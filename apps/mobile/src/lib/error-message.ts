@@ -5,7 +5,7 @@
  * (wrong password vs wrong login, validation details, size limits).
  */
 import { ApiClientError, LOCAL_ERROR } from "./api/client";
-import { ErrorCode } from "@ordo/shared";
+import { APP_NAME, ErrorCode } from "@ordo/shared";
 
 const FRIENDLY: Record<string, string> = {
   [ErrorCode.EMAIL_ALREADY_EXISTS]: "An account with this email already exists.",
@@ -40,7 +40,7 @@ const FRIENDLY: Record<string, string> = {
   [ErrorCode.IMPORT_NOT_FOUND]: "This import no longer exists.",
   [ErrorCode.IMPORT_INVALID_STATE]: "This import can't be confirmed again.",
   [ErrorCode.IMPORT_FILE_TOO_LARGE]: "That file is too large to import.",
-  [ErrorCode.IMPORT_UNSUPPORTED_FORMAT]: "Use an Ordo, HTML, or CSV bookmark export.",
+  [ErrorCode.IMPORT_UNSUPPORTED_FORMAT]: `Use an ${APP_NAME}, HTML, or CSV bookmark export.`,
   [ErrorCode.IMPORT_PARSE_FAILED]: "That file couldn't be read.",
 };
 

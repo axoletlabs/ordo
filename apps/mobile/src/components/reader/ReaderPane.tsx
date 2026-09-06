@@ -4,7 +4,7 @@
  * Renders the server's sanitized semantic HTML natively (no WebView/JS) in a
  * reader-themed surface independent of the app theme, with account-synced
  * font/size/theme preferences and reading-progress tracking. Non-articles
- * open an in-app website view; "Read in Ordo" appears when extraction
+ * open an in-app website view; "Read in ordo" appears when extraction
  * actually produced an article.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -25,7 +25,7 @@ import { StatusBar, setStatusBarStyle } from "expo-status-bar";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { EXTRACTION_VERSION, READ_COMPLETION_THRESHOLD } from "@ordo/shared";
+import { APP_NAME, EXTRACTION_VERSION, READ_COMPLETION_THRESHOLD } from "@ordo/shared";
 import type {
   ReaderPreferences,
   UpdateReaderPreferencesInput,
@@ -912,7 +912,7 @@ function ReaderPaneInner({
             {showWebsiteView && showReadInOrdo ? (
               <SheetActionRow
                 icon="reader-outline"
-                label="Read in Ordo"
+                label={`Read in ${APP_NAME}`}
                 onPress={() => {
                   setActionPanel(null);
                   setSurface("reader");

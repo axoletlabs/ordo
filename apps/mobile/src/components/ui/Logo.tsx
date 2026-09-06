@@ -5,6 +5,7 @@
  */
 import React from "react";
 import { Image, StyleSheet, View } from "react-native";
+import { APP_NAME } from "@ordo/shared";
 import LOGO_MARK from "../../../assets/logo-mark.png";
 
 const ASPECT = 468 / 509;
@@ -23,7 +24,7 @@ export function Logo({ width = AUTH_LOGO_WIDTH }: LogoProps) {
         source={LOGO_MARK}
         style={styles.logo}
         resizeMode="contain"
-        accessibilityLabel="Ordo"
+        accessibilityLabel={APP_NAME}
         accessibilityRole="image"
       />
     </View>

@@ -137,7 +137,7 @@ describe("Auth (e2e)", () => {
     it("reports smtpConfigured false when SMTP_URL is unset", async () => {
       const res = await request(ctx.app.getHttpServer()).get("/api/server/info").expect(200);
       expect(res.body).toMatchObject({
-        name: "Ordo",
+        name: "ordo",
         registrationEnabled: true,
         emailVerificationRequired: false,
         smtpConfigured: false,

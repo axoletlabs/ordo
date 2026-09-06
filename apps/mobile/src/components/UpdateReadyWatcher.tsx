@@ -2,6 +2,7 @@
  * Announces the newest actionable update once per artifact. Renderless.
  */
 import { useEffect, useRef } from "react";
+import { APP_NAME } from "@ordo/shared";
 import { useAppUpdate } from "../hooks/use-app-update";
 import { restartForUpdate } from "../store/update-restart";
 import { toast } from "./ui/toast-store";
@@ -22,7 +23,7 @@ export function UpdateReadyWatcher() {
     lastNativeShown.current = native.release.tagName;
 
     haptics.light();
-    toast.show(`Ordo v${native.release.version} is available`, {
+    toast.show(`${APP_NAME} v${native.release.version} is available`, {
       duration: 6000,
       swipeable: true,
       action: {

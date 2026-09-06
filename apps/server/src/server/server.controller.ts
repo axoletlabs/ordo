@@ -1,7 +1,7 @@
 import { Controller, Get, Inject } from "@nestjs/common";
 import { APP_CONFIG } from "../config/config.module.js";
 import type { AppConfig } from "../config/config.module.js";
-import type { ServerInfoDto } from "@ordo/shared";
+import { APP_NAME, type ServerInfoDto } from "@ordo/shared";
 import { MailService } from "../auth/mail.service.js";
 
 const VERSION = "0.1.0";
@@ -16,7 +16,7 @@ export class ServerController {
   @Get("info")
   info(): ServerInfoDto {
     return {
-      name: "Ordo",
+      name: APP_NAME,
       version: VERSION,
       registrationEnabled: this.cfg.registrationEnabled,
       emailVerificationRequired: this.cfg.emailVerificationRequired,

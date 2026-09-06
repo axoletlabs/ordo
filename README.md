@@ -1,4 +1,4 @@
-# Ordo
+# ordo
 
 A self-hostable bookmark manager. Save URLs, read them in a clean reader mode, organize into folders.
 
@@ -69,6 +69,6 @@ This keeps the two concerns cleanly separated and avoids overloading either tool
 | `CORS_ALLOWED_ORIGINS` | reflect origin | Comma-separated origins |
 | `EMAIL_VERIFICATION_REQUIRED` | `false` | Require email verification on signup |
 | `SMTP_URL` | — | SMTP for verification, email-change, and password-reset codes. When unset, the one-time code is printed to the server console. Mailpit (or any fake SMTP) is optional. |
-| `SMTP_FROM` | `Ordo <noreply@ordo.local>` | From address used when SMTP is configured |
+| `SMTP_FROM` | `ordo <noreply@ordo.local>` | From address used when SMTP is configured |
 | `RATE_LIMIT_ENABLED` | `true` (off in Jest) | Login / register / password-reset / reader rate limits. In-memory, per process; set `false` to disable in local dev |
 | `TRUST_PROXY` | `0` | Reverse-proxy hops to trust for `X-Forwarded-For`. `0` uses the socket address (clients cannot spoof it). Set to `1` behind nginx, Caddy, or a Cloudflare tunnel |

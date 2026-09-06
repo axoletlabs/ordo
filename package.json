@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "license": "AGPL-3.0",
-  "description": "Ordo — a self-hostable bookmark manager",
+  "description": "ordo — a self-hostable bookmark manager",
   "packageManager": "pnpm@11.10.0",
   "engines": {
     "node": ">=20"

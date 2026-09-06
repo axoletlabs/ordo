@@ -1,4 +1,4 @@
-// Ordo — SQLite schema
+// ordo — SQLite schema
 // Run `pnpm --filter @ordo/server db:setup` to generate the client + create the DB.
 
 generator client {

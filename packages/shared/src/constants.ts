@@ -1,5 +1,8 @@
 /** Shared constants for client and server. */
 
+/** User-facing product name (home screen, emails, authenticator issuer). */
+export const APP_NAME = "ordo";
+
 /** HTTP header that tells the server this is a mobile (token-based) client. */
 export const CLIENT_TYPE_HEADER = "x-client-type";
 export const CLIENT_TYPE_MOBILE = "mobile";
@@ -47,7 +50,7 @@ export type EmailOtpPurpose = (typeof EMAIL_OTP_PURPOSE)[keyof typeof EMAIL_OTP_
 
 /** TOTP + backup-code MFA. */
 export const MFA = {
-  ISSUER: "Ordo",
+  ISSUER: APP_NAME,
   TOTP_DIGITS: 6,
   TOTP_PERIOD_S: 30,
   TOTP_WINDOW: 1,

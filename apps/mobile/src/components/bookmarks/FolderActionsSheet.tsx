@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { DEFAULT_FOLDER_ICON, type FolderDto, type FolderIcon, type FolderLockType, type FolderPinLength } from "@ordo/shared";
+import { APP_NAME, DEFAULT_FOLDER_ICON, type FolderDto, type FolderIcon, type FolderLockType, type FolderPinLength } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
@@ -405,7 +405,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: Fo
           {error ? <Text variant="footnote" color="danger" style={styles.error}>{error}</Text> : null}
           {serverInfo.data && !lockTypesSupported ? (
             <Text variant="footnote" color="tertiary" style={styles.staleServer}>
-              Update your Ordo server to use pattern, PIN, and device locks.
+              Update your {APP_NAME} server to use pattern, PIN, and device locks.
             </Text>
           ) : null}
           <View>

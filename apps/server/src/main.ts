@@ -2,6 +2,7 @@ import { NestFactory } from "@nestjs/core";
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import { Logger } from "@nestjs/common";
 import cookieParser from "cookie-parser";
+import { APP_NAME } from "@ordo/shared";
 import { AppModule } from "./app.module.js";
 import { APP_CONFIG } from "./config/config.module.js";
 import type { AppConfig } from "./config/config.module.js";
@@ -32,7 +33,7 @@ async function bootstrap(): Promise<void> {
   app.use(cookieParser());
 
   await app.listen(cfg.port, () => {
-    new Logger("Bootstrap").log(`Ordo server listening on http://localhost:${cfg.port}`);
+    new Logger("Bootstrap").log(`${APP_NAME} server listening on http://localhost:${cfg.port}`);
   });
 }
 

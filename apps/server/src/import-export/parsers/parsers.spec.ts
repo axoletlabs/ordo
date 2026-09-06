@@ -258,9 +258,9 @@ describe("parseOrdoJson", () => {
 
   it("rejects foreign JSON and wrong versions", () => {
     expect(looksLikeOrdoJson('{"hello":1}')).toBe(false);
-    expect(() => parseOrdoJson('{"hello":1}')).toThrow(/not an Ordo export/);
+    expect(() => parseOrdoJson('{"hello":1}')).toThrow(/not an ordo export/);
     expect(() =>
       parseOrdoJson(JSON.stringify({ ...file, version: 2 })),
-    ).toThrow(/Unsupported Ordo export version/);
+    ).toThrow(/Unsupported ordo export version/);
   });
 });

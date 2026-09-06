@@ -304,24 +304,24 @@ jobs:
         run: |
           VERSION="${{ needs.detect.outputs.version }}"
           cd apk
-          # universal (all ABIs) -> Ordo-vX.Y.Z.apk
+          # universal (all ABIs) -> ordo-vX.Y.Z.apk
           if [ -f app-universal-release.apk ]; then
-            mv app-universal-release.apk "Ordo-v${VERSION}.apk"
+            mv app-universal-release.apk "ordo-v${VERSION}.apk"
           elif [ -f app-release.apk ]; then
-            mv app-release.apk "Ordo-v${VERSION}.apk"
+            mv app-release.apk "ordo-v${VERSION}.apk"
           fi
-          # per-ABI splits -> Ordo-vX.Y.Z-<abi>.apk
+          # per-ABI splits -> ordo-vX.Y.Z-<abi>.apk
           for abi in armeabi-v7a arm64-v8a x86 x86_64; do
             if [ -f "app-${abi}-release.apk" ]; then
-              mv "app-${abi}-release.apk" "Ordo-v${VERSION}-${abi}.apk"
+              mv "app-${abi}-release.apk" "ordo-v${VERSION}-${abi}.apk"
             fi
           done
           echo "## APKs to publish:" >> "$GITHUB_STEP_SUMMARY"
-          ls -1 Ordo-v*.apk | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY"
+          ls -1 ordo-v*.apk | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.event.release.tag_name }}"
-          gh release upload "$TAG" apk/Ordo-v*.apk --clobber -R "$GITHUB_REPOSITORY"
+          gh release upload "$TAG" apk/ordo-v*.apk --clobber -R "$GITHUB_REPOSITORY"

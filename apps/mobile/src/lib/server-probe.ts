@@ -4,7 +4,7 @@
  * is what lets the "Change server" UI test a connection safely (the previous
  * implementation temporarily mutated the store, which is what broke Save).
  */
-import type { ServerInfoDto } from "@ordo/shared";
+import { APP_NAME, type ServerInfoDto } from "@ordo/shared";
 import { isAbortError, isDeadlineError, raceDeadline } from "./fetch-timeout";
 
 export type ProbeStepState = "pending" | "success" | "failure";
@@ -134,7 +134,7 @@ export async function probeServer(
         command: `GET /api/server/info`,
         state: "success",
         latencyMs: Date.now() - t0,
-        detail: `${info?.name ?? "Ordo"} v${info?.version ?? "?"}`,
+        detail: `${info?.name ?? APP_NAME} v${info?.version ?? "?"}`,
       };
       emit();
       return { url: origin, status: "up", latencyMs: Date.now() - t0, info, detail: "reachable" };

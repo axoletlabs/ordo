@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { useShareIntentContext } from "expo-share-intent";
+import { APP_NAME } from "@ordo/shared";
 import { returnToShareSender } from "../lib/share-target";
 import { extractSharedUrl } from "../lib/shared-url";
 import { useIncomingShareStore } from "../store/incoming-share";
@@ -26,7 +27,7 @@ export function IncomingShareHandler() {
   useEffect(() => {
     if (!error) return;
     resetShareIntent();
-    returnToShareSender("Ordo couldn't read the shared link.");
+    returnToShareSender(`${APP_NAME} couldn't read the shared link.`);
   }, [error, resetShareIntent]);
 
   return null;

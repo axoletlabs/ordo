@@ -1,6 +1,7 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { APP_NAME } from "@ordo/shared";
 import { FloatingPanel } from "./ui/FloatingPanel";
 import { PanelHeader } from "./ui/PanelHeader";
 import { Button } from "./ui/Button";
@@ -40,10 +41,10 @@ export function NativeUpdateProgress() {
         }
         subtitle={
           downloading
-            ? "Keep Ordo open."
+            ? `Keep ${APP_NAME} open.`
             : downloadFailed
               ? "Your current version is unchanged."
-              : `Ordo v${update.release?.version ?? ""} is ready.`
+              : `${APP_NAME} v${update.release?.version ?? ""} is ready.`
         }
       />
 

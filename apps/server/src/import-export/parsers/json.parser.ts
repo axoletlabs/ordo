@@ -3,6 +3,7 @@
  * individually so one bad bookmark does not sink the whole file.
  */
 import {
+  APP_NAME,
   OrdoExportBookmarkSchema,
   OrdoExportFolderSchema,
   isSupportedUrl,
@@ -32,13 +33,13 @@ export function parseOrdoJson(text: string): ParseResult {
   }
   const envelope = value as { format?: unknown; version?: unknown; folders?: unknown; bookmarks?: unknown };
   if (envelope?.format !== "ordo-export") {
-    throw new Error("The JSON file is not an Ordo export.");
+    throw new Error(`The JSON file is not an ${APP_NAME} export.`);
   }
   if (envelope.version !== 1) {
-    throw new Error(`Unsupported Ordo export version: ${String(envelope.version)}`);
+    throw new Error(`Unsupported ${APP_NAME} export version: ${String(envelope.version)}`);
   }
   if (!Array.isArray(envelope.bookmarks)) {
-    throw new Error("The Ordo export is missing its bookmarks list.");
+    throw new Error(`The ${APP_NAME} export is missing its bookmarks list.`);
   }
 
   const entries: ParsedEntry[] = [];

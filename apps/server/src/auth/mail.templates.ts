@@ -2,6 +2,7 @@
  * Transactional email bodies. Table + inline CSS so they survive Gmail,
  * Apple Mail, and Mailpit. Mirrors the app's warm paper / coral palette.
  */
+import { APP_NAME } from "@ordo/shared";
 
 export const VERIFICATION_LOGO_CID = "ordo-logo";
 
@@ -24,23 +25,23 @@ const COPY: Record<
   { subject: string; kicker: string; body: string; ignore: string; textHeading: string }
 > = {
   verification: {
-    subject: "Your Ordo verification code",
+    subject: `Your ${APP_NAME} verification code`,
     kicker: "Verification",
-    body: "Enter this code in Ordo to continue.",
+    body: `Enter this code in ${APP_NAME} to continue.`,
     ignore: "If you didn't request this, you can ignore this email.",
     textHeading: "Your verification code",
   },
   password_reset: {
-    subject: "Your Ordo password reset code",
+    subject: `Your ${APP_NAME} password reset code`,
     kicker: "Password reset",
-    body: "Enter this code in Ordo to choose a new password.",
+    body: `Enter this code in ${APP_NAME} to choose a new password.`,
     ignore: "If you didn't request this, you can ignore this email.",
     textHeading: "Your password reset code",
   },
   mfa_recovery: {
-    subject: "Your Ordo authenticator recovery code",
+    subject: `Your ${APP_NAME} authenticator recovery code`,
     kicker: "Authenticator recovery",
-    body: "Enter this code in Ordo to turn off your authenticator app and sign in.",
+    body: `Enter this code in ${APP_NAME} to turn off your authenticator app and sign in.`,
     ignore: "If you didn't request this, you can ignore this email. Your authenticator stays on.",
     textHeading: "Your authenticator recovery code",
   },
@@ -59,7 +60,7 @@ export function otpEmail(
   const copy = COPY[kind];
   const subject = copy.subject;
   const text = [
-    "Ordo",
+    APP_NAME,
     "",
     copy.textHeading,
     "",
@@ -86,7 +87,7 @@ export function otpEmail(
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:440px;border-collapse:separate;border-spacing:0;">
           <tr>
             <td align="center" style="background:${CARD};border:1px solid ${RULE};border-radius:24px;padding:36px 32px 32px;">
-              <img src="cid:${VERIFICATION_LOGO_CID}" width="${LOGO_W}" height="${LOGO_H}" alt="Ordo" style="display:block;margin:0 auto 28px;border:0;outline:none;text-decoration:none;" />
+              <img src="cid:${VERIFICATION_LOGO_CID}" width="${LOGO_W}" height="${LOGO_H}" alt="${APP_NAME}" style="display:block;margin:0 auto 28px;border:0;outline:none;text-decoration:none;" />
               <p style="margin:0 0 8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:${FAINT};">
                 ${escapeHtml(copy.kicker)}
               </p>

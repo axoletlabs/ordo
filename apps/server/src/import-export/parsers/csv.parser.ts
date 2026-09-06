@@ -7,7 +7,7 @@
  *  - Pocket (url, time_added, status: unread|archive)
  *  - Instapaper (URL, Title, Folder with Unread/Archive sentinels)
  */
-import { isSupportedUrl } from "@ordo/shared";
+import { APP_NAME, isSupportedUrl } from "@ordo/shared";
 import type { InvalidRow, ParseResult, ParsedEntry } from "./parse-utils";
 import { clampProgress, coerceDate, sanitizeTitle } from "./parse-utils";
 
@@ -98,7 +98,7 @@ export function parseCsv(text: string): ParseResult {
   const profile = detectCsvProfile(header);
   if (!profile) {
     throw new Error(
-      "Unrecognised CSV columns. Use an Ordo, Raindrop.io, Pocket, or Instapaper export.",
+      `Unrecognised CSV columns. Use an ${APP_NAME}, Raindrop.io, Pocket, or Instapaper export.`,
     );
   }
 

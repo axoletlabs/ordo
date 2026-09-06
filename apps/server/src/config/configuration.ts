@@ -2,7 +2,7 @@ import { z } from "zod";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
-import { AVATAR } from "@ordo/shared";
+import { APP_NAME, AVATAR } from "@ordo/shared";
 
 export type AvatarStorage = "filesystem" | "database";
 
@@ -55,7 +55,7 @@ const EnvSchema = z.object({
     .default("false"),
   CORS_ALLOWED_ORIGINS: z.string().default(""),
   SMTP_URL: z.string().optional(),
-  SMTP_FROM: z.string().default("Ordo <noreply@ordo.local>"),
+  SMTP_FROM: z.string().default(`${APP_NAME} <noreply@ordo.local>`),
   RATE_LIMIT_ENABLED: z.string().optional(),
   TRUST_PROXY: z.coerce.number().int().min(0).max(32).default(0),
   PROFILE_PICTURE_MAX_BYTES: z.coerce

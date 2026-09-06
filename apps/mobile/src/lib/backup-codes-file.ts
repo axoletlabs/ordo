@@ -1,11 +1,12 @@
 import { Platform, Share } from "react-native";
 import * as FileSystem from "expo-file-system";
+import { APP_NAME } from "@ordo/shared";
 
 const FILENAME = "ordo-backup-codes.txt";
 
 export function formatBackupCodesFile(codes: string[]): string {
   return [
-    "Ordo backup codes",
+    `${APP_NAME} backup codes`,
     "Each code signs you in once. Keep this file somewhere safe.",
     "",
     ...codes,
@@ -21,7 +22,7 @@ export async function downloadBackupCodes(codes: string[]): Promise<void> {
   }
   const dir = FileSystem.cacheDirectory;
   if (!dir) {
-    await Share.share({ message: body, title: "Ordo backup codes" });
+    await Share.share({ message: body, title: `${APP_NAME} backup codes` });
     return;
   }
   const path = `${dir}${FILENAME}`;
@@ -29,12 +30,12 @@ export async function downloadBackupCodes(codes: string[]): Promise<void> {
   try {
     if (Platform.OS === "android") {
       const contentUri = await FileSystem.getContentUriAsync(path);
-      await Share.share({ title: "Ordo backup codes", message: body, url: contentUri });
+      await Share.share({ title: `${APP_NAME} backup codes`, message: body, url: contentUri });
       return;
     }
-    await Share.share({ title: "Ordo backup codes", url: path });
+    await Share.share({ title: `${APP_NAME} backup codes`, url: path });
   } catch {
-    await Share.share({ title: "Ordo backup codes", message: body });
+    await Share.share({ title: `${APP_NAME} backup codes`, message: body });
   }
 }
 

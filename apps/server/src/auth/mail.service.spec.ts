@@ -3,7 +3,7 @@ import { MailService } from "./mail.service.js";
 import type { AppConfig } from "../config/config.module.js";
 
 const baseCfg = {
-  smtpFrom: "Ordo <noreply@ordo.local>",
+  smtpFrom: "ordo <noreply@ordo.local>",
 } as AppConfig;
 
 describe("MailService", () => {

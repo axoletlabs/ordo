@@ -4,6 +4,7 @@ import * as Device from "expo-device";
 import * as FileSystem from "expo-file-system";
 import * as IntentLauncher from "expo-intent-launcher";
 import { create } from "zustand";
+import { APP_NAME } from "@ordo/shared";
 import { isNewerVersion, parseVersion } from "../lib/app-version";
 import { prefsGet, prefsSet, StorageKeys } from "../lib/storage";
 
@@ -117,7 +118,7 @@ function normalizeRelease(release: GithubRelease): NativeRelease | null {
   return {
     version,
     tagName: release.tag_name!,
-    name: release.name?.trim() || `Ordo ${release.tag_name}`,
+    name: release.name?.trim() || `${APP_NAME} ${release.tag_name}`,
     body: release.body?.trim() ?? "",
     prerelease: !!release.prerelease,
     publishedAt: release.published_at,

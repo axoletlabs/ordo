@@ -1,4 +1,4 @@
-/** Verify and switch the self-hosted Ordo server. */
+/** Verify and switch the self-hosted ordo server. */
 import React, { useEffect, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
@@ -11,6 +11,7 @@ import Animated, {
   withRepeat,
   withTiming,
 } from "react-native-reanimated";
+import { APP_NAME } from "@ordo/shared";
 import {
   SettingsForm,
   SettingsGroup,
@@ -245,7 +246,7 @@ export default function ServerScreen() {
           }}
         />
 
-        <SettingsGroup label="Change server" footer="You'll be signed out, and Ordo will restart.">
+        <SettingsGroup label="Change server" footer={`You'll be signed out, and ${APP_NAME} will restart.`}>
           <SettingsForm style={styles.editor}>
             <Input
               label="Server URL"
@@ -277,7 +278,7 @@ export default function ServerScreen() {
         onDismiss={() => setConfirmedUrl(null)}
         icon="log-out-outline"
         title="Switch server?"
-        message="You'll be signed out, and Ordo will restart."
+        message={`You'll be signed out, and ${APP_NAME} will restart.`}
         confirmLabel="Switch"
         loading={switching}
         dismissible={!switching}

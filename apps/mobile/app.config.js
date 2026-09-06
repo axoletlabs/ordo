@@ -25,7 +25,7 @@ const gitDirty = git("status --porcelain").length > 0;
 
 /** @type {import('expo/config').ExpoConfig} */
 module.exports = {
-  name: "Ordo",
+  name: "ordo",
   slug: "ordo",
   version: "0.1.0",
   orientation: "default",
@@ -42,14 +42,14 @@ module.exports = {
     [
       "expo-local-authentication",
       {
-        faceIDPermission: "Allow Ordo to use Face ID to unlock protected folders.",
+        faceIDPermission: "Allow ordo to use Face ID to unlock protected folders.",
       },
     ],
     [
       "expo-image-picker",
       {
-        photosPermission: "Allow Ordo to access your photos to set a profile picture.",
-        cameraPermission: "Allow Ordo to take a photo for your profile picture.",
+        photosPermission: "Allow ordo to access your photos to set a profile picture.",
+        cameraPermission: "Allow ordo to take a photo for your profile picture.",
       },
     ],
     [
