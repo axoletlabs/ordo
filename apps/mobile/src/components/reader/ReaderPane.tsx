@@ -719,19 +719,8 @@ function ReaderPaneInner({
               },
             ]}
           >
-            {showReadInOrdo ? (
-              <Button label="Read in Ordo" block onPress={() => setSurface("reader")} />
-            ) : bookmarkCanBeArticle(bookmark) ? (
-              <Button
-                label="Mark as article"
-                block
-                onPress={() => handleClassify(true)}
-                loading={setContentKind.isPending}
-              />
-            ) : null}
             <Button
               label="Open in browser"
-              variant="secondary"
               block
               onPress={handleOpenSystemBrowser}
             />
