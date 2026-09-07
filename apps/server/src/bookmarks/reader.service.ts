@@ -269,6 +269,13 @@ export class ReaderService implements OnModuleDestroy {
         );
         if (decoded.toLowerCase().includes("</head>") || bytes >= HEAD_SNIFF_BYTES) {
           headDone = true;
+          if (!forceArticle) {
+            const pageKind = classifyHtmlHead(decoded);
+            if (pageKind) {
+              await reader.cancel().catch(() => undefined);
+              throw new UnsupportedContentError(pageKind, "Page metadata is not an article");
+            }
+          }
           allowCutoff = headHasArticleEvidence(decoded);
         }
       }

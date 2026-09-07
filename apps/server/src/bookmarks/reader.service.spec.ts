@@ -422,6 +422,43 @@ describe("ReaderService", () => {
       await expectUnsupported("https://example.com/catalog/chairs", "not_an_article");
     });
 
+    it("aborts the body download once the head declares a product", async () => {
+      const head =
+        `<!DOCTYPE html><html><head><meta property="og:type" content="product"><title>Shoes</title>${" ".repeat(8_200)}</head>`;
+      const rest = `<body><article>${P(1)}${P(2)}${P(3)}${P(4)}</article></body></html>`;
+      let cancelled = false;
+      globalThis.fetch = (async () => {
+        const encoder = new TextEncoder();
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(encoder.encode(head));
+          },
+          pull(controller) {
+            if (cancelled) {
+              controller.close();
+              return;
+            }
+            controller.enqueue(encoder.encode(rest));
+            controller.close();
+          },
+          cancel() {
+            cancelled = true;
+          },
+        });
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (name: string) => (name.toLowerCase() === "content-type" ? "text/html" : null),
+          },
+          body: stream,
+        } as unknown as Response;
+      }) as typeof fetch;
+
+      await expectUnsupported("https://example.com/shoes/streamed", "not_an_article");
+      expect(cancelled).toBe(true);
+    });
+
     it("rejects unmarked pages with buy/cart CTAs", async () => {
       mockFetch(`<!DOCTYPE html><html><head><title>Wool Runner</title></head><body>
         <h1>Wool Runner</h1>

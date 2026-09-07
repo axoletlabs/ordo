@@ -242,6 +242,7 @@ export class ExtractionService {
       }
     } finally {
       this.controllers.delete(bookmarkId);
+      this.canceled.delete(bookmarkId);
     }
   }
 
