@@ -14,12 +14,19 @@ import { useFloatingDockMetrics } from "../../src/hooks/use-floating-dock-metric
 import { useAuthStore } from "../../src/store/auth";
 import { useSettingsStore } from "../../src/store/settings";
 import { MfaEnrollmentScreen } from "../../src/components/auth/MfaEnrollmentScreen";
-import { StyleSheet, Text as NativeText, View } from "react-native";
+import { StyleSheet, Text as NativeText, View, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const HIDDEN = {
   href: null,
 };
+
+function tabBarStyleIsHidden(
+  style: BottomTabBarProps["descriptors"][string]["options"]["tabBarStyle"],
+) {
+  const flattened = StyleSheet.flatten(style as ViewStyle | undefined);
+  return flattened?.display === "none";
+}
 
 export default function AppLayout() {
   const { palette, shadows } = useTheme();
@@ -33,7 +40,6 @@ export default function AppLayout() {
     compact,
     sideNavigation,
     hideBottomNav,
-    visible: floatingDockVisible,
     bottom: floatingBottom,
     height: floatingHeight,
     windowWidth,
@@ -57,7 +63,8 @@ export default function AppLayout() {
   const tabBarStyle = React.useMemo(
     () => {
       // Geometry for the reused native tab bar. Portrait floating docks are
-      // positioned by a wrapper (see renderTabBar); this style only fills it.
+      // positioned by a wrapper (see renderTabBar); this style only fills that
+      // shell. Leave `top` null so Yoga cannot pin a leaked bar to the screen top.
       const reset = {
         borderWidth: 0,
         borderTopWidth: 0,
@@ -156,7 +163,7 @@ export default function AppLayout() {
       return {
         ...reset,
         position: "absolute" as const,
-        top: 0,
+        top: null,
         left: 0,
         right: 0,
         start: 0,
@@ -260,11 +267,21 @@ export default function AppLayout() {
       // Own the floating dock's screen position with a View that is never the
       // landscape rail. Pinning the reused native tab bar with `top` used the
       // window height, which does not match the navigator parent after rotate.
-      if (floatingDockVisible) {
+      //
+      // Keep this shell mounted on every portrait floating route. Gating it on
+      // pathname unwrapped the bar while back-navigation had already applied
+      // the visible dock style, so it flashed at the top of the screen.
+      if (floating && !sideNavigation) {
+        const focused = props.state.routes[props.state.index];
+        const showFloatingDock = !tabBarStyleIsHidden(
+          props.descriptors[focused.key]?.options.tabBarStyle,
+        );
+
         return (
           <View key={compact ? "compact-dock" : "full-dock"} pointerEvents="box-none" style={StyleSheet.absoluteFill}>
             <View
               collapsable={false}
+              pointerEvents={showFloatingDock ? "auto" : "none"}
               style={{
                 position: "absolute",
                 left: compact ? compactDockLeft : spacing[16],
@@ -273,6 +290,7 @@ export default function AppLayout() {
                 top: null,
                 bottom: floatingBottom,
                 height: floatingHeight,
+                display: showFloatingDock ? "flex" : "none",
                 ...shadows.level3,
               }}
             >
@@ -299,8 +317,8 @@ export default function AppLayout() {
       compact,
       compactDockLeft,
       compactDockWidth,
+      floating,
       floatingBottom,
-      floatingDockVisible,
       floatingHeight,
       palette.borderStrong,
       palette.surfaceElevated,
