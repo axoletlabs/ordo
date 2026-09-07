@@ -118,27 +118,7 @@ export function Header({
         },
       ]}
     >
-      <View style={styles.cluster}>
-        {!showLarge && showBack ? (
-          <View style={[styles.side, styles.sideLeft]}>
-            <PressableScale
-              style={styles.backBtn}
-              scaleTo={0.85}
-              onPress={handleBack}
-              hitSlop={8}
-              accessibilityRole="button"
-              accessibilityLabel="Back"
-            >
-              <Ionicons
-                name="chevron-back"
-                size={24}
-                color={palette.text}
-                style={headerIconGlyphStyle}
-              />
-            </PressableScale>
-          </View>
-        ) : null}
-
+      <View style={styles.cluster} pointerEvents="box-none">
         <View pointerEvents={onTitleLongPress ? "auto" : "none"} style={styles.titleSlot}>
           {titleBlock}
           {subtitle ? (
@@ -154,7 +134,30 @@ export function Header({
           ) : null}
         </View>
 
-        {right ? <View style={[styles.side, styles.sideRight]}>{right}</View> : null}
+        <View style={styles.sides} pointerEvents="box-none">
+          <View style={styles.sideSlot} pointerEvents="box-none">
+            {!showLarge && showBack ? (
+              <PressableScale
+                style={styles.backBtn}
+                scaleTo={0.85}
+                onPress={handleBack}
+                hitSlop={8}
+                accessibilityRole="button"
+                accessibilityLabel="Back"
+              >
+                <Ionicons
+                  name="chevron-back"
+                  size={24}
+                  color={palette.text}
+                  style={headerIconGlyphStyle}
+                />
+              </PressableScale>
+            ) : null}
+          </View>
+          <View style={[styles.sideSlot, styles.sideSlotEnd]} pointerEvents="box-none">
+            {right}
+          </View>
+        </View>
       </View>
     </View>
   );
@@ -204,11 +207,13 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "center",
     paddingBottom: spacing[6],
+    overflow: "visible",
   },
   cluster: {
     position: "relative",
-    justifyContent: "center",
-    minHeight: HEADER_LINE_HEIGHT,
+    justifyContent: "flex-start",
+    minHeight: HEADER_CONTROL_SIZE,
+    overflow: "visible",
   },
   titleSlot: {
     minHeight: HEADER_LINE_HEIGHT,
@@ -223,11 +228,23 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
     textAlignVertical: "center",
   },
+  sides: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  sideSlot: {
+    minHeight: HEADER_CONTROL_SIZE,
+    justifyContent: "center",
+  },
+  sideSlotEnd: { alignItems: "flex-end" },
   side: {
     position: "absolute",
     top: 0,
-    bottom: 0,
-    justifyContent: "center",
+    height: "100%",
+    flexDirection: "row",
+    alignItems: "center",
     zIndex: 1,
   },
   sideLeft: { left: 0 },
