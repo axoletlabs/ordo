@@ -4,7 +4,7 @@ import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
 import { Ionicons } from "@expo/vector-icons";
-import { Header } from "../../src/components/ui/Header";
+import { Header, HeaderActions, HeaderIconButton, HEADER_CONTROL_SIZE } from "../../src/components/ui/Header";
 import { SelectionHeader } from "../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../src/components/bookmarks/SelectionTools";
 import { FAB, FABLayer } from "../../src/components/ui/FAB";
@@ -160,7 +160,7 @@ export default function BookmarksScreen() {
 
   const headerRight =
     tagCount > 0 || hasUnread ? (
-      <View style={styles.headerActions}>
+      <HeaderActions style={styles.headerActions}>
         {tagCount > 0 ? (
           <PressableScale
             style={styles.tagsLink}
@@ -180,17 +180,14 @@ export default function BookmarksScreen() {
           </PressableScale>
         ) : null}
         {hasUnread ? (
-          <PressableScale
-            style={styles.headerAction}
+          <HeaderIconButton
+            name="checkmark-done"
+            color={palette.accent}
             onPress={onMarkAllRead}
-            hitSlop={8}
-            accessibilityRole="button"
             accessibilityLabel="Mark all as read"
-          >
-            <Ionicons name="checkmark-done" size={22} color={palette.accent} />
-          </PressableScale>
+          />
         ) : null}
-      </View>
+      </HeaderActions>
     ) : undefined;
 
   return (
@@ -410,13 +407,12 @@ export default function BookmarksScreen() {
 const styles = StyleSheet.create({
   content: { flex: 1, width: "100%" },
   center: { flex: 1, width: "100%", justifyContent: "center" },
-  headerActions: { flexDirection: "row", alignItems: "center", gap: spacing[4] },
-  headerAction: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
+  headerActions: { gap: spacing[4] },
   tagsLink: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[6],
-    height: 32,
+    height: HEADER_CONTROL_SIZE,
     paddingHorizontal: spacing[4],
   },
   emptyBookmarks: { minHeight: 300, justifyContent: "center" },

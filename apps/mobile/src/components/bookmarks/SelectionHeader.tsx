@@ -7,7 +7,12 @@ import { StyleSheet, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PressableScale } from "../ui/PressableScale";
 import { Text } from "../ui/Text";
-import { HEADER_LINE_HEIGHT, headerTitleTextStyle } from "../ui/Header";
+import {
+  HEADER_CONTROL_SIZE,
+  HEADER_LINE_HEIGHT,
+  headerSideStyle,
+  headerTitleTextStyle,
+} from "../ui/Header";
 import { useTheme } from "../../theme/ThemeProvider";
 import { layout, spacing } from "../../theme/tokens";
 
@@ -46,34 +51,38 @@ export function SelectionHeader({
       ]}
     >
       <View style={styles.row}>
-        <PressableScale
-          accessibilityRole="button"
-          accessibilityLabel="Cancel selection"
-          onPress={onCancel}
-          hitSlop={8}
-          style={[styles.side, styles.left]}
-        >
-          <Text variant="bodyStrong" color="accent">
-            Cancel
-          </Text>
-        </PressableScale>
+        <View style={[headerSideStyle, styles.left]} pointerEvents="box-none">
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel="Cancel selection"
+            onPress={onCancel}
+            hitSlop={8}
+            style={styles.sideHit}
+          >
+            <Text variant="bodyStrong" color="accent">
+              Cancel
+            </Text>
+          </PressableScale>
+        </View>
         <View pointerEvents="none" style={styles.titleSlot}>
           <Text variant="header" align="center" numberOfLines={1} style={headerTitleTextStyle}>
             {title}
           </Text>
         </View>
         {selectableCount > 0 ? (
-          <PressableScale
-            accessibilityRole="button"
-            accessibilityLabel={allSelected ? "Deselect all" : "Select all"}
-            onPress={onToggleSelectAll}
-            hitSlop={8}
-            style={[styles.side, styles.right]}
-          >
-            <Text variant="bodyStrong" color="accent" numberOfLines={1}>
-              {allSelected ? "Deselect" : "Select all"}
-            </Text>
-          </PressableScale>
+          <View style={[headerSideStyle, styles.right]} pointerEvents="box-none">
+            <PressableScale
+              accessibilityRole="button"
+              accessibilityLabel={allSelected ? "Deselect all" : "Select all"}
+              onPress={onToggleSelectAll}
+              hitSlop={8}
+              style={styles.sideHit}
+            >
+              <Text variant="bodyStrong" color="accent" numberOfLines={1}>
+                {allSelected ? "Deselect" : "Select all"}
+              </Text>
+            </PressableScale>
+          </View>
         ) : null}
       </View>
     </View>
@@ -98,14 +107,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  side: {
-    position: "absolute",
-    top: "50%",
-    marginTop: -16,
-    height: 32,
-    justifyContent: "center",
-    zIndex: 1,
-  },
   left: { left: 0 },
   right: { right: 0, alignItems: "flex-end" },
+  sideHit: { height: HEADER_CONTROL_SIZE, justifyContent: "center" },
 });

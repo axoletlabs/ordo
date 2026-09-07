@@ -22,14 +22,13 @@ import {
 import { useColorScheme, useWindowDimensions } from "react-native";
 import { StatusBar, setStatusBarStyle } from "expo-status-bar";
 import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { APP_NAME, EXTRACTION_VERSION, READ_COMPLETION_THRESHOLD } from "@ordo/shared";
 import type {
   ReaderPreferences,
   UpdateReaderPreferencesInput,
 } from "@ordo/shared";
-import { Header } from "../ui/Header";
+import { Header, HeaderActions, HeaderIconButton } from "../ui/Header";
 import { ScreenContent } from "../ui/ScreenContent";
 import { Text } from "../ui/Text";
 import { Button } from "../ui/Button";
@@ -550,52 +549,40 @@ function ReaderPaneInner({
   const fallbackArticleWidth = Math.min(windowWidth, layout.maxContentWidth) - spacing[16] * 2;
 
   const rightActions = bookmark ? (
-    <View style={styles.headerActions}>
+    <HeaderActions>
       {showWebsiteView ? (
-        <PressableScale
-          style={styles.iconBtn}
-          scaleTo={0.85}
-          hitSlop={8}
+        <HeaderIconButton
+          name="open-outline"
+          color={palette.text}
           onPress={() => {
             haptics.light();
             handleOpenSystemBrowser();
           }}
-          accessibilityRole="button"
           accessibilityLabel="Open in external browser"
           accessibilityHint="Opens this page in Safari or Chrome."
-        >
-          <Ionicons name="open-outline" size={22} color={palette.text} />
-        </PressableScale>
+        />
       ) : (
-        <PressableScale
-          style={styles.iconBtn}
-          scaleTo={0.85}
-          hitSlop={8}
+        <HeaderIconButton
+          name="options-outline"
+          color={palette.text}
           onPress={() => {
             haptics.light();
             setControlsOpen(true);
           }}
-          accessibilityRole="button"
           accessibilityLabel="Reader settings"
           accessibilityHint="Adjust text size, typeface, and reading theme."
-        >
-          <Ionicons name="options-outline" size={22} color={palette.text} />
-        </PressableScale>
+        />
       )}
-      <PressableScale
-        style={styles.iconBtn}
-        scaleTo={0.85}
-        hitSlop={8}
+      <HeaderIconButton
+        name="ellipsis-horizontal"
+        color={palette.text}
         onPress={() => {
           haptics.light();
           setActionPanel("actions");
         }}
-        accessibilityRole="button"
         accessibilityLabel={showWebsiteView ? "More page actions" : "More article actions"}
-      >
-        <Ionicons name="ellipsis-horizontal" size={22} color={palette.text} />
-      </PressableScale>
-    </View>
+      />
+    </HeaderActions>
   ) : undefined;
 
   const articleHead = (
@@ -989,8 +976,6 @@ const styles = StyleSheet.create({
   description: { marginTop: spacing[8] },
   byline: { marginTop: spacing[6] },
   content: { marginTop: spacing[24] },
-  headerActions: { flexDirection: "row", alignItems: "center" },
-  iconBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
   actionLabel: { flex: 1 },
   tocList: { maxHeight: 420 },
   tocRow: { minHeight: 44, justifyContent: "center" },

@@ -6,13 +6,11 @@ import { useMemo, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
-import { Ionicons } from "@expo/vector-icons";
-import { Header } from "../../../src/components/ui/Header";
+import { Header, HeaderActions, HeaderIconButton } from "../../../src/components/ui/Header";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
 import { FAB, FABLayer } from "../../../src/components/ui/FAB";
 import { Button } from "../../../src/components/ui/Button";
-import { PressableScale } from "../../../src/components/ui/PressableScale";
 import { ScreenContent } from "../../../src/components/ui/ScreenContent";
 import { EmptyState } from "../../../src/components/ui/EmptyState";
 import { BookmarkListSkeleton } from "../../../src/components/ui/BookmarkListSkeleton";
@@ -187,18 +185,14 @@ export default function TagDetailScreen() {
         maxWidth={hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth}
         right={
           anchor ? (
-            <View style={styles.headerActions}>
-              <PressableScale
-                style={styles.iconBtn}
-                scaleTo={0.85}
-                hitSlop={8}
+            <HeaderActions>
+              <HeaderIconButton
+                name="ellipsis-horizontal"
+                color={palette.text}
                 onPress={() => setTagActionsOpen(true)}
-                accessibilityRole="button"
                 accessibilityLabel="Tag actions"
-              >
-                <Ionicons name="ellipsis-horizontal" size={22} color={palette.text} />
-              </PressableScale>
-            </View>
+              />
+            </HeaderActions>
           ) : undefined
         }
       />
@@ -378,7 +372,5 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     overflow: "hidden",
   },
-  iconBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
-  headerActions: { flexDirection: "row", alignItems: "center" },
   footer: { paddingVertical: spacing[20], alignItems: "center" },
 });

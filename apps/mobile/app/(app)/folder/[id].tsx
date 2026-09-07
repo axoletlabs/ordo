@@ -7,13 +7,11 @@ import { useMemo, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
-import { Ionicons } from "@expo/vector-icons";
-import { Header } from "../../../src/components/ui/Header";
+import { Header, HeaderActions, HeaderIconButton } from "../../../src/components/ui/Header";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
 import { FAB, FABLayer } from "../../../src/components/ui/FAB";
 import { Button } from "../../../src/components/ui/Button";
-import { PressableScale } from "../../../src/components/ui/PressableScale";
 import { ScreenContent } from "../../../src/components/ui/ScreenContent";
 import { EmptyState } from "../../../src/components/ui/EmptyState";
 import { BookmarkListSkeleton } from "../../../src/components/ui/BookmarkListSkeleton";
@@ -198,30 +196,22 @@ export default function FolderDetailScreen() {
         maxWidth={hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth}
         right={
           folder ? (
-            <View style={styles.headerActions}>
+            <HeaderActions>
               {hasUnread && !showLocked && !loadFailed ? (
-                <PressableScale
-                  style={styles.iconBtn}
-                  scaleTo={0.85}
+                <HeaderIconButton
+                  name="checkmark-done"
+                  color={palette.accent}
                   onPress={onMarkAllRead}
-                  hitSlop={8}
-                  accessibilityRole="button"
                   accessibilityLabel="Mark all as read"
-                >
-                  <Ionicons name="checkmark-done" size={22} color={palette.accent} />
-                </PressableScale>
+                />
               ) : null}
-              <PressableScale
-                style={styles.iconBtn}
-                scaleTo={0.85}
+              <HeaderIconButton
+                name="ellipsis-horizontal"
+                color={palette.text}
                 onPress={() => setFolderActions(true)}
-                hitSlop={8}
-                accessibilityRole="button"
                 accessibilityLabel="Folder actions"
-              >
-                <Ionicons name="ellipsis-horizontal" size={22} color={palette.text} />
-              </PressableScale>
-            </View>
+              />
+            </HeaderActions>
           ) : undefined
         }
       />
@@ -380,8 +370,6 @@ export default function FolderDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  iconBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
-  headerActions: { flexDirection: "row", alignItems: "center" },
   content: { flex: 1, width: "100%" },
   center: { flex: 1, width: "100%", justifyContent: "center" },
   singlePane: { flex: 1, width: "100%" },

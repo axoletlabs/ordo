@@ -2,9 +2,12 @@
  * Screen header with optional back button, title, and trailing action.
  * Large tab headers and compact pushed headers share one title slot so
  * "Bookmarks" and a folder name sit on the same line when you navigate.
+ *
+ * Side controls are vertically centered on the full title cluster (title plus
+ * optional subtitle), not the title line alone.
  */
 import React from "react";
-import { Pressable, StyleSheet, View, type TextStyle } from "react-native";
+import { Pressable, StyleSheet, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -19,9 +22,18 @@ import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
 export const HEADER_LINE_HEIGHT = 21;
 /** Clears the 36px back control and a pair of 32px trailing icons. */
 export const HEADER_TITLE_INSET = 48;
+/** Square hit target for header icon buttons. */
+export const HEADER_CONTROL_SIZE = 32;
+/** Trailing header glyphs (back chevron stays 24). */
+export const HEADER_ICON_SIZE = 22;
 
 export const headerTitleTextStyle: TextStyle = {
   width: "100%",
+  includeFontPadding: false,
+  textAlignVertical: "center",
+};
+
+const headerIconGlyphStyle: TextStyle = {
   includeFontPadding: false,
   textAlignVertical: "center",
 };
@@ -106,50 +118,84 @@ export function Header({
         },
       ]}
     >
-      {showLarge && right ? (
-        <View style={[styles.largeRight, { top: topInset - spacing[2], right: endPad }]}>
-          {right}
-        </View>
-      ) : null}
-
-      <View style={styles.titleRow}>
+      <View style={styles.cluster}>
         {!showLarge && showBack ? (
-          <PressableScale
-            style={[styles.backBtn, styles.overlay, styles.overlayLeft]}
-            scaleTo={0.85}
-            onPress={handleBack}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel="Back"
-          >
-            <Ionicons name="chevron-back" size={24} color={palette.text} />
-          </PressableScale>
+          <View style={[styles.side, styles.sideLeft]}>
+            <PressableScale
+              style={styles.backBtn}
+              scaleTo={0.85}
+              onPress={handleBack}
+              hitSlop={8}
+              accessibilityRole="button"
+              accessibilityLabel="Back"
+            >
+              <Ionicons
+                name="chevron-back"
+                size={24}
+                color={palette.text}
+                style={headerIconGlyphStyle}
+              />
+            </PressableScale>
+          </View>
         ) : null}
 
-        <View
-          pointerEvents={onTitleLongPress ? "auto" : "none"}
-          style={styles.titleSlot}
-        >
+        <View pointerEvents={onTitleLongPress ? "auto" : "none"} style={styles.titleSlot}>
           {titleBlock}
+          {subtitle ? (
+            <Text
+              variant="footnote"
+              color="secondary"
+              align="center"
+              numberOfLines={1}
+              style={styles.subtitle}
+            >
+              {subtitle}
+            </Text>
+          ) : null}
         </View>
 
-        {!showLarge && right ? (
-          <View style={[styles.overlay, styles.overlayRight]}>{right}</View>
-        ) : null}
+        {right ? <View style={[styles.side, styles.sideRight]}>{right}</View> : null}
       </View>
-
-      {subtitle ? (
-        <Text
-          variant="footnote"
-          color="secondary"
-          align="center"
-          numberOfLines={1}
-          style={styles.subtitle}
-        >
-          {subtitle}
-        </Text>
-      ) : null}
     </View>
+  );
+}
+
+/** Row of trailing header controls; keeps mixed icons/labels on one baseline. */
+export function HeaderActions({
+  children,
+  style,
+}: {
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return <View style={[styles.actions, style]}>{children}</View>;
+}
+
+export function HeaderIconButton({
+  name,
+  color,
+  onPress,
+  accessibilityLabel,
+  accessibilityHint,
+}: {
+  name: keyof typeof Ionicons.glyphMap;
+  color: string;
+  onPress: () => void;
+  accessibilityLabel: string;
+  accessibilityHint?: string;
+}) {
+  return (
+    <PressableScale
+      style={styles.iconBtn}
+      scaleTo={0.85}
+      onPress={onPress}
+      hitSlop={8}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
+    >
+      <Ionicons name={name} size={HEADER_ICON_SIZE} color={color} style={headerIconGlyphStyle} />
+    </PressableScale>
   );
 }
 
@@ -159,32 +205,47 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     paddingBottom: spacing[6],
   },
-  titleRow: {
-    height: HEADER_LINE_HEIGHT,
+  cluster: {
+    position: "relative",
     justifyContent: "center",
+    minHeight: HEADER_LINE_HEIGHT,
   },
   titleSlot: {
-    ...StyleSheet.absoluteFillObject,
-    left: HEADER_TITLE_INSET,
-    right: HEADER_TITLE_INSET,
+    minHeight: HEADER_LINE_HEIGHT,
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: HEADER_TITLE_INSET,
   },
-  titleHit: { width: "100%", height: "100%", justifyContent: "center" },
+  titleHit: { width: "100%", justifyContent: "center" },
   subtitle: {
     width: "100%",
     marginTop: spacing[2],
-    paddingHorizontal: HEADER_TITLE_INSET,
     includeFontPadding: false,
+    textAlignVertical: "center",
   },
-  backBtn: { width: 36, height: 32, alignItems: "center", justifyContent: "center" },
-  overlay: {
+  side: {
     position: "absolute",
-    top: "50%",
-    marginTop: -16,
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
     zIndex: 1,
   },
-  overlayLeft: { left: 0 },
-  overlayRight: { right: 0, height: 32, justifyContent: "center" },
-  largeRight: { position: "absolute", height: 32, justifyContent: "center", zIndex: 1 },
+  sideLeft: { left: 0 },
+  sideRight: { right: 0 },
+  backBtn: {
+    width: 36,
+    height: HEADER_CONTROL_SIZE,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconBtn: {
+    width: HEADER_CONTROL_SIZE,
+    height: HEADER_CONTROL_SIZE,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actions: { flexDirection: "row", alignItems: "center" },
 });
+
+/** Stretch a side control across the title cluster and center it. */
+export const headerSideStyle = styles.side;
