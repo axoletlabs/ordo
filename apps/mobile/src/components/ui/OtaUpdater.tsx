@@ -14,14 +14,11 @@ export function OtaUpdateCard() {
 
   React.useEffect(() => {
     if (!manualCheck.current) return;
+    if (update.checking) return;
 
-    if (!update.checking && !update.kind && !update.error) {
-      manualCheck.current = false;
-      toast.show("You're up to date", { tone: "success", duration: 3000 });
-    } else if (!update.checking && update.kind) {
-      manualCheck.current = false;
-    } else if (!update.checking && update.error) {
-      manualCheck.current = false;
+    manualCheck.current = false;
+    if (update.action !== "check") return;
+    if (update.error) {
       toast.show(ota.message ?? native.error ?? "Couldn't check for updates.", {
         tone: "danger",
         duration: 5000,
@@ -33,55 +30,60 @@ export function OtaUpdateCard() {
           },
         },
       });
+      return;
     }
-  }, [native.error, ota.message, update]);
+    toast.show("You're up to date", { tone: "success", duration: 3000 });
+  }, [native.error, ota.message, update.action, update.check, update.checking, update.error]);
 
-  const description = !update.enabled
-    ? "Available in production builds"
-    : native.status === "downloading"
-      ? `Downloading v${native.release?.version ?? ""}…`
-      : update.kind === "native" && native.release
-        ? `v${native.release.version} is ready to install`
-        : update.kind === "ota" && ota.status === "ready"
-          ? "Restart to apply"
-          : update.kind === "ota"
-            ? "A quick update is available"
-            : undefined;
-
-  const buttonLabel = update.checking
-    ? "Checking…"
-    : update.kind === "native"
-      ? "Install"
-      : ota.status === "ready"
-        ? "Restart"
-        : ota.status === "available"
-          ? "Download"
+  const buttonLabel =
+    update.checking && update.action === "check"
+      ? "Checking…"
+      : update.action === "download"
+        ? "Download"
+        : update.action === "restart"
+          ? "Restart"
           : "Check";
+
+  const busy = update.downloading || (update.checking && update.action === "check");
 
   return (
     <SettingRow
       icon="cloud-download-outline"
       label="App updates"
-      description={description}
+      description={!update.enabled ? "Available in production builds" : undefined}
       right={
         <Button
           label={buttonLabel}
           size="md"
-          loading={update.checking || native.status === "downloading"}
-          disabled={!update.enabled || ota.status === "downloading"}
+          loading={busy}
+          disabled={!update.enabled}
           style={styles.checkButton}
           onPress={() => {
-            if (update.kind === "native") {
-              void native
-                .downloadAndInstall()
-                .catch(() => toast.error("Couldn't download the update."));
-              return;
-            }
-            if (update.kind === "ota" && ota.status === "available") {
+            if (update.action === "download") {
+              if (update.kind === "native") {
+                void native
+                  .downloadAndInstall()
+                  .catch(() => toast.error("Couldn't download the update."));
+                return;
+              }
               void ota.download().catch(() => toast.error("Couldn't download the update."));
               return;
             }
-            if (update.kind === "ota" && ota.status === "ready") {
+            if (update.action === "restart") {
+              if (update.kind === "native") {
+                void native.install().catch((error) => {
+                  const missing =
+                    error instanceof Error && error.message.includes("no longer on the device");
+                  if (missing) {
+                    void native
+                      .downloadAndInstall()
+                      .catch(() => toast.error("Couldn't download the update."));
+                    return;
+                  }
+                  toast.error("Couldn't open the installer.");
+                });
+                return;
+              }
               void ota.restart().catch(() => toast.error("Couldn't restart to apply the update."));
               return;
             }

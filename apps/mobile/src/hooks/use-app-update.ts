@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useCallback, useEffect } from "react";
 import { AppState } from "react-native";
 import { useOtaUpdate } from "./use-ota-update";
 import { useNativeUpdateStore } from "../store/native-update";
+import { resolveAppUpdateAction } from "../lib/app-update-action";
 
 const FOREGROUND_RECHECK_MS = 60 * 60 * 1000;
 let lastNativeForegroundCheck = 0;
@@ -25,39 +26,33 @@ export function useAppUpdate() {
     return () => subscription.remove();
   }, [native.check, native.hydrate]);
 
-  const otaDate =
-    ota.status === "ready"
-      ? ota.pendingUpdateCreatedAt
-      : ota.status === "available"
-        ? ota.availableUpdateCreatedAt
-        : null;
-  const nativeDate = native.release ? new Date(native.release.publishedAt) : null;
-  const nativeIsActionable =
-    !!native.release && (native.status === "available" || native.status === "error");
-  const nativeIsLatest =
-    nativeIsActionable &&
-    (!otaDate || !nativeDate || nativeDate.getTime() >= otaDate.getTime());
-  const kind = nativeIsLatest
-    ? "native"
-    : ota.status === "available" || ota.status === "ready"
-      ? "ota"
-      : null;
+  const resolved = resolveAppUpdateAction({
+    otaStatus: ota.status,
+    otaAvailableAt: ota.availableUpdateCreatedAt,
+    otaPendingAt: ota.pendingUpdateCreatedAt,
+    nativeStatus: native.status,
+    nativeRelease: native.release,
+    nativeDownloaded: !!native.downloadedUri,
+  });
 
-  const check = async () => {
-    const results = await Promise.allSettled([ota.check(), native.check(true)]);
+  const checkOta = ota.check;
+  const checkNative = native.check;
+  const check = useCallback(async () => {
+    const results = await Promise.allSettled([checkOta(), checkNative(true)]);
     if (results.every((result) => result.status === "rejected")) {
       throw (results[0] as PromiseRejectedResult).reason;
     }
-  };
+  }, [checkNative, checkOta]);
 
-  const checking = ota.status === "checking" || native.status === "checking";
   const error = !!(ota.message || native.error);
 
   return {
     ota,
     native,
-    kind,
-    checking,
+    action: resolved.action,
+    kind: resolved.kind,
+    checking: resolved.checking,
+    downloading: resolved.downloading,
     error,
     enabled: ota.enabled || native.status !== "disabled",
     check,

@@ -88,12 +88,22 @@ export function useOtaUpdate(): UseOtaUpdate {
     return () => sub.remove();
   }, [enabled]);
 
+  const runningId = currentlyRunning.updateId ?? null;
+  const availableId = availableUpdate?.updateId ?? null;
+  const pendingId = downloadedUpdate?.updateId ?? null;
+  // A pending bundle that's older than the one just advertised should Download,
+  // not Restart into the stale copy. Same-id available+pending is Restart.
+  const newerThanPending =
+    isUpdateAvailable &&
+    availableId != null &&
+    availableId !== runningId &&
+    availableId !== pendingId;
+
   const status: OtaStatus = (() => {
     if (!enabled) return "disabled";
-    // Actionable states take priority over a transient error so the user can
-    // always act on a downloaded update even if a later check failed.
-    if (isUpdatePending) return "ready";
     if (isDownloading) return "downloading";
+    if (newerThanPending) return "available";
+    if (isUpdatePending) return "ready";
     if (isChecking) return "checking";
     if (isUpdateAvailable) return "available";
     if (checkError || downloadError || initializationError) return "error";

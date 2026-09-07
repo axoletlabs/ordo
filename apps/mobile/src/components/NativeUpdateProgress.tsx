@@ -15,9 +15,10 @@ export function NativeUpdateProgress() {
   const { palette } = useTheme();
   const update = useNativeUpdateStore();
   const visible =
-    update.status === "downloading" ||
-    (update.status === "downloaded" && !!update.downloadedUri) ||
-    (update.status === "error" && (!!update.downloadedUri || update.progress > 0));
+    update.showProgress &&
+    (update.status === "downloading" ||
+      (update.status === "downloaded" && !!update.downloadedUri) ||
+      (update.status === "error" && (!!update.downloadedUri || update.progress > 0)));
   const downloading = update.status === "downloading";
   const downloadFailed = update.status === "error" && !update.downloadedUri;
   const percent = Math.round(update.progress * 100);

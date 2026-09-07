@@ -66,6 +66,8 @@ interface NativeUpdateState {
   release: NativeRelease | null;
   progress: number;
   downloadedUri: string | null;
+  /** True while this process is fetching or presenting a just-downloaded APK. */
+  showProgress: boolean;
   error: string | null;
   lastChecked: number | null;
   hydrate: () => Promise<void>;
@@ -136,6 +138,35 @@ function isSupported(): boolean {
   return Platform.OS === "android" && !__DEV__;
 }
 
+function apkDestination(version: string): string | null {
+  if (!FileSystem.cacheDirectory) return null;
+  return `${FileSystem.cacheDirectory}ordo-${version}.apk`;
+}
+
+async function apkIsReady(uri: string | null, apkSize: number): Promise<boolean> {
+  if (!uri) return false;
+  try {
+    const info = await FileSystem.getInfoAsync(uri);
+    if (!info.exists) return false;
+    return apkSize <= 0 || info.size === apkSize;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveLocalApk(release: NativeRelease | null): Promise<string | null> {
+  if (!release) return null;
+  const destination = apkDestination(release.version);
+  if (destination && (await apkIsReady(destination, release.apkSize))) return destination;
+  return null;
+}
+
+async function deleteApk(version: string | undefined): Promise<void> {
+  if (!version) return;
+  const path = apkDestination(version);
+  if (path) await FileSystem.deleteAsync(path, { idempotent: true }).catch(() => {});
+}
+
 async function saveCache(state: NativeUpdateState): Promise<void> {
   await prefsSet(StorageKeys.NATIVE_UPDATE, {
     checkedAt: state.lastChecked ?? Date.now(),
@@ -151,6 +182,7 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
   release: null,
   progress: 0,
   downloadedUri: null,
+  showProgress: false,
   error: null,
   lastChecked: null,
 
@@ -161,23 +193,35 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
       cached?.release && isNewerVersion(cached.release.version, currentVersion())
         ? cached.release
         : null;
+    if (cached?.release && !release) await deleteApk(cached.release.version);
+    if (!isSupported()) {
+      set({
+        hydrated: true,
+        includePrereleases: cached?.includePrereleases ?? false,
+        release: null,
+        lastChecked: cached?.checkedAt ?? null,
+        downloadedUri: null,
+        showProgress: false,
+        status: "disabled",
+      });
+      return;
+    }
+    const downloadedUri = await resolveLocalApk(release);
     set({
       hydrated: true,
       includePrereleases: cached?.includePrereleases ?? false,
       release,
       lastChecked: cached?.checkedAt ?? null,
-      status: !isSupported() ? "disabled" : release ? "available" : "idle",
+      downloadedUri,
+      progress: downloadedUri ? 1 : 0,
+      showProgress: false,
+      status: release ? (downloadedUri ? "downloaded" : "available") : "idle",
     });
   },
 
   setIncludePrereleases: async (enabled) => {
     await get().hydrate();
-    set({
-      includePrereleases: enabled,
-      lastChecked: null,
-      release: null,
-      status: isSupported() ? "idle" : "disabled",
-    });
+    set({ includePrereleases: enabled, lastChecked: null });
     await saveCache(get());
     await get().check(true).catch(() => {});
   },
@@ -186,19 +230,22 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
     await get().hydrate();
     if (!isSupported()) return null;
     const state = get();
-    if (state.status === "checking") return state.release;
-    if (state.status === "downloading" || state.status === "downloaded") return state.release;
-    if (state.status === "error" && (state.downloadedUri || state.progress > 0)) {
-      return state.release;
-    }
+    if (state.status === "checking" || state.status === "downloading") return state.release;
+    const awaitingNewer = !!state.release || !!state.downloadedUri;
     if (
       !force &&
+      !awaitingNewer &&
       state.lastChecked != null &&
       Date.now() - state.lastChecked < CHECK_COOLDOWN_MS
     ) {
       return state.release;
     }
 
+    const previous = {
+      release: state.release,
+      downloadedUri: state.downloadedUri,
+      progress: state.progress,
+    };
     set({ status: "checking", error: null });
     try {
       const controller = new AbortController();
@@ -214,11 +261,12 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
       }
       if (!response.ok) throw new Error(`GitHub returned ${response.status}`);
       const releases = (await response.json()) as GithubRelease[];
+      const includePrereleases = get().includePrereleases;
       const eligible = releases.filter((release) => {
         const version = releaseVersion(release.tag_name ?? "");
         return (
           !release.draft &&
-          (state.includePrereleases || !release.prerelease) &&
+          (includePrereleases || !release.prerelease) &&
           version != null &&
           isNewerVersion(version, currentVersion())
         );
@@ -229,25 +277,43 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
         .sort((a, b) => new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime());
       const release = candidates[0] ?? null;
       const waitingForApk = eligible.length > candidates.length;
+      if (previous.release?.version && previous.release.version !== release?.version) {
+        await deleteApk(previous.release.version);
+      }
+      const downloadedUri = await resolveLocalApk(release);
       set({
         release,
-        status: release ? "available" : "idle",
+        downloadedUri,
+        progress: downloadedUri ? 1 : 0,
+        status: release ? (downloadedUri ? "downloaded" : "available") : "idle",
         lastChecked: waitingForApk ? null : Date.now(),
         error: null,
       });
       if (waitingForApk) {
         await prefsSet(StorageKeys.NATIVE_UPDATE, {
           checkedAt: 0,
-          includePrereleases: state.includePrereleases,
+          includePrereleases,
           release,
         } satisfies CachedUpdate);
       } else {
         await saveCache(get());
       }
+      if (get().includePrereleases !== includePrereleases) {
+        return get().check(true);
+      }
       return release;
     } catch (error) {
+      const downloadedUri =
+        (await resolveLocalApk(previous.release)) ?? previous.downloadedUri;
       set({
-        status: get().release ? "available" : "error",
+        release: previous.release,
+        downloadedUri,
+        progress: downloadedUri ? 1 : previous.progress,
+        status: downloadedUri
+          ? "downloaded"
+          : previous.release
+            ? "available"
+            : "error",
         error: error instanceof Error ? error.message : "Native update check failed",
       });
       throw error;
@@ -257,18 +323,28 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
   downloadAndInstall: async () => {
     if (get().status === "downloading") return;
     const release = get().release;
-    if (!release || !FileSystem.cacheDirectory) return;
-    const existingUri = get().downloadedUri;
-    if (existingUri) {
-      const existing = await FileSystem.getInfoAsync(existingUri).catch(() => null);
-      if (existing?.exists && (release.apkSize <= 0 || existing.size === release.apkSize)) {
-        set({ status: "downloaded", progress: 1, error: null });
-        await get().install();
-        return;
-      }
+    if (!release) return;
+    const destination = apkDestination(release.version);
+    if (!destination) return;
+    if (await apkIsReady(destination, release.apkSize)) {
+      set({
+        status: "downloaded",
+        progress: 1,
+        downloadedUri: destination,
+        error: null,
+        showProgress: true,
+      });
+      await get().install();
+      if (get().lastChecked == null) void get().check(true).catch(() => {});
+      return;
     }
-    const destination = `${FileSystem.cacheDirectory}ordo-${release.version}.apk`;
-    set({ status: "downloading", progress: 0, downloadedUri: null, error: null });
+    set({
+      status: "downloading",
+      progress: 0,
+      downloadedUri: null,
+      error: null,
+      showProgress: true,
+    });
     try {
       await FileSystem.deleteAsync(destination, { idempotent: true });
       const download = FileSystem.createDownloadResumable(
@@ -283,14 +359,21 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
       );
       const result = await download.downloadAsync();
       if (!result?.uri) throw new Error("The update download did not finish");
-      const info = await FileSystem.getInfoAsync(result.uri);
-      if (!info.exists || (release.apkSize > 0 && info.size !== release.apkSize)) {
+      if (!(await apkIsReady(result.uri, release.apkSize))) {
         await FileSystem.deleteAsync(result.uri, { idempotent: true });
         throw new Error("The update download was incomplete");
       }
       set({ status: "downloaded", progress: 1, downloadedUri: result.uri });
       await get().install();
+      if (get().lastChecked == null) void get().check(true).catch(() => {});
     } catch (error) {
+      if (get().downloadedUri) {
+        set({
+          status: "downloaded",
+          error: error instanceof Error ? error.message : "Couldn't open the installer.",
+        });
+        throw error;
+      }
       set({
         status: "error",
         error: error instanceof Error ? error.message : "Couldn't download the update.",
@@ -300,8 +383,22 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
   },
 
   install: async () => {
-    const uri = get().downloadedUri;
-    if (!uri) return;
+    const release = get().release;
+    const currentUri = get().downloadedUri;
+    const uri = (await apkIsReady(currentUri, release?.apkSize ?? 0))
+      ? currentUri
+      : await resolveLocalApk(release);
+    if (!uri) {
+      set({
+        downloadedUri: null,
+        progress: 0,
+        status: release ? "available" : "idle",
+      });
+      throw new Error("The downloaded update is no longer on the device");
+    }
+    if (uri !== currentUri) {
+      set({ downloadedUri: uri, status: "downloaded", progress: 1 });
+    }
     try {
       const contentUri = await FileSystem.getContentUriAsync(uri);
       await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
@@ -317,6 +414,11 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
 
   dismissDownload: () => {
     const release = get().release;
-    set({ status: release ? "available" : "idle", progress: 0, error: null });
+    const downloaded = !!get().downloadedUri;
+    set({
+      status: release ? (downloaded ? "downloaded" : "available") : "idle",
+      showProgress: false,
+      error: null,
+    });
   },
 }));

@@ -19,6 +19,7 @@ export function UpdateReadyWatcher() {
 
   useEffect(() => {
     if (update.kind !== "native" || !native.release) return;
+    if (update.action !== "download" || update.downloading) return;
     if (native.release.tagName === lastNativeShown.current) return;
     lastNativeShown.current = native.release.tagName;
 
@@ -27,12 +28,12 @@ export function UpdateReadyWatcher() {
       duration: 6000,
       swipeable: true,
       action: {
-        label: "Install",
+        label: "Download",
         onPress: () =>
           native.downloadAndInstall().catch(() => toast.error("Couldn't download the update.")),
       },
     });
-  }, [native.downloadAndInstall, native.release, update.kind]);
+  }, [native.downloadAndInstall, native.release, update.action, update.downloading, update.kind]);
 
   useEffect(() => {
     if (update.kind !== "ota" || !ota.enabled || ota.status !== "available") return;
