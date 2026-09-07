@@ -61,7 +61,7 @@ export function PanelHeader({
 const styles = StyleSheet.create({
   wrap: {
     alignItems: "center",
-    marginBottom: spacing[8],
+    marginBottom: spacing[6],
   },
   icon: {
     width: 36,
@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
-    marginBottom: spacing[6],
+    marginBottom: spacing[4],
   },
   titleCluster: {
     flexDirection: "row",

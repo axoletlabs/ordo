@@ -24,7 +24,7 @@ import { EditTagPanel } from "../../../src/components/tags/EditTagPanel";
 import { ConfirmDialog } from "../../../src/components/ui/ConfirmDialog";
 import { FloatingPanel } from "../../../src/components/ui/FloatingPanel";
 import { PanelHeader } from "../../../src/components/ui/PanelHeader";
-import { SheetActionRow } from "../../../src/components/ui/SheetActionRow";
+import { SheetActionRow, SheetMenu } from "../../../src/components/ui/SheetActionRow";
 import { ReaderPane, ReaderPanePlaceholder } from "../../../src/components/reader/ReaderPane";
 import { useTags, useTaggedBookmarks, useDeleteTag } from "../../../src/hooks/use-tags";
 import {
@@ -289,26 +289,28 @@ export default function TagDetailScreen() {
         onDismiss={() => setEditTagsBm(null)}
       />
 
-      <FloatingPanel visible={tagActionsOpen} onDismiss={() => setTagActionsOpen(false)}>
+      <FloatingPanel visible={tagActionsOpen} onDismiss={() => setTagActionsOpen(false)} fitContent>
         <PanelHeader title={anchor?.name ?? "Tag"} />
-        <SheetActionRow
-          icon="create-outline"
-          label="Edit tag"
-          onPress={() => {
-            setTagActionsOpen(false);
-            setTimeout(() => setEditTagOpen(true), 100);
-          }}
-        />
-        <SheetActionRow
-          icon="trash-outline"
-          label="Delete tag"
-          tone="danger"
-          divider={false}
-          onPress={() => {
-            setTagActionsOpen(false);
-            setTimeout(() => setDeleteTagOpen(true), 100);
-          }}
-        />
+        <SheetMenu>
+          <SheetActionRow
+            icon="create-outline"
+            label="Edit tag"
+            onPress={() => {
+              setTagActionsOpen(false);
+              setTimeout(() => setEditTagOpen(true), 100);
+            }}
+          />
+          <SheetActionRow
+            icon="trash-outline"
+            label="Delete tag"
+            tone="danger"
+            divider={false}
+            onPress={() => {
+              setTagActionsOpen(false);
+              setTimeout(() => setDeleteTagOpen(true), 100);
+            }}
+          />
+        </SheetMenu>
       </FloatingPanel>
 
       <EditTagPanel

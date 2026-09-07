@@ -7,7 +7,7 @@ import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 import { Text } from "../ui/Text";
-import { SheetActionRow, sheetMenuStyles } from "../ui/SheetActionRow";
+import { SheetActionRow, SheetMenu, sheetMenuStyles } from "../ui/SheetActionRow";
 import { EyeToggle } from "../ui/EyeToggle";
 import { PressableScale } from "../ui/PressableScale";
 import { Segmented } from "../ui/Segmented";
@@ -352,7 +352,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: Fo
   };
 
   return (
-    <FloatingPanel visible={visible && !!folder} onDismiss={onDismiss}>
+    <FloatingPanel visible={visible && !!folder} onDismiss={onDismiss} fitContent={mode === "menu" || mode === "lockChoice"}>
       {folder && mode === "menu" ? (
         <>
           <PanelHeader
@@ -369,7 +369,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: Fo
             }
           />
           {error ? <Text variant="footnote" color="danger" style={styles.error}>{error}</Text> : null}
-          <View>
+          <SheetMenu>
             <SheetActionRow icon={folder.pinned ? "pin" : "pin-outline"} label={folder.pinned ? "Unpin folder" : "Pin folder"} onPress={doTogglePinned} />
             <SheetActionRow icon="happy-outline" label="Change icon" onPress={() => showMode("icon")} />
             <SheetActionRow icon="create-outline" label="Rename" onPress={() => showMode("rename")} />
@@ -379,7 +379,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: Fo
               <SheetActionRow icon="lock-closed-outline" label="Lock folder" onPress={() => showMode("lockChoice")} />
             )}
             <SheetActionRow icon="trash-outline" label="Delete folder" tone="danger" divider={false} onPress={() => showMode("delete")} />
-          </View>
+          </SheetMenu>
         </>
       ) : null}
 
@@ -403,7 +403,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: Fo
               Update your {APP_NAME} server to use pattern, PIN, and device locks.
             </Text>
           ) : null}
-          <View>
+          <SheetMenu>
             {lockTypesSupported ? (
               <>
                 <SheetActionRow icon="finger-print-outline" label="Device lock" onPress={doSetDeviceLock} />
@@ -412,7 +412,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: Fo
               </>
             ) : null}
             <SheetActionRow icon="text-outline" label="Text password" divider={false} onPress={() => { setLockType("password"); showMode("lockCredential"); }} />
-          </View>
+          </SheetMenu>
           <Button label="Back" variant="ghost" block disabled={removing} onPress={() => showMode("menu")} style={sheetMenuStyles.cancel} />
         </>
       ) : null}

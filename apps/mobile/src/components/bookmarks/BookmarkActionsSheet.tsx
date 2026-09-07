@@ -4,7 +4,7 @@ import { useRouter } from "expo-router";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Button } from "../ui/Button";
-import { SheetActionRow, sheetMenuStyles } from "../ui/SheetActionRow";
+import { SheetActionRow, SheetMenu, sheetMenuStyles } from "../ui/SheetActionRow";
 import { useTheme } from "../../theme/ThemeProvider";
 import { copyLink } from "../../lib/copy-link";
 import { openLivePage } from "../../lib/open-website";
@@ -55,7 +55,7 @@ export function BookmarkActionsSheet({
   if (!bookmark) return null;
 
   return (
-    <FloatingPanel visible={visible} onDismiss={onDismiss}>
+    <FloatingPanel visible={visible} onDismiss={onDismiss} fitContent={mode === "menu"}>
       {mode === "delete" ? (
         <>
           <PanelHeader
@@ -82,7 +82,8 @@ export function BookmarkActionsSheet({
       ) : (
         <>
           <PanelHeader title={bookmark.title || bookmark.url} numberOfLines={2} />
-          <SheetActionRow
+          <SheetMenu>
+            <SheetActionRow
             icon={bookmark.isRead ? "radio-button-off" : "checkmark-circle"}
             label={bookmark.isRead ? "Mark as unread" : "Mark as read"}
             onPress={() => {
@@ -179,6 +180,7 @@ export function BookmarkActionsSheet({
             divider={false}
             onPress={() => setMode("delete")}
           />
+          </SheetMenu>
         </>
       )}
     </FloatingPanel>

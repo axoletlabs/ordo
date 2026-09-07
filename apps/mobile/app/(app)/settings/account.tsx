@@ -14,7 +14,7 @@ import { SettingRow } from "../../../src/components/ui/SettingRow";
 import { UserAvatar } from "../../../src/components/ui/UserAvatar";
 import { FloatingPanel } from "../../../src/components/ui/FloatingPanel";
 import { PanelHeader } from "../../../src/components/ui/PanelHeader";
-import { SheetActionRow } from "../../../src/components/ui/SheetActionRow";
+import { SheetActionRow, SheetMenu } from "../../../src/components/ui/SheetActionRow";
 import { toast } from "../../../src/components/ui/toast-store";
 import { useAuthStore } from "../../../src/store/auth";
 import { useServerInfo } from "../../../src/hooks/queries";
@@ -188,28 +188,30 @@ export default function AccountScreen() {
         </SettingsGroup>
       </SettingsScrollView>
 
-      <FloatingPanel visible={menuOpen} onDismiss={() => setMenuOpen(false)}>
+      <FloatingPanel visible={menuOpen} onDismiss={() => setMenuOpen(false)} fitContent>
         <PanelHeader title="Profile picture" />
-        <SheetActionRow
-          icon="image-outline"
-          label="Choose photo"
-          onPress={() => afterSheet(() => void choosePhoto())}
-        />
-        <SheetActionRow
-          icon="camera-outline"
-          label="Take photo"
-          divider={!user?.hasAvatar}
-          onPress={() => afterSheet(() => void takePhoto())}
-        />
-        {user?.hasAvatar ? (
+        <SheetMenu>
           <SheetActionRow
-            icon="trash-outline"
-            label="Remove photo"
-            tone="danger"
-            divider={false}
-            onPress={() => afterSheet(() => void removePhoto())}
+            icon="image-outline"
+            label="Choose photo"
+            onPress={() => afterSheet(() => void choosePhoto())}
           />
-        ) : null}
+          <SheetActionRow
+            icon="camera-outline"
+            label="Take photo"
+            divider={!user?.hasAvatar}
+            onPress={() => afterSheet(() => void takePhoto())}
+          />
+          {user?.hasAvatar ? (
+            <SheetActionRow
+              icon="trash-outline"
+              label="Remove photo"
+              tone="danger"
+              divider={false}
+              onPress={() => afterSheet(() => void removePhoto())}
+            />
+          ) : null}
+        </SheetMenu>
       </FloatingPanel>
     </SettingsPage>
   );

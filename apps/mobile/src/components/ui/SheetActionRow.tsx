@@ -13,6 +13,15 @@ export const sheetMenuStyles = StyleSheet.create({
   cancel: { marginTop: spacing[4] },
 });
 
+/** Shrink-wraps action rows to the longest label and centers that column. */
+export function SheetMenu({ children }: { children: React.ReactNode }) {
+  return (
+    <View style={styles.menu}>
+      <View>{children}</View>
+    </View>
+  );
+}
+
 export function SheetActionRow({
   icon,
   label,
@@ -30,8 +39,9 @@ export function SheetActionRow({
 }) {
   const { palette } = useTheme();
   const color = tone === "danger" ? palette.danger : palette.text;
+  const fill = trailing != null;
   return (
-    <View style={styles.wrap}>
+    <View style={[styles.wrap, fill && styles.wrapFill]}>
       <PressableScale
         accessibilityRole="button"
         accessibilityLabel={label}
@@ -42,7 +52,7 @@ export function SheetActionRow({
         }}
       >
         <Ionicons name={icon} size={20} color={tone === "danger" ? color : palette.accent} />
-        <Text variant="body" style={[styles.label, { color }]} numberOfLines={1}>
+        <Text variant="body" style={[styles.label, fill && styles.labelFill, { color }]} numberOfLines={1}>
           {label}
         </Text>
         {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
@@ -53,18 +63,18 @@ export function SheetActionRow({
 }
 
 const styles = StyleSheet.create({
-  wrap: {
-    alignSelf: "center",
-    width: "72%",
-    maxWidth: 280,
-  },
+  menu: { width: "100%", alignItems: "center" },
+  wrap: { minWidth: "100%" },
+  wrapFill: { alignSelf: "stretch", width: "100%" },
   row: {
     flexDirection: "row",
     alignItems: "center",
+    alignSelf: "stretch",
     gap: spacing[12],
     minHeight: 42,
   },
-  label: { flex: 1, minWidth: 0 },
+  label: { flexShrink: 1 },
+  labelFill: { flex: 1, minWidth: 0 },
   trailing: {
     flexDirection: "row",
     alignItems: "center",

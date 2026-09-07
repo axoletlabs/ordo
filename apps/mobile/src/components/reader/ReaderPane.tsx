@@ -37,7 +37,7 @@ import { Skeleton } from "../ui/Skeleton";
 import { PressableScale } from "../ui/PressableScale";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
-import { SheetActionRow, sheetMenuStyles } from "../ui/SheetActionRow";
+import { SheetActionRow, SheetMenu, sheetMenuStyles } from "../ui/SheetActionRow";
 import { FAB, FABLayer } from "../ui/FAB";
 import { ArticleHtml, type ArticleHeading } from "./ArticleHtml";
 import { Markdown } from "./Markdown";
@@ -830,7 +830,7 @@ function ReaderPaneInner({
         bookmark={bookmark ?? null}
         onDismiss={() => setEditTagsOpen(false)}
       />
-      <FloatingPanel visible={actionPanel !== null} onDismiss={() => setActionPanel(null)}>
+      <FloatingPanel visible={actionPanel !== null} onDismiss={() => setActionPanel(null)} fitContent={actionPanel === "actions"}>
         {actionPanel === "contents" ? (
           <>
             <PanelHeader title="Table of contents" />
@@ -867,6 +867,7 @@ function ReaderPaneInner({
         ) : (
           <>
             <PanelHeader title={showWebsiteView ? "Page actions" : "Article actions"} />
+            <SheetMenu>
             {hasHtml && articleHeadings.length >= 3 && !showWebsiteView ? (
               <SheetActionRow
                 icon="list-outline"
@@ -948,6 +949,7 @@ function ReaderPaneInner({
                 }}
               />
             )}
+            </SheetMenu>
           </>
         )}
       </FloatingPanel>

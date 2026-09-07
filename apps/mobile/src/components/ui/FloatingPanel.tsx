@@ -22,6 +22,8 @@ export interface FloatingPanelProps {
   style?: StyleProp<ViewStyle>;
   maxWidth?: number;
   onShow?: () => void;
+  /** Size the card to its children instead of stretching toward `maxWidth`. */
+  fitContent?: boolean;
   /** When false, the scrim and back button do not close the panel. */
   dismissible?: boolean;
 }
@@ -33,6 +35,7 @@ export function FloatingPanel({
   style,
   maxWidth = 420,
   onShow,
+  fitContent = false,
   dismissible = true,
 }: FloatingPanelProps) {
   const { palette, shadows } = useTheme();
@@ -77,7 +80,9 @@ export function FloatingPanel({
             style={[
               styles.panel,
               {
-                width: Math.min(maxWidth, width - spacing[32]),
+                width: fitContent ? undefined : Math.min(maxWidth, width - spacing[32]),
+                maxWidth: Math.min(maxWidth, width - spacing[32]),
+                minWidth: fitContent ? 220 : undefined,
                 maxHeight: height - insets.top - insets.bottom - spacing[48],
                 backgroundColor: palette.surfaceElevated,
                 borderColor: palette.borderStrong,

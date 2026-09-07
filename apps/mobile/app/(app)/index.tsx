@@ -13,7 +13,7 @@ import { PanelHeader } from "../../src/components/ui/PanelHeader";
 import { Button } from "../../src/components/ui/Button";
 import { Text } from "../../src/components/ui/Text";
 import { PressableScale } from "../../src/components/ui/PressableScale";
-import { SheetActionRow } from "../../src/components/ui/SheetActionRow";
+import { SheetActionRow, SheetMenu } from "../../src/components/ui/SheetActionRow";
 import { ScreenContent } from "../../src/components/ui/ScreenContent";
 import { BookmarkListSkeleton } from "../../src/components/ui/BookmarkListSkeleton";
 import { EmptyState } from "../../src/components/ui/EmptyState";
@@ -331,25 +331,27 @@ export default function BookmarksScreen() {
       </FABLayer>
       ) : null}
 
-      <FloatingPanel visible={createMenuOpen} onDismiss={() => setCreateMenuOpen(false)}>
+      <FloatingPanel visible={createMenuOpen} onDismiss={() => setCreateMenuOpen(false)} fitContent>
         <PanelHeader title="Create" />
-        <SheetActionRow
-          icon="bookmark-outline"
-          label="Save bookmark"
-          onPress={() => {
-            setCreateMenuOpen(false);
-            setTimeout(() => setAddOpen(true), 100);
-          }}
-        />
-        <SheetActionRow
-          icon="folder-outline"
-          label="New folder"
-          divider={false}
-          onPress={() => {
-            setCreateMenuOpen(false);
-            setTimeout(() => setCreateOpen(true), 100);
-          }}
-        />
+        <SheetMenu>
+          <SheetActionRow
+            icon="bookmark-outline"
+            label="Save bookmark"
+            onPress={() => {
+              setCreateMenuOpen(false);
+              setTimeout(() => setAddOpen(true), 100);
+            }}
+          />
+          <SheetActionRow
+            icon="folder-outline"
+            label="New folder"
+            divider={false}
+            onPress={() => {
+              setCreateMenuOpen(false);
+              setTimeout(() => setCreateOpen(true), 100);
+            }}
+          />
+        </SheetMenu>
       </FloatingPanel>
 
       <AddBookmarkSheet
