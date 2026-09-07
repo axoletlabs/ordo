@@ -310,6 +310,8 @@ function ReaderPaneInner({
   const showWebsiteView =
     surface === "browser" || (surface === "auto" && !!bookmark && bookmarkOpensAsWebsite(bookmark));
   const showReadInOrdo = !!bookmark && canReadInOrdo(bookmark);
+  const showClassifyRow =
+    !!bookmark && (bookmarkIsArticle(bookmark) || bookmarkCanBeArticle(bookmark));
   const palette = showWebsiteView ? appPalette : readerPalette;
   const effectiveDark = palette.mode === "dark";
 
@@ -894,6 +896,7 @@ function ReaderPaneInner({
             <SheetActionRow
               icon="pricetags-outline"
               label="Edit tags"
+              divider={!showWebsiteView || showReadInOrdo || showClassifyRow}
               onPress={() => {
                 setActionPanel(null);
                 setEditTagsOpen(true);
@@ -903,6 +906,7 @@ function ReaderPaneInner({
               <SheetActionRow
                 icon="reader-outline"
                 label={`Read in ${APP_NAME}`}
+                divider={showClassifyRow}
                 onPress={() => {
                   setActionPanel(null);
                   setSurface("reader");
@@ -913,6 +917,7 @@ function ReaderPaneInner({
               <SheetActionRow
                 icon="globe-outline"
                 label="Mark as website"
+                divider={!showWebsiteView}
                 onPress={() => {
                   setActionPanel(null);
                   handleClassify(false);
@@ -922,23 +927,14 @@ function ReaderPaneInner({
               <SheetActionRow
                 icon="reader-outline"
                 label="Mark as article"
+                divider={!showWebsiteView}
                 onPress={() => {
                   setActionPanel(null);
                   handleClassify(true);
                 }}
               />
             ) : null}
-            {showWebsiteView ? (
-              <SheetActionRow
-                icon="open-outline"
-                label="Open in external browser"
-                divider={false}
-                onPress={() => {
-                  setActionPanel(null);
-                  handleOpenSystemBrowser();
-                }}
-              />
-            ) : (
+            {!showWebsiteView ? (
               <SheetActionRow
                 icon="globe-outline"
                 label="Open original"
@@ -948,7 +944,7 @@ function ReaderPaneInner({
                   handleOpenOriginal();
                 }}
               />
-            )}
+            ) : null}
             </SheetMenu>
           </>
         )}
