@@ -55,7 +55,9 @@ export function BookmarkRow({
   const faviconUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
   const [failedFavicon, setFailedFavicon] = React.useState<string | null>(null);
   const opensAsWebsite = bookmarkOpensAsWebsite(bookmark);
-  const showReadingTime = bookmarkIsArticle(bookmark) && !!bookmark.readingTimeMinutes;
+  const isArticle = bookmarkIsArticle(bookmark);
+  const showReadingTime = isArticle && !!bookmark.readingTimeMinutes;
+  const showDescription = isArticle && !!bookmark.description;
   const isPending = bookmark.fetchStatus === "pending";
   const tags = Array.isArray(bookmark.tags) ? bookmark.tags : [];
   const suggestedTags = Array.isArray(bookmark.suggestedTags) ? bookmark.suggestedTags : [];
@@ -145,7 +147,7 @@ export function BookmarkRow({
           <Text variant="headline" color={titleColor} numberOfLines={1}>
             {title}
           </Text>
-          {bookmark.description ? (
+          {showDescription ? (
             <Text variant="footnote" color="secondary" numberOfLines={1} style={styles.description}>
               {bookmark.description}
             </Text>
