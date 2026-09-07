@@ -12,6 +12,7 @@
     "start": "expo start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/lib/app-version.test.ts src/lib/native-release.test.ts",
     "clean": "rimraf .expo node_modules/.cache"
   },
   "dependencies": {

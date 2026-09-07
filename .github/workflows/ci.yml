@@ -18,6 +18,11 @@ on:
         default: 'false'
         type: boolean
 
+# Native GitHub Releases:
+#   Latest (stable): tag vX.Y.Z, "Set as the latest release", pre-release unchecked.
+#   Early: tag vX.Y.Z-alpha.N | -beta.N | -rc.N, "This is a pre-release" checked.
+# JS-only production updates still go through EAS Update on main when the
+# Android fingerprint is unchanged.
 # Concurrency is per-job, not workflow-wide. A workflow-level group would
 # cancel an in-flight APK when a later JS-only push starts OTA, leaving that
 # native fingerprint with no binary.
@@ -163,15 +168,13 @@ jobs:
             echo "should_build=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Validate release tag matches app version
+      - name: Validate release tag
         if: github.event_name == 'release'
         run: |
-          TAG="${{ github.event.release.tag_name }}"
-          EXPECTED="v${{ steps.info.outputs.version }}"
-          if [[ "$TAG" != "$EXPECTED" ]]; then
-            echo "::error::Release tag '$TAG' does not match app version '$EXPECTED'"
-            exit 1
-          fi
+          node "$GITHUB_WORKSPACE/.github/scripts/validate-release-tag.js" \
+            "${{ github.event.release.tag_name }}" \
+            "${{ steps.info.outputs.version }}" \
+            "${{ github.event.release.prerelease }}"
 
   analyze:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -327,6 +330,9 @@ jobs:
 
   release:
     needs: [detect, build_apk]
+    # Attaches APKs to the GitHub Release that triggered this run.
+    # Stable (Latest): tag vX.Y.Z, pre-release unchecked.
+    # Early (pre-release): tag vX.Y.Z-(alpha|beta|rc)[.N], pre-release checked.
     if: needs.detect.outputs.is_release == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -344,13 +350,13 @@ jobs:
         run: |
           VERSION="${{ needs.detect.outputs.version }}"
           cd apk
-          # universal (all ABIs) -> ordo-vX.Y.Z.apk
+          # universal (all ABIs) -> ordo-vX.Y.Z.apk or ordo-vX.Y.Z-beta.N.apk
           if [ -f app-universal-release.apk ]; then
             mv app-universal-release.apk "ordo-v${VERSION}.apk"
           elif [ -f app-release.apk ]; then
             mv app-release.apk "ordo-v${VERSION}.apk"
           fi
-          # per-ABI splits -> ordo-vX.Y.Z-<abi>.apk
+          # per-ABI splits -> ordo-vX.Y.Z[-prerelease]-<abi>.apk
           for abi in armeabi-v7a arm64-v8a x86 x86_64; do
             if [ -f "app-${abi}-release.apk" ]; then
               mv "app-${abi}-release.apk" "ordo-v${VERSION}-${abi}.apk"
