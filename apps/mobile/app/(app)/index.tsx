@@ -158,37 +158,34 @@ export default function BookmarksScreen() {
     router.push(`/folder/${folder.id}`);
   };
 
-  const headerRight =
-    tagCount > 0 || hasUnread ? (
-      <HeaderActions style={styles.headerActions}>
-        {tagCount > 0 ? (
-          <PressableScale
-            style={styles.tagsLink}
-            onPress={() => {
-              haptics.light();
-              router.push("/tags");
-            }}
-            hitSlop={8}
-            accessibilityRole="button"
-            accessibilityLabel={`Tags, ${tagCount} ${tagCount === 1 ? "tag" : "tags"}`}
-            accessibilityHint="Browse and manage tags."
-          >
-            <Ionicons name="pricetags-outline" size={11} color={palette.textTertiary} />
-            <Text variant="label" color="secondary">
-              Tags
-            </Text>
-          </PressableScale>
-        ) : null}
-        {hasUnread ? (
-          <HeaderIconButton
-            name="checkmark-done"
-            color={palette.accent}
-            onPress={onMarkAllRead}
-            accessibilityLabel="Mark all as read"
-          />
-        ) : null}
-      </HeaderActions>
-    ) : undefined;
+  const headerRight = (
+    <HeaderActions style={styles.headerActions}>
+      <PressableScale
+        style={styles.tagsLink}
+        onPress={() => {
+          haptics.light();
+          router.push("/tags");
+        }}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={`Tags, ${tagCount} ${tagCount === 1 ? "tag" : "tags"}`}
+        accessibilityHint="Browse and manage tags."
+      >
+        <Ionicons name="pricetags-outline" size={11} color={palette.textTertiary} />
+        <Text variant="label" color="secondary">
+          Tags
+        </Text>
+      </PressableScale>
+      {hasUnread ? (
+        <HeaderIconButton
+          name="checkmark-done"
+          color={palette.accent}
+          onPress={onMarkAllRead}
+          accessibilityLabel="Mark all as read"
+        />
+      ) : null}
+    </HeaderActions>
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.background }}>
