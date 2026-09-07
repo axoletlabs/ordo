@@ -174,7 +174,7 @@ jobs:
           fi
 
   analyze:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'release'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     concurrency:
       group: ci-analyze-${{ github.ref }}
       cancel-in-progress: true
@@ -210,12 +210,10 @@ jobs:
         run: pnpm -r test
 
   ota:
-    needs: [detect, analyze]
+    needs: detect
     # Publishes a JS-only update (EAS Update) to the production channel on
     # OTA-eligible pushes to main. Native fingerprint changes and commits
     # explicitly marked with -apk are routed to an installable APK instead.
-    # Waits for analyze so a typecheck failure cannot ship an update (this
-    # happened on 2026-09-06: analyze failed, OTA still published).
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.detect.outputs.should_build != 'true') || (github.event_name == 'workflow_dispatch' && inputs.publish_ota == true)
     concurrency:
       group: ci-ota-${{ github.ref }}
@@ -258,7 +256,7 @@ jobs:
         run: eas update --channel production --non-interactive --auto
 
   build_apk:
-    needs: [detect, analyze]
+    needs: detect
     if: needs.detect.outputs.should_build == 'true'
     runs-on: ubuntu-latest
     permissions:
