@@ -1,6 +1,5 @@
 /**
- * Title block for floating panels and dialogs.
- * Action menus use `align="start"` so the title sits on the same edge as the rows.
+ * Centered title block for floating panels, menus, and dialogs.
  */
 import React from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
@@ -18,7 +17,6 @@ export function PanelHeader({
   subtitleVariant = "footnote",
   numberOfLines,
   accessory,
-  align = "center",
   style,
 }: {
   title: string;
@@ -30,19 +28,17 @@ export function PanelHeader({
   subtitleVariant?: TextVariant;
   numberOfLines?: number;
   accessory?: React.ReactNode;
-  align?: "center" | "start";
   style?: StyleProp<ViewStyle>;
 }) {
-  const start = align === "start";
-  const copy = (
-    <>
-      <View style={[styles.titleCluster, start && styles.titleClusterStart]}>
-        <Text
-          variant={titleVariant}
-          align={start ? "left" : "center"}
-          numberOfLines={numberOfLines}
-          style={styles.title}
-        >
+  return (
+    <View style={[styles.wrap, style]}>
+      {icon ? (
+        <View style={[styles.icon, { backgroundColor: iconBackground }]}>
+          <Ionicons name={icon} size={20} color={iconColor} />
+        </View>
+      ) : null}
+      <View style={styles.titleCluster}>
+        <Text variant={titleVariant} align="center" numberOfLines={numberOfLines} style={styles.title}>
           {title}
         </Text>
         {accessory}
@@ -51,24 +47,13 @@ export function PanelHeader({
         <Text
           variant={subtitleVariant}
           color="secondary"
-          align={start ? "left" : "center"}
+          align="center"
           numberOfLines={3}
           style={styles.subtitle}
         >
           {subtitle}
         </Text>
       ) : null}
-    </>
-  );
-
-  return (
-    <View style={[styles.wrap, start && styles.wrapStart, style]}>
-      {icon ? (
-        <View style={[styles.icon, start && styles.iconStart, { backgroundColor: iconBackground }]}>
-          <Ionicons name={icon} size={start ? 16 : 20} color={iconColor} />
-        </View>
-      ) : null}
-      {start ? <View style={styles.copy}>{copy}</View> : copy}
     </View>
   );
 }
@@ -78,11 +63,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: spacing[8],
   },
-  wrapStart: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: spacing[6],
-  },
   icon: {
     width: 36,
     height: 36,
@@ -91,13 +71,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: spacing[6],
   },
-  iconStart: {
-    width: 28,
-    height: 28,
-    marginBottom: 0,
-    flexShrink: 0,
-  },
-  copy: { flex: 1, minWidth: 0 },
   titleCluster: {
     flexDirection: "row",
     alignItems: "center",
@@ -105,7 +78,6 @@ const styles = StyleSheet.create({
     gap: spacing[8],
     alignSelf: "stretch",
   },
-  titleClusterStart: { justifyContent: "flex-start" },
   title: { flexShrink: 1 },
   subtitle: { marginTop: spacing[2], alignSelf: "stretch" },
 });

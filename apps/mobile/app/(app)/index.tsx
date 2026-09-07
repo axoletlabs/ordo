@@ -335,7 +335,7 @@ export default function BookmarksScreen() {
       ) : null}
 
       <FloatingPanel visible={createMenuOpen} onDismiss={() => setCreateMenuOpen(false)}>
-        <PanelHeader title="Create" align="start" />
+        <PanelHeader title="Create" />
         <SheetActionRow
           icon="bookmark-outline"
           label="Save bookmark"

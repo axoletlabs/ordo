@@ -189,7 +189,7 @@ export default function AccountScreen() {
       </SettingsScrollView>
 
       <FloatingPanel visible={menuOpen} onDismiss={() => setMenuOpen(false)}>
-        <PanelHeader title="Profile picture" align="start" />
+        <PanelHeader title="Profile picture" />
         <SheetActionRow
           icon="image-outline"
           label="Choose photo"

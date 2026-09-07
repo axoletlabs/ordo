@@ -98,7 +98,7 @@ export function EditTagsSheet({ visible, onDismiss, bookmark }: EditTagsSheetPro
   return (
     <>
       <FloatingPanel visible={visible} onDismiss={onDismiss}>
-        <PanelHeader title="Edit tags" align="start" />
+        <PanelHeader title="Edit tags" />
 
       {assigned.length > 0 ? (
         <ScrollView

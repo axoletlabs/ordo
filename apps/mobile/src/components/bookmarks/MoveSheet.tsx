@@ -124,7 +124,7 @@ export function MoveSheet({
         />
       ) : (
         <>
-          <PanelHeader title="Move to folder" align="start" />
+          <PanelHeader title="Move to folder" />
           {error ? (
             <Text variant="footnote" color="danger" style={{ marginBottom: spacing[8] }}>
               {error}

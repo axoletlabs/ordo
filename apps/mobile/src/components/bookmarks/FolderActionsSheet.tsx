@@ -365,7 +365,6 @@ export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: Fo
             title={folder.name}
             subtitle={`${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}`}
             numberOfLines={1}
-            align="start"
             accessory={
               folder.pinned ? (
                 <Ionicons name="pin" size={14} color={palette.accent} />
@@ -400,7 +399,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: Fo
 
       {folder && mode === "lockChoice" ? (
         <>
-          <PanelHeader title="Lock folder" align="start" />
+          <PanelHeader title="Lock folder" />
           {error ? <Text variant="footnote" color="danger" style={styles.error}>{error}</Text> : null}
           {serverInfo.data && !lockTypesSupported ? (
             <Text variant="footnote" color="tertiary" style={styles.staleServer}>

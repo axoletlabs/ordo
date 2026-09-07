@@ -81,7 +81,7 @@ export function BookmarkActionsSheet({
         </>
       ) : (
         <>
-          <PanelHeader title={bookmark.title || bookmark.url} numberOfLines={2} align="start" />
+          <PanelHeader title={bookmark.title || bookmark.url} numberOfLines={2} />
           <SheetActionRow
             icon={bookmark.isRead ? "radio-button-off" : "checkmark-circle"}
             label={bookmark.isRead ? "Mark as unread" : "Mark as read"}

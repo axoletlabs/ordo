@@ -297,7 +297,7 @@ export default function TagDetailScreen() {
       />
 
       <FloatingPanel visible={tagActionsOpen} onDismiss={() => setTagActionsOpen(false)}>
-        <PanelHeader title={anchor?.name ?? "Tag"} align="start" />
+        <PanelHeader title={anchor?.name ?? "Tag"} />
         <SheetActionRow
           icon="create-outline"
           label="Edit tag"

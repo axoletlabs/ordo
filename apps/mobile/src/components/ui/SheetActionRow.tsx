@@ -31,37 +31,39 @@ export function SheetActionRow({
   const { palette } = useTheme();
   const color = tone === "danger" ? palette.danger : palette.text;
   return (
-    <PressableScale
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      style={[
-        styles.row,
-        { borderBottomColor: palette.border },
-        !divider && styles.noDivider,
-      ]}
-      onPress={() => {
-        haptics.light();
-        onPress();
-      }}
-    >
-      <Ionicons name={icon} size={20} color={tone === "danger" ? color : palette.accent} />
-      <Text variant="body" style={[styles.label, { color }]} numberOfLines={1}>
-        {label}
-      </Text>
-      {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
-    </PressableScale>
+    <View style={styles.wrap}>
+      <PressableScale
+        accessibilityRole="button"
+        accessibilityLabel={label}
+        style={styles.row}
+        onPress={() => {
+          haptics.light();
+          onPress();
+        }}
+      >
+        <Ionicons name={icon} size={20} color={tone === "danger" ? color : palette.accent} />
+        <Text variant="body" style={[styles.label, { color }]} numberOfLines={1}>
+          {label}
+        </Text>
+        {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
+      </PressableScale>
+      {divider ? <View style={[styles.divider, { backgroundColor: palette.border }]} /> : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrap: {
+    alignSelf: "center",
+    width: "72%",
+    maxWidth: 280,
+  },
   row: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[12],
-    minHeight: 44,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    minHeight: 42,
   },
-  noDivider: { borderBottomWidth: 0 },
   label: { flex: 1, minWidth: 0 },
   trailing: {
     flexDirection: "row",
@@ -69,4 +71,5 @@ const styles = StyleSheet.create({
     gap: spacing[8],
     flexShrink: 0,
   },
+  divider: { height: StyleSheet.hairlineWidth, width: "100%" },
 });

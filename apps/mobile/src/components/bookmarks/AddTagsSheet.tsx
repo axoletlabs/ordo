@@ -73,7 +73,7 @@ export function AddTagsSheet({
   return (
     <>
       <FloatingPanel visible={visible} onDismiss={onDismiss}>
-        <PanelHeader title="Add tags" align="start" />
+        <PanelHeader title="Add tags" />
         <TagSelectList
           selectedIds={selectedIds}
           onToggle={toggle}

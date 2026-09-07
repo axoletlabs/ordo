@@ -80,7 +80,7 @@ export function ReaderControlsSheet({
 }: ReaderControlsSheetProps) {
   return (
     <FloatingPanel visible={visible} onDismiss={onDismiss} maxWidth={420}>
-      <PanelHeader title="Reader" align="start" />
+      <PanelHeader title="Reader" />
 
       <ControlGroup label="Text size" accessibilityHint="Changes the article text size.">
         <Segmented

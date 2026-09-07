@@ -846,7 +846,7 @@ function ReaderPaneInner({
       <FloatingPanel visible={actionPanel !== null} onDismiss={() => setActionPanel(null)}>
         {actionPanel === "contents" ? (
           <>
-            <PanelHeader title="Table of contents" align="start" />
+            <PanelHeader title="Table of contents" />
             <ScrollView style={styles.tocList} showsVerticalScrollIndicator={false}>
               {articleHeadings.map((heading) => (
                 <PressableScale
@@ -879,7 +879,7 @@ function ReaderPaneInner({
           </>
         ) : (
           <>
-            <PanelHeader title={showWebsiteView ? "Page actions" : "Article actions"} align="start" />
+            <PanelHeader title={showWebsiteView ? "Page actions" : "Article actions"} />
             {hasHtml && articleHeadings.length >= 3 && !showWebsiteView ? (
               <SheetActionRow
                 icon="list-outline"
