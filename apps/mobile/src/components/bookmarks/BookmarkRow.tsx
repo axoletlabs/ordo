@@ -14,7 +14,7 @@ import { TagChip } from "../tags/TagChip";
 import { SelectionMark } from "./SelectionMark";
 import { useTheme } from "../../theme/ThemeProvider";
 import { domainFromUrl, relativeTime } from "../../lib/format";
-import { bookmarkOpensAsWebsite } from "../../lib/bookmark-reader";
+import { bookmarkIsArticle, bookmarkOpensAsWebsite } from "../../lib/bookmark-reader";
 import { haptics } from "../../lib/haptics";
 import { radius, spacing } from "../../theme/tokens";
 import { SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
@@ -55,6 +55,7 @@ export function BookmarkRow({
   const faviconUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
   const [failedFavicon, setFailedFavicon] = React.useState<string | null>(null);
   const opensAsWebsite = bookmarkOpensAsWebsite(bookmark);
+  const showReadingTime = bookmarkIsArticle(bookmark) && !!bookmark.readingTimeMinutes;
   const isPending = bookmark.fetchStatus === "pending";
   const tags = Array.isArray(bookmark.tags) ? bookmark.tags : [];
   const suggestedTags = Array.isArray(bookmark.suggestedTags) ? bookmark.suggestedTags : [];
@@ -185,7 +186,7 @@ export function BookmarkRow({
             <Text variant="caption" color="tertiary" numberOfLines={1}>
               {createdLabel}
             </Text>
-            {bookmark.readingTimeMinutes ? (
+            {showReadingTime ? (
               <>
                 <View style={[styles.separator, { backgroundColor: palette.textFaint }]} />
                 <Text variant="caption" color="tertiary" numberOfLines={1}>
