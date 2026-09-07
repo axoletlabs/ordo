@@ -91,10 +91,6 @@ export default function AboutScreen() {
             label="Build fingerprint"
             value={fingerprint ?? "—"}
             onPress={fingerprint ? () => setFingerprintOpen(true) : undefined}
-            onLongPress={fingerprint ? () => void copyFingerprint(fingerprint) : undefined}
-            accessibilityHint={
-              fingerprint ? "Shows the full fingerprint. Touch and hold to copy." : undefined
-            }
             divider={false}
           />
         </SettingsGroup>
