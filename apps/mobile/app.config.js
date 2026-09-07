@@ -13,7 +13,13 @@ const { execSync } = require("node:child_process");
 /** Run a git subcommand, returning "" when git or the repo is unavailable. */
 function git(args) {
   try {
-    return execSync(`git ${args}`, { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+    return execSync(`git ${args}`, {
+      stdio: ["ignore", "pipe", "ignore"],
+      // Fingerprint generate loads this config in a child process. An unbounded
+      // `git status` can wait on index.lock and freeze the whole detect job.
+      timeout: 8_000,
+      env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+    }).toString().trim();
   } catch {
     return "";
   }

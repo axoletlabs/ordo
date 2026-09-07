@@ -66,22 +66,37 @@ jobs:
         id: eligibility
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         continue-on-error: true
+        # Fingerprint generate has hung indefinitely on native-module bumps
+        # (stdout is redirected, so the step looks frozen). Fail open to APK.
+        timeout-minutes: 3
         env:
           CURRENT_SHA: ${{ github.sha }}
           PREVIOUS_SHA: ${{ github.event.before }}
+          # Don't wait on a leftover .git/index.lock from git checkout / a
+          # fingerprint child that is still running git status via app.config.js.
+          GIT_OPTIONAL_LOCKS: '0'
         run: |
           if [[ "$PREVIOUS_SHA" =~ ^0+$ ]]; then
             echo "native_changed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          git checkout --detach "$PREVIOUS_SHA"
-          pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true
-          pnpm --dir apps/mobile exec fingerprint fingerprint:generate --platform android > /tmp/fingerprint-previous.json
+          generate_fingerprint() {
+            local sha="$1"
+            local out="$2"
+            echo "Checking out $sha"
+            git checkout --detach "$sha"
+            pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true
+            echo "Generating fingerprint for $sha"
+            # stdin closed: fingerprint's ExpoConfigLoader / autolinking children
+            # inherit the Actions pipe and can wait forever for EOF.
+            timeout --signal=KILL 60s pnpm --dir apps/mobile exec fingerprint fingerprint:generate --platform android \
+              < /dev/null > "$out"
+            echo "Wrote $out ($(wc -c < "$out") bytes)"
+          }
 
-          git checkout --detach "$CURRENT_SHA"
-          pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true
-          pnpm --dir apps/mobile exec fingerprint fingerprint:generate --platform android > /tmp/fingerprint-current.json
+          generate_fingerprint "$PREVIOUS_SHA" /tmp/fingerprint-previous.json
+          generate_fingerprint "$CURRENT_SHA" /tmp/fingerprint-current.json
 
           # Build metadata changes every commit but does not affect native compatibility.
           for fingerprint in /tmp/fingerprint-previous.json /tmp/fingerprint-current.json; do
