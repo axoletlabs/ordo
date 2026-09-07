@@ -24,6 +24,9 @@ on:
 jobs:
   detect:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     outputs:
       version: ${{ steps.info.outputs.version }}
       version_code: ${{ steps.info.outputs.version_code }}
@@ -71,25 +74,39 @@ jobs:
         timeout-minutes: 3
         env:
           CURRENT_SHA: ${{ github.sha }}
-          PREVIOUS_SHA: ${{ github.event.before }}
-          # Don't wait on a leftover .git/index.lock from git checkout / a
-          # fingerprint child that is still running git status via app.config.js.
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Don't wait on a leftover .git/index.lock from a fingerprint child
+          # that is still running git status via app.config.js.
           GIT_OPTIONAL_LOCKS: '0'
         run: |
-          if [[ "$PREVIOUS_SHA" =~ ^0+$ ]]; then
+          if [[ "${{ github.event.before }}" =~ ^0+$ ]]; then
             echo "native_changed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
-          # Do not `git checkout` this worktree. The Expo fingerprint CLI
-          # leaves autolinking children running after a native-module bump;
-          # those children plus in-place checkout share index.lock and hang
-          # the second generate. Isolated worktree + a wrapper that
-          # process.exit()s after JSON so detect cannot wedge CI.
+          # Compare against the last shipped APK, not github.event.before.
+          # A hung/cancelled native bump leaves later JS commits looking
+          # unchanged vs their parent (both already have the new module) and
+          # would OTA a runtime that never got a binary.
+          BASELINE_SHA="$(bash "$GITHUB_WORKSPACE/.github/scripts/last-successful-apk-sha.sh" || true)"
+          if [[ -z "$BASELINE_SHA" ]]; then
+            echo "No successful APK on main; treating as native-incompatible"
+            echo "native_changed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Last successful APK SHA: $BASELINE_SHA"
+          if [[ "$BASELINE_SHA" == "$CURRENT_SHA" ]]; then
+            echo "This commit already has an APK"
+            echo "native_changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Isolated worktree + a wrapper that process.exit()s after JSON so
+          # leftover autolinking children cannot wedge detect.
           SCRIPT="$GITHUB_WORKSPACE/.github/scripts/generate-android-fingerprint.js"
           PREV_DIR="${RUNNER_TEMP}/fp-prev"
           rm -rf "$PREV_DIR"
-          git worktree add --detach "$PREV_DIR" "$PREVIOUS_SHA"
+          git worktree add --detach "$PREV_DIR" "$BASELINE_SHA"
           cleanup() { git worktree remove --force "$PREV_DIR" 2>/dev/null || true; }
           trap cleanup EXIT
 
@@ -157,8 +174,7 @@ jobs:
           fi
 
   analyze:
-    needs: detect
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'release'
     concurrency:
       group: ci-analyze-${{ github.ref }}
       cancel-in-progress: true
@@ -194,10 +210,12 @@ jobs:
         run: pnpm -r test
 
   ota:
-    needs: detect
+    needs: [detect, analyze]
     # Publishes a JS-only update (EAS Update) to the production channel on
     # OTA-eligible pushes to main. Native fingerprint changes and commits
     # explicitly marked with -apk are routed to an installable APK instead.
+    # Waits for analyze so a typecheck failure cannot ship an update (this
+    # happened on 2026-09-06: analyze failed, OTA still published).
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.detect.outputs.should_build != 'true') || (github.event_name == 'workflow_dispatch' && inputs.publish_ota == true)
     concurrency:
       group: ci-ota-${{ github.ref }}
@@ -226,7 +244,7 @@ jobs:
       # OTA update gets a different runtime version than the installed binary.
       - name: Expo prebuild
         working-directory: apps/mobile
-        run: npx expo prebuild --platform android --no-install
+        run: pnpm exec expo prebuild --platform android --no-install
 
       # Install eas-cli via npm to avoid pnpm's unapproved-build-script gate
       # (eas-cli pulls dtrace-provider, whose build script pnpm would reject).
@@ -240,7 +258,7 @@ jobs:
         run: eas update --channel production --non-interactive --auto
 
   build_apk:
-    needs: detect
+    needs: [detect, analyze]
     if: needs.detect.outputs.should_build == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -285,15 +303,9 @@ jobs:
       - name: Build shared package
         run: pnpm --filter @ordo/shared build
 
-      - name: Setup Expo
-        uses: expo/expo-github-action@v9
-        with:
-          expo-version: latest
-          packager: pnpm
-
       - name: Prebuild (generate native Android project)
         working-directory: apps/mobile
-        run: npx expo prebuild --platform android --no-install
+        run: pnpm exec expo prebuild --platform android --no-install
 
       - name: Verify OTA channel embedded
         working-directory: apps/mobile
