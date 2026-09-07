@@ -7,7 +7,7 @@ import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 import { Text } from "../ui/Text";
-import { SheetActionRow } from "../ui/SheetActionRow";
+import { SheetActionRow, sheetMenuStyles } from "../ui/SheetActionRow";
 import { EyeToggle } from "../ui/EyeToggle";
 import { PressableScale } from "../ui/PressableScale";
 import { Segmented } from "../ui/Segmented";
@@ -365,12 +365,12 @@ export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: Fo
             title={folder.name}
             subtitle={`${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}`}
             numberOfLines={1}
+            align="start"
             accessory={
               folder.pinned ? (
                 <Ionicons name="pin" size={14} color={palette.accent} />
               ) : null
             }
-            style={styles.menuHeader}
           />
           {error ? <Text variant="footnote" color="danger" style={styles.error}>{error}</Text> : null}
           <View>
@@ -382,9 +382,8 @@ export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: Fo
             ) : (
               <SheetActionRow icon="lock-closed-outline" label="Lock folder" onPress={() => showMode("lockChoice")} />
             )}
-            <SheetActionRow icon="trash-outline" label="Delete folder" tone="danger" onPress={() => showMode("delete")} />
+            <SheetActionRow icon="trash-outline" label="Delete folder" tone="danger" divider={false} onPress={() => showMode("delete")} />
           </View>
-          <Button label="Cancel" variant="ghost" block onPress={onDismiss} style={styles.menuCancel} />
         </>
       ) : null}
 
@@ -392,7 +391,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: Fo
         <>
           <PanelHeader title="Rename folder" />
           <Input label="Name" value={name} onChangeText={setName} autoFocus error={error || undefined} onSubmitEditing={doRename} />
-          <View style={styles.actions}>
+          <View style={sheetMenuStyles.stack}>
             <Button label="Save" block size="lg" onPress={doRename} loading={rename.isPending} />
             <Button label="Cancel" variant="ghost" block onPress={() => showMode("menu")} />
           </View>
@@ -401,7 +400,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: Fo
 
       {folder && mode === "lockChoice" ? (
         <>
-          <PanelHeader title="Lock folder" />
+          <PanelHeader title="Lock folder" align="start" />
           {error ? <Text variant="footnote" color="danger" style={styles.error}>{error}</Text> : null}
           {serverInfo.data && !lockTypesSupported ? (
             <Text variant="footnote" color="tertiary" style={styles.staleServer}>
@@ -416,9 +415,9 @@ export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: Fo
                 <SheetActionRow icon="keypad-outline" label="PIN" onPress={() => { setLockType("pin"); showMode("lockCredential"); }} />
               </>
             ) : null}
-            <SheetActionRow icon="text-outline" label="Text password" onPress={() => { setLockType("password"); showMode("lockCredential"); }} />
+            <SheetActionRow icon="text-outline" label="Text password" divider={false} onPress={() => { setLockType("password"); showMode("lockCredential"); }} />
           </View>
-          <Button label="Cancel" variant="ghost" block disabled={removing} onPress={() => showMode("menu")} style={styles.menuCancel} />
+          <Button label="Back" variant="ghost" block disabled={removing} onPress={() => showMode("menu")} style={sheetMenuStyles.cancel} />
         </>
       ) : null}
 
@@ -511,7 +510,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: Fo
               />
             </>
           )}
-          <View style={styles.actions}>
+          <View style={sheetMenuStyles.stack}>
             {lockType === "pattern" || lockType === "pin" ? null : (
               <Button label="Lock folder" block size="lg" onPress={() => void doSetCredential()} />
             )}
@@ -601,7 +600,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: Fo
           >
             <Text variant="footnote" color="accent">Use account password</Text>
           </PressableScale>
-          <View style={styles.actions}>
+          <View style={sheetMenuStyles.stack}>
             {(folder.lockType ?? "password") === "pattern" || (folder.lockType ?? "password") === "pin" ? null : (
               <Button
                 label={(folder.lockType ?? "password") === "device" ? "Use device lock" : "Remove lock"}
@@ -658,7 +657,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: Fo
                     : "Use folder password"}
             </Text>
           </PressableScale>
-          <View style={styles.actions}>
+          <View style={sheetMenuStyles.stack}>
             <Button label="Remove lock" variant="danger" block size="lg" onPress={submitAccountBypass} loading={removing} />
             <Button label="Cancel" variant="ghost" block disabled={removing} onPress={() => showMode("menu")} />
           </View>
@@ -670,7 +669,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: Fo
           <PanelHeader title="Choose an icon" />
           <FolderIconPicker value={icon} onChange={setIcon} />
           {error ? <Text variant="footnote" color="danger" style={styles.error}>{error}</Text> : null}
-          <View style={styles.actions}>
+          <View style={sheetMenuStyles.stack}>
             <Button label="Save icon" block size="lg" onPress={doUpdateIcon} loading={update.isPending} disabled={icon === folder.icon} />
             <Button label="Cancel" variant="ghost" block onPress={() => showMode("menu")} />
           </View>
@@ -691,7 +690,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: Fo
             }
           />
           {error ? <Text variant="footnote" color="danger" align="center" style={styles.error}>{error}</Text> : null}
-          <View style={styles.actions}>
+          <View style={sheetMenuStyles.stack}>
             <Button label="Delete folder" variant="danger" block size="lg" onPress={doDelete} loading={del.isPending} />
             <Button label="Cancel" variant="ghost" block disabled={del.isPending} onPress={() => showMode("menu")} />
           </View>
@@ -702,12 +701,9 @@ export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: Fo
 }
 
 const styles = StyleSheet.create({
-  menuHeader: { marginBottom: spacing[8] },
-  error: { marginTop: spacing[10] },
-  menuCancel: { marginTop: spacing[8] },
-  actions: { gap: spacing[8], marginTop: spacing[16] },
-  forgot: { alignSelf: "center", marginTop: spacing[10] },
+  error: { marginTop: spacing[8] },
+  forgot: { alignSelf: "center", marginTop: spacing[8] },
   confirmInput: { marginTop: spacing[12] },
-  pinBoxes: { marginTop: spacing[16] },
-  staleServer: { marginTop: spacing[10] },
+  pinBoxes: { marginTop: spacing[12] },
+  staleServer: { marginTop: spacing[8], marginBottom: spacing[4] },
 });

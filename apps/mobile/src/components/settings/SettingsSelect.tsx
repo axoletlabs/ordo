@@ -110,7 +110,7 @@ export function SettingsSelect<T extends string>({
 
   const menuWidth = Math.min(300, width - spacing[32]);
   const menuLeft = Math.min(Math.max(spacing[16], anchor.x + anchor.width - menuWidth), width - menuWidth - spacing[16]);
-  const estimatedHeight = options.length * 48 + spacing[12];
+  const estimatedHeight = options.length * 42 + spacing[8];
   const menuTop = anchor.y + anchor.height + spacing[8] + estimatedHeight <= height - spacing[16]
     ? anchor.y + anchor.height + spacing[8]
     : Math.max(spacing[16], anchor.y - estimatedHeight - spacing[8]);
@@ -206,17 +206,17 @@ const styles = StyleSheet.create({
   menu: {
     position: "absolute",
     maxHeight: 360,
-    padding: spacing[6],
+    padding: spacing[4],
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius["2xl"],
   },
   option: {
-    minHeight: 44,
+    minHeight: 42,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[12],
-    paddingHorizontal: spacing[12],
-    borderRadius: radius.lg,
+    paddingHorizontal: spacing[10],
+    borderRadius: radius.md,
   },
   optionLabel: { flex: 1 },
 });

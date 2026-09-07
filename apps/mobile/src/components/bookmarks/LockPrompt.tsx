@@ -17,6 +17,7 @@ import { Text } from "../ui/Text";
 import { EyeToggle } from "../ui/EyeToggle";
 import { Segmented } from "../ui/Segmented";
 import { OtpInput } from "../ui/OtpInput";
+import { sheetMenuStyles } from "../ui/SheetActionRow";
 import { PatternInput } from "./PatternInput";
 import { useUnlockFolder } from "../../hooks/use-folders";
 import { getDeviceLockCredential } from "../../lib/device-folder-lock";
@@ -244,7 +245,7 @@ export function UnlockForm({
             status={unlock.isPending ? "loading" : error ? "error" : "idle"}
             error={error || undefined}
             editable={!unlock.isPending}
-            style={knownPinLength ? undefined : { marginTop: spacing[16] }}
+            style={knownPinLength ? undefined : { marginTop: spacing[12] }}
           />
         </View>
       ) : (
@@ -271,19 +272,15 @@ export function UnlockForm({
         </Text>
       ) : null}
       {isPassword ? (
-        <>
-          <View style={{ height: spacing[20] }} />
+        <View style={sheetMenuStyles.stack}>
           <Button label="Unlock" block size="lg" onPress={() => void submitPassword()} loading={unlock.isPending} />
-        </>
+        </View>
       ) : null}
       <Text variant="caption" color="tertiary" align="center" style={styles.footnote}>
         Unlocked for {UNLOCK_MINUTES} minutes on this device.
       </Text>
       {onCancel ? (
-        <>
-          <View style={{ height: spacing[8] }} />
-          <Button label={cancelLabel} variant="ghost" block onPress={onCancel} />
-        </>
+        <Button label={cancelLabel} variant="ghost" block onPress={onCancel} style={sheetMenuStyles.cancel} />
       ) : null}
     </View>
   );
@@ -352,10 +349,10 @@ const styles = StyleSheet.create({
     alignSelf: "center",
   },
   error: {
-    marginTop: spacing[12],
+    marginTop: spacing[8],
   },
   footnote: {
-    marginTop: spacing[12],
+    marginTop: spacing[8],
   },
   screen: {
     flex: 1,

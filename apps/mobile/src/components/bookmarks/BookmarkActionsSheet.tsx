@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import { useRouter } from "expo-router";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Button } from "../ui/Button";
-import { SheetActionRow } from "../ui/SheetActionRow";
+import { SheetActionRow, sheetMenuStyles } from "../ui/SheetActionRow";
 import { useTheme } from "../../theme/ThemeProvider";
-import { spacing } from "../../theme/tokens";
 import { copyLink } from "../../lib/copy-link";
 import { bookmarkCanBeArticle, bookmarkIsArticle } from "../../lib/bookmark-reader";
 import * as bookmarkHooks from "../../hooks/use-bookmarks";
@@ -64,7 +63,7 @@ export function BookmarkActionsSheet({
             title="Delete this bookmark?"
             subtitle="You can undo this."
           />
-          <View style={styles.actions}>
+          <View style={sheetMenuStyles.stack}>
             <Button
               label="Delete bookmark"
               variant="danger"
@@ -80,7 +79,7 @@ export function BookmarkActionsSheet({
         </>
       ) : (
         <>
-          <PanelHeader title={bookmark.title || bookmark.url} numberOfLines={2} style={styles.title} />
+          <PanelHeader title={bookmark.title || bookmark.url} numberOfLines={2} align="start" />
           <SheetActionRow
             icon={bookmark.isRead ? "radio-button-off" : "checkmark-circle"}
             label={bookmark.isRead ? "Mark as unread" : "Mark as read"}
@@ -170,17 +169,11 @@ export function BookmarkActionsSheet({
             icon="trash-outline"
             label="Delete bookmark"
             tone="danger"
+            divider={false}
             onPress={() => setMode("delete")}
           />
-          <Button label="Cancel" variant="ghost" block onPress={onDismiss} style={styles.menuCancel} />
         </>
       )}
     </FloatingPanel>
   );
 }
-
-const styles = StyleSheet.create({
-  title: { marginBottom: spacing[8] },
-  menuCancel: { marginTop: spacing[8] },
-  actions: { gap: spacing[8], marginTop: spacing[16] },
-});

@@ -2,13 +2,13 @@
  * Floating dialog to move one or more bookmarks into another folder.
  */
 import React, { useEffect, useState } from "react";
-import { FlatList, StyleSheet } from "react-native";
+import { FlatList } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { UnlockForm } from "./LockPrompt";
 import { Text } from "../ui/Text";
-import { PressableScale } from "../ui/PressableScale";
+import { SheetActionRow } from "../ui/SheetActionRow";
 import { useFolders } from "../../hooks/queries";
 import { useFolderTokenStore } from "../../store/folder-tokens";
 import { errorMessage, isFolderProtected } from "../../lib/error-message";
@@ -124,9 +124,9 @@ export function MoveSheet({
         />
       ) : (
         <>
-          <PanelHeader title="Move to folder" />
+          <PanelHeader title="Move to folder" align="start" />
           {error ? (
-            <Text variant="footnote" color="danger" style={{ marginBottom: spacing[12] }}>
+            <Text variant="footnote" color="danger" style={{ marginBottom: spacing[8] }}>
               {error}
             </Text>
           ) : null}
@@ -136,24 +136,22 @@ export function MoveSheet({
             <FlatList
               data={destinations}
               keyExtractor={(d) => (isRootDestination(d) ? "root" : d.id)}
-              renderItem={({ item }) => (
-                <PressableScale style={[styles.row, { borderBottomColor: palette.border }]} onPress={() => pick(item)} accessibilityRole="button" accessibilityLabel={isRootDestination(item) ? "Bookmarks" : item.name}>
-                  <Ionicons
-                    name={isRootDestination(item) ? "bookmark-outline" : (item.icon ?? DEFAULT_FOLDER_ICON)}
-                    size={20}
-                    color={palette.accent}
-                  />
-                  <Text variant="body" style={{ flex: 1 }} numberOfLines={1}>
-                    {isRootDestination(item) ? "Bookmarks" : item.name}
-                  </Text>
-                  {isRootDestination(item) ? null : (
-                    <>
-                      {item.pinned ? <Ionicons name="pin" size={14} color={palette.accent} /> : null}
-                      {item.protected ? <Ionicons name="lock-closed" size={14} color={palette.textTertiary} /> : null}
-                      <Text variant="footnote" color="tertiary">{item.bookmarkCount}</Text>
-                    </>
-                  )}
-                </PressableScale>
+              renderItem={({ item, index }) => (
+                <SheetActionRow
+                  icon={isRootDestination(item) ? "bookmark-outline" : (item.icon ?? DEFAULT_FOLDER_ICON)}
+                  label={isRootDestination(item) ? "Bookmarks" : item.name}
+                  divider={index < destinations.length - 1}
+                  trailing={
+                    isRootDestination(item) ? undefined : (
+                      <>
+                        {item.pinned ? <Ionicons name="pin" size={14} color={palette.accent} /> : null}
+                        {item.protected ? <Ionicons name="lock-closed" size={14} color={palette.textTertiary} /> : null}
+                        <Text variant="footnote" color="tertiary">{item.bookmarkCount}</Text>
+                      </>
+                    )
+                  }
+                  onPress={() => void pick(item)}
+                />
               )}
               style={{ maxHeight: Math.min(320, height * 0.5) }}
             />
@@ -163,7 +161,3 @@ export function MoveSheet({
     </FloatingPanel>
   );
 }
-
-const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", gap: spacing[12], paddingVertical: spacing[12], borderBottomWidth: StyleSheet.hairlineWidth },
-});

@@ -73,7 +73,7 @@ export function AddTagsSheet({
   return (
     <>
       <FloatingPanel visible={visible} onDismiss={onDismiss}>
-        <PanelHeader title="Add tags" />
+        <PanelHeader title="Add tags" align="start" />
         <TagSelectList
           selectedIds={selectedIds}
           onToggle={toggle}
@@ -105,6 +105,6 @@ export function AddTagsSheet({
 }
 
 const styles = StyleSheet.create({
-  error: { marginTop: spacing[12] },
-  actions: { flexDirection: "row", gap: spacing[10], marginTop: spacing[16] },
+  error: { marginTop: spacing[8] },
+  actions: { flexDirection: "row", gap: spacing[8], marginTop: spacing[12] },
 });

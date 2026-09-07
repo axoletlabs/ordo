@@ -199,7 +199,7 @@ export function AddBookmarkSheet({
                 />
               </View>
             ) : destination ? (
-              <Text variant="footnote" color="secondary" style={{ marginBottom: spacing[16] }}>
+              <Text variant="footnote" color="secondary" style={{ marginBottom: spacing[8] }}>
                 Saving to <Text variant="footnote" color="accent">{destination}</Text>
               </Text>
             ) : null}
@@ -295,25 +295,25 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: spacing[12],
-    marginBottom: spacing[12],
+    marginBottom: spacing[8],
   },
   tagsRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginTop: spacing[12],
-    marginBottom: spacing[6],
+    marginTop: spacing[10],
+    marginBottom: spacing[4],
   },
   selectedTagWrap: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: spacing[6],
-    marginBottom: spacing[8],
+    marginBottom: spacing[6],
   },
   actions: {
     flexDirection: "row",
-    gap: spacing[10],
-    marginTop: spacing[16],
+    gap: spacing[8],
+    marginTop: spacing[12],
   },
   action: { flex: 1 },
   saveAction: { flex: 1.4 },

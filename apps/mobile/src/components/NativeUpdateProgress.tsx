@@ -104,7 +104,7 @@ export function NativeUpdateProgress() {
 }
 
 const styles = StyleSheet.create({
-  progressSection: { marginTop: spacing[8] },
+  progressSection: { marginTop: spacing[4] },
   progressTrack: { height: 8, borderRadius: radius.full, overflow: "hidden" },
   progressFill: { height: "100%", borderRadius: radius.full },
   progressMeta: {
@@ -112,6 +112,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  actions: { marginTop: spacing[20], gap: spacing[4] },
+  actions: { marginTop: spacing[12], gap: spacing[4] },
   error: { marginBottom: spacing[12] },
 });

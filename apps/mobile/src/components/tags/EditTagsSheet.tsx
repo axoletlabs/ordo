@@ -98,7 +98,7 @@ export function EditTagsSheet({ visible, onDismiss, bookmark }: EditTagsSheetPro
   return (
     <>
       <FloatingPanel visible={visible} onDismiss={onDismiss}>
-        <PanelHeader title="Edit tags" />
+        <PanelHeader title="Edit tags" align="start" />
 
       {assigned.length > 0 ? (
         <ScrollView
@@ -211,16 +211,16 @@ function PressableIconButton({
 }
 
 const styles = StyleSheet.create({
-  hint: { marginBottom: spacing[8] },
-  chipRow: { flexDirection: "row", gap: spacing[8], paddingVertical: spacing[8], flexWrap: "wrap" },
-  chipWrap: { flexDirection: "row", gap: spacing[8], flexWrap: "wrap", marginTop: spacing[8] },
+  hint: { marginBottom: spacing[6] },
+  chipRow: { flexDirection: "row", gap: spacing[8], paddingVertical: spacing[6], flexWrap: "wrap" },
+  chipWrap: { flexDirection: "row", gap: spacing[8], flexWrap: "wrap", marginTop: spacing[6] },
   suggestionChip: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[4],
   },
   suggestionActions: { flexDirection: "row", gap: spacing[2] },
-  section: { marginTop: spacing[12] },
-  error: { marginTop: spacing[12] },
-  actions: { flexDirection: "row", gap: spacing[10], marginTop: spacing[16] },
+  section: { marginTop: spacing[10] },
+  error: { marginTop: spacing[8] },
+  actions: { flexDirection: "row", gap: spacing[8], marginTop: spacing[12] },
 });

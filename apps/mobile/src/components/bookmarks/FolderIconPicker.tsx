@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { FOLDER_ICONS, type FolderIcon } from "@ordo/shared";
 import { haptics } from "../../lib/haptics";
@@ -47,7 +47,6 @@ export function FolderIconPicker({
           </Pressable>
         );
       })}
-      <View style={styles.spacer} />
     </ScrollView>
   );
 }
@@ -64,5 +63,4 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.lg,
   },
-  spacer: { width: "100%", height: spacing[2] },
 });

@@ -8,9 +8,9 @@ import { Button, type ButtonVariant } from "../ui/Button";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { type OtpStatus } from "../ui/OtpInput";
+import { sheetMenuStyles } from "../ui/SheetActionRow";
 import { errorMessage, isMfaInvalidError, isMfaRequiredError } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
-import { spacing } from "../../theme/tokens";
 import { MfaCodeField } from "./MfaSetupPanel";
 
 export function MfaStepUpPanel({
@@ -100,17 +100,17 @@ export function MfaStepUpPanel({
         autoFocus
         onComplete={(next) => void submit(next)}
       />
-      <View style={{ height: spacing[16] }} />
-      <Button
-        label={confirmLabel}
-        variant={confirmVariant}
-        block
-        size="lg"
-        loading={busy}
-        onPress={() => void submit()}
-      />
-      <View style={{ height: spacing[10] }} />
-      <Button label="Cancel" variant="ghost" block disabled={busy} onPress={close} />
+      <View style={sheetMenuStyles.stack}>
+        <Button
+          label={confirmLabel}
+          variant={confirmVariant}
+          block
+          size="lg"
+          loading={busy}
+          onPress={() => void submit()}
+        />
+        <Button label="Cancel" variant="ghost" block disabled={busy} onPress={close} />
+      </View>
     </FloatingPanel>
   );
 }

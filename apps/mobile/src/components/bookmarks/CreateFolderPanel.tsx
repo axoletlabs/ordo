@@ -10,6 +10,7 @@ import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 import { Text } from "../ui/Text";
 import { FolderIconPicker } from "./FolderIconPicker";
+import { sheetMenuStyles } from "../ui/SheetActionRow";
 import { useCreateFolder } from "../../hooks/use-folders";
 import { haptics } from "../../lib/haptics";
 import { errorMessage } from "../../lib/error-message";
@@ -75,7 +76,7 @@ export function CreateFolderPanel({
         />
         <Text variant="label" color="tertiary" style={styles.iconLabel}>Icon</Text>
         <FolderIconPicker value={icon} onChange={setIcon} />
-        <View style={styles.actions}>
+        <View style={sheetMenuStyles.stack}>
           <Button label="Create folder" block size="lg" onPress={submit} loading={createFolder.isPending} />
           <Button label="Cancel" variant="ghost" block onPress={close} />
         </View>
@@ -85,6 +86,5 @@ export function CreateFolderPanel({
 }
 
 const styles = StyleSheet.create({
-  iconLabel: { marginTop: spacing[12], marginBottom: spacing[8] },
-  actions: { gap: spacing[8], marginTop: spacing[16] },
+  iconLabel: { marginTop: spacing[10], marginBottom: spacing[6] },
 });

@@ -39,7 +39,7 @@ import { Skeleton } from "../ui/Skeleton";
 import { PressableScale } from "../ui/PressableScale";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
-import { SheetActionRow } from "../ui/SheetActionRow";
+import { SheetActionRow, sheetMenuStyles } from "../ui/SheetActionRow";
 import { FAB, FABLayer } from "../ui/FAB";
 import { ArticleHtml, type ArticleHeading } from "./ArticleHtml";
 import { Markdown } from "./Markdown";
@@ -844,14 +844,14 @@ function ReaderPaneInner({
       <FloatingPanel visible={actionPanel !== null} onDismiss={() => setActionPanel(null)}>
         {actionPanel === "contents" ? (
           <>
-            <PanelHeader title="Table of contents" style={styles.actionsTitle} />
+            <PanelHeader title="Table of contents" align="start" />
             <ScrollView style={styles.tocList} showsVerticalScrollIndicator={false}>
               {articleHeadings.map((heading) => (
                 <PressableScale
                   key={heading.id}
                   style={[
                     styles.tocRow,
-                    { paddingLeft: spacing[4] + (heading.level - 1) * spacing[16] },
+                    { paddingLeft: (heading.level - 1) * spacing[16] },
                   ]}
                   onPress={() => handleHeadingSelect(heading.id)}
                   accessibilityRole="button"
@@ -872,12 +872,12 @@ function ReaderPaneInner({
               variant="ghost"
               block
               onPress={() => setActionPanel("actions")}
-              style={styles.actionsCancel}
+              style={sheetMenuStyles.cancel}
             />
           </>
         ) : (
           <>
-            <PanelHeader title={showWebsiteView ? "Page actions" : "Article actions"} style={styles.actionsTitle} />
+            <PanelHeader title={showWebsiteView ? "Page actions" : "Article actions"} align="start" />
             {hasHtml && articleHeadings.length >= 3 && !showWebsiteView ? (
               <SheetActionRow
                 icon="list-outline"
@@ -942,6 +942,7 @@ function ReaderPaneInner({
               <SheetActionRow
                 icon="open-outline"
                 label="Open in browser"
+                divider={false}
                 onPress={() => {
                   setActionPanel(null);
                   handleOpenSystemBrowser();
@@ -951,19 +952,13 @@ function ReaderPaneInner({
               <SheetActionRow
                 icon="globe-outline"
                 label="Open original"
+                divider={false}
                 onPress={() => {
                   setActionPanel(null);
                   handleOpenOriginal();
                 }}
               />
             )}
-            <Button
-              label="Cancel"
-              variant="ghost"
-              block
-              onPress={() => setActionPanel(null)}
-              style={styles.actionsCancel}
-            />
           </>
         )}
       </FloatingPanel>
@@ -994,11 +989,9 @@ const styles = StyleSheet.create({
   content: { marginTop: spacing[24] },
   headerActions: { flexDirection: "row", alignItems: "center" },
   iconBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
-  actionsTitle: { marginBottom: spacing[12] },
   actionLabel: { flex: 1 },
-  actionsCancel: { marginTop: spacing[8] },
   tocList: { maxHeight: 420 },
-  tocRow: { minHeight: 44, justifyContent: "center", paddingRight: spacing[4] },
+  tocRow: { minHeight: 44, justifyContent: "center" },
   progressTrack: { height: 2, width: "100%", overflow: "hidden" },
   progressFill: { height: 2 },
   stateBody: {

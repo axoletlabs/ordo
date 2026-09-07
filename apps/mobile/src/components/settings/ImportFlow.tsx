@@ -488,7 +488,7 @@ function Metric({ label, value }: { label: string; value: number }) {
 }
 
 const styles = StyleSheet.create({
-  busy: { alignItems: "center", paddingVertical: spacing[12] },
+  busy: { alignItems: "center", paddingVertical: spacing[8] },
   metrics: {
     flexDirection: "row",
     gap: spacing[8],
@@ -503,8 +503,8 @@ const styles = StyleSheet.create({
   },
   note: { marginTop: spacing[4] },
   samples: { marginTop: spacing[8], gap: spacing[4] },
-  lockBox: { marginTop: spacing[12] },
-  actions: { gap: spacing[4], marginTop: spacing[16] },
+  lockBox: { marginTop: spacing[10] },
+  actions: { gap: spacing[4], marginTop: spacing[12] },
   advancedWrap: { marginTop: spacing[8] },
   advancedBody: { gap: spacing[10], paddingBottom: spacing[4] },
 });

@@ -9,7 +9,6 @@ import { StyleSheet, View } from "react-native";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Segmented } from "../ui/Segmented";
-import { SettingRow } from "../ui/SettingRow";
 import { Text } from "../ui/Text";
 import { Toggle } from "../ui/Toggle";
 import { spacing } from "../../theme/tokens";
@@ -81,7 +80,7 @@ export function ReaderControlsSheet({
 }: ReaderControlsSheetProps) {
   return (
     <FloatingPanel visible={visible} onDismiss={onDismiss} maxWidth={420}>
-      <PanelHeader title="Reader" style={styles.title} />
+      <PanelHeader title="Reader" align="start" />
 
       <ControlGroup label="Text size" accessibilityHint="Changes the article text size.">
         <Segmented
@@ -108,19 +107,16 @@ export function ReaderControlsSheet({
       </ControlGroup>
 
       <View style={styles.amoledRow}>
-        <SettingRow
-          icon="contrast-outline"
-          label="AMOLED black"
-          description={effectiveDark ? undefined : "Available in dark mode"}
-          right={
-            <Toggle
-              value={preferences.amoled && effectiveDark}
-              onValueChange={(amoled) => onUpdate({ amoled })}
-              disabled={!effectiveDark}
-            />
-          }
-          rightFit="content"
-          divider={false}
+        <View style={styles.amoledCopy}>
+          <Text variant="bodyStrong">AMOLED black</Text>
+          {effectiveDark ? null : (
+            <Text variant="footnote" color="tertiary">Available in dark mode</Text>
+          )}
+        </View>
+        <Toggle
+          value={preferences.amoled && effectiveDark}
+          onValueChange={(amoled) => onUpdate({ amoled })}
+          disabled={!effectiveDark}
         />
       </View>
     </FloatingPanel>
@@ -128,8 +124,13 @@ export function ReaderControlsSheet({
 }
 
 const styles = StyleSheet.create({
-  title: { marginBottom: spacing[12] },
-  group: { marginBottom: spacing[12] },
-  groupControl: { marginTop: spacing[6] },
-  amoledRow: { marginTop: spacing[2], marginHorizontal: -spacing[16] },
+  group: { marginBottom: spacing[10] },
+  groupControl: { marginTop: spacing[4] },
+  amoledRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[12],
+    minHeight: 44,
+  },
+  amoledCopy: { flex: 1, minWidth: 0 },
 });

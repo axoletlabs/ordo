@@ -10,6 +10,7 @@ import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 import { Text } from "../ui/Text";
 import { TagColorPicker } from "./TagColorPicker";
+import { sheetMenuStyles } from "../ui/SheetActionRow";
 import { useCreateTag } from "../../hooks/use-tags";
 import { errorMessage } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
@@ -67,7 +68,7 @@ export function CreateTagPanel({ visible, onDismiss, onCreated }: CreateTagPanel
       />
       <Text variant="label" color="tertiary" style={styles.label}>Color</Text>
       <TagColorPicker value={color} onChange={setColor} />
-      <View style={styles.actions}>
+      <View style={sheetMenuStyles.row}>
         <Button label="Cancel" variant="secondary" onPress={onDismiss} style={{ flex: 1 }} />
         <Button label="Create" onPress={submit} loading={create.isPending} style={{ flex: 1.4 }} />
       </View>
@@ -76,6 +77,5 @@ export function CreateTagPanel({ visible, onDismiss, onCreated }: CreateTagPanel
 }
 
 const styles = StyleSheet.create({
-  label: { marginTop: spacing[12], marginBottom: spacing[8] },
-  actions: { flexDirection: "row", gap: spacing[10], marginTop: spacing[16] },
+  label: { marginTop: spacing[10], marginBottom: spacing[6] },
 });

@@ -1,6 +1,6 @@
 /** Account identity and security settings. */
 import React, { useState } from "react";
-import { Pressable, StyleSheet } from "react-native";
+import { Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -14,7 +14,6 @@ import { SettingRow } from "../../../src/components/ui/SettingRow";
 import { UserAvatar } from "../../../src/components/ui/UserAvatar";
 import { FloatingPanel } from "../../../src/components/ui/FloatingPanel";
 import { PanelHeader } from "../../../src/components/ui/PanelHeader";
-import { Button } from "../../../src/components/ui/Button";
 import { SheetActionRow } from "../../../src/components/ui/SheetActionRow";
 import { toast } from "../../../src/components/ui/toast-store";
 import { useAuthStore } from "../../../src/store/auth";
@@ -190,7 +189,7 @@ export default function AccountScreen() {
       </SettingsScrollView>
 
       <FloatingPanel visible={menuOpen} onDismiss={() => setMenuOpen(false)}>
-        <PanelHeader title="Profile picture" style={styles.menuTitle} />
+        <PanelHeader title="Profile picture" align="start" />
         <SheetActionRow
           icon="image-outline"
           label="Choose photo"
@@ -199,6 +198,7 @@ export default function AccountScreen() {
         <SheetActionRow
           icon="camera-outline"
           label="Take photo"
+          divider={!user?.hasAvatar}
           onPress={() => afterSheet(() => void takePhoto())}
         />
         {user?.hasAvatar ? (
@@ -206,16 +206,11 @@ export default function AccountScreen() {
             icon="trash-outline"
             label="Remove photo"
             tone="danger"
+            divider={false}
             onPress={() => afterSheet(() => void removePhoto())}
           />
         ) : null}
-        <Button label="Cancel" variant="ghost" block onPress={() => setMenuOpen(false)} style={styles.menuCancel} />
       </FloatingPanel>
     </SettingsPage>
   );
 }
-
-const styles = StyleSheet.create({
-  menuTitle: { marginBottom: spacing[8] },
-  menuCancel: { marginTop: spacing[8] },
-});

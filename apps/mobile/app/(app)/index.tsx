@@ -13,6 +13,7 @@ import { PanelHeader } from "../../src/components/ui/PanelHeader";
 import { Button } from "../../src/components/ui/Button";
 import { Text } from "../../src/components/ui/Text";
 import { PressableScale } from "../../src/components/ui/PressableScale";
+import { SheetActionRow } from "../../src/components/ui/SheetActionRow";
 import { ScreenContent } from "../../src/components/ui/ScreenContent";
 import { BookmarkListSkeleton } from "../../src/components/ui/BookmarkListSkeleton";
 import { EmptyState } from "../../src/components/ui/EmptyState";
@@ -331,35 +332,24 @@ export default function BookmarksScreen() {
       ) : null}
 
       <FloatingPanel visible={createMenuOpen} onDismiss={() => setCreateMenuOpen(false)}>
-        <PanelHeader title="Create" style={styles.createTitle} />
-        <View style={styles.createMenuActions}>
-          <PressableScale
-            accessibilityRole="button"
-            accessibilityLabel="Save bookmark"
-            style={[styles.createMenuAction, { backgroundColor: palette.surfaceSecondary }]}
-            onPress={() => {
-              setCreateMenuOpen(false);
-              setTimeout(() => setAddOpen(true), 100);
-            }}
-          >
-            <Ionicons name="bookmark-outline" size={20} color={palette.accent} />
-            <Text variant="bodyStrong" style={styles.createMenuCopy}>Save bookmark</Text>
-            <Ionicons name="chevron-forward" size={16} color={palette.textFaint} />
-          </PressableScale>
-          <PressableScale
-            accessibilityRole="button"
-            accessibilityLabel="New folder"
-            style={[styles.createMenuAction, { backgroundColor: palette.surfaceSecondary }]}
-            onPress={() => {
-              setCreateMenuOpen(false);
-              setTimeout(() => setCreateOpen(true), 100);
-            }}
-          >
-            <Ionicons name="folder-outline" size={20} color={palette.accent} />
-            <Text variant="bodyStrong" style={styles.createMenuCopy}>New folder</Text>
-            <Ionicons name="chevron-forward" size={16} color={palette.textFaint} />
-          </PressableScale>
-        </View>
+        <PanelHeader title="Create" align="start" />
+        <SheetActionRow
+          icon="bookmark-outline"
+          label="Save bookmark"
+          onPress={() => {
+            setCreateMenuOpen(false);
+            setTimeout(() => setAddOpen(true), 100);
+          }}
+        />
+        <SheetActionRow
+          icon="folder-outline"
+          label="New folder"
+          divider={false}
+          onPress={() => {
+            setCreateMenuOpen(false);
+            setTimeout(() => setCreateOpen(true), 100);
+          }}
+        />
       </FloatingPanel>
 
       <AddBookmarkSheet
@@ -431,15 +421,4 @@ const styles = StyleSheet.create({
   },
   emptyBookmarks: { minHeight: 300, justifyContent: "center" },
   footer: { paddingVertical: spacing[20], alignItems: "center" },
-  createMenuActions: { gap: spacing[6] },
-  createMenuAction: {
-    minHeight: 52,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[12],
-    paddingHorizontal: spacing[14],
-    borderRadius: 12,
-  },
-  createMenuCopy: { flex: 1 },
-  createTitle: { marginBottom: spacing[8] },
 });

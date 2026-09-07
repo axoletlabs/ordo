@@ -308,7 +308,7 @@ export function ServerConnectSheet({
 }
 
 const styles = StyleSheet.create({
-  recents: { marginTop: spacing[12], gap: spacing[8] },
+  recents: { marginTop: spacing[10], gap: spacing[6] },
   recentRow: {
     minHeight: 44,
     borderWidth: 1,
@@ -320,8 +320,8 @@ const styles = StyleSheet.create({
     gap: spacing[10],
   },
   recentCopy: { flex: 1, minWidth: 0 },
-  currentRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing[10] },
-  actions: { flexDirection: "row", alignItems: "center", marginTop: spacing[16] },
+  currentRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing[8] },
+  actions: { flexDirection: "row", alignItems: "center", marginTop: spacing[12] },
   changeBtn: {
     paddingHorizontal: spacing[20],
     flexDirection: "row",

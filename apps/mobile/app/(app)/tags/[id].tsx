@@ -294,7 +294,7 @@ export default function TagDetailScreen() {
       />
 
       <FloatingPanel visible={tagActionsOpen} onDismiss={() => setTagActionsOpen(false)}>
-        <PanelHeader title={anchor?.name ?? "Tag"} style={styles.tagActionsTitle} />
+        <PanelHeader title={anchor?.name ?? "Tag"} align="start" />
         <SheetActionRow
           icon="create-outline"
           label="Edit tag"
@@ -307,12 +307,12 @@ export default function TagDetailScreen() {
           icon="trash-outline"
           label="Delete tag"
           tone="danger"
+          divider={false}
           onPress={() => {
             setTagActionsOpen(false);
             setTimeout(() => setDeleteTagOpen(true), 100);
           }}
         />
-        <Button label="Cancel" variant="ghost" block onPress={() => setTagActionsOpen(false)} style={styles.tagActionsCancel} />
       </FloatingPanel>
 
       <EditTagPanel
@@ -385,6 +385,4 @@ const styles = StyleSheet.create({
   iconBtn: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
   headerActions: { flexDirection: "row", alignItems: "center" },
   footer: { paddingVertical: spacing[20], alignItems: "center" },
-  tagActionsTitle: { marginBottom: spacing[8] },
-  tagActionsCancel: { marginTop: spacing[8] },
 });
