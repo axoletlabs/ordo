@@ -13,6 +13,8 @@ export interface SettingRowProps {
   description?: string;
   value?: string;
   onPress?: () => void;
+  onLongPress?: () => void;
+  accessibilityHint?: string;
   right?: React.ReactNode;
   /** `column` (default) reserves the settings picker width so labels align. */
   rightFit?: "column" | "content";
@@ -27,6 +29,8 @@ export function SettingRow({
   description,
   value,
   onPress,
+  onLongPress,
+  accessibilityHint,
   right,
   rightFit = "column",
   destructive,
@@ -70,10 +74,17 @@ export function SettingRow({
     </View>
   );
 
-  if (!onPress) return <View style={styles.pad}>{content}</View>;
+  if (!onPress && !onLongPress) return <View style={styles.pad}>{content}</View>;
   return (
     <View style={styles.pad}>
-      <PressableScale style={styles.press} dim onPress={onPress}>
+      <PressableScale
+        accessibilityRole="button"
+        accessibilityHint={accessibilityHint}
+        style={styles.press}
+        dim
+        onPress={onPress}
+        onLongPress={onLongPress}
+      >
         {content}
       </PressableScale>
     </View>
