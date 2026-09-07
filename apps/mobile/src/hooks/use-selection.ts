@@ -47,22 +47,22 @@ export function useSelectionMode() {
     bump(new Set(), false);
   }, [bump]);
 
+  const idsRef = useRef(ids);
+  idsRef.current = ids;
+
   const toggle = useCallback((key: SelectionKey) => {
     haptics.selection();
-    setIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-    setActive(true);
-    setRevision((value) => value + 1);
-  }, []);
+    const next = new Set(idsRef.current);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    bump(next, next.size > 0);
+  }, [bump]);
 
   const replace = useCallback(
     (keys: readonly SelectionKey[]) => {
       haptics.selection();
-      bump(new Set(keys), true);
+      const next = new Set(keys);
+      bump(next, next.size > 0);
     },
     [bump],
   );
