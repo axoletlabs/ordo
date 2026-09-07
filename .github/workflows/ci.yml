@@ -66,8 +66,8 @@ jobs:
         id: eligibility
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         continue-on-error: true
-        # Fingerprint generate has hung indefinitely on native-module bumps
-        # (stdout is redirected, so the step looks frozen). Fail open to APK.
+        # Last-resort cap if createFingerprintAsync never resolves. The
+        # wrapper process.exit()s after JSON so this should not fire.
         timeout-minutes: 3
         env:
           CURRENT_SHA: ${{ github.sha }}
@@ -81,22 +81,37 @@ jobs:
             exit 0
           fi
 
+          # Do not `git checkout` this worktree. The Expo fingerprint CLI
+          # leaves autolinking children running after a native-module bump;
+          # those children plus in-place checkout share index.lock and hang
+          # the second generate. Isolated worktree + a wrapper that
+          # process.exit()s after JSON so detect cannot wedge CI.
+          SCRIPT="$GITHUB_WORKSPACE/.github/scripts/generate-android-fingerprint.js"
+          PREV_DIR="${RUNNER_TEMP}/fp-prev"
+          rm -rf "$PREV_DIR"
+          git worktree add --detach "$PREV_DIR" "$PREVIOUS_SHA"
+          cleanup() { git worktree remove --force "$PREV_DIR" 2>/dev/null || true; }
+          trap cleanup EXIT
+
           generate_fingerprint() {
-            local sha="$1"
+            local dir="$1"
             local out="$2"
-            echo "Checking out $sha"
-            git checkout --detach "$sha"
-            pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true
-            echo "Generating fingerprint for $sha"
-            # stdin closed: fingerprint's ExpoConfigLoader / autolinking children
-            # inherit the Actions pipe and can wait forever for EOF.
-            timeout --signal=KILL 60s pnpm --dir apps/mobile exec fingerprint fingerprint:generate --platform android \
-              < /dev/null > "$out"
+            echo "Installing $(git -C "$dir" rev-parse --short HEAD) in $dir"
+            (cd "$dir" && pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true)
+            echo "Generating fingerprint for $(git -C "$dir" rev-parse --short HEAD)"
+            # stdin closed: ExpoConfigLoader / autolinking inherit the Actions
+            # pipe and can wait forever for EOF. timeout is a last resort if
+            # createFingerprintAsync itself never resolves.
+            (
+              cd "$dir/apps/mobile"
+              timeout --kill-after=5s 60s node "$SCRIPT" --platform android \
+                < /dev/null > "$out"
+            )
             echo "Wrote $out ($(wc -c < "$out") bytes)"
           }
 
-          generate_fingerprint "$PREVIOUS_SHA" /tmp/fingerprint-previous.json
-          generate_fingerprint "$CURRENT_SHA" /tmp/fingerprint-current.json
+          generate_fingerprint "$PREV_DIR" /tmp/fingerprint-previous.json
+          generate_fingerprint "$GITHUB_WORKSPACE" /tmp/fingerprint-current.json
 
           # Build metadata changes every commit but does not affect native compatibility.
           for fingerprint in /tmp/fingerprint-previous.json /tmp/fingerprint-current.json; do
