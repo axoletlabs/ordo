@@ -113,6 +113,9 @@ export function allBookmarkListMatcher() {
  * Update a bookmark everywhere it is cached: every list (folders + search)
  * plus the detail entry (which additionally carries contentHtml). Queries
  * not containing this bookmark are returned unchanged.
+ *
+ * List payloads omit article bodies; do not clobber a cached detail/list
+ * body with those nulls unless the patch is actually clearing content.
  */
 export function updateBookmarkEverywhere(
   qc: QueryClient,
@@ -120,6 +123,19 @@ export function updateBookmarkEverywhere(
   updater: (b: BookmarkDto) => BookmarkDto,
 ) {
   updateBookmarksEverywhere(qc, new Set([id]), updater);
+}
+
+function preserveBodies<T extends BookmarkDto>(old: T, patch: T): T {
+  const clearing =
+    patch.fetchStatus === "unsupported" ||
+    patch.fetchStatus === "failed" ||
+    patch.contentKindOverride === "web";
+  if (clearing) return patch;
+  return {
+    ...patch,
+    contentText: patch.contentText ?? old.contentText,
+    contentMarkdown: patch.contentMarkdown ?? old.contentMarkdown,
+  };
 }
 
 /** Apply the same list/detail patch to many bookmarks in one cache walk. */
@@ -139,7 +155,7 @@ export function updateBookmarksEverywhere(
         const items = page.items.map((b) => {
           if (!ids.has(b.id)) return b;
           pageChanged = true;
-          return updater(b);
+          return preserveBodies(b, updater(b) as BookmarkDto);
         });
         if (!pageChanged) return page;
         changed = true;
@@ -148,7 +164,25 @@ export function updateBookmarksEverywhere(
       return changed ? { ...paged, pages } : data;
     }
     const detail = data as BookmarkDetailDto;
-    return ids.has(detail.id) ? updater(detail) : data;
+    if (!ids.has(detail.id)) return data;
+    const next = updater(detail) as BookmarkDetailDto;
+    return preserveBodies(detail, next);
+  });
+}
+
+/** Copy extraction fields from a detail fetch onto list rows without shipping HTML. */
+export function patchListsFromDetail(qc: QueryClient, detail: BookmarkDetailDto) {
+  const { contentHtml: _html, contentText: _text, contentMarkdown: _md, ...list } = detail;
+  updateBookmarkEverywhere(qc, detail.id, (old) => {
+    if ("contentHtml" in old) {
+      return { ...old, ...detail };
+    }
+    return {
+      ...old,
+      ...list,
+      contentText: null,
+      contentMarkdown: null,
+    };
   });
 }
 

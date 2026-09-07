@@ -330,6 +330,7 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
             url: c.entry.url,
             userId,
             mode: "content" as const,
+            priority: "high" as const,
           })),
         );
       }

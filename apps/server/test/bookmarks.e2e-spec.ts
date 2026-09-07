@@ -32,6 +32,8 @@ function fakeReader() {
       }
       return { ...FAKE_EXTRACTED };
     },
+    prefetch: () => undefined,
+    classifyShellText: () => null,
   } as unknown as ReaderService;
 }
 
@@ -264,6 +266,12 @@ describe("Bookmarks & Folders (e2e)", () => {
       });
       const ready = await agent.get(`/api/bookmarks/${res.body.id}`).expect(200);
       expect(ready.body.contentKind).toBe("article");
+      expect(ready.body.contentMarkdown).toBe("Hello world.");
+      expect(ready.body.contentText).toBe("Hello world.");
+      const listed = await agent.get("/api/bookmarks").expect(200);
+      const row = listed.body.items.find((item: { id: string }) => item.id === res.body.id);
+      expect(row.contentMarkdown).toBeNull();
+      expect(row.contentText).toBeNull();
     });
 
     it("stores typed unsupported rejections instead of junk content", async () => {
@@ -428,6 +436,14 @@ describe("Bookmarks & Folders (e2e)", () => {
         .send({ url: "https://example.com/x", folderId: "" })
         .expect(400);
       expect(emptyFolder.body.error.code).toBe(ErrorCode.VALIDATION_ERROR);
+    });
+
+    it("accepts a prefetch warmup without creating a bookmark", async () => {
+      const { agent } = await setup();
+      await agent.post("/api/bookmarks/prefetch").send({ url: "https://example.com/soon" }).expect(204);
+      await agent.post("/api/bookmarks/prefetch").send({ url: "not-a-url" }).expect(400);
+      const listed = await agent.get("/api/bookmarks").expect(200);
+      expect(listed.body.items).toEqual([]);
     });
 
     it("creates a bookmark directly into an owned folder", async () => {

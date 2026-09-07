@@ -112,4 +112,7 @@ export const bookmarksApi = {
     api.get<typeof BookmarkRoutes.extractionProgress.response>(
       BookmarkRoutes.extractionProgress.path,
     ),
+
+  prefetch: (url: string) =>
+    api.post<typeof BookmarkRoutes.prefetch.response>(BookmarkRoutes.prefetch.path, { url }),
 };

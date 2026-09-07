@@ -128,6 +128,11 @@ export class RateLimitService implements OnModuleInit, OnModuleDestroy {
     this.consumeWindow(`bookmark:${userId}`, RATE_LIMIT.bookmarkCreateUser, "URLs fetched");
   }
 
+  consumeBookmarkPrefetch(userId: string): void {
+    if (!this.enabled) return;
+    this.consumeWindow(`prefetch:${userId}`, RATE_LIMIT.bookmarkPrefetchUser, "URL prefetches");
+  }
+
   /**
    * Reject if this folder's failed-unlock window is already full.
    * Does not record a failure.

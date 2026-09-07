@@ -50,6 +50,11 @@ export class RateLimitInterceptor implements NestInterceptor {
         if (userId) this.rateLimit.consumeBookmarkCreate(userId);
         return;
       }
+      case "bookmark-prefetch": {
+        const userId = req.user?.userId;
+        if (userId) this.rateLimit.consumeBookmarkPrefetch(userId);
+        return;
+      }
       case "mfa-verify":
         this.rateLimit.consumeMfaVerify(ip);
         return;

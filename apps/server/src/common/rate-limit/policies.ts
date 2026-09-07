@@ -26,6 +26,7 @@ export const RATE_LIMIT = {
   forgotPasswordIp: { limit: 10, windowMs: HOUR } satisfies WindowPolicy,
   resetPasswordIp: { limit: 10, windowMs: 15 * MINUTE } satisfies WindowPolicy,
   bookmarkCreateUser: { limit: 30, windowMs: MINUTE } satisfies WindowPolicy,
+  bookmarkPrefetchUser: { limit: 60, windowMs: MINUTE } satisfies WindowPolicy,
   /** Wrong folder PIN / pattern / password (unlock or remove-lock) per user and folder. */
   folderUnlockUser: { limit: 10, windowMs: 15 * MINUTE } satisfies WindowPolicy,
   mfaVerifyIp: { limit: 30, windowMs: 15 * MINUTE } satisfies WindowPolicy,

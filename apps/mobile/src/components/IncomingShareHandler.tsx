@@ -3,6 +3,7 @@ import { useShareIntentContext } from "expo-share-intent";
 import { APP_NAME } from "@ordo/shared";
 import { returnToShareSender } from "../lib/share-target";
 import { extractSharedUrl } from "../lib/shared-url";
+import { prefetchExtraction } from "../lib/prefetch-extraction";
 import { useIncomingShareStore } from "../store/incoming-share";
 
 /** Bridges Android ACTION_SEND intents into Ordo's existing bookmark flow. */
@@ -21,6 +22,7 @@ export function IncomingShareHandler() {
       return;
     }
 
+    prefetchExtraction(url);
     setPendingUrl(url);
   }, [hasShareIntent, resetShareIntent, setPendingUrl, shareIntent]);
 

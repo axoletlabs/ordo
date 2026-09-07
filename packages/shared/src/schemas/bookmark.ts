@@ -21,6 +21,9 @@ export const CreateBookmarkSchema = z.object({
 });
 export type CreateBookmarkInput = z.infer<typeof CreateBookmarkSchema>;
 
+export const PrefetchBookmarkSchema = z.object({ url });
+export type PrefetchBookmarkInput = z.infer<typeof PrefetchBookmarkSchema>;
+
 export const UpdateBookmarkSchema = z
   .object({
     /** Passing `null` moves the bookmark to unfiled. */

@@ -106,4 +106,20 @@ describe("scoreTagSuggestions", () => {
     });
     expect(scored).toEqual([]);
   });
+
+  it("uses body matches to break equal title scores", () => {
+    const scored = scoreTagSuggestions(
+      [
+        { id: "a", name: "alpha" },
+        { id: "b", name: "bravo" },
+      ],
+      {
+        title: "alpha and bravo",
+        description: null,
+        domain: null,
+        body: "bravo appears in the body too",
+      },
+    );
+    expect(scored[0]?.id).toBe("b");
+  });
 });

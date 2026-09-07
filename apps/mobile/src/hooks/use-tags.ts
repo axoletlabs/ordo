@@ -135,12 +135,6 @@ export function useTaggedBookmarks(tagIds: readonly string[], enabled = true) {
     initialPageParam: null as string | null,
     getNextPageParam: (last) => (last.hasMore ? last.nextCursor : undefined),
     enabled,
-    refetchInterval: (query) =>
-      query.state.data?.pages.some((page) =>
-        page.items.some((bookmark) => bookmark.fetchStatus === "pending"),
-      )
-        ? 1_500
-        : false,
   });
 }
 

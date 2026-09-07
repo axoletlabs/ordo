@@ -185,6 +185,14 @@ describe("RateLimitService", () => {
     expect(() => limiter.consumeBookmarkCreate("user-2")).not.toThrow();
   });
 
+  it("limits bookmark prefetches per user", () => {
+    const limiter = service();
+    for (let i = 0; i < RATE_LIMIT.bookmarkPrefetchUser.limit; i++) {
+      expect(() => limiter.consumeBookmarkPrefetch("user-1")).not.toThrow();
+    }
+    expectLimited(() => limiter.consumeBookmarkPrefetch("user-1"), "URL prefetches");
+  });
+
   it("limits failed folder unlocks per user and folder, and clears on success", () => {
     const limiter = service();
     for (let i = 0; i < RATE_LIMIT.folderUnlockUser.limit; i++) {

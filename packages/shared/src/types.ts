@@ -162,7 +162,9 @@ export interface BookmarkDto {
   title: string;
   description: string | null;
   domain: string;
+  /** Omitted on list/search; present on GET /bookmarks/:id. */
   contentText: string | null;
+  /** Legacy body; omitted on list/search. Current extracts render from contentHtml. */
   contentMarkdown: string | null;
   fetchStatus: FetchStatus;
   /** Why extraction ended in `unsupported`/`failed`; null when it succeeded. */

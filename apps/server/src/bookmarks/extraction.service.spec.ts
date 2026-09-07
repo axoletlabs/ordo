@@ -1,6 +1,16 @@
-import { EXTRACTION_VERSION } from "@ordo/shared";
+import { EXTRACTION_VERSION, extractionPollIntervalMs } from "@ordo/shared";
 import { ExtractionService } from "./extraction.service.js";
 import { ReaderService, UnsupportedContentError } from "./reader.service.js";
+
+describe("extractionPollIntervalMs", () => {
+  it("backs off from 200ms to 1.5s", () => {
+    expect(extractionPollIntervalMs(1)).toBe(200);
+    expect(extractionPollIntervalMs(2)).toBe(400);
+    expect(extractionPollIntervalMs(3)).toBe(800);
+    expect(extractionPollIntervalMs(4)).toBe(1_500);
+    expect(extractionPollIntervalMs(12)).toBe(1_500);
+  });
+});
 
 describe("ExtractionService", () => {
   function setup(error: Error, contentText: string | null = "Previously readable article") {
@@ -161,8 +171,16 @@ describe("ExtractionService", () => {
 
     await service.enrichBookmark("bookmark-1", "https://grugbrain.dev/");
 
-    expect(extract).toHaveBeenNthCalledWith(1, "https://grugbrain.dev/", { forceArticle: false });
-    expect(extract).toHaveBeenNthCalledWith(2, "https://grugbrain.dev/", { forceArticle: true });
+    expect(extract).toHaveBeenNthCalledWith(
+      1,
+      "https://grugbrain.dev/",
+      expect.objectContaining({ forceArticle: false }),
+    );
+    expect(extract).toHaveBeenNthCalledWith(
+      2,
+      "https://grugbrain.dev/",
+      expect.objectContaining({ forceArticle: true }),
+    );
     expect(extract).toHaveBeenCalledTimes(2);
   });
 
@@ -200,5 +218,100 @@ describe("ExtractionService", () => {
       }),
     );
     expect(refreshSafely).not.toHaveBeenCalled();
+  });
+
+  it("writes og metadata while extraction is still pending", async () => {
+    const extract = jest.fn().mockImplementation(async (_url: string, options: { onMetadata?: (meta: object) => void }) => {
+      await options.onMetadata?.({
+        title: "OG Title",
+        description: "A summary",
+        author: "Jane",
+        publishedAt: "2024-05-01T10:00:00.000Z",
+      });
+      return {
+        title: "Final Title",
+        description: "A summary",
+        author: "Jane",
+        publishedAt: "2024-05-01T10:00:00.000Z",
+        domain: "example.com",
+        readingTimeMinutes: 1,
+        contentHtml: "<p>Body with plenty of words for the reader.</p>",
+        contentMarkdown: "",
+        contentText: "Body with plenty of words for the reader.",
+      };
+    });
+    const prisma = {
+      bookmark: {
+        findUnique: jest.fn().mockResolvedValue({ contentKindOverride: null }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        count: jest.fn().mockResolvedValue(0),
+      },
+    };
+    const service = new ExtractionService(
+      prisma as never,
+      { extract, classifyShellText: () => null } as never,
+      { refreshSafely: () => undefined } as never,
+    );
+
+    await service.enrichBookmark("bookmark-1", "https://example.com/article");
+
+    expect(prisma.bookmark.updateMany).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: { id: "bookmark-1", fetchStatus: "pending" },
+        data: expect.objectContaining({ title: "OG Title", author: "Jane" }),
+      }),
+    );
+    expect(prisma.bookmark.updateMany).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: expect.objectContaining({ title: "Final Title", fetchStatus: "ok" }),
+      }),
+    );
+  });
+
+  it("does not persist extract results after cancel", async () => {
+    let finish!: (value: unknown) => void;
+    let started!: () => void;
+    const extractStarted = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const extract = jest.fn().mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          started();
+          finish = resolve;
+        }),
+    );
+    const prisma = {
+      bookmark: {
+        findUnique: jest.fn().mockResolvedValue({ contentKindOverride: null }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+        count: jest.fn().mockResolvedValue(0),
+      },
+    };
+    const service = new ExtractionService(
+      prisma as never,
+      { extract, classifyShellText: () => null } as never,
+      { refreshSafely: () => undefined } as never,
+    );
+
+    const pending = service.enrichBookmark("bookmark-1", "https://example.com/article");
+    await extractStarted;
+    service.cancel("bookmark-1");
+    finish({
+      title: "Too late",
+      description: null,
+      author: null,
+      publishedAt: null,
+      domain: "example.com",
+      readingTimeMinutes: 1,
+      contentHtml: "<p>Gone.</p>",
+      contentMarkdown: "",
+      contentText: "Gone.",
+    });
+    await pending;
+
+    expect(prisma.bookmark.updateMany).not.toHaveBeenCalled();
   });
 });

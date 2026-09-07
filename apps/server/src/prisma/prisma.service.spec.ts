@@ -266,6 +266,7 @@ describe("PrismaService legacy schema migration", () => {
     expect(indexes.map((i) => i.name).sort()).toEqual([
       "Bookmark_createdAt_idx",
       "Bookmark_folderId_idx",
+      "Bookmark_userId_fetchStatus_idx",
       "Bookmark_userId_idx",
       "sqlite_autoindex_Bookmark_1",
     ]);

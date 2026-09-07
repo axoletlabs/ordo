@@ -1,357 +1,152 @@
-import { Injectable, Logger } from "@nestjs/common";
-import { isProbablyReaderable, Readability } from "@mozilla/readability";
-import { JSDOM } from "jsdom";
-import { lookup } from "node:dns/promises";
+import { Injectable, Logger, type OnModuleDestroy } from "@nestjs/common";
 import { isIP } from "node:net";
-import TurndownService from "turndown";
-import sanitizeHtml from "sanitize-html";
+import { setDefaultResultOrder } from "node:dns";
+import { Agent } from "undici";
+import { classifyDestination, type ReaderRejectionReason } from "./reader-classify.js";
+import { UnsupportedContentError } from "./reader-errors.js";
+import { DnsCache } from "./dns-cache.js";
+import { HtmlCache } from "./html-cache.js";
+import { ExtractPool } from "./reader-pool.js";
 import {
-  classifyDestination,
-  classifyPageSignals,
-  collectPageSignals,
-  hasArticleEvidence,
-  hasCommerceCta,
-  type ReaderRejectionReason,
-} from "./reader-classify.js";
+  ampHtmlHref,
+  ARTICLE_CUTOFF_MIN_BYTES,
+  ARTICLE_CUTOFF_TRAIL_BYTES,
+  classifyHtmlHead,
+  classifyShellText,
+  decodeHtmlBytes,
+  EARLY_STOP_MIN_WORDS,
+  HEAD_SNIFF_BYTES,
+  headHasArticleEvidence,
+  isAmpUrl,
+  peekMetadata,
+  roughWordCount,
+  type ArticleMetadata,
+  type ExtractedContent,
+  type ExtractOptions as ParseOptions,
+} from "./reader-parse.js";
 
-export type { ReaderRejectionReason };
+export type { ReaderRejectionReason, ExtractedContent, ArticleMetadata };
+export { UnsupportedContentError } from "./reader-errors.js";
 
-/** Typed rejection: the bookmark is stored as `unsupported` with this reason. */
-export class UnsupportedContentError extends Error {
-  constructor(
-    readonly reason: ReaderRejectionReason,
-    message?: string,
-  ) {
-    super(message ?? reason);
-    this.name = "UnsupportedContentError";
-  }
+export interface ExtractOptions extends ParseOptions {
+  signal?: AbortSignal;
+  html?: string;
+  onHtml?: (html: string) => void;
+  onMetadata?: (meta: ArticleMetadata) => void | Promise<void>;
 }
 
-export interface ExtractedContent {
-  title: string;
-  description: string | null;
-  author: string | null;
-  publishedAt: string | null;
-  domain: string;
-  readingTimeMinutes: number;
-  contentHtml: string;
-  contentMarkdown: string;
-  contentText: string;
-}
-
-export interface ExtractOptions {
-  /**
-   * User forced this bookmark to be an article. Skips the high-confidence
-   * article-evidence gate (og:type / JSON-LD Article) and still tries Readability.
-   */
-  forceArticle?: boolean;
-}
-
-const FETCH_TIMEOUT_MS = 15_000;
+const FETCH_TIMEOUT_MS = 8_000;
+const CONNECT_TIMEOUT_MS = 4_000;
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 const MAX_REDIRECTS = 5;
 const USER_AGENT =
-  "Mozilla/5.0 (compatible; OrdoReader/0.1; +https://ordo.app) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36";
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
 
-/** Quality gates an extracted (or fallback) body must pass to count as an article. */
-const MIN_WORDS = 70;
-/** Unmarked pages (no Article schema / og:type) need a real body, not nav chrome. */
-const MIN_WORDS_UNMARKED = 280;
-const MAX_LINK_DENSITY = 0.4;
-const MAX_LINK_DENSITY_UNMARKED = 0.3;
-/** Shell phrases are only trusted on pages with very little text at all. */
-const SHELL_TEXT_LIMIT = 2_000;
-const WORDS_PER_MINUTE = 200;
-const MAX_IMAGE_DIMENSION = 10_000;
+setDefaultResultOrder("ipv4first");
 
-const JS_REQUIRED_PATTERNS: RegExp[] = [
-  /(?:please|kindly) (?:enable|turn on|activate) (?:javascript|js)\b/,
-  /enable (?:javascript|js) to (?:continue|view|read|use|see|access)/,
-  /javascript (?:is|must be|needs to be|has to be|appears to be|seems to be) (?:not )?(?:enabled|disabled|required|turned on|turned off|activated|supported)/,
-  /\bjs (?:is|must be|needs to be) (?:not )?(?:enabled|disabled|required)/,
-  /(?:javascript|js) (?:is )?required/,
-  /browser (?:does not|doesn'?t|doesnt) support (?:javascript|js)/,
-  /without (?:javascript|js)/,
-];
-
-const LOGIN_PAYWALL_PATTERNS: RegExp[] = [
-  /sign ?in (?:to|in order to) (?:continue|read|view|access|see)/,
-  /log ?in (?:to|in order to) (?:continue|read|view|access|see)/,
-  /(?:create|register) (?:a )?(?:free )?account to (?:continue|read|view|access)/,
-  /subscribe to (?:continue|read|view|keep reading)/,
-  /subscription (?:is )?required/,
-  /paid (?:subscription|account|plan) required/,
-  /already a subscriber/,
-  /members[- ]only (?:content|article)/,
-];
-
-const BOT_CHALLENGE_PATTERNS: RegExp[] = [
-  /verify (?:that )?you'?re? (?:a )?human/,
-  /are you a robot/,
-  /checking your browser/,
-  /just a moment\.\.\./,
-  /unusual traffic/,
-  /(?:ddos|bot) protection/,
-  /complete the (?:security check|captcha)/,
-  /(?:verify|solve) (?:the )?captcha/,
-  /access (?:denied|blocked)/,
-];
-
-const CONSENT_WALL_PATTERNS: RegExp[] = [
-  /before you continue (?:to|with)/,
-  /accept (?:all )?cookies to (?:continue|proceed|read|view)/,
-  /cookies? must be (?:enabled|accepted)/,
-  /consent (?:is )?required/,
-  /this site uses cookies[\s\S]*by using this site,? you agree/,
-];
-
-function pixelSizeFromStyle(
-  style: string | undefined,
-  property: "width" | "height",
-): string | undefined {
-  return new RegExp(`(?:^|;)\\s*${property}\\s*:\\s*(\\d{1,5})\\s*px(?:\\s*(?:;|$))`, "i")
-    .exec(style ?? "")?.[1];
-}
-
-/** Preserve bounded image dimensions, but never retain arbitrary source CSS. */
-function normalizeImageAttributes(tagName: string, attributes: Record<string, string>) {
-  const next = { ...attributes };
-  delete next.style;
-
-  for (const dimension of ["width", "height"] as const) {
-    const attribute = next[dimension]?.trim();
-    const numericAttribute = attribute && /^\d{1,5}$/.test(attribute) ? Number(attribute) : 0;
-    if (numericAttribute >= 1 && numericAttribute <= MAX_IMAGE_DIMENSION) {
-      next[dimension] = String(numericAttribute);
-      continue;
-    }
-
-    const styleValue = pixelSizeFromStyle(attributes.style, dimension);
-    const numericStyle = styleValue ? Number(styleValue) : 0;
-    if (numericStyle >= 1 && numericStyle <= MAX_IMAGE_DIMENSION) {
-      next[dimension] = String(numericStyle);
-    } else {
-      delete next[dimension];
-    }
-  }
-
-  return { tagName, attribs: next };
-}
-
-/** Semantic tags only; layout wrappers are unwrapped, interactive embeds dropped. */
-const SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
-  allowedTags: [
-    "p", "br", "hr", "h1", "h2", "h3", "h4", "h5", "h6",
-    "ul", "ol", "li", "blockquote", "pre", "code",
-    "em", "strong", "b", "i", "u", "s", "del", "mark", "sub", "sup", "abbr", "kbd", "cite", "q", "small",
-    "a", "img", "figure", "figcaption", "picture", "source",
-    "table", "thead", "tbody", "tfoot", "tr", "th", "td", "caption",
-    "time",
-  ],
-  allowedAttributes: {
-    a: ["href", "title", "rel"],
-    img: ["src", "alt", "title", "width", "height", "loading"],
-    source: ["srcset", "type", "media"],
-    time: ["datetime"],
-  },
-  allowedSchemes: ["http", "https", "mailto"],
-  allowedSchemesByTag: { img: ["http", "https"], source: ["http", "https"] },
-  transformTags: { img: normalizeImageAttributes },
-  // drop images whose src was stripped (e.g. data: URLs) — an img without src is junk
-  exclusiveFilter: (frame) => frame.tag === "img" && !frame.attribs.src,
-  disallowedTagsMode: "discard",
-};
-
-function normalizeSpace(text: string): string {
-  return text.replace(/\s+/g, " ").trim();
-}
-
-/** Lowercase, strip punctuation/symbols, collapse whitespace — for comparisons. */
-function normalizeForCompare(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[\p{P}\p{S}]/gu, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function wordCount(text: string): number {
-  const trimmed = text.trim();
-  if (!trimmed) return 0;
-  return trimmed.split(/\s+/).length;
-}
-
-/** Share of an element's text that lives inside links (0..1). */
-function linkDensity(element: Element): number {
-  const total = (element.textContent ?? "").length;
-  if (total === 0) return 1;
-  let linkText = 0;
-  for (const a of Array.from(element.querySelectorAll("a"))) {
-    linkText += (a.textContent ?? "").length;
-  }
-  return linkText / total;
-}
-
-function hasSameText(a: string, b: string): boolean {
-  const na = normalizeForCompare(a);
-  const nb = normalizeForCompare(b);
-  return !!na && na === nb;
-}
-
-/** Page titles may add a short site-name affix around the article heading. */
-function duplicatesTitle(a: string, b: string): boolean {
-  const na = normalizeForCompare(a);
-  const nb = normalizeForCompare(b);
-  if (!na || !nb) return false;
-  if (na === nb) return true;
-  const shorter = na.length < nb.length ? na : nb;
-  const longer = na.length < nb.length ? nb : na;
-  if (shorter.length < 8 || shorter.length / longer.length < 0.8) return false;
-  return longer.startsWith(shorter) || longer.endsWith(shorter);
-}
-
-function toIsoDate(value: string | null | undefined): string | null {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
-}
-
-/**
- * Fetches a URL and extracts clean, readable article content using
- * Readability. Produces sanitized semantic HTML (primary), Markdown (kept for
- * compatibility/search), and plain text (full-text search), plus article
- * metadata (title, excerpt, byline, published time, reading time).
- *
- * Unsupported destinations and non-articles are rejected with a typed
- * `UnsupportedContentError` so callers can store a classifiable reason
- * instead of junk content. Scripts are never executed (JSDOM is created
- * without `runScripts`).
- */
 @Injectable()
-export class ReaderService {
+export class ReaderService implements OnModuleDestroy {
   private readonly logger = new Logger(ReaderService.name);
-  private readonly turndown = new TurndownService({
-    headingStyle: "atx",
-    codeBlockStyle: "fenced",
-    bulletListMarker: "-",
-  });
+  private readonly htmlCache = new HtmlCache();
+  private readonly dnsCache = new DnsCache();
+  private readonly pool = new ExtractPool();
+  private readonly dispatcher = process.env.JEST_WORKER_ID
+    ? null
+    : new Agent({
+        connections: 16,
+        connect: { timeout: CONNECT_TIMEOUT_MS, lookup: this.dnsCache.asLookup() },
+        bodyTimeout: FETCH_TIMEOUT_MS,
+        headersTimeout: FETCH_TIMEOUT_MS,
+        keepAliveTimeout: 30_000,
+      });
+
+  async onModuleDestroy(): Promise<void> {
+    await this.pool.close();
+    if (this.dispatcher) await this.dispatcher.close();
+  }
+
+  classifyShellText(text: string): ReaderRejectionReason | null {
+    return classifyShellText(text);
+  }
+
+  /** Warm the HTML cache for a URL the user is about to save. */
+  prefetch(url: string): void {
+    try {
+      this.rejectUnsupportedDestination(url, false);
+    } catch {
+      return;
+    }
+    void this.loadHtml(url, false).catch((err: unknown) => {
+      this.logger.debug(`Prefetch skipped for ${safeHostname(url)}: ${(err as Error).message}`);
+    });
+  }
 
   async extract(url: string, options: ExtractOptions = {}): Promise<ExtractedContent> {
     const forceArticle = options.forceArticle === true;
-    const domain = this.safeHostname(url);
     this.rejectUnsupportedDestination(url, forceArticle);
 
-    const html = await this.fetchHtml(url, forceArticle);
-    // No `runScripts`: embedded scripts are parsed but never executed.
-    const document = new JSDOM(html, { url }).window.document;
-
-    const signals = collectPageSignals(document);
-    const pageKind = classifyPageSignals(signals);
-    if (pageKind && !forceArticle) {
-      throw new UnsupportedContentError(pageKind, "Page metadata is not an article");
-    }
-    const articleEvidence = hasArticleEvidence(signals);
-    if (!articleEvidence && !forceArticle && hasCommerceCta(document)) {
-      throw new UnsupportedContentError("not_an_article", "Page looks like a store, not an article");
+    const loaded = options.html
+      ? { html: options.html }
+      : await this.loadHtml(url, forceArticle, options.signal);
+    options.onHtml?.(loaded.html);
+    try {
+      await options.onMetadata?.(peekMetadata(loaded.html, url));
+    } catch (err) {
+      this.logger.debug(`Early metadata failed for ${url}: ${(err as Error).message}`);
     }
 
-    const visibleText = this.shellDetectionText(document);
-    if (!visibleText) {
-      throw new UnsupportedContentError("too_short", "Page contains no readable text");
+    try {
+      return await this.pool.parse(loaded.html, url, forceArticle);
+    } catch (err) {
+      if (!loaded.fallbackHtml) throw err;
+      this.logger.debug(`AMP extract missed for ${url}; falling back to original HTML`);
+      return this.pool.parse(loaded.fallbackHtml, url, forceArticle);
     }
-    const shell = this.classifyShellText(visibleText);
-    if (shell) {
-      throw new UnsupportedContentError(shell, `Page looks like a ${shell.replace(/_/g, " ")} shell`);
-    }
-
-    this.stripNonContentTags(document);
-
-    // Auto-classify only when the page declares itself an article (~high precision:
-    // og:type=article or JSON-LD Article). Unmarked readable pages stay websites
-    // unless the user promotes them.
-    if (!forceArticle && !articleEvidence) {
-      throw new UnsupportedContentError("not_an_article", "Page does not declare itself an article");
-    }
-
-    const readerable = isProbablyReaderable(document);
-    let parsed: ReturnType<Readability["parse"]> = null;
-    if (readerable) {
-      try {
-        parsed = new Readability(document.cloneNode(true) as Document).parse();
-      } catch (err) {
-        this.logger.debug(`Readability failed for ${url}: ${(err as Error).message}`);
-      }
-    }
-
-    let contentRoot: Element;
-    if (parsed?.content) {
-      contentRoot = this.parseFragment(parsed.content);
-    } else if (articleEvidence || forceArticle) {
-      // Not readerable, or parse returned nothing. Only a marked <article>
-      // may rescue a page that already declared itself an article (or a
-      // user-forced extract).
-      const fallback = this.narrowArticleFallback(document);
-      if (!fallback) {
-        throw new UnsupportedContentError("not_an_article", "No readable article content found");
-      }
-      contentRoot = fallback;
-    } else {
-      throw new UnsupportedContentError("not_an_article", "No readable article content found");
-    }
-    this.unwrapLayoutRoots(contentRoot);
-
-    // Quality gates — reject link farms, app/home shells and stubs.
-    const text = normalizeSpace(contentRoot.textContent ?? "");
-    const extractedShell = this.classifyShellText(text);
-    if (extractedShell) {
-      throw new UnsupportedContentError(
-        extractedShell,
-        `Extracted content is a ${extractedShell.replace(/_/g, " ")} shell`,
-      );
-    }
-    const minWords = articleEvidence || forceArticle ? MIN_WORDS : MIN_WORDS_UNMARKED;
-    const maxLinkDensity = articleEvidence || forceArticle ? MAX_LINK_DENSITY : MAX_LINK_DENSITY_UNMARKED;
-    if (wordCount(text) < minWords) {
-      throw new UnsupportedContentError("too_short", "Extracted content is too short to read");
-    }
-    if (linkDensity(contentRoot) > maxLinkDensity) {
-      throw new UnsupportedContentError("not_an_article", "Content is mostly links, not an article");
-    }
-
-    const title = this.resolveTitle(parsed?.title, document, domain);
-    const description =
-      this.readMeta(document, "description") ||
-      this.readMeta(document, "og:description") ||
-      (parsed?.excerpt ? normalizeSpace(parsed.excerpt) : null);
-
-    this.convertEmbedsToLinks(contentRoot, url);
-    this.removeDuplicateLeadingHeading(contentRoot, title);
-    this.removeDuplicateLeadingParagraph(contentRoot, description);
-
-    const contentHtml = sanitizeHtml(contentRoot.innerHTML, SANITIZE_OPTIONS).trim();
-    if (!contentHtml) {
-      throw new UnsupportedContentError("too_short", "Extracted content is empty after sanitizing");
-    }
-    const contentText = this.toPlainText(contentHtml);
-    const readingTimeMinutes = Math.max(
-      1,
-      Math.round(wordCount(contentText) / WORDS_PER_MINUTE),
-    );
-
-    return {
-      title: title.slice(0, 500),
-      description: description ? description.slice(0, 1000) : null,
-      author: (parsed?.byline?.trim() || this.readMeta(document, "author"))?.slice(0, 200) ?? null,
-      publishedAt: toIsoDate(parsed?.publishedTime ?? this.readMeta(document, "article:published_time")),
-      domain,
-      readingTimeMinutes,
-      contentHtml,
-      contentMarkdown: this.toMarkdown(contentHtml),
-      contentText: contentText.slice(0, 200_000),
-    };
   }
 
-  /** Classify destinations an article reader can never handle before fetching. */
+  async loadHtml(
+    url: string,
+    forceArticle = false,
+    signal?: AbortSignal,
+  ): Promise<{ html: string; fallbackHtml?: string }> {
+    if (process.env.JEST_WORKER_ID) {
+      return this.fetchAndMaybeAmp(url, forceArticle, signal);
+    }
+    const html = await this.htmlCache.remember(url, () =>
+      this.fetchHtml(url, forceArticle, signal),
+    );
+    return this.followAmp(url, html, forceArticle, signal);
+  }
+
+  private async fetchAndMaybeAmp(
+    url: string,
+    forceArticle: boolean,
+    signal?: AbortSignal,
+  ): Promise<{ html: string; fallbackHtml?: string }> {
+    const html = await this.fetchHtml(url, forceArticle, signal);
+    return this.followAmp(url, html, forceArticle, signal);
+  }
+
+  private async followAmp(
+    url: string,
+    html: string,
+    forceArticle: boolean,
+    signal?: AbortSignal,
+  ): Promise<{ html: string; fallbackHtml?: string }> {
+    const amp = !isAmpUrl(url) ? ampHtmlHref(html, url) : null;
+    if (!amp) return { html };
+    try {
+      this.rejectUnsupportedDestination(amp, forceArticle);
+      const ampHtml = process.env.JEST_WORKER_ID
+        ? await this.fetchHtml(amp, forceArticle, signal)
+        : await this.htmlCache.remember(amp, () => this.fetchHtml(amp, forceArticle, signal));
+      return { html: ampHtml, fallbackHtml: html };
+    } catch (err) {
+      this.logger.debug(`AMP fetch skipped for ${url}: ${(err as Error).message}`);
+      return { html };
+    }
+  }
+
   private rejectUnsupportedDestination(url: string, forceArticle = false): void {
     let parsed: URL;
     try {
@@ -361,193 +156,53 @@ export class ReaderService {
     }
     const reason = classifyDestination(parsed);
     if (!reason) return;
-    // Files and social/app destinations still cannot be articles, even if the
-    // user promoted the bookmark. Commerce/search URL gates can be overridden.
     if (forceArticle && reason === "not_an_article") return;
     throw new UnsupportedContentError(reason, `${parsed.hostname} is not an article source`);
   }
 
-  /** Detect obvious JS-only/error/interstitial shells by their telltale text. */
-  classifyShellText(text: string): ReaderRejectionReason | null {
-    if (text.length > SHELL_TEXT_LIMIT) return null; // real articles have real text
-    const t = text.toLowerCase();
-    for (const pattern of BOT_CHALLENGE_PATTERNS) {
-      if (pattern.test(t)) return "bot_challenge";
-    }
-    for (const pattern of JS_REQUIRED_PATTERNS) {
-      if (pattern.test(t)) return "js_required";
-    }
-    for (const pattern of LOGIN_PAYWALL_PATTERNS) {
-      if (pattern.test(t)) return "login_or_paywall";
-    }
-    for (const pattern of CONSENT_WALL_PATTERNS) {
-      if (pattern.test(t)) return "consent_wall";
-    }
-    return null;
-  }
-
-  private stripNonContentTags(document: Document): void {
-    document
-      .querySelectorAll("script, style, noscript, template, form, button, input, select, textarea, canvas, svg, dialog")
-      .forEach((el) => el.remove());
-  }
-
-  /** Script/style bundles are not visible page copy and must not hide a short
-   *  noscript warning by pushing it over the shell-detection size limit. */
-  private shellDetectionText(document: Document): string {
-    const clone = document.cloneNode(true) as Document;
-    clone
-      .querySelectorAll("script, style, template, svg, canvas")
-      .forEach((el) => el.remove());
-    return normalizeSpace(clone.body?.textContent ?? "");
-  }
-
-  /** Marked `<article>` fallback when Readability declines a page that already
-   *  declared itself an article. `<main>` is never used — product/home chrome
-   *  lives there and used to leak into the reader. */
-  private narrowArticleFallback(document: Document): Element | null {
-    const viable = Array.from(document.querySelectorAll("article"))
-      .filter((el) => wordCount(el.textContent ?? "") >= MIN_WORDS)
-      .filter((el) => linkDensity(el) <= MAX_LINK_DENSITY)
-      .sort((a, b) => (b.textContent ?? "").length - (a.textContent ?? "").length);
-    if (viable.length > 0) return this.parseFragment(viable[0].outerHTML);
-    return null;
-  }
-
-  private resolveTitle(readabilityTitle: string | undefined, document: Document, domain: string): string {
-    return (
-      readabilityTitle?.trim() ||
-      this.readMeta(document, "og:title") ||
-      document.title?.trim() ||
-      domain
-    );
-  }
-
-  private parseFragment(html: string): Element {
-    return new JSDOM(`<!doctype html><body>${html}</body>`).window.document.body;
-  }
-
-  /**
-   * Readability (and many pages) wrap the real content in layout roots like
-   * `<div id="readability-page-1"><article>…`. Hoist the children so the
-   * leading-block checks below see the actual first heading/paragraph.
-   */
-  private unwrapLayoutRoots(root: Element): void {
-    for (let guard = 0; guard < 10; guard += 1) {
-      const meaningful = Array.from(root.childNodes).filter(
-        (node) =>
-          !(node.nodeType === 3 && !(node.textContent ?? "").trim()) && node.nodeType !== 8,
-      );
-      const only = meaningful.length === 1 && meaningful[0].nodeType === 1
-        ? (meaningful[0] as Element)
-        : null;
-      if (!only) return;
-      const tag = only.tagName.toLowerCase();
-      if (tag !== "div" && tag !== "article" && tag !== "section") return;
-      const parent = only.parentNode;
-      if (!parent) return;
-      while (only.firstChild) parent.insertBefore(only.firstChild, only);
-      parent.removeChild(only);
-    }
-  }
-
-  /** Replace iframes/embeds with a plain link paragraph; drop unsupported ones. */
-  private convertEmbedsToLinks(root: Element, baseUrl: string): void {
-    for (const el of Array.from(root.querySelectorAll("iframe, embed, object"))) {
-      const src =
-        el.getAttribute("src") ??
-        el.querySelector('param[name="movie"]')?.getAttribute("value") ??
-        "";
-      let href: string | null = null;
-      if (src) {
-        try {
-          const resolved = new URL(src, baseUrl);
-          if (resolved.protocol === "http:" || resolved.protocol === "https:") {
-            href = resolved.toString();
-          }
-        } catch {
-          href = null;
-        }
+  private async fetchHtml(
+    url: string,
+    forceArticle: boolean,
+    signal: AbortSignal | undefined,
+  ): Promise<string> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        return await this.fetchHtmlOnce(url, forceArticle, signal);
+      } catch (err) {
+        lastError = err;
+        if (err instanceof UnsupportedContentError) throw err;
+        if (signal?.aborted) throw err;
+        if (attempt === 0 && isRetryableError(err)) continue;
+        throw err;
       }
-      if (!href) {
-        el.remove();
-        continue;
-      }
-      const doc = el.ownerDocument;
-      if (!doc) {
-        el.remove();
-        continue;
-      }
-      const p = doc.createElement("p");
-      const a = doc.createElement("a");
-      a.setAttribute("href", href);
-      a.textContent = href;
-      p.appendChild(a);
-      el.replaceWith(p);
     }
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
   }
 
-  /** Drop an opening H1/H2 that repeats metadata, even when lead media comes first. */
-  private removeDuplicateLeadingHeading(root: Element, title: string): void {
-    const first = this.firstLeadingContentElement(root);
-    if (!first) return;
-    const tag = first.tagName.toLowerCase();
-    if (tag !== "h1" && tag !== "h2") return;
-    if (duplicatesTitle(title, first.textContent ?? "")) first.remove();
-  }
-
-  /** Drop a leading paragraph that just repeats the description/excerpt. */
-  private removeDuplicateLeadingParagraph(root: Element, description: string | null): void {
-    if (!description) return;
-    const first = this.firstLeadingContentElement(root);
-    if (!first || first.tagName.toLowerCase() !== "p") return;
-    if (hasSameText(description, first.textContent ?? "")) first.remove();
-  }
-
-  /** Find the first textual content block while allowing media-only lead art. */
-  private firstLeadingContentElement(root: Element): Element | null {
-    for (const node of Array.from(root.childNodes)) {
-      if (node.nodeType === 3) {
-        // skip whitespace between block elements; real text means no leading block
-        if (!(node.textContent ?? "").trim()) continue;
-        return null;
-      }
-      if (node.nodeType === 8) continue; // comments
-      if (node.nodeType !== 1) return null;
-
-      const element = node as Element;
-      const tag = element.tagName.toLowerCase();
-      if (["figure", "picture", "img"].includes(tag)) continue;
-      if (
-        tag === "a" &&
-        !normalizeSpace(element.textContent ?? "") &&
-        element.querySelector("img, picture")
-      ) {
-        continue;
-      }
-      if (["article", "div", "header", "section"].includes(tag)) {
-        const nested = this.firstLeadingContentElement(element);
-        if (nested) return nested;
-        if (!normalizeSpace(element.textContent ?? "")) continue;
-      }
-      return element;
-    }
-    return null;
-  }
-
-  private async fetchHtml(url: string, forceArticle = false): Promise<string> {
+  private async fetchHtmlOnce(
+    url: string,
+    forceArticle: boolean,
+    signal: AbortSignal | undefined,
+  ): Promise<string> {
     let current = new URL(url);
     let res: Response | null = null;
+    const timeout = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+    const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
+
     for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
       await this.assertPublicDestination(current);
-      res = await fetch(current, {
-        redirect: "manual",
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      const request = {
+        redirect: "manual" as const,
+        signal: combined,
         headers: {
           "user-agent": USER_AGENT,
           accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+          "accept-language": "en-US,en;q=0.9",
         },
-      });
+        ...(this.dispatcher ? { dispatcher: this.dispatcher } : {}),
+      };
+      res = await fetch(current, request as RequestInit);
       if (![301, 302, 303, 307, 308].includes(res.status)) break;
       const location = res.headers.get("location");
       if (!location) break;
@@ -556,6 +211,9 @@ export class ReaderService {
       this.rejectUnsupportedDestination(current.toString(), forceArticle);
     }
     if (!res) throw new Error(`Request to ${url} returned no response`);
+    if (isRetryableStatus(res.status) && !combined.aborted) {
+      throw new Error(`Request to ${url} failed with status ${res.status}`);
+    }
     if (!res.ok) {
       throw new Error(`Request to ${url} failed with status ${res.status}`);
     }
@@ -567,27 +225,80 @@ export class ReaderService {
     if (declaredLength > MAX_RESPONSE_BYTES) {
       throw new UnsupportedContentError("non_html_content", "HTML response is too large");
     }
-    if (!res.body) return res.text(); // small test/mocked responses
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
+    const html = res.body
+      ? await this.readStreamingBody(res, forceArticle, combined)
+      : await res.text();
+    this.rejectFromHead(html, forceArticle);
+    return html;
+  }
+
+  private async readStreamingBody(
+    res: Response,
+    forceArticle: boolean,
+    signal: AbortSignal,
+  ): Promise<string> {
+    const reader = res.body!.getReader();
+    const chunks: Uint8Array[] = [];
     let bytes = 0;
-    let html = "";
+    let headDone = false;
+    let allowCutoff = false;
+    let cutoffAt: number | null = null;
+    const contentType = res.headers.get("content-type") ?? "text/html";
+
+    const concat = () => concatChunks(chunks, bytes);
+
     while (true) {
+      if (signal.aborted) {
+        await reader.cancel().catch(() => undefined);
+        throw signal.reason instanceof Error ? signal.reason : new Error("aborted");
+      }
       const { done, value } = await reader.read();
       if (done) break;
       bytes += value.byteLength;
       if (bytes > MAX_RESPONSE_BYTES) {
-        await reader.cancel();
+        await reader.cancel().catch(() => undefined);
         throw new UnsupportedContentError("non_html_content", "HTML response is too large");
       }
-      html += decoder.decode(value, { stream: true });
+      chunks.push(value);
+
+      if (!headDone && bytes >= 8_192) {
+        const decoded = decodeHtmlBytes(
+          concat().subarray(0, Math.min(bytes, HEAD_SNIFF_BYTES)),
+          contentType,
+        );
+        if (decoded.toLowerCase().includes("</head>") || bytes >= HEAD_SNIFF_BYTES) {
+          headDone = true;
+          allowCutoff = headHasArticleEvidence(decoded);
+        }
+      }
+
+      if (allowCutoff && cutoffAt === null && bytes >= ARTICLE_CUTOFF_MIN_BYTES) {
+        const soFar = decodeHtmlBytes(concat(), contentType);
+        if (
+          soFar.toLowerCase().includes("</article>") &&
+          roughWordCount(soFar) >= EARLY_STOP_MIN_WORDS
+        ) {
+          cutoffAt = bytes + ARTICLE_CUTOFF_TRAIL_BYTES;
+        }
+      }
+      if (cutoffAt !== null && bytes >= cutoffAt) {
+        await reader.cancel().catch(() => undefined);
+        break;
+      }
     }
-    return html + decoder.decode();
+
+    return decodeHtmlBytes(concat(), contentType);
   }
 
-  /** Reject loopback, private, link-local, multicast and documentation ranges
-   *  before every request and redirect to prevent server-side request forgery. */
+  private rejectFromHead(html: string, forceArticle: boolean): void {
+    if (forceArticle) return;
+    const pageKind = classifyHtmlHead(html);
+    if (pageKind) {
+      throw new UnsupportedContentError(pageKind, "Page metadata is not an article");
+    }
+  }
+
   private async assertPublicDestination(url: URL): Promise<void> {
     if (url.protocol !== "http:" && url.protocol !== "https:") {
       throw new UnsupportedContentError("non_html_content", "Only HTTP pages are supported");
@@ -598,7 +309,7 @@ export class ReaderService {
     }
     const addresses = isIP(host)
       ? [{ address: host }]
-      : await lookup(host, { all: true, verbatim: true });
+      : await this.dnsCache.lookupAll(host);
     if (addresses.length === 0 || addresses.some(({ address }) => !this.isPublicIp(address))) {
       throw new UnsupportedContentError("non_html_content", "Private network URLs are not supported");
     }
@@ -633,38 +344,34 @@ export class ReaderService {
       (a === 203 && b === 0 && c === 113)
     );
   }
+}
 
-  private readMeta(document: Document, name: string): string | null {
-    // namespaced keys (og:, article:, twitter:) live in `property`, others in `name`
-    const selector = name.includes(":") ? `meta[property="${name}"]` : `meta[name="${name}"]`;
-    const elements = Array.from(document.querySelectorAll(selector));
-    const content =
-      elements.find((el) => el.getAttribute("content")?.trim())?.getAttribute("content") ?? null;
-    return content?.trim() || null;
+function concatChunks(chunks: Uint8Array[], bytes: number): Uint8Array {
+  const out = new Uint8Array(bytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    out.set(chunk, offset);
+    offset += chunk.byteLength;
   }
+  return out;
+}
 
-  private toMarkdown(html: string): string {
-    try {
-      return this.turndown.turndown(html).trim();
-    } catch {
-      return this.toPlainText(html);
-    }
-  }
+function isRetryableStatus(status: number): boolean {
+  return status === 429 || status === 502 || status === 503 || status === 504;
+}
 
-  private toPlainText(html: string): string {
-    try {
-      const dom = new JSDOM(html);
-      return (dom.window.document.body?.textContent ?? "").replace(/\s+\n/g, "\n").trim();
-    } catch {
-      return html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
-    }
-  }
+function isRetryableError(err: unknown): boolean {
+  const message = ((err as Error).message ?? "").toLowerCase();
+  if (/too many redirects|invalid url/.test(message)) return false;
+  return /timeout|network|econnreset|econnrefused|enotfound|fetch failed|status 429|status 502|status 503|status 504/.test(
+    message,
+  );
+}
 
-  private safeHostname(url: string): string {
-    try {
-      return new URL(url).hostname.replace(/^www\./, "");
-    } catch {
-      return url.slice(0, 255);
-    }
+function safeHostname(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url.slice(0, 255);
   }
 }

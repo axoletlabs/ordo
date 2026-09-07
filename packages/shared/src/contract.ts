@@ -427,6 +427,14 @@ export const BookmarkRoutes = {
     params: {} as Empty,
     response: {} as ExtractionProgressDto,
   },
+  prefetch: {
+    path: `${API_PREFIX}/bookmarks/prefetch`,
+    method: "POST",
+    body: {} as { url: string },
+    query: {} as Empty,
+    params: {} as Empty,
+    response: {} as Empty,
+  },
   detail: {
     path: `${API_PREFIX}/bookmarks/:id`,
     method: "GET",

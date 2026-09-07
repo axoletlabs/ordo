@@ -33,6 +33,8 @@ describe("Rate limiting (e2e)", () => {
       customize: (b) =>
         b.overrideProvider(ReaderService).useValue({
           extract: async () => ({ ...FAKE_EXTRACTED }),
+          prefetch: () => undefined,
+          classifyShellText: () => null,
         } as unknown as ReaderService),
     });
     limiter = ctx.app.get(RateLimitService);

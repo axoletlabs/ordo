@@ -176,6 +176,7 @@ model Bookmark {
   suggestions BookmarkTagSuggestion[]
 
   @@index([userId])
+  @@index([userId, fetchStatus])
   @@index([folderId])
   @@index([createdAt])
 }

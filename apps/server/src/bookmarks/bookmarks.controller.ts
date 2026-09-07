@@ -15,6 +15,7 @@ import {
 import type { Request } from "express";
 import {
   CreateBookmarkSchema,
+  PrefetchBookmarkSchema,
   MarkAllReadSchema,
   BatchBookmarksSchema,
   UpdateBookmarkSchema,
@@ -104,6 +105,15 @@ export class BookmarksController {
   @Get("extraction-progress")
   async extractionProgress(@CurrentUser() user: AuthContext): Promise<ExtractionProgressDto> {
     return this.extraction.progress(user.userId);
+  }
+
+  @Post("prefetch")
+  @HttpCode(204)
+  @RateLimit("bookmark-prefetch")
+  async prefetch(
+    @Body(new ZodValidationPipe(PrefetchBookmarkSchema)) body: { url: string },
+  ): Promise<void> {
+    this.extraction.prefetch(body.url);
   }
 
   @Get(":id")

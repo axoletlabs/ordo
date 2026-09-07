@@ -7,7 +7,6 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
-  type InfiniteData,
 } from "@tanstack/react-query";
 import { bookmarksApi } from "../lib/api/bookmarks";
 import { queryClient } from "../lib/query-client";
@@ -15,6 +14,7 @@ import { useFolderTokenStore } from "../store/folder-tokens";
 import { qk } from "../lib/api/query-keys";
 import {
   bumpFolderCount,
+  patchListsFromDetail,
   prependBookmarkToPages,
   removeBookmarkFromPages,
   removeBookmarksEverywhere,
@@ -26,17 +26,11 @@ import { deleteBookmarksUndoable } from "../lib/undoable-bookmark-delete";
 import {
   BATCH_ITEM_LIMIT,
   DEFAULT_PAGE_SIZE,
+  extractionPollIntervalMs,
   type BookmarkDetailDto,
   type BookmarkDto,
-  type CursorPage,
   type FolderDto,
 } from "@ordo/shared";
-
-const EXTRACTION_POLL_MS = 1_500;
-
-function hasPendingBookmark(data?: InfiniteData<CursorPage<BookmarkDto>>): boolean {
-  return data?.pages.some((page) => page.items.some((bookmark) => bookmark.fetchStatus === "pending")) ?? false;
-}
 
 export function useInfiniteBookmarks(folderId: string | null, enabled = true) {
   return useInfiniteQuery({
@@ -46,8 +40,6 @@ export function useInfiniteBookmarks(folderId: string | null, enabled = true) {
     initialPageParam: null as string | null,
     getNextPageParam: (last) => (last.hasMore ? last.nextCursor : undefined),
     enabled,
-    refetchInterval: (query) =>
-      hasPendingBookmark(query.state.data) ? EXTRACTION_POLL_MS : false,
   });
 }
 
@@ -60,19 +52,24 @@ export function useInfiniteSearch(q: string, tagIds: readonly string[] = []) {
     getNextPageParam: (last) => (last.hasMore ? last.nextCursor : undefined),
     enabled: q.trim().length > 0 || tagIds.length > 0,
     placeholderData: (prev) => prev,
-    refetchInterval: (query) =>
-      hasPendingBookmark(query.state.data) ? EXTRACTION_POLL_MS : false,
   });
 }
 
 export function useBookmarkDetail(id: string, enabled = true, folderId?: string | null) {
+  const qc = useQueryClient();
   return useQuery({
     queryKey: qk.bookmark(id),
-    queryFn: () => bookmarksApi.detail(id, folderId),
+    queryFn: async () => {
+      const detail = await bookmarksApi.detail(id, folderId);
+      patchListsFromDetail(qc, detail);
+      return detail;
+    },
     enabled: !!id && enabled,
     staleTime: 5 * 60_000,
     refetchInterval: (query) =>
-      query.state.data?.fetchStatus === "pending" ? EXTRACTION_POLL_MS : false,
+      query.state.data?.fetchStatus === "pending"
+        ? extractionPollIntervalMs(query.state.dataUpdateCount)
+        : false,
   });
 }
 

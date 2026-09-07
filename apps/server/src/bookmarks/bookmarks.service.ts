@@ -16,6 +16,7 @@ import { AppError } from "../common/errors/app-error.js";
 import { FolderAccessService } from "./folder-access.service.js";
 import { TagsService } from "./tags.service.js";
 import { ExtractionService } from "./extraction.service.js";
+import { provisionalTitle } from "./provisional-title.js";
 import { toBookmarkDto, toBookmarkDetailDto } from "../common/mappers.js";
 import {
   clampLimit,
@@ -31,8 +32,6 @@ const LIST_SELECT = {
   title: true,
   description: true,
   domain: true,
-  contentMarkdown: true,
-  contentText: true,
   fetchStatus: true,
   extractionReason: true,
   extractionVersion: true,
@@ -95,19 +94,20 @@ export class BookmarksService implements OnApplicationBootstrap {
     tagIds: string[] = [],
   ): Promise<BookmarkDto> {
     await this.tags.requireOwnedIds(userId, tagIds);
+    const domain = this.safeHostname(url);
     const bookmark = await this.prisma.bookmark.create({
       data: {
         userId,
         folderId: folder ? folder.id : null,
         url,
-        title: this.safeHostname(url),
-        domain: this.safeHostname(url),
+        title: provisionalTitle(url, domain),
+        domain,
         fetchStatus: "pending",
         tags: { create: tagIds.map((tagId) => ({ tagId })) },
       },
       select: LIST_SELECT,
     });
-    this.extraction.enqueue([{ bookmarkId: bookmark.id, url, userId, mode: "full" }]);
+    this.extraction.enqueue([{ bookmarkId: bookmark.id, url, userId, mode: "full", priority: "high" }]);
     return toBookmarkDto(bookmark);
   }
 
@@ -291,6 +291,7 @@ export class BookmarksService implements OnApplicationBootstrap {
           userId,
           mode: "full",
           forceArticle: true,
+          priority: "high",
         },
       ]);
     }
@@ -309,6 +310,7 @@ export class BookmarksService implements OnApplicationBootstrap {
     if (bookmark.folderId) {
       await this.access.requireFolder(bookmark.folderId, userId, tokens);
     }
+    this.extraction.cancel(bookmarkId);
     await this.prisma.bookmark.delete({ where: { id: bookmarkId } });
   }
 
@@ -376,6 +378,7 @@ export class BookmarksService implements OnApplicationBootstrap {
     if (targetIds.length === 0) return { updated: 0 };
 
     if (input.action === "delete") {
+      for (const id of targetIds) this.extraction.cancel(id);
       const result = await this.prisma.bookmark.deleteMany({
         where: { id: { in: targetIds }, userId },
       });
@@ -509,6 +512,7 @@ export class BookmarksService implements OnApplicationBootstrap {
             userId: row.userId,
             mode: "full" as const,
             forceArticle: row.contentKindOverride === "article",
+            priority: "low" as const,
           })),
           false,
         );

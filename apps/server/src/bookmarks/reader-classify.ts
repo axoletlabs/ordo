@@ -104,8 +104,10 @@ export function classifyDestination(url: URL): ReaderRejectionReason | null {
     unsupportedDomains.appHostPrefixes.some((prefix) => host.startsWith(prefix));
   if (knownShell) return "social_video_or_app";
 
-  if ([...COMMERCE_HOSTS].some((configured) => hostMatches(host, configured))) {
-    return "not_an_article";
+  if (COMMERCE_HOSTS.size > 0) {
+    for (const configured of COMMERCE_HOSTS) {
+      if (hostMatches(host, configured)) return "not_an_article";
+    }
   }
 
   // Site roots are not skipped: many essays live at `/`. Automatic

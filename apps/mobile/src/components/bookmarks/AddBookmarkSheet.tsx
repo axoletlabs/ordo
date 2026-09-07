@@ -25,6 +25,7 @@ import { TagSelectList } from "../tags/TagSelectList";
 import { CreateTagPanel } from "../tags/CreateTagPanel";
 import { errorMessage, isFolderProtected } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
+import { prefetchExtraction } from "../../lib/prefetch-extraction";
 import { toast } from "../ui/toast-store";
 import { spacing } from "../../theme/tokens";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -106,6 +107,12 @@ export function AddBookmarkSheet({
     setShowTagPicker(false);
     setSelectedTagIds(initialTagIds);
   }, [folderId, initialUrl, initialTagIds, visible]);
+
+  React.useEffect(() => {
+    if (!visible) return;
+    const handle = setTimeout(() => prefetchExtraction(url), 400);
+    return () => clearTimeout(handle);
+  }, [url, visible]);
 
   const reset = () => {
     setUrl("");

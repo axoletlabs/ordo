@@ -94,7 +94,7 @@ describe("ReaderService", () => {
   }
 
   describe("successful extraction", () => {
-    it("extracts the article body as sanitized semantic html, text, and markdown", async () => {
+    it("extracts the article body as sanitized semantic html and text", async () => {
       mockFetch(SAMPLE_HTML);
       const result = await reader.extract("https://www.example.com/article/123");
 
@@ -102,8 +102,9 @@ describe("ReaderService", () => {
       expect(result.contentHtml).toContain("<figure>");
       expect(result.contentHtml).toContain("A cat caption");
       expect(result.contentHtml).toContain('alt="A cat"');
+      expect(result.contentHtml.toLowerCase()).toContain("<h2");
       expect(result.contentText).toMatch(/Paragraph 5/);
-      expect(result.contentMarkdown.toLowerCase()).toMatch(/## a section/);
+      expect(result.contentMarkdown).toBe("");
       // scripts, iframes and data: urls never survive
       expect(result.contentHtml).not.toContain("<script");
       expect(result.contentHtml).not.toContain("evil()");
@@ -453,6 +454,88 @@ describe("ReaderService", () => {
       mockFetch(SAMPLE_HTML);
       const result = await reader.extract("https://example.com/posts/2026/how-we-built-it");
       expect(result.title).toBe("The Real Title");
+    });
+
+    it("sends a Chrome user-agent and accept-language", async () => {
+      let headers: Record<string, string> | undefined;
+      globalThis.fetch = (async (_input, init) => {
+        headers = init?.headers as Record<string, string>;
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (name: string) => (name.toLowerCase() === "content-type" ? "text/html" : null),
+          },
+          text: async () => SAMPLE_HTML,
+        } as unknown as Response;
+      }) as typeof fetch;
+
+      await reader.extract("https://example.com/article");
+      expect(headers?.["user-agent"]).toMatch(/Chrome\/140/);
+      expect(headers?.["accept-language"]).toMatch(/en-US/);
+    });
+
+    it("retries once on a 503 then extracts", async () => {
+      let calls = 0;
+      globalThis.fetch = (async () => {
+        calls += 1;
+        if (calls === 1) {
+          return {
+            ok: false,
+            status: 503,
+            headers: { get: () => "text/html" },
+            text: async () => "",
+          } as unknown as Response;
+        }
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (name: string) => (name.toLowerCase() === "content-type" ? "text/html" : null),
+          },
+          text: async () => SAMPLE_HTML,
+        } as unknown as Response;
+      }) as typeof fetch;
+
+      const result = await reader.extract("https://example.com/article");
+      expect(calls).toBe(2);
+      expect(result.title).toBe("The Real Title");
+    });
+
+    it("reports page metadata before the body is parsed", async () => {
+      mockFetch(SAMPLE_HTML);
+      const onMetadata = jest.fn();
+      await reader.extract("https://example.com/article", { onMetadata });
+      expect(onMetadata).toHaveBeenCalledWith(
+        expect.objectContaining({
+          title: "The Real Title",
+          author: "Jane Doe",
+          description: "A short summary of the article.",
+        }),
+      );
+    });
+
+    it("extracts AMP HTML when the page advertises rel=amphtml", async () => {
+      const original = `<!DOCTYPE html><html><head>
+        <link rel="amphtml" href="https://example.com/amp">
+        <title>Original</title>
+      </head><body><p>Thin original shell</p></body></html>`;
+      globalThis.fetch = (async (input: RequestInfo | URL) => {
+        const href = String(input);
+        const html = href.includes("/amp") ? SAMPLE_HTML : original;
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (name: string) => (name.toLowerCase() === "content-type" ? "text/html" : null),
+          },
+          text: async () => html,
+        } as unknown as Response;
+      }) as typeof fetch;
+
+      const result = await reader.extract("https://example.com/wired-story");
+      expect(result.title).toBe("The Real Title");
+      expect(result.contentText).toMatch(/Paragraph 5/);
     });
   });
 });

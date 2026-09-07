@@ -26,7 +26,22 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
   async onModuleInit() {
     await this.$connect();
+    if (this.cfg.databaseUrl.startsWith("file:")) {
+      await this.$queryRawUnsafe("PRAGMA journal_mode = WAL");
+      await this.$queryRawUnsafe("PRAGMA synchronous = NORMAL");
+      await this.$queryRawUnsafe("PRAGMA busy_timeout = 5000");
+    }
     await this.migrateLegacySchema();
+    if (this.cfg.databaseUrl.startsWith("file:")) {
+      const tables = await this.$queryRaw<Array<{ name: string }>>(
+        Prisma.sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'Bookmark'`,
+      );
+      if (tables.length > 0) {
+        await this.$executeRawUnsafe(
+          `CREATE INDEX IF NOT EXISTS "Bookmark_userId_fetchStatus_idx" ON "Bookmark"("userId", "fetchStatus")`,
+        );
+      }
+    }
     this.logger.log(`Connected to database (${this.mask(this.cfg.databaseUrl)})`);
   }
 
@@ -253,6 +268,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         await tx.$executeRawUnsafe(`DROP TABLE "Bookmark"`);
         await tx.$executeRawUnsafe(`ALTER TABLE "Bookmark_migration" RENAME TO "Bookmark"`);
         await tx.$executeRawUnsafe(`CREATE INDEX "Bookmark_userId_idx" ON "Bookmark"("userId")`);
+        await tx.$executeRawUnsafe(
+          `CREATE INDEX "Bookmark_userId_fetchStatus_idx" ON "Bookmark"("userId", "fetchStatus")`,
+        );
         await tx.$executeRawUnsafe(`CREATE INDEX "Bookmark_folderId_idx" ON "Bookmark"("folderId")`);
         await tx.$executeRawUnsafe(`CREATE INDEX "Bookmark_createdAt_idx" ON "Bookmark"("createdAt")`);
       },
