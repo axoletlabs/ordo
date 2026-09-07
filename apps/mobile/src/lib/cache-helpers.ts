@@ -109,6 +109,55 @@ export function allBookmarkListMatcher() {
   return { predicate: (q: { queryKey: readonly unknown[] }) => q.queryKey[0] === "bookmarks" && q.queryKey[1] !== "search" };
 }
 
+function isPagedBookmarks(
+  data: unknown,
+): data is InfiniteData<CursorPage<BookmarkDto>> {
+  return !!data && typeof data === "object" && Array.isArray((data as { pages?: unknown }).pages);
+}
+
+function isBookmarkRecord(data: unknown): data is BookmarkDto {
+  return (
+    !!data &&
+    typeof data === "object" &&
+    typeof (data as { id?: unknown }).id === "string" &&
+    Array.isArray((data as { tags?: unknown }).tags)
+  );
+}
+
+/**
+ * Map every cached bookmark (infinite lists + reader detail). Leave other
+ * `bookmarks`-prefixed payloads alone — extraction progress is `{ pending }`,
+ * not a paged list, and calling `.pages.map` on it throws.
+ */
+export function mapCachedBookmarks(
+  qc: QueryClient,
+  mapper: (b: BookmarkDto) => BookmarkDto,
+) {
+  qc.setQueriesData<unknown>({ queryKey: ["bookmarks"] }, (data: unknown) => {
+    if (isPagedBookmarks(data)) {
+      let changed = false;
+      const pages = data.pages.map((page) => {
+        if (!page || !Array.isArray(page.items)) return page;
+        let pageChanged = false;
+        const items = page.items.map((b) => {
+          const next = mapper(b);
+          if (next !== b) pageChanged = true;
+          return next;
+        });
+        if (!pageChanged) return page;
+        changed = true;
+        return { ...page, items };
+      });
+      return changed ? { ...data, pages } : data;
+    }
+    if (isBookmarkRecord(data)) {
+      const next = mapper(data);
+      return next === data ? data : next;
+    }
+    return data;
+  });
+}
+
 /**
  * Update a bookmark everywhere it is cached: every list (folders + search)
  * plus the detail entry (which additionally carries contentHtml). Queries

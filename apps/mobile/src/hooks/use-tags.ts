@@ -8,14 +8,13 @@ import {
   useMutation,
   useQuery,
   useQueryClient,
-  type InfiniteData,
 } from "@tanstack/react-query";
 import { DEFAULT_PAGE_SIZE, type BookmarkDto, type CursorPage, type TagColor, type TagDto } from "@ordo/shared";
 import { tagsApi } from "../lib/api/tags";
 import { qk, tagsAnyAccess } from "../lib/api/query-keys";
 import { bookmarksApi } from "../lib/api/bookmarks";
 import { useFolderTokenStore } from "../store/folder-tokens";
-import { updateBookmarkEverywhere } from "../lib/cache-helpers";
+import { mapCachedBookmarks, updateBookmarkEverywhere } from "../lib/cache-helpers";
 
 function sortTags(tags: TagDto[]) {
   return [...tags].sort(
@@ -60,26 +59,20 @@ export function useUpdateTag() {
       qc.setQueriesData<TagDto[]>({ queryKey: tagsAnyAccess }, (old) =>
         old ? old.map((t) => (t.id === id ? { ...t, ...input } : t)) : old,
       );
-      // Tag summaries ride along on cached bookmarks.
-      qc.setQueriesData<InfiniteData<CursorPage<BookmarkDto>>>(
-        { queryKey: ["bookmarks"] },
-        (data) =>
-          data
-            ? {
-                ...data,
-                pages: data.pages.map((page) => ({
-                  ...page,
-                  items: page.items.map((b) => ({
-                    ...b,
-                    tags: b.tags.map((t) => (t.id === id ? { ...t, ...input } : t)),
-                    suggestedTags: b.suggestedTags.map((t) =>
-                      t.id === id ? { ...t, ...input } : t,
-                    ),
-                  })),
-                })),
-              }
-            : data,
-      );
+      mapCachedBookmarks(qc, (b) => {
+        let changed = false;
+        const tags = b.tags.map((t) => {
+          if (t.id !== id) return t;
+          changed = true;
+          return { ...t, ...input };
+        });
+        const suggestedTags = b.suggestedTags.map((t) => {
+          if (t.id !== id) return t;
+          changed = true;
+          return { ...t, ...input };
+        });
+        return changed ? { ...b, tags, suggestedTags } : b;
+      });
       return { prev };
     },
     onError: (_e, _v, ctx) => {
@@ -101,24 +94,14 @@ export function useDeleteTag() {
       qc.setQueriesData<TagDto[]>({ queryKey: tagsAnyAccess }, (old) =>
         old ? old.filter((t) => t.id !== id) : old,
       );
-      // Strip the tag (and its suggestions) from every cached bookmark.
-      qc.setQueriesData<InfiniteData<CursorPage<BookmarkDto>>>(
-        { queryKey: ["bookmarks"] },
-        (data) =>
-          data
-            ? {
-                ...data,
-                pages: data.pages.map((page) => ({
-                  ...page,
-                  items: page.items.map((b) => ({
-                    ...b,
-                    tags: b.tags.filter((t) => t.id !== id),
-                    suggestedTags: b.suggestedTags.filter((t) => t.id !== id),
-                  })),
-                })),
-              }
-            : data,
-      );
+      mapCachedBookmarks(qc, (b) => {
+        const tags = b.tags.filter((t) => t.id !== id);
+        const suggestedTags = b.suggestedTags.filter((t) => t.id !== id);
+        if (tags.length === b.tags.length && suggestedTags.length === b.suggestedTags.length) {
+          return b;
+        }
+        return { ...b, tags, suggestedTags };
+      });
       // Tag-filtered lists may have contained it; refresh them.
       void qc.invalidateQueries({ queryKey: ["bookmarks", "tagged"] });
       void qc.invalidateQueries({ queryKey: ["bookmarks", "search"] });

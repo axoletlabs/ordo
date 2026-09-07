@@ -55,11 +55,11 @@ export default function TagsScreen() {
             ? `Deleted "${target.name}" and its ${target.bookmarkCount} assignments`
             : `Deleted "${target.name}"`,
         );
-        setDeleteTarget(null);
       },
       onError: (e) => {
         toast.error(errorMessage(e));
       },
+      onSettled: () => setDeleteTarget(null),
     });
   };
 

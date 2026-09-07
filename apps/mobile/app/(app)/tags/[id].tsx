@@ -347,11 +347,11 @@ export default function TagDetailScreen() {
                   ? `Deleted "${anchor.name}" and its ${anchor.bookmarkCount} assignments`
                   : `Deleted "${anchor.name}"`,
               );
-              setDeleteTagOpen(false);
               if (router.canGoBack()) router.back();
               else router.replace("/tags");
             },
             onError: (e) => toast.error(errorMessage(e)),
+            onSettled: () => setDeleteTagOpen(false),
           });
         }}
       />
