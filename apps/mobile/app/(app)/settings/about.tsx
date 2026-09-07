@@ -95,10 +95,7 @@ export default function AboutScreen() {
           />
         </SettingsGroup>
 
-        <SettingsGroup
-          label="Updates"
-          footer="Off is GitHub’s latest stable only. On also offers pre-releases (alpha, then beta, then RC) when they outrank that stable."
-        >
+        <SettingsGroup label="Updates">
           <OtaUpdateCard />
           <SettingRow
             icon="flask-outline"
