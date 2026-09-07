@@ -1,6 +1,6 @@
 /**
- * Reader or in-app website view for a saved bookmark.
- * Use `?view=browser` to open the live page first (from "Open original").
+ * Reader or live website view for a saved bookmark.
+ * Use `?view=browser` to open ordo's browser first (from "Open original").
  */
 import React from "react";
 import { useLocalSearchParams } from "expo-router";

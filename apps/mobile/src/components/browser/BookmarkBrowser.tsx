@@ -1,6 +1,6 @@
 /**
- * In-app website view for bookmarks that are not articles.
- * Loads the live page (with JavaScript) instead of ejecting to Safari/Chrome.
+ * Ordo's built-in website view for bookmarks that are not articles.
+ * Loads the live page (with JavaScript) inside the app.
  */
 import React, { useMemo, useState } from "react";
 import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";

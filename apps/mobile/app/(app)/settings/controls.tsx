@@ -1,4 +1,4 @@
-/** Preferences for shortcuts and gestures. */
+/** Preferences for shortcuts, gestures, and where websites open. */
 import React from "react";
 import {
   SettingsGroup,
@@ -10,10 +10,12 @@ import {
   type SettingsSelectOption,
 } from "../../../src/components/settings/SettingsSelect";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
+import { APP_NAME } from "@ordo/shared";
 import {
   useSettingsStore,
   type CreateButtonAction,
   type CreateButtonHoldAction,
+  type WebsiteBrowser,
 } from "../../../src/store/settings";
 
 const tapOptions: readonly SettingsSelectOption<CreateButtonAction>[] = [
@@ -27,11 +29,19 @@ const holdOptions: readonly SettingsSelectOption<CreateButtonHoldAction>[] = [
   { value: "none", label: "No action", icon: "remove-circle-outline" },
 ];
 
+const websiteBrowserOptions: readonly SettingsSelectOption<WebsiteBrowser>[] = [
+  { value: "ordo", label: APP_NAME, icon: "phone-portrait-outline" },
+  { value: "inApp", label: "In-app browser", shortLabel: "In-app", icon: "browsers-outline" },
+  { value: "external", label: "External browser", shortLabel: "External", icon: "open-outline" },
+];
+
 export default function ControlsScreen() {
   const tapAction = useSettingsStore((s) => s.createButtonTapAction);
   const holdAction = useSettingsStore((s) => s.createButtonHoldAction);
+  const websiteBrowser = useSettingsStore((s) => s.websiteBrowser);
   const setTapAction = useSettingsStore((s) => s.setCreateButtonTapAction);
   const setHoldAction = useSettingsStore((s) => s.setCreateButtonHoldAction);
+  const setWebsiteBrowser = useSettingsStore((s) => s.setWebsiteBrowser);
 
   return (
     <SettingsPage title="Controls">
@@ -62,6 +72,24 @@ export default function ControlsScreen() {
                 options={holdOptions}
                 value={holdAction}
                 onChange={setHoldAction}
+              />
+            }
+            divider={false}
+          />
+        </SettingsGroup>
+        <SettingsGroup
+          label="Browser"
+          footer={`${APP_NAME} stays in this app with a separate login. In-app uses Safari or Chrome as a sheet. External leaves ${APP_NAME}.`}
+        >
+          <SettingRow
+            icon="globe-outline"
+            label="Open websites in"
+            right={
+              <SettingsSelect
+                title="Open websites in"
+                options={websiteBrowserOptions}
+                value={websiteBrowser}
+                onChange={setWebsiteBrowser}
               />
             }
             divider={false}

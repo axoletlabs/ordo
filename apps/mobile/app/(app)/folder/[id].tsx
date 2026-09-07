@@ -45,6 +45,7 @@ import { errorMessage, isFolderProtected } from "../../../src/lib/error-message"
 import { flattenPages } from "../../../src/lib/api/query-keys";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
 import { type BookmarkDto } from "@ordo/shared";
+import { openListBookmark } from "../../../src/lib/open-website";
 
 export default function FolderDetailScreen() {
   const { palette } = useTheme();
@@ -92,14 +93,16 @@ export default function FolderDetailScreen() {
   const hasUnread = folder ? folder.unreadCount > 0 : items.some((b) => !b.isRead);
 
   const openReader = (b: BookmarkDto) => {
-    if (hasDetailPane) {
-      router.push({
-        pathname: "/folder/[id]",
-        params: { id: folderId ?? "root", bookmark: b.id },
-      });
-      return;
-    }
-    router.push(`/reader/${b.id}`);
+    openListBookmark(b, () => {
+      if (hasDetailPane) {
+        router.push({
+          pathname: "/folder/[id]",
+          params: { id: folderId ?? "root", bookmark: b.id },
+        });
+        return;
+      }
+      router.push(`/reader/${b.id}`);
+    });
   };
 
   const loadMore = () => {

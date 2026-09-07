@@ -44,7 +44,7 @@ export function bookmarkCanBeArticle(bookmark: BookmarkDto): boolean {
   return kind !== "media" && kind !== "file";
 }
 
-/** Non-article destinations open the in-app website view, not the reader. */
+/** Non-article destinations open the live website, not the reader. */
 export function bookmarkOpensAsWebsite(bookmark: BookmarkDto): boolean {
   const kind = resolveContentKind(bookmark);
   return kind === "web" || kind === "media" || kind === "file";

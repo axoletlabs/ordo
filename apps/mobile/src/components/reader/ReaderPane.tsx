@@ -4,13 +4,12 @@
  * Renders the server's sanitized semantic HTML natively (no WebView/JS) in a
  * reader-themed surface independent of the app theme, with account-synced
  * font/size/theme preferences and reading-progress tracking. Non-articles
- * open an in-app website view; "Read in ordo" appears when extraction
- * actually produced an article.
+ * open according to the website-browser setting; "Read in ordo" appears when
+ * extraction actually produced an article.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Appearance,
-  Linking,
   Platform,
   ScrollView,
   Share,
@@ -71,6 +70,7 @@ import {
   canReadInOrdo,
 } from "../../lib/bookmark-reader";
 import { copyLink } from "../../lib/copy-link";
+import { openExternalBrowser, openLivePage } from "../../lib/open-website";
 
 function useSetContentKindMissing() {
   return { mutate: () => undefined, isPending: false };
@@ -259,14 +259,17 @@ function ReaderPaneInner({
   const handleOpenOriginal = () => {
     if (!bookmark) return;
     haptics.light();
-    setSurface("browser");
+    const browser = useSettingsStore.getState().websiteBrowser;
+    if (browser === "ordo") {
+      setSurface("browser");
+      return;
+    }
+    void openLivePage(bookmark.url, browser);
   };
 
   const handleOpenSystemBrowser = () => {
     if (!bookmark) return;
-    Linking.openURL(bookmark.url).catch(() =>
-      toast.error("Couldn't open this page in the browser."),
-    );
+    void openExternalBrowser(bookmark.url);
   };
 
   const handleShare = () => {
@@ -548,7 +551,22 @@ function ReaderPaneInner({
 
   const rightActions = bookmark ? (
     <View style={styles.headerActions}>
-      {!showWebsiteView ? (
+      {showWebsiteView ? (
+        <PressableScale
+          style={styles.iconBtn}
+          scaleTo={0.85}
+          hitSlop={8}
+          onPress={() => {
+            haptics.light();
+            handleOpenSystemBrowser();
+          }}
+          accessibilityRole="button"
+          accessibilityLabel="Open in external browser"
+          accessibilityHint="Opens this page in Safari or Chrome."
+        >
+          <Ionicons name="open-outline" size={22} color={palette.text} />
+        </PressableScale>
+      ) : (
         <PressableScale
           style={styles.iconBtn}
           scaleTo={0.85}
@@ -563,7 +581,7 @@ function ReaderPaneInner({
         >
           <Ionicons name="options-outline" size={22} color={palette.text} />
         </PressableScale>
-      ) : null}
+      )}
       <PressableScale
         style={styles.iconBtn}
         scaleTo={0.85}
@@ -709,22 +727,6 @@ function ReaderPaneInner({
       ) : showWebsiteView ? (
         <View style={styles.browserPane}>
           <BookmarkBrowser url={bookmark.url} />
-          <View
-            style={[
-              styles.browserBar,
-              {
-                backgroundColor: palette.surface,
-                borderTopColor: palette.border,
-                paddingBottom: safeBottom ? insets.bottom + spacing[8] : spacing[8],
-              },
-            ]}
-          >
-            <Button
-              label="Open in browser"
-              block
-              onPress={handleOpenSystemBrowser}
-            />
-          </View>
         </View>
       ) : (
         <View style={styles.scrollViewport}>
@@ -941,7 +943,7 @@ function ReaderPaneInner({
             {showWebsiteView ? (
               <SheetActionRow
                 icon="open-outline"
-                label="Open in browser"
+                label="Open in external browser"
                 divider={false}
                 onPress={() => {
                   setActionPanel(null);
@@ -1017,10 +1019,4 @@ const styles = StyleSheet.create({
   },
   preparingText: { marginTop: spacing[16], textAlign: "center" },
   browserPane: { flex: 1 },
-  browserBar: {
-    gap: spacing[8],
-    paddingHorizontal: spacing[16],
-    paddingTop: spacing[8],
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
 });

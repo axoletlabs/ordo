@@ -32,6 +32,7 @@ import { errorMessage } from "../../src/lib/error-message";
 import { haptics } from "../../src/lib/haptics";
 import { layout, radius, spacing } from "../../src/theme/tokens";
 import type { BookmarkDto } from "@ordo/shared";
+import { openListBookmark } from "../../src/lib/open-website";
 
 export default function SearchScreen() {
   const { palette } = useTheme();
@@ -89,14 +90,16 @@ export default function SearchScreen() {
   }, [q, routeQuery]);
 
   const openReader = (b: BookmarkDto) => {
-    if (hasDetailPane) {
-      router.push({
-        pathname: "/search",
-        params: { query: q, bookmark: b.id },
-      });
-      return;
-    }
-    router.push(`/reader/${b.id}`);
+    openListBookmark(b, () => {
+      if (hasDetailPane) {
+        router.push({
+          pathname: "/search",
+          params: { query: q, bookmark: b.id },
+        });
+        return;
+      }
+      router.push(`/reader/${b.id}`);
+    });
   };
 
   const toggleTag = (tagId: string) => {

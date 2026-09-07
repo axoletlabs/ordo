@@ -1,7 +1,7 @@
 /**
  * Client/UI settings store: server URL, recent server history, theme mode,
- * AMOLED and navigation preferences. Persisted to AsyncStorage (non-secret).
- * Hydrated explicitly on app start.
+ * AMOLED, navigation, and website-browser preferences. Persisted to
+ * AsyncStorage (non-secret). Hydrated explicitly on app start.
  */
 import { create } from "zustand";
 import {
@@ -17,9 +17,15 @@ export const DEFAULT_SERVER_URL = "http://localhost:3000";
 export type NavigationStyle = "docked" | "floating" | "compactFloating";
 export type CreateButtonAction = "menu" | "bookmark" | "folder";
 export type CreateButtonHoldAction = CreateButtonAction | "none";
+/** Where live websites open: ordo's WebView, a Safari/Chrome sheet, or the browser app. */
+export type WebsiteBrowser = "ordo" | "inApp" | "external";
 
 function isCreateButtonAction(value: unknown): value is CreateButtonAction {
   return value === "menu" || value === "bookmark" || value === "folder";
+}
+
+function isWebsiteBrowser(value: unknown): value is WebsiteBrowser {
+  return value === "ordo" || value === "inApp" || value === "external";
 }
 
 export interface SettingsState {
@@ -30,6 +36,7 @@ export interface SettingsState {
   showNavigationLabels: boolean;
   createButtonTapAction: CreateButtonAction;
   createButtonHoldAction: CreateButtonHoldAction;
+  websiteBrowser: WebsiteBrowser;
   /** One-time tip: OTP is printed to the server console when SMTP is unset. */
   consoleOtpTipDismissed: boolean;
   /** Last three servers left behind when switching. URLs only — no credentials. */
@@ -45,6 +52,7 @@ export interface SettingsState {
   setShowNavigationLabels: (show: boolean) => void;
   setCreateButtonTapAction: (action: CreateButtonAction) => void;
   setCreateButtonHoldAction: (action: CreateButtonHoldAction) => void;
+  setWebsiteBrowser: (browser: WebsiteBrowser) => void;
   dismissConsoleOtpTip: () => void;
 }
 
@@ -56,6 +64,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   showNavigationLabels: true,
   createButtonTapAction: "menu",
   createButtonHoldAction: "bookmark",
+  websiteBrowser: "ordo",
   consoleOtpTipDismissed: false,
   serverHistory: [],
   hydrated: false,
@@ -78,6 +87,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         saved?.createButtonHoldAction === "none" || isCreateButtonAction(saved?.createButtonHoldAction)
           ? saved.createButtonHoldAction
           : "bookmark",
+      websiteBrowser: isWebsiteBrowser(saved?.websiteBrowser) ? saved.websiteBrowser : "ordo",
       consoleOtpTipDismissed: saved?.consoleOtpTipDismissed === true,
       serverHistory: parseServerHistory(saved?.serverHistory),
       hydrated: true,
@@ -118,6 +128,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setCreateButtonHoldAction: (createButtonHoldAction) => {
     set({ createButtonHoldAction });
     void prefsSet(StorageKeys.SETTINGS, { ...get(), createButtonHoldAction });
+  },
+  setWebsiteBrowser: (websiteBrowser) => {
+    set({ websiteBrowser });
+    void prefsSet(StorageKeys.SETTINGS, { ...get(), websiteBrowser });
   },
   dismissConsoleOtpTip: () => {
     set({ consoleOtpTipDismissed: true });

@@ -43,6 +43,7 @@ import { errorMessage } from "../../../src/lib/error-message";
 import { flattenPages } from "../../../src/lib/api/query-keys";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
 import type { BookmarkDto } from "@ordo/shared";
+import { openListBookmark } from "../../../src/lib/open-website";
 
 export default function TagDetailScreen() {
   const { palette } = useTheme();
@@ -79,14 +80,16 @@ export default function TagDetailScreen() {
   const selectableKeys = useMemo(() => items.map((bookmark) => bookmarkKey(bookmark.id)), [items]);
 
   const openReader = (b: BookmarkDto) => {
-    if (hasDetailPane) {
-      router.push({
-        pathname: "/tags/[id]",
-        params: { id: routeId ?? "", bookmark: b.id },
-      });
-      return;
-    }
-    router.push(`/reader/${b.id}`);
+    openListBookmark(b, () => {
+      if (hasDetailPane) {
+        router.push({
+          pathname: "/tags/[id]",
+          params: { id: routeId ?? "", bookmark: b.id },
+        });
+        return;
+      }
+      router.push(`/reader/${b.id}`);
+    });
   };
 
   const onToggleRead = (b: BookmarkDto) => {

@@ -7,6 +7,8 @@ import { Button } from "../ui/Button";
 import { SheetActionRow, sheetMenuStyles } from "../ui/SheetActionRow";
 import { useTheme } from "../../theme/ThemeProvider";
 import { copyLink } from "../../lib/copy-link";
+import { openLivePage } from "../../lib/open-website";
+import { useSettingsStore } from "../../store/settings";
 import { bookmarkCanBeArticle, bookmarkIsArticle } from "../../lib/bookmark-reader";
 import * as bookmarkHooks from "../../hooks/use-bookmarks";
 import { toast } from "../ui/toast-store";
@@ -110,10 +112,15 @@ export function BookmarkActionsSheet({
             icon="globe-outline"
             label="Open original"
             onPress={() => {
-              router.push({
-                pathname: "/reader/[id]",
-                params: { id: bookmark.id, view: "browser" },
-              });
+              const browser = useSettingsStore.getState().websiteBrowser;
+              if (browser === "ordo") {
+                router.push({
+                  pathname: "/reader/[id]",
+                  params: { id: bookmark.id, view: "browser" },
+                });
+              } else {
+                void openLivePage(bookmark.url, browser);
+              }
               if (!bookmark.isRead) onToggleRead(bookmark);
               onDismiss();
             }}

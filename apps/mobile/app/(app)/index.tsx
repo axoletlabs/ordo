@@ -49,6 +49,7 @@ import {
 } from "../../src/store/settings";
 import { layout, spacing } from "../../src/theme/tokens";
 import { type BookmarkDto, type FolderDto } from "@ordo/shared";
+import { openListBookmark } from "../../src/lib/open-website";
 
 type LibraryItem =
   | { type: "folder"; folder: FolderDto }
@@ -130,7 +131,9 @@ export default function BookmarksScreen() {
   };
 
   const openBookmark = (bookmark: BookmarkDto) => {
-    router.push(`/reader/${bookmark.id}`);
+    openListBookmark(bookmark, () => {
+      router.push(`/reader/${bookmark.id}`);
+    });
   };
 
   const runCreateAction = (action: CreateButtonHoldAction) => {
