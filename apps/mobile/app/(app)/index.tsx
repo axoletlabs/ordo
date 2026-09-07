@@ -391,10 +391,7 @@ export default function BookmarksScreen() {
         visible={!!actionsFolder}
         folder={actionsFolder}
         onDismiss={() => setActionsFolder(null)}
-        onDeleted={() => {
-          toast.success("Folder deleted");
-          setActionsFolder(null);
-        }}
+        onDeleted={() => setActionsFolder(null)}
       />
 
       <SelectionTools

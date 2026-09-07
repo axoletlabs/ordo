@@ -20,7 +20,6 @@ import { EditTagPanel } from "../../../src/components/tags/EditTagPanel";
 import { useDeleteTag, useTags } from "../../../src/hooks/use-tags";
 import { tagColorValue } from "../../../src/lib/tag-colors";
 import { haptics } from "../../../src/lib/haptics";
-import { toast } from "../../../src/components/ui/toast-store";
 import { errorMessage } from "../../../src/lib/error-message";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
@@ -48,19 +47,8 @@ export default function TagsScreen() {
     const target = deleteTarget;
     if (!target) return;
     haptics.medium();
-    deleteTag.mutate(target.id, {
-      onSuccess: () => {
-        toast.success(
-          target.bookmarkCount > 0
-            ? `Deleted "${target.name}" and its ${target.bookmarkCount} assignments`
-            : `Deleted "${target.name}"`,
-        );
-      },
-      onError: (e) => {
-        toast.error(errorMessage(e));
-      },
-      onSettled: () => setDeleteTarget(null),
-    });
+    setDeleteTarget(null);
+    deleteTag.mutate(target);
   };
 
   return (
@@ -171,9 +159,8 @@ export default function TagsScreen() {
               : `Delete "${deleteTarget.name}"?`
             : ""
         }
-        message="The tag is removed. Bookmarks are kept."
+        message="The tag is removed. Bookmarks are kept. You can undo this."
         confirmLabel="Delete tag"
-        loading={deleteTag.isPending}
         onConfirm={onDelete}
       />
     </View>

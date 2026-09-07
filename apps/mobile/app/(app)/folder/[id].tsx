@@ -356,7 +356,6 @@ export default function FolderDetailScreen() {
         folder={folder ?? null}
         onDismiss={() => setFolderActions(false)}
         onDeleted={() => {
-          toast.success("Folder deleted");
           setFolderActions(false);
           router.replace("/");
         }}

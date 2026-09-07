@@ -1,5 +1,5 @@
 /** Shared user-facing phrases used in more than one screen. */
-import type { ImportResultDto } from "@ordo/shared";
+import type { ImportResultDto, TagDto } from "@ordo/shared";
 
 export function markedAsReadToast(count: number): string {
   return count === 1 ? "1 bookmark marked as read" : `${count} bookmarks marked as read`;
@@ -15,6 +15,16 @@ export function deletedBookmarksToast(count: number): string {
 
 export function deletedFoldersToast(count: number): string {
   return count === 1 ? "Folder deleted" : `${count} folders deleted`;
+}
+
+export function deletedTagsToast(tags: readonly Pick<TagDto, "name" | "bookmarkCount">[]): string {
+  if (tags.length === 1) {
+    const tag = tags[0];
+    return tag.bookmarkCount > 0
+      ? `Deleted "${tag.name}" and its ${tag.bookmarkCount} assignments`
+      : `Deleted "${tag.name}"`;
+  }
+  return `${tags.length} tags deleted`;
 }
 
 export function movedBookmarksToast(count: number, folderName: string): string {

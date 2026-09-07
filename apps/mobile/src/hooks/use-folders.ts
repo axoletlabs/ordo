@@ -6,6 +6,7 @@ import { foldersApi } from "../lib/api/folders";
 import { queryClient } from "../lib/query-client";
 import { qk, tagsAnyAccess } from "../lib/api/query-keys";
 import { errorMessage, isFolderProtected } from "../lib/error-message";
+import { deleteUndoable } from "../lib/undoable-delete";
 import { toast } from "../components/ui/toast-store";
 import { useFolderTokenStore } from "../store/folder-tokens";
 import {
@@ -118,13 +119,10 @@ export function useUpdateFolder() {
 }
 
 export function useDeleteFolder() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => foldersApi.remove(id),
-    onSuccess: (_r, id) => {
-      qc.setQueryData<FolderDto[]>(qk.folders, (old) => (old ?? []).filter((f) => f.id !== id));
-    },
-  });
+  return {
+    mutate: (folder: FolderDto, opts?: { onDeleted?: () => void }) =>
+      deleteUndoable({ folders: [folder], onDeleted: opts?.onDeleted }),
+  };
 }
 
 export function useBatchFolders() {

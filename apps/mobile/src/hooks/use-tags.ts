@@ -9,12 +9,13 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { DEFAULT_PAGE_SIZE, type BookmarkDto, type CursorPage, type TagColor, type TagDto } from "@ordo/shared";
+import { DEFAULT_PAGE_SIZE, type TagColor, type TagDto } from "@ordo/shared";
 import { tagsApi } from "../lib/api/tags";
 import { qk, tagsAnyAccess } from "../lib/api/query-keys";
 import { bookmarksApi } from "../lib/api/bookmarks";
 import { useFolderTokenStore } from "../store/folder-tokens";
 import { mapCachedBookmarks, updateBookmarkEverywhere } from "../lib/cache-helpers";
+import { deleteUndoable } from "../lib/undoable-delete";
 
 function sortTags(tags: TagDto[]) {
   return [...tags].sort(
@@ -87,26 +88,10 @@ export function useUpdateTag() {
 }
 
 export function useDeleteTag() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) => tagsApi.remove(id),
-    onSuccess: (_r, id) => {
-      qc.setQueriesData<TagDto[]>({ queryKey: tagsAnyAccess }, (old) =>
-        old ? old.filter((t) => t.id !== id) : old,
-      );
-      mapCachedBookmarks(qc, (b) => {
-        const tags = b.tags.filter((t) => t.id !== id);
-        const suggestedTags = b.suggestedTags.filter((t) => t.id !== id);
-        if (tags.length === b.tags.length && suggestedTags.length === b.suggestedTags.length) {
-          return b;
-        }
-        return { ...b, tags, suggestedTags };
-      });
-      // Tag-filtered lists may have contained it; refresh them.
-      void qc.invalidateQueries({ queryKey: ["bookmarks", "tagged"] });
-      void qc.invalidateQueries({ queryKey: ["bookmarks", "search"] });
-    },
-  });
+  return {
+    mutate: (tag: TagDto, opts?: { onDeleted?: () => void }) =>
+      deleteUndoable({ tags: [tag], onDeleted: opts?.onDeleted }),
+  };
 }
 
 /** Whole-library, tag-filtered (AND) bookmark list. */

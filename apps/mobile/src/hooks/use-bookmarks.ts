@@ -22,7 +22,7 @@ import {
   updateBookmarkInPages,
   updateBookmarksEverywhere,
 } from "../lib/cache-helpers";
-import { deleteBookmarksUndoable } from "../lib/undoable-bookmark-delete";
+import { deleteBookmarksUndoable } from "../lib/undoable-delete";
 import {
   BATCH_ITEM_LIMIT,
   DEFAULT_PAGE_SIZE,

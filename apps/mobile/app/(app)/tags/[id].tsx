@@ -38,7 +38,6 @@ import { bookmarkKey, useSelectionMode } from "../../../src/hooks/use-selection"
 import { useFloatingDockMetrics } from "../../../src/hooks/use-floating-dock-metrics";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { haptics } from "../../../src/lib/haptics";
-import { toast } from "../../../src/components/ui/toast-store";
 import { errorMessage } from "../../../src/lib/error-message";
 import { flattenPages } from "../../../src/lib/api/query-keys";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
@@ -334,24 +333,18 @@ export default function TagDetailScreen() {
               : `Delete "${anchor.name}"?`
             : ""
         }
-        message="The tag is removed. Bookmarks are kept."
+        message="The tag is removed. Bookmarks are kept. You can undo this."
         confirmLabel="Delete tag"
-        loading={deleteTag.isPending}
         onConfirm={() => {
           if (!anchor) return;
           haptics.medium();
-          deleteTag.mutate(anchor.id, {
-            onSuccess: () => {
-              toast.success(
-                anchor.bookmarkCount > 0
-                  ? `Deleted "${anchor.name}" and its ${anchor.bookmarkCount} assignments`
-                  : `Deleted "${anchor.name}"`,
-              );
+          const target = anchor;
+          setDeleteTagOpen(false);
+          deleteTag.mutate(target, {
+            onDeleted: () => {
               if (router.canGoBack()) router.back();
               else router.replace("/tags");
             },
-            onError: (e) => toast.error(errorMessage(e)),
-            onSettled: () => setDeleteTagOpen(false),
           });
         }}
       />

@@ -340,18 +340,15 @@ export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: Fo
     }
   };
 
-  const doDelete = async () => {
+  const doDelete = () => {
     if (!folder) return;
-    try {
-      await del.mutateAsync(folder.id);
-      clearToken(folder.id);
-      invalidateBookmarks();
-      haptics.success();
-      onDeleted?.(folder.id);
-      onDismiss();
-    } catch (cause) {
-      setError(errorMessage(cause));
-    }
+    haptics.medium();
+    del.mutate(folder, {
+      onDeleted: () => {
+        onDeleted?.(folder.id);
+        onDismiss();
+      },
+    });
   };
 
   return (
@@ -684,14 +681,14 @@ export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: Fo
             title={`Delete ${folder.name}?`}
             subtitle={
               folder.bookmarkCount > 0
-                ? `Also deletes ${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}.`
-                : "This folder will be deleted."
+                ? `Also deletes ${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}. You can undo this.`
+                : "You can undo this."
             }
           />
           {error ? <Text variant="footnote" color="danger" align="center" style={styles.error}>{error}</Text> : null}
           <View style={sheetMenuStyles.stack}>
-            <Button label="Delete folder" variant="danger" block size="lg" onPress={doDelete} loading={del.isPending} />
-            <Button label="Cancel" variant="ghost" block disabled={del.isPending} onPress={() => showMode("menu")} />
+            <Button label="Delete folder" variant="danger" block size="lg" onPress={doDelete} />
+            <Button label="Cancel" variant="ghost" block onPress={() => showMode("menu")} />
           </View>
         </ScrollView>
       ) : null}

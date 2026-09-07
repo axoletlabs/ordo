@@ -12,14 +12,10 @@ import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { useBatchBookmarks } from "../../hooks/use-bookmarks";
 import { useBatchFolders } from "../../hooks/use-folders";
 import { copyLinks } from "../../lib/copy-link";
-import {
-  deletedFoldersToast,
-  markedAsReadToast,
-  markedAsUnreadToast,
-} from "../../lib/copy";
+import { markedAsReadToast, markedAsUnreadToast } from "../../lib/copy";
 import { errorMessage } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
-import { deleteBookmarksUndoable } from "../../lib/undoable-bookmark-delete";
+import { deleteUndoable } from "../../lib/undoable-delete";
 import { toast } from "../ui/toast-store";
 import { layout } from "../../theme/tokens";
 
@@ -99,11 +95,11 @@ export function SelectionTools({
         : `Delete ${bookmarks.length} bookmarks?`;
 
   const deleteMessage = mixed
-    ? "Folders and their bookmarks will be deleted, along with the selected bookmarks."
+    ? "Folders and their bookmarks will be deleted, along with the selected bookmarks. You can undo this."
     : foldersOnly
       ? folders.some((folder) => folder.bookmarkCount > 0)
-        ? "Folders and every bookmark inside them will be deleted."
-        : "These folders will be deleted."
+        ? "Folders and every bookmark inside them will be deleted. You can undo this."
+        : "You can undo this."
       : "You can undo this.";
 
   const actions: SelectionAction[] = [];
@@ -164,42 +160,17 @@ export function SelectionTools({
     });
   }
 
-  const confirmDelete = async () => {
-    if (bookmarksOnly) {
-      haptics.medium();
-      const targets = [...bookmarks];
-      setDeleteOpen(false);
-      onFinished();
-      deleteBookmarksUndoable(targets, { scopeFolderId: fromFolderId });
-      return;
-    }
-
-    try {
-      haptics.medium();
-      if (bookmarks.length > 0) {
-        await batchBookmarks.mutateAsync({
-          action: "delete",
-          ids: bookmarks.map((bookmark) => bookmark.id),
-          scopeFolderId: fromFolderId,
-        });
-      }
-      if (folders.length > 0) {
-        await batchFolders.mutateAsync({
-          action: "delete",
-          ids: folders.map((folder) => folder.id),
-        });
-      }
-      if (mixed) {
-        toast.success("Deleted");
-      } else {
-        toast.success(deletedFoldersToast(folders.length));
-      }
-      setDeleteOpen(false);
-      onFinished();
-    } catch (cause) {
-      haptics.error();
-      toast.error(errorMessage(cause));
-    }
+  const confirmDelete = () => {
+    haptics.medium();
+    const selectedBookmarks = [...bookmarks];
+    const selectedFolders = [...folders];
+    setDeleteOpen(false);
+    onFinished();
+    deleteUndoable({
+      bookmarks: selectedBookmarks,
+      folders: selectedFolders,
+      scopeFolderId: fromFolderId,
+    });
   };
 
   return (
@@ -242,7 +213,7 @@ export function SelectionTools({
         }
         loading={busy}
         onDismiss={() => setDeleteOpen(false)}
-        onConfirm={() => void confirmDelete()}
+        onConfirm={confirmDelete}
       />
     </>
   );
