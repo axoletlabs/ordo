@@ -44,6 +44,7 @@ import { flattenPages } from "../../../src/lib/api/query-keys";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
 import { type BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
+import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
 
 export default function FolderDetailScreen() {
   const { palette } = useTheme();
@@ -73,8 +74,10 @@ export default function FolderDetailScreen() {
   const [addOpen, setAddOpen] = useState(false);
   const [moveTarget, setMoveTarget] = useState<BookmarkDto | null>(null);
   const [actionBm, setActionBm] = useState<BookmarkDto | null>(null);
+  const [bookmarkAnchor, setBookmarkAnchor] = useState<MenuAnchorRect | null>(null);
   const [editTagsBm, setEditTagsBm] = useState<BookmarkDto | null>(null);
   const [folderActions, setFolderActions] = useState(false);
+  const [folderAnchor, setFolderAnchor] = useState<MenuAnchorRect | null>(null);
   const selection = useSelectionMode();
 
   const protectedError = !!bookmarks.error && isFolderProtected(bookmarks.error) && !unlocked;
@@ -137,7 +140,7 @@ export default function FolderDetailScreen() {
   const listPane = (
     <FlashList
       data={items}
-      extraData={selection.revision}
+      extraData={`${selection.revision}:${actionBm?.id ?? ""}`}
       keyExtractor={(b: BookmarkDto) => b.id}
       renderItem={({ item }: { item: BookmarkDto }) => (
         <BookmarkRow
@@ -156,7 +159,11 @@ export default function FolderDetailScreen() {
             if (selection.active) selection.toggle(bookmarkKey(bookmark.id));
             else selection.enter(bookmarkKey(bookmark.id));
           }}
-          onMore={(b) => setActionBm(b)}
+          onMore={(b, anchor) => {
+            setBookmarkAnchor(anchor);
+            setActionBm(b);
+          }}
+          highlighted={actionBm?.id === item.id}
         />
       )}
       estimatedItemSize={108}
@@ -208,7 +215,10 @@ export default function FolderDetailScreen() {
               <HeaderIconButton
                 name="ellipsis-horizontal"
                 color={palette.text}
-                onPress={() => setFolderActions(true)}
+                onPress={(anchor) => {
+                  setFolderAnchor(anchor);
+                  setFolderActions(true);
+                }}
                 accessibilityLabel="Folder actions"
               />
             </HeaderActions>
@@ -321,7 +331,11 @@ export default function FolderDetailScreen() {
       <BookmarkActionsSheet
         visible={!!actionBm}
         bookmark={actionBm}
-        onDismiss={() => setActionBm(null)}
+        anchor={bookmarkAnchor}
+        onDismiss={() => {
+          setActionBm(null);
+          setBookmarkAnchor(null);
+        }}
         onToggleRead={onToggleRead}
         onMove={(b) => setMoveTarget(b)}
         onDelete={onDelete}
@@ -344,6 +358,7 @@ export default function FolderDetailScreen() {
       <FolderActionsSheet
         visible={folderActions}
         folder={folder ?? null}
+        anchor={folderAnchor}
         onDismiss={() => setFolderActions(false)}
         onDeleted={() => {
           setFolderActions(false);

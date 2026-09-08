@@ -5,7 +5,7 @@
  * are marked on the favicon.
  */
 import React from "react";
-import { ActivityIndicator, Image, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { PressableScale } from "../ui/PressableScale";
@@ -16,6 +16,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { domainFromUrl, relativeTime } from "../../lib/format";
 import { bookmarkIsArticle, bookmarkOpensAsWebsite } from "../../lib/bookmark-reader";
 import { haptics } from "../../lib/haptics";
+import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { radius, spacing } from "../../theme/tokens";
 import { SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
 import type { BookmarkDto } from "@ordo/shared";
@@ -26,10 +27,12 @@ const MAX_ROW_TAGS = 3;
 export interface BookmarkRowProps {
   bookmark: BookmarkDto;
   onPress: (b: BookmarkDto) => void;
-  onMore?: (b: BookmarkDto) => void;
+  onMore?: (b: BookmarkDto, anchor: MenuAnchorRect) => void;
   onLongPress?: (b: BookmarkDto) => void;
   selected?: boolean;
   selectionMode?: boolean;
+  /** True while this row's context menu is open, so the trigger stays obvious in a long list. */
+  highlighted?: boolean;
   /** Override chip taps (e.g. toggle a search filter). Default: open that tag. */
   onTagPress?: (tagId: string) => void;
   /** Hide tags already expressed by the current view (e.g. the active tag filter). */
@@ -43,11 +46,14 @@ export function BookmarkRow({
   onLongPress,
   selected,
   selectionMode,
+  highlighted,
   onTagPress,
   omitTagIds,
 }: BookmarkRowProps) {
   const { palette } = useTheme();
   const router = useRouter();
+  const moreRef = React.useRef<View>(null);
+  const [hovered, setHovered] = React.useState(false);
   const titleColor = bookmark.isRead ? "secondary" : "primary";
   const domain = bookmark.domain || domainFromUrl(bookmark.url);
   const title = bookmark.title || domain;
@@ -90,15 +96,31 @@ export function BookmarkRow({
     router.push(`/tags/${tagId}`);
   };
 
+  const openMore = (event?: { nativeEvent: { pageX: number; pageY: number } }) => {
+    measureAnchor(moreRef.current, (anchor) => onMore?.(bookmark, anchor), event);
+  };
+
+  const rowFill = selected || highlighted
+    ? palette.surfaceSecondary
+    : hovered
+      ? menuHoverFill(palette.mode)
+      : "transparent";
+
   return (
     <View
       style={[
         styles.wrap,
         {
-          backgroundColor: selected ? palette.surfaceSecondary : "transparent",
+          backgroundColor: rowFill,
           borderBottomColor: palette.border,
         },
       ]}
+      {...(Platform.OS === "web"
+        ? {
+            onMouseEnter: () => setHovered(true),
+            onMouseLeave: () => setHovered(false),
+          }
+        : null)}
     >
       <PressableScale
         accessibilityRole={selectionMode ? "checkbox" : "button"}
@@ -109,7 +131,7 @@ export function BookmarkRow({
         }
         style={styles.body}
         onPress={() => onPress(bookmark)}
-        onLongPress={onLongPress ? () => onLongPress(bookmark) : onMore ? () => onMore(bookmark) : undefined}
+        onLongPress={onLongPress ? () => onLongPress(bookmark) : onMore ? openMore : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         {selectionMode ? (
@@ -217,16 +239,21 @@ export function BookmarkRow({
       </PressableScale>
 
       {onMore && !selectionMode ? (
-        <PressableScale
-          accessibilityRole="button"
-          accessibilityLabel={`More actions for ${bookmark.title || domainFromUrl(bookmark.url)}`}
-          style={styles.moreBtn}
-          scaleTo={0.85}
-          onPress={() => onMore(bookmark)}
-          hitSlop={12}
-        >
-          <Ionicons name="ellipsis-horizontal" size={20} color={palette.textTertiary} />
-        </PressableScale>
+        <View ref={moreRef} collapsable={false} style={styles.moreBtn}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`More actions for ${bookmark.title || domainFromUrl(bookmark.url)}`}
+            onHoverIn={() => setHovered(true)}
+            style={({ pressed }) => [
+              styles.moreHit,
+              (pressed || hovered) && { backgroundColor: menuHoverFill(palette.mode, true) },
+            ]}
+            onPress={openMore}
+            hitSlop={12}
+          >
+            <Ionicons name="ellipsis-horizontal" size={20} color={hovered || highlighted ? palette.textSecondary : palette.textTertiary} />
+          </Pressable>
+        </View>
       ) : onMore ? (
         <View style={styles.moreBtn} pointerEvents="none" />
       ) : null}
@@ -293,5 +320,13 @@ const styles = StyleSheet.create({
     marginTop: spacing[10],
     alignItems: "center",
     justifyContent: "center",
+  },
+  moreHit: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.full,
+    alignItems: "center",
+    justifyContent: "center",
+    ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
   },
 });

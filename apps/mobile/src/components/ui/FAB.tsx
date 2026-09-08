@@ -7,12 +7,13 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PressableScale } from "./PressableScale";
 import { useTheme } from "../../theme/ThemeProvider";
+import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { layout, spacing } from "../../theme/tokens";
 
 export interface FABProps {
   icon?: keyof typeof Ionicons.glyphMap;
-  onPress: () => void;
-  onLongPress?: () => void;
+  onPress: (anchor: MenuAnchorRect) => void;
+  onLongPress?: (anchor: MenuAnchorRect) => void;
   accessibilityLabel?: string;
   accessibilityHint?: string;
   testID?: string;
@@ -51,23 +52,34 @@ export function FAB({
   const { palette, shadows } = useTheme();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const anchorRef = React.useRef<View>(null);
   const right = Math.max(
     insets.right + spacing[20],
     rightOverride ?? (width - Math.min(width, maxContentWidth)) / 2 + spacing[20],
   );
+  const emit = (handler?: (anchor: MenuAnchorRect) => void, event?: { nativeEvent: { pageX: number; pageY: number } }) => {
+    if (!handler) return;
+    measureAnchor(anchorRef.current, handler, event);
+  };
   return (
-    <PressableScale
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      accessibilityHint={accessibilityHint}
-      testID={testID}
+    <View
+      ref={anchorRef}
+      collapsable={false}
       style={[styles.fab, { backgroundColor: palette.accent, bottom, right }, shadows.level2]}
-      scaleTo={0.9}
-      onPress={onPress}
-      onLongPress={onLongPress}
     >
-      <Ionicons name={icon} size={24} color={palette.onAccent} />
-    </PressableScale>
+      <PressableScale
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityHint={accessibilityHint}
+        testID={testID}
+        style={styles.fabHit}
+        scaleTo={0.9}
+        onPress={(event) => emit(onPress, event)}
+        onLongPress={onLongPress ? (event) => emit(onLongPress, event) : undefined}
+      >
+        <Ionicons name={icon} size={24} color={palette.onAccent} />
+      </PressableScale>
+    </View>
   );
 }
 
@@ -78,6 +90,12 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  fabHit: {
+    width: 48,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
   },

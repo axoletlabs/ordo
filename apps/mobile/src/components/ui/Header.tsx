@@ -8,6 +8,7 @@
  */
 import React from "react";
 import { Pressable, StyleSheet, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
+import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -183,22 +184,27 @@ export function HeaderIconButton({
 }: {
   name: keyof typeof Ionicons.glyphMap;
   color: string;
-  onPress: () => void;
+  onPress: (anchor: MenuAnchorRect) => void;
   accessibilityLabel: string;
   accessibilityHint?: string;
 }) {
+  const anchorRef = React.useRef<View>(null);
   return (
-    <PressableScale
-      style={styles.iconBtn}
-      scaleTo={0.85}
-      onPress={onPress}
-      hitSlop={8}
-      accessibilityRole="button"
-      accessibilityLabel={accessibilityLabel}
-      accessibilityHint={accessibilityHint}
-    >
-      <Ionicons name={name} size={HEADER_ICON_SIZE} color={color} style={headerIconGlyphStyle} />
-    </PressableScale>
+    <View ref={anchorRef} collapsable={false}>
+      <PressableScale
+        style={styles.iconBtn}
+        scaleTo={0.85}
+        onPress={(event) => {
+          measureAnchor(anchorRef.current, onPress, event);
+        }}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityHint={accessibilityHint}
+      >
+        <Ionicons name={name} size={HEADER_ICON_SIZE} color={color} style={headerIconGlyphStyle} />
+      </PressableScale>
+    </View>
   );
 }
 

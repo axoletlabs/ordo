@@ -33,6 +33,7 @@ import { haptics } from "../../src/lib/haptics";
 import { layout, radius, spacing } from "../../src/theme/tokens";
 import type { BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../src/lib/open-website";
+import type { MenuAnchorRect } from "../../src/lib/menu-anchor";
 
 export default function SearchScreen() {
   const { palette } = useTheme();
@@ -54,6 +55,7 @@ export default function SearchScreen() {
   const [q, setQ] = useState(routeQuery);
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [actionBm, setActionBm] = useState<BookmarkDto | null>(null);
+  const [bookmarkAnchor, setBookmarkAnchor] = useState<MenuAnchorRect | null>(null);
   const [moveTarget, setMoveTarget] = useState<BookmarkDto | null>(null);
   const [editTagsBm, setEditTagsBm] = useState<BookmarkDto | null>(null);
   const selection = useSelectionMode();
@@ -136,7 +138,7 @@ export default function SearchScreen() {
   const listPane = (
     <FlashList
       data={items}
-      extraData={selection.revision}
+      extraData={`${selection.revision}:${actionBm?.id ?? ""}`}
       keyExtractor={(b: BookmarkDto) => b.id}
       renderItem={({ item }: { item: BookmarkDto }) => (
         <BookmarkRow
@@ -155,7 +157,11 @@ export default function SearchScreen() {
             if (selection.active) selection.toggle(bookmarkKey(bookmark.id));
             else selection.enter(bookmarkKey(bookmark.id));
           }}
-          onMore={setActionBm}
+          onMore={(bookmark, menuAnchor) => {
+            setBookmarkAnchor(menuAnchor);
+            setActionBm(bookmark);
+          }}
+          highlighted={actionBm?.id === item.id}
           onTagPress={toggleTag}
         />
       )}
@@ -294,7 +300,11 @@ export default function SearchScreen() {
       <BookmarkActionsSheet
         visible={!!actionBm}
         bookmark={actionBm}
-        onDismiss={() => setActionBm(null)}
+        anchor={bookmarkAnchor}
+        onDismiss={() => {
+          setActionBm(null);
+          setBookmarkAnchor(null);
+        }}
         onToggleRead={onToggleRead}
         onMove={setMoveTarget}
         onDelete={onDelete}

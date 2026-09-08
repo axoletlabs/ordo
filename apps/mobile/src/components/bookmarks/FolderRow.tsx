@@ -3,7 +3,7 @@
  * read as one library, not two stacked features.
  */
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { PressableScale } from "../ui/PressableScale";
 import { Text } from "../ui/Text";
@@ -11,6 +11,7 @@ import { Badge } from "../ui/Badge";
 import { SelectionMark } from "./SelectionMark";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
+import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { radius, spacing } from "../../theme/tokens";
 import { SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
 import { DEFAULT_FOLDER_ICON, type FolderDto } from "@ordo/shared";
@@ -18,26 +19,43 @@ import { DEFAULT_FOLDER_ICON, type FolderDto } from "@ordo/shared";
 export interface FolderRowProps {
   folder: FolderDto;
   onPress: (f: FolderDto) => void;
-  onMore?: (f: FolderDto) => void;
+  onMore?: (f: FolderDto, anchor: MenuAnchorRect) => void;
   onLongPress?: (f: FolderDto) => void;
   selected?: boolean;
   selectionMode?: boolean;
+  highlighted?: boolean;
 }
 
-export function FolderRow({ folder, onPress, onMore, onLongPress, selected, selectionMode }: FolderRowProps) {
+export function FolderRow({ folder, onPress, onMore, onLongPress, selected, selectionMode, highlighted }: FolderRowProps) {
   const { palette } = useTheme();
+  const moreRef = React.useRef<View>(null);
+  const [hovered, setHovered] = React.useState(false);
   const unread = folder.unreadCount > 0;
   const countLabel = `${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}`;
+  const openMore = (event?: { nativeEvent: { pageX: number; pageY: number } }) => {
+    measureAnchor(moreRef.current, (anchor) => onMore?.(folder, anchor), event);
+  };
+  const rowFill = selected || highlighted
+    ? palette.surfaceSecondary
+    : hovered
+      ? menuHoverFill(palette.mode)
+      : "transparent";
 
   return (
     <View
       style={[
         styles.wrap,
         {
-          backgroundColor: selected ? palette.surfaceSecondary : "transparent",
+          backgroundColor: rowFill,
           borderBottomColor: palette.border,
         },
       ]}
+      {...(Platform.OS === "web"
+        ? {
+            onMouseEnter: () => setHovered(true),
+            onMouseLeave: () => setHovered(false),
+          }
+        : null)}
     >
       <PressableScale
         accessibilityRole={selectionMode ? "checkbox" : "button"}
@@ -51,7 +69,7 @@ export function FolderRow({ folder, onPress, onMore, onLongPress, selected, sele
           if (!selectionMode) haptics.light();
           onPress(folder);
         }}
-        onLongPress={onLongPress ? () => onLongPress(folder) : onMore ? () => onMore(folder) : undefined}
+        onLongPress={onLongPress ? () => onLongPress(folder) : onMore ? openMore : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         {selectionMode ? (
@@ -96,16 +114,21 @@ export function FolderRow({ folder, onPress, onMore, onLongPress, selected, sele
         {unread && !selectionMode ? <Badge tone="accent">{folder.unreadCount}</Badge> : null}
       </PressableScale>
       {onMore && !selectionMode ? (
-        <PressableScale
-          accessibilityRole="button"
-          accessibilityLabel={`More actions for ${folder.name}`}
-          style={styles.moreBtn}
-          scaleTo={0.85}
-          onPress={() => onMore(folder)}
-          hitSlop={12}
-        >
-          <Ionicons name="ellipsis-horizontal" size={20} color={palette.textTertiary} />
-        </PressableScale>
+        <View ref={moreRef} collapsable={false} style={styles.moreBtn}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`More actions for ${folder.name}`}
+            onHoverIn={() => setHovered(true)}
+            style={({ pressed }) => [
+              styles.moreHit,
+              (pressed || hovered) && { backgroundColor: menuHoverFill(palette.mode, true) },
+            ]}
+            onPress={openMore}
+            hitSlop={12}
+          >
+            <Ionicons name="ellipsis-horizontal" size={20} color={hovered || highlighted ? palette.textSecondary : palette.textTertiary} />
+          </Pressable>
+        </View>
       ) : onMore ? (
         <View style={styles.moreBtn} pointerEvents="none" />
       ) : null}
@@ -147,5 +170,13 @@ const styles = StyleSheet.create({
     marginTop: spacing[10],
     alignItems: "center",
     justifyContent: "center",
+  },
+  moreHit: {
+    width: 32,
+    height: 32,
+    borderRadius: radius.full,
+    alignItems: "center",
+    justifyContent: "center",
+    ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
   },
 });
