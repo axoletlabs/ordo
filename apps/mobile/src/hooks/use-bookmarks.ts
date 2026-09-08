@@ -71,10 +71,19 @@ export function useBookmarkDetail(id: string, enabled = true, folderId?: string 
         query.state.data.fetchStatus !== "ok")
         ? 0
         : 5 * 60_000,
-    refetchInterval: (query) =>
-      query.state.data?.fetchStatus === "pending"
-        ? extractionPollIntervalMs(query.state.dataUpdateCount)
-        : false,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return false;
+      // Boot re-extracts keep `failed` until they finish; keep polling so an
+      // open reader picks up HTML without leaving the screen.
+      if (data.fetchStatus === "pending") {
+        return extractionPollIntervalMs(query.state.dataUpdateCount);
+      }
+      if (data.contentKindOverride === "article" && data.fetchStatus !== "ok") {
+        return extractionPollIntervalMs(query.state.dataUpdateCount);
+      }
+      return false;
+    },
   });
 }
 

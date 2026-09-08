@@ -87,7 +87,7 @@ export const BATCH_ITEM_LIMIT = 200;
  * pipeline changes enough that stored content should be re-extracted; rows
  * with an older (or missing) version are refreshed in the background.
  */
-export const EXTRACTION_VERSION = 9;
+export const EXTRACTION_VERSION = 10;
 
 /** Client poll cadence while a bookmark is `pending` (200ms → 1.5s). */
 export function extractionPollIntervalMs(dataUpdateCount: number): number {

@@ -791,6 +791,25 @@ function ReaderPaneInner({
                     Preparing this page…
                   </Text>
                 </View>
+              ) : bookmark.fetchStatus === "failed" ? (
+                <EmptyState
+                  compact
+                  icon="cloud-offline-outline"
+                  title="Couldn't load this page"
+                  action={
+                    <Button
+                      label="Retry"
+                      variant="secondary"
+                      onPress={() => {
+                        if (bookmark.contentKindOverride === "article") {
+                          handleClassify(true);
+                          return;
+                        }
+                        void detail.refetch();
+                      }}
+                    />
+                  }
+                />
               ) : (
                 <EmptyState
                   compact

@@ -1,7 +1,7 @@
 import { Injectable, Logger, type OnModuleDestroy } from "@nestjs/common";
 import { isIP } from "node:net";
 import { setDefaultResultOrder } from "node:dns";
-import { Agent } from "undici";
+import { Agent, fetch as undiciFetch } from "undici";
 import { classifyDestination, type ReaderRejectionReason } from "./reader-classify.js";
 import { UnsupportedContentError } from "./reader-errors.js";
 import { DnsCache } from "./dns-cache.js";
@@ -192,17 +192,23 @@ export class ReaderService implements OnModuleDestroy {
 
     for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
       await this.assertPublicDestination(current);
-      const request = {
-        redirect: "manual" as const,
-        signal: combined,
-        headers: {
-          "user-agent": USER_AGENT,
-          accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
-          "accept-language": "en-US,en;q=0.9",
-        },
-        ...(this.dispatcher ? { dispatcher: this.dispatcher } : {}),
+      const headers = {
+        "user-agent": USER_AGENT,
+        accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8",
+        "accept-language": "en-US,en;q=0.9",
       };
-      res = await fetch(current, request as RequestInit);
+      // npm `undici` and Node's bundled fetch are different copies. Passing this
+      // Agent into global fetch throws `invalid onRequestStart method`, which
+      // every extraction then stores as `fetch_error`. Tests mock global fetch
+      // and run without a dispatcher.
+      res = this.dispatcher
+        ? ((await undiciFetch(current, {
+            redirect: "manual",
+            signal: combined,
+            headers,
+            dispatcher: this.dispatcher,
+          })) as Response)
+        : await fetch(current, { redirect: "manual", signal: combined, headers });
       if (![301, 302, 303, 307, 308].includes(res.status)) break;
       const location = res.headers.get("location");
       if (!location) break;
