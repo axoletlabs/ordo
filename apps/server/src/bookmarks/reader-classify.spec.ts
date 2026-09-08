@@ -27,6 +27,22 @@ describe("reader-classify", () => {
       expect(reason("https://jvns.ca/blog/2024/cool-post")).toBeNull();
     });
 
+    it("rejects GitHub repo homepages, profiles, and source trees, not markdown or Pages", () => {
+      expect(reason("https://github.com/Azvyl/PMInputAPI")).toBe("not_an_article");
+      expect(reason("https://www.github.com/Azvyl/PMInputAPI/")).toBe("not_an_article");
+      expect(reason("https://github.com/Cosmoverse/libpmquery?tab=readme-ov-file")).toBe("not_an_article");
+      expect(reason("https://github.com/xRookieFight")).toBe("not_an_article");
+      expect(reason("https://github.com/Wraith0x10?tab=repositories")).toBe("not_an_article");
+      expect(reason("https://github.com/platz1de/EasyEdit/tree/main")).toBe("not_an_article");
+      expect(reason("https://github.com/anomalyco/opencode/blob/v2/.opencode/plugins/orchestrator.ts")).toBe(
+        "not_an_article",
+      );
+      expect(reason("https://github.com/ninjaknights/CameraUtils/blob/stable-PM5/Usage.md")).toBeNull();
+      expect(reason("https://github.com/platz1de/EasyEdit/wiki/Conditional-Patterns")).toBeNull();
+      expect(reason("https://w1zardz.github.io/bedrock-nbt-editor/")).toBeNull();
+      expect(reason("https://gist.github.com/user/abc123")).toBeNull();
+    });
+
     it("does not treat private IPs as homepages", () => {
       expect(reason("http://192.168.1.1/")).toBeNull();
       expect(reason("http://127.0.0.1/admin")).toBeNull();

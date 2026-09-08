@@ -110,6 +110,9 @@ export function classifyDestination(url: URL): ReaderRejectionReason | null {
     }
   }
 
+  const github = classifyGitHubDestination(host, url);
+  if (github) return github;
+
   // Site roots are not skipped: many essays live at `/` (grugbrain.dev, …).
   // Link-heavy homepages still fail Readability / quality gates after fetch.
 
@@ -123,6 +126,45 @@ export function classifyDestination(url: URL): ReaderRejectionReason | null {
   }
 
   return null;
+}
+
+/** Markdown-like files GitHub serves as readable HTML on `/blob/` pages. */
+const GITHUB_DOC_EXTENSIONS = new Set([
+  "md",
+  "markdown",
+  "mdx",
+  "rst",
+  "adoc",
+  "asciidoc",
+  "org",
+]);
+
+/**
+ * Repo homepages (`github.com/owner/repo`) render the README, so Readability
+ * treats them as essays. They are project surfaces, not posts. Allow markdown
+ * blobs, wiki pages, Gists, and GitHub Pages (`*.github.io`).
+ */
+export function classifyGitHubDestination(host: string, url: URL): ReaderRejectionReason | null {
+  if (host.endsWith(".github.io")) return null;
+  if (host === "gist.github.com" || host === "github.blog" || host === "docs.github.com") {
+    return null;
+  }
+  if (host !== "github.com") return null;
+
+  const segments = url.pathname.split("/").filter(Boolean);
+  if (segments.length <= 2) return "not_an_article";
+
+  const section = segments[2].toLowerCase();
+  if (section === "wiki") return null;
+  if (section === "blob") {
+    const file = segments[segments.length - 1] ?? "";
+    const dot = file.lastIndexOf(".");
+    if (dot !== -1 && GITHUB_DOC_EXTENSIONS.has(file.slice(dot + 1).toLowerCase())) {
+      return null;
+    }
+    return "not_an_article";
+  }
+  return "not_an_article";
 }
 
 export function pathnameLooksLikeCommerce(pathname: string): boolean {

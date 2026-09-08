@@ -369,9 +369,22 @@ describe("ReaderService", () => {
       expect(result.contentText).toMatch(/Grug think about code/);
     });
 
-    it("fetches a commerce URL when the user forced article classification", async () => {
+    it("pre-bypasses GitHub repository homepages without fetching", async () => {
+      mockFetchNeverCalled();
+      await expectUnsupported("https://github.com/Azvyl/PMInputAPI", "not_an_article");
+      await expectUnsupported("https://github.com/owner/repo?tab=readme-ov-file", "not_an_article");
+      await expectUnsupported("https://github.com/owner/repo/blob/main/src/index.ts", "not_an_article");
+    });
+
+    it("still extracts a GitHub markdown blob when it looks like an article", async () => {
       mockFetch(SAMPLE_HTML);
-      const result = await reader.extract("https://www.amazon.com/dp/B00TEST123", { forceArticle: true });
+      const result = await reader.extract("https://github.com/ninjaknights/CameraUtils/blob/stable-PM5/Usage.md");
+      expect(result.title).toBe("The Real Title");
+    });
+
+    it("fetches a GitHub repo URL when the user forced article classification", async () => {
+      mockFetch(SAMPLE_HTML);
+      const result = await reader.extract("https://github.com/Azvyl/PMInputAPI", { forceArticle: true });
       expect(result.title).toBe("The Real Title");
     });
 
