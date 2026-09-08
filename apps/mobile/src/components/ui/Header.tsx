@@ -15,8 +15,9 @@ import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
-import { layout, spacing } from "../../theme/tokens";
+import { layout, radius, spacing } from "../../theme/tokens";
 import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
+import { measureAnchor, menuHoverFill, type MenuAnchor } from "./ContextMenu";
 
 /** Matches `Text` variant "header" line height (14px × 1.5). */
 export const HEADER_LINE_HEIGHT = 21;
@@ -183,15 +184,28 @@ export function HeaderIconButton({
 }: {
   name: keyof typeof Ionicons.glyphMap;
   color: string;
-  onPress: () => void;
+  onPress: (anchor?: MenuAnchor) => void;
   accessibilityLabel: string;
   accessibilityHint?: string;
 }) {
+  const { palette } = useTheme();
+  const ref = React.useRef<React.ComponentRef<typeof PressableScale>>(null);
+  const [hovered, setHovered] = React.useState(false);
   return (
     <PressableScale
-      style={styles.iconBtn}
+      ref={ref}
+      collapsable={false}
+      style={[
+        styles.iconBtn,
+        hovered ? { backgroundColor: menuHoverFill(palette) } : null,
+      ]}
       scaleTo={0.85}
-      onPress={onPress}
+      dim={false}
+      onHoverIn={() => setHovered(true)}
+      onHoverOut={() => setHovered(false)}
+      onPress={(event) => {
+        measureAnchor(ref.current, (anchor) => onPress(anchor), event);
+      }}
       hitSlop={8}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
@@ -260,6 +274,7 @@ const styles = StyleSheet.create({
     height: HEADER_CONTROL_SIZE,
     alignItems: "center",
     justifyContent: "center",
+    borderRadius: radius.md,
   },
   actions: { flexDirection: "row", alignItems: "center" },
 });

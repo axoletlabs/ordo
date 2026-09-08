@@ -31,16 +31,19 @@ export type PressableScaleProps = Omit<PressableProps, "onPressIn" | "onPressOut
   style?: StyleProp<ViewStyle>;
 };
 
-export function PressableScale({
-  scaleTo = 0.97,
-  dim = true,
-  onPressIn,
-  onPressOut,
-  disabled,
-  style,
-  children,
-  ...rest
-}: PressableScaleProps) {
+export const PressableScale = React.forwardRef<React.ComponentRef<typeof Pressable>, PressableScaleProps>(function PressableScale(
+  {
+    scaleTo = 0.97,
+    dim = true,
+    onPressIn,
+    onPressOut,
+    disabled,
+    style,
+    children,
+    ...rest
+  },
+  ref,
+) {
   const pressed = useSharedValue(0);
 
   React.useEffect(
@@ -77,6 +80,7 @@ export function PressableScale({
 
   return (
     <AnimatedPressable
+      ref={ref}
       onPressIn={handleIn}
       onPressOut={handleOut}
       disabled={disabled}
@@ -86,4 +90,4 @@ export function PressableScale({
       {children}
     </AnimatedPressable>
   );
-}
+});

@@ -12,9 +12,7 @@ import {
 } from "../../../src/components/settings/SettingsPage";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
 import { UserAvatar } from "../../../src/components/ui/UserAvatar";
-import { FloatingPanel } from "../../../src/components/ui/FloatingPanel";
-import { PanelHeader } from "../../../src/components/ui/PanelHeader";
-import { SheetActionRow, SheetMenu } from "../../../src/components/ui/SheetActionRow";
+import { ContextMenu, ContextMenuItem, measureAnchor, type MenuAnchor } from "../../../src/components/ui/ContextMenu";
 import { toast } from "../../../src/components/ui/toast-store";
 import { useAuthStore } from "../../../src/store/auth";
 import { useServerInfo } from "../../../src/hooks/queries";
@@ -31,10 +29,12 @@ export default function AccountScreen() {
   const { data: info } = useServerInfo();
   const [busy, setBusy] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
+  const avatarRef = React.useRef<React.ComponentRef<typeof Pressable>>(null);
 
   const afterSheet = (fn: () => void) => {
     setMenuOpen(false);
-    setTimeout(fn, 280);
+    setTimeout(fn, 100);
   };
 
   const uploadFromUri = async (uri: string) => {
@@ -123,9 +123,18 @@ export default function AccountScreen() {
     <SettingsPage title="Account">
       <SettingsScrollView>
         <Pressable
-          onPress={() => {
+          ref={avatarRef}
+          collapsable={false}
+          onPress={(event) => {
             if (busy) return;
-            setMenuOpen(true);
+            measureAnchor(
+              avatarRef.current,
+              (next) => {
+                setMenuAnchor(next);
+                setMenuOpen(true);
+              },
+              event,
+            );
           }}
           disabled={busy}
           accessibilityRole="button"
@@ -188,31 +197,26 @@ export default function AccountScreen() {
         </SettingsGroup>
       </SettingsScrollView>
 
-      <FloatingPanel visible={menuOpen} onDismiss={() => setMenuOpen(false)} fitContent>
-        <PanelHeader title="Profile picture" />
-        <SheetMenu>
-          <SheetActionRow
-            icon="image-outline"
-            label="Choose photo"
-            onPress={() => afterSheet(() => void choosePhoto())}
+      <ContextMenu visible={menuOpen} onDismiss={() => setMenuOpen(false)} anchor={menuAnchor} align="center">
+        <ContextMenuItem
+          icon="image-outline"
+          label="Choose photo"
+          onPress={() => afterSheet(() => void choosePhoto())}
+        />
+        <ContextMenuItem
+          icon="camera-outline"
+          label="Take photo"
+          onPress={() => afterSheet(() => void takePhoto())}
+        />
+        {user?.hasAvatar ? (
+          <ContextMenuItem
+            icon="trash-outline"
+            label="Remove photo"
+            tone="danger"
+            onPress={() => afterSheet(() => void removePhoto())}
           />
-          <SheetActionRow
-            icon="camera-outline"
-            label="Take photo"
-            divider={!user?.hasAvatar}
-            onPress={() => afterSheet(() => void takePhoto())}
-          />
-          {user?.hasAvatar ? (
-            <SheetActionRow
-              icon="trash-outline"
-              label="Remove photo"
-              tone="danger"
-              divider={false}
-              onPress={() => afterSheet(() => void removePhoto())}
-            />
-          ) : null}
-        </SheetMenu>
-      </FloatingPanel>
+        ) : null}
+      </ContextMenu>
     </SettingsPage>
   );
 }

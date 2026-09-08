@@ -22,9 +22,7 @@ import { MoveSheet } from "../../../src/components/bookmarks/MoveSheet";
 import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
 import { EditTagPanel } from "../../../src/components/tags/EditTagPanel";
 import { ConfirmDialog } from "../../../src/components/ui/ConfirmDialog";
-import { FloatingPanel } from "../../../src/components/ui/FloatingPanel";
-import { PanelHeader } from "../../../src/components/ui/PanelHeader";
-import { SheetActionRow, SheetMenu } from "../../../src/components/ui/SheetActionRow";
+import { ContextMenu, ContextMenuItem, type MenuAnchor } from "../../../src/components/ui/ContextMenu";
 import { ReaderPane, ReaderPanePlaceholder } from "../../../src/components/reader/ReaderPane";
 import { useTags, useTaggedBookmarks, useDeleteTag } from "../../../src/hooks/use-tags";
 import {
@@ -62,9 +60,11 @@ export default function TagDetailScreen() {
 
   const [addOpen, setAddOpen] = useState(false);
   const [actionBm, setActionBm] = useState<BookmarkDto | null>(null);
+  const [bookmarkMenuAnchor, setBookmarkMenuAnchor] = useState<MenuAnchor | null>(null);
   const [moveTarget, setMoveTarget] = useState<BookmarkDto | null>(null);
   const [editTagsBm, setEditTagsBm] = useState<BookmarkDto | null>(null);
   const [tagActionsOpen, setTagActionsOpen] = useState(false);
+  const [tagMenuAnchor, setTagMenuAnchor] = useState<MenuAnchor | null>(null);
   const [editTagOpen, setEditTagOpen] = useState(false);
   const [deleteTagOpen, setDeleteTagOpen] = useState(false);
   const selection = useSelectionMode();
@@ -131,7 +131,10 @@ export default function TagDetailScreen() {
             if (selection.active) selection.toggle(bookmarkKey(bookmark.id));
             else selection.enter(bookmarkKey(bookmark.id));
           }}
-          onMore={(b) => setActionBm(b)}
+          onMore={(b, menuAnchor) => {
+            setBookmarkMenuAnchor(menuAnchor);
+            setActionBm(b);
+          }}
           omitTagIds={activeIds}
           onTagPress={(tagId) => {
             if (selection.active) return;
@@ -189,7 +192,10 @@ export default function TagDetailScreen() {
               <HeaderIconButton
                 name="ellipsis-horizontal"
                 color={palette.text}
-                onPress={() => setTagActionsOpen(true)}
+                onPress={(menuAnchor) => {
+                  if (menuAnchor) setTagMenuAnchor(menuAnchor);
+                  setTagActionsOpen(true);
+                }}
                 accessibilityLabel="Tag actions"
               />
             </HeaderActions>
@@ -269,6 +275,7 @@ export default function TagDetailScreen() {
       <BookmarkActionsSheet
         visible={!!actionBm}
         bookmark={actionBm}
+        anchor={bookmarkMenuAnchor}
         onDismiss={() => setActionBm(null)}
         onToggleRead={onToggleRead}
         onMove={setMoveTarget}
@@ -289,29 +296,25 @@ export default function TagDetailScreen() {
         onDismiss={() => setEditTagsBm(null)}
       />
 
-      <FloatingPanel visible={tagActionsOpen} onDismiss={() => setTagActionsOpen(false)} fitContent>
-        <PanelHeader title={anchor?.name ?? "Tag"} />
-        <SheetMenu>
-          <SheetActionRow
-            icon="create-outline"
-            label="Edit tag"
-            onPress={() => {
-              setTagActionsOpen(false);
-              setTimeout(() => setEditTagOpen(true), 100);
-            }}
-          />
-          <SheetActionRow
-            icon="trash-outline"
-            label="Delete tag"
-            tone="danger"
-            divider={false}
-            onPress={() => {
-              setTagActionsOpen(false);
-              setTimeout(() => setDeleteTagOpen(true), 100);
-            }}
-          />
-        </SheetMenu>
-      </FloatingPanel>
+      <ContextMenu visible={tagActionsOpen} onDismiss={() => setTagActionsOpen(false)} anchor={tagMenuAnchor}>
+        <ContextMenuItem
+          icon="create-outline"
+          label="Edit tag"
+          onPress={() => {
+            setTagActionsOpen(false);
+            setTimeout(() => setEditTagOpen(true), 100);
+          }}
+        />
+        <ContextMenuItem
+          icon="trash-outline"
+          label="Delete tag"
+          tone="danger"
+          onPress={() => {
+            setTagActionsOpen(false);
+            setTimeout(() => setDeleteTagOpen(true), 100);
+          }}
+        />
+      </ContextMenu>
 
       <EditTagPanel
         visible={editTagOpen}

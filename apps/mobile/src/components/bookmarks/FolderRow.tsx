@@ -13,12 +13,13 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
 import { radius, spacing } from "../../theme/tokens";
 import { SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
+import { measureAnchor, menuHoverFill, type MenuAnchor } from "../ui/ContextMenu";
 import { DEFAULT_FOLDER_ICON, type FolderDto } from "@ordo/shared";
 
 export interface FolderRowProps {
   folder: FolderDto;
   onPress: (f: FolderDto) => void;
-  onMore?: (f: FolderDto) => void;
+  onMore?: (f: FolderDto, anchor: MenuAnchor) => void;
   onLongPress?: (f: FolderDto) => void;
   selected?: boolean;
   selectionMode?: boolean;
@@ -26,6 +27,8 @@ export interface FolderRowProps {
 
 export function FolderRow({ folder, onPress, onMore, onLongPress, selected, selectionMode }: FolderRowProps) {
   const { palette } = useTheme();
+  const moreRef = React.useRef<React.ComponentRef<typeof PressableScale>>(null);
+  const [moreHovered, setMoreHovered] = React.useState(false);
   const unread = folder.unreadCount > 0;
   const countLabel = `${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}`;
 
@@ -51,7 +54,9 @@ export function FolderRow({ folder, onPress, onMore, onLongPress, selected, sele
           if (!selectionMode) haptics.light();
           onPress(folder);
         }}
-        onLongPress={onLongPress ? () => onLongPress(folder) : onMore ? () => onMore(folder) : undefined}
+        onLongPress={onLongPress ? () => onLongPress(folder) : onMore ? (event) => {
+          measureAnchor(moreRef.current, (anchor) => onMore(folder, anchor), event);
+        } : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         {selectionMode ? (
@@ -97,11 +102,21 @@ export function FolderRow({ folder, onPress, onMore, onLongPress, selected, sele
       </PressableScale>
       {onMore && !selectionMode ? (
         <PressableScale
+          ref={moreRef}
+          collapsable={false}
           accessibilityRole="button"
           accessibilityLabel={`More actions for ${folder.name}`}
-          style={styles.moreBtn}
+          style={[
+            styles.moreBtn,
+            moreHovered ? { backgroundColor: menuHoverFill(palette) } : null,
+          ]}
           scaleTo={0.85}
-          onPress={() => onMore(folder)}
+          dim={false}
+          onHoverIn={() => setMoreHovered(true)}
+          onHoverOut={() => setMoreHovered(false)}
+          onPress={(event) => {
+            measureAnchor(moreRef.current, (anchor) => onMore(folder, anchor), event);
+          }}
           hitSlop={12}
         >
           <Ionicons name="ellipsis-horizontal" size={20} color={palette.textTertiary} />
@@ -147,5 +162,6 @@ const styles = StyleSheet.create({
     marginTop: spacing[10],
     alignItems: "center",
     justifyContent: "center",
+    borderRadius: radius.lg,
   },
 });

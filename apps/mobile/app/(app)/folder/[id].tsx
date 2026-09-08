@@ -24,6 +24,7 @@ import { BookmarkActionsSheet } from "../../../src/components/bookmarks/Bookmark
 import { FolderActionsSheet } from "../../../src/components/bookmarks/FolderActionsSheet";
 import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
 import { ReaderPane, ReaderPanePlaceholder } from "../../../src/components/reader/ReaderPane";
+import { type MenuAnchor } from "../../../src/components/ui/ContextMenu";
 import { useFolders } from "../../../src/hooks/queries";
 import { useFolderUnlocked } from "../../../src/hooks/use-folders";
 import {
@@ -73,8 +74,10 @@ export default function FolderDetailScreen() {
   const [addOpen, setAddOpen] = useState(false);
   const [moveTarget, setMoveTarget] = useState<BookmarkDto | null>(null);
   const [actionBm, setActionBm] = useState<BookmarkDto | null>(null);
+  const [bookmarkMenuAnchor, setBookmarkMenuAnchor] = useState<MenuAnchor | null>(null);
   const [editTagsBm, setEditTagsBm] = useState<BookmarkDto | null>(null);
   const [folderActions, setFolderActions] = useState(false);
+  const [folderMenuAnchor, setFolderMenuAnchor] = useState<MenuAnchor | null>(null);
   const selection = useSelectionMode();
 
   const protectedError = !!bookmarks.error && isFolderProtected(bookmarks.error) && !unlocked;
@@ -156,7 +159,10 @@ export default function FolderDetailScreen() {
             if (selection.active) selection.toggle(bookmarkKey(bookmark.id));
             else selection.enter(bookmarkKey(bookmark.id));
           }}
-          onMore={(b) => setActionBm(b)}
+          onMore={(b, menuAnchor) => {
+            setBookmarkMenuAnchor(menuAnchor);
+            setActionBm(b);
+          }}
         />
       )}
       estimatedItemSize={108}
@@ -208,7 +214,10 @@ export default function FolderDetailScreen() {
               <HeaderIconButton
                 name="ellipsis-horizontal"
                 color={palette.text}
-                onPress={() => setFolderActions(true)}
+                onPress={(menuAnchor) => {
+                  if (menuAnchor) setFolderMenuAnchor(menuAnchor);
+                  setFolderActions(true);
+                }}
                 accessibilityLabel="Folder actions"
               />
             </HeaderActions>
@@ -321,6 +330,7 @@ export default function FolderDetailScreen() {
       <BookmarkActionsSheet
         visible={!!actionBm}
         bookmark={actionBm}
+        anchor={bookmarkMenuAnchor}
         onDismiss={() => setActionBm(null)}
         onToggleRead={onToggleRead}
         onMove={(b) => setMoveTarget(b)}
@@ -344,6 +354,7 @@ export default function FolderDetailScreen() {
       <FolderActionsSheet
         visible={folderActions}
         folder={folder ?? null}
+        anchor={folderMenuAnchor}
         onDismiss={() => setFolderActions(false)}
         onDeleted={() => {
           setFolderActions(false);
