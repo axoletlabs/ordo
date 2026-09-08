@@ -128,10 +128,6 @@ export default function TagDetailScreen() {
             if (selection.active) selection.toggle(bookmarkKey(bookmark.id));
             else openReader(bookmark);
           }}
-          onLongPress={(bookmark) => {
-            if (selection.active) selection.toggle(bookmarkKey(bookmark.id));
-            else selection.enter(bookmarkKey(bookmark.id));
-          }}
           onMore={(b, menuAnchor) => {
             setBookmarkAnchor(menuAnchor);
             setActionBm(b);
@@ -260,7 +256,9 @@ export default function TagDetailScreen() {
       <FABLayer maxWidth={layout.maxContentWidth}>
         <FAB
           onPress={() => setAddOpen(true)}
+          onLongPress={() => selection.enter()}
           accessibilityLabel="Save bookmark"
+          accessibilityHint="Tap to save a bookmark. Press and hold to select items."
           right={spacing[20]}
         />
       </FABLayer>

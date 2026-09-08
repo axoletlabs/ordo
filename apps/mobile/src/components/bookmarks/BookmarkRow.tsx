@@ -1,8 +1,6 @@
 /**
- * A single bookmark row. Tapping opens the reader; the trailing button reveals
- * row actions. A long-press enters multi-select. The title leads the hierarchy,
- * while source and status details sit in a quieter metadata line. Unread items
- * are marked on the favicon.
+ * A single bookmark row. Tapping opens the reader; the trailing button or a
+ * long-press reveals row actions. Hold the create button to multi-select.
  */
 import React from "react";
 import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, View } from "react-native";
@@ -28,7 +26,6 @@ export interface BookmarkRowProps {
   bookmark: BookmarkDto;
   onPress: (b: BookmarkDto) => void;
   onMore?: (b: BookmarkDto, anchor: MenuAnchorRect) => void;
-  onLongPress?: (b: BookmarkDto) => void;
   selected?: boolean;
   selectionMode?: boolean;
   /** True while this row's context menu is open, so the trigger stays obvious in a long list. */
@@ -43,7 +40,6 @@ export function BookmarkRow({
   bookmark,
   onPress,
   onMore,
-  onLongPress,
   selected,
   selectionMode,
   highlighted,
@@ -127,11 +123,17 @@ export function BookmarkRow({
         accessibilityLabel={accessibilityLabel}
         accessibilityState={selectionMode ? { checked: !!selected } : { selected: !!selected }}
         accessibilityHint={
-          selectionMode ? (selected ? "Deselect this bookmark" : "Select this bookmark") : undefined
+          selectionMode
+            ? selected
+              ? "Deselect this bookmark"
+              : "Select this bookmark"
+            : onMore
+              ? "Press and hold for more actions"
+              : undefined
         }
         style={styles.body}
         onPress={() => onPress(bookmark)}
-        onLongPress={onLongPress ? () => onLongPress(bookmark) : onMore ? openMore : undefined}
+        onLongPress={selectionMode ? undefined : onMore ? (event) => openMore(event) : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         {selectionMode ? (

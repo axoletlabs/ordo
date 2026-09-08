@@ -9,6 +9,7 @@ import { PressableScale } from "./PressableScale";
 import { useTheme } from "../../theme/ThemeProvider";
 import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { layout, spacing } from "../../theme/tokens";
+import { SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
 
 export interface FABProps {
   icon?: keyof typeof Ionicons.glyphMap;
@@ -76,6 +77,7 @@ export function FAB({
         scaleTo={0.9}
         onPress={(event) => emit(onPress, event)}
         onLongPress={onLongPress ? (event) => emit(onLongPress, event) : undefined}
+        delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         <Ionicons name={icon} size={24} color={palette.onAccent} />
       </PressableScale>

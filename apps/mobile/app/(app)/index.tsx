@@ -43,7 +43,6 @@ import { flattenPages } from "../../src/lib/api/query-keys";
 import {
   useSettingsStore,
   type CreateButtonAction,
-  type CreateButtonHoldAction,
 } from "../../src/store/settings";
 import { layout, spacing } from "../../src/theme/tokens";
 import { type BookmarkDto, type FolderDto } from "@ordo/shared";
@@ -65,7 +64,6 @@ export default function BookmarksScreen() {
   const deleteBookmark = useDeleteBookmark(null);
   const markAllRead = useMarkAllRead(null);
   const createButtonTapAction = useSettingsStore((s) => s.createButtonTapAction);
-  const createButtonHoldAction = useSettingsStore((s) => s.createButtonHoldAction);
 
   const [addOpen, setAddOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -138,7 +136,7 @@ export default function BookmarksScreen() {
     });
   };
 
-  const runCreateAction = (action: CreateButtonHoldAction, anchor?: MenuAnchorRect) => {
+  const runCreateAction = (action: CreateButtonAction, anchor?: MenuAnchorRect) => {
     if (action === "menu") {
       setCreateAnchor(anchor ?? null);
       setCreateMenuOpen(true);
@@ -250,10 +248,6 @@ export default function BookmarksScreen() {
                       }
                       openFolder(selectedFolder);
                     }}
-                    onLongPress={(selectedFolder) => {
-                      if (selection.active) selection.toggle(folderKey(selectedFolder.id));
-                      else selection.enter(folderKey(selectedFolder.id));
-                    }}
                     onMore={(selectedFolder, anchor) => {
                       setFolderAnchor(anchor);
                       setActionsFolder(selectedFolder);
@@ -270,10 +264,6 @@ export default function BookmarksScreen() {
                   onPress={(bookmark) => {
                     if (selection.active) selection.toggle(bookmarkKey(bookmark.id));
                     else openBookmark(bookmark);
-                  }}
-                  onLongPress={(bookmark) => {
-                    if (selection.active) selection.toggle(bookmarkKey(bookmark.id));
-                    else selection.enter(bookmarkKey(bookmark.id));
                   }}
                   onMore={(bookmark, anchor) => {
                     setBookmarkAnchor(anchor);
@@ -324,16 +314,9 @@ export default function BookmarksScreen() {
       <FABLayer maxWidth={layout.maxContentWidth}>
         <FAB
           onPress={(anchor) => runCreateAction(createButtonTapAction, anchor)}
-          onLongPress={(anchor) => {
-            if (createButtonHoldAction !== "none") haptics.medium();
-            runCreateAction(createButtonHoldAction, anchor);
-          }}
+          onLongPress={() => selection.enter()}
           accessibilityLabel={createActionLabel(createButtonTapAction)}
-          accessibilityHint={
-            createButtonHoldAction === "none"
-              ? `Tap to ${createActionDescription(createButtonTapAction)}. Press and hold is disabled.`
-              : `Tap to ${createActionDescription(createButtonTapAction)}. Press and hold to ${createActionDescription(createButtonHoldAction)}.`
-          }
+          accessibilityHint={`Tap to ${createActionDescription(createButtonTapAction)}. Press and hold to select items.`}
           testID="add-bookmark-fab"
           bottom={floatingNavigation ? bottomClearance : spacing[20]}
           right={spacing[20]}

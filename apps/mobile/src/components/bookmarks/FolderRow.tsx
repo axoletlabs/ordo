@@ -20,13 +20,12 @@ export interface FolderRowProps {
   folder: FolderDto;
   onPress: (f: FolderDto) => void;
   onMore?: (f: FolderDto, anchor: MenuAnchorRect) => void;
-  onLongPress?: (f: FolderDto) => void;
   selected?: boolean;
   selectionMode?: boolean;
   highlighted?: boolean;
 }
 
-export function FolderRow({ folder, onPress, onMore, onLongPress, selected, selectionMode, highlighted }: FolderRowProps) {
+export function FolderRow({ folder, onPress, onMore, selected, selectionMode, highlighted }: FolderRowProps) {
   const { palette } = useTheme();
   const moreRef = React.useRef<View>(null);
   const [hovered, setHovered] = React.useState(false);
@@ -62,14 +61,20 @@ export function FolderRow({ folder, onPress, onMore, onLongPress, selected, sele
         accessibilityLabel={`${folder.name}, ${countLabel}${folder.pinned ? ", pinned" : ""}${folder.protected ? ", locked" : ""}${unread ? `, ${folder.unreadCount} unread` : ""}`}
         accessibilityState={selectionMode ? { checked: !!selected } : undefined}
         accessibilityHint={
-          selectionMode ? (selected ? "Deselect this folder" : "Select this folder") : undefined
+          selectionMode
+            ? selected
+              ? "Deselect this folder"
+              : "Select this folder"
+            : onMore
+              ? "Press and hold for more actions"
+              : undefined
         }
         style={styles.body}
         onPress={() => {
           if (!selectionMode) haptics.light();
           onPress(folder);
         }}
-        onLongPress={onLongPress ? () => onLongPress(folder) : onMore ? openMore : undefined}
+        onLongPress={selectionMode ? undefined : onMore ? (event) => openMore(event) : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         {selectionMode ? (

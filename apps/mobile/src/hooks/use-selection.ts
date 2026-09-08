@@ -1,6 +1,6 @@
 /**
- * Multi-select for library rows. Long-press enters the mode with one item;
- * further taps toggle. Android back exits without acting.
+ * Multi-select for library rows. Press-and-hold on the create button enters
+ * the mode; further taps toggle. Android back exits without acting.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler } from "react-native";
@@ -36,9 +36,9 @@ export function useSelectionMode() {
   }, []);
 
   const enter = useCallback(
-    (key: SelectionKey) => {
+    (key?: SelectionKey) => {
       haptics.medium();
-      bump(new Set([key]), true);
+      bump(key ? new Set([key]) : new Set(), true);
     },
     [bump],
   );
@@ -55,14 +55,14 @@ export function useSelectionMode() {
     const next = new Set(idsRef.current);
     if (next.has(key)) next.delete(key);
     else next.add(key);
-    bump(next, next.size > 0);
+    bump(next, true);
   }, [bump]);
 
   const replace = useCallback(
     (keys: readonly SelectionKey[]) => {
       haptics.selection();
       const next = new Set(keys);
-      bump(next, next.size > 0);
+      bump(next, true);
     },
     [bump],
   );

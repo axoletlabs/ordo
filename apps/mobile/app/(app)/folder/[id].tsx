@@ -155,10 +155,6 @@ export default function FolderDetailScreen() {
             if (selection.active) selection.toggle(bookmarkKey(bookmark.id));
             else openReader(bookmark);
           }}
-          onLongPress={(bookmark) => {
-            if (selection.active) selection.toggle(bookmarkKey(bookmark.id));
-            else selection.enter(bookmarkKey(bookmark.id));
-          }}
           onMore={(b, anchor) => {
             setBookmarkAnchor(anchor);
             setActionBm(b);
@@ -210,6 +206,15 @@ export default function FolderDetailScreen() {
                   color={palette.accent}
                   onPress={onMarkAllRead}
                   accessibilityLabel="Mark all as read"
+                />
+              ) : null}
+              {hasDetailPane && !showLocked && !loadFailed ? (
+                <HeaderIconButton
+                  name="checkbox-outline"
+                  color={palette.text}
+                  onPress={() => selection.enter()}
+                  accessibilityLabel="Select items"
+                  accessibilityHint="Select multiple bookmarks."
                 />
               ) : null}
               <HeaderIconButton
@@ -314,7 +319,9 @@ export default function FolderDetailScreen() {
         <FABLayer maxWidth={layout.maxContentWidth}>
           <FAB
             onPress={() => setAddOpen(true)}
+            onLongPress={() => selection.enter()}
             accessibilityLabel="Save bookmark"
+            accessibilityHint="Tap to save a bookmark. Press and hold to select items."
             testID="add-bookmark-fab"
             right={spacing[20]}
           />
