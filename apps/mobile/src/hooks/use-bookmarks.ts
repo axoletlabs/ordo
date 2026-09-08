@@ -65,7 +65,12 @@ export function useBookmarkDetail(id: string, enabled = true, folderId?: string 
       return detail;
     },
     enabled: !!id && enabled,
-    staleTime: 5 * 60_000,
+    staleTime: (query) =>
+      query.state.data?.fetchStatus === "pending" ||
+      (query.state.data?.contentKindOverride === "article" &&
+        query.state.data.fetchStatus !== "ok")
+        ? 0
+        : 5 * 60_000,
     refetchInterval: (query) =>
       query.state.data?.fetchStatus === "pending"
         ? extractionPollIntervalMs(query.state.dataUpdateCount)

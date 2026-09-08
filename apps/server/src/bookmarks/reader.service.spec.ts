@@ -340,27 +340,33 @@ describe("ReaderService", () => {
       expect(result.title).toBe("The Real Title");
     });
 
-    it("does not auto-classify an unmarked long essay as an article", async () => {
+    it("extracts an unmarked long essay with no Article schema or <article> tag", async () => {
       mockFetch(`<!DOCTYPE html><html><head>
-        <title>Example Article — My Site</title>
-        <meta property="og:title" content="The Real Title">
-        <meta name="description" content="A short summary of the article.">
+        <title>The Grug Brained Developer</title>
       </head><body>
-        <article><h1>The Real Title</h1>${P(1)}${P(2)}${P(3)}${P(4)}${P(5)}${P(6)}${P(7)}${P(8)}</article>
+        <div>
+          <h1>The Grug Brained Developer<br/><small>A layman's guide</small></h1>
+        </div>
+        <h1>Introduction</h1>
+        ${P(1)}${P(2)}${P(3)}${P(4)}${P(5)}${P(6)}${P(7)}${P(8)}
+        <h2><a href="#complexity">The Eternal Enemy: Complexity</a></h2>
+        ${P(9)}${P(10)}
       </body></html>`);
-      await expectUnsupported("https://grugbrain.dev/", "not_an_article");
+      const result = await reader.extract("https://grugbrain.dev/");
+      expect(result.title).toMatch(/Grug/i);
+      expect(result.contentText).toMatch(/Paragraph 2/);
     });
 
-    it("extracts an unmarked essay when the user forced article classification", async () => {
-      mockFetch(`<!DOCTYPE html><html><head>
-        <title>Example Article — My Site</title>
-        <meta property="og:title" content="The Real Title">
-      </head><body>
-        <article><h1>The Real Title</h1>${P(1)}${P(2)}${P(3)}${P(4)}${P(5)}${P(6)}${P(7)}${P(8)}</article>
-      </body></html>`);
+    it("extracts a forced article even when Readability's heuristic and <article> are absent", async () => {
+      const short = Array.from(
+        { length: 24 },
+        (_, i) => `<p>Grug think about code and life number ${i} today.</p>`,
+      ).join("");
+      mockFetch(`<!DOCTYPE html><html><head><title>The Grug Brained Developer</title></head>
+        <body><h1>The Grug Brained Developer</h1>${short}</body></html>`);
       const result = await reader.extract("https://grugbrain.dev/", { forceArticle: true });
-      expect(result.title).toBe("The Real Title");
-      expect(result.contentText).toMatch(/Paragraph 2/);
+      expect(result.title).toMatch(/Grug/i);
+      expect(result.contentText).toMatch(/Grug think about code/);
     });
 
     it("fetches a commerce URL when the user forced article classification", async () => {

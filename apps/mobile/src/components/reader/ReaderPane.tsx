@@ -157,7 +157,8 @@ function ReaderPaneInner({
   const cached = bookmarkId ? findBookmarkInCache(queryClient, bookmarkId) : undefined;
   const skipWebsiteDetail =
     (cached?.fetchStatus === "unsupported" || cached?.fetchStatus === "failed") &&
-    cached.contentKindOverride !== "article";
+    cached.contentKindOverride !== "article" &&
+    cached.contentKind !== "article";
   const detail = useBookmarkDetail(
     bookmarkId ?? "",
     !!bookmarkId && !skipWebsiteDetail,

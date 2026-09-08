@@ -37,7 +37,9 @@ export interface ArticleMetadata {
 }
 
 const MIN_WORDS = 70;
+const MIN_WORDS_UNMARKED = 280;
 const MAX_LINK_DENSITY = 0.4;
+const MAX_LINK_DENSITY_UNMARKED = 0.3;
 const SHELL_TEXT_LIMIT = 2_000;
 const WORDS_PER_MINUTE = 200;
 const MAX_IMAGE_DIMENSION = 10_000;
@@ -383,10 +385,6 @@ export function extractFromHtml(html: string, url: string, options: ExtractOptio
 
     stripNonContentTags(document);
 
-    if (!forceArticle && !articleEvidence) {
-      throw new UnsupportedContentError("not_an_article", "Page does not declare itself an article");
-    }
-
     const meta = {
       title: readMeta(document, "og:title") || document.title?.trim() || domain,
       description: readMeta(document, "description") || readMeta(document, "og:description"),
@@ -394,9 +392,13 @@ export function extractFromHtml(html: string, url: string, options: ExtractOptio
       publishedTime: readMeta(document, "article:published_time"),
     };
 
+    // Unmarked pages still go through Readability; og:type/JSON-LD is a hint,
+    // not a requirement. Many real essays (grugbrain.dev, indie blogs) never
+    // declare Article schema. Forced extracts also try parse when the
+    // readerable heuristic is false (short paragraphs, unusual markup).
     const readerable = isProbablyReaderable(document);
     let parsed: ReturnType<Readability["parse"]> = null;
-    if (readerable) {
+    if (readerable || forceArticle) {
       try {
         parsed = new Readability(document.cloneNode(true) as Document).parse();
       } catch {
@@ -410,7 +412,9 @@ export function extractFromHtml(html: string, url: string, options: ExtractOptio
       fragmentClose = fragment.close;
       contentRoot = fragment.root;
     } else if (articleEvidence || forceArticle) {
-      const fallback = narrowArticleFallback(document);
+      const fallback =
+        narrowArticleFallback(document) ??
+        (forceArticle ? wideBodyFallback(document) : null);
       if (!fallback) {
         throw new UnsupportedContentError("not_an_article", "No readable article content found");
       }
@@ -428,10 +432,13 @@ export function extractFromHtml(html: string, url: string, options: ExtractOptio
         `Extracted content is a ${extractedShell.replace(/_/g, " ")} shell`,
       );
     }
-    if (wordCount(text) < MIN_WORDS) {
+    const lenient = articleEvidence || forceArticle;
+    const minWords = lenient ? MIN_WORDS : MIN_WORDS_UNMARKED;
+    const maxLinkDensity = lenient ? MAX_LINK_DENSITY : MAX_LINK_DENSITY_UNMARKED;
+    if (wordCount(text) < minWords) {
       throw new UnsupportedContentError("too_short", "Extracted content is too short to read");
     }
-    if (linkDensity(contentRoot) > MAX_LINK_DENSITY) {
+    if (linkDensity(contentRoot) > maxLinkDensity) {
       throw new UnsupportedContentError("not_an_article", "Content is mostly links, not an article");
     }
 
@@ -479,6 +486,15 @@ function narrowArticleFallback(document: Document): Element | null {
     .sort((a, b) => (b.textContent ?? "").length - (a.textContent ?? "").length);
   if (viable.length === 0) return null;
   return viable[0].cloneNode(true) as Element;
+}
+
+/** Last-resort body capture for a user-forced article with no <article> node. */
+function wideBodyFallback(document: Document): Element | null {
+  const body = document.body;
+  if (!body) return null;
+  if (wordCount(body.textContent ?? "") < MIN_WORDS) return null;
+  if (linkDensity(body) > MAX_LINK_DENSITY) return null;
+  return body.cloneNode(true) as Element;
 }
 
 function parseFragment(html: string): { root: Element; close: () => void } {

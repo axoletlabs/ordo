@@ -262,7 +262,7 @@ export class BookmarksService implements OnApplicationBootstrap {
         if (!bookmark.articleUndoSnapshot && bookmark.fetchStatus !== "ok") {
           data.articleUndoSnapshot = serializeArticleUndoSnapshot(bookmark);
         }
-        if (!bookmark.contentHtml) {
+        if (bookmark.fetchStatus !== "ok" || !bookmark.contentHtml) {
           data.fetchStatus = "pending";
           data.extractionReason = null;
         }
@@ -283,7 +283,7 @@ export class BookmarksService implements OnApplicationBootstrap {
       data,
       select: LIST_SELECT,
     });
-    if (changes.contentKindOverride === "article" && !bookmark.contentHtml) {
+    if (changes.contentKindOverride === "article" && (bookmark.fetchStatus !== "ok" || !bookmark.contentHtml)) {
       this.extraction.enqueue([
         {
           bookmarkId,

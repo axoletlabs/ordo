@@ -110,8 +110,8 @@ export function classifyDestination(url: URL): ReaderRejectionReason | null {
     }
   }
 
-  // Site roots are not skipped: many essays live at `/`. Automatic
-  // classification still requires article evidence after fetch.
+  // Site roots are not skipped: many essays live at `/` (grugbrain.dev, …).
+  // Link-heavy homepages still fail Readability / quality gates after fetch.
 
   if (pathnameLooksLikeCommerce(path)) return "not_an_article";
 
