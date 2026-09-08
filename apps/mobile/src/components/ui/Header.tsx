@@ -16,6 +16,7 @@ import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
+import { afterPress } from "../../lib/after-press";
 import { layout, spacing } from "../../theme/tokens";
 import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
 
@@ -80,9 +81,11 @@ export function Header({
 
   const handleBack = () => {
     haptics.light();
-    if (onBack) onBack();
-    else if (router.canGoBack()) router.back();
-    else router.replace("/");
+    afterPress(() => {
+      if (onBack) onBack();
+      else if (router.canGoBack()) router.back();
+      else router.replace("/");
+    });
   };
 
   const titleEl = (

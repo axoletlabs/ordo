@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { Modal, ScrollView, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Button } from "../ui/Button";
 import { PanelHeader } from "../ui/PanelHeader";
+import { FloatingPanel } from "../ui/FloatingPanel";
 import { Text } from "../ui/Text";
 import { toast } from "../ui/toast-store";
 import { downloadBackupCodes } from "../../lib/backup-codes-file";
@@ -21,7 +22,7 @@ export function BackupCodesDialog({
   codes: string[] | null;
   onClose: () => void;
 }) {
-  const { palette, shadows } = useTheme();
+  const { palette } = useTheme();
   const [saving, setSaving] = useState(false);
   const visible = !!codes?.length;
 
@@ -40,90 +41,47 @@ export function BackupCodesDialog({
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      statusBarTranslucent
-      onRequestClose={onClose}
-    >
-      <View style={styles.root}>
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: palette.overlay }]} />
+    <FloatingPanel visible={visible} onDismiss={onClose} maxWidth={360} dismissible={false}>
+      <PanelHeader
+        icon="key-outline"
+        iconColor={palette.accent}
+        iconBackground={palette.accentSoft}
+        title="Save your backup codes"
+        subtitle="Each code works once. Download them now — they won't be shown again."
+        style={styles.header}
+      />
+
+      {codes ? (
         <View
-          accessibilityViewIsModal
           style={[
-            styles.dialog,
-            {
-              backgroundColor: palette.surfaceElevated,
-              borderColor: palette.border,
-              ...shadows.level3,
-            },
+            styles.grid,
+            { backgroundColor: palette.surface, borderColor: palette.border },
           ]}
         >
-          <ScrollView
-            bounces={false}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            <PanelHeader
-              icon="key-outline"
-              iconColor={palette.accent}
-              iconBackground={palette.accentSoft}
-              title="Save your backup codes"
-              subtitle="Each code works once. Download them now — they won't be shown again."
-              style={styles.header}
-            />
-
-            {codes ? (
-              <View
-                style={[
-                  styles.grid,
-                  { backgroundColor: palette.surface, borderColor: palette.border },
-                ]}
-              >
-                {codes.map((code) => (
-                  <Text key={code} variant="mono" style={styles.code}>
-                    {code}
-                  </Text>
-                ))}
-              </View>
-            ) : null}
-
-            <View style={styles.actions}>
-              <Button
-                label="Download"
-                variant="primary"
-                size="lg"
-                block
-                loading={saving}
-                onPress={() => void save()}
-              />
-              <Button label="Done" variant="ghost" block onPress={onClose} />
-            </View>
-          </ScrollView>
+          {codes.map((code) => (
+            <Text key={code} variant="mono" style={styles.code}>
+              {code}
+            </Text>
+          ))}
         </View>
+      ) : null}
+
+      <View style={styles.actions}>
+        <Button
+          label="Download"
+          variant="primary"
+          size="lg"
+          block
+          loading={saving}
+          onPress={() => void save()}
+        />
+        <Button label="Done" variant="ghost" block onPress={onClose} />
       </View>
-    </Modal>
+    </FloatingPanel>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: spacing[20],
-  },
-  dialog: {
-    width: "100%",
-    maxWidth: 360,
-    maxHeight: "88%",
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius["3xl"],
-    paddingHorizontal: spacing[16],
-    paddingTop: spacing[16],
-    paddingBottom: spacing[12],
-  },
   header: { marginBottom: 0 },
   grid: {
     marginTop: spacing[12],

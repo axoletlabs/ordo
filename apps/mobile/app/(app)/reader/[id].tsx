@@ -13,6 +13,7 @@ export default function ReaderScreen() {
 
   return (
     <ReaderPane
+      key={`${bookmarkId}:${viewParam ?? "auto"}`}
       bookmarkId={bookmarkId}
       initialSurface={viewParam === "browser" ? "browser" : "auto"}
     />

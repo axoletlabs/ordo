@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Image, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { Image } from "expo-image";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { authApi } from "../../lib/api/auth";
@@ -39,7 +40,14 @@ export function UserAvatar({
 
   const radius = size / 2;
   if (uri) {
-    return <Image source={{ uri }} style={{ width: size, height: size, borderRadius: radius }} />;
+    return (
+      <Image
+        source={{ uri }}
+        style={{ width: size, height: size, borderRadius: radius }}
+        contentFit="cover"
+        cachePolicy="memory-disk"
+      />
+    );
   }
 
   const bg = user ? avatarColor(user.id || user.displayName) : palette.surfaceSecondary;

@@ -11,9 +11,11 @@ import { Badge } from "../ui/Badge";
 import { SelectionMark } from "./SelectionMark";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
+import { afterPress } from "../../lib/after-press";
 import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { radius, spacing } from "../../theme/tokens";
-import { SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
+import { folderKey, SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
+import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
 import { DEFAULT_FOLDER_ICON, type FolderDto } from "@ordo/shared";
 
 export interface FolderRowProps {
@@ -25,10 +27,13 @@ export interface FolderRowProps {
   highlighted?: boolean;
 }
 
-export function FolderRow({ folder, onPress, onMore, selected, selectionMode, highlighted }: FolderRowProps) {
+export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore, selected, selectionMode, highlighted: highlightedProp }: FolderRowProps) {
   const { palette } = useTheme();
   const moreRef = React.useRef<View>(null);
   const [hovered, setHovered] = React.useState(false);
+  const menuKey = folderKey(folder.id);
+  const highlightedFromMenu = useMenuHighlightStore((s) => s.key === menuKey);
+  const highlighted = highlightedProp ?? highlightedFromMenu;
   const unread = folder.unreadCount > 0;
   const countLabel = `${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}`;
   const openMore = (event?: { nativeEvent: { pageX: number; pageY: number } }) => {
@@ -71,8 +76,12 @@ export function FolderRow({ folder, onPress, onMore, selected, selectionMode, hi
         }
         style={styles.body}
         onPress={() => {
-          if (!selectionMode) haptics.light();
-          onPress(folder);
+          if (selectionMode) {
+            onPress(folder);
+            return;
+          }
+          haptics.light();
+          afterPress(() => onPress(folder));
         }}
         onLongPress={selectionMode ? undefined : onMore ? (event) => openMore(event) : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}
@@ -139,7 +148,7 @@ export function FolderRow({ folder, onPress, onMore, selected, selectionMode, hi
       ) : null}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrap: {

@@ -24,9 +24,8 @@ export interface TagSelectListProps {
   maxHeight?: number;
   autoCreate?: boolean;
   /**
-   * Opens the caller's "New tag" panel. The panel must be rendered OUTSIDE any
-   * FloatingPanel/Modal hosting this list — Android does not support nested
-   * modals, and mounting one here blanks the hosting sheet.
+   * FloatingPanel hosting this list — a nested overlay is fine, but the
+   * create-tag panel is still rendered by the caller so the list stays simple.
    */
   onRequestCreateTag?: () => void;
 }

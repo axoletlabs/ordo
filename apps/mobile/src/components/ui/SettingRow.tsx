@@ -6,6 +6,7 @@ import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { layout, radius, spacing } from "../../theme/tokens";
+import { afterPress } from "../../lib/after-press";
 
 export interface SettingRowProps {
   icon?: keyof typeof Ionicons.glyphMap;
@@ -73,7 +74,10 @@ export function SettingRow({
   if (!onPress) return <View style={styles.pad}>{content}</View>;
   return (
     <View style={styles.pad}>
-      <PressableScale style={styles.press} dim onPress={onPress}>
+      <PressableScale
+        style={styles.press}
+        onPress={() => afterPress(() => onPress())}
+      >
         {content}
       </PressableScale>
     </View>

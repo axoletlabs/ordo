@@ -23,6 +23,7 @@ import { useFolderTokenStore } from "../src/store/folder-tokens";
 import { useOnlineStore, useOnline } from "../src/lib/online";
 import { scheduleProactiveRefresh } from "../src/lib/api/client";
 import { ToastHost } from "../src/components/ui/ToastHost";
+import { OverlayHost } from "../src/components/ui/overlay-host";
 import { Banner } from "../src/components/ui/Banner";
 import { UpdateReadyWatcher } from "../src/components/UpdateReadyWatcher";
 import { NativeUpdateProgress } from "../src/components/NativeUpdateProgress";
@@ -37,6 +38,9 @@ import {
   markRestartSplashPresented,
   useUpdateRestartStore,
 } from "../src/store/update-restart";
+import { enableFreeze } from "react-native-screens";
+
+enableFreeze(true);
 
 // Hold the native splash as early as possible so it covers JS load + hydration
 // (otherwise its auto-hide leaves a white frame before React paints).
@@ -104,34 +108,36 @@ function RootShell() {
 
   return (
     <>
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: palette.background },
-          animation: "fade",
-          animationDuration: 260,
-        }}
-      >
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(app)" />
-      </Stack>
-      <ConnectionBanner />
-      <ToastHost />
-      <IncomingShareHandler />
-      {!showSplash && !restarting && routeMatchesAuth && status === "authenticated" ? (
-        <AddBookmarkSheet
-          visible={!!sharedUrl}
-          onDismiss={() => {
-            clearSharedUrl();
-            returnToShareSender();
+      <OverlayHost>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: palette.background },
+            animation: "fade",
+            animationDuration: 260,
           }}
-          folderId={null}
-          allowFolderSelection
-          initialUrl={sharedUrl ?? undefined}
-        />
-      ) : null}
-      <UpdateReadyWatcher />
-      <NativeUpdateProgress />
+        >
+          <Stack.Screen name="(auth)" />
+          <Stack.Screen name="(app)" />
+        </Stack>
+        <ConnectionBanner />
+        <IncomingShareHandler />
+        {!showSplash && !restarting && routeMatchesAuth && status === "authenticated" ? (
+          <AddBookmarkSheet
+            visible={!!sharedUrl}
+            onDismiss={() => {
+              clearSharedUrl();
+              returnToShareSender();
+            }}
+            folderId={null}
+            allowFolderSelection
+            initialUrl={sharedUrl ?? undefined}
+          />
+        ) : null}
+        <UpdateReadyWatcher />
+        <NativeUpdateProgress />
+      </OverlayHost>
+      <ToastHost />
       {(showSplash || restarting) && (
         <LaunchSplash
           transitionIn={restarting}

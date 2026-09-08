@@ -1,39 +1,39 @@
 /**
  * Global bookmark search (title, url, article text). Debounced + infinite.
  */
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
 import { Ionicons } from "@expo/vector-icons";
-import { Header, HeaderActions, HeaderIconButton } from "../../src/components/ui/Header";
-import { SelectionHeader } from "../../src/components/bookmarks/SelectionHeader";
-import { SelectionTools } from "../../src/components/bookmarks/SelectionTools";
-import { BookmarkActionsSheet } from "../../src/components/bookmarks/BookmarkActionsSheet";
-import { MoveSheet } from "../../src/components/bookmarks/MoveSheet";
-import { EditTagsSheet } from "../../src/components/tags/EditTagsSheet";
-import { ScreenContent } from "../../src/components/ui/ScreenContent";
-import { Input } from "../../src/components/ui/Input";
-import { EmptyState } from "../../src/components/ui/EmptyState";
-import { Button } from "../../src/components/ui/Button";
-import { BookmarkListSkeleton } from "../../src/components/ui/BookmarkListSkeleton";
-import { BookmarkRow } from "../../src/components/bookmarks/BookmarkRow";
-import { ExtractionProgressLine } from "../../src/components/bookmarks/ExtractionProgressLine";
-import { TagChip } from "../../src/components/tags/TagChip";
-import { ReaderPane, ReaderPanePlaceholder } from "../../src/components/reader/ReaderPane";
-import { useInfiniteSearch, useToggleRead, useDeleteBookmark } from "../../src/hooks/use-bookmarks";
-import { bookmarkKey, useSelectionMode } from "../../src/hooks/use-selection";
-import { useTags } from "../../src/hooks/use-tags";
-import { useResponsiveLayout } from "../../src/hooks/use-responsive-layout";
-import { useFloatingDockMetrics } from "../../src/hooks/use-floating-dock-metrics";
-import { useTheme } from "../../src/theme/ThemeProvider";
-import { flattenPages } from "../../src/lib/api/query-keys";
-import { errorMessage } from "../../src/lib/error-message";
-import { haptics } from "../../src/lib/haptics";
-import { layout, radius, spacing } from "../../src/theme/tokens";
+import { Header, HeaderActions, HeaderIconButton } from "../../../src/components/ui/Header";
+import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
+import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
+import { BookmarkActionsSheet } from "../../../src/components/bookmarks/BookmarkActionsSheet";
+import { MoveSheet } from "../../../src/components/bookmarks/MoveSheet";
+import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
+import { ScreenContent } from "../../../src/components/ui/ScreenContent";
+import { Input } from "../../../src/components/ui/Input";
+import { EmptyState } from "../../../src/components/ui/EmptyState";
+import { Button } from "../../../src/components/ui/Button";
+import { BookmarkListSkeleton } from "../../../src/components/ui/BookmarkListSkeleton";
+import { BookmarkRow } from "../../../src/components/bookmarks/BookmarkRow";
+import { ExtractionProgressLine } from "../../../src/components/bookmarks/ExtractionProgressLine";
+import { TagChip } from "../../../src/components/tags/TagChip";
+import { ReaderPane, ReaderPanePlaceholder } from "../../../src/components/reader/ReaderPane";
+import { useInfiniteSearch, useToggleRead, useDeleteBookmark } from "../../../src/hooks/use-bookmarks";
+import { bookmarkKey, useSelectionMode } from "../../../src/hooks/use-selection";
+import { useTags } from "../../../src/hooks/use-tags";
+import { useResponsiveLayout } from "../../../src/hooks/use-responsive-layout";
+import { useFloatingDockMetrics } from "../../../src/hooks/use-floating-dock-metrics";
+import { useTheme } from "../../../src/theme/ThemeProvider";
+import { flattenPages } from "../../../src/lib/api/query-keys";
+import { errorMessage } from "../../../src/lib/error-message";
+import { haptics } from "../../../src/lib/haptics";
+import { layout, radius, spacing } from "../../../src/theme/tokens";
 import type { BookmarkDto } from "@ordo/shared";
-import { openListBookmark } from "../../src/lib/open-website";
-import type { MenuAnchorRect } from "../../src/lib/menu-anchor";
+import { openListBookmark } from "../../../src/lib/open-website";
+import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
 
 export default function SearchScreen() {
   const { palette } = useTheme();
@@ -59,6 +59,8 @@ export default function SearchScreen() {
   const [moveTarget, setMoveTarget] = useState<BookmarkDto | null>(null);
   const [editTagsBm, setEditTagsBm] = useState<BookmarkDto | null>(null);
   const selection = useSelectionMode();
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
   const toggleRead = useToggleRead(null);
   const deleteBm = useDeleteBookmark(null);
   const { data: allTags } = useTags();
@@ -91,7 +93,7 @@ export default function SearchScreen() {
     }
   }, [q, routeQuery]);
 
-  const openReader = (b: BookmarkDto) => {
+  const openReader = useCallback((b: BookmarkDto) => {
     openListBookmark(b, () => {
       if (hasDetailPane) {
         router.push({
@@ -102,15 +104,26 @@ export default function SearchScreen() {
       }
       router.push(`/reader/${b.id}`);
     });
-  };
+  }, [hasDetailPane, q, router]);
 
-  const toggleTag = (tagId: string) => {
-    if (selection.active) return;
+  const onPressBookmark = useCallback((bookmark: BookmarkDto) => {
+    const sel = selectionRef.current;
+    if (sel.active) sel.toggle(bookmarkKey(bookmark.id));
+    else openReader(bookmark);
+  }, [openReader]);
+
+  const onMoreBookmark = useCallback((bookmark: BookmarkDto, menuAnchor: MenuAnchorRect) => {
+    setBookmarkAnchor(menuAnchor);
+    setActionBm(bookmark);
+  }, []);
+
+  const toggleTag = useCallback((tagId: string) => {
+    if (selectionRef.current.active) return;
     haptics.selection();
     setTagFilter((prev) =>
       prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
     );
-  };
+  }, []);
 
   const onToggleRead = (bookmark: BookmarkDto) => {
     haptics.light();
@@ -138,7 +151,7 @@ export default function SearchScreen() {
   const listPane = (
     <FlashList
       data={items}
-      extraData={`${selection.revision}:${actionBm?.id ?? ""}`}
+      extraData={selection.revision}
       keyExtractor={(b: BookmarkDto) => b.id}
       renderItem={({ item }: { item: BookmarkDto }) => (
         <BookmarkRow
@@ -149,15 +162,8 @@ export default function SearchScreen() {
               ? selection.has(bookmarkKey(item.id))
               : hasDetailPane && item.id === selectedBookmarkId
           }
-          onPress={(bookmark) => {
-            if (selection.active) selection.toggle(bookmarkKey(bookmark.id));
-            else openReader(bookmark);
-          }}
-          onMore={(bookmark, menuAnchor) => {
-            setBookmarkAnchor(menuAnchor);
-            setActionBm(bookmark);
-          }}
-          highlighted={actionBm?.id === item.id}
+          onPress={onPressBookmark}
+          onMore={onMoreBookmark}
           onTagPress={toggleTag}
         />
       )}

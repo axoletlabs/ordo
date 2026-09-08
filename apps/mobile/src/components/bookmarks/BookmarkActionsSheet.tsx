@@ -14,6 +14,8 @@ import { bookmarkCanBeArticle, bookmarkIsArticle } from "../../lib/bookmark-read
 import * as bookmarkHooks from "../../hooks/use-bookmarks";
 import { toast } from "../ui/toast-store";
 import { errorMessage } from "../../lib/error-message";
+import { bookmarkKey } from "../../hooks/use-selection";
+import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
 import type { MenuAnchorRect } from "../../lib/menu-anchor";
 import type { BookmarkDto } from "@ordo/shared";
 
@@ -55,6 +57,16 @@ export function BookmarkActionsSheet({
   useEffect(() => {
     if (visible) setMode("menu");
   }, [visible]);
+
+  useEffect(() => {
+    if (!visible || !bookmark) return;
+    const key = bookmarkKey(bookmark.id);
+    useMenuHighlightStore.getState().set(key);
+    return () => {
+      const store = useMenuHighlightStore.getState();
+      if (store.key === key) store.set(null);
+    };
+  }, [visible, bookmark]);
 
   if (!bookmark) return null;
 

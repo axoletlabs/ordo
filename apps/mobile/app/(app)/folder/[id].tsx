@@ -3,7 +3,7 @@
  * Handles protected folders (inline unlock → token cached → list loads),
  * optimistic toggle/delete/move, mark-all-read, and folder actions.
  */
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
@@ -79,6 +79,8 @@ export default function FolderDetailScreen() {
   const [folderActions, setFolderActions] = useState(false);
   const [folderAnchor, setFolderAnchor] = useState<MenuAnchorRect | null>(null);
   const selection = useSelectionMode();
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
 
   const protectedError = !!bookmarks.error && isFolderProtected(bookmarks.error) && !unlocked;
   const showLocked = locked || protectedError;
@@ -93,7 +95,7 @@ export default function FolderDetailScreen() {
   // Root isn't a folder row, so derive unread state from the loaded items.
   const hasUnread = folder ? folder.unreadCount > 0 : items.some((b) => !b.isRead);
 
-  const openReader = (b: BookmarkDto) => {
+  const openReader = useCallback((b: BookmarkDto) => {
     openListBookmark(b, () => {
       if (hasDetailPane) {
         router.push({
@@ -104,7 +106,18 @@ export default function FolderDetailScreen() {
       }
       router.push(`/reader/${b.id}`);
     });
-  };
+  }, [hasDetailPane, folderId, router]);
+
+  const onPressBookmark = useCallback((bookmark: BookmarkDto) => {
+    const sel = selectionRef.current;
+    if (sel.active) sel.toggle(bookmarkKey(bookmark.id));
+    else openReader(bookmark);
+  }, [openReader]);
+
+  const onMoreBookmark = useCallback((b: BookmarkDto, anchor: MenuAnchorRect) => {
+    setBookmarkAnchor(anchor);
+    setActionBm(b);
+  }, []);
 
   const loadMore = () => {
     if (bookmarks.hasNextPage && !bookmarks.isFetchingNextPage) {
@@ -140,7 +153,7 @@ export default function FolderDetailScreen() {
   const listPane = (
     <FlashList
       data={items}
-      extraData={`${selection.revision}:${actionBm?.id ?? ""}`}
+      extraData={selection.revision}
       keyExtractor={(b: BookmarkDto) => b.id}
       renderItem={({ item }: { item: BookmarkDto }) => (
         <BookmarkRow
@@ -151,15 +164,8 @@ export default function FolderDetailScreen() {
               ? selection.has(bookmarkKey(item.id))
               : hasDetailPane && item.id === selectedBookmarkId
           }
-          onPress={(bookmark) => {
-            if (selection.active) selection.toggle(bookmarkKey(bookmark.id));
-            else openReader(bookmark);
-          }}
-          onMore={(b, anchor) => {
-            setBookmarkAnchor(anchor);
-            setActionBm(b);
-          }}
-          highlighted={actionBm?.id === item.id}
+          onPress={onPressBookmark}
+          onMore={onMoreBookmark}
         />
       )}
       estimatedItemSize={108}

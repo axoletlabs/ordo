@@ -3,7 +3,8 @@
  * long-press reveals row actions. Hold the create button to multi-select.
  */
 import React from "react";
-import { ActivityIndicator, Image, Platform, Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from "react-native";
+import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { PressableScale } from "../ui/PressableScale";
@@ -14,9 +15,11 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { domainFromUrl, relativeTime } from "../../lib/format";
 import { bookmarkIsArticle, bookmarkOpensAsWebsite } from "../../lib/bookmark-reader";
 import { haptics } from "../../lib/haptics";
+import { afterPress } from "../../lib/after-press";
 import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { radius, spacing } from "../../theme/tokens";
-import { SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
+import { bookmarkKey, SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
+import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
 import type { BookmarkDto } from "@ordo/shared";
 
 /** Compact tags shown inline on a row before overflow. */
@@ -36,13 +39,13 @@ export interface BookmarkRowProps {
   omitTagIds?: readonly string[];
 }
 
-export function BookmarkRow({
+export const BookmarkRow = React.memo(function BookmarkRow({
   bookmark,
   onPress,
   onMore,
   selected,
   selectionMode,
-  highlighted,
+  highlighted: highlightedProp,
   onTagPress,
   omitTagIds,
 }: BookmarkRowProps) {
@@ -50,6 +53,9 @@ export function BookmarkRow({
   const router = useRouter();
   const moreRef = React.useRef<View>(null);
   const [hovered, setHovered] = React.useState(false);
+  const menuKey = bookmarkKey(bookmark.id);
+  const highlightedFromMenu = useMenuHighlightStore((s) => s.key === menuKey);
+  const highlighted = highlightedProp ?? highlightedFromMenu;
   const titleColor = bookmark.isRead ? "secondary" : "primary";
   const domain = bookmark.domain || domainFromUrl(bookmark.url);
   const title = bookmark.title || domain;
@@ -89,7 +95,7 @@ export function BookmarkRow({
       return;
     }
     haptics.light();
-    router.push(`/tags/${tagId}`);
+    afterPress(() => router.push(`/tags/${tagId}`));
   };
 
   const openMore = (event?: { nativeEvent: { pageX: number; pageY: number } }) => {
@@ -132,8 +138,11 @@ export function BookmarkRow({
               : undefined
         }
         style={styles.body}
-        onPress={() => onPress(bookmark)}
-        onLongPress={selectionMode ? undefined : onMore ? (event) => openMore(event) : undefined}
+        onPress={() => {
+          if (selectionMode) onPress(bookmark);
+          else afterPress(() => onPress(bookmark));
+        }}
+        onLongPress={selectionMode ? undefined : onMore ? () => openMore() : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         {selectionMode ? (
@@ -156,7 +165,8 @@ export function BookmarkRow({
               <Image
                 source={{ uri: faviconUrl }}
                 style={styles.favicon}
-                resizeMode="contain"
+                contentFit="contain"
+                cachePolicy="memory-disk"
                 accessible={false}
                 onError={() => setFailedFavicon(faviconUrl)}
               />
@@ -261,7 +271,7 @@ export function BookmarkRow({
       ) : null}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrap: {

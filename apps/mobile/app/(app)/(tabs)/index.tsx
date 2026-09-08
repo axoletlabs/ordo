@@ -1,53 +1,54 @@
 /** Bookmarks home: folders and unfiled bookmarks in one library list. */
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
 import { Ionicons } from "@expo/vector-icons";
-import { Header, HeaderActions, HeaderIconButton, HEADER_CONTROL_SIZE } from "../../src/components/ui/Header";
-import { SelectionHeader } from "../../src/components/bookmarks/SelectionHeader";
-import { SelectionTools } from "../../src/components/bookmarks/SelectionTools";
-import { FAB, FABLayer } from "../../src/components/ui/FAB";
-import { ContextMenu, ContextMenuItem } from "../../src/components/ui/ContextMenu";
-import { Button } from "../../src/components/ui/Button";
-import { Text } from "../../src/components/ui/Text";
-import { PressableScale } from "../../src/components/ui/PressableScale";
-import { ScreenContent } from "../../src/components/ui/ScreenContent";
-import { BookmarkListSkeleton } from "../../src/components/ui/BookmarkListSkeleton";
-import { EmptyState } from "../../src/components/ui/EmptyState";
-import { AddBookmarkSheet } from "../../src/components/bookmarks/AddBookmarkSheet";
-import { BookmarkActionsSheet } from "../../src/components/bookmarks/BookmarkActionsSheet";
-import { FolderRow } from "../../src/components/bookmarks/FolderRow";
-import { FolderActionsSheet } from "../../src/components/bookmarks/FolderActionsSheet";
-import { CreateFolderPanel } from "../../src/components/bookmarks/CreateFolderPanel";
-import { MoveSheet } from "../../src/components/bookmarks/MoveSheet";
-import { BookmarkRow } from "../../src/components/bookmarks/BookmarkRow";
-import { ExtractionProgressLine } from "../../src/components/bookmarks/ExtractionProgressLine";
-import { EditTagsSheet } from "../../src/components/tags/EditTagsSheet";
-import { useFolders } from "../../src/hooks/use-folders";
-import { useTags } from "../../src/hooks/use-tags";
+import { Header, HeaderActions, HeaderIconButton, HEADER_CONTROL_SIZE } from "../../../src/components/ui/Header";
+import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
+import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
+import { FAB, FABLayer } from "../../../src/components/ui/FAB";
+import { ContextMenu, ContextMenuItem } from "../../../src/components/ui/ContextMenu";
+import { Button } from "../../../src/components/ui/Button";
+import { Text } from "../../../src/components/ui/Text";
+import { PressableScale } from "../../../src/components/ui/PressableScale";
+import { ScreenContent } from "../../../src/components/ui/ScreenContent";
+import { BookmarkListSkeleton } from "../../../src/components/ui/BookmarkListSkeleton";
+import { EmptyState } from "../../../src/components/ui/EmptyState";
+import { AddBookmarkSheet } from "../../../src/components/bookmarks/AddBookmarkSheet";
+import { BookmarkActionsSheet } from "../../../src/components/bookmarks/BookmarkActionsSheet";
+import { FolderRow } from "../../../src/components/bookmarks/FolderRow";
+import { FolderActionsSheet } from "../../../src/components/bookmarks/FolderActionsSheet";
+import { CreateFolderPanel } from "../../../src/components/bookmarks/CreateFolderPanel";
+import { MoveSheet } from "../../../src/components/bookmarks/MoveSheet";
+import { BookmarkRow } from "../../../src/components/bookmarks/BookmarkRow";
+import { ExtractionProgressLine } from "../../../src/components/bookmarks/ExtractionProgressLine";
+import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
+import { useFolders } from "../../../src/hooks/use-folders";
+import { useTags } from "../../../src/hooks/use-tags";
 import {
   useDeleteBookmark,
   useInfiniteBookmarks,
   useMarkAllRead,
   useToggleRead,
-} from "../../src/hooks/use-bookmarks";
-import { useFloatingDockMetrics } from "../../src/hooks/use-floating-dock-metrics";
-import { bookmarkKey, folderKey, useSelectionMode } from "../../src/hooks/use-selection";
-import { useTheme } from "../../src/theme/ThemeProvider";
-import { haptics } from "../../src/lib/haptics";
-import { toast } from "../../src/components/ui/toast-store";
-import { markedAsReadToast } from "../../src/lib/copy";
-import { errorMessage } from "../../src/lib/error-message";
-import { flattenPages } from "../../src/lib/api/query-keys";
+} from "../../../src/hooks/use-bookmarks";
+import { useFloatingDockMetrics } from "../../../src/hooks/use-floating-dock-metrics";
+import { bookmarkKey, folderKey, useSelectionMode } from "../../../src/hooks/use-selection";
+import { useTheme } from "../../../src/theme/ThemeProvider";
+import { haptics } from "../../../src/lib/haptics";
+import { afterPress } from "../../../src/lib/after-press";
+import { toast } from "../../../src/components/ui/toast-store";
+import { markedAsReadToast } from "../../../src/lib/copy";
+import { errorMessage } from "../../../src/lib/error-message";
+import { flattenPages } from "../../../src/lib/api/query-keys";
 import {
   useSettingsStore,
   type CreateButtonAction,
-} from "../../src/store/settings";
-import { layout, spacing } from "../../src/theme/tokens";
+} from "../../../src/store/settings";
+import { layout, spacing } from "../../../src/theme/tokens";
 import { type BookmarkDto, type FolderDto } from "@ordo/shared";
-import { openListBookmark } from "../../src/lib/open-website";
-import type { MenuAnchorRect } from "../../src/lib/menu-anchor";
+import { openListBookmark } from "../../../src/lib/open-website";
+import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
 
 type LibraryItem =
   | { type: "folder"; folder: FolderDto }
@@ -76,6 +77,8 @@ export default function BookmarksScreen() {
   const [moveTarget, setMoveTarget] = useState<BookmarkDto | null>(null);
   const [editTagsTarget, setEditTagsTarget] = useState<BookmarkDto | null>(null);
   const selection = useSelectionMode();
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
 
   const items = useMemo(() => flattenPages(bookmarks.data?.pages ?? []), [bookmarks.data]);
   const hasUnread = items.some((bookmark) => !bookmark.isRead);
@@ -130,11 +133,40 @@ export default function BookmarksScreen() {
     }
   };
 
-  const openBookmark = (bookmark: BookmarkDto) => {
+  const openBookmark = useCallback((bookmark: BookmarkDto) => {
     openListBookmark(bookmark, () => {
       router.push(`/reader/${bookmark.id}`);
     });
-  };
+  }, [router]);
+
+  const openFolder = useCallback((folder: FolderDto) => {
+    router.push(`/folder/${folder.id}`);
+  }, [router]);
+
+  const onPressFolder = useCallback((selectedFolder: FolderDto) => {
+    const sel = selectionRef.current;
+    if (sel.active) {
+      sel.toggle(folderKey(selectedFolder.id));
+      return;
+    }
+    openFolder(selectedFolder);
+  }, [openFolder]);
+
+  const onMoreFolder = useCallback((selectedFolder: FolderDto, anchor: MenuAnchorRect) => {
+    setFolderAnchor(anchor);
+    setActionsFolder(selectedFolder);
+  }, []);
+
+  const onPressLibraryBookmark = useCallback((bookmark: BookmarkDto) => {
+    const sel = selectionRef.current;
+    if (sel.active) sel.toggle(bookmarkKey(bookmark.id));
+    else openBookmark(bookmark);
+  }, [openBookmark]);
+
+  const onMoreBookmark = useCallback((bookmark: BookmarkDto, anchor: MenuAnchorRect) => {
+    setBookmarkAnchor(anchor);
+    setActionBookmark(bookmark);
+  }, []);
 
   const runCreateAction = (action: CreateButtonAction, anchor?: MenuAnchorRect) => {
     if (action === "menu") {
@@ -157,17 +189,13 @@ export default function BookmarksScreen() {
     return "create a folder";
   };
 
-  const openFolder = (folder: FolderDto) => {
-    router.push(`/folder/${folder.id}`);
-  };
-
   const headerRight = (
     <HeaderActions style={styles.headerActions}>
       <PressableScale
         style={styles.tagsLink}
         onPress={() => {
           haptics.light();
-          router.push("/tags");
+          afterPress(() => router.push("/tags"));
         }}
         hitSlop={8}
         accessibilityRole="button"
@@ -241,18 +269,8 @@ export default function BookmarksScreen() {
                     folder={item.folder}
                     selectionMode={selection.active}
                     selected={selection.has(folderKey(item.folder.id))}
-                    onPress={(selectedFolder) => {
-                      if (selection.active) {
-                        selection.toggle(folderKey(selectedFolder.id));
-                        return;
-                      }
-                      openFolder(selectedFolder);
-                    }}
-                    onMore={(selectedFolder, anchor) => {
-                      setFolderAnchor(anchor);
-                      setActionsFolder(selectedFolder);
-                    }}
-                    highlighted={actionsFolder?.id === item.folder.id}
+                    onPress={onPressFolder}
+                    onMore={onMoreFolder}
                   />
                 );
               }
@@ -261,19 +279,12 @@ export default function BookmarksScreen() {
                   bookmark={item.bookmark}
                   selectionMode={selection.active}
                   selected={selection.has(bookmarkKey(item.bookmark.id))}
-                  onPress={(bookmark) => {
-                    if (selection.active) selection.toggle(bookmarkKey(bookmark.id));
-                    else openBookmark(bookmark);
-                  }}
-                  onMore={(bookmark, anchor) => {
-                    setBookmarkAnchor(anchor);
-                    setActionBookmark(bookmark);
-                  }}
-                  highlighted={actionBookmark?.id === item.bookmark.id}
+                  onPress={onPressLibraryBookmark}
+                  onMore={onMoreBookmark}
                 />
               );
             }}
-            extraData={`${selection.revision}:${actionBookmark?.id ?? ""}:${actionsFolder?.id ?? ""}`}
+            extraData={selection.revision}
             estimatedItemSize={108}
             ListEmptyComponent={
               libraryLoading ? (
@@ -330,7 +341,7 @@ export default function BookmarksScreen() {
           label="Save bookmark"
           onPress={() => {
             setCreateMenuOpen(false);
-            setTimeout(() => setAddOpen(true), 100);
+            setAddOpen(true);
           }}
         />
         <ContextMenuItem
@@ -338,7 +349,7 @@ export default function BookmarksScreen() {
           label="New folder"
           onPress={() => {
             setCreateMenuOpen(false);
-            setTimeout(() => setCreateOpen(true), 100);
+            setCreateOpen(true);
           }}
         />
       </ContextMenu>

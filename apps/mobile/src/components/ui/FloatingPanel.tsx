@@ -1,8 +1,6 @@
 import React from "react";
 import {
-  Animated,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   Pressable,
   StyleSheet,
@@ -11,8 +9,11 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
+import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { OverlayPortal } from "./overlay-host";
 import { useTheme } from "../../theme/ThemeProvider";
+import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { radius, spacing } from "../../theme/tokens";
 
 export interface FloatingPanelProps {
@@ -41,34 +42,33 @@ export function FloatingPanel({
   const { palette, shadows } = useTheme();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const progress = React.useRef(new Animated.Value(0)).current;
+  const { rendered, progress } = useOverlayPresence(visible, onDismiss);
 
   React.useEffect(() => {
-    if (!visible) return;
-    progress.setValue(0);
-    requestAnimationFrame(() => {
-      Animated.spring(progress, {
-        toValue: 1,
-        damping: 22,
-        stiffness: 260,
-        mass: 0.75,
-        useNativeDriver: true,
-      }).start();
-    });
-  }, [progress, visible]);
+    if (visible) onShow?.();
+  }, [onShow, visible]);
+
+  const scrimStyle = useAnimatedStyle(() => ({
+    opacity: progress.value,
+  }));
+  const panelStyle = useAnimatedStyle(() => ({
+    opacity: progress.value,
+    transform: [
+      { translateY: interpolate(progress.value, [0, 1], [8, 0]) },
+      { scale: interpolate(progress.value, [0, 1], [0.97, 1]) },
+    ],
+  }));
+
+  if (!rendered) return null;
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      statusBarTranslucent
-      onShow={onShow}
-      onRequestClose={dismissible ? onDismiss : () => {}}
-    >
+    <OverlayPortal>
       <View accessibilityViewIsModal style={styles.root}>
+        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, scrimStyle]}>
+          <View style={[StyleSheet.absoluteFill, { backgroundColor: palette.overlay }]} />
+        </Animated.View>
         <Pressable
-          style={[StyleSheet.absoluteFill, { backgroundColor: palette.overlay }]}
+          style={StyleSheet.absoluteFill}
           onPress={dismissible ? onDismiss : undefined}
         />
         <KeyboardAvoidingView
@@ -87,12 +87,8 @@ export function FloatingPanel({
                 backgroundColor: palette.surfaceElevated,
                 borderColor: palette.borderStrong,
                 ...shadows.level3,
-                opacity: progress,
-                transform: [
-                  { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [8, 0] }) },
-                  { scale: progress.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) },
-                ],
               },
+              panelStyle,
               style,
             ]}
           >
@@ -100,12 +96,12 @@ export function FloatingPanel({
           </Animated.View>
         </KeyboardAvoidingView>
       </View>
-    </Modal>
+    </OverlayPortal>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 },
+  root: { ...StyleSheet.absoluteFillObject },
   frame: {
     flex: 1,
     alignItems: "center",

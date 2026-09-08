@@ -24,7 +24,7 @@ const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 export type PressableScaleProps = Omit<PressableProps, "onPressIn" | "onPressOut"> & {
   /** Max press depth (0–1). Default 0.97. */
   scaleTo?: number;
-  /** Dim opacity while pressed. Default true. */
+  /** Dim opacity while pressed. Default false — scale is enough feedback. */
   dim?: boolean;
   onPressIn?: (e: GestureResponderEvent) => void;
   onPressOut?: (e: GestureResponderEvent) => void;
@@ -33,7 +33,7 @@ export type PressableScaleProps = Omit<PressableProps, "onPressIn" | "onPressOut
 
 export function PressableScale({
   scaleTo = 0.97,
-  dim = true,
+  dim = false,
   onPressIn,
   onPressOut,
   disabled,

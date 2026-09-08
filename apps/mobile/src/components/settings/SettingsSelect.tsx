@@ -1,5 +1,5 @@
 import React from "react";
-import { Keyboard, Platform, Pressable, StyleSheet, View } from "react-native";
+import { Keyboard, Pressable, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Text } from "../ui/Text";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
@@ -35,15 +35,12 @@ export function SettingsSelect<T extends string>({
   const show = () => {
     haptics.selection();
     Keyboard.dismiss();
-    setTimeout(
-      () => {
-        anchorRef.current?.measureInWindow((x, y, measuredWidth, measuredHeight) => {
-          setAnchor({ x, y, width: measuredWidth, height: measuredHeight });
-          setOpen(true);
-        });
-      },
-      Platform.OS === "web" ? 0 : 160,
-    );
+    requestAnimationFrame(() => {
+      anchorRef.current?.measureInWindow((x, y, measuredWidth, measuredHeight) => {
+        setAnchor({ x, y, width: measuredWidth, height: measuredHeight });
+        setOpen(true);
+      });
+    });
   };
 
   const choose = (next: T) => {

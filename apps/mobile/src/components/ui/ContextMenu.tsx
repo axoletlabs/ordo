@@ -5,9 +5,6 @@
  */
 import React from "react";
 import {
-  Animated,
-  Keyboard,
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -16,10 +13,13 @@ import {
   useWindowDimensions,
   type ViewStyle,
 } from "react-native";
+import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "./Text";
+import { OverlayPortal } from "./overlay-host";
 import { useTheme } from "../../theme/ThemeProvider";
+import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { haptics } from "../../lib/haptics";
 import {
   CONTEXT_MENU_WIDTH,
@@ -48,31 +48,8 @@ export function ContextMenu({
   const { palette, shadows } = useTheme();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const progress = React.useRef(new Animated.Value(0)).current;
+  const { rendered, progress } = useOverlayPresence(visible, onDismiss);
   const [contentHeight, setContentHeight] = React.useState(0);
-  const hasSize = contentHeight > 0;
-
-  React.useEffect(() => {
-    if (!visible) {
-      progress.setValue(0);
-      return;
-    }
-    Keyboard.dismiss();
-  }, [progress, visible]);
-
-  React.useEffect(() => {
-    if (!visible || !hasSize) return;
-    progress.setValue(0);
-    requestAnimationFrame(() => {
-      Animated.spring(progress, {
-        toValue: 1,
-        damping: 22,
-        stiffness: 280,
-        mass: 0.7,
-        useNativeDriver: true,
-      }).start();
-    });
-  }, [hasSize, progress, visible]);
 
   const menuWidth = Math.min(width, Math.max(160, windowWidth - spacing[32]));
   const placed = isMenuAnchorRect(anchor)
@@ -92,14 +69,15 @@ export function ContextMenu({
       };
   const fromY = placed.placement === "below" ? -6 : 6;
 
+  const menuStyle = useAnimatedStyle(() => ({
+    opacity: progress.value,
+    transform: [{ translateY: interpolate(progress.value, [0, 1], [fromY, 0]) }],
+  }));
+
+  if (!rendered) return null;
+
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      statusBarTranslucent
-      onRequestClose={onDismiss}
-    >
+    <OverlayPortal>
       <View accessibilityViewIsModal style={styles.modalRoot}>
         <Pressable
           accessibilityRole="button"
@@ -119,11 +97,8 @@ export function ContextMenu({
               backgroundColor: palette.mode === "dark" ? palette.surfaceSecondary : palette.surfaceElevated,
               borderColor: palette.borderStrong,
               ...shadows.level3,
-              opacity: hasSize ? progress : 0,
-              transform: [
-                { translateY: progress.interpolate({ inputRange: [0, 1], outputRange: [fromY, 0] }) },
-              ],
             },
+            menuStyle,
           ]}
         >
           <ScrollView
@@ -143,7 +118,7 @@ export function ContextMenu({
           </ScrollView>
         </Animated.View>
       </View>
-    </Modal>
+    </OverlayPortal>
   );
 }
 
@@ -200,7 +175,7 @@ export function ContextMenuItem({
 }
 
 const styles = StyleSheet.create({
-  modalRoot: { flex: 1 },
+  modalRoot: { ...StyleSheet.absoluteFillObject },
   menu: {
     position: "absolute",
     overflow: "hidden",

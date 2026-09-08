@@ -38,13 +38,14 @@ module.exports = {
   userInterfaceStyle: "automatic",
   icon: "./assets/icon.png",
   backgroundColor: "#EFE7D2",
-  newArchEnabled: false,
+  newArchEnabled: true,
   updates: {
     url: "https://u.expo.dev/c044b586-2816-42c7-b564-bef8556e21da",
   },
   runtimeVersion: { policy: "fingerprint" },
   plugins: [
     "expo-asset",
+    "expo-image",
     [
       "expo-local-authentication",
       {

@@ -21,6 +21,7 @@ import { errorMessage } from "../../../src/lib/error-message";
 import { formatDate } from "../../../src/lib/format";
 import { haptics } from "../../../src/lib/haptics";
 import { spacing } from "../../../src/theme/tokens";
+import { afterPress } from "../../../src/lib/after-press";
 import { measureAnchor, type MenuAnchorRect } from "../../../src/lib/menu-anchor";
 
 export default function AccountScreen() {
@@ -35,7 +36,7 @@ export default function AccountScreen() {
 
   const afterSheet = (fn: () => void) => {
     setMenuOpen(false);
-    setTimeout(fn, 280);
+    afterPress(fn);
   };
 
   const uploadFromUri = async (uri: string) => {

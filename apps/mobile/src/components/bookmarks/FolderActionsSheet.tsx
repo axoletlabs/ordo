@@ -36,6 +36,8 @@ import {
 } from "../../hooks/use-folders";
 import { useServerInfo } from "../../hooks/queries";
 import { useFolderTokenStore } from "../../store/folder-tokens";
+import { folderKey } from "../../hooks/use-selection";
+import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
 
 type Mode = "menu" | "rename" | "lockChoice" | "lockCredential" | "icon" | "delete" | "removePassword" | "removePasswordAccount";
 
@@ -74,6 +76,16 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
   const [removing, setRemoving] = useState(false);
   const folderRef = React.useRef(folder);
   folderRef.current = folder;
+
+  React.useEffect(() => {
+    if (!visible || !folder) return;
+    const key = folderKey(folder.id);
+    useMenuHighlightStore.getState().set(key);
+    return () => {
+      const store = useMenuHighlightStore.getState();
+      if (store.key === key) store.set(null);
+    };
+  }, [visible, folder]);
 
   React.useEffect(() => {
     if (!visible) return;

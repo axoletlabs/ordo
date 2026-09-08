@@ -2,7 +2,7 @@
  * Tag browse: whole-library bookmark list for one tag. Other tags stay on
  * each row (except the one you are already viewing) and open that tag.
  */
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
@@ -69,6 +69,8 @@ export default function TagDetailScreen() {
   const [editTagOpen, setEditTagOpen] = useState(false);
   const [deleteTagOpen, setDeleteTagOpen] = useState(false);
   const selection = useSelectionMode();
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
 
   const items = useMemo(() => flattenPages(list.data?.pages ?? []), [list.data]);
   const selectedBookmarks = useMemo(
@@ -77,7 +79,7 @@ export default function TagDetailScreen() {
   );
   const selectableKeys = useMemo(() => items.map((bookmark) => bookmarkKey(bookmark.id)), [items]);
 
-  const openReader = (b: BookmarkDto) => {
+  const openReader = useCallback((b: BookmarkDto) => {
     openListBookmark(b, () => {
       if (hasDetailPane) {
         router.push({
@@ -88,7 +90,18 @@ export default function TagDetailScreen() {
       }
       router.push(`/reader/${b.id}`);
     });
-  };
+  }, [hasDetailPane, routeId, router]);
+
+  const onPressBookmark = useCallback((bookmark: BookmarkDto) => {
+    const sel = selectionRef.current;
+    if (sel.active) sel.toggle(bookmarkKey(bookmark.id));
+    else openReader(bookmark);
+  }, [openReader]);
+
+  const onMoreBookmark = useCallback((b: BookmarkDto, menuAnchor: MenuAnchorRect) => {
+    setBookmarkAnchor(menuAnchor);
+    setActionBm(b);
+  }, []);
 
   const onToggleRead = (b: BookmarkDto) => {
     haptics.light();
@@ -110,10 +123,16 @@ export default function TagDetailScreen() {
     if (list.hasNextPage && !list.isFetchingNextPage) list.fetchNextPage();
   };
 
+  const onTagPress = useCallback((tagId: string) => {
+    if (selectionRef.current.active) return;
+    haptics.light();
+    router.replace(`/tags/${tagId}`);
+  }, [router]);
+
   const listPane = (
     <FlashList
       data={items}
-      extraData={`${selection.revision}:${actionBm?.id ?? ""}`}
+      extraData={selection.revision}
       keyExtractor={(b: BookmarkDto) => b.id}
       renderItem={({ item }: { item: BookmarkDto }) => (
         <BookmarkRow
@@ -124,21 +143,10 @@ export default function TagDetailScreen() {
               ? selection.has(bookmarkKey(item.id))
               : hasDetailPane && item.id === selectedBookmarkId
           }
-          onPress={(bookmark) => {
-            if (selection.active) selection.toggle(bookmarkKey(bookmark.id));
-            else openReader(bookmark);
-          }}
-          onMore={(b, menuAnchor) => {
-            setBookmarkAnchor(menuAnchor);
-            setActionBm(b);
-          }}
-          highlighted={actionBm?.id === item.id}
+          onPress={onPressBookmark}
+          onMore={onMoreBookmark}
           omitTagIds={activeIds}
-          onTagPress={(tagId) => {
-            if (selection.active) return;
-            haptics.light();
-            router.replace(`/tags/${tagId}`);
-          }}
+          onTagPress={onTagPress}
         />
       )}
       estimatedItemSize={108}
@@ -305,7 +313,7 @@ export default function TagDetailScreen() {
           label="Edit tag"
           onPress={() => {
             setTagActionsOpen(false);
-            setTimeout(() => setEditTagOpen(true), 100);
+            setEditTagOpen(true);
           }}
         />
         <ContextMenuItem
@@ -314,7 +322,7 @@ export default function TagDetailScreen() {
           tone="danger"
           onPress={() => {
             setTagActionsOpen(false);
-            setTimeout(() => setDeleteTagOpen(true), 100);
+            setDeleteTagOpen(true);
           }}
         />
       </ContextMenu>
