@@ -1,13 +1,13 @@
 import React, { useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
-import { DEFAULT_FOLDER_ICON, type FolderDto, type FolderIcon, type FolderLockType, type FolderPinLength } from "@ordo/shared";
+import { Ionicons } from "@expo/vector-icons";
+import { APP_NAME, DEFAULT_FOLDER_ICON, type FolderDto, type FolderIcon, type FolderLockType, type FolderPinLength } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 import { Text } from "../ui/Text";
-import { ContextMenu, ContextMenuItem, type MenuAnchor } from "../ui/ContextMenu";
-import { sheetMenuStyles } from "../ui/SheetActionRow";
+import { SheetActionRow, SheetMenu, sheetMenuStyles } from "../ui/SheetActionRow";
 import { EyeToggle } from "../ui/EyeToggle";
 import { PressableScale } from "../ui/PressableScale";
 import { Segmented } from "../ui/Segmented";
@@ -42,11 +42,10 @@ export interface FolderActionsSheetProps {
   visible: boolean;
   onDismiss: () => void;
   folder: FolderDto | null;
-  anchor?: MenuAnchor | null;
   onDeleted?: (id: string) => void;
 }
 
-export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDeleted }: FolderActionsSheetProps) {
+export function FolderActionsSheet({ visible, onDismiss, folder, onDeleted }: FolderActionsSheetProps) {
   const { palette } = useTheme();
   const serverInfo = useServerInfo();
   /** Older servers drop lockType and silently store every lock as a password. */
@@ -158,9 +157,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
       toast.success(folder.pinned ? "Folder unpinned" : "Folder pinned");
       onDismiss();
     } catch (cause) {
-      const message = errorMessage(cause);
-      setError(message);
-      toast.error(message);
+      setError(errorMessage(cause));
     }
   };
 
@@ -250,9 +247,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
       toast.success("Folder locked");
       onDismiss();
     } catch (cause) {
-      const message = errorMessage(cause, "Could not enable the device lock.");
-      setError(message);
-      toast.error(message);
+      setError(errorMessage(cause, "Could not enable the device lock."));
     } finally {
       setRemoving(false);
     }
@@ -356,40 +351,38 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
     });
   };
 
-  const menuVisible = visible && !!folder && (mode === "menu" || mode === "lockChoice");
-  const panelVisible = visible && !!folder && mode !== "menu" && mode !== "lockChoice";
-
   return (
-    <>
-    <ContextMenu visible={menuVisible} onDismiss={onDismiss} anchor={anchor}>
+    <FloatingPanel visible={visible && !!folder} onDismiss={onDismiss} fitContent={mode === "menu" || mode === "lockChoice"}>
       {folder && mode === "menu" ? (
         <>
-          <ContextMenuItem icon={folder.pinned ? "pin" : "pin-outline"} label={folder.pinned ? "Unpin folder" : "Pin folder"} onPress={doTogglePinned} />
-          <ContextMenuItem icon="happy-outline" label="Change icon" onPress={() => showMode("icon")} />
-          <ContextMenuItem icon="create-outline" label="Rename" onPress={() => showMode("rename")} />
-          {folder.protected ? (
-            <ContextMenuItem icon="lock-open-outline" label="Remove lock" onPress={() => showMode("removePassword")} />
-          ) : (
-            <ContextMenuItem icon="lock-closed-outline" label="Lock folder" onPress={() => showMode("lockChoice")} />
-          )}
-          <ContextMenuItem icon="trash-outline" label="Delete folder" tone="danger" onPress={() => showMode("delete")} />
+          <PanelHeader
+            icon={folder.icon ?? DEFAULT_FOLDER_ICON}
+            iconColor={palette.accent}
+            iconBackground={palette.surfaceSecondary}
+            title={folder.name}
+            subtitle={`${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}`}
+            numberOfLines={1}
+            accessory={
+              folder.pinned ? (
+                <Ionicons name="pin" size={14} color={palette.accent} />
+              ) : null
+            }
+          />
+          {error ? <Text variant="footnote" color="danger" style={styles.error}>{error}</Text> : null}
+          <SheetMenu>
+            <SheetActionRow icon={folder.pinned ? "pin" : "pin-outline"} label={folder.pinned ? "Unpin folder" : "Pin folder"} onPress={doTogglePinned} />
+            <SheetActionRow icon="happy-outline" label="Change icon" onPress={() => showMode("icon")} />
+            <SheetActionRow icon="create-outline" label="Rename" onPress={() => showMode("rename")} />
+            {folder.protected ? (
+              <SheetActionRow icon="lock-open-outline" label="Remove lock" onPress={() => showMode("removePassword")} />
+            ) : (
+              <SheetActionRow icon="lock-closed-outline" label="Lock folder" onPress={() => showMode("lockChoice")} />
+            )}
+            <SheetActionRow icon="trash-outline" label="Delete folder" tone="danger" divider={false} onPress={() => showMode("delete")} />
+          </SheetMenu>
         </>
       ) : null}
-      {folder && mode === "lockChoice" ? (
-        <>
-          {lockTypesSupported ? (
-            <>
-              <ContextMenuItem icon="finger-print-outline" label="Device lock" onPress={doSetDeviceLock} />
-              <ContextMenuItem icon="apps-outline" label="Pattern" onPress={() => { setLockType("pattern"); showMode("lockCredential"); }} />
-              <ContextMenuItem icon="keypad-outline" label="PIN" onPress={() => { setLockType("pin"); showMode("lockCredential"); }} />
-            </>
-          ) : null}
-          <ContextMenuItem icon="text-outline" label="Text password" onPress={() => { setLockType("password"); showMode("lockCredential"); }} />
-          <ContextMenuItem icon="chevron-back" label="Back" onPress={() => showMode("menu")} />
-        </>
-      ) : null}
-    </ContextMenu>
-    <FloatingPanel visible={panelVisible} onDismiss={onDismiss}>
+
       {folder && mode === "rename" ? (
         <>
           <PanelHeader title="Rename folder" />
@@ -398,6 +391,29 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             <Button label="Save" block size="lg" onPress={doRename} loading={rename.isPending} />
             <Button label="Cancel" variant="ghost" block onPress={() => showMode("menu")} />
           </View>
+        </>
+      ) : null}
+
+      {folder && mode === "lockChoice" ? (
+        <>
+          <PanelHeader title="Lock folder" />
+          {error ? <Text variant="footnote" color="danger" style={styles.error}>{error}</Text> : null}
+          {serverInfo.data && !lockTypesSupported ? (
+            <Text variant="footnote" color="tertiary" style={styles.staleServer}>
+              Update your {APP_NAME} server to use pattern, PIN, and device locks.
+            </Text>
+          ) : null}
+          <SheetMenu>
+            {lockTypesSupported ? (
+              <>
+                <SheetActionRow icon="finger-print-outline" label="Device lock" onPress={doSetDeviceLock} />
+                <SheetActionRow icon="apps-outline" label="Pattern" onPress={() => { setLockType("pattern"); showMode("lockCredential"); }} />
+                <SheetActionRow icon="keypad-outline" label="PIN" onPress={() => { setLockType("pin"); showMode("lockCredential"); }} />
+              </>
+            ) : null}
+            <SheetActionRow icon="text-outline" label="Text password" divider={false} onPress={() => { setLockType("password"); showMode("lockCredential"); }} />
+          </SheetMenu>
+          <Button label="Back" variant="ghost" block disabled={removing} onPress={() => showMode("menu")} style={sheetMenuStyles.cancel} />
         </>
       ) : null}
 
@@ -677,7 +693,6 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
         </ScrollView>
       ) : null}
     </FloatingPanel>
-    </>
   );
 }
 
@@ -686,4 +701,5 @@ const styles = StyleSheet.create({
   forgot: { alignSelf: "center", marginTop: spacing[8] },
   confirmInput: { marginTop: spacing[12] },
   pinBoxes: { marginTop: spacing[12] },
+  staleServer: { marginTop: spacing[8], marginBottom: spacing[4] },
 });

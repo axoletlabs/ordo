@@ -18,7 +18,6 @@ import { bookmarkIsArticle, bookmarkOpensAsWebsite } from "../../lib/bookmark-re
 import { haptics } from "../../lib/haptics";
 import { radius, spacing } from "../../theme/tokens";
 import { SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
-import { measureAnchor, menuHoverFill, type MenuAnchor } from "../ui/ContextMenu";
 import type { BookmarkDto } from "@ordo/shared";
 
 /** Compact tags shown inline on a row before overflow. */
@@ -27,7 +26,7 @@ const MAX_ROW_TAGS = 3;
 export interface BookmarkRowProps {
   bookmark: BookmarkDto;
   onPress: (b: BookmarkDto) => void;
-  onMore?: (b: BookmarkDto, anchor: MenuAnchor) => void;
+  onMore?: (b: BookmarkDto) => void;
   onLongPress?: (b: BookmarkDto) => void;
   selected?: boolean;
   selectionMode?: boolean;
@@ -49,8 +48,6 @@ export function BookmarkRow({
 }: BookmarkRowProps) {
   const { palette } = useTheme();
   const router = useRouter();
-  const moreRef = React.useRef<React.ComponentRef<typeof PressableScale>>(null);
-  const [moreHovered, setMoreHovered] = React.useState(false);
   const titleColor = bookmark.isRead ? "secondary" : "primary";
   const domain = bookmark.domain || domainFromUrl(bookmark.url);
   const title = bookmark.title || domain;
@@ -112,9 +109,7 @@ export function BookmarkRow({
         }
         style={styles.body}
         onPress={() => onPress(bookmark)}
-        onLongPress={onLongPress ? () => onLongPress(bookmark) : onMore ? (event) => {
-          measureAnchor(moreRef.current, (anchor) => onMore(bookmark, anchor), event);
-        } : undefined}
+        onLongPress={onLongPress ? () => onLongPress(bookmark) : onMore ? () => onMore(bookmark) : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         {selectionMode ? (
@@ -223,21 +218,11 @@ export function BookmarkRow({
 
       {onMore && !selectionMode ? (
         <PressableScale
-          ref={moreRef}
-          collapsable={false}
           accessibilityRole="button"
           accessibilityLabel={`More actions for ${bookmark.title || domainFromUrl(bookmark.url)}`}
-          style={[
-            styles.moreBtn,
-            moreHovered ? { backgroundColor: menuHoverFill(palette) } : null,
-          ]}
+          style={styles.moreBtn}
           scaleTo={0.85}
-          dim={false}
-          onHoverIn={() => setMoreHovered(true)}
-          onHoverOut={() => setMoreHovered(false)}
-          onPress={(event) => {
-            measureAnchor(moreRef.current, (anchor) => onMore(bookmark, anchor), event);
-          }}
+          onPress={() => onMore(bookmark)}
           hitSlop={12}
         >
           <Ionicons name="ellipsis-horizontal" size={20} color={palette.textTertiary} />
@@ -308,6 +293,5 @@ const styles = StyleSheet.create({
     marginTop: spacing[10],
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: radius.lg,
   },
 });

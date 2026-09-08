@@ -37,8 +37,7 @@ import { Skeleton } from "../ui/Skeleton";
 import { PressableScale } from "../ui/PressableScale";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
-import { ContextMenu, ContextMenuItem, type MenuAnchor } from "../ui/ContextMenu";
-import { sheetMenuStyles } from "../ui/SheetActionRow";
+import { SheetActionRow, SheetMenu, sheetMenuStyles } from "../ui/SheetActionRow";
 import { FAB, FABLayer } from "../ui/FAB";
 import { ArticleHtml, type ArticleHeading } from "./ArticleHtml";
 import { Markdown } from "./Markdown";
@@ -193,7 +192,6 @@ function ReaderPaneInner({
 
   const [controlsOpen, setControlsOpen] = useState(false);
   const [actionPanel, setActionPanel] = useState<"actions" | "contents" | null>(null);
-  const [actionsAnchor, setActionsAnchor] = useState<MenuAnchor | null>(null);
   const [editTagsOpen, setEditTagsOpen] = useState(false);
   const [headingState, setHeadingState] = useState<{
     bookmarkId: string;
@@ -313,6 +311,8 @@ function ReaderPaneInner({
   const showWebsiteView =
     surface === "browser" || (surface === "auto" && !!bookmark && bookmarkOpensAsWebsite(bookmark));
   const showReadInOrdo = !!bookmark && canReadInOrdo(bookmark);
+  const showClassifyRow =
+    !!bookmark && (bookmarkIsArticle(bookmark) || bookmarkCanBeArticle(bookmark));
   const palette = showWebsiteView ? appPalette : readerPalette;
   const effectiveDark = palette.mode === "dark";
 
@@ -579,9 +579,8 @@ function ReaderPaneInner({
       <HeaderIconButton
         name="ellipsis-horizontal"
         color={palette.text}
-        onPress={(menuAnchor) => {
+        onPress={() => {
           haptics.light();
-          if (menuAnchor) setActionsAnchor(menuAnchor);
           setActionPanel("actions");
         }}
         accessibilityLabel={showWebsiteView ? "More page actions" : "More article actions"}
@@ -853,110 +852,123 @@ function ReaderPaneInner({
         bookmark={bookmark ?? null}
         onDismiss={() => setEditTagsOpen(false)}
       />
-      <FloatingPanel visible={actionPanel === "contents"} onDismiss={() => setActionPanel(null)}>
-        <PanelHeader title="Table of contents" />
-        <ScrollView style={styles.tocList} showsVerticalScrollIndicator={false}>
-          {articleHeadings.map((heading) => (
-            <PressableScale
-              key={heading.id}
-              style={[
-                styles.tocRow,
-                { paddingLeft: (heading.level - 1) * spacing[16] },
-              ]}
-              onPress={() => handleHeadingSelect(heading.id)}
-              accessibilityRole="button"
-              accessibilityLabel={`Go to ${heading.text}`}
-            >
-              <Text
-                variant={heading.level === 1 ? "bodyStrong" : "body"}
-                numberOfLines={2}
-                style={styles.actionLabel}
-              >
-                {heading.text}
-              </Text>
-            </PressableScale>
-          ))}
-        </ScrollView>
-        <Button
-          label="Article actions"
-          variant="ghost"
-          block
-          onPress={() => setActionPanel("actions")}
-          style={sheetMenuStyles.cancel}
-        />
+      <FloatingPanel visible={actionPanel !== null} onDismiss={() => setActionPanel(null)} fitContent={actionPanel === "actions"}>
+        {actionPanel === "contents" ? (
+          <>
+            <PanelHeader title="Table of contents" />
+            <ScrollView style={styles.tocList} showsVerticalScrollIndicator={false}>
+              {articleHeadings.map((heading) => (
+                <PressableScale
+                  key={heading.id}
+                  style={[
+                    styles.tocRow,
+                    { paddingLeft: (heading.level - 1) * spacing[16] },
+                  ]}
+                  onPress={() => handleHeadingSelect(heading.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Go to ${heading.text}`}
+                >
+                  <Text
+                    variant={heading.level === 1 ? "bodyStrong" : "body"}
+                    numberOfLines={2}
+                    style={styles.actionLabel}
+                  >
+                    {heading.text}
+                  </Text>
+                </PressableScale>
+              ))}
+            </ScrollView>
+            <Button
+              label="Article actions"
+              variant="ghost"
+              block
+              onPress={() => setActionPanel("actions")}
+              style={sheetMenuStyles.cancel}
+            />
+          </>
+        ) : (
+          <>
+            <PanelHeader title={showWebsiteView ? "Page actions" : "Article actions"} />
+            <SheetMenu>
+            {hasHtml && articleHeadings.length >= 3 && !showWebsiteView ? (
+              <SheetActionRow
+                icon="list-outline"
+                label="Table of contents"
+                onPress={() => setActionPanel("contents")}
+              />
+            ) : null}
+            <SheetActionRow
+              icon="share-social-outline"
+              label={showWebsiteView ? "Share page" : "Share article"}
+              onPress={() => {
+                setActionPanel(null);
+                handleShare();
+              }}
+            />
+            <SheetActionRow
+              icon="link-outline"
+              label="Copy link"
+              onPress={() => {
+                setActionPanel(null);
+                handleCopyLink();
+              }}
+            />
+            <SheetActionRow
+              icon="pricetags-outline"
+              label="Edit tags"
+              divider={!showWebsiteView || showReadInOrdo || showClassifyRow}
+              onPress={() => {
+                setActionPanel(null);
+                setEditTagsOpen(true);
+              }}
+            />
+            {showWebsiteView && showReadInOrdo ? (
+              <SheetActionRow
+                icon="reader-outline"
+                label={`Read in ${APP_NAME}`}
+                divider={showClassifyRow}
+                onPress={() => {
+                  setActionPanel(null);
+                  setSurface("reader");
+                }}
+              />
+            ) : null}
+            {bookmark && bookmarkIsArticle(bookmark) ? (
+              <SheetActionRow
+                icon="globe-outline"
+                label="Mark as website"
+                divider={!showWebsiteView}
+                onPress={() => {
+                  setActionPanel(null);
+                  handleClassify(false);
+                }}
+              />
+            ) : bookmark && bookmarkCanBeArticle(bookmark) ? (
+              <SheetActionRow
+                icon="reader-outline"
+                label="Mark as article"
+                divider={!showWebsiteView}
+                onPress={() => {
+                  setActionPanel(null);
+                  handleClassify(true);
+                }}
+              />
+            ) : null}
+            {!showWebsiteView ? (
+              <SheetActionRow
+                icon="globe-outline"
+                label="Open original"
+                divider={false}
+                onPress={() => {
+                  setActionPanel(null);
+                  handleOpenOriginal();
+                }}
+              />
+            ) : null}
+            </SheetMenu>
+          </>
+        )}
       </FloatingPanel>
-      <ContextMenu visible={actionPanel === "actions"} onDismiss={() => setActionPanel(null)} anchor={actionsAnchor}>
-        {hasHtml && articleHeadings.length >= 3 && !showWebsiteView ? (
-          <ContextMenuItem
-            icon="list-outline"
-            label="Table of contents"
-            onPress={() => setActionPanel("contents")}
-          />
-        ) : null}
-        <ContextMenuItem
-          icon="share-social-outline"
-          label={showWebsiteView ? "Share page" : "Share article"}
-          onPress={() => {
-            setActionPanel(null);
-            handleShare();
-          }}
-        />
-        <ContextMenuItem
-          icon="link-outline"
-          label="Copy link"
-          onPress={() => {
-            setActionPanel(null);
-            handleCopyLink();
-          }}
-        />
-        <ContextMenuItem
-          icon="pricetags-outline"
-          label="Edit tags"
-          onPress={() => {
-            setActionPanel(null);
-            setEditTagsOpen(true);
-          }}
-        />
-        {showWebsiteView && showReadInOrdo ? (
-          <ContextMenuItem
-            icon="reader-outline"
-            label={`Read in ${APP_NAME}`}
-            onPress={() => {
-              setActionPanel(null);
-              setSurface("reader");
-            }}
-          />
-        ) : null}
-        {bookmark && bookmarkIsArticle(bookmark) ? (
-          <ContextMenuItem
-            icon="globe-outline"
-            label="Mark as website"
-            onPress={() => {
-              setActionPanel(null);
-              handleClassify(false);
-            }}
-          />
-        ) : bookmark && bookmarkCanBeArticle(bookmark) ? (
-          <ContextMenuItem
-            icon="reader-outline"
-            label="Mark as article"
-            onPress={() => {
-              setActionPanel(null);
-              handleClassify(true);
-            }}
-          />
-        ) : null}
-        {!showWebsiteView ? (
-          <ContextMenuItem
-            icon="globe-outline"
-            label="Open original"
-            onPress={() => {
-              setActionPanel(null);
-              handleOpenOriginal();
-            }}
-          />
-        ) : null}
-      </ContextMenu>
     </View>
     </ThemeOverrideProvider>
   );

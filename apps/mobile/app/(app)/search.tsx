@@ -10,7 +10,6 @@ import { Header } from "../../src/components/ui/Header";
 import { SelectionHeader } from "../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../src/components/bookmarks/SelectionTools";
 import { BookmarkActionsSheet } from "../../src/components/bookmarks/BookmarkActionsSheet";
-import { type MenuAnchor } from "../../src/components/ui/ContextMenu";
 import { MoveSheet } from "../../src/components/bookmarks/MoveSheet";
 import { EditTagsSheet } from "../../src/components/tags/EditTagsSheet";
 import { ScreenContent } from "../../src/components/ui/ScreenContent";
@@ -55,7 +54,6 @@ export default function SearchScreen() {
   const [q, setQ] = useState(routeQuery);
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [actionBm, setActionBm] = useState<BookmarkDto | null>(null);
-  const [bookmarkMenuAnchor, setBookmarkMenuAnchor] = useState<MenuAnchor | null>(null);
   const [moveTarget, setMoveTarget] = useState<BookmarkDto | null>(null);
   const [editTagsBm, setEditTagsBm] = useState<BookmarkDto | null>(null);
   const selection = useSelectionMode();
@@ -157,10 +155,7 @@ export default function SearchScreen() {
             if (selection.active) selection.toggle(bookmarkKey(bookmark.id));
             else selection.enter(bookmarkKey(bookmark.id));
           }}
-          onMore={(bookmark, menuAnchor) => {
-            setBookmarkMenuAnchor(menuAnchor);
-            setActionBm(bookmark);
-          }}
+          onMore={setActionBm}
           onTagPress={toggleTag}
         />
       )}
@@ -299,7 +294,6 @@ export default function SearchScreen() {
       <BookmarkActionsSheet
         visible={!!actionBm}
         bookmark={actionBm}
-        anchor={bookmarkMenuAnchor}
         onDismiss={() => setActionBm(null)}
         onToggleRead={onToggleRead}
         onMove={setMoveTarget}
