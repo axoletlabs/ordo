@@ -45,7 +45,6 @@ module.exports = {
   runtimeVersion: { policy: "fingerprint" },
   plugins: [
     "expo-asset",
-    "expo-image",
     [
       "expo-local-authentication",
       {
