@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 /**
- * Keep in sync with apps/mobile/src/lib/app-version.ts (`validateReleaseTag`).
+ * Keep in sync with apps/mobile/src/lib/app-version.ts
+ * (`validateReleaseTag`, `easUpdatesChannel`).
  *
- * Usage: validate-release-tag.js <tag> <appVersion> <githubPrerelease>
+ * Usage:
+ *   validate-release-tag.js <tag> <appVersion> <githubPrerelease>
+ *   validate-release-tag.js --channel <appVersion>
  * githubPrerelease is "true" or "false".
  */
 "use strict";
@@ -19,6 +22,12 @@ function classify(value) {
   if (!channel) return { version: core, kind: "stable" };
   const suffix = numberToken != null ? `${channel}.${numberToken}` : channel;
   return { version: `${core}-${suffix}`, kind: "prerelease" };
+}
+
+function easUpdatesChannel(appVersion) {
+  const classified = classify(appVersion);
+  if (!classified) return null;
+  return classified.kind === "prerelease" ? "development" : "production";
 }
 
 function validateReleaseTag(tag, appVersion, githubPrerelease) {
@@ -38,9 +47,23 @@ function validateReleaseTag(tag, appVersion, githubPrerelease) {
   return null;
 }
 
+if (process.argv[2] === "--channel") {
+  const version = process.argv[3];
+  const channel = version ? easUpdatesChannel(version) : null;
+  if (!channel) {
+    console.error(`::error::Cannot map app version '${version ?? ""}' to an EAS channel`);
+    process.exit(1);
+  }
+  process.stdout.write(`${channel}\n`);
+  process.exit(0);
+}
+
 const [tag, appVersion, prereleaseArg] = process.argv.slice(2);
 if (!tag || appVersion == null || prereleaseArg == null) {
-  console.error("Usage: validate-release-tag.js <tag> <appVersion> <true|false>");
+  console.error(
+    "Usage: validate-release-tag.js <tag> <appVersion> <true|false>\n" +
+      "       validate-release-tag.js --channel <appVersion>",
+  );
   process.exit(2);
 }
 

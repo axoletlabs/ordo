@@ -96,6 +96,15 @@ export function classifyReleaseVersion(value: string): ClassifiedReleaseVersion 
   };
 }
 
+/** EAS Update channel baked into the APK and used by `eas update`. */
+export function easUpdatesChannel(
+  appVersion: string,
+): "production" | "development" | null {
+  const classified = classifyReleaseVersion(appVersion);
+  if (!classified) return null;
+  return classified.kind === "prerelease" ? "development" : "production";
+}
+
 /** GitHub tag `vX.Y.Z` / `vX.Y.Z-beta.N` must match app.config version and the pre-release checkbox. */
 export function validateReleaseTag(
   tag: string,

@@ -13,7 +13,7 @@ on:
         default: 'false'
         type: boolean
       publish_ota:
-        description: 'Publish an EAS Update to the production channel'
+        description: 'Publish an EAS Update to the channel for this version'
         required: false
         default: 'false'
         type: boolean
@@ -21,8 +21,11 @@ on:
 # Native GitHub Releases:
 #   Latest (stable): tag vX.Y.Z, "Set as the latest release", pre-release unchecked.
 #   Early: tag vX.Y.Z-alpha.N | -beta.N | -rc.N, "This is a pre-release" checked.
-# JS-only production updates still go through EAS Update on main when the
-# Android fingerprint is unchanged.
+# EAS Update channels (baked into the APK, not switched in-app):
+#   production — stable X.Y.Z binaries
+#   development — early-access (alpha / beta / RC) binaries
+# JS-only updates on main go to the channel that matches apps/mobile version
+# when the Android fingerprint is unchanged.
 # Concurrency is per-job, not workflow-wide. A workflow-level group would
 # cancel an in-flight APK when a later JS-only push starts OTA, leaving that
 # native fingerprint with no binary.
@@ -38,6 +41,7 @@ jobs:
       should_build: ${{ steps.route.outputs.should_build }}
       is_release: ${{ steps.info.outputs.is_release }}
       build_ref: ${{ steps.info.outputs.build_ref }}
+      updates_channel: ${{ steps.info.outputs.updates_channel }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -48,6 +52,9 @@ jobs:
         run: |
           VERSION=$(node -e "console.log(require('./apps/mobile/app.config.js').version)")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          CHANNEL=$(node "$GITHUB_WORKSPACE/.github/scripts/validate-release-tag.js" --channel "$VERSION")
+          echo "updates_channel=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "EAS Update channel: $CHANNEL"
           # versionCode scaled by 10000 so per-ABI versionCode offsets from
           # splits.abi can never invert ordering between builds.
           echo "version_code=$(( ${{ github.run_number }} * 10000 ))" >> "$GITHUB_OUTPUT"
@@ -218,7 +225,8 @@ jobs:
 
   ota:
     needs: detect
-    # Publishes a JS-only update (EAS Update) to the production channel on
+    # Publishes a JS-only update (EAS Update) to the channel for this version
+    # (production for stable X.Y.Z, development for alpha/beta/RC) on
     # OTA-eligible pushes to main, including JS follow-ups while an APK for
     # the same fingerprint is still building. Native fingerprint changes and
     # commits explicitly marked with -apk are routed to an installable APK.
@@ -250,6 +258,8 @@ jobs:
       # OTA update gets a different runtime version than the installed binary.
       - name: Expo prebuild
         working-directory: apps/mobile
+        env:
+          EXPO_UPDATES_CHANNEL: ${{ needs.detect.outputs.updates_channel }}
         run: pnpm exec expo prebuild --platform android --no-install
 
       # Install eas-cli via npm to avoid pnpm's unapproved-build-script gate
@@ -261,7 +271,7 @@ jobs:
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-        run: eas update --channel production --non-interactive --auto
+        run: eas update --channel ${{ needs.detect.outputs.updates_channel }} --non-interactive --auto
 
   build_apk:
     needs: detect
@@ -311,11 +321,16 @@ jobs:
 
       - name: Prebuild (generate native Android project)
         working-directory: apps/mobile
+        env:
+          EXPO_UPDATES_CHANNEL: ${{ needs.detect.outputs.updates_channel }}
         run: pnpm exec expo prebuild --platform android --no-install
 
       - name: Verify OTA channel embedded
         working-directory: apps/mobile
-        run: grep -q "expo-channel-name" android/app/src/main/AndroidManifest.xml
+        run: |
+          CHANNEL="${{ needs.detect.outputs.updates_channel }}"
+          grep -q "expo-channel-name" android/app/src/main/AndroidManifest.xml
+          grep -q "$CHANNEL" android/app/src/main/AndroidManifest.xml
 
       - name: Build APK (dev, arm64 only)
         if: needs.detect.outputs.is_release != 'true'

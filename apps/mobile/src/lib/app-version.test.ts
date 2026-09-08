@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   classifyReleaseVersion,
   compareVersions,
+  easUpdatesChannel,
   isNewerVersion,
   validateReleaseTag,
 } from "./app-version.ts";
@@ -41,6 +42,15 @@ test("classifyReleaseVersion accepts only stable and alpha/beta/rc tags", () => 
   assert.equal(classifyReleaseVersion("0.2.0-rc")?.number, null);
   assert.equal(classifyReleaseVersion("dev"), null);
   assert.equal(classifyReleaseVersion("0.2.0-preview.1"), null);
+});
+
+test("easUpdatesChannel maps stable to production and early tags to development", () => {
+  assert.equal(easUpdatesChannel("0.2.0"), "production");
+  assert.equal(easUpdatesChannel("v0.2.0"), "production");
+  assert.equal(easUpdatesChannel("0.3.0-alpha.1"), "development");
+  assert.equal(easUpdatesChannel("0.3.0-beta.3"), "development");
+  assert.equal(easUpdatesChannel("0.3.0-rc.1"), "development");
+  assert.equal(easUpdatesChannel("dev"), null);
 });
 
 test("validateReleaseTag keeps the GitHub pre-release checkbox aligned with the tag", () => {

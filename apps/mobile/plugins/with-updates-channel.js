@@ -2,12 +2,12 @@ const { withAndroidManifest } = require('expo/config-plugins');
 
 const CHANNEL = process.env.EXPO_UPDATES_CHANNEL || 'production';
 
-// The EAS Update runtime resolves the build's channel from the
-// `expo-channel-name` entry in the request-headers map (meta-data
-// `expo.modules.updates.UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY`). A bare
-// `expo-channel-name`-less request is rejected by EAS ("channel-name: Required"),
-// so every OTA request would fail without this. EAS Build injects this header
-// automatically; this plugin does the equivalent for raw local Gradle builds.
+// Stable X.Y.Z APKs use `production`. Early-access tags (alpha / beta / RC)
+// use `development`. EAS Update publishes to the same name.
+// The runtime reads the channel from `expo-channel-name` in the request-headers
+// map (meta-data UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY). A request without
+// it is rejected by EAS ("channel-name: Required"). EAS Build injects this
+// header; this plugin does the equivalent for raw local Gradle builds.
 const REQUEST_HEADERS_META = 'expo.modules.updates.UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY';
 
 const withUpdatesChannel = (config) =>
