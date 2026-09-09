@@ -44,7 +44,7 @@ export function PanelHeader({
           variant={subtitleVariant}
           color="secondary"
           numberOfLines={3}
-          style={styles.subtitle}
+          style={[styles.subtitle, icon ? styles.subtitleWithIcon : null]}
         >
           {subtitle}
         </Text>
@@ -66,5 +66,6 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
   },
   title: { flex: 1, minWidth: 0 },
-  subtitle: { marginTop: spacing[4] },
+  subtitle: { marginTop: spacing[6] },
+  subtitleWithIcon: { paddingLeft: 26 },
 });

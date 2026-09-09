@@ -7,7 +7,7 @@ import { spacing } from "../../theme/tokens";
 
 export const sheetMenuStyles = StyleSheet.create({
   stack: { gap: spacing[8], marginTop: spacing[8] },
-  row: { flexDirection: "row", alignItems: "center", gap: spacing[8], marginTop: spacing[12] },
+  row: { flexDirection: "row", alignItems: "center", gap: spacing[10], marginTop: spacing[16] },
   cancel: { marginTop: spacing[4] },
 });
 

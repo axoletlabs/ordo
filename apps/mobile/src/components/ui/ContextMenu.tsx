@@ -171,7 +171,7 @@ export function ContextMenuItem({
         (pressed || hovered) && !inactive ? { backgroundColor: highlight } : null,
       ]}
     >
-      {icon ? <Ionicons name={icon} size={18} color={color} /> : null}
+      {icon ? <Ionicons name={icon} size={18} color={color} /> : <View style={styles.iconSlot} />}
       <Text variant="body" style={[styles.itemLabel, { color }]} numberOfLines={1}>
         {label}
       </Text>
@@ -196,11 +196,12 @@ const styles = StyleSheet.create({
     borderRadius: radius["3xl"],
   },
   item: {
-    minHeight: 44,
+    minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[12],
     paddingHorizontal: spacing[12],
+    paddingVertical: spacing[10],
     borderRadius: radius.lg,
   },
   itemWeb: {
@@ -209,6 +210,7 @@ const styles = StyleSheet.create({
     transitionDuration: "120ms",
   } as ViewStyle,
   itemDisabled: { opacity: 0.45 },
+  iconSlot: { width: 18, height: 18 },
   itemLabel: { flex: 1, minWidth: 0 },
   trailing: {
     flexDirection: "row",

@@ -3,13 +3,12 @@
  * inline "New tag" affordance. Shared by the save sheet and edit-tags sheet.
  */
 import React, { useMemo, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { FlatList, Keyboard, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { type TagColor } from "@ordo/shared";
 import { Text } from "../ui/Text";
 import { Input } from "../ui/Input";
 import { PressableScale } from "../ui/PressableScale";
-import { ThemedFlatList } from "../ui/ThemedScrollView";
 import { useTags, useCreateTag } from "../../hooks/use-tags";
 import { useTheme } from "../../theme/ThemeProvider";
 import { spacing } from "../../theme/tokens";
@@ -64,9 +63,12 @@ export function TagSelectList({
   const listHeight = maxHeight ?? Math.min(300, height * 0.42);
 
   const createAndSelect = async (name: string) => {
+    if (create.isPending) return;
+    Keyboard.dismiss();
     try {
       const tag = await create.mutateAsync({ name });
       onToggle(tag.id);
+      setQuery("");
     } catch {
       // Best-effort quick create; failures surface via the host sheet's toast.
     }
@@ -89,57 +91,63 @@ export function TagSelectList({
     </PressableScale>
   );
 
+  const createRow =
+    autoCreate && query.trim() ? (
+      <PressableScale
+        accessibilityRole="button"
+        accessibilityLabel={`Create tag ${query.trim()}`}
+        style={styles.row}
+        onPress={() => void createAndSelect(query.trim())}
+      >
+        <View style={[styles.dot, { backgroundColor: palette.accent }]} />
+        <Text variant="body" color="accent" numberOfLines={1} style={{ flex: 1 }}>
+          Create “{query.trim()}”
+        </Text>
+        <Ionicons name="add" size={18} color={palette.accent} />
+      </PressableScale>
+    ) : autoCreate ? (
+      <PressableScale
+        accessibilityRole="button"
+        accessibilityLabel="New tag"
+        style={styles.row}
+        onPress={() => {
+          Keyboard.dismiss();
+          onRequestCreateTag?.();
+        }}
+      >
+        <View style={[styles.dot, { backgroundColor: palette.accent }]} />
+        <Text variant="body" color="accent">
+          New tag
+        </Text>
+        <Ionicons name="chevron-forward" size={16} color={palette.textFaint} />
+      </PressableScale>
+    ) : null;
+
   return (
-    <View>
-      <Input
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Filter tags…"
-        autoCapitalize="none"
-        autoCorrect={false}
-        icon={<Ionicons name="search-outline" size={18} color={palette.textTertiary} />}
-      />
-      <ThemedFlatList
-        data={[...tags.selected, ...tags.unselected]}
-        keyExtractor={(t) => t.id}
-        renderItem={({ item }) => renderRow(item, selectedIds.includes(item.id))}
-        style={{ maxHeight: listHeight }}
-        ListEmptyComponent={
-          <Text variant="footnote" color="secondary" style={styles.empty}>
-            {query ? `No tags match "${query}".` : "No tags yet."}
-          </Text>
-        }
-        ListFooterComponent={
-          autoCreate && query.trim() ? (
-            <PressableScale
-              accessibilityRole="button"
-              accessibilityLabel={`Create tag ${query.trim()}`}
-              style={styles.row}
-              onPress={() => void createAndSelect(query.trim())}
-            >
-              <View style={[styles.dot, { backgroundColor: palette.accent }]} />
-              <Text variant="body" color="accent" numberOfLines={1} style={{ flex: 1 }}>
-                Create “{query.trim()}”
-              </Text>
-              <Ionicons name="add" size={18} color={palette.accent} />
-            </PressableScale>
-          ) : autoCreate ? (
-            <PressableScale
-              accessibilityRole="button"
-              accessibilityLabel="New tag"
-              style={styles.row}
-              onPress={() => onRequestCreateTag?.()}
-            >
-              <View style={[styles.dot, { backgroundColor: palette.accent }]} />
-              <Text variant="body" color="accent">
-                New tag
-              </Text>
-              <Ionicons name="chevron-forward" size={16} color={palette.textFaint} />
-            </PressableScale>
-          ) : null
-        }
-      />
-    </View>
+    <FlatList
+      data={[...tags.selected, ...tags.unselected]}
+      keyExtractor={(t) => t.id}
+      renderItem={({ item }) => renderRow(item, selectedIds.includes(item.id))}
+      style={{ maxHeight: listHeight }}
+      keyboardShouldPersistTaps="always"
+      keyboardDismissMode="none"
+      ListHeaderComponent={
+        <Input
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Filter tags…"
+          autoCapitalize="none"
+          autoCorrect={false}
+          icon={<Ionicons name="search-outline" size={18} color={palette.textTertiary} />}
+        />
+      }
+      ListEmptyComponent={
+        <Text variant="footnote" color="secondary" style={styles.empty}>
+          {query ? `No tags match "${query}".` : "No tags yet."}
+        </Text>
+      }
+      ListFooterComponent={createRow}
+    />
   );
 }
 

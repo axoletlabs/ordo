@@ -409,13 +409,16 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
         {displayFolder && mode === "delete" ? (
           <>
             {error ? <Text variant="footnote" color="danger" style={styles.menuNote}>{error}</Text> : null}
+            <Text variant="footnote" color="secondary" style={styles.menuNote}>
+              This can’t be undone.
+            </Text>
             <ContextMenuItem
               icon="trash-outline"
-              label="Delete folder"
+              label="Confirm deletion"
               tone="danger"
               onPress={doDelete}
             />
-            <ContextMenuItem label="Cancel" onPress={() => showMode("menu")} />
+            <ContextMenuItem icon="close-outline" label="Cancel" onPress={() => showMode("menu")} />
           </>
         ) : null}
       </ContextMenu>

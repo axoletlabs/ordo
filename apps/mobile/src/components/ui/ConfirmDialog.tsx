@@ -1,10 +1,11 @@
 import React from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { type ButtonVariant } from "./Button";
 import { PanelHeader } from "./PanelHeader";
 import { FloatingPanel } from "./FloatingPanel";
-import { ContextMenuItem } from "./ContextMenu";
+import { PanelActions } from "./SheetActionRow";
+import { useTheme } from "../../theme/ThemeProvider";
 import { spacing } from "../../theme/tokens";
 
 export function ConfirmDialog({
@@ -36,6 +37,7 @@ export function ConfirmDialog({
   cancelLabel?: string;
   dismissible?: boolean;
 }) {
+  const { palette } = useTheme();
   const canDismiss = dismissible && !loading;
   const danger = (confirmVariant ?? (tone === "danger" ? "danger" : "primary")) === "danger";
 
@@ -46,27 +48,36 @@ export function ConfirmDialog({
       maxWidth={360}
       dismissible={canDismiss}
     >
-      <ScrollView
-        bounces={false}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        <PanelHeader title={title} subtitle={message} titleVariant="title2" style={styles.header} />
-        {children ? <View style={styles.extra}>{children}</View> : null}
-        <ContextMenuItem
+      <View style={styles.body}>
+        <PanelHeader
+          title={title}
+          subtitle={message}
           icon={icon}
-          label={confirmLabel}
-          tone={danger ? "danger" : undefined}
-          busy={loading}
-          onPress={onConfirm}
+          iconColor={danger ? palette.danger : palette.accent}
+          titleVariant="title2"
+          style={styles.header}
         />
-        <ContextMenuItem label={cancelLabel} disabled={loading} onPress={onDismiss} />
-      </ScrollView>
+        {children ? <View style={styles.extra}>{children}</View> : null}
+        <PanelActions
+          confirmLabel={confirmLabel}
+          confirmVariant={danger ? "danger" : "primary"}
+          onConfirm={onConfirm}
+          onCancel={onDismiss}
+          cancelLabel={cancelLabel}
+          loading={loading}
+          cancelDisabled={!canDismiss}
+        />
+      </View>
     </FloatingPanel>
   );
 }
 
 const styles = StyleSheet.create({
-  header: { marginBottom: spacing[4] },
-  extra: { marginBottom: spacing[8], paddingHorizontal: spacing[12] },
+  body: {
+    paddingHorizontal: spacing[12],
+    paddingTop: spacing[12],
+    paddingBottom: spacing[8],
+  },
+  header: { marginBottom: spacing[20] },
+  extra: { marginBottom: spacing[12] },
 });
