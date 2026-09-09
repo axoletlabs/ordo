@@ -18,7 +18,6 @@ function highRefreshRateKotlin(packageName) {
 import android.app.Activity
 import android.os.Build
 import android.view.Display
-import android.view.WindowManager
 
 internal object HighRefreshRate {
   @JvmStatic
@@ -29,19 +28,14 @@ internal object HighRefreshRate {
     val targetHz = mode?.refreshRate ?: display.refreshRate
     if (targetHz <= 0f) return
 
+    // Window has no frame-rate setter on compileSdk 35. These LayoutParams
+    // are the API that opts the activity into the panel rate.
     val attrs = window.attributes
     attrs.preferredRefreshRate = targetHz
     if (mode != null) {
       attrs.preferredDisplayModeId = mode.modeId
     }
     window.attributes = attrs
-
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-      window.setFrameRate(
-        targetHz,
-        WindowManager.LayoutParams.FRAME_RATE_COMPATIBILITY_DEFAULT,
-      )
-    }
   }
 
   private fun currentDisplay(activity: Activity): Display? {

@@ -33,6 +33,27 @@ function applyHermesFlags(code) {
   return code.replace(/react\s*\{/, `react {\n${HERMES_FLAGS_LINE}`);
 }
 
+// Fabric codegen emits `$event` / `$payload` in EventEmitters.cpp. Clang
+// warns on those (`-Wdollar-in-identifier-extension`) for every autolinked
+// module (safe-area, screens, svg, …) and GitHub annotates the whole CMake
+// step as errors even though ninja succeeds.
+const CMAKE_DOLLAR_FLAGS = [
+  '        externalNativeBuild {',
+  '            cmake {',
+  '                cppFlags "-Wno-dollar-in-identifier-extension"',
+  '            }',
+  '        }',
+].join('\n');
+
+function applyCmakeCppFlags(code) {
+  if (code.includes('-Wno-dollar-in-identifier-extension')) return code;
+  if (!/defaultConfig\s*\{/.test(code)) return code;
+  return code.replace(
+    /defaultConfig\s*\{/,
+    `defaultConfig {\n${CMAKE_DOLLAR_FLAGS}`
+  );
+}
+
 function isSendFilter(filter) {
   return filter.action?.some(
     (action) =>
@@ -221,6 +242,7 @@ class ShareReceiverActivity : Activity() {
     }
 
     code = applyHermesFlags(code);
+    code = applyCmakeCppFlags(code);
 
     c.modResults.contents = code;
     return c;

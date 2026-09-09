@@ -63,7 +63,8 @@ test("patches Java MainActivity the same way", () => {
 test("writes a helper that requests the peak same-resolution mode", () => {
   const source = highRefreshRateKotlin('com.axolet.ordo');
   assert.match(source, /package com\.axolet\.ordo/);
-  assert.match(source, /window\.setFrameRate/);
+  assert.match(source, /preferredRefreshRate/);
   assert.match(source, /preferredDisplayModeId/);
   assert.match(source, /physicalWidth == current\.physicalWidth/);
+  assert.doesNotMatch(source, /window\.setFrameRate/);
 });
