@@ -1,7 +1,7 @@
 /**
  * Window-space placement for floating context menus. Aligns to the trailing
- * edge of a trigger (the row "more" button, a header icon, the FAB) and flips
- * above when a long bookmark list leaves no room below.
+ * edge of a trigger (a library row, a header icon, the FAB) and flips above
+ * when a long bookmark list leaves no room below.
  */
 
 export interface MenuAnchorRect {

@@ -1,9 +1,9 @@
 /**
- * A single bookmark row. Tapping opens the reader; the trailing button or a
- * long-press on the row reveals actions. Hold the favicon to multi-select.
+ * A single bookmark row. Tapping opens the reader; a long-press on the row
+ * reveals actions. Hold the favicon to multi-select.
  */
 import React from "react";
-import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -55,7 +55,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
 }: BookmarkRowProps) {
   const { palette } = useTheme();
   const router = useRouter();
-  const moreRef = React.useRef<View>(null);
+  const rowRef = React.useRef<View>(null);
   const [hovered, setHovered] = React.useState(false);
   const menuKey = bookmarkKey(bookmark.id);
   const highlightedFromMenu = useMenuHighlightStore((s) => s.key === menuKey);
@@ -118,7 +118,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   };
 
   const openMore = (event?: { nativeEvent: { pageX: number; pageY: number } }) => {
-    measureAnchor(moreRef.current, (anchor) => onMore?.(bookmark, anchor), event);
+    measureAnchor(rowRef.current, (anchor) => onMore?.(bookmark, anchor), event);
   };
 
   const rowFill = selected || highlighted
@@ -129,6 +129,8 @@ export const BookmarkRow = React.memo(function BookmarkRow({
 
   return (
     <View
+      ref={rowRef}
+      collapsable={false}
       style={[
         styles.wrap,
         {
@@ -140,6 +142,13 @@ export const BookmarkRow = React.memo(function BookmarkRow({
         ? {
             onMouseEnter: () => setHovered(true),
             onMouseLeave: () => setHovered(false),
+            onContextMenu:
+              onMore && !selectionMode
+                ? (event: { preventDefault?: () => void }) => {
+                    event.preventDefault?.();
+                    openMore();
+                  }
+                : undefined,
           }
         : null)}
     >
@@ -204,10 +213,20 @@ export const BookmarkRow = React.memo(function BookmarkRow({
               ? "Press and hold for more actions"
               : undefined
         }
+        accessibilityActions={
+          onMore && !selectionMode ? [{ name: "more", label: "More actions" }] : undefined
+        }
+        onAccessibilityAction={
+          onMore && !selectionMode
+            ? (event) => {
+                if (event.nativeEvent.actionName === "more") openMore();
+              }
+            : undefined
+        }
         style={styles.body}
         onPressIn={warmBookmark}
         onPress={openBookmark}
-        onLongPress={selectionMode ? undefined : onMore ? () => openMore() : undefined}
+        onLongPress={selectionMode ? undefined : onMore ? (event) => openMore(event) : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         <View style={styles.content}>
@@ -282,26 +301,6 @@ export const BookmarkRow = React.memo(function BookmarkRow({
           </View>
         </View>
       </PressableScale>
-
-      {onMore && !selectionMode ? (
-        <View ref={moreRef} collapsable={false} style={styles.moreBtn}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`More actions for ${bookmark.title || domainFromUrl(bookmark.url)}`}
-            onHoverIn={() => setHovered(true)}
-            style={({ pressed }) => [
-              styles.moreHit,
-              (pressed || hovered) && { backgroundColor: menuHoverFill(palette.mode, true) },
-            ]}
-            onPress={openMore}
-            hitSlop={12}
-          >
-            <Ionicons name="ellipsis-horizontal" size={20} color={hovered || highlighted ? palette.textSecondary : palette.textTertiary} />
-          </Pressable>
-        </View>
-      ) : onMore ? (
-        <View style={styles.moreBtn} pointerEvents="none" />
-      ) : null}
     </View>
   );
 });
@@ -311,7 +310,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingRight: spacing[8],
+    paddingRight: spacing[16],
   },
   leading: {
     justifyContent: "center",
@@ -365,19 +364,4 @@ const styles = StyleSheet.create({
   domain: { flexShrink: 1 },
   separator: { width: 3, height: 3, borderRadius: radius.full },
   statusIcon: { marginLeft: spacing[2] },
-  moreBtn: {
-    width: 40,
-    height: 40,
-    marginTop: spacing[10],
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  moreHit: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.full,
-    alignItems: "center",
-    justifyContent: "center",
-    ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
-  },
 });

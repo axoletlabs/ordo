@@ -3,7 +3,7 @@
  * read as one library, not two stacked features.
  */
 import React from "react";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { PressableScale } from "../ui/PressableScale";
 import { Text } from "../ui/Text";
@@ -31,7 +31,7 @@ export interface FolderRowProps {
 
 export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore, onEnterSelection, selected, selectionMode, highlighted: highlightedProp }: FolderRowProps) {
   const { palette } = useTheme();
-  const moreRef = React.useRef<View>(null);
+  const rowRef = React.useRef<View>(null);
   const [hovered, setHovered] = React.useState(false);
   const menuKey = folderKey(folder.id);
   const highlightedFromMenu = useMenuHighlightStore((s) => s.key === menuKey);
@@ -51,7 +51,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
     void prefetchFolderBookmarks(folder.id);
   };
   const openMore = (event?: { nativeEvent: { pageX: number; pageY: number } }) => {
-    measureAnchor(moreRef.current, (anchor) => onMore?.(folder, anchor), event);
+    measureAnchor(rowRef.current, (anchor) => onMore?.(folder, anchor), event);
   };
   const rowFill = selected || highlighted
     ? palette.surfaceSecondary
@@ -61,6 +61,8 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
 
   return (
     <View
+      ref={rowRef}
+      collapsable={false}
       style={[
         styles.wrap,
         {
@@ -72,6 +74,13 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
         ? {
             onMouseEnter: () => setHovered(true),
             onMouseLeave: () => setHovered(false),
+            onContextMenu:
+              onMore && !selectionMode
+                ? (event: { preventDefault?: () => void }) => {
+                    event.preventDefault?.();
+                    openMore();
+                  }
+                : undefined,
           }
         : null)}
     >
@@ -117,6 +126,16 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
               ? "Press and hold for more actions"
               : undefined
         }
+        accessibilityActions={
+          onMore && !selectionMode ? [{ name: "more", label: "More actions" }] : undefined
+        }
+        onAccessibilityAction={
+          onMore && !selectionMode
+            ? (event) => {
+                if (event.nativeEvent.actionName === "more") openMore();
+              }
+            : undefined
+        }
         style={styles.body}
         onPressIn={warmFolder}
         onPress={openFolder}
@@ -151,25 +170,6 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
         </View>
         {unread && !selectionMode ? <Badge tone="accent">{folder.unreadCount}</Badge> : null}
       </PressableScale>
-      {onMore && !selectionMode ? (
-        <View ref={moreRef} collapsable={false} style={styles.moreBtn}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`More actions for ${folder.name}`}
-            onHoverIn={() => setHovered(true)}
-            style={({ pressed }) => [
-              styles.moreHit,
-              (pressed || hovered) && { backgroundColor: menuHoverFill(palette.mode, true) },
-            ]}
-            onPress={openMore}
-            hitSlop={12}
-          >
-            <Ionicons name="ellipsis-horizontal" size={20} color={hovered || highlighted ? palette.textSecondary : palette.textTertiary} />
-          </Pressable>
-        </View>
-      ) : onMore ? (
-        <View style={styles.moreBtn} pointerEvents="none" />
-      ) : null}
     </View>
   );
 });
@@ -179,7 +179,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "flex-start",
     borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingRight: spacing[8],
+    paddingRight: spacing[16],
   },
   leading: {
     justifyContent: "center",
@@ -209,19 +209,4 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[6], marginTop: spacing[6] },
   count: { flexShrink: 1 },
   statusIcon: { marginLeft: spacing[2] },
-  moreBtn: {
-    width: 40,
-    height: 40,
-    marginTop: spacing[10],
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  moreHit: {
-    width: 32,
-    height: 32,
-    borderRadius: radius.full,
-    alignItems: "center",
-    justifyContent: "center",
-    ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
-  },
 });

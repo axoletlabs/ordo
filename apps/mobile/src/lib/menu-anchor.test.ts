@@ -35,7 +35,7 @@ test("flips above when a lower bookmark would overflow the window", () => {
   assert.equal(placed.top, 820 - 6 - 280);
 });
 
-test("keeps the menu on-screen when the more button sits on the right edge", () => {
+test("keeps the menu on-screen when the trigger sits on the right edge", () => {
   const placed = placeMenu({
     anchor: anchor(760, 120),
     menuWidth: 252,
