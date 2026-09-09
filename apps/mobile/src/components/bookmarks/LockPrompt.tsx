@@ -17,7 +17,7 @@ import { Text } from "../ui/Text";
 import { EyeToggle } from "../ui/EyeToggle";
 import { Segmented } from "../ui/Segmented";
 import { OtpInput } from "../ui/OtpInput";
-import { sheetMenuStyles } from "../ui/SheetActionRow";
+import { PanelActions, sheetMenuStyles } from "../ui/SheetActionRow";
 import { PatternInput } from "./PatternInput";
 import { useUnlockFolder } from "../../hooks/use-folders";
 import { getDeviceLockCredential } from "../../lib/device-folder-lock";
@@ -271,17 +271,22 @@ export function UnlockForm({
           {error}
         </Text>
       ) : null}
-      {isPassword ? (
-        <View style={sheetMenuStyles.stack}>
-          <Button label="Unlock" block size="lg" onPress={() => void submitPassword()} loading={unlock.isPending} />
-        </View>
+      {isPassword && onCancel ? (
+        <PanelActions
+          confirmLabel="Unlock"
+          onConfirm={() => void submitPassword()}
+          onCancel={onCancel}
+          cancelLabel={cancelLabel}
+          loading={unlock.isPending}
+        />
+      ) : isPassword ? (
+        <Button label="Unlock" block onPress={() => void submitPassword()} loading={unlock.isPending} />
+      ) : onCancel ? (
+        <Button label={cancelLabel} variant="ghost" onPress={onCancel} style={sheetMenuStyles.cancel} />
       ) : null}
       <Text variant="caption" color="tertiary" align="center" style={styles.footnote}>
         Unlocked for {UNLOCK_MINUTES} minutes on this device.
       </Text>
-      {onCancel ? (
-        <Button label={cancelLabel} variant="ghost" block size="lg" onPress={onCancel} style={sheetMenuStyles.cancel} />
-      ) : null}
     </View>
   );
 }

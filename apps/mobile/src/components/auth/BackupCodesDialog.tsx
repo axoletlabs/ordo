@@ -1,9 +1,9 @@
 import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { Button } from "../ui/Button";
 import { PanelHeader } from "../ui/PanelHeader";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { Text } from "../ui/Text";
+import { PanelActions } from "../ui/SheetActionRow";
 import { toast } from "../ui/toast-store";
 import { downloadBackupCodes } from "../../lib/backup-codes-file";
 import { errorMessage } from "../../lib/error-message";
@@ -66,17 +66,13 @@ export function BackupCodesDialog({
         </View>
       ) : null}
 
-      <View style={styles.actions}>
-        <Button
-          label="Download"
-          variant="primary"
-          size="lg"
-          block
-          loading={saving}
-          onPress={() => void save()}
-        />
-        <Button label="Done" variant="ghost" block size="lg" onPress={onClose} />
-      </View>
+      <PanelActions
+        confirmLabel="Download"
+        cancelLabel="Done"
+        onConfirm={() => void save()}
+        onCancel={onClose}
+        loading={saving}
+      />
     </FloatingPanel>
   );
 }
@@ -98,5 +94,4 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[6],
     letterSpacing: 0.4,
   },
-  actions: { gap: spacing[4], marginTop: spacing[12] },
 });

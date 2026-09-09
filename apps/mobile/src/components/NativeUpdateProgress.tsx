@@ -1,11 +1,10 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
 import { APP_NAME } from "@ordo/shared";
 import { FloatingPanel } from "./ui/FloatingPanel";
 import { PanelHeader } from "./ui/PanelHeader";
-import { Button } from "./ui/Button";
 import { Text } from "./ui/Text";
+import { PanelActions } from "./ui/SheetActionRow";
 import { toast } from "./ui/toast-store";
 import { useNativeUpdateStore } from "../store/native-update";
 import { useTheme } from "../theme/ThemeProvider";
@@ -69,17 +68,16 @@ export function NativeUpdateProgress() {
           <Text variant="footnote" color="danger" align="center" style={styles.error}>
             {update.error ?? "Couldn't download the update."}
           </Text>
-          <Button
-            label="Retry"
-            size="lg"
-            block
-            onPress={() =>
+          <PanelActions
+            confirmLabel="Retry"
+            cancelLabel="Later"
+            onConfirm={() =>
               update
                 .downloadAndInstall()
                 .catch(() => toast.error("Couldn't download the update."))
             }
+            onCancel={update.dismissDownload}
           />
-          <Button label="Later" variant="ghost" block size="lg" onPress={update.dismissDownload} />
         </View>
       ) : (
         <View style={styles.actions}>
@@ -88,16 +86,14 @@ export function NativeUpdateProgress() {
               {update.error}
             </Text>
           ) : null}
-          <Button
-            label="Open installer"
-            size="lg"
-            block
-            icon={<Ionicons name="open-outline" size={17} color={palette.onAccent} />}
-            onPress={() =>
+          <PanelActions
+            confirmLabel="Open installer"
+            cancelLabel="Later"
+            onConfirm={() =>
               update.install().catch(() => toast.error("Couldn't open the installer."))
             }
+            onCancel={update.dismissDownload}
           />
-          <Button label="Later" variant="ghost" block size="lg" onPress={update.dismissDownload} />
         </View>
       )}
     </FloatingPanel>

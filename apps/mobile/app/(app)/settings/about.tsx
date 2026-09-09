@@ -4,7 +4,7 @@ import { Linking, StyleSheet, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
 import { Text } from "../../../src/components/ui/Text";
-import { Button } from "../../../src/components/ui/Button";
+import { PanelActions } from "../../../src/components/ui/SheetActionRow";
 import { FloatingPanel } from "../../../src/components/ui/FloatingPanel";
 import { PanelHeader } from "../../../src/components/ui/PanelHeader";
 import { OtaUpdateCard } from "../../../src/components/ui/OtaUpdater";
@@ -144,17 +144,14 @@ export default function AboutScreen() {
             {fingerprint ? formatFingerprint(fingerprint) : "—"}
           </Text>
         </View>
-        <View style={styles.fingerprintActions}>
-          <Button
-            label="Copy"
-            size="lg"
-            block
-            onPress={() => {
-              if (fingerprint) void copyFingerprint(fingerprint);
-            }}
-          />
-          <Button label="Done" variant="ghost" block size="lg" onPress={() => setFingerprintOpen(false)} />
-        </View>
+        <PanelActions
+          confirmLabel="Copy"
+          cancelLabel="Done"
+          onConfirm={() => {
+            if (fingerprint) void copyFingerprint(fingerprint);
+          }}
+          onCancel={() => setFingerprintOpen(false)}
+        />
       </FloatingPanel>
     </SettingsPage>
   );
@@ -168,5 +165,4 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     padding: spacing[12],
   },
-  fingerprintActions: { gap: spacing[4], marginTop: spacing[12] },
 });

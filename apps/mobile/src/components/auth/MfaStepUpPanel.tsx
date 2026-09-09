@@ -3,12 +3,11 @@
  * form, not as another field on it.
  */
 import React, { useEffect, useState } from "react";
-import { View } from "react-native";
-import { Button, type ButtonVariant } from "../ui/Button";
+import { type ButtonVariant } from "../ui/Button";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { type OtpStatus } from "../ui/OtpInput";
-import { sheetMenuStyles } from "../ui/SheetActionRow";
+import { PanelActions } from "../ui/SheetActionRow";
 import { errorMessage, isMfaInvalidError, isMfaRequiredError } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
 import { MfaCodeField } from "./MfaSetupPanel";
@@ -100,17 +99,14 @@ export function MfaStepUpPanel({
         autoFocus
         onComplete={(next) => void submit(next)}
       />
-      <View style={sheetMenuStyles.stack}>
-        <Button
-          label={confirmLabel}
-          variant={confirmVariant}
-          block
-          size="lg"
-          loading={busy}
-          onPress={() => void submit()}
-        />
-        <Button label="Cancel" variant="ghost" block size="lg" disabled={busy} onPress={close} />
-      </View>
+      <PanelActions
+        confirmLabel={confirmLabel}
+        confirmVariant={confirmVariant}
+        onConfirm={() => void submit()}
+        onCancel={close}
+        loading={busy}
+        cancelDisabled={busy}
+      />
     </FloatingPanel>
   );
 }

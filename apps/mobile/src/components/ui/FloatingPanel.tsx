@@ -53,10 +53,7 @@ export function FloatingPanel({
   }));
   const panelStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
-    transform: [
-      { translateY: interpolate(progress.value, [0, 1], [8, 0]) },
-      { scale: interpolate(progress.value, [0, 1], [0.97, 1]) },
-    ],
+    transform: [{ translateY: interpolate(progress.value, [0, 1], [6, 0]) }],
   }));
 
   if (!rendered) return null;
@@ -84,7 +81,7 @@ export function FloatingPanel({
                 maxWidth: Math.min(maxWidth, width - spacing[32]),
                 minWidth: fitContent ? 220 : undefined,
                 maxHeight: height - insets.top - insets.bottom - spacing[48],
-                backgroundColor: palette.surfaceElevated,
+                backgroundColor: palette.mode === "dark" ? palette.surfaceSecondary : palette.surfaceElevated,
                 borderColor: palette.borderStrong,
                 ...shadows.level3,
               },
@@ -111,7 +108,7 @@ const styles = StyleSheet.create({
   panel: {
     overflow: "hidden",
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius["2xl"],
-    padding: spacing[12],
+    borderRadius: radius["3xl"],
+    padding: spacing[8],
   },
 });

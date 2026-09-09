@@ -136,11 +136,10 @@ export function MoveSheet({
             <FlatList
               data={destinations}
               keyExtractor={(d) => (isRootDestination(d) ? "root" : d.id)}
-              renderItem={({ item, index }) => (
+              renderItem={({ item }) => (
                 <SheetActionRow
                   icon={isRootDestination(item) ? "bookmark-outline" : (item.icon ?? DEFAULT_FOLDER_ICON)}
                   label={isRootDestination(item) ? "Bookmarks" : item.name}
-                  divider={index < destinations.length - 1}
                   trailing={
                     isRootDestination(item) ? undefined : (
                       <>

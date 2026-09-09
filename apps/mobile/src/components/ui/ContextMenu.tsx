@@ -11,6 +11,7 @@ import {
   StyleSheet,
   View,
   useWindowDimensions,
+  ActivityIndicator,
   type ViewStyle,
 } from "react-native";
 import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
@@ -133,6 +134,7 @@ export function ContextMenuItem({
   trailing,
   selected,
   disabled,
+  busy,
   onPress,
 }: {
   icon?: keyof typeof Ionicons.glyphMap;
@@ -141,39 +143,46 @@ export function ContextMenuItem({
   trailing?: React.ReactNode;
   selected?: boolean;
   disabled?: boolean;
+  busy?: boolean;
   onPress: () => void;
 }) {
   const { palette } = useTheme();
   const [hovered, setHovered] = React.useState(false);
   const color = tone === "danger" ? palette.danger : palette.text;
   const highlight = menuHoverFill(palette.mode, true);
+  const inactive = disabled || busy;
 
   return (
     <Pressable
       accessibilityRole="menuitem"
       accessibilityLabel={label}
-      accessibilityState={{ disabled: !!disabled, selected: !!selected }}
-      disabled={disabled}
+      accessibilityState={{ disabled: !!inactive, selected: !!selected, busy: !!busy }}
+      disabled={inactive}
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
       onPress={() => {
-        if (disabled) return;
+        if (inactive) return;
         haptics.light();
         onPress();
       }}
       style={({ pressed }) => [
         styles.item,
         Platform.OS === "web" ? styles.itemWeb : null,
-        disabled && styles.itemDisabled,
-        (pressed || hovered) && !disabled ? { backgroundColor: highlight } : null,
+        inactive && styles.itemDisabled,
+        (pressed || hovered) && !inactive ? { backgroundColor: highlight } : null,
       ]}
     >
       {icon ? <Ionicons name={icon} size={18} color={color} /> : null}
       <Text variant="body" style={[styles.itemLabel, { color }]} numberOfLines={1}>
         {label}
       </Text>
-      {selected ? <Ionicons name="checkmark" size={18} color={palette.accent} /> : null}
-      {trailing ? <View style={styles.trailing}>{trailing}</View> : null}
+      {busy ? (
+        <ActivityIndicator size="small" color={color} />
+      ) : selected ? (
+        <Ionicons name="checkmark" size={18} color={palette.accent} />
+      ) : trailing ? (
+        <View style={styles.trailing}>{trailing}</View>
+      ) : null}
     </Pressable>
   );
 }

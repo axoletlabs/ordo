@@ -7,7 +7,7 @@ import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 import { Text } from "../ui/Text";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
-import { sheetMenuStyles } from "../ui/SheetActionRow";
+import { PanelActions, sheetMenuStyles } from "../ui/SheetActionRow";
 import { EyeToggle } from "../ui/EyeToggle";
 import { PressableScale } from "../ui/PressableScale";
 import { Segmented } from "../ui/Segmented";
@@ -366,8 +366,8 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
     });
   };
 
-  const menuOpen = visible && !!displayFolder && (mode === "menu" || mode === "lockChoice");
-  const dialogOpen = visible && !!displayFolder && mode !== "menu" && mode !== "lockChoice";
+  const menuOpen = visible && !!displayFolder && (mode === "menu" || mode === "lockChoice" || mode === "delete");
+  const dialogOpen = visible && !!displayFolder && mode !== "menu" && mode !== "lockChoice" && mode !== "delete";
 
   return (
     <>
@@ -405,6 +405,18 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             <ContextMenuItem icon="text-outline" label="Text password" onPress={() => { setLockType("password"); showMode("lockCredential"); }} />
           </>
         ) : null}
+        {displayFolder && mode === "delete" ? (
+          <>
+            {error ? <Text variant="footnote" color="danger" style={styles.menuNote}>{error}</Text> : null}
+            <ContextMenuItem
+              icon="trash-outline"
+              label="Delete folder"
+              tone="danger"
+              onPress={doDelete}
+            />
+            <ContextMenuItem label="Cancel" onPress={() => showMode("menu")} />
+          </>
+        ) : null}
       </ContextMenu>
 
       <FloatingPanel visible={dialogOpen} onDismiss={onDismiss}>
@@ -412,10 +424,12 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
         <>
           <PanelHeader title="Rename folder" />
           <Input label="Name" value={name} onChangeText={setName} autoFocus error={error || undefined} onSubmitEditing={doRename} />
-          <View style={sheetMenuStyles.stack}>
-            <Button label="Save" block size="lg" onPress={doRename} loading={rename.isPending} />
-            <Button label="Cancel" variant="ghost" block size="lg" onPress={() => showMode("menu")} />
-          </View>
+          <PanelActions
+            confirmLabel="Save"
+            onConfirm={doRename}
+            onCancel={() => showMode("menu")}
+            loading={rename.isPending}
+          />
         </>
       ) : null}
 
@@ -509,10 +523,16 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             </>
           )}
           <View style={sheetMenuStyles.stack}>
-            {lockType === "pattern" || lockType === "pin" ? null : (
-              <Button label="Lock folder" block size="lg" onPress={() => void doSetCredential()} />
+            {lockType === "pattern" || lockType === "pin" ? (
+              <Button label="Back" variant="ghost" onPress={() => showMode("lockChoice")} />
+            ) : (
+              <PanelActions
+                confirmLabel="Lock folder"
+                cancelLabel="Back"
+                onConfirm={() => void doSetCredential()}
+                onCancel={() => showMode("lockChoice")}
+              />
             )}
-            <Button label="Back" variant="ghost" block size="lg" onPress={() => showMode("lockChoice")} />
           </View>
         </>
       ) : null}
@@ -599,17 +619,18 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             <Text variant="footnote" color="accent">Use account password</Text>
           </PressableScale>
           <View style={sheetMenuStyles.stack}>
-            {(folder.lockType ?? "password") === "pattern" || (folder.lockType ?? "password") === "pin" ? null : (
-              <Button
-                label={(folder.lockType ?? "password") === "device" ? "Use device lock" : "Remove lock"}
-                variant="danger"
-                block
-                size="lg"
-                onPress={(folder.lockType ?? "password") === "device" ? removeWithDeviceLock : () => void removeWithFolderPassword()}
+            {(folder.lockType ?? "password") === "pattern" || (folder.lockType ?? "password") === "pin" ? (
+              <Button label="Cancel" variant="ghost" disabled={removing} onPress={() => showMode("menu")} />
+            ) : (
+              <PanelActions
+                confirmLabel={(folder.lockType ?? "password") === "device" ? "Use device lock" : "Remove lock"}
+                confirmVariant="danger"
+                onConfirm={(folder.lockType ?? "password") === "device" ? removeWithDeviceLock : () => void removeWithFolderPassword()}
+                onCancel={() => showMode("menu")}
                 loading={removing}
+                cancelDisabled={removing}
               />
             )}
-            <Button label="Cancel" variant="ghost" block size="lg" disabled={removing} onPress={() => showMode("menu")} />
           </View>
         </ScrollView>
       ) : null}
@@ -655,10 +676,14 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
                     : "Use folder password"}
             </Text>
           </PressableScale>
-          <View style={sheetMenuStyles.stack}>
-            <Button label="Remove lock" variant="danger" block size="lg" onPress={submitAccountBypass} loading={removing} />
-            <Button label="Cancel" variant="ghost" block size="lg" disabled={removing} onPress={() => showMode("menu")} />
-          </View>
+          <PanelActions
+            confirmLabel="Remove lock"
+            confirmVariant="danger"
+            onConfirm={submitAccountBypass}
+            onCancel={() => showMode("menu")}
+            loading={removing}
+            cancelDisabled={removing}
+          />
         </ScrollView>
       ) : null}
 
@@ -667,32 +692,14 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
           <PanelHeader title="Choose an icon" />
           <FolderIconPicker value={icon} onChange={setIcon} />
           {error ? <Text variant="footnote" color="danger" style={styles.error}>{error}</Text> : null}
-          <View style={sheetMenuStyles.stack}>
-            <Button label="Save icon" block size="lg" onPress={doUpdateIcon} loading={update.isPending} disabled={icon === folder.icon} />
-            <Button label="Cancel" variant="ghost" block size="lg" onPress={() => showMode("menu")} />
-          </View>
-        </>
-      ) : null}
-
-      {folder && mode === "delete" ? (
-        <ScrollView keyboardShouldPersistTaps="handled">
-          <PanelHeader
-            icon="trash-outline"
-            iconColor={palette.danger}
-            iconBackground={palette.dangerSoft}
-            title={`Delete ${folder.name}?`}
-            subtitle={
-              folder.bookmarkCount > 0
-                ? `Also deletes ${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}. You can undo this.`
-                : "You can undo this."
-            }
+          <PanelActions
+            confirmLabel="Save icon"
+            onConfirm={doUpdateIcon}
+            onCancel={() => showMode("menu")}
+            loading={update.isPending}
+            confirmDisabled={icon === folder.icon}
           />
-          {error ? <Text variant="footnote" color="danger" align="center" style={styles.error}>{error}</Text> : null}
-          <View style={sheetMenuStyles.stack}>
-            <Button label="Delete folder" variant="danger" block size="lg" onPress={doDelete} />
-            <Button label="Cancel" variant="ghost" block size="lg" onPress={() => showMode("menu")} />
-          </View>
-        </ScrollView>
+        </>
       ) : null}
       </FloatingPanel>
     </>

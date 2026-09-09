@@ -3,14 +3,13 @@
  * Shared by the library home header action and the save-bookmark sheet.
  */
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, View, type TextInput } from "react-native";
+import { ScrollView, StyleSheet, type TextInput } from "react-native";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
-import { Button } from "../ui/Button";
 import { Text } from "../ui/Text";
 import { FolderIconPicker } from "./FolderIconPicker";
-import { sheetMenuStyles } from "../ui/SheetActionRow";
+import { PanelActions } from "../ui/SheetActionRow";
 import { useCreateFolder } from "../../hooks/use-folders";
 import { haptics } from "../../lib/haptics";
 import { errorMessage } from "../../lib/error-message";
@@ -76,10 +75,12 @@ export function CreateFolderPanel({
         />
         <Text variant="label" color="tertiary" style={styles.iconLabel}>Icon</Text>
         <FolderIconPicker value={icon} onChange={setIcon} />
-        <View style={sheetMenuStyles.stack}>
-          <Button label="Create folder" block size="lg" onPress={submit} loading={createFolder.isPending} />
-          <Button label="Cancel" variant="ghost" block size="lg" onPress={close} />
-        </View>
+        <PanelActions
+          confirmLabel="Create folder"
+          onConfirm={() => void submit()}
+          onCancel={close}
+          loading={createFolder.isPending}
+        />
       </ScrollView>
     </FloatingPanel>
   );

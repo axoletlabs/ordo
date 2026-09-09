@@ -15,6 +15,7 @@ import { Segmented } from "../ui/Segmented";
 import { Toggle } from "../ui/Toggle";
 import { Button } from "../ui/Button";
 import { Text } from "../ui/Text";
+import { PanelActions } from "../ui/SheetActionRow";
 import { toast } from "../ui/toast-store";
 import { importExportApi } from "../../lib/api/import-export";
 import { qk } from "../../lib/api/query-keys";
@@ -319,7 +320,7 @@ function SuccessState({
         </View>
       ) : null}
       <View style={styles.actions}>
-        <Button label="Done" block size="lg" onPress={onDone} />
+        <Button label="Done" block onPress={onDone} />
       </View>
     </View>
   );
@@ -428,18 +429,15 @@ function PreviewState({
 
       <View style={styles.actions}>
         {empty || count === 0 ? (
-          <Button label="Done" block size="lg" onPress={onDiscard} disabled={confirming} />
+          <Button label="Done" block onPress={onDiscard} disabled={confirming} />
         ) : (
-          <>
-            <Button
-              label={count === 1 ? "Import 1 bookmark" : `Import ${count} bookmarks`}
-              block
-              size="lg"
-              loading={confirming}
-              onPress={onConfirm}
-            />
-            <Button label="Discard" variant="ghost" block size="lg" onPress={onDiscard} disabled={confirming} />
-          </>
+          <PanelActions
+            confirmLabel={count === 1 ? "Import 1 bookmark" : `Import ${count} bookmarks`}
+            cancelLabel="Discard"
+            onConfirm={onConfirm}
+            onCancel={onDiscard}
+            loading={confirming}
+          />
         )}
       </View>
 

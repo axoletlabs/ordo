@@ -1,18 +1,18 @@
 /**
- * Centered title block for floating panels, menus, and dialogs.
+ * Title block for floating panels and dialogs. Left-aligned to match
+ * the context-menu card, not a centered alert.
  */
 import React from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Text, type TextVariant } from "./Text";
-import { radius, spacing } from "../../theme/tokens";
+import { spacing } from "../../theme/tokens";
 
 export function PanelHeader({
   title,
   subtitle,
   icon,
   iconColor,
-  iconBackground,
   titleVariant = "title2",
   subtitleVariant = "footnote",
   numberOfLines,
@@ -32,13 +32,9 @@ export function PanelHeader({
 }) {
   return (
     <View style={[styles.wrap, style]}>
-      {icon ? (
-        <View style={[styles.icon, { backgroundColor: iconBackground }]}>
-          <Ionicons name={icon} size={20} color={iconColor} />
-        </View>
-      ) : null}
-      <View style={styles.titleCluster}>
-        <Text variant={titleVariant} align="center" numberOfLines={numberOfLines} style={styles.title}>
+      <View style={styles.titleRow}>
+        {icon ? <Ionicons name={icon} size={18} color={iconColor} accessible={false} /> : null}
+        <Text variant={titleVariant} numberOfLines={numberOfLines} style={styles.title}>
           {title}
         </Text>
         {accessory}
@@ -47,7 +43,6 @@ export function PanelHeader({
         <Text
           variant={subtitleVariant}
           color="secondary"
-          align="center"
           numberOfLines={3}
           style={styles.subtitle}
         >
@@ -60,24 +55,16 @@ export function PanelHeader({
 
 const styles = StyleSheet.create({
   wrap: {
-    alignItems: "center",
-    marginBottom: spacing[6],
+    alignItems: "stretch",
+    paddingHorizontal: spacing[4],
+    marginBottom: spacing[8],
   },
-  icon: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.md,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: spacing[4],
-  },
-  titleCluster: {
+  titleRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
     gap: spacing[8],
     alignSelf: "stretch",
   },
-  title: { flexShrink: 1 },
-  subtitle: { marginTop: spacing[2], alignSelf: "stretch" },
+  title: { flex: 1, minWidth: 0 },
+  subtitle: { marginTop: spacing[4] },
 });
