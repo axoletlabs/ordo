@@ -37,13 +37,20 @@ export const bookmarksApi = {
       folderTokens: true,
     }),
 
-  search: (q: string, cursor?: string | null, limit?: number, tagIds: string[] = []) =>
+  search: (
+    q: string,
+    cursor?: string | null,
+    limit?: number,
+    tagIds: string[] = [],
+    unread: "all" | "unread" | "read" = "all",
+  ) =>
     api.get<typeof BookmarkRoutes.search.response>(BookmarkRoutes.search.path, {
       query: {
         q,
         cursor,
         limit,
         tagIds: tagIds.length > 0 ? tagIds.join(",") : undefined,
+        unread: unread === "unread" ? "1" : unread === "read" ? "0" : undefined,
       },
       auth: true,
       folderTokens: true,

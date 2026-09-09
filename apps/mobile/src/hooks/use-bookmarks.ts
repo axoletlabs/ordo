@@ -64,15 +64,20 @@ export function useInfiniteBookmarks(folderId: string | null, enabled = true) {
   });
 }
 
-export function useInfiniteSearch(q: string, tagIds: readonly string[] = []) {
+export function useInfiniteSearch(
+  q: string,
+  tagIds: readonly string[] = [],
+  unread: "all" | "unread" | "read" = "all",
+  enabled = true,
+) {
+  const term = q.trim();
   return useInfiniteQuery({
-    queryKey: qk.search(q, tagIds),
+    queryKey: qk.search(term, tagIds, unread),
     queryFn: ({ pageParam }) =>
-      bookmarksApi.search(q, pageParam ?? undefined, DEFAULT_PAGE_SIZE, [...tagIds]),
+      bookmarksApi.search(term, pageParam ?? undefined, DEFAULT_PAGE_SIZE, [...tagIds], unread),
     initialPageParam: null as string | null,
-    getNextPageParam: (last) => (last.hasMore ? last.nextCursor : undefined),
-    enabled: q.trim().length > 0 || tagIds.length > 0,
-    placeholderData: (prev) => prev,
+    getNextPageParam: (last) => (last.hasMore && last.nextCursor ? last.nextCursor : undefined),
+    enabled,
   });
 }
 

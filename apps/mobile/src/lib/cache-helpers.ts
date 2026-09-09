@@ -255,6 +255,25 @@ export function removeBookmarksEverywhere(qc: QueryClient, ids: ReadonlySet<stri
   });
 }
 
+/** Every bookmark currently in the React Query cache (lists + reader detail). */
+export function collectCachedBookmarks(qc: QueryClient): BookmarkDto[] {
+  const byId = new Map<string, BookmarkDto>();
+  for (const query of qc.getQueryCache().getAll()) {
+    const data = query.state.data;
+    if (isPagedBookmarks(data)) {
+      for (const page of data.pages) {
+        if (!page || !Array.isArray(page.items)) continue;
+        for (const item of page.items) {
+          if (item?.id) byId.set(item.id, item);
+        }
+      }
+    } else if (isBookmarkRecord(data)) {
+      byId.set(data.id, data);
+    }
+  }
+  return [...byId.values()];
+}
+
 /**
  * Find a bookmark across all cached bookmark lists (folder lists + search).
  * Lets the reader render instantly from cache without a detail fetch.
