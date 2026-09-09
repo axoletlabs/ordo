@@ -80,6 +80,7 @@ module.exports = {
     ],
     "./plugins/with-updates-channel.js",
     "./plugins/with-android-build.js",
+    "./plugins/with-high-refresh-rate.js",
   ],
   extra: {
     eas: {
@@ -103,6 +104,9 @@ module.exports = {
   },
   ios: {
     infoPlist: {
+      // Third-party apps stay at 60fps on ProMotion iPhones unless this is set.
+      // The flag only *allows* the panel rate; 60Hz hardware stays at 60.
+      CADisableMinimumFrameDurationOnPhone: true,
       NSAppTransportSecurity: {
         NSAllowsArbitraryLoads: true,
       },
