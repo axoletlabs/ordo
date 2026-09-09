@@ -1,4 +1,4 @@
-/** Theme and navigation preferences. */
+/** Theme, motion, and haptic preferences. */
 import React from "react";
 import {
   SettingsGroup,
@@ -40,11 +40,13 @@ export default function AppearanceScreen() {
   const navigationStyle = useSettingsStore((s) => s.navigationStyle);
   const navigationAnimation = useSettingsStore((s) => s.navigationAnimation);
   const showNavigationLabels = useSettingsStore((s) => s.showNavigationLabels);
+  const hapticsEnabled = useSettingsStore((s) => s.hapticsEnabled);
   const setThemeMode = useSettingsStore((s) => s.setThemeMode);
   const setAmoled = useSettingsStore((s) => s.setAmoled);
   const setNavigationStyle = useSettingsStore((s) => s.setNavigationStyle);
   const setNavigationAnimation = useSettingsStore((s) => s.setNavigationAnimation);
   const setShowNavigationLabels = useSettingsStore((s) => s.setShowNavigationLabels);
+  const setHapticsEnabled = useSettingsStore((s) => s.setHapticsEnabled);
   const isDarkActive = palette.mode === "dark";
 
   return (
@@ -78,6 +80,16 @@ export default function AppearanceScreen() {
                 disabled={!isDarkActive}
               />
             }
+            rightFit="content"
+            divider={false}
+          />
+        </SettingsGroup>
+
+        <SettingsGroup label="Feedback">
+          <SettingRow
+            icon="pulse-outline"
+            label="Haptic feedback"
+            right={<Toggle value={hapticsEnabled} onValueChange={setHapticsEnabled} />}
             rightFit="content"
             divider={false}
           />
