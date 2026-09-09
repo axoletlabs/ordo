@@ -75,7 +75,6 @@ export function SettingRow({
     <View style={styles.pad}>
       <PressableScale
         style={styles.press}
-        scaleTo={1}
         onPress={onPress}
       >
         {content}

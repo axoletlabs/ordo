@@ -150,7 +150,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
         accessible={!selectionMode}
         importantForAccessibility={selectionMode ? "no" : "yes"}
         style={styles.leading}
-        scaleTo={1}
+        scaleTo={0.95}
         onPressIn={warmBookmark}
         onPress={openBookmark}
         onLongPress={
@@ -205,7 +205,6 @@ export const BookmarkRow = React.memo(function BookmarkRow({
               : undefined
         }
         style={styles.body}
-        scaleTo={1}
         onPressIn={warmBookmark}
         onPress={openBookmark}
         onLongPress={selectionMode ? undefined : onMore ? () => openMore() : undefined}

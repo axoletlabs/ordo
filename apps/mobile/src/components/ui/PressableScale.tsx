@@ -1,6 +1,6 @@
 /**
- * Pressable with optional scale-down. Navigation rows pass `scaleTo={1}` so
- * freeze-on-blur does not snapshot a squashed row mid-spring.
+ * Pressable with a snappy scale-down on press. Release eases back quickly so
+ * navigation can start on the same tap without waiting on the spring.
  */
 import React, { useCallback } from "react";
 import {
@@ -14,14 +14,16 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   cancelAnimation,
+  withSpring,
   withTiming,
   interpolate,
 } from "react-native-reanimated";
+import { springs } from "../../theme/tokens";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
 export type PressableScaleProps = Omit<PressableProps, "onPressIn" | "onPressOut"> & {
-  /** Max press depth (0–1). Default 0.97. Pass 1 to skip scale (navigation). */
+  /** Max press depth (0–1). Default 0.97. */
   scaleTo?: number;
   /** Dim opacity while pressed. Default false — scale is enough feedback. */
   dim?: boolean;
@@ -52,7 +54,7 @@ export function PressableScale({
   const handleIn = useCallback(
     (e: GestureResponderEvent) => {
       if (disabled) return;
-      pressed.value = withTiming(1, { duration: 50 });
+      pressed.value = withSpring(1, springs.snappy);
       onPressIn?.(e);
     },
     [disabled, onPressIn, pressed],
@@ -60,19 +62,17 @@ export function PressableScale({
 
   const handleOut = useCallback(
     (e: GestureResponderEvent) => {
-      cancelAnimation(pressed);
-      pressed.value = 0;
+      pressed.value = withTiming(0, { duration: 80 });
       onPressOut?.(e);
     },
     [onPressOut, pressed],
   );
 
   const animatedStyle = useAnimatedStyle(() => {
-    const opacity = dim ? interpolate(pressed.value, [0, 1], [1, 0.7]) : 1;
-    if (scaleTo === 1) return { opacity };
+    const s = interpolate(pressed.value, [0, 1], [1, scaleTo]);
     return {
-      transform: [{ scale: interpolate(pressed.value, [0, 1], [1, scaleTo]) }],
-      opacity,
+      transform: [{ scale: s }],
+      opacity: dim ? interpolate(pressed.value, [0, 1], [1, 0.7]) : 1,
     };
   });
 

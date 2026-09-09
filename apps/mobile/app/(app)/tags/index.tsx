@@ -94,7 +94,6 @@ export default function TagsScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={`${item.name}, ${item.bookmarkCount} bookmarks`}
                 style={[styles.row, { borderBottomColor: palette.border }]}
-                scaleTo={1}
                 onPressIn={() => {
                   void prefetchTaggedBookmarks(item.id);
                 }}

@@ -204,7 +204,6 @@ export default function BookmarksScreen() {
     <HeaderActions style={styles.headerActions}>
       <PressableScale
         style={styles.tagsLink}
-        scaleTo={1}
         onPress={() => {
           haptics.light();
           router.push("/tags");

@@ -140,7 +140,7 @@ export function Header({
             {!showLarge && showBack ? (
               <PressableScale
                 style={styles.backBtn}
-                scaleTo={1}
+                scaleTo={0.85}
                 onPress={handleBack}
                 hitSlop={8}
                 accessibilityRole="button"
