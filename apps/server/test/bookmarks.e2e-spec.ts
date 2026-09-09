@@ -1277,6 +1277,66 @@ describe("Bookmarks & Folders (e2e)", () => {
         "Needle unfiled",
       ]);
     });
+
+    it("ranks title matches ahead of newer body-only hits and finds domains", async () => {
+      const { agent, userId } = await setup();
+      await ctx.prisma.bookmark.create({
+        data: {
+          userId,
+          folderId: null,
+          url: "https://react.dev/learn",
+          title: "Needle titled",
+          domain: "react.dev",
+        },
+      });
+      await ctx.prisma.bookmark.create({
+        data: {
+          userId,
+          folderId: null,
+          url: "https://example.com/body",
+          title: "Diary",
+          domain: "example.com",
+          contentText: "needle in the article body",
+        },
+      });
+
+      const ranked = await agent.get("/api/bookmarks/search?q=needle").expect(200);
+      expect(ranked.body.items.map((b: { title: string }) => b.title)).toEqual([
+        "Needle titled",
+        "Diary",
+      ]);
+
+      const byDomain = await agent.get("/api/bookmarks/search?q=react.dev").expect(200);
+      expect(byDomain.body.items).toHaveLength(1);
+      expect(byDomain.body.items[0].domain).toBe("react.dev");
+    });
+
+    it("filters search results to unread bookmarks", async () => {
+      const { agent, userId } = await setup();
+      await ctx.prisma.bookmark.create({
+        data: {
+          userId,
+          folderId: null,
+          url: "https://example.com/read",
+          title: "Needle read",
+          domain: "example.com",
+          isRead: true,
+        },
+      });
+      await ctx.prisma.bookmark.create({
+        data: {
+          userId,
+          folderId: null,
+          url: "https://example.com/unread",
+          title: "Needle unread",
+          domain: "example.com",
+          isRead: false,
+        },
+      });
+
+      const unread = await agent.get("/api/bookmarks/search?q=needle&unread=1").expect(200);
+      expect(unread.body.items.map((b: { title: string }) => b.title)).toEqual(["Needle unread"]);
+    });
   });
 
   describe("folder protection", () => {

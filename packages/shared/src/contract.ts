@@ -415,7 +415,7 @@ export const BookmarkRoutes = {
     path: `${API_PREFIX}/bookmarks/search`,
     method: "GET",
     body: {} as Empty,
-    query: {} as { q: string; tagIds?: string; cursor?: string; limit?: number },
+    query: {} as { q: string; tagIds?: string; unread?: "0" | "1"; cursor?: string; limit?: number },
     params: {} as Empty,
     response: {} as CursorPage<BookmarkDto>,
   },

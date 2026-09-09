@@ -10,6 +10,7 @@ import {
   type BatchBookmarksInput,
   type BookmarkDto,
   type CursorPage,
+  rankSearchResults,
 } from "@ordo/shared";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { AppError } from "../common/errors/app-error.js";
@@ -58,6 +59,8 @@ type ListItem = Prisma.BookmarkGetPayload<{ select: typeof LIST_SELECT }>;
 /** Background refresh tuning: small batches, finite spacing. */
 const REFRESH_BATCH_SIZE = 50;
 const REFRESH_DELAY_MS = 250;
+/** Ranked text search loads a pool, then returns it as one page. */
+const SEARCH_POOL_SIZE = 200;
 /** Hard stop so a pathological database can never loop forever. */
 const REFRESH_MAX_BATCHES = 500;
 
@@ -141,7 +144,13 @@ export class BookmarksService implements OnApplicationBootstrap {
   async search(
     userId: string,
     q: string,
-    opts: { cursor?: string; limit?: number; tagIds?: string[]; folderTokens?: string[] },
+    opts: {
+      cursor?: string;
+      limit?: number;
+      tagIds?: string[];
+      unread?: boolean;
+      folderTokens?: string[];
+    },
   ): Promise<CursorPage<BookmarkDto>> {
     const term = q.trim();
     const tagIds = opts.tagIds ?? [];
@@ -157,17 +166,35 @@ export class BookmarksService implements OnApplicationBootstrap {
                 OR: [
                   { title: { contains: term } },
                   { url: { contains: term } },
+                  { domain: { contains: term } },
                   { contentText: { contains: term } },
                   { description: { contains: term } },
+                  { author: { contains: term } },
                   { tags: { some: { tag: { name: { contains: term } } } } },
                 ],
               } satisfies Prisma.BookmarkWhereInput,
             ]
           : []),
         ...tagIds.map((tagId) => ({ tags: { some: { tagId } } })),
+        ...(opts.unread === undefined ? [] : [{ isRead: !opts.unread }]),
       ],
     };
-    return this.paginate(where, opts.cursor, opts.limit, (b) => toBookmarkDto(b));
+
+    if (!term) {
+      return this.paginate(where, opts.cursor, opts.limit, (b) => toBookmarkDto(b));
+    }
+
+    const rows = await this.prisma.bookmark.findMany({
+      where,
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: SEARCH_POOL_SIZE,
+      select: LIST_SELECT,
+    });
+    return {
+      items: rankSearchResults(rows.map((row) => toBookmarkDto(row)), term),
+      nextCursor: null,
+      hasMore: false,
+    };
   }
 
   async detail(

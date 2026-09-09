@@ -92,12 +92,14 @@ export class BookmarksController {
     @Query("cursor") cursor: string | undefined,
     @Query("limit") limit: string | undefined,
     @Query("tagIds") rawTagIds: string | undefined,
+    @Query("unread") unread: string | undefined,
     @Req() req: Request,
   ): Promise<CursorPage<BookmarkDto>> {
     return this.bookmarks.search(user.userId, q ?? "", {
       cursor,
       limit: limit ? parseInt(limit, 10) : undefined,
       tagIds: this.parseTagIds(rawTagIds),
+      unread: unread === "1" || unread === "true" ? true : unread === "0" || unread === "false" ? false : undefined,
       folderTokens: getPresentedFolderTokens(req),
     });
   }
