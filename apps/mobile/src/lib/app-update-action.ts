@@ -1,13 +1,12 @@
 import type { OtaStatus } from "../hooks/use-ota-update";
 import type { NativeRelease, NativeUpdateStatus } from "../store/native-update";
 
-export type AppUpdateAction = "check" | "download" | "restart";
+export type AppUpdateAction = "check" | "download" | "restart" | "install";
 export type AppUpdateKind = "ota" | "native" | null;
 
-interface UpdatePhase {
+export interface AppUpdatePhase {
   kind: "ota" | "native";
-  action: "download" | "restart";
-  at: number;
+  action: "download" | "restart" | "install";
 }
 
 export interface AppUpdateActionInput {
@@ -19,64 +18,60 @@ export interface AppUpdateActionInput {
   nativeDownloaded: boolean;
 }
 
-/** Pick Check / Download / Restart from OTA + native state, including stale downloads. */
-export function resolveAppUpdateAction(input: AppUpdateActionInput): {
+export interface AppUpdateActionResult {
+  /** First actionable phase, or Check when nothing is pending. */
   action: AppUpdateAction;
   kind: AppUpdateKind;
+  /** Native and OTA together when both are pending — never drop one for the other. */
+  phases: AppUpdatePhase[];
   checking: boolean;
   downloading: boolean;
-} {
+}
+
+function nativePhase(input: AppUpdateActionInput): AppUpdatePhase | null {
+  if (!input.nativeRelease) return null;
+  if (input.nativeStatus === "disabled" || input.nativeStatus === "idle") return null;
+  if (input.nativeStatus === "downloading") {
+    return { kind: "native", action: "download" };
+  }
+  return {
+    kind: "native",
+    action: input.nativeDownloaded ? "install" : "download",
+  };
+}
+
+function otaPhase(input: AppUpdateActionInput): AppUpdatePhase | null {
+  if (input.otaStatus === "downloading") {
+    return { kind: "ota", action: "download" };
+  }
+  if (input.otaStatus === "available") {
+    return { kind: "ota", action: "download" };
+  }
+  if (input.otaStatus === "ready") {
+    return { kind: "ota", action: "restart" };
+  }
+  return null;
+}
+
+/** Every pending OTA and native step, native first. In-flight downloads stay Download. */
+export function listAppUpdatePhases(input: AppUpdateActionInput): AppUpdatePhase[] {
+  const phases: AppUpdatePhase[] = [];
+  const native = nativePhase(input);
+  const ota = otaPhase(input);
+  if (native) phases.push(native);
+  if (ota) phases.push(ota);
+  return phases;
+}
+
+/** Pick Check or the first pending phase. Prefer listing `phases` when both exist. */
+export function resolveAppUpdateAction(input: AppUpdateActionInput): AppUpdateActionResult {
   const checking = input.otaStatus === "checking" || input.nativeStatus === "checking";
   const downloading =
     input.otaStatus === "downloading" || input.nativeStatus === "downloading";
-
-  // An in-flight fetch keeps Download so the button doesn't jump to Restart/Check.
-  if (input.nativeStatus === "downloading" && input.nativeRelease) {
-    return { action: "download", kind: "native", checking, downloading };
-  }
-  if (input.otaStatus === "downloading") {
-    return { action: "download", kind: "ota", checking, downloading };
-  }
-
-  const phases: UpdatePhase[] = [];
-
-  if (input.otaStatus === "available") {
-    phases.push({
-      kind: "ota",
-      action: "download",
-      at: input.otaAvailableAt?.getTime() ?? 0,
-    });
-  } else if (input.otaStatus === "ready") {
-    phases.push({
-      kind: "ota",
-      action: "restart",
-      at: input.otaPendingAt?.getTime() ?? 0,
-    });
-  }
-
-  if (
-    input.nativeRelease &&
-    input.nativeStatus !== "disabled" &&
-    input.nativeStatus !== "idle"
-  ) {
-    phases.push({
-      kind: "native",
-      action: input.nativeDownloaded ? "restart" : "download",
-      at: new Date(input.nativeRelease.publishedAt).getTime(),
-    });
-  }
-
+  const phases = listAppUpdatePhases(input);
   if (phases.length === 0) {
-    return { action: "check", kind: null, checking, downloading };
+    return { action: "check", kind: null, phases, checking, downloading };
   }
-
-  phases.sort((left, right) => {
-    const delta = right.at - left.at;
-    if (delta !== 0) return delta;
-    if (left.kind === right.kind) return 0;
-    return left.kind === "native" ? -1 : 1;
-  });
-
   const top = phases[0]!;
-  return { action: top.action, kind: top.kind, checking, downloading };
+  return { action: top.action, kind: top.kind, phases, checking, downloading };
 }

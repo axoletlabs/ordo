@@ -20,6 +20,10 @@ const CHECK_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 const CHECK_TIMEOUT_MS = 15 * 1000;
 const APK_MIME_TYPE = "application/vnd.android.package-archive";
 const READ_URI_PERMISSION = 1;
+const INSTALL_UNKNOWN_APPS_ACTION = "android.settings.MANAGE_UNKNOWN_APP_SOURCES";
+
+/** Invalidate in-flight GitHub checks so they cannot overwrite a download or installer. */
+let checkEpoch = 0;
 
 export interface NativeRelease {
   version: string;
@@ -75,6 +79,10 @@ interface NativeUpdateState {
   downloadedUri: string | null;
   /** True while this process is fetching or presenting a just-downloaded APK. */
   showProgress: boolean;
+  /** True while the system installer activity is in the foreground. */
+  installing: boolean;
+  /** True when Android likely blocked sideloading (unknown-sources). */
+  installPermissionLikely: boolean;
   error: string | null;
   lastChecked: number | null;
   hydrate: () => Promise<void>;
@@ -83,6 +91,22 @@ interface NativeUpdateState {
   downloadAndInstall: () => Promise<void>;
   install: () => Promise<void>;
   dismissDownload: () => void;
+}
+
+function androidPackageName(): string {
+  return Constants.expoConfig?.android?.package ?? "com.axolet.ordo";
+}
+
+export async function openInstallPermissionSettings(): Promise<void> {
+  await IntentLauncher.startActivityAsync(INSTALL_UNKNOWN_APPS_ACTION, {
+    data: `package:${androidPackageName()}`,
+  });
+}
+
+function isInstallPermissionError(message: string): boolean {
+  return /unknown source|install.?unknown|REQUEST_INSTALL|not allowed to install|permission denied|INSTALL_FAILED_USER_RESTRICTED/i.test(
+    message,
+  );
 }
 
 function releaseVersion(tagName: string): string | null {
@@ -210,6 +234,8 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
   progress: 0,
   downloadedUri: null,
   showProgress: false,
+  installing: false,
+  installPermissionLikely: false,
   error: null,
   lastChecked: null,
 
@@ -234,6 +260,8 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
         lastChecked: cached?.checkedAt ?? null,
         downloadedUri: null,
         showProgress: false,
+        installing: false,
+        installPermissionLikely: false,
         status: "disabled",
       });
       return;
@@ -247,6 +275,8 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
       downloadedUri,
       progress: downloadedUri ? 1 : 0,
       showProgress: false,
+      installing: false,
+      installPermissionLikely: false,
       status: release ? (downloadedUri ? "downloaded" : "available") : "idle",
     });
   },
@@ -275,7 +305,13 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
     await get().hydrate();
     if (!isSupported()) return null;
     const state = get();
-    if (state.status === "checking" || state.status === "downloading") return state.release;
+    if (
+      state.status === "checking" ||
+      state.status === "downloading" ||
+      state.installing
+    ) {
+      return state.release;
+    }
     const awaitingNewer = !!state.release || !!state.downloadedUri;
     if (
       !force &&
@@ -290,6 +326,15 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
       release: state.release,
       downloadedUri: state.downloadedUri,
       progress: state.progress,
+    };
+    const epoch = ++checkEpoch;
+    const mayCommit = () => {
+      const current = get();
+      return (
+        epoch === checkEpoch &&
+        current.status !== "downloading" &&
+        !current.installing
+      );
     };
     set({ status: "checking", error: null });
     try {
@@ -321,10 +366,13 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
         const waitingForApk =
           !!newestEligible &&
           (!release || compareReleaseCandidates(newestEligible, release) > 0);
+        if (!mayCommit()) return get().release;
         if (previous.release?.version && previous.release.version !== release?.version) {
           await deleteApk(previous.release.version);
         }
+        if (!mayCommit()) return get().release;
         const downloadedUri = await resolveLocalApk(release);
+        if (!mayCommit()) return get().release;
         set({
           release,
           downloadedUri,
@@ -350,6 +398,7 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
         clearTimeout(timeout);
       }
     } catch (error) {
+      if (!mayCommit()) throw error;
       const downloadedUri =
         (await resolveLocalApk(previous.release)) ?? previous.downloadedUri;
       set({
@@ -368,7 +417,8 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
   },
 
   downloadAndInstall: async () => {
-    if (get().status === "downloading") return;
+    if (get().status === "downloading" || get().installing) return;
+    checkEpoch += 1;
     const release = get().release;
     if (!release) return;
     const destination = apkDestination(release.version);
@@ -380,9 +430,10 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
         downloadedUri: destination,
         error: null,
         showProgress: true,
+        installPermissionLikely: false,
       });
       await get().install();
-      if (get().lastChecked == null) void get().check(true).catch(() => {});
+      if (get().lastChecked == null && !get().error) void get().check(true).catch(() => {});
       return;
     }
     set({
@@ -391,6 +442,7 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
       downloadedUri: null,
       error: null,
       showProgress: true,
+      installPermissionLikely: false,
     });
     try {
       await FileSystem.deleteAsync(destination, { idempotent: true });
@@ -412,7 +464,7 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
       }
       set({ status: "downloaded", progress: 1, downloadedUri: result.uri });
       await get().install();
-      if (get().lastChecked == null) void get().check(true).catch(() => {});
+      if (get().lastChecked == null && !get().error) void get().check(true).catch(() => {});
     } catch (error) {
       if (get().downloadedUri) {
         set({
@@ -440,22 +492,58 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
         downloadedUri: null,
         progress: 0,
         status: release ? "available" : "idle",
+        installing: false,
       });
       throw new Error("The downloaded update is no longer on the device");
     }
     if (uri !== currentUri) {
       set({ downloadedUri: uri, status: "downloaded", progress: 1 });
     }
+    checkEpoch += 1;
+    set({
+      installing: true,
+      error: null,
+      installPermissionLikely: false,
+      showProgress: true,
+      status: "downloaded",
+    });
     try {
       const contentUri = await FileSystem.getContentUriAsync(uri);
-      await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
+      const result = await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
         data: contentUri,
         type: APK_MIME_TYPE,
         flags: READ_URI_PERMISSION,
       });
+      const stillNeedsUpdate =
+        !!release && isNewerVersion(release.version, currentVersion());
+      if (!stillNeedsUpdate) return;
+      const canceled = result.resultCode === IntentLauncher.ResultCode.Canceled;
+      set({
+        status: "downloaded",
+        downloadedUri: uri,
+        progress: 1,
+        showProgress: true,
+        error: canceled
+          ? "Install was cancelled. Your current version is unchanged."
+          : "The new version isn't installed yet. Finish the system installer, or allow Ordo to install unknown apps.",
+        installPermissionLikely: !canceled,
+      });
     } catch (error) {
-      set({ error: error instanceof Error ? error.message : "Couldn't open the installer." });
+      const message = error instanceof Error ? error.message : "Couldn't open the installer.";
+      const permission = isInstallPermissionError(message);
+      set({
+        status: "downloaded",
+        downloadedUri: uri,
+        progress: 1,
+        showProgress: true,
+        error: permission
+          ? "Android blocked the installer. Allow Ordo to install unknown apps, then try again."
+          : message,
+        installPermissionLikely: permission,
+      });
       throw error;
+    } finally {
+      set({ installing: false });
     }
   },
 
@@ -465,6 +553,8 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
     set({
       status: release ? (downloaded ? "downloaded" : "available") : "idle",
       showProgress: false,
+      installing: false,
+      installPermissionLikely: false,
       error: null,
     });
   },

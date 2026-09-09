@@ -1,10 +1,13 @@
 /**
  * Top-level error boundary. Catches render errors anywhere in the tree and
- * shows a small themed fallback instead of a blank/white screen. "Reload"
- * refreshes the page on web; "Retry" clears the error and re-renders.
+ * shows a small themed fallback instead of a blank/white screen.
+ *
+ * Retry remounts the current JS tree. Reload never applies a *different*
+ * pending OTA — that is a separate, explicit action.
  */
 import React, { Component, type ReactNode } from "react";
 import {
+  Linking,
   Platform,
   Pressable,
   StyleSheet,
@@ -15,6 +18,8 @@ import {
 import * as Updates from "expo-updates";
 import * as SplashScreen from "expo-splash-screen";
 
+const RELEASES_URL = "https://github.com/axoletlabs/ordo/releases";
+
 interface Props {
   children: ReactNode;
 }
@@ -23,26 +28,41 @@ interface State {
   error: Error | null;
 }
 
-async function reload() {
-  if (Platform.OS === "web" && typeof window !== "undefined") {
-    window.location.reload();
-    return;
-  }
-  await Updates.reloadAsync();
-}
-
 function Fallback({ error, onReset }: { error: Error; onReset: () => void }) {
   const dark = useColorScheme() === "dark";
   const foreground = dark ? "#F4F1E8" : "#24231F";
   const secondary = dark ? "#AAA79F" : "#656159";
   const background = dark ? "#11110F" : "#EFE7D2";
+  const updates = Updates.useUpdates();
+  const pendingId = updates.downloadedUpdate?.updateId;
+  const runningId = updates.currentlyRunning.updateId;
+  const pendingIsDifferent =
+    updates.isUpdatePending && pendingId != null && pendingId !== runningId;
+  const runningOta = Updates.isEnabled && !updates.currentlyRunning.isEmbeddedLaunch;
+  const emergency = updates.currentlyRunning.isEmergencyLaunch;
+
+  const reloadCurrent = () => {
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      window.location.reload();
+      return;
+    }
+    if (pendingIsDifferent) {
+      onReset();
+      return;
+    }
+    void Updates.reloadAsync().catch(onReset);
+  };
 
   return (
     <View style={[styles.root, { backgroundColor: background }]}>
       <View style={styles.card}>
         <Text style={[styles.title, { color: foreground }]}>Something went wrong</Text>
         <Text style={[styles.message, { color: secondary }]}>
-          An unexpected error occurred. Reloading usually fixes it.
+          {emergency
+            ? "The last update failed to launch, so this is the version built into the app."
+            : pendingIsDifferent
+              ? "Retry keeps the version you're on. Applying the downloaded update is a separate step."
+              : "An unexpected error occurred. Retrying usually fixes it."}
         </Text>
         <Text style={styles.details} selectable>
           {error.message || error.name}
@@ -51,18 +71,39 @@ function Fallback({ error, onReset }: { error: Error; onReset: () => void }) {
           <Pressable
             accessibilityRole="button"
             style={[styles.button, styles.primaryButton]}
-            onPress={() => void reload().catch(onReset)}
-          >
-            <Text style={[styles.buttonLabel, styles.primaryButtonLabel]}>Reload</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            style={[styles.button, { borderColor: secondary }]}
             onPress={onReset}
           >
-            <Text style={[styles.buttonLabel, { color: foreground }]}>Retry</Text>
+            <Text style={[styles.buttonLabel, styles.primaryButtonLabel]}>Retry</Text>
           </Pressable>
+          {pendingIsDifferent ? (
+            <Pressable
+              accessibilityRole="button"
+              style={[styles.button, { borderColor: secondary }]}
+              onPress={() => void Updates.reloadAsync().catch(onReset)}
+            >
+              <Text style={[styles.buttonLabel, { color: foreground }]}>Apply update</Text>
+            </Pressable>
+          ) : (
+            <Pressable
+              accessibilityRole="button"
+              style={[styles.button, { borderColor: secondary }]}
+              onPress={reloadCurrent}
+            >
+              <Text style={[styles.buttonLabel, { color: foreground }]}>Reload</Text>
+            </Pressable>
+          )}
         </View>
+        {runningOta ? (
+          <Pressable
+            accessibilityRole="button"
+            style={styles.link}
+            onPress={() => void Linking.openURL(RELEASES_URL).catch(() => {})}
+          >
+            <Text style={[styles.linkLabel, { color: secondary }]}>
+              Restore the bundled app from GitHub
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
     </View>
   );
@@ -109,4 +150,6 @@ const styles = StyleSheet.create({
   primaryButton: { backgroundColor: "#EF705F", borderColor: "#EF705F" },
   buttonLabel: { fontSize: 14, fontWeight: "700", letterSpacing: 1.1, textTransform: "uppercase" },
   primaryButtonLabel: { color: "#FFFFFF" },
+  link: { marginTop: 16, minHeight: 44, alignItems: "center", justifyContent: "center" },
+  linkLabel: { fontSize: 13, lineHeight: 18, textAlign: "center" },
 });

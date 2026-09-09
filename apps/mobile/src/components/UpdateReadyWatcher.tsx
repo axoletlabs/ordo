@@ -1,5 +1,6 @@
 /**
- * Announces the newest actionable update once per artifact. Renderless.
+ * Announces each actionable update once per artifact. Renderless.
+ * OTA and native toasts are independent so one never hides the other.
  */
 import { useEffect, useRef } from "react";
 import { APP_NAME } from "@ordo/shared";
@@ -13,15 +14,17 @@ const UPDATE_TOAST_DURATION = 3000;
 export function UpdateReadyWatcher() {
   const update = useAppUpdate();
   const { ota, native } = update;
-  const lastNativeShown = useRef<string | null>(null);
+  const lastNativeDownloadShown = useRef<string | null>(null);
+  const lastNativeInstallShown = useRef<string | null>(null);
   const lastAvailableShown = useRef<string | null>(null);
   const lastReadyShown = useRef<string | null>(null);
 
   useEffect(() => {
-    if (update.kind !== "native" || !native.release) return;
-    if (update.action !== "download" || update.downloading) return;
-    if (native.release.tagName === lastNativeShown.current) return;
-    lastNativeShown.current = native.release.tagName;
+    if (!native.release || native.showProgress) return;
+    if (native.status === "downloading") return;
+    if (native.status !== "available") return;
+    if (native.release.tagName === lastNativeDownloadShown.current) return;
+    lastNativeDownloadShown.current = native.release.tagName;
 
     haptics.light();
     toast.show(`${APP_NAME} v${native.release.version} is available`, {
@@ -33,10 +36,34 @@ export function UpdateReadyWatcher() {
           native.downloadAndInstall().catch(() => toast.error("Couldn't download the update.")),
       },
     });
-  }, [native.downloadAndInstall, native.release, update.action, update.downloading, update.kind]);
+  }, [native.downloadAndInstall, native.release, native.showProgress, native.status]);
 
   useEffect(() => {
-    if (update.kind !== "ota" || !ota.enabled || ota.status !== "available") return;
+    if (!native.release || native.showProgress) return;
+    if (native.status !== "downloaded" || !native.downloadedUri) return;
+    if (native.release.tagName === lastNativeInstallShown.current) return;
+    lastNativeInstallShown.current = native.release.tagName;
+
+    haptics.light();
+    toast.show(`${APP_NAME} v${native.release.version} is ready to install`, {
+      duration: 6000,
+      swipeable: true,
+      action: {
+        label: "Install",
+        onPress: () =>
+          native.install().catch(() => toast.error("Couldn't open the installer.")),
+      },
+    });
+  }, [
+    native.downloadedUri,
+    native.install,
+    native.release,
+    native.showProgress,
+    native.status,
+  ]);
+
+  useEffect(() => {
+    if (!ota.enabled || ota.status !== "available") return;
     const key = ota.availableUpdateId ?? "__available";
     if (key === lastAvailableShown.current) return;
     lastAvailableShown.current = key;
@@ -50,10 +77,10 @@ export function UpdateReadyWatcher() {
         onPress: () => ota.download().catch(() => toast.error("Couldn't download the update.")),
       },
     });
-  }, [ota.availableUpdateId, ota.download, ota.enabled, ota.status, update.kind]);
+  }, [ota.availableUpdateId, ota.download, ota.enabled, ota.status]);
 
   useEffect(() => {
-    if (update.kind !== "ota" || !ota.enabled || ota.status !== "ready") return;
+    if (!ota.enabled || ota.status !== "ready") return;
     const key = ota.pendingUpdateId ?? "__pending";
     if (key === lastReadyShown.current) return;
     lastReadyShown.current = key;
@@ -70,7 +97,7 @@ export function UpdateReadyWatcher() {
         },
       },
     });
-  }, [ota.enabled, ota.status, ota.pendingUpdateId, update.kind]);
+  }, [ota.enabled, ota.status, ota.pendingUpdateId]);
 
   return null;
 }

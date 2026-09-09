@@ -103,7 +103,7 @@ export default function AboutScreen() {
             right={
               <Toggle
                 value={nativeUpdate.includePrereleases}
-                disabled={nativeUpdate.status === "checking" || nativeUpdate.status === "downloading"}
+                disabled={nativeUpdate.status === "checking" || nativeUpdate.status === "downloading" || nativeUpdate.installing}
                 onValueChange={(enabled) => void nativeUpdate.setIncludePrereleases(enabled)}
               />
             }

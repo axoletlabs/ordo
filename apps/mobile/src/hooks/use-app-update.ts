@@ -51,6 +51,7 @@ export function useAppUpdate() {
     native,
     action: resolved.action,
     kind: resolved.kind,
+    phases: resolved.phases,
     checking: resolved.checking,
     downloading: resolved.downloading,
     error,

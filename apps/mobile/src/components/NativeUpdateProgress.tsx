@@ -4,9 +4,13 @@ import { APP_NAME } from "@ordo/shared";
 import { FloatingPanel } from "./ui/FloatingPanel";
 import { PanelHeader } from "./ui/PanelHeader";
 import { Text } from "./ui/Text";
+import { Button } from "./ui/Button";
 import { PanelActions } from "./ui/SheetActionRow";
 import { toast } from "./ui/toast-store";
-import { useNativeUpdateStore } from "../store/native-update";
+import {
+  openInstallPermissionSettings,
+  useNativeUpdateStore,
+} from "../store/native-update";
 import { useTheme } from "../theme/ThemeProvider";
 import { radius, spacing } from "../theme/tokens";
 
@@ -16,16 +20,18 @@ export function NativeUpdateProgress() {
   const visible =
     update.showProgress &&
     (update.status === "downloading" ||
+      update.installing ||
       (update.status === "downloaded" && !!update.downloadedUri) ||
       (update.status === "error" && (!!update.downloadedUri || update.progress > 0)));
   const downloading = update.status === "downloading";
   const downloadFailed = update.status === "error" && !update.downloadedUri;
+  const installUnfinished = !downloading && !downloadFailed && !!update.error;
   const percent = Math.round(update.progress * 100);
 
   return (
     <FloatingPanel
       visible={visible}
-      onDismiss={downloading ? () => {} : update.dismissDownload}
+      onDismiss={downloading || update.installing ? () => {} : update.dismissDownload}
       maxWidth={380}
     >
       <PanelHeader
@@ -37,14 +43,18 @@ export function NativeUpdateProgress() {
             ? "Downloading update"
             : downloadFailed
               ? "Download interrupted"
-              : "Ready to install"
+              : installUnfinished
+                ? "Install didn't finish"
+                : "Ready to install"
         }
         subtitle={
           downloading
             ? `Keep ${APP_NAME} open.`
             : downloadFailed
               ? "Your current version is unchanged."
-              : `${APP_NAME} v${update.release?.version ?? ""} is ready.`
+              : installUnfinished
+                ? "Your current version is unchanged."
+                : `${APP_NAME} v${update.release?.version ?? ""} is ready.`
         }
       />
 
@@ -86,9 +96,23 @@ export function NativeUpdateProgress() {
               {update.error}
             </Text>
           ) : null}
+          {update.installPermissionLikely ? (
+            <Button
+              label="Allow installs"
+              variant="secondary"
+              onPress={() =>
+                openInstallPermissionSettings().catch(() =>
+                  toast.error("Couldn't open Android install settings."),
+                )
+              }
+              style={styles.permissionButton}
+            />
+          ) : null}
           <PanelActions
-            confirmLabel="Open installer"
+            confirmLabel={update.installing ? "Opening…" : "Open installer"}
             cancelLabel="Later"
+            loading={update.installing}
+            confirmDisabled={update.installing}
             onConfirm={() =>
               update.install().catch(() => toast.error("Couldn't open the installer."))
             }
@@ -111,4 +135,5 @@ const styles = StyleSheet.create({
   },
   actions: { marginTop: spacing[12], gap: spacing[4] },
   error: { marginBottom: spacing[12] },
+  permissionButton: { width: "100%", marginBottom: spacing[8] },
 });
