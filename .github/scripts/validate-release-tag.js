@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 /**
  * Keep in sync with apps/mobile/src/lib/app-version.ts
- * (`validateReleaseTag`, `easUpdatesChannel`).
+ * (`validateReleaseTag`, `easUpdatesChannel`, `resolveUpdatesChannel`).
  *
  * Usage:
  *   validate-release-tag.js <tag> <appVersion> <githubPrerelease>
- *   validate-release-tag.js --channel <appVersion>
+ *   validate-release-tag.js --channel <appVersion> [--branch <gitBranch>]
  * githubPrerelease is "true" or "false".
  */
 "use strict";
 
+const PREVIEW_UPDATE_BRANCH = "preview";
 const RELEASE_VERSION_RE =
   /^v?(\d+\.\d+\.\d+)(?:-(alpha|beta|rc)(?:\.(\d+))?)?(?:\+[0-9A-Za-z.-]+)?$/;
 
@@ -30,6 +31,11 @@ function easUpdatesChannel(appVersion) {
   return classified.kind === "prerelease" ? "development" : "production";
 }
 
+function resolveUpdatesChannel(appVersion, gitBranch) {
+  if (gitBranch === PREVIEW_UPDATE_BRANCH) return "preview";
+  return easUpdatesChannel(appVersion);
+}
+
 function validateReleaseTag(tag, appVersion, githubPrerelease) {
   if (tag !== `v${appVersion}`) {
     return `Release tag '${tag}' does not match app version 'v${appVersion}'`;
@@ -48,8 +54,18 @@ function validateReleaseTag(tag, appVersion, githubPrerelease) {
 }
 
 if (process.argv[2] === "--channel") {
-  const version = process.argv[3];
-  const channel = version ? easUpdatesChannel(version) : null;
+  const args = process.argv.slice(3);
+  let version;
+  let branch;
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] === "--branch") {
+      branch = args[index + 1];
+      index += 1;
+      continue;
+    }
+    if (version == null) version = args[index];
+  }
+  const channel = version ? resolveUpdatesChannel(version, branch) : null;
   if (!channel) {
     console.error(`::error::Cannot map app version '${version ?? ""}' to an EAS channel`);
     process.exit(1);
@@ -62,7 +78,7 @@ const [tag, appVersion, prereleaseArg] = process.argv.slice(2);
 if (!tag || appVersion == null || prereleaseArg == null) {
   console.error(
     "Usage: validate-release-tag.js <tag> <appVersion> <true|false>\n" +
-      "       validate-release-tag.js --channel <appVersion>",
+      "       validate-release-tag.js --channel <appVersion> [--branch <gitBranch>]",
   );
   process.exit(2);
 }

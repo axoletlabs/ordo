@@ -5,6 +5,7 @@ import {
   compareVersions,
   easUpdatesChannel,
   isNewerVersion,
+  resolveUpdatesChannel,
   validateReleaseTag,
 } from "./app-version.ts";
 
@@ -51,6 +52,15 @@ test("easUpdatesChannel maps stable to production and early tags to development"
   assert.equal(easUpdatesChannel("0.3.0-beta.3"), "development");
   assert.equal(easUpdatesChannel("0.3.0-rc.1"), "development");
   assert.equal(easUpdatesChannel("dev"), null);
+});
+
+test("resolveUpdatesChannel sends only the preview git branch to preview", () => {
+  assert.equal(resolveUpdatesChannel("0.1.0", "preview"), "preview");
+  assert.equal(resolveUpdatesChannel("0.3.0-beta.1", "preview"), "preview");
+  assert.equal(resolveUpdatesChannel("0.1.0", "main"), "production");
+  assert.equal(resolveUpdatesChannel("0.3.0-beta.1", "main"), "development");
+  assert.equal(resolveUpdatesChannel("0.1.0", "feat/foo"), "production");
+  assert.equal(resolveUpdatesChannel("0.1.0", "v0.1.0"), "production");
 });
 
 test("validateReleaseTag keeps the GitHub pre-release checkbox aligned with the tag", () => {

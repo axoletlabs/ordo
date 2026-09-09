@@ -13,7 +13,7 @@ on:
         default: 'false'
         type: boolean
       publish_ota:
-        description: 'Publish an EAS Update to the channel for this version'
+        description: 'Publish an EAS Update (main or preview branch only)'
         required: false
         default: 'false'
         type: boolean
@@ -22,10 +22,11 @@ on:
 #   Latest (stable): tag vX.Y.Z, "Set as the latest release", pre-release unchecked.
 #   Early: tag vX.Y.Z-alpha.N | -beta.N | -rc.N, "This is a pre-release" checked.
 # EAS Update channels (baked into the APK, not switched in-app):
-#   production — stable X.Y.Z binaries
-#   development — early-access (alpha / beta / RC) binaries
-# JS-only updates on main go to the channel that matches apps/mobile version
-# when the Android fingerprint is unchanged.
+#   production  — GitHub Latest / `main` while apps/mobile version is stable X.Y.Z
+#   development — GitHub pre-release / `main` while version is alpha|beta|rc
+#   preview     — `preview` git branch dogfood APKs only (not feature branches)
+# JS-only updates on main or preview go to that stream's channel when the
+# Android fingerprint matches the last (or in-flight) APK on the same branch.
 # Concurrency is per-job, not workflow-wide. A workflow-level group would
 # cancel an in-flight APK when a later JS-only push starts OTA, leaving that
 # native fingerprint with no binary.
@@ -52,9 +53,14 @@ jobs:
         run: |
           VERSION=$(node -e "console.log(require('./apps/mobile/app.config.js').version)")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          CHANNEL=$(node "$GITHUB_WORKSPACE/.github/scripts/validate-release-tag.js" --channel "$VERSION")
+          BRANCH="${GITHUB_REF_NAME}"
+          if [ "${{ github.event_name }}" = "release" ]; then
+            # Tag names must not select the preview stream.
+            BRANCH=""
+          fi
+          CHANNEL=$(node "$GITHUB_WORKSPACE/.github/scripts/validate-release-tag.js" --channel "$VERSION" --branch "$BRANCH")
           echo "updates_channel=$CHANNEL" >> "$GITHUB_OUTPUT"
-          echo "EAS Update channel: $CHANNEL"
+          echo "EAS Update channel: $CHANNEL (branch=${BRANCH:-none})"
           # versionCode scaled by 10000 so per-ABI versionCode offsets from
           # splits.abi can never invert ordering between builds.
           echo "version_code=$(( ${{ github.run_number }} * 10000 ))" >> "$GITHUB_OUTPUT"
@@ -67,11 +73,11 @@ jobs:
           fi
 
       - name: Setup pnpm for OTA eligibility check
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preview')
         uses: pnpm/action-setup@v5
 
       - name: Setup Node.js for OTA eligibility check
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preview')
         uses: actions/setup-node@v5
         with:
           node-version: '22'
@@ -79,7 +85,7 @@ jobs:
 
       - name: Check Android native fingerprint
         id: eligibility
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preview')
         continue-on-error: true
         # Last-resort cap if createFingerprintAsync never resolves. The
         # wrapper process.exit()s after JSON so this should not fire.
@@ -97,16 +103,18 @@ jobs:
             exit 0
           fi
 
-          # Compare against an in-flight CI run on main when one exists (an
-          # APK still building, or detect still running), else the last
-          # shipped APK. Parent-commit comparison is wrong: a cancelled
-          # native bump would make later JS look unchanged vs parent and
-          # OTA a runtime that never got a binary. An in-flight APK *will*
-          # produce that binary, so a JS-only follow-up should OTA onto it
-          # instead of starting a second APK.
-          BASELINE_SHA="$(bash "$GITHUB_WORKSPACE/.github/scripts/apk-baseline-sha.sh" || true)"
+          # Compare against an in-flight CI run on this stream (main or
+          # preview) when one exists (an APK still building, or detect still
+          # running), else the last shipped APK on the same branch. Never
+          # compare preview to a production APK — the baked channel differs.
+          # Parent-commit comparison is wrong: a cancelled native bump would
+          # make later JS look unchanged vs parent and OTA a runtime that
+          # never got a binary. An in-flight APK *will* produce that binary,
+          # so a JS-only follow-up should OTA onto it instead of starting a
+          # second APK.
+          BASELINE_SHA="$(bash "$GITHUB_WORKSPACE/.github/scripts/apk-baseline-sha.sh" "$GITHUB_REF_NAME" || true)"
           if [[ -z "$BASELINE_SHA" ]]; then
-            echo "No APK baseline on main; treating as native-incompatible"
+            echo "No APK baseline on ${GITHUB_REF_NAME}; treating as native-incompatible"
             echo "native_changed=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -173,11 +181,17 @@ jobs:
             echo "should_build=true" >> "$GITHUB_OUTPUT"
           elif [[ "$MSG" == *-apk ]]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.event_name }}" = "push" && "${{ github.ref }}" = "refs/heads/main" && "$NATIVE_CHANGED" = "true" ]]; then
+          elif [[ "${{ github.event_name }}" = "push" && ( "${{ github.ref }}" = "refs/heads/main" || "${{ github.ref }}" = "refs/heads/preview" ) && "$NATIVE_CHANGED" = "true" ]]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
           else
             echo "should_build=false" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Guard OTA publish
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_ota == true && github.ref != 'refs/heads/main' && github.ref != 'refs/heads/preview'
+        run: |
+          echo "::error::OTA publish is only allowed from main or preview (not ${GITHUB_REF_NAME})."
+          exit 1
 
       - name: Validate release tag
         if: github.event_name == 'release'
@@ -225,12 +239,19 @@ jobs:
 
   ota:
     needs: detect
-    # Publishes a JS-only update (EAS Update) to the channel for this version
-    # (production for stable X.Y.Z, development for alpha/beta/RC) on
-    # OTA-eligible pushes to main, including JS follow-ups while an APK for
-    # the same fingerprint is still building. Native fingerprint changes and
-    # commits explicitly marked with -apk are routed to an installable APK.
-    if: (github.event_name == 'push' && github.ref == 'refs/heads/main' && needs.detect.outputs.should_build != 'true') || (github.event_name == 'workflow_dispatch' && inputs.publish_ota == true)
+    # Publishes a JS-only update to this stream's channel:
+    #   main    → production (stable version) or development (alpha/beta/rc)
+    #   preview → preview
+    # including JS follow-ups while an APK for the same fingerprint is still
+    # building. Native fingerprint changes and commits marked -apk build an APK.
+    # Feature branches never OTA (last-write-wins would clobber the stream).
+    if: >
+      (github.event_name == 'push' &&
+        (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preview') &&
+        needs.detect.outputs.should_build != 'true') ||
+      (github.event_name == 'workflow_dispatch' &&
+        inputs.publish_ota == true &&
+        (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preview'))
     concurrency:
       group: ci-ota-${{ github.ref }}
       cancel-in-progress: true

@@ -96,13 +96,30 @@ export function classifyReleaseVersion(value: string): ClassifiedReleaseVersion 
   };
 }
 
-/** EAS Update channel baked into the APK and used by `eas update`. */
+export type EasUpdateChannel = "production" | "development" | "preview";
+
+/** Git branch that bakes and publishes the `preview` EAS channel. */
+export const PREVIEW_UPDATE_BRANCH = "preview";
+
+/** EAS Update channel baked into GitHub Release APKs (`main` stream). */
 export function easUpdatesChannel(
   appVersion: string,
 ): "production" | "development" | null {
   const classified = classifyReleaseVersion(appVersion);
   if (!classified) return null;
   return classified.kind === "prerelease" ? "development" : "production";
+}
+
+/**
+ * Channel for this CI ref: `preview` git branch → preview; otherwise the
+ * version mapping (`production` / `development`). Feature branches do not OTA.
+ */
+export function resolveUpdatesChannel(
+  appVersion: string,
+  gitBranch?: string | null,
+): EasUpdateChannel | null {
+  if (gitBranch === PREVIEW_UPDATE_BRANCH) return "preview";
+  return easUpdatesChannel(appVersion);
 }
 
 /** GitHub tag `vX.Y.Z` / `vX.Y.Z-beta.N` must match app.config version and the pre-release checkbox. */
