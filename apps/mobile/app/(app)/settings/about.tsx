@@ -83,6 +83,11 @@ export default function AboutScreen() {
             label="Origin"
             value={ota.isEmbeddedLaunch ? "Embedded" : "OTA"}
           />
+          <SettingRow
+            icon="git-branch-outline"
+            label="Channel"
+            value={ota.channel ?? "—"}
+          />
           {publishedLabel ? (
             <SettingRow icon="calendar-outline" label="Published" value={publishedLabel} />
           ) : null}

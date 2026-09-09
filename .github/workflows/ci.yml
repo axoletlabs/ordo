@@ -366,7 +366,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v6
         with:
-          name: ordo-apk
+          name: ordo-apk-${{ needs.detect.outputs.updates_channel }}
           path: apps/mobile/android/app/build/outputs/apk/release/*.apk
 
   release:
