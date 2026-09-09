@@ -1,4 +1,4 @@
-/** Preferences for shortcuts, gestures, and where websites open. */
+/** Preferences for shortcuts, gestures, haptics, and where websites open. */
 import React from "react";
 import {
   SettingsGroup,
@@ -10,6 +10,7 @@ import {
   type SettingsSelectOption,
 } from "../../../src/components/settings/SettingsSelect";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
+import { Toggle } from "../../../src/components/ui/Toggle";
 import { APP_NAME } from "@ordo/shared";
 import {
   useSettingsStore,
@@ -39,9 +40,11 @@ export default function ControlsScreen() {
   const tapAction = useSettingsStore((s) => s.createButtonTapAction);
   const holdAction = useSettingsStore((s) => s.createButtonHoldAction);
   const websiteBrowser = useSettingsStore((s) => s.websiteBrowser);
+  const hapticsEnabled = useSettingsStore((s) => s.hapticsEnabled);
   const setTapAction = useSettingsStore((s) => s.setCreateButtonTapAction);
   const setHoldAction = useSettingsStore((s) => s.setCreateButtonHoldAction);
   const setWebsiteBrowser = useSettingsStore((s) => s.setWebsiteBrowser);
+  const setHapticsEnabled = useSettingsStore((s) => s.setHapticsEnabled);
 
   return (
     <SettingsPage title="Controls">
@@ -70,6 +73,18 @@ export default function ControlsScreen() {
                 onChange={setHoldAction}
               />
             }
+            divider={false}
+          />
+        </SettingsGroup>
+        <SettingsGroup
+          label="Feedback"
+          footer="Vibration on taps, selections, and confirmations."
+        >
+          <SettingRow
+            icon="pulse-outline"
+            label="Haptic feedback"
+            right={<Toggle value={hapticsEnabled} onValueChange={setHapticsEnabled} />}
+            rightFit="content"
             divider={false}
           />
         </SettingsGroup>

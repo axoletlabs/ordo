@@ -5,6 +5,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
+import { haptics } from "../../lib/haptics";
 import { layout, radius, spacing } from "../../theme/tokens";
 
 export interface SettingRowProps {
@@ -75,7 +76,10 @@ export function SettingRow({
     <View style={styles.pad}>
       <PressableScale
         style={styles.press}
-        onPress={onPress}
+        onPress={() => {
+          haptics.light();
+          onPress();
+        }}
       >
         {content}
       </PressableScale>

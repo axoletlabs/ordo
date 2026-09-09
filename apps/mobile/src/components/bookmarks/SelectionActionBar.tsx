@@ -4,6 +4,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { PressableScale } from "../ui/PressableScale";
 import { Text } from "../ui/Text";
 import { useTheme } from "../../theme/ThemeProvider";
+import { haptics } from "../../lib/haptics";
 import { layout, radius, spacing } from "../../theme/tokens";
 import { SELECTION_BAR_HEIGHT } from "../../hooks/use-selection";
 
@@ -50,7 +51,11 @@ export function SelectionActionBar({
                 accessibilityRole="button"
                 accessibilityLabel={action.label}
                 disabled={muted}
-                onPress={action.onPress}
+                onPress={() => {
+                  if (muted) return;
+                  haptics.light();
+                  action.onPress();
+                }}
                 style={[styles.action, muted && styles.disabled]}
               >
                 <Ionicons name={action.icon} size={22} color={color} />

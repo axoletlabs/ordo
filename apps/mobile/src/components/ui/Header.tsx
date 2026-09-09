@@ -195,6 +195,7 @@ export function HeaderIconButton({
         style={styles.iconBtn}
         scaleTo={0.85}
         onPress={(event) => {
+          haptics.light();
           measureAnchor(anchorRef.current, onPress, event);
         }}
         hitSlop={8}

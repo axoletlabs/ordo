@@ -1,9 +1,10 @@
 /**
  * Client/UI settings store: server URL, recent server history, theme mode,
- * AMOLED, navigation, and website-browser preferences. Persisted to
+ * AMOLED, navigation, haptics, and website-browser preferences. Persisted to
  * AsyncStorage (non-secret). Hydrated explicitly on app start.
  */
 import { create } from "zustand";
+import { setHapticsEnabled as applyHapticsEnabled } from "../lib/haptics";
 import {
   parseServerHistory,
   recordServerSwitch,
@@ -44,6 +45,7 @@ export interface SettingsState {
   createButtonTapAction: CreateButtonAction;
   createButtonHoldAction: CreateButtonHoldAction;
   websiteBrowser: WebsiteBrowser;
+  hapticsEnabled: boolean;
   /** One-time tip: OTP is printed to the server console when SMTP is unset. */
   consoleOtpTipDismissed: boolean;
   /** Last three servers left behind when switching. URLs only — no credentials. */
@@ -61,6 +63,7 @@ export interface SettingsState {
   setCreateButtonTapAction: (action: CreateButtonAction) => void;
   setCreateButtonHoldAction: (action: CreateButtonHoldAction) => void;
   setWebsiteBrowser: (browser: WebsiteBrowser) => void;
+  setHapticsEnabled: (on: boolean) => void;
   dismissConsoleOtpTip: () => void;
 }
 
@@ -74,6 +77,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   createButtonTapAction: "menu",
   createButtonHoldAction: "bookmark",
   websiteBrowser: "ordo",
+  hapticsEnabled: true,
   consoleOtpTipDismissed: false,
   serverHistory: [],
   hydrated: false,
@@ -100,10 +104,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           ? saved.createButtonHoldAction
           : "bookmark",
       websiteBrowser: isWebsiteBrowser(saved?.websiteBrowser) ? saved.websiteBrowser : "ordo",
+      hapticsEnabled: saved?.hapticsEnabled !== false,
       consoleOtpTipDismissed: saved?.consoleOtpTipDismissed === true,
       serverHistory: parseServerHistory(saved?.serverHistory),
       hydrated: true,
     });
+    applyHapticsEnabled(get().hapticsEnabled);
   },
 
   setServerUrl: async (url) => {
@@ -148,6 +154,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setWebsiteBrowser: (websiteBrowser) => {
     set({ websiteBrowser });
     void prefsSet(StorageKeys.SETTINGS, { ...get(), websiteBrowser });
+  },
+  setHapticsEnabled: (hapticsEnabled) => {
+    set({ hapticsEnabled });
+    applyHapticsEnabled(hapticsEnabled);
+    void prefsSet(StorageKeys.SETTINGS, { ...get(), hapticsEnabled });
   },
   dismissConsoleOtpTip: () => {
     set({ consoleOtpTipDismissed: true });

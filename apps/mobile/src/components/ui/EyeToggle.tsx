@@ -45,7 +45,7 @@ export function EyeToggle({ visible, onPress, size = 18 }: EyeToggleProps) {
   return (
     <Pressable
       onPress={() => {
-        haptics.light();
+        haptics.selection();
         onPress();
       }}
       hitSlop={8}

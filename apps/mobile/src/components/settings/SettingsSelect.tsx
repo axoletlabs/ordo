@@ -42,7 +42,6 @@ export function SettingsSelect<T extends string>({
   };
 
   const choose = (next: T) => {
-    haptics.selection();
     onChange(next);
     setOpen(false);
   };

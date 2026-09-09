@@ -69,6 +69,7 @@ export function Segmented<T extends string>({ options, value, onChange }: Segmen
           option={o}
           active={o.value === value}
           onPress={() => {
+            if (o.value === value) return;
             haptics.selection();
             onChange(o.value);
           }}

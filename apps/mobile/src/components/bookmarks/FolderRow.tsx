@@ -51,6 +51,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
     void prefetchFolderBookmarks(folder.id);
   };
   const openMore = (event?: { nativeEvent: { pageX: number; pageY: number } }) => {
+    haptics.light();
     measureAnchor(rowRef.current, (anchor) => onMore?.(folder, anchor), event);
   };
   const rowFill = selected || highlighted

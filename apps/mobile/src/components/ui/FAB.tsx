@@ -7,6 +7,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PressableScale } from "./PressableScale";
 import { useTheme } from "../../theme/ThemeProvider";
+import { haptics } from "../../lib/haptics";
 import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { layout, spacing } from "../../theme/tokens";
 import { SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
@@ -75,7 +76,10 @@ export function FAB({
         testID={testID}
         style={styles.fabHit}
         scaleTo={0.9}
-        onPress={(event) => emit(onPress, event)}
+        onPress={(event) => {
+          haptics.light();
+          emit(onPress, event);
+        }}
         onLongPress={onLongPress ? (event) => emit(onLongPress, event) : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >

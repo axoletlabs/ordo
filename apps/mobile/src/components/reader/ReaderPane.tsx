@@ -560,10 +560,7 @@ function ReaderPaneInner({
         <HeaderIconButton
           name="open-outline"
           color={palette.text}
-          onPress={() => {
-            haptics.light();
-            handleOpenSystemBrowser();
-          }}
+          onPress={() => handleOpenSystemBrowser()}
           accessibilityLabel="Open in external browser"
           accessibilityHint="Opens this page in Safari or Chrome."
         />
@@ -571,10 +568,7 @@ function ReaderPaneInner({
         <HeaderIconButton
           name="options-outline"
           color={palette.text}
-          onPress={() => {
-            haptics.light();
-            setControlsOpen(true);
-          }}
+          onPress={() => setControlsOpen(true)}
           accessibilityLabel="Reader settings"
           accessibilityHint="Adjust text size, typeface, and reading theme."
         />
@@ -583,7 +577,6 @@ function ReaderPaneInner({
         name="ellipsis-horizontal"
         color={palette.text}
         onPress={(anchor) => {
-          haptics.light();
           setActionsAnchor(anchor);
           setActionPanel("actions");
         }}
@@ -834,7 +827,6 @@ function ReaderPaneInner({
             accessibilityLabel="Table of contents"
             accessibilityHint="Jump to a section in this article."
             onPress={() => {
-              haptics.light();
               setActionPanel("contents");
             }}
             right={spacing[20]}

@@ -118,6 +118,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   };
 
   const openMore = (event?: { nativeEvent: { pageX: number; pageY: number } }) => {
+    haptics.light();
     measureAnchor(rowRef.current, (anchor) => onMore?.(bookmark, anchor), event);
   };
 
