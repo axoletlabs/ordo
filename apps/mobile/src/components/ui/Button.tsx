@@ -2,7 +2,7 @@
  * Button — spring press feedback, four variants faithful to ordo-archive:
  *  - primary:   coral fill, white label
  *  - secondary: transparent, 1px line border
- *  - ghost:     transparent, no border
+ *  - ghost:     transparent fill
  *  - danger:    coral outline (coral border + coral label)
  */
 import React from "react";
@@ -61,10 +61,16 @@ export function Button({
         ? palette.danger
         : palette.text;
 
-  const borderWidth =
-    variant === "secondary" || variant === "danger" ? 1 : 0;
+  // Keep a 1px border on every variant so filled and outlined buttons share a box.
+  const borderWidth = 1;
   const borderColor =
-    variant === "danger" ? palette.danger : palette.borderStrong;
+    variant === "primary"
+      ? surface
+      : variant === "ghost"
+        ? "transparent"
+        : variant === "danger"
+          ? palette.danger
+          : palette.borderStrong;
 
   return (
     <PressableScale

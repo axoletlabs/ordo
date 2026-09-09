@@ -193,7 +193,7 @@ export function BookmarkActionsSheet({
               onDismiss();
             }}
           />
-          <Button label="Cancel" variant="ghost" block onPress={() => setMode("menu")} />
+          <Button label="Cancel" variant="ghost" block size="lg" onPress={() => setMode("menu")} />
         </View>
       </FloatingPanel>
     </>

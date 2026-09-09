@@ -79,7 +79,7 @@ export function NativeUpdateProgress() {
                 .catch(() => toast.error("Couldn't download the update."))
             }
           />
-          <Button label="Later" variant="ghost" block onPress={update.dismissDownload} />
+          <Button label="Later" variant="ghost" block size="lg" onPress={update.dismissDownload} />
         </View>
       ) : (
         <View style={styles.actions}>
@@ -97,7 +97,7 @@ export function NativeUpdateProgress() {
               update.install().catch(() => toast.error("Couldn't open the installer."))
             }
           />
-          <Button label="Later" variant="ghost" block onPress={update.dismissDownload} />
+          <Button label="Later" variant="ghost" block size="lg" onPress={update.dismissDownload} />
         </View>
       )}
     </FloatingPanel>

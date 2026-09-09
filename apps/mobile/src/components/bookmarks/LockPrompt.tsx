@@ -280,7 +280,7 @@ export function UnlockForm({
         Unlocked for {UNLOCK_MINUTES} minutes on this device.
       </Text>
       {onCancel ? (
-        <Button label={cancelLabel} variant="ghost" block onPress={onCancel} style={sheetMenuStyles.cancel} />
+        <Button label={cancelLabel} variant="ghost" block size="lg" onPress={onCancel} style={sheetMenuStyles.cancel} />
       ) : null}
     </View>
   );

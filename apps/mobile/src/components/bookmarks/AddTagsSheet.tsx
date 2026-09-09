@@ -91,7 +91,7 @@ export function AddTagsSheet({
             onPress={() => void save()}
             loading={batch.isPending}
             disabled={selectedIds.length === 0}
-            style={{ flex: 1.4 }}
+            style={{ flex: 1 }}
           />
         </View>
       </FloatingPanel>

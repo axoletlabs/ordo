@@ -414,7 +414,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
           <Input label="Name" value={name} onChangeText={setName} autoFocus error={error || undefined} onSubmitEditing={doRename} />
           <View style={sheetMenuStyles.stack}>
             <Button label="Save" block size="lg" onPress={doRename} loading={rename.isPending} />
-            <Button label="Cancel" variant="ghost" block onPress={() => showMode("menu")} />
+            <Button label="Cancel" variant="ghost" block size="lg" onPress={() => showMode("menu")} />
           </View>
         </>
       ) : null}
@@ -512,7 +512,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             {lockType === "pattern" || lockType === "pin" ? null : (
               <Button label="Lock folder" block size="lg" onPress={() => void doSetCredential()} />
             )}
-            <Button label="Back" variant="ghost" block onPress={() => showMode("lockChoice")} />
+            <Button label="Back" variant="ghost" block size="lg" onPress={() => showMode("lockChoice")} />
           </View>
         </>
       ) : null}
@@ -609,7 +609,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
                 loading={removing}
               />
             )}
-            <Button label="Cancel" variant="ghost" block disabled={removing} onPress={() => showMode("menu")} />
+            <Button label="Cancel" variant="ghost" block size="lg" disabled={removing} onPress={() => showMode("menu")} />
           </View>
         </ScrollView>
       ) : null}
@@ -657,7 +657,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
           </PressableScale>
           <View style={sheetMenuStyles.stack}>
             <Button label="Remove lock" variant="danger" block size="lg" onPress={submitAccountBypass} loading={removing} />
-            <Button label="Cancel" variant="ghost" block disabled={removing} onPress={() => showMode("menu")} />
+            <Button label="Cancel" variant="ghost" block size="lg" disabled={removing} onPress={() => showMode("menu")} />
           </View>
         </ScrollView>
       ) : null}
@@ -669,7 +669,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
           {error ? <Text variant="footnote" color="danger" style={styles.error}>{error}</Text> : null}
           <View style={sheetMenuStyles.stack}>
             <Button label="Save icon" block size="lg" onPress={doUpdateIcon} loading={update.isPending} disabled={icon === folder.icon} />
-            <Button label="Cancel" variant="ghost" block onPress={() => showMode("menu")} />
+            <Button label="Cancel" variant="ghost" block size="lg" onPress={() => showMode("menu")} />
           </View>
         </>
       ) : null}
@@ -690,7 +690,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
           {error ? <Text variant="footnote" color="danger" align="center" style={styles.error}>{error}</Text> : null}
           <View style={sheetMenuStyles.stack}>
             <Button label="Delete folder" variant="danger" block size="lg" onPress={doDelete} />
-            <Button label="Cancel" variant="ghost" block onPress={() => showMode("menu")} />
+            <Button label="Cancel" variant="ghost" block size="lg" onPress={() => showMode("menu")} />
           </View>
         </ScrollView>
       ) : null}

@@ -276,7 +276,7 @@ export function AddBookmarkSheet({
 
             <View style={styles.actions}>
               <Button label="Cancel" variant="secondary" onPress={close} style={styles.action} />
-              <Button label="Save" onPress={submit} loading={create.isPending} style={styles.saveAction} />
+              <Button label="Save" onPress={submit} loading={create.isPending} style={styles.action} />
             </View>
           </>
         )}
@@ -323,5 +323,4 @@ const styles = StyleSheet.create({
     marginTop: spacing[12],
   },
   action: { flex: 1 },
-  saveAction: { flex: 1.4 },
 });

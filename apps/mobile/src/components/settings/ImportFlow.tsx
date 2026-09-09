@@ -438,7 +438,7 @@ function PreviewState({
               loading={confirming}
               onPress={onConfirm}
             />
-            <Button label="Discard" variant="ghost" block onPress={onDiscard} disabled={confirming} />
+            <Button label="Discard" variant="ghost" block size="lg" onPress={onDiscard} disabled={confirming} />
           </>
         )}
       </View>

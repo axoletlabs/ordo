@@ -76,6 +76,7 @@ export function ConfirmDialog({
           <Button
             label={cancelLabel}
             variant="ghost"
+            size="lg"
             block
             disabled={loading}
             onPress={onDismiss}

@@ -82,7 +82,7 @@ export function EditTagPanel({ visible, tag, onDismiss }: EditTagPanelProps) {
       <TagColorPicker value={color} onChange={setColor} />
       <View style={sheetMenuStyles.row}>
         <Button label="Cancel" variant="secondary" onPress={onDismiss} style={{ flex: 1 }} />
-        <Button label="Save" onPress={save} loading={update.isPending} style={{ flex: 1.4 }} />
+        <Button label="Save" onPress={save} loading={update.isPending} style={{ flex: 1 }} />
       </View>
     </FloatingPanel>
   );

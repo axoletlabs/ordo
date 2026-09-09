@@ -281,26 +281,32 @@ export function ServerConnectSheet({
 
       {/* Actions */}
       <View style={styles.actions}>
-        <Button label="Cancel" variant="secondary" onPress={onDismiss} disabled={confirming} />
-        <View style={{ width: spacing[10] }} />
-        <View style={{ flex: 2 }}>
-          {animateReadyColor ? (
+        <Button
+          label="Cancel"
+          variant="secondary"
+          onPress={onDismiss}
+          disabled={confirming}
+          style={styles.action}
+        />
+        {animateReadyColor ? (
+          <View style={styles.action}>
             <AnimatedChangeButton
               ready={up && !probing}
               loading={confirming}
               disabled={!canChange}
               onPress={onChange}
             />
-          ) : (
-            <Button
-              label={confirming ? "" : "Change"}
-              variant="primary"
-              onPress={onChange}
-              disabled={!canChange}
-              loading={confirming}
-            />
-          )}
-        </View>
+          </View>
+        ) : (
+          <Button
+            label={confirming ? "" : "Change"}
+            variant="primary"
+            onPress={onChange}
+            disabled={!canChange}
+            loading={confirming}
+            style={styles.action}
+          />
+        )}
       </View>
       </ScrollView>
     </FloatingPanel>
@@ -321,12 +327,19 @@ const styles = StyleSheet.create({
   },
   recentCopy: { flex: 1, minWidth: 0 },
   currentRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing[8] },
-  actions: { flexDirection: "row", alignItems: "center", marginTop: spacing[12] },
+  actions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[8],
+    marginTop: spacing[12],
+  },
+  action: { flex: 1 },
   changeBtn: {
     paddingHorizontal: spacing[20],
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    alignSelf: "stretch",
   },
   changeContent: { flexDirection: "row", alignItems: "center", justifyContent: "center" },
 });

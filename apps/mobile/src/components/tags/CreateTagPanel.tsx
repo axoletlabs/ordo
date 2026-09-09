@@ -70,7 +70,7 @@ export function CreateTagPanel({ visible, onDismiss, onCreated }: CreateTagPanel
       <TagColorPicker value={color} onChange={setColor} />
       <View style={sheetMenuStyles.row}>
         <Button label="Cancel" variant="secondary" onPress={onDismiss} style={{ flex: 1 }} />
-        <Button label="Create" onPress={submit} loading={create.isPending} style={{ flex: 1.4 }} />
+        <Button label="Create" onPress={submit} loading={create.isPending} style={{ flex: 1 }} />
       </View>
     </FloatingPanel>
   );

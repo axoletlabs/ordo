@@ -153,7 +153,7 @@ export default function AboutScreen() {
               if (fingerprint) void copyFingerprint(fingerprint);
             }}
           />
-          <Button label="Done" variant="ghost" block onPress={() => setFingerprintOpen(false)} />
+          <Button label="Done" variant="ghost" block size="lg" onPress={() => setFingerprintOpen(false)} />
         </View>
       </FloatingPanel>
     </SettingsPage>

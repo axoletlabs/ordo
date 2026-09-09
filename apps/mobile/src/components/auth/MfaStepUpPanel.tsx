@@ -109,7 +109,7 @@ export function MfaStepUpPanel({
           loading={busy}
           onPress={() => void submit()}
         />
-        <Button label="Cancel" variant="ghost" block disabled={busy} onPress={close} />
+        <Button label="Cancel" variant="ghost" block size="lg" disabled={busy} onPress={close} />
       </View>
     </FloatingPanel>
   );

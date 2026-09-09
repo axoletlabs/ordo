@@ -78,7 +78,7 @@ export function CreateFolderPanel({
         <FolderIconPicker value={icon} onChange={setIcon} />
         <View style={sheetMenuStyles.stack}>
           <Button label="Create folder" block size="lg" onPress={submit} loading={createFolder.isPending} />
-          <Button label="Cancel" variant="ghost" block onPress={close} />
+          <Button label="Cancel" variant="ghost" block size="lg" onPress={close} />
         </View>
       </ScrollView>
     </FloatingPanel>

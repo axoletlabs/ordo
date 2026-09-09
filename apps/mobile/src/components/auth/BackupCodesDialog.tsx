@@ -75,7 +75,7 @@ export function BackupCodesDialog({
           loading={saving}
           onPress={() => void save()}
         />
-        <Button label="Done" variant="ghost" block onPress={onClose} />
+        <Button label="Done" variant="ghost" block size="lg" onPress={onClose} />
       </View>
     </FloatingPanel>
   );

@@ -172,7 +172,7 @@ export function EditTagsSheet({ visible, onDismiss, bookmark }: EditTagsSheetPro
           label="Save"
           onPress={save}
           loading={updateTags.isPending}
-          style={{ flex: 1.4 }}
+          style={{ flex: 1 }}
         />
       </View>
       </FloatingPanel>
