@@ -46,11 +46,7 @@ export default function ControlsScreen() {
   return (
     <SettingsPage title="Controls">
       <SettingsScrollView>
-        <SettingsGroup
-          label="Create button"
-          compact
-          footer="On the Bookmarks screen."
-        >
+        <SettingsGroup label="Create button" compact>
           <SettingRow
             icon="hand-left-outline"
             label="Tap"
@@ -77,10 +73,7 @@ export default function ControlsScreen() {
             divider={false}
           />
         </SettingsGroup>
-        <SettingsGroup
-          label="Browser"
-          footer={`${APP_NAME} stays in this app with a separate login. In-app uses Safari or Chrome as a sheet. External leaves ${APP_NAME}.`}
-        >
+        <SettingsGroup label="Browser">
           <SettingRow
             icon="globe-outline"
             label="Open websites in"

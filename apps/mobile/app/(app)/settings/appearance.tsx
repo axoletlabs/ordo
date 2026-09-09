@@ -83,10 +83,7 @@ export default function AppearanceScreen() {
           />
         </SettingsGroup>
 
-        <SettingsGroup
-          label="Navigation"
-          footer="Page animation is used when you open a folder, article, or settings page."
-        >
+        <SettingsGroup label="Navigation">
           <SettingRow
             icon="navigate-outline"
             label="Navigation style"

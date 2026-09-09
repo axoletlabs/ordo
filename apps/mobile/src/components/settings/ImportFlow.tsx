@@ -182,7 +182,6 @@ export function ImportFlow({
         <SettingRow
           icon="download-outline"
           label="Import from file"
-          description="HTML, JSON, CSV, or a browser export"
           onPress={pickFile}
           showChevron
           divider={false}

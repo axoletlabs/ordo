@@ -246,7 +246,7 @@ export default function ServerScreen() {
           }}
         />
 
-        <SettingsGroup label="Change server" footer={`You'll be signed out, and ${APP_NAME} will restart.`}>
+        <SettingsGroup label="Change server">
           <SettingsForm style={styles.editor}>
             <Input
               label="Server URL"

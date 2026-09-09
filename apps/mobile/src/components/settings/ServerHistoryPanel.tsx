@@ -33,10 +33,7 @@ export function ServerHistoryPanel({
   const selectedOrigin = normalizeServerUrl(selectedUrl);
 
   return (
-    <SettingsGroup
-      label="Recent servers"
-      footer="Fills the URL below. Switching still signs you out."
-    >
+    <SettingsGroup label="Recent servers">
       {entries.map((entry, index) => {
         const host = hostOf(entry.url);
         const selected = selectedOrigin === entry.url;
