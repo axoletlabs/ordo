@@ -2,6 +2,7 @@ import { usePathname } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSettingsStore } from "../store/settings";
 import { layout, spacing } from "../theme/tokens";
+import { useKeyboardVisible } from "./use-keyboard-visible";
 import { useResponsiveLayout } from "./use-responsive-layout";
 import { SELECTION_BAR_HEIGHT, useSelectionUiStore } from "./use-selection";
 
@@ -14,6 +15,7 @@ export function useFloatingDockMetrics() {
     useResponsiveLayout();
   const navigationStyle = useSettingsStore((s) => s.navigationStyle);
   const selectionActive = useSelectionUiStore((s) => s.active);
+  const keyboardVisible = useKeyboardVisible();
   const floating = navigationStyle !== "docked";
   const compact = navigationStyle === "compactFloating";
   const showLabels = useSettingsStore((s) => s.showNavigationLabels);
@@ -21,6 +23,9 @@ export function useFloatingDockMetrics() {
   const height = (showLabels ? layout.tabBarHeight : layout.touchTargetMin) + spacing[8];
   const clearance = bottom + height + spacing[16];
   const hideBottomNav = selectionActive && !useSideNavigation;
+  // Hide-on-keyboard only slides the inner tab items. Our floating chrome is a
+  // separate pill, so it must hide too or it sits empty above the keyboard.
+  const hideForKeyboard = keyboardVisible && floating && !useSideNavigation;
   const navigationVisible = FLOATING_DOCK_PATHS.has(pathname) && !hideBottomNav;
   const dockedClearance =
     (showLabels ? layout.tabBarHeight : layout.touchTargetMin) + insets.bottom + spacing[16];
@@ -34,6 +39,7 @@ export function useFloatingDockMetrics() {
     windowHeight,
     visible: floating && !useSideNavigation && navigationVisible,
     hideBottomNav,
+    hideForKeyboard,
     bottom,
     height,
     clearance,

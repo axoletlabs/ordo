@@ -29,6 +29,7 @@ export default function TabsLayout() {
     compact,
     sideNavigation,
     hideBottomNav,
+    hideForKeyboard,
     bottom: floatingBottom,
     height: floatingHeight,
     windowWidth,
@@ -109,7 +110,7 @@ export default function TabsLayout() {
     tabBarHeight,
   ]);
 
-  const visibleTabBarStyle = hideBottomNav
+  const visibleTabBarStyle = hideBottomNav || hideForKeyboard
     ? { ...tabBarStyle, display: "none" as const }
     : tabBarStyle;
 
@@ -127,9 +128,9 @@ export default function TabsLayout() {
       if (sideNavigation) return null;
       if (floating) {
         const focused = props.state.routes[props.state.index];
-        const showFloatingDock = !tabBarStyleIsHidden(
-          props.descriptors[focused.key]?.options.tabBarStyle,
-        );
+        const showFloatingDock =
+          !hideForKeyboard &&
+          !tabBarStyleIsHidden(props.descriptors[focused.key]?.options.tabBarStyle);
 
         return (
           <View key={compact ? "compact-dock" : "full-dock"} pointerEvents="box-none" style={StyleSheet.absoluteFill}>
@@ -174,6 +175,7 @@ export default function TabsLayout() {
       floating,
       floatingBottom,
       floatingHeight,
+      hideForKeyboard,
       palette.borderStrong,
       palette.surfaceElevated,
       shadows.level3,
@@ -208,7 +210,9 @@ export default function TabsLayout() {
           tabBarPosition: "bottom",
           tabBarVariant: "uikit",
           tabBarLabelPosition: "below-icon",
-          tabBarHideOnKeyboard: true,
+          // Docked bars can slide themselves away. The floating pill is extra
+          // chrome around that bar, so keyboard hiding is owned by `hideForKeyboard`.
+          tabBarHideOnKeyboard: !floating,
           tabBarActiveTintColor: palette.accent,
           tabBarInactiveTintColor: palette.textTertiary,
           tabBarShowLabel: showNavigationLabels,
