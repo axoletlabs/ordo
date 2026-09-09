@@ -33,25 +33,52 @@ function applyHermesFlags(code) {
   return code.replace(/react\s*\{/, `react {\n${HERMES_FLAGS_LINE}`);
 }
 
-// Fabric codegen emits `$event` / `$payload` in EventEmitters.cpp. Clang
-// warns on those (`-Wdollar-in-identifier-extension`) for every autolinked
-// module (safe-area, screens, svg, …) and GitHub annotates the whole CMake
-// step as errors even though ninja succeeds.
-const CMAKE_DOLLAR_FLAGS = [
-  '        externalNativeBuild {',
-  '            cmake {',
-  '                cppFlags "-Wno-dollar-in-identifier-extension"',
-  '            }',
+// Fabric codegen emits `$event` / `$payload` in EventEmitters.cpp. Each
+// autolinked module compiles those files with `-Wpedantic`, which re-enables
+// `-Wdollar-in-identifier-extension` after Gradle cppFlags. Flags must be
+// added on those targets *after* React Native creates them.
+const APP_JNI_CMAKE_PATH = 'src/main/jni/CMakeLists.txt';
+
+const APP_JNI_CMAKE = `cmake_minimum_required(VERSION 3.13)
+project(appmodules)
+include(\${REACT_ANDROID_DIR}/cmake-utils/ReactNative-application.cmake)
+
+set(ORDO_CXX_WARNING_FLAGS
+  -Wno-dollar-in-identifier-extension
+  -Wno-error=dollar-in-identifier-extension
+)
+if(TARGET common_flags)
+  target_compile_options(common_flags INTERFACE \${ORDO_CXX_WARNING_FLAGS})
+endif()
+if(DEFINED AUTOLINKED_LIBRARIES)
+  foreach(autolinked_library \${AUTOLINKED_LIBRARIES})
+    if(TARGET \${autolinked_library})
+      target_compile_options(\${autolinked_library} PRIVATE \${ORDO_CXX_WARNING_FLAGS})
+    endif()
+  endforeach()
+endif()
+if(DEFINED APP_CODEGEN_TARGET)
+  foreach(codegen_target \${APP_CODEGEN_TARGET})
+    if(TARGET \${codegen_target})
+      target_compile_options(\${codegen_target} PRIVATE \${ORDO_CXX_WARNING_FLAGS})
+    endif()
+  endforeach()
+endif()
+`;
+
+const CMAKE_EXTERNAL_BUILD = [
+  '    externalNativeBuild {',
+  '        cmake {',
+  `            path "${APP_JNI_CMAKE_PATH}"`,
   '        }',
+  '    }',
+  '',
 ].join('\n');
 
-function applyCmakeCppFlags(code) {
-  if (code.includes('-Wno-dollar-in-identifier-extension')) return code;
-  if (!/defaultConfig\s*\{/.test(code)) return code;
-  return code.replace(
-    /defaultConfig\s*\{/,
-    `defaultConfig {\n${CMAKE_DOLLAR_FLAGS}`
-  );
+function applyCmakePath(code) {
+  if (code.includes(APP_JNI_CMAKE_PATH)) return code;
+  if (!/android\s*\{/.test(code)) return code;
+  return code.replace(/android\s*\{/, `android {\n${CMAKE_EXTERNAL_BUILD}`);
 }
 
 function isSendFilter(filter) {
@@ -81,6 +108,8 @@ function isSendFilter(filter) {
  *     RN, Reanimated, and whatwg-fetch refer to polyfilled globals (`Promise`,
  *     `setTimeout`, `Headers`, …) and worklet `eval()`, which hermesc otherwise
  *     dumps into the Gradle log during `:app:createBundleReleaseJsAndAssets`.
+ *   - a jni CMakeLists.txt silences Fabric codegen's `$event` clang warnings
+ *     on autolinked modules (safe-area, screens, svg).
  */
 const withAndroidBuild = (config) => {
   // ── AndroidManifest.xml ────────────────────────────────────────────────
@@ -142,6 +171,16 @@ const withAndroidBuild = (config) => {
         ...packageName.split('.')
       );
       await fs.mkdir(sourceDir, { recursive: true });
+      const jniDir = path.join(
+        c.modRequest.platformProjectRoot,
+        'app',
+        'src',
+        'main',
+        'jni'
+      );
+      await fs.mkdir(jniDir, { recursive: true });
+      await fs.writeFile(path.join(jniDir, 'CMakeLists.txt'), APP_JNI_CMAKE);
+
       await fs.writeFile(
         path.join(sourceDir, 'ShareReceiverActivity.kt'),
         `package ${packageName}
@@ -242,7 +281,7 @@ class ShareReceiverActivity : Activity() {
     }
 
     code = applyHermesFlags(code);
-    code = applyCmakeCppFlags(code);
+    code = applyCmakePath(code);
 
     c.modResults.contents = code;
     return c;
@@ -252,3 +291,5 @@ class ShareReceiverActivity : Activity() {
 };
 
 module.exports = withAndroidBuild;
+module.exports.APP_JNI_CMAKE = APP_JNI_CMAKE;
+module.exports.applyCmakePath = applyCmakePath;
