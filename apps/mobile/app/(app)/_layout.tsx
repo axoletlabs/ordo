@@ -11,12 +11,23 @@ import { useTheme } from "../../src/theme/ThemeProvider";
 import { useServerInfo, useValidateSession } from "../../src/hooks/queries";
 import { useFloatingDockMetrics } from "../../src/hooks/use-floating-dock-metrics";
 import { useAuthStore } from "../../src/store/auth";
+import { useSettingsStore, type NavigationAnimation } from "../../src/store/settings";
 import { MfaEnrollmentScreen } from "../../src/components/auth/MfaEnrollmentScreen";
 import { NavigationRail, useRailSceneOffset } from "../../src/components/navigation/NavigationRail";
 
 enableFreeze(true);
 
-const DETAIL_ANIMATION = Platform.OS === "web" ? "fade" : "slide_from_right";
+function stackAnimation(preference: NavigationAnimation) {
+  if (preference === "instant") return "none" as const;
+  if (preference === "fade" || Platform.OS === "web") return "fade" as const;
+  return "slide_from_right" as const;
+}
+
+function stackAnimationDuration(preference: NavigationAnimation) {
+  if (preference === "instant") return 0;
+  if (preference === "fade") return 180;
+  return 220;
+}
 
 export const unstable_settings = {
   initialRouteName: "(tabs)",
@@ -25,6 +36,7 @@ export const unstable_settings = {
 export default function AppLayout() {
   const { palette } = useTheme();
   const user = useAuthStore((s) => s.user);
+  const navigationAnimation = useSettingsStore((s) => s.navigationAnimation);
   const { data: serverInfo } = useServerInfo();
   const { floating, sideNavigation } = useFloatingDockMetrics();
   const sceneOffset = useRailSceneOffset();
@@ -36,8 +48,8 @@ export default function AppLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        animation: DETAIL_ANIMATION,
-        animationDuration: 220,
+        animation: stackAnimation(navigationAnimation),
+        animationDuration: stackAnimationDuration(navigationAnimation),
         freezeOnBlur: true,
         contentStyle: { backgroundColor: palette.background, ...sceneOffset },
         fullScreenGestureEnabled: true,

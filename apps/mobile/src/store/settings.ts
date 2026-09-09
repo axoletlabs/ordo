@@ -15,6 +15,8 @@ import type { ThemeMode } from "../theme/theme";
 
 export const DEFAULT_SERVER_URL = "http://localhost:3000";
 export type NavigationStyle = "docked" | "floating" | "compactFloating";
+/** How folder, reader, and settings pages enter and leave. */
+export type NavigationAnimation = "slide" | "fade" | "instant";
 export type CreateButtonAction = "menu" | "bookmark" | "folder";
 export type CreateButtonHoldAction = CreateButtonAction | "none";
 /** Where live websites open: ordo's WebView, a Safari/Chrome sheet, or the browser app. */
@@ -28,11 +30,16 @@ function isWebsiteBrowser(value: unknown): value is WebsiteBrowser {
   return value === "ordo" || value === "inApp" || value === "external";
 }
 
+function isNavigationAnimation(value: unknown): value is NavigationAnimation {
+  return value === "slide" || value === "fade" || value === "instant";
+}
+
 export interface SettingsState {
   serverUrl: string;
   themeMode: ThemeMode;
   amoled: boolean;
   navigationStyle: NavigationStyle;
+  navigationAnimation: NavigationAnimation;
   showNavigationLabels: boolean;
   createButtonTapAction: CreateButtonAction;
   createButtonHoldAction: CreateButtonHoldAction;
@@ -49,6 +56,7 @@ export interface SettingsState {
   setThemeMode: (mode: ThemeMode) => void;
   setAmoled: (on: boolean) => void;
   setNavigationStyle: (style: NavigationStyle) => void;
+  setNavigationAnimation: (animation: NavigationAnimation) => void;
   setShowNavigationLabels: (show: boolean) => void;
   setCreateButtonTapAction: (action: CreateButtonAction) => void;
   setCreateButtonHoldAction: (action: CreateButtonHoldAction) => void;
@@ -61,6 +69,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   themeMode: "system",
   amoled: false,
   navigationStyle: "docked",
+  navigationAnimation: "slide",
   showNavigationLabels: true,
   createButtonTapAction: "menu",
   createButtonHoldAction: "bookmark",
@@ -79,6 +88,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         saved?.navigationStyle === "floating" || saved?.navigationStyle === "compactFloating"
           ? saved.navigationStyle
           : "docked",
+      navigationAnimation: isNavigationAnimation(saved?.navigationAnimation)
+        ? saved.navigationAnimation
+        : "slide",
       showNavigationLabels: saved?.showNavigationLabels !== false,
       createButtonTapAction: isCreateButtonAction(saved?.createButtonTapAction)
         ? saved.createButtonTapAction
@@ -116,6 +128,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setNavigationStyle: (navigationStyle) => {
     set({ navigationStyle });
     void prefsSet(StorageKeys.SETTINGS, { ...get(), navigationStyle });
+  },
+  setNavigationAnimation: (navigationAnimation) => {
+    set({ navigationAnimation });
+    void prefsSet(StorageKeys.SETTINGS, { ...get(), navigationAnimation });
   },
   setShowNavigationLabels: (showNavigationLabels) => {
     set({ showNavigationLabels });

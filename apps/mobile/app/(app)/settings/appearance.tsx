@@ -11,7 +11,7 @@ import {
 } from "../../../src/components/settings/SettingsSelect";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
 import { Toggle } from "../../../src/components/ui/Toggle";
-import { useSettingsStore, type NavigationStyle } from "../../../src/store/settings";
+import { useSettingsStore, type NavigationAnimation, type NavigationStyle } from "../../../src/store/settings";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import type { ThemeMode } from "../../../src/theme/theme";
 
@@ -27,15 +27,23 @@ const navigationOptions: readonly SettingsSelectOption<NavigationStyle>[] = [
   { value: "compactFloating", label: "Compact floating dock", shortLabel: "Compact", icon: "ellipsis-horizontal-outline" },
 ];
 
+const pageAnimationOptions: readonly SettingsSelectOption<NavigationAnimation>[] = [
+  { value: "slide", label: "Slide", icon: "arrow-forward-outline" },
+  { value: "fade", label: "Fade", icon: "layers-outline" },
+  { value: "instant", label: "Instant", icon: "flash-outline" },
+];
+
 export default function AppearanceScreen() {
   const { palette } = useTheme();
   const themeMode = useSettingsStore((s) => s.themeMode);
   const amoled = useSettingsStore((s) => s.amoled);
   const navigationStyle = useSettingsStore((s) => s.navigationStyle);
+  const navigationAnimation = useSettingsStore((s) => s.navigationAnimation);
   const showNavigationLabels = useSettingsStore((s) => s.showNavigationLabels);
   const setThemeMode = useSettingsStore((s) => s.setThemeMode);
   const setAmoled = useSettingsStore((s) => s.setAmoled);
   const setNavigationStyle = useSettingsStore((s) => s.setNavigationStyle);
+  const setNavigationAnimation = useSettingsStore((s) => s.setNavigationAnimation);
   const setShowNavigationLabels = useSettingsStore((s) => s.setShowNavigationLabels);
   const isDarkActive = palette.mode === "dark";
 
@@ -75,7 +83,10 @@ export default function AppearanceScreen() {
           />
         </SettingsGroup>
 
-        <SettingsGroup label="Navigation">
+        <SettingsGroup
+          label="Navigation"
+          footer="Page animation is used when you open a folder, article, or settings page."
+        >
           <SettingRow
             icon="navigate-outline"
             label="Navigation style"
@@ -85,6 +96,18 @@ export default function AppearanceScreen() {
                 options={navigationOptions}
                 value={navigationStyle}
                 onChange={setNavigationStyle}
+              />
+            }
+          />
+          <SettingRow
+            icon="swap-horizontal-outline"
+            label="Page animation"
+            right={
+              <SettingsSelect
+                title="Page animation"
+                options={pageAnimationOptions}
+                value={navigationAnimation}
+                onChange={setNavigationAnimation}
               />
             }
           />
