@@ -17,7 +17,7 @@ import { PressableScale } from "../../../src/components/ui/PressableScale";
 import { ConfirmDialog } from "../../../src/components/ui/ConfirmDialog";
 import { CreateTagPanel } from "../../../src/components/tags/CreateTagPanel";
 import { EditTagPanel } from "../../../src/components/tags/EditTagPanel";
-import { useDeleteTag, useTags } from "../../../src/hooks/use-tags";
+import { prefetchTaggedBookmarks, useDeleteTag, useTags } from "../../../src/hooks/use-tags";
 import { tagColorValue } from "../../../src/lib/tag-colors";
 import { haptics } from "../../../src/lib/haptics";
 import { errorMessage } from "../../../src/lib/error-message";
@@ -94,6 +94,10 @@ export default function TagsScreen() {
                 accessibilityRole="button"
                 accessibilityLabel={`${item.name}, ${item.bookmarkCount} bookmarks`}
                 style={[styles.row, { borderBottomColor: palette.border }]}
+                scaleTo={1}
+                onPressIn={() => {
+                  void prefetchTaggedBookmarks(item.id);
+                }}
                 onPress={() => router.push(`/tags/${item.id}`)}
               >
                 <View style={[styles.dot, { backgroundColor: tagColorValue(item.color).dot }]} />

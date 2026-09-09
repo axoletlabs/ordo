@@ -11,6 +11,7 @@ import {
 } from "@tanstack/react-query";
 import { DEFAULT_PAGE_SIZE, type TagColor, type TagDto } from "@ordo/shared";
 import { tagsApi } from "../lib/api/tags";
+import { queryClient } from "../lib/query-client";
 import { qk, tagsAnyAccess } from "../lib/api/query-keys";
 import { bookmarksApi } from "../lib/api/bookmarks";
 import { useFolderTokenStore } from "../store/folder-tokens";
@@ -92,6 +93,16 @@ export function useDeleteTag() {
     mutate: (tag: TagDto, opts?: { onDeleted?: () => void }) =>
       deleteUndoable({ tags: [tag], onDeleted: opts?.onDeleted }),
   };
+}
+
+export function prefetchTaggedBookmarks(tagId: string) {
+  if (!tagId) return;
+  return queryClient.prefetchInfiniteQuery({
+    queryKey: qk.tagged([tagId]),
+    queryFn: ({ pageParam }) =>
+      bookmarksApi.listTagged([tagId], pageParam ?? undefined, DEFAULT_PAGE_SIZE),
+    initialPageParam: null as string | null,
+  });
 }
 
 /** Whole-library, tag-filtered (AND) bookmark list. */

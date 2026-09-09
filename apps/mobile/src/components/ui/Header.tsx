@@ -16,7 +16,6 @@ import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
-import { afterPress } from "../../lib/after-press";
 import { layout, spacing } from "../../theme/tokens";
 import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
 
@@ -81,11 +80,9 @@ export function Header({
 
   const handleBack = () => {
     haptics.light();
-    afterPress(() => {
-      if (onBack) onBack();
-      else if (router.canGoBack()) router.back();
-      else router.replace("/");
-    });
+    if (onBack) onBack();
+    else if (router.canGoBack()) router.back();
+    else router.replace("/");
   };
 
   const titleEl = (
@@ -143,7 +140,7 @@ export function Header({
             {!showLarge && showBack ? (
               <PressableScale
                 style={styles.backBtn}
-                scaleTo={0.85}
+                scaleTo={1}
                 onPress={handleBack}
                 hitSlop={8}
                 accessibilityRole="button"

@@ -35,11 +35,9 @@ export function SettingsSelect<T extends string>({
   const show = () => {
     haptics.selection();
     Keyboard.dismiss();
-    requestAnimationFrame(() => {
-      anchorRef.current?.measureInWindow((x, y, measuredWidth, measuredHeight) => {
-        setAnchor({ x, y, width: measuredWidth, height: measuredHeight });
-        setOpen(true);
-      });
+    anchorRef.current?.measureInWindow((x, y, measuredWidth, measuredHeight) => {
+      setAnchor({ x, y, width: measuredWidth, height: measuredHeight });
+      setOpen(true);
     });
   };
 

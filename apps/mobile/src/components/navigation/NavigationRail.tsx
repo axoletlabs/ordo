@@ -10,7 +10,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useFloatingDockMetrics } from "../../hooks/use-floating-dock-metrics";
 import { useSettingsStore } from "../../store/settings";
-import { afterPress } from "../../lib/after-press";
 import { layout, radius, spacing } from "../../theme/tokens";
 
 type Section = "bookmarks" | "search" | "settings";
@@ -57,9 +56,7 @@ export function NavigationRail() {
   const iconSize = compact ? 20 : 22;
 
   const go = (href: (typeof ITEMS)[number]["href"]) => {
-    afterPress(() => {
-      router.navigate(href);
-    });
+    router.navigate(href);
   };
 
   const docked = !floating;

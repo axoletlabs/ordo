@@ -37,7 +37,6 @@ import { useFloatingDockMetrics } from "../../../src/hooks/use-floating-dock-met
 import { bookmarkKey, folderKey, useSelectionMode } from "../../../src/hooks/use-selection";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { haptics } from "../../../src/lib/haptics";
-import { afterPress } from "../../../src/lib/after-press";
 import { toast } from "../../../src/components/ui/toast-store";
 import { markedAsReadToast } from "../../../src/lib/copy";
 import { errorMessage } from "../../../src/lib/error-message";
@@ -205,9 +204,10 @@ export default function BookmarksScreen() {
     <HeaderActions style={styles.headerActions}>
       <PressableScale
         style={styles.tagsLink}
+        scaleTo={1}
         onPress={() => {
           haptics.light();
-          afterPress(() => router.push("/tags"));
+          router.push("/tags");
         }}
         hitSlop={8}
         accessibilityRole="button"

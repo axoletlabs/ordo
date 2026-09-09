@@ -15,8 +15,9 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { domainFromUrl, relativeTime } from "../../lib/format";
 import { bookmarkIsArticle, bookmarkOpensAsWebsite } from "../../lib/bookmark-reader";
 import { haptics } from "../../lib/haptics";
-import { afterPress } from "../../lib/after-press";
 import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
+import { prefetchBookmarkDetail } from "../../hooks/use-bookmarks";
+import { prefetchTaggedBookmarks } from "../../hooks/use-tags";
 import { radius, spacing } from "../../theme/tokens";
 import { bookmarkKey, SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
 import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
@@ -98,7 +99,22 @@ export const BookmarkRow = React.memo(function BookmarkRow({
       return;
     }
     haptics.light();
-    afterPress(() => router.push(`/tags/${tagId}`));
+    void prefetchTaggedBookmarks(tagId);
+    router.push(`/tags/${tagId}`);
+  };
+
+  const openBookmark = () => {
+    if (selectionMode) {
+      onPress(bookmark);
+      return;
+    }
+    haptics.light();
+    onPress(bookmark);
+  };
+
+  const warmBookmark = () => {
+    if (selectionMode) return;
+    void prefetchBookmarkDetail(bookmark.id, bookmark.folderId);
   };
 
   const openMore = (event?: { nativeEvent: { pageX: number; pageY: number } }) => {
@@ -134,11 +150,9 @@ export const BookmarkRow = React.memo(function BookmarkRow({
         accessible={!selectionMode}
         importantForAccessibility={selectionMode ? "no" : "yes"}
         style={styles.leading}
-        scaleTo={0.95}
-        onPress={() => {
-          if (selectionMode) onPress(bookmark);
-          else afterPress(() => onPress(bookmark));
-        }}
+        scaleTo={1}
+        onPressIn={warmBookmark}
+        onPress={openBookmark}
         onLongPress={
           selectionMode || !onEnterSelection ? undefined : () => onEnterSelection(bookmark)
         }
@@ -191,10 +205,9 @@ export const BookmarkRow = React.memo(function BookmarkRow({
               : undefined
         }
         style={styles.body}
-        onPress={() => {
-          if (selectionMode) onPress(bookmark);
-          else afterPress(() => onPress(bookmark));
-        }}
+        scaleTo={1}
+        onPressIn={warmBookmark}
+        onPress={openBookmark}
         onLongPress={selectionMode ? undefined : onMore ? () => openMore() : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >

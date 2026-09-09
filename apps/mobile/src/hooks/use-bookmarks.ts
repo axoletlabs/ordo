@@ -41,6 +41,18 @@ export function prefetchFolderBookmarks(folderId: string) {
   });
 }
 
+export function prefetchBookmarkDetail(id: string, folderId?: string | null) {
+  if (!id) return;
+  return queryClient.prefetchQuery({
+    queryKey: qk.bookmark(id),
+    queryFn: async () => {
+      const detail = await bookmarksApi.detail(id, folderId);
+      patchListsFromDetail(queryClient, detail);
+      return detail;
+    },
+  });
+}
+
 export function useInfiniteBookmarks(folderId: string | null, enabled = true) {
   return useInfiniteQuery({
     queryKey: qk.bookmarks(folderId),

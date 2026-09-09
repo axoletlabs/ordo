@@ -1,11 +1,11 @@
 /**
  * Present/dismiss animation for overlays rendered through OverlayHost.
  * Keeps the tree mounted through the close animation, and owns Android back.
+ * Menus snap open so choosing a control is not waiting on a spring.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { BackHandler, Keyboard } from "react-native";
-import { runOnJS, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
-import { springs } from "../theme/tokens";
+import { cancelAnimation, runOnJS, useSharedValue, withTiming } from "react-native-reanimated";
 
 export function useOverlayPresence(visible: boolean, onDismiss: () => void) {
   const progress = useSharedValue(visible ? 1 : 0);
@@ -17,17 +17,18 @@ export function useOverlayPresence(visible: boolean, onDismiss: () => void) {
     setRendered(false);
   }, []);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (visible) {
       generation.current += 1;
       Keyboard.dismiss();
       setRendered(true);
-      progress.value = withSpring(1, springs.snappy);
+      cancelAnimation(progress);
+      progress.value = 1;
       return;
     }
     if (!rendered) return;
     const token = generation.current;
-    progress.value = withTiming(0, { duration: 140 }, (finished) => {
+    progress.value = withTiming(0, { duration: 90 }, (finished) => {
       if (finished) runOnJS(hide)(token);
     });
   }, [hide, progress, rendered, visible]);

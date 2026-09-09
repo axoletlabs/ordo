@@ -82,7 +82,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
         accessible={!selectionMode}
         importantForAccessibility={selectionMode ? "no" : "yes"}
         style={styles.leading}
-        scaleTo={0.95}
+        scaleTo={1}
         onPressIn={warmFolder}
         onPress={openFolder}
         onLongPress={
@@ -118,6 +118,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
               : undefined
         }
         style={styles.body}
+        scaleTo={1}
         onPressIn={warmFolder}
         onPress={openFolder}
         onLongPress={selectionMode ? undefined : onMore ? (event) => openMore(event) : undefined}

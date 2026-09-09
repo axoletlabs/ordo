@@ -20,9 +20,8 @@ import { authApi } from "../../../src/lib/api/auth";
 import { errorMessage } from "../../../src/lib/error-message";
 import { formatDate } from "../../../src/lib/format";
 import { haptics } from "../../../src/lib/haptics";
-import { spacing } from "../../../src/theme/tokens";
-import { afterPress } from "../../../src/lib/after-press";
 import { measureAnchor, type MenuAnchorRect } from "../../../src/lib/menu-anchor";
+import { spacing } from "../../../src/theme/tokens";
 
 export default function AccountScreen() {
   const router = useRouter();
@@ -36,7 +35,7 @@ export default function AccountScreen() {
 
   const afterSheet = (fn: () => void) => {
     setMenuOpen(false);
-    afterPress(fn);
+    fn();
   };
 
   const uploadFromUri = async (uri: string) => {
