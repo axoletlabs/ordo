@@ -75,7 +75,8 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
   const [error, setError] = useState("");
   const [removing, setRemoving] = useState(false);
   const folderRef = React.useRef(folder);
-  folderRef.current = folder;
+  if (folder) folderRef.current = folder;
+  const displayFolder = folder ?? folderRef.current;
 
   React.useEffect(() => {
     if (!visible || !folder) return;
@@ -365,19 +366,19 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
     });
   };
 
-  const menuOpen = visible && !!folder && (mode === "menu" || mode === "lockChoice");
-  const dialogOpen = visible && !!folder && mode !== "menu" && mode !== "lockChoice";
+  const menuOpen = visible && !!displayFolder && (mode === "menu" || mode === "lockChoice");
+  const dialogOpen = visible && !!displayFolder && mode !== "menu" && mode !== "lockChoice";
 
   return (
     <>
       <ContextMenu visible={menuOpen} onDismiss={onDismiss} anchor={anchor ?? null}>
-        {folder && mode === "menu" ? (
+        {displayFolder && mode === "menu" ? (
           <>
             {error ? <Text variant="footnote" color="danger" style={styles.menuNote}>{error}</Text> : null}
-            <ContextMenuItem icon={folder.pinned ? "pin" : "pin-outline"} label={folder.pinned ? "Unpin folder" : "Pin folder"} onPress={doTogglePinned} />
+            <ContextMenuItem icon={displayFolder.pinned ? "pin" : "pin-outline"} label={displayFolder.pinned ? "Unpin folder" : "Pin folder"} onPress={doTogglePinned} />
             <ContextMenuItem icon="happy-outline" label="Change icon" onPress={() => showMode("icon")} />
             <ContextMenuItem icon="create-outline" label="Rename" onPress={() => showMode("rename")} />
-            {folder.protected ? (
+            {displayFolder.protected ? (
               <ContextMenuItem icon="lock-open-outline" label="Remove lock" onPress={() => showMode("removePassword")} />
             ) : (
               <ContextMenuItem icon="lock-closed-outline" label="Lock folder" onPress={() => showMode("lockChoice")} />
@@ -385,7 +386,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             <ContextMenuItem icon="trash-outline" label="Delete folder" tone="danger" onPress={() => showMode("delete")} />
           </>
         ) : null}
-        {folder && mode === "lockChoice" ? (
+        {displayFolder && mode === "lockChoice" ? (
           <>
             <ContextMenuItem icon="chevron-back" label="Back" onPress={() => showMode("menu")} disabled={removing} />
             {error ? <Text variant="footnote" color="danger" style={styles.menuNote}>{error}</Text> : null}

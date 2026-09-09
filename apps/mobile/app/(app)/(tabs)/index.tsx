@@ -27,6 +27,7 @@ import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
 import { useFolders } from "../../../src/hooks/use-folders";
 import { useTags } from "../../../src/hooks/use-tags";
 import {
+  prefetchFolderBookmarks,
   useDeleteBookmark,
   useInfiniteBookmarks,
   useMarkAllRead,
@@ -142,6 +143,7 @@ export default function BookmarksScreen() {
   }, [router]);
 
   const openFolder = useCallback((folder: FolderDto) => {
+    if (!folder.protected) void prefetchFolderBookmarks(folder.id);
     router.push(`/folder/${folder.id}`);
   }, [router]);
 

@@ -53,31 +53,34 @@ export function BookmarkActionsSheet({
   const router = useRouter();
   const setContentKind = useSetContentKind();
   const [mode, setMode] = useState<"menu" | "delete">("menu");
+  const bookmarkRef = React.useRef(bookmark);
+  if (bookmark) bookmarkRef.current = bookmark;
+  const displayBookmark = bookmark ?? bookmarkRef.current;
 
   useEffect(() => {
     if (visible) setMode("menu");
   }, [visible]);
 
   useEffect(() => {
-    if (!visible || !bookmark) return;
-    const key = bookmarkKey(bookmark.id);
+    if (!visible || !displayBookmark) return;
+    const key = bookmarkKey(displayBookmark.id);
     useMenuHighlightStore.getState().set(key);
     return () => {
       const store = useMenuHighlightStore.getState();
       if (store.key === key) store.set(null);
     };
-  }, [visible, bookmark]);
+  }, [visible, displayBookmark]);
 
-  if (!bookmark) return null;
+  if (!displayBookmark) return null;
 
   return (
     <>
       <ContextMenu visible={visible && mode === "menu"} onDismiss={onDismiss} anchor={anchor}>
         <ContextMenuItem
-          icon={bookmark.isRead ? "radio-button-off" : "checkmark-circle"}
-          label={bookmark.isRead ? "Mark as unread" : "Mark as read"}
+          icon={displayBookmark.isRead ? "radio-button-off" : "checkmark-circle"}
+          label={displayBookmark.isRead ? "Mark as unread" : "Mark as read"}
           onPress={() => {
-            onToggleRead(bookmark);
+            onToggleRead(displayBookmark);
             onDismiss();
           }}
         />
@@ -85,7 +88,7 @@ export function BookmarkActionsSheet({
           icon="folder-open-outline"
           label="Move to folder"
           onPress={() => {
-            onMove(bookmark);
+            onMove(displayBookmark);
             onDismiss();
           }}
         />
@@ -94,7 +97,7 @@ export function BookmarkActionsSheet({
             icon="pricetags-outline"
             label="Edit tags"
             onPress={() => {
-              onEditTags(bookmark);
+              onEditTags(displayBookmark);
               onDismiss();
             }}
           />
@@ -107,24 +110,24 @@ export function BookmarkActionsSheet({
             if (browser === "ordo") {
               router.push({
                 pathname: "/reader/[id]",
-                params: { id: bookmark.id, view: "browser" },
+                params: { id: displayBookmark.id, view: "browser" },
               });
             } else {
-              void openLivePage(bookmark.url, browser);
+              void openLivePage(displayBookmark.url, browser);
             }
-            if (!bookmark.isRead) onToggleRead(bookmark);
+            if (!displayBookmark.isRead) onToggleRead(displayBookmark);
             onDismiss();
           }}
         />
-        {typeof bookmarkHooks.useSetContentKind === "function" && bookmarkIsArticle(bookmark) ? (
+        {typeof bookmarkHooks.useSetContentKind === "function" && bookmarkIsArticle(displayBookmark) ? (
           <ContextMenuItem
             icon="globe-outline"
             label="Mark as website"
             onPress={() => {
               setContentKind.mutate(
                 {
-                  id: bookmark.id,
-                  folderId: bookmark.folderId,
+                  id: displayBookmark.id,
+                  folderId: displayBookmark.folderId,
                   contentKindOverride: "web",
                 },
                 {
@@ -135,15 +138,15 @@ export function BookmarkActionsSheet({
               onDismiss();
             }}
           />
-        ) : typeof bookmarkHooks.useSetContentKind === "function" && bookmarkCanBeArticle(bookmark) ? (
+        ) : typeof bookmarkHooks.useSetContentKind === "function" && bookmarkCanBeArticle(displayBookmark) ? (
           <ContextMenuItem
             icon="reader-outline"
             label="Mark as article"
             onPress={() => {
               setContentKind.mutate(
                 {
-                  id: bookmark.id,
-                  folderId: bookmark.folderId,
+                  id: displayBookmark.id,
+                  folderId: displayBookmark.folderId,
                   contentKindOverride: "article",
                 },
                 {
@@ -159,7 +162,7 @@ export function BookmarkActionsSheet({
           icon="link-outline"
           label="Copy link"
           onPress={() => {
-            void copyLink(bookmark.url);
+            void copyLink(displayBookmark.url);
             onDismiss();
           }}
         />
@@ -186,7 +189,7 @@ export function BookmarkActionsSheet({
             block
             size="lg"
             onPress={() => {
-              onDelete(bookmark);
+              onDelete(displayBookmark);
               onDismiss();
             }}
           />

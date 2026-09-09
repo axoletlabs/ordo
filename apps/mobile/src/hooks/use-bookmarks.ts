@@ -32,6 +32,15 @@ import {
   type FolderDto,
 } from "@ordo/shared";
 
+export function prefetchFolderBookmarks(folderId: string) {
+  return queryClient.prefetchInfiniteQuery({
+    queryKey: qk.bookmarks(folderId),
+    queryFn: ({ pageParam }) =>
+      bookmarksApi.list({ folderId, cursor: pageParam ?? undefined, limit: DEFAULT_PAGE_SIZE }),
+    initialPageParam: null as string | null,
+  });
+}
+
 export function useInfiniteBookmarks(folderId: string | null, enabled = true) {
   return useInfiniteQuery({
     queryKey: qk.bookmarks(folderId),

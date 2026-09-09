@@ -50,31 +50,33 @@ export function ContextMenu({
   const insets = useSafeAreaInsets();
   const { rendered, progress } = useOverlayPresence(visible, onDismiss);
   const [contentHeight, setContentHeight] = React.useState(0);
+  const lastPlacement = React.useRef<ReturnType<typeof placeMenu> | null>(null);
+  const lastChildren = React.useRef(children);
+  if (visible) lastChildren.current = children;
 
   const menuWidth = Math.min(width, Math.max(160, windowWidth - spacing[32]));
-  const placed = isMenuAnchorRect(anchor)
-    ? placeMenu({
-        anchor,
-        menuWidth,
-        menuHeight: contentHeight || 240,
-        windowWidth,
-        windowHeight,
-        insets,
-      })
-    : {
-        left: Math.max(spacing[16], windowWidth - menuWidth - spacing[16]),
-        top: insets.top + spacing[16],
-        placement: "below" as const,
-        maxHeight: Math.max(0, windowHeight - insets.top - insets.bottom - spacing[32]),
-      };
-  const fromY = placed.placement === "below" ? -6 : 6;
+  // Keep the last real placement and items through dismiss. Callers clear
+  // `anchor` and empty `children` on close; the old fallback sat at the top
+  // of the screen, so a fading scrap of the menu flashed there.
+  if (visible && isMenuAnchorRect(anchor)) {
+    lastPlacement.current = placeMenu({
+      anchor,
+      menuWidth,
+      menuHeight: contentHeight || 240,
+      windowWidth,
+      windowHeight,
+      insets,
+    });
+  }
+  const placed = lastPlacement.current;
+  const fromY = placed?.placement === "above" ? 6 : -6;
 
   const menuStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
     transform: [{ translateY: interpolate(progress.value, [0, 1], [fromY, 0]) }],
   }));
 
-  if (!rendered) return null;
+  if (!rendered || !placed) return null;
 
   return (
     <OverlayPortal>
@@ -83,6 +85,7 @@ export function ContextMenu({
           accessibilityRole="button"
           accessibilityLabel="Dismiss menu"
           style={StyleSheet.absoluteFill}
+          pointerEvents={visible ? "auto" : "none"}
           onPress={onDismiss}
         />
         <Animated.View
@@ -109,11 +112,12 @@ export function ContextMenu({
           >
             <View
               onLayout={(event) => {
+                if (!visible) return;
                 const next = event.nativeEvent.layout.height;
                 if (next > 0 && Math.abs(next - contentHeight) > 0.5) setContentHeight(next);
               }}
             >
-              {children}
+              {visible ? children : lastChildren.current}
             </View>
           </ScrollView>
         </Animated.View>

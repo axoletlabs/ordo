@@ -11,11 +11,11 @@ import { Badge } from "../ui/Badge";
 import { SelectionMark } from "./SelectionMark";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
-import { afterPress } from "../../lib/after-press";
 import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { radius, spacing } from "../../theme/tokens";
 import { folderKey, SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
 import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
+import { prefetchFolderBookmarks } from "../../hooks/use-bookmarks";
 import { DEFAULT_FOLDER_ICON, type FolderDto } from "@ordo/shared";
 
 export interface FolderRowProps {
@@ -38,6 +38,18 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
   const highlighted = highlightedProp ?? highlightedFromMenu;
   const unread = folder.unreadCount > 0;
   const countLabel = `${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}`;
+  const openFolder = () => {
+    if (selectionMode) {
+      onPress(folder);
+      return;
+    }
+    haptics.light();
+    onPress(folder);
+  };
+  const warmFolder = () => {
+    if (selectionMode || folder.protected) return;
+    void prefetchFolderBookmarks(folder.id);
+  };
   const openMore = (event?: { nativeEvent: { pageX: number; pageY: number } }) => {
     measureAnchor(moreRef.current, (anchor) => onMore?.(folder, anchor), event);
   };
@@ -71,14 +83,8 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
         importantForAccessibility={selectionMode ? "no" : "yes"}
         style={styles.leading}
         scaleTo={0.95}
-        onPress={() => {
-          if (selectionMode) {
-            onPress(folder);
-            return;
-          }
-          haptics.light();
-          afterPress(() => onPress(folder));
-        }}
+        onPressIn={warmFolder}
+        onPress={openFolder}
         onLongPress={
           selectionMode || !onEnterSelection ? undefined : () => onEnterSelection(folder)
         }
@@ -112,14 +118,8 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
               : undefined
         }
         style={styles.body}
-        onPress={() => {
-          if (selectionMode) {
-            onPress(folder);
-            return;
-          }
-          haptics.light();
-          afterPress(() => onPress(folder));
-        }}
+        onPressIn={warmFolder}
+        onPress={openFolder}
         onLongPress={selectionMode ? undefined : onMore ? (event) => openMore(event) : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
