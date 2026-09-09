@@ -7,7 +7,8 @@ import type { BookmarkDto } from "@ordo/shared";
 export const FOLDER_ROW_SIZE = 72;
 export const BOOKMARK_ROW_BASE_SIZE = 72;
 
-export function estimateBookmarkRowSize(bookmark: BookmarkDto): number {
+export function estimateBookmarkRowSize(bookmark: BookmarkDto | null | undefined): number {
+  if (!bookmark) return BOOKMARK_ROW_BASE_SIZE;
   let size = BOOKMARK_ROW_BASE_SIZE;
   const isArticle = bookmark.contentKind === "article" || bookmark.fetchStatus === "ok";
   if (isArticle && bookmark.description) size += 18;

@@ -45,8 +45,13 @@ function isArticleBookmark(bookmark: BookmarkDto): boolean {
   return bookmark.fetchStatus === "ok";
 }
 
+function namedTags(tags: BookmarkDto["tags"] | unknown): { id?: string; name: string }[] {
+  if (!Array.isArray(tags)) return [];
+  return tags.filter((tag): tag is { id?: string; name: string } => !!tag && typeof tag.name === "string");
+}
+
 export function bookmarkPassesSearchFilters(bookmark: BookmarkDto, filters: SearchFilters): boolean {
-  const tags = Array.isArray(bookmark.tags) ? bookmark.tags : [];
+  const tags = namedTags(bookmark.tags);
   if (filters.tagIds.some((id) => !tags.some((tag) => tag.id === id))) return false;
   if (filters.status === "unread" && bookmark.isRead) return false;
   if (filters.status === "read" && !bookmark.isRead) return false;
@@ -58,8 +63,10 @@ export function bookmarkPassesSearchFilters(bookmark: BookmarkDto, filters: Sear
 const haystackMemo = new Map<string, { stamp: string; haystack: string }>();
 
 function haystackStamp(bookmark: BookmarkDto): string {
-  const tags = Array.isArray(bookmark.tags) ? bookmark.tags : [];
-  return `${bookmark.updatedAt ?? ""}\0${bookmark.title ?? ""}\0${bookmark.url ?? ""}\0${bookmark.domain ?? ""}\0${bookmark.description ?? ""}\0${bookmark.author ?? ""}\0${tags.map((tag) => tag.name).join("\0")}`;
+  const tagNames = namedTags(bookmark.tags)
+    .map((tag) => tag.name)
+    .join("\0");
+  return `${bookmark.updatedAt ?? ""}\0${bookmark.title ?? ""}\0${bookmark.url ?? ""}\0${bookmark.domain ?? ""}\0${bookmark.description ?? ""}\0${bookmark.author ?? ""}\0${tagNames}`;
 }
 
 /** Cached haystack so typing does not rebuild lowercase blobs on every key. */
@@ -69,7 +76,7 @@ function haystackFor(bookmark: BookmarkDto): string {
   if (hit && hit.stamp === stamp) return hit.haystack;
   const haystack = bookmarkSearchHaystack({
     ...bookmark,
-    tags: Array.isArray(bookmark.tags) ? bookmark.tags : [],
+    tags: namedTags(bookmark.tags),
   });
   if (haystackMemo.size > 4000) haystackMemo.clear();
   haystackMemo.set(bookmark.id, { stamp, haystack });

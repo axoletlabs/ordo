@@ -3,7 +3,7 @@
  * the server catches up shortly after for article-body hits.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Keyboard, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Keyboard, Pressable, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
@@ -68,14 +68,28 @@ const SearchField = React.memo(function SearchField({
 }) {
   const { palette } = useTheme();
   const [input, setInput] = useState(routeQuery);
+  const queryFrame = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
 
   useEffect(() => {
     setInput(routeQuery);
   }, [routeQuery]);
 
+  useEffect(
+    () => () => {
+      if (queryFrame.current != null) cancelAnimationFrame(queryFrame.current);
+    },
+    [],
+  );
+
   const commit = (text: string) => {
     setInput(text);
-    React.startTransition(() => onQueryChange(text));
+    if (queryFrame.current != null) cancelAnimationFrame(queryFrame.current);
+    // Let the focused TextInput finish its native layout before the list
+    // swaps empty → dozens of rows. Updating both in the same event crashes.
+    queryFrame.current = requestAnimationFrame(() => {
+      queryFrame.current = null;
+      onQueryChange(text);
+    });
   };
 
   const trimmed = input.trim();
@@ -94,31 +108,30 @@ const SearchField = React.memo(function SearchField({
       containerStyle={styles.searchField}
       icon={<Ionicons name="search-outline" size={18} color={palette.textTertiary} />}
       rightAccessory={
-        resultLabel || trimmed || fetching ? (
-          <View style={styles.fieldTail}>
-            {resultLabel ? (
-              <Text variant="caption" color="tertiary" numberOfLines={1} style={styles.resultLabel}>
-                {resultLabel}
-              </Text>
-            ) : null}
-            {trimmed ? (
-              <PressableScale
-                accessibilityRole="button"
-                accessibilityLabel="Clear search"
-                hitSlop={8}
-                scaleTo={0.85}
-                onPress={() => {
-                  haptics.light();
-                  commit("");
-                }}
-              >
-                <Ionicons name="close-circle" size={18} color={palette.textFaint} />
-              </PressableScale>
-            ) : fetching ? (
-              <ActivityIndicator size="small" color={palette.textTertiary} />
-            ) : null}
-          </View>
-        ) : null
+        <View style={styles.fieldTail} pointerEvents="box-none" collapsable={false}>
+          {resultLabel ? (
+            <Text variant="caption" color="tertiary" numberOfLines={1} style={styles.resultLabel}>
+              {resultLabel}
+            </Text>
+          ) : null}
+          {trimmed ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+              hitSlop={8}
+              onPress={() => {
+                haptics.light();
+                commit("");
+              }}
+            >
+              <Ionicons name="close-circle" size={18} color={palette.textFaint} />
+            </Pressable>
+          ) : fetching ? (
+            <ActivityIndicator size="small" color={palette.textTertiary} />
+          ) : (
+            <View style={styles.tailPlaceholder} />
+          )}
+        </View>
       }
     />
   );
@@ -178,13 +191,17 @@ export default function SearchScreen() {
   }, [browsing, queryClient, search.dataUpdatedAt]);
   const compiledItems = useMemo(() => {
     if (!browsing) return EMPTY_BOOKMARKS;
-    return compileSearchResults({
-      query: trimmed,
-      filters,
-      serverItems,
-      cachedItems,
-      serverMatchesQuery: trimmed === serverQ,
-    });
+    try {
+      return compileSearchResults({
+        query: trimmed,
+        filters,
+        serverItems,
+        cachedItems,
+        serverMatchesQuery: trimmed === serverQ,
+      });
+    } catch {
+      return EMPTY_BOOKMARKS;
+    }
   }, [browsing, cachedItems, filters, serverItems, serverQ, trimmed]);
   const itemsRef = useRef(EMPTY_BOOKMARKS);
   const items = reuseSearchResults(itemsRef.current, compiledItems);
@@ -359,7 +376,15 @@ export default function SearchScreen() {
   ) : null;
 
   const overrideItemLayout = useCallback((layout: { size?: number }, item: BookmarkDto) => {
-    layout.size = estimateBookmarkRowSize(item);
+    if (!item) {
+      layout.size = 72;
+      return;
+    }
+    try {
+      layout.size = estimateBookmarkRowSize(item);
+    } catch {
+      layout.size = 72;
+    }
   }, []);
 
   const listPane = (
@@ -564,8 +589,16 @@ const styles = StyleSheet.create({
   searchWrap: { width: "100%", paddingBottom: spacing[6] },
   searchRow: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
   searchField: { flex: 1, minWidth: 0 },
-  fieldTail: { flexDirection: "row", alignItems: "center", gap: spacing[8], maxWidth: 140 },
-  resultLabel: { flexShrink: 1 },
+  fieldTail: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: spacing[8],
+    width: 118,
+    minHeight: 18,
+  },
+  tailPlaceholder: { width: 18, height: 18 },
+  resultLabel: { flexShrink: 1, maxWidth: 92 },
   filterBtn: {
     width: 46,
     height: 46,

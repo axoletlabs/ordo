@@ -297,6 +297,23 @@ test("compileSearchResults does not throw on incomplete cache rows", () => {
   });
 });
 
+test("compileSearchResults ignores null tag entries in the haystack", () => {
+  const broken = bookmark({
+    id: "nt",
+    title: "Inbox",
+    tags: [null as unknown as BookmarkDto["tags"][number]],
+  });
+  assert.doesNotThrow(() => {
+    compileSearchResults({
+      query: "in",
+      filters: none,
+      serverItems: [],
+      cachedItems: [broken],
+      serverMatchesQuery: false,
+    });
+  });
+});
+
 test("reuseSearchResults keeps the same array when order is unchanged", () => {
   const first = bookmark({ id: "a", title: "Morning" });
   const compiled = [first];
