@@ -13,6 +13,7 @@ import {
   tabScreenAnimation,
   tabTransitionSpec,
 } from "../../../src/lib/navigation-animation";
+import { requestSearchFieldFocus } from "../../../src/lib/search-field-focus";
 import { useSettingsStore } from "../../../src/store/settings";
 import { StyleSheet, Text as NativeText, View, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -249,6 +250,11 @@ export default function TabsLayout() {
               <Ionicons name="search-outline" size={compact ? 20 : 22} color={color} />
             ),
             tabBarLabel: ({ color }) => tabLabel("Search", color),
+          }}
+          listeners={{
+            tabPress: () => {
+              requestSearchFieldFocus();
+            },
           }}
         />
         <Tabs.Screen

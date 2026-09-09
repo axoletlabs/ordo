@@ -77,7 +77,7 @@ function haystackStamp(bookmark: BookmarkDto, omitTagIds: ReadonlySet<string>): 
   const tagNames = tagsForTextQuery(bookmark, omitTagIds)
     .map((tag) => tag.name)
     .join("\0");
-  return `${bookmark.updatedAt ?? ""}\0${bookmark.title ?? ""}\0${bookmark.url ?? ""}\0${bookmark.domain ?? ""}\0${bookmark.description ?? ""}\0${bookmark.author ?? ""}\0${tagNames}`;
+  return `${bookmark.updatedAt ?? ""}\0${bookmark.title ?? ""}\0${bookmark.url ?? ""}\0${bookmark.domain ?? ""}\0${bookmark.description ?? ""}\0${bookmark.author ?? ""}\0${bookmark.contentKind ?? ""}\0${bookmark.fetchStatus ?? ""}\0${tagNames}`;
 }
 
 /** Cached haystack so typing does not rebuild lowercase blobs on every key. */
@@ -86,9 +86,16 @@ function haystackFor(bookmark: BookmarkDto, omitTagIds: ReadonlySet<string>): st
   const stamp = haystackStamp(bookmark, omitTagIds);
   const hit = haystackMemo.get(key);
   if (hit && hit.stamp === stamp) return hit.haystack;
+  const filtering = omitTagIds.size > 0;
+  const article = isArticleBookmark(bookmark);
   const haystack = bookmarkSearchHaystack({
     ...bookmark,
     tags: tagsForTextQuery(bookmark, omitTagIds),
+    // Website rows hide description/author. Matching those while a tag
+    // filter is on looks like the tag name itself matched ("l" in Shopping List).
+    description: !filtering || article ? bookmark.description : null,
+    author: !filtering || article ? bookmark.author : null,
+    contentText: filtering ? null : bookmark.contentText,
   });
   if (haystackMemo.size > 4000) haystackMemo.clear();
   haystackMemo.set(key, { stamp, haystack });
@@ -107,7 +114,7 @@ function passesTextQuery(
 ): boolean {
   if (tokens.length === 0) return true;
   if (haystackMatches(haystackFor(bookmark, omitTagIds), tokens)) return true;
-  if (!allowBodyOnlyHit) return false;
+  if (!allowBodyOnlyHit || !isArticleBookmark(bookmark)) return false;
   // Server rows that only match because the active tag's name contains the
   // query are not article-body hits.
   if (omitTagIds.size > 0 && haystackMatches(haystackFor(bookmark, NO_OMIT_TAGS), tokens)) {

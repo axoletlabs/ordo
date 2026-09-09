@@ -215,6 +215,9 @@ test("an active tag filter's own name does not satisfy the typed query", () => {
     id: "hoodie",
     title: "Shadowflex Hoodie",
     domain: "viralpickz.onshopbase.com",
+    url: "https://viralpickz.onshopbase.com/hoodie",
+    contentKind: "web",
+    fetchStatus: "unsupported",
     tags: [shopping],
   });
   const notepad = bookmark({
@@ -222,6 +225,9 @@ test("an active tag filter's own name does not satisfy the typed query", () => {
     title: "Notepad Duo",
     domain: "rodanotes.com",
     url: "https://rodanotes.com/notepad-duo",
+    description: "Lined notebook for lists",
+    contentKind: "web",
+    fetchStatus: "unsupported",
     tags: [shopping],
   });
   const hits = compileSearchResults({

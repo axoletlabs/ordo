@@ -22,6 +22,8 @@ export interface InputProps extends Omit<TextInputProps, "style"> {
   helper?: string;
   icon?: React.ReactNode;
   rightAccessory?: React.ReactNode;
+  /** Sit the accessory on top of the field so empty space still focuses the input. */
+  overlayRightAccessory?: boolean;
   mono?: boolean;
   containerStyle?: ViewStyle;
 }
@@ -32,6 +34,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   helper,
   icon,
   rightAccessory,
+  overlayRightAccessory,
   mono,
   containerStyle,
   onFocus,
@@ -43,6 +46,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
 }, ref) {
   const { palette } = useTheme();
   const [focused, setFocused] = useState(false);
+  const [overlayWidth, setOverlayWidth] = useState(0);
 
   const borderColor = error ? palette.danger : focused ? palette.accent : palette.border;
   const borderWidth = error ? 1 : focused ? 1.5 : 1;
@@ -53,6 +57,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
     : mono
       ? resolveFont("mono", "400")
       : resolveFont("sans", "400");
+  const overlay = overlayRightAccessory && !!rightAccessory;
 
   return (
     <View style={containerStyle}>
@@ -93,9 +98,25 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
           style={[
             styles.input,
             { color: palette.text, fontFamily },
+            overlay && overlayWidth > 0 ? { paddingRight: overlayWidth + spacing[8] } : null,
           ]}
         />
-        {rightAccessory ? <View style={styles.right}>{rightAccessory}</View> : null}
+        {rightAccessory ? (
+          <View
+            pointerEvents={overlay ? "box-none" : "auto"}
+            onLayout={
+              overlay
+                ? (event) => {
+                    const width = Math.ceil(event.nativeEvent.layout.width);
+                    setOverlayWidth((current) => (current === width ? current : width));
+                  }
+                : undefined
+            }
+            style={overlay ? styles.rightOverlay : styles.right}
+          >
+            {rightAccessory}
+          </View>
+        ) : null}
       </View>
       {error ? (
         <Text variant="footnote" color="danger" style={styles.msg}>
@@ -121,5 +142,12 @@ const styles = StyleSheet.create({
   icon: { marginRight: spacing[8] },
   input: { flex: 1, paddingVertical: spacing[10], fontSize: 13 },
   right: { marginLeft: spacing[8] },
+  rightOverlay: {
+    position: "absolute",
+    right: spacing[12],
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
+  },
   msg: { marginTop: spacing[6] },
 });

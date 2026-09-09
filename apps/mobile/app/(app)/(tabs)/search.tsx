@@ -3,7 +3,7 @@
  * the server catches up shortly after for article-body hits.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Keyboard, Pressable, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Keyboard, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
@@ -49,6 +49,7 @@ import { layout, radius, spacing } from "../../../src/theme/tokens";
 import type { BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 import { estimateBookmarkRowSize } from "../../../src/lib/bookmark-row-layout";
+import { registerSearchFieldFocus } from "../../../src/lib/search-field-focus";
 
 const SERVER_DEBOUNCE_MS = 250;
 const URL_SYNC_MS = 1000;
@@ -67,12 +68,19 @@ const SearchField = React.memo(function SearchField({
   onQueryChange: (query: string) => void;
 }) {
   const { palette } = useTheme();
+  const inputRef = useRef<TextInput>(null);
   const [input, setInput] = useState(routeQuery);
+  const [focused, setFocused] = useState(false);
   const queryFrame = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
 
   useEffect(() => {
     setInput(routeQuery);
   }, [routeQuery]);
+
+  useEffect(() => {
+    registerSearchFieldFocus(() => inputRef.current?.focus());
+    return () => registerSearchFieldFocus(null);
+  }, []);
 
   useEffect(
     () => () => {
@@ -93,11 +101,20 @@ const SearchField = React.memo(function SearchField({
   };
 
   const trimmed = input.trim();
+  const closeSearch = () => {
+    haptics.light();
+    inputRef.current?.blur();
+    Keyboard.dismiss();
+  };
+  const tail = resultLabel || trimmed || fetching;
 
   return (
     <Input
+      ref={inputRef}
       value={input}
       onChangeText={commit}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
       placeholder="Search bookmarks…"
       autoFocus={false}
       autoCorrect={false}
@@ -106,32 +123,56 @@ const SearchField = React.memo(function SearchField({
       enablesReturnKeyAutomatically
       onSubmitEditing={() => Keyboard.dismiss()}
       containerStyle={styles.searchField}
-      icon={<Ionicons name="search-outline" size={18} color={palette.textTertiary} />}
+      overlayRightAccessory
+      icon={
+        focused ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close search"
+            hitSlop={6}
+            onPress={closeSearch}
+          >
+            <Ionicons name="chevron-back" size={18} color={palette.text} />
+          </Pressable>
+        ) : (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Search bookmarks"
+            hitSlop={6}
+            onPress={() => inputRef.current?.focus()}
+          >
+            <Ionicons name="search-outline" size={18} color={palette.textTertiary} />
+          </Pressable>
+        )
+      }
       rightAccessory={
-        <View style={styles.fieldTail} pointerEvents="box-none" collapsable={false}>
-          {resultLabel ? (
-            <Text variant="caption" color="tertiary" numberOfLines={1} style={styles.resultLabel}>
-              {resultLabel}
-            </Text>
-          ) : null}
-          {trimmed ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Clear search"
-              hitSlop={8}
-              onPress={() => {
-                haptics.light();
-                commit("");
-              }}
-            >
-              <Ionicons name="close-circle" size={18} color={palette.textFaint} />
-            </Pressable>
-          ) : fetching ? (
-            <ActivityIndicator size="small" color={palette.textTertiary} />
-          ) : (
-            <View style={styles.tailPlaceholder} />
-          )}
-        </View>
+        tail ? (
+          <View style={styles.fieldTail} pointerEvents="box-none" collapsable={false}>
+            {resultLabel ? (
+              <View pointerEvents="none">
+                <Text variant="caption" color="tertiary" numberOfLines={1} style={styles.resultLabel}>
+                  {resultLabel}
+                </Text>
+              </View>
+            ) : null}
+            {trimmed ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+                hitSlop={8}
+                onPress={() => {
+                  haptics.light();
+                  commit("");
+                  inputRef.current?.focus();
+                }}
+              >
+                <Ionicons name="close-circle" size={18} color={palette.textFaint} />
+              </Pressable>
+            ) : fetching ? (
+              <ActivityIndicator size="small" color={palette.textTertiary} />
+            ) : null}
+          </View>
+        ) : null
       }
     />
   );
@@ -594,10 +635,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "flex-end",
     gap: spacing[8],
-    width: 118,
-    minHeight: 18,
   },
-  tailPlaceholder: { width: 18, height: 18 },
   resultLabel: { flexShrink: 1, maxWidth: 92 },
   filterBtn: {
     width: 46,

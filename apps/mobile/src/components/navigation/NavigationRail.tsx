@@ -11,6 +11,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { useFloatingDockMetrics } from "../../hooks/use-floating-dock-metrics";
 import { useSettingsStore } from "../../store/settings";
 import { layout, radius, spacing } from "../../theme/tokens";
+import { requestSearchFieldFocus } from "../../lib/search-field-focus";
 
 type Section = "bookmarks" | "search" | "settings";
 
@@ -99,7 +100,13 @@ export function NavigationRail() {
             accessibilityRole="tab"
             accessibilityState={{ selected: focused }}
             accessibilityLabel={item.label}
-            onPress={() => go(item.href)}
+            onPress={() => {
+              if (focused && item.section === "search") {
+                requestSearchFieldFocus();
+                return;
+              }
+              go(item.href);
+            }}
             style={[
               styles.item,
               {
