@@ -384,7 +384,7 @@ jobs:
       - name: Download APK artifact
         uses: actions/download-artifact@v6
         with:
-          name: ordo-apk
+          name: ordo-apk-${{ needs.detect.outputs.updates_channel }}
           path: apk
 
       - name: Rename APKs
