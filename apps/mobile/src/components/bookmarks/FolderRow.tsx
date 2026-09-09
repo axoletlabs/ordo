@@ -5,7 +5,7 @@
 import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { PressableScale } from "../ui/PressableScale";
+import { ListPressable } from "../ui/ListPressable";
 import { PinIcon } from "../ui/PinIcon";
 import { Text } from "../ui/Text";
 import { Badge } from "../ui/Badge";
@@ -86,14 +86,13 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
           }
         : null)}
     >
-      <PressableScale
+      <ListPressable
         accessibilityRole="button"
         accessibilityLabel={`Select ${folder.name}`}
         accessibilityHint="Press and hold to select"
         accessible={!selectionMode}
         importantForAccessibility={selectionMode ? "no" : "yes"}
         style={styles.leading}
-        scaleTo={0.95}
         onPressIn={warmFolder}
         onPress={openFolder}
         onLongPress={
@@ -113,9 +112,9 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
             <Ionicons name={folder.icon ?? DEFAULT_FOLDER_ICON} size={18} color={palette.accent} />
           </View>
         )}
-      </PressableScale>
+      </ListPressable>
 
-      <PressableScale
+      <ListPressable
         accessibilityRole={selectionMode ? "checkbox" : "button"}
         accessibilityLabel={`${folder.name}, ${countLabel}${folder.pinned ? ", pinned" : ""}${folder.protected ? ", locked" : ""}${unread ? `, ${folder.unreadCount} unread` : ""}`}
         accessibilityState={selectionMode ? { checked: !!selected } : undefined}
@@ -171,7 +170,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
           </View>
         </View>
         {unread && !selectionMode ? <Badge tone="accent">{folder.unreadCount}</Badge> : null}
-      </PressableScale>
+      </ListPressable>
     </View>
   );
 });

@@ -44,6 +44,7 @@ import { flattenPages } from "../../../src/lib/api/query-keys";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
 import { type BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
+import { estimateBookmarkRowSize } from "../../../src/lib/bookmark-row-layout";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
 
 export default function FolderDetailScreen() {
@@ -123,6 +124,29 @@ export default function FolderDetailScreen() {
     selectionRef.current.enter(bookmarkKey(bookmark.id));
   }, []);
 
+  const selectionActive = selection.active;
+  const selectionRevision = selection.revision;
+  const renderBookmark = useCallback(
+    ({ item }: { item: BookmarkDto }) => (
+      <BookmarkRow
+        bookmark={item}
+        selectionMode={selectionActive}
+        selected={
+          selectionActive
+            ? selectionRef.current.has(bookmarkKey(item.id))
+            : hasDetailPane && item.id === selectedBookmarkId
+        }
+        onPress={onPressBookmark}
+        onEnterSelection={onEnterSelection}
+        onMore={onMoreBookmark}
+      />
+    ),
+    [hasDetailPane, onEnterSelection, onMoreBookmark, onPressBookmark, selectedBookmarkId, selectionActive, selectionRevision],
+  );
+  const overrideItemLayout = useCallback((layout: { size?: number }, item: BookmarkDto) => {
+    layout.size = estimateBookmarkRowSize(item);
+  }, []);
+
   const loadMore = () => {
     if (bookmarks.hasNextPage && !bookmarks.isFetchingNextPage) {
       bookmarks.fetchNextPage();
@@ -157,23 +181,11 @@ export default function FolderDetailScreen() {
   const listPane = (
     <ThemedFlashList
       data={items}
-      extraData={selection.revision}
+      extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}`}
       keyExtractor={(b: BookmarkDto) => b.id}
-      renderItem={({ item }: { item: BookmarkDto }) => (
-        <BookmarkRow
-          bookmark={item}
-          selectionMode={selection.active}
-          selected={
-            selection.active
-              ? selection.has(bookmarkKey(item.id))
-              : hasDetailPane && item.id === selectedBookmarkId
-          }
-          onPress={onPressBookmark}
-          onEnterSelection={onEnterSelection}
-          onMore={onMoreBookmark}
-        />
-      )}
-      estimatedItemSize={108}
+      renderItem={renderBookmark}
+      estimatedItemSize={72}
+      overrideItemLayout={overrideItemLayout}
       contentContainerStyle={{ paddingBottom: listContentPadding }}
       refreshing={bookmarks.isFetching && !bookmarks.isFetchingNextPage}
       onRefresh={() => bookmarks.refetch()}

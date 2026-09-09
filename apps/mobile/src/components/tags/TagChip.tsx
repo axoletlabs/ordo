@@ -3,9 +3,8 @@
  * filter controls; the leading dot always carries the tag color.
  */
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { Pressable, StyleSheet, View } from "react-native";
 import { TagColor } from "@ordo/shared";
-import { PressableScale } from "../ui/PressableScale";
 import { Text } from "../ui/Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { radius, spacing } from "../../theme/tokens";
@@ -21,7 +20,7 @@ export interface TagChipProps {
   accessibilityLabel?: string;
 }
 
-export function TagChip({
+export const TagChip = React.memo(function TagChip({
   name,
   color,
   selected = false,
@@ -69,7 +68,7 @@ export function TagChip({
   if (!onPress) return body;
 
   return (
-    <PressableScale
+    <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? name}
       accessibilityState={{ selected }}
@@ -78,11 +77,12 @@ export function TagChip({
         onPress();
       }}
       hitSlop={8}
+      style={({ pressed }) => (pressed ? { opacity: 0.72 } : null)}
     >
       {body}
-    </PressableScale>
+    </Pressable>
   );
-}
+});
 
 const styles = StyleSheet.create({
   chip: {

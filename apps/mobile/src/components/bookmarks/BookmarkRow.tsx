@@ -7,7 +7,7 @@ import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { PressableScale } from "../ui/PressableScale";
+import { ListPressable } from "../ui/ListPressable";
 import { Text } from "../ui/Text";
 import { TagChip } from "../tags/TagChip";
 import { SelectionMark } from "./SelectionMark";
@@ -171,14 +171,13 @@ export const BookmarkRow = React.memo(function BookmarkRow({
           }
         : null)}
     >
-      <PressableScale
+      <ListPressable
         accessibilityRole="button"
         accessibilityLabel={`Select ${title}`}
         accessibilityHint="Press and hold to select"
         accessible={!selectionMode}
         importantForAccessibility={selectionMode ? "no" : "yes"}
         style={styles.leading}
-        scaleTo={0.95}
         onPressIn={warmBookmark}
         onPress={openBookmark}
         onLongPress={
@@ -217,9 +216,9 @@ export const BookmarkRow = React.memo(function BookmarkRow({
             ) : null}
           </View>
         )}
-      </PressableScale>
+      </ListPressable>
 
-      <PressableScale
+      <ListPressable
         accessibilityRole={selectionMode ? "checkbox" : "button"}
         accessibilityLabel={accessibilityLabel}
         accessibilityState={selectionMode ? { checked: !!selected } : { selected: !!selected }}
@@ -319,7 +318,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
             ) : null}
           </View>
         </View>
-      </PressableScale>
+      </ListPressable>
     </View>
   );
 });

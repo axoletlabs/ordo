@@ -49,6 +49,7 @@ import {
 import { layout, spacing } from "../../../src/theme/tokens";
 import { type BookmarkDto, type FolderDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
+import { estimateBookmarkRowSize, FOLDER_ROW_SIZE } from "../../../src/lib/bookmark-row-layout";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
 
 type LibraryItem =
@@ -179,6 +180,63 @@ export default function BookmarksScreen() {
     selectionRef.current.enter(bookmarkKey(bookmark.id));
   }, []);
 
+  const selectionActive = selection.active;
+  const selectionRevision = selection.revision;
+  const renderLibraryItem = useCallback(
+    ({ item }: { item: LibraryItem }) => {
+      if (item.type === "folder") {
+        return (
+          <FolderRow
+            folder={item.folder}
+            selectionMode={selectionActive}
+            selected={selectionRef.current.has(folderKey(item.folder.id))}
+            onPress={onPressFolder}
+            onEnterSelection={onEnterFolder}
+            onMore={onMoreFolder}
+          />
+        );
+      }
+      return (
+        <BookmarkRow
+          bookmark={item.bookmark}
+          selectionMode={selectionActive}
+          selected={selectionRef.current.has(bookmarkKey(item.bookmark.id))}
+          onPress={onPressLibraryBookmark}
+          onEnterSelection={onEnterBookmark}
+          onMore={onMoreBookmark}
+        />
+      );
+    },
+    [
+      onEnterBookmark,
+      onEnterFolder,
+      onMoreBookmark,
+      onMoreFolder,
+      onPressFolder,
+      onPressLibraryBookmark,
+      selectionActive,
+      selectionRevision,
+    ],
+  );
+  const overrideLibraryLayout = useCallback((layout: { size?: number }, item: LibraryItem) => {
+    layout.size = item.type === "folder" ? FOLDER_ROW_SIZE : estimateBookmarkRowSize(item.bookmark);
+  }, []);
+  const libraryKeyExtractor = useCallback(
+    (item: LibraryItem) => (item.type === "folder" ? folderKey(item.folder.id) : bookmarkKey(item.bookmark.id)),
+    [],
+  );
+  const listContentStyle = useMemo(
+    () => ({
+      paddingTop: spacing[8],
+      paddingBottom: selection.active
+        ? selectionClearance
+        : floatingNavigation
+          ? bottomClearance
+          : spacing[96],
+    }),
+    [bottomClearance, floatingNavigation, selection.active, selectionClearance],
+  );
+
   const runCreateAction = (action: CreateButtonHoldAction, anchor?: MenuAnchorRect) => {
     if (action === "menu") {
       setCreateAnchor(anchor ?? null);
@@ -266,39 +324,12 @@ export default function BookmarksScreen() {
         <ScreenContent maxWidth={layout.maxContentWidth} style={styles.content}>
           <ThemedFlashList
             data={libraryItems}
-            keyExtractor={(item: LibraryItem) =>
-              item.type === "folder" ? folderKey(item.folder.id) : bookmarkKey(item.bookmark.id)
-            }
+            extraData={selectionRevision}
+            keyExtractor={libraryKeyExtractor}
             getItemType={(item: LibraryItem) => item.type}
-            overrideItemLayout={(layout, item: LibraryItem) => {
-              layout.size = item.type === "folder" ? 76 : 108;
-            }}
-            renderItem={({ item }: { item: LibraryItem }) => {
-              if (item.type === "folder") {
-                return (
-                  <FolderRow
-                    folder={item.folder}
-                    selectionMode={selection.active}
-                    selected={selection.has(folderKey(item.folder.id))}
-                    onPress={onPressFolder}
-                    onEnterSelection={onEnterFolder}
-                    onMore={onMoreFolder}
-                  />
-                );
-              }
-              return (
-                <BookmarkRow
-                  bookmark={item.bookmark}
-                  selectionMode={selection.active}
-                  selected={selection.has(bookmarkKey(item.bookmark.id))}
-                  onPress={onPressLibraryBookmark}
-                  onEnterSelection={onEnterBookmark}
-                  onMore={onMoreBookmark}
-                />
-              );
-            }}
-            extraData={selection.revision}
-            estimatedItemSize={108}
+            overrideItemLayout={overrideLibraryLayout}
+            renderItem={renderLibraryItem}
+            estimatedItemSize={72}
             ListEmptyComponent={
               libraryLoading ? (
                 <BookmarkListSkeleton />
@@ -318,14 +349,7 @@ export default function BookmarksScreen() {
                 <View style={styles.footer}><ActivityIndicator color={palette.accent} /></View>
               ) : null
             }
-            contentContainerStyle={{
-              paddingTop: spacing[8],
-              paddingBottom: selection.active
-                ? selectionClearance
-                : floatingNavigation
-                  ? bottomClearance
-                  : spacing[96],
-            }}
+            contentContainerStyle={listContentStyle}
             refreshing={(bookmarks.isFetching || folders.isFetching || tags.isFetching) && !bookmarks.isLoading}
             onRefresh={refresh}
             onEndReached={loadMore}

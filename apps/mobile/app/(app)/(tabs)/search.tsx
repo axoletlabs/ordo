@@ -48,6 +48,7 @@ import {
 import { layout, radius, spacing } from "../../../src/theme/tokens";
 import type { BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
+import { estimateBookmarkRowSize } from "../../../src/lib/bookmark-row-layout";
 
 const SERVER_DEBOUNCE_MS = 250;
 const URL_SYNC_MS = 1000;
@@ -57,10 +58,12 @@ const EMPTY_BOOKMARKS: BookmarkDto[] = [];
 const SearchField = React.memo(function SearchField({
   routeQuery,
   fetching,
+  resultLabel,
   onQueryChange,
 }: {
   routeQuery: string;
   fetching: boolean;
+  resultLabel: string | null;
   onQueryChange: (query: string) => void;
 }) {
   const { palette } = useTheme();
@@ -72,7 +75,7 @@ const SearchField = React.memo(function SearchField({
 
   const commit = (text: string) => {
     setInput(text);
-    onQueryChange(text);
+    React.startTransition(() => onQueryChange(text));
   };
 
   const trimmed = input.trim();
@@ -91,21 +94,30 @@ const SearchField = React.memo(function SearchField({
       containerStyle={styles.searchField}
       icon={<Ionicons name="search-outline" size={18} color={palette.textTertiary} />}
       rightAccessory={
-        trimmed ? (
-          <PressableScale
-            accessibilityRole="button"
-            accessibilityLabel="Clear search"
-            hitSlop={8}
-            scaleTo={0.85}
-            onPress={() => {
-              haptics.light();
-              commit("");
-            }}
-          >
-            <Ionicons name="close-circle" size={18} color={palette.textFaint} />
-          </PressableScale>
-        ) : fetching ? (
-          <ActivityIndicator size="small" color={palette.textTertiary} />
+        resultLabel || trimmed || fetching ? (
+          <View style={styles.fieldTail}>
+            {resultLabel ? (
+              <Text variant="caption" color="tertiary" numberOfLines={1} style={styles.resultLabel}>
+                {resultLabel}
+              </Text>
+            ) : null}
+            {trimmed ? (
+              <PressableScale
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+                hitSlop={8}
+                scaleTo={0.85}
+                onPress={() => {
+                  haptics.light();
+                  commit("");
+                }}
+              >
+                <Ionicons name="close-circle" size={18} color={palette.textFaint} />
+              </PressableScale>
+            ) : fetching ? (
+              <ActivityIndicator size="small" color={palette.textTertiary} />
+            ) : null}
+          </View>
         ) : null
       }
     />
@@ -346,6 +358,10 @@ export default function SearchScreen() {
     />
   ) : null;
 
+  const overrideItemLayout = useCallback((layout: { size?: number }, item: BookmarkDto) => {
+    layout.size = estimateBookmarkRowSize(item);
+  }, []);
+
   const listPane = (
     <ThemedFlashList
       data={items}
@@ -353,7 +369,8 @@ export default function SearchScreen() {
       keyExtractor={(b: BookmarkDto) => b.id}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
-      estimatedItemSize={108}
+      estimatedItemSize={72}
+      overrideItemLayout={overrideItemLayout}
       renderItem={renderBookmark}
       ListEmptyComponent={empty ? <View style={styles.emptyList}>{empty}</View> : null}
       ListFooterComponent={
@@ -405,6 +422,7 @@ export default function SearchScreen() {
             <SearchField
               routeQuery={routeQuery}
               fetching={search.isFetching && browsing}
+              resultLabel={resultMeta}
               onQueryChange={setLiveQuery}
             />
             <View ref={filterRef} collapsable={false}>
@@ -434,7 +452,7 @@ export default function SearchScreen() {
             </View>
           </View>
 
-          {filtersOn || resultMeta || browsing ? (
+          {filtersOn ? (
             <View style={styles.metaRow}>
               {selectedTags.map((tag) => (
                 <TagChip
@@ -466,11 +484,6 @@ export default function SearchScreen() {
                   onPress={() => setFilters((prev) => ({ ...prev, kind: "all" }))}
                   accessibilityLabel="Clear type filter"
                 />
-              ) : null}
-              {resultMeta ? (
-                <Text variant="caption" color="tertiary" style={styles.resultCount}>
-                  {resultMeta}
-                </Text>
               ) : null}
             </View>
           ) : null}
@@ -548,9 +561,11 @@ export default function SearchScreen() {
 
 const styles = StyleSheet.create({
   content: { flex: 1, width: "100%" },
-  searchWrap: { width: "100%", paddingBottom: spacing[8], gap: spacing[8] },
+  searchWrap: { width: "100%", paddingBottom: spacing[6] },
   searchRow: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
   searchField: { flex: 1, minWidth: 0 },
+  fieldTail: { flexDirection: "row", alignItems: "center", gap: spacing[8], maxWidth: 140 },
+  resultLabel: { flexShrink: 1 },
   filterBtn: {
     width: 46,
     height: 46,
@@ -572,9 +587,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexWrap: "wrap",
     gap: spacing[6],
-    minHeight: 28,
+    paddingTop: spacing[8],
   },
-  resultCount: { marginLeft: "auto" },
   emptyList: { flexGrow: 1, alignItems: "center", justifyContent: "center", minHeight: 280 },
   footer: { paddingVertical: spacing[20], alignItems: "center" },
   singlePane: { flex: 1, width: "100%" },
