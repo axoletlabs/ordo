@@ -34,14 +34,17 @@ export function useMe() {
   });
 }
 
-/** Validate the persisted session on launch (reconcile local → server). */
+/** Validate the persisted session on launch and when returning to the app. */
 export function useValidateSession() {
   const setUser = useAuthStore((s) => s.setUser);
   const query = useQuery({
     queryKey: ["auth", "validate"],
     queryFn: () => authApi.me(),
     retry: false,
+    // Success should not refetch on every app switch. A failed boot has no
+    // data, so it stays stale and retries when the app returns to the foreground.
     staleTime: Infinity,
+    refetchOnWindowFocus: true,
   });
 
   // The server account is canonical (display name, email, reader preferences…):

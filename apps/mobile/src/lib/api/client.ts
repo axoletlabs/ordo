@@ -7,9 +7,11 @@
  *    in the body instead of httpOnly cookies).
  *  - Attach `Authorization: Bearer <accessToken>` for authed requests.
  *  - Attach `x-folder-token` for requests targeting a (possibly) protected folder.
- *  - Transparently refresh on `token_expired` (single-flight) and replay once.
+ *  - Transparently refresh on `token_expired` / `unauthorized` (single-flight) and replay once.
  *  - Normalise every failure into an `ApiClientError` with a stable `code`.
  *  - Schedule a proactive refresh just before the access token expires.
+ *  - Never drop a live session because the server was down or an in-flight
+ *    request lost the race with a token rotation.
  */
 import {
   AuthRoutes,
@@ -27,6 +29,13 @@ import * as Device from "expo-device";
 import { useAuthStore } from "../../store/auth";
 import { useFolderTokenStore } from "../../store/folder-tokens";
 import { useSettingsStore } from "../../store/settings";
+import {
+  isDefiniteRefreshRejection,
+  nextProactiveRefreshDelayMs,
+  shouldClearSessionForError,
+  shouldRefreshAccessToken,
+  shouldRetryRequestWithRefresh,
+} from "../auth-session-policy";
 import {
   REQUEST_HARD_TIMEOUT_MS,
   REQUEST_TIMEOUT_MS,
@@ -64,10 +73,7 @@ export class ApiClientError extends Error {
   }
   /** True when the session is gone and the user must re-authenticate. */
   get sessionGone() {
-    return (
-      this.code === "session_revoked" ||
-      (this.status === 401 && (this.code === "unauthorized" || this.code === "session_revoked"))
-    );
+    return this.code === "session_revoked";
   }
 }
 
@@ -183,6 +189,7 @@ async function doRefresh(): Promise<RefreshResult> {
   const { tokens, setTokens, clear } = useAuthStore.getState();
   const refreshToken = tokens?.refreshToken;
   if (!refreshToken) {
+    cancelProactiveRefresh();
     void clear();
     return "rejected";
   }
@@ -206,8 +213,9 @@ async function doRefresh(): Promise<RefreshResult> {
   } catch (e) {
     const err = e instanceof ApiClientError ? e : new ApiClientError(0, null);
     // Only drop the session when the server actually rejected the refresh.
-    // A down host, timeout, or 5xx must not sign the user out.
-    if (err.status === 401 || err.sessionGone) {
+    // A down host, timeout, proxy 401, or 5xx must not sign the user out.
+    if (isDefiniteRefreshRejection(err)) {
+      cancelProactiveRefresh();
       void clear();
       return "rejected";
     }
@@ -227,13 +235,23 @@ function refreshOnce(): Promise<RefreshResult> {
 /**
  * Schedule a silent refresh ~60s before the access token expires.
  * Safe to call repeatedly; clears any prior timer.
+ *
+ * Pass `expiresIn` right after a login/refresh. Otherwise uses the stamped
+ * `accessExpiresAt` from the auth store so a later launch does not treat the
+ * original TTL as remaining time.
  */
 export function scheduleProactiveRefresh(expiresInSec?: number): void {
-  if (proactiveTimer) clearTimeout(proactiveTimer);
-  if (!expiresInSec || expiresInSec <= 0) return;
-  // Refresh a minute early, clamped to >=5s.
-  const leadMs = Math.min(60_000, Math.max(0, expiresInSec * 1000 - 60_000));
-  const delay = Math.max(5_000, expiresInSec * 1000 - leadMs);
+  if (proactiveTimer) {
+    clearTimeout(proactiveTimer);
+    proactiveTimer = null;
+  }
+  const expiresAt =
+    expiresInSec && expiresInSec > 0
+      ? Date.now() + expiresInSec * 1000
+      : useAuthStore.getState().accessExpiresAt;
+  if (expiresAt == null) return;
+  const delay = nextProactiveRefreshDelayMs(expiresAt);
+  if (delay <= 0) return;
   proactiveTimer = setTimeout(() => {
     void refreshOnce().catch(() => {});
   }, delay);
@@ -242,6 +260,20 @@ export function scheduleProactiveRefresh(expiresInSec?: number): void {
 export function cancelProactiveRefresh(): void {
   if (proactiveTimer) clearTimeout(proactiveTimer);
   proactiveTimer = null;
+}
+
+/**
+ * Refresh if the access token is expired, unknown, or within the lead window.
+ * Otherwise (re)arm the proactive timer. Used on launch and foreground.
+ */
+export async function ensureFreshAccessToken(): Promise<RefreshResult | "skipped"> {
+  const { tokens, accessExpiresAt, status } = useAuthStore.getState();
+  if (status !== "authenticated" || !tokens?.refreshToken) return "skipped";
+  if (!shouldRefreshAccessToken(accessExpiresAt)) {
+    scheduleProactiveRefresh();
+    return "skipped";
+  }
+  return refreshOnce();
 }
 
 /* ------------------------------------------------------------------ */
@@ -298,8 +330,11 @@ async function request<T>(
               message: "The server took too long to respond.",
             })
           : new ApiClientError(0, null, "Unexpected error");
-    // Transparent refresh + single replay.
-    if (err.tokenExpired && auth && !retried) {
+    const sentAccessToken = tokens?.accessToken;
+    // Transparent refresh + single replay. `unauthorized` is included because
+    // rotating refresh invalidates the previous access token (hash miss), so
+    // in-flight requests often see that instead of `token_expired`.
+    if (shouldRetryRequestWithRefresh(err, { auth, retried })) {
       const refresh = await refreshOnce();
       if (refresh === "ok") return request<T>(path, options, true);
       if (refresh === "rejected") {
@@ -310,8 +345,15 @@ async function request<T>(
         message: "Couldn't reach the server. Check your connection.",
       });
     }
-    // If the server says the session is gone, make sure we clear local state.
-    if (err.sessionGone) void useAuthStore.getState().clear();
+    if (
+      shouldClearSessionForError(err, {
+        sentAccessToken,
+        currentAccessToken: useAuthStore.getState().tokens?.accessToken,
+      })
+    ) {
+      cancelProactiveRefresh();
+      void useAuthStore.getState().clear();
+    }
     throw err;
   }
 }

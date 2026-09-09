@@ -21,7 +21,8 @@ import { useAuthStore } from "../src/store/auth";
 import { useSettingsStore } from "../src/store/settings";
 import { useFolderTokenStore } from "../src/store/folder-tokens";
 import { useOnlineStore, useOnline } from "../src/lib/online";
-import { scheduleProactiveRefresh } from "../src/lib/api/client";
+import { cancelProactiveRefresh, ensureFreshAccessToken } from "../src/lib/api/client";
+import { initAppLifecycle } from "../src/lib/app-lifecycle";
 import { ToastHost } from "../src/components/ui/ToastHost";
 import { OverlayHost } from "../src/components/ui/overlay-host";
 import { Banner } from "../src/components/ui/Banner";
@@ -41,6 +42,7 @@ import {
 import { enableFreeze } from "react-native-screens";
 
 enableFreeze(true);
+initAppLifecycle();
 
 // Hold the native splash as early as possible so it covers JS load + hydration
 // (otherwise its auto-hide leaves a white frame before React paints).
@@ -89,10 +91,14 @@ function RootShell() {
     }
   }, [status, segments, router]);
 
-  // Schedule a proactive token refresh whenever the session changes.
+  // Keep the access token fresh while the app is in the foreground.
   useEffect(() => {
-    if (tokens?.expiresIn) scheduleProactiveRefresh(tokens.expiresIn);
-  }, [tokens?.expiresIn, tokens?.accessToken]);
+    if (status !== "authenticated") {
+      cancelProactiveRefresh();
+      return;
+    }
+    void ensureFreshAccessToken();
+  }, [status, tokens?.accessToken]);
 
   // Keep the native splash visible while the redirect reconciles with auth so
   // the wrong group (e.g. login for an authenticated user) is never shown.
@@ -168,7 +174,7 @@ export default function RootLayout() {
         await useAuthStore.getState().hydrate();
       } catch (error) {
         console.warn("Auth bootstrap failed", error);
-        useAuthStore.setState({ user: null, tokens: null, status: "unauthenticated" });
+        useAuthStore.setState({ user: null, tokens: null, accessExpiresAt: null, status: "unauthenticated" });
       } finally {
         setBooted(true);
       }

@@ -1,9 +1,11 @@
 /**
  * React Query client with sensible defaults:
- *  - staleTime so cached screens don't refetch on every focus (no flicker / SWR).
+ *  - staleTime so cached screens don't flicker; refetch on app foreground
+ *    once that window has elapsed (wired via AppState → focusManager).
  *  - retry skips client errors (except token_expired, which the interceptor already retried).
  *  - retry pauses when the device has no link (not when the Ordo server is down).
  *  - networkMode `always` so a false "offline" flag cannot leave queries pending forever.
+ *  - refetchInterval pauses in the background (`refetchIntervalInBackground: false`).
  */
 import { QueryClient } from "@tanstack/react-query";
 import { ApiClientError } from "./api/client";
@@ -23,7 +25,8 @@ export const queryClient = new QueryClient({
         if (!useOnlineStore.getState().online) return false;
         return failureCount < 2;
       },
-      refetchOnWindowFocus: false,
+      refetchOnWindowFocus: true,
+      refetchIntervalInBackground: false,
     },
     mutations: {
       retry: false,

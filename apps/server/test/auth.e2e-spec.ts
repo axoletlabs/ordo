@@ -218,11 +218,13 @@ describe("Auth (e2e)", () => {
         .send({ refreshToken: auth.tokens.refreshToken })
         .expect(401);
 
-      // old access token is invalidated by rotation (lookup by hash fails)
-      await request(ctx.app.getHttpServer())
+      // old access token is invalidated by rotation (lookup by hash fails).
+      // Clients should refresh, not treat this as a hard logout.
+      const stale = await request(ctx.app.getHttpServer())
         .get("/api/auth/me")
         .set("authorization", `Bearer ${auth.tokens.accessToken}`)
         .expect(401);
+      expect(stale.body.error.code).toBe(ErrorCode.TOKEN_EXPIRED);
     });
 
     it("logs out and revokes the session instantly", async () => {
@@ -238,6 +240,14 @@ describe("Auth (e2e)", () => {
         .get("/api/auth/me")
         .set("authorization", `Bearer ${auth.tokens.accessToken}`)
         .expect(401);
+    });
+
+    it("asks clients to refresh when a bearer token is unknown", async () => {
+      const res = await request(ctx.app.getHttpServer())
+        .get("/api/auth/me")
+        .set("authorization", "Bearer not-a-real-token")
+        .expect(401);
+      expect(res.body.error.code).toBe(ErrorCode.TOKEN_EXPIRED);
     });
 
     it("revokes another session by id", async () => {

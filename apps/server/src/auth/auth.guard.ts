@@ -37,7 +37,10 @@ export class AuthGuard implements CanActivate {
     }
     const result = await this.sessions.validateAccess(token);
     if (!result) {
-      throw new AppError(ErrorCode.UNAUTHORIZED, "Sign in to continue.");
+      // Present but unknown (rotated, revoked, or never issued). Ask the client
+      // to refresh rather than treating it as a hard logout — in-flight
+      // requests often lose the race with a successful token rotation.
+      throw new AppError(ErrorCode.TOKEN_EXPIRED, "Your session has expired.");
     }
     if (result.expired) {
       throw new AppError(ErrorCode.TOKEN_EXPIRED, "Your session has expired.");
