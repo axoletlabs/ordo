@@ -33,6 +33,7 @@ test("AMOLED scrollbar is a light gray, not black-on-black", () => {
 test("maxHeight-only hosts do not flex-fill (shrink-wrapped menus)", () => {
   assert.equal(scrollViewShouldFill(undefined), false);
   assert.equal(scrollViewShouldFill({ maxHeight: 240 }), false);
+  assert.equal(scrollViewShouldFill({ height: null }), false);
   assert.equal(scrollViewShouldFill({ flex: 1 }), true);
   assert.equal(scrollViewShouldFill({ height: 400 }), true);
 });

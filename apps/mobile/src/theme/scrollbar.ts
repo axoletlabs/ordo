@@ -51,10 +51,10 @@ export function scrollbarColors(palette: Palette): { thumb: string; track: strin
  * menu went invisible after the scrollbar wrap for this reason.
  */
 export function scrollViewShouldFill(wrapper: {
-  flex?: number;
-  flexGrow?: number;
-  height?: number | string;
-  maxHeight?: number | string;
+  flex?: unknown;
+  flexGrow?: unknown;
+  height?: unknown;
+  maxHeight?: unknown;
 } | undefined): boolean {
   if (!wrapper) return false;
   return wrapper.flex != null || wrapper.flexGrow != null || wrapper.height != null;
