@@ -1,6 +1,6 @@
 /**
  * A single bookmark row. Tapping opens the reader; the trailing button or a
- * long-press reveals row actions. Hold the create button to multi-select.
+ * long-press on the row reveals actions. Hold the favicon to multi-select.
  */
 import React from "react";
 import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from "react-native";
@@ -29,6 +29,8 @@ export interface BookmarkRowProps {
   bookmark: BookmarkDto;
   onPress: (b: BookmarkDto) => void;
   onMore?: (b: BookmarkDto, anchor: MenuAnchorRect) => void;
+  /** Press-and-hold on the favicon enters selection with this bookmark. */
+  onEnterSelection?: (b: BookmarkDto) => void;
   selected?: boolean;
   selectionMode?: boolean;
   /** True while this row's context menu is open, so the trigger stays obvious in a long list. */
@@ -43,6 +45,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   bookmark,
   onPress,
   onMore,
+  onEnterSelection,
   selected,
   selectionMode,
   highlighted: highlightedProp,
@@ -125,24 +128,20 @@ export const BookmarkRow = React.memo(function BookmarkRow({
         : null)}
     >
       <PressableScale
-        accessibilityRole={selectionMode ? "checkbox" : "button"}
-        accessibilityLabel={accessibilityLabel}
-        accessibilityState={selectionMode ? { checked: !!selected } : { selected: !!selected }}
-        accessibilityHint={
-          selectionMode
-            ? selected
-              ? "Deselect this bookmark"
-              : "Select this bookmark"
-            : onMore
-              ? "Press and hold for more actions"
-              : undefined
-        }
-        style={styles.body}
+        accessibilityRole="button"
+        accessibilityLabel={`Select ${title}`}
+        accessibilityHint="Press and hold to select"
+        accessible={!selectionMode}
+        importantForAccessibility={selectionMode ? "no" : "yes"}
+        style={styles.leading}
+        scaleTo={0.95}
         onPress={() => {
           if (selectionMode) onPress(bookmark);
           else afterPress(() => onPress(bookmark));
         }}
-        onLongPress={selectionMode ? undefined : onMore ? () => openMore() : undefined}
+        onLongPress={
+          selectionMode || !onEnterSelection ? undefined : () => onEnterSelection(bookmark)
+        }
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         {selectionMode ? (
@@ -176,7 +175,29 @@ export const BookmarkRow = React.memo(function BookmarkRow({
             ) : null}
           </View>
         )}
+      </PressableScale>
 
+      <PressableScale
+        accessibilityRole={selectionMode ? "checkbox" : "button"}
+        accessibilityLabel={accessibilityLabel}
+        accessibilityState={selectionMode ? { checked: !!selected } : { selected: !!selected }}
+        accessibilityHint={
+          selectionMode
+            ? selected
+              ? "Deselect this bookmark"
+              : "Select this bookmark"
+            : onMore
+              ? "Press and hold for more actions"
+              : undefined
+        }
+        style={styles.body}
+        onPress={() => {
+          if (selectionMode) onPress(bookmark);
+          else afterPress(() => onPress(bookmark));
+        }}
+        onLongPress={selectionMode ? undefined : onMore ? () => openMore() : undefined}
+        delayLongPress={SELECTION_LONG_PRESS_MS}
+      >
         <View style={styles.content}>
           <Text variant="headline" color={titleColor} numberOfLines={1}>
             {title}
@@ -280,13 +301,19 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     paddingRight: spacing[8],
   },
+  leading: {
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: spacing[12],
+    paddingLeft: spacing[16],
+    ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
+  },
   body: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing[12],
     paddingVertical: spacing[12],
-    paddingLeft: spacing[16],
+    paddingLeft: spacing[12],
     paddingRight: spacing[8],
   },
   faviconFrame: {

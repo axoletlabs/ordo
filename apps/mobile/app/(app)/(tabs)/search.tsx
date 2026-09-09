@@ -6,7 +6,7 @@ import { ScrollView, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { FlashList } from "@shopify/flash-list";
 import { Ionicons } from "@expo/vector-icons";
-import { Header, HeaderActions, HeaderIconButton } from "../../../src/components/ui/Header";
+import { Header } from "../../../src/components/ui/Header";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
 import { BookmarkActionsSheet } from "../../../src/components/bookmarks/BookmarkActionsSheet";
@@ -117,6 +117,10 @@ export default function SearchScreen() {
     setActionBm(bookmark);
   }, []);
 
+  const onEnterSelection = useCallback((bookmark: BookmarkDto) => {
+    selectionRef.current.enter(bookmarkKey(bookmark.id));
+  }, []);
+
   const toggleTag = useCallback((tagId: string) => {
     if (selectionRef.current.active) return;
     haptics.selection();
@@ -163,6 +167,7 @@ export default function SearchScreen() {
               : hasDetailPane && item.id === selectedBookmarkId
           }
           onPress={onPressBookmark}
+          onEnterSelection={onEnterSelection}
           onMore={onMoreBookmark}
           onTagPress={toggleTag}
         />
@@ -194,19 +199,6 @@ export default function SearchScreen() {
           title="Search"
           large
           maxWidth={hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth}
-          right={
-            items.length > 0 ? (
-              <HeaderActions>
-                <HeaderIconButton
-                  name="checkbox-outline"
-                  color={palette.text}
-                  onPress={() => selection.enter()}
-                  accessibilityLabel="Select items"
-                  accessibilityHint="Select multiple bookmarks."
-                />
-              </HeaderActions>
-            ) : undefined
-          }
         />
       )}
       <ExtractionProgressLine maxWidth={hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth} />

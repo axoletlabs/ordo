@@ -44,6 +44,7 @@ import { flattenPages } from "../../../src/lib/api/query-keys";
 import {
   useSettingsStore,
   type CreateButtonAction,
+  type CreateButtonHoldAction,
 } from "../../../src/store/settings";
 import { layout, spacing } from "../../../src/theme/tokens";
 import { type BookmarkDto, type FolderDto } from "@ordo/shared";
@@ -65,6 +66,7 @@ export default function BookmarksScreen() {
   const deleteBookmark = useDeleteBookmark(null);
   const markAllRead = useMarkAllRead(null);
   const createButtonTapAction = useSettingsStore((s) => s.createButtonTapAction);
+  const createButtonHoldAction = useSettingsStore((s) => s.createButtonHoldAction);
 
   const [addOpen, setAddOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
@@ -168,7 +170,15 @@ export default function BookmarksScreen() {
     setActionBookmark(bookmark);
   }, []);
 
-  const runCreateAction = (action: CreateButtonAction, anchor?: MenuAnchorRect) => {
+  const onEnterFolder = useCallback((selectedFolder: FolderDto) => {
+    selectionRef.current.enter(folderKey(selectedFolder.id));
+  }, []);
+
+  const onEnterBookmark = useCallback((bookmark: BookmarkDto) => {
+    selectionRef.current.enter(bookmarkKey(bookmark.id));
+  }, []);
+
+  const runCreateAction = (action: CreateButtonHoldAction, anchor?: MenuAnchorRect) => {
     if (action === "menu") {
       setCreateAnchor(anchor ?? null);
       setCreateMenuOpen(true);
@@ -270,6 +280,7 @@ export default function BookmarksScreen() {
                     selectionMode={selection.active}
                     selected={selection.has(folderKey(item.folder.id))}
                     onPress={onPressFolder}
+                    onEnterSelection={onEnterFolder}
                     onMore={onMoreFolder}
                   />
                 );
@@ -280,6 +291,7 @@ export default function BookmarksScreen() {
                   selectionMode={selection.active}
                   selected={selection.has(bookmarkKey(item.bookmark.id))}
                   onPress={onPressLibraryBookmark}
+                  onEnterSelection={onEnterBookmark}
                   onMore={onMoreBookmark}
                 />
               );
@@ -325,9 +337,16 @@ export default function BookmarksScreen() {
       <FABLayer maxWidth={layout.maxContentWidth}>
         <FAB
           onPress={(anchor) => runCreateAction(createButtonTapAction, anchor)}
-          onLongPress={() => selection.enter()}
+          onLongPress={(anchor) => {
+            if (createButtonHoldAction !== "none") haptics.medium();
+            runCreateAction(createButtonHoldAction, anchor);
+          }}
           accessibilityLabel={createActionLabel(createButtonTapAction)}
-          accessibilityHint={`Tap to ${createActionDescription(createButtonTapAction)}. Press and hold to select items.`}
+          accessibilityHint={
+            createButtonHoldAction === "none"
+              ? `Tap to ${createActionDescription(createButtonTapAction)}. Press and hold is disabled.`
+              : `Tap to ${createActionDescription(createButtonTapAction)}. Press and hold to ${createActionDescription(createButtonHoldAction)}.`
+          }
           testID="add-bookmark-fab"
           bottom={floatingNavigation ? bottomClearance : spacing[20]}
           right={spacing[20]}

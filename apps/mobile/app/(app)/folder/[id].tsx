@@ -119,6 +119,10 @@ export default function FolderDetailScreen() {
     setActionBm(b);
   }, []);
 
+  const onEnterSelection = useCallback((bookmark: BookmarkDto) => {
+    selectionRef.current.enter(bookmarkKey(bookmark.id));
+  }, []);
+
   const loadMore = () => {
     if (bookmarks.hasNextPage && !bookmarks.isFetchingNextPage) {
       bookmarks.fetchNextPage();
@@ -165,6 +169,7 @@ export default function FolderDetailScreen() {
               : hasDetailPane && item.id === selectedBookmarkId
           }
           onPress={onPressBookmark}
+          onEnterSelection={onEnterSelection}
           onMore={onMoreBookmark}
         />
       )}
@@ -212,15 +217,6 @@ export default function FolderDetailScreen() {
                   color={palette.accent}
                   onPress={onMarkAllRead}
                   accessibilityLabel="Mark all as read"
-                />
-              ) : null}
-              {hasDetailPane && !showLocked && !loadFailed ? (
-                <HeaderIconButton
-                  name="checkbox-outline"
-                  color={palette.text}
-                  onPress={() => selection.enter()}
-                  accessibilityLabel="Select items"
-                  accessibilityHint="Select multiple bookmarks."
                 />
               ) : null}
               <HeaderIconButton
@@ -325,9 +321,8 @@ export default function FolderDetailScreen() {
         <FABLayer maxWidth={layout.maxContentWidth}>
           <FAB
             onPress={() => setAddOpen(true)}
-            onLongPress={() => selection.enter()}
             accessibilityLabel="Save bookmark"
-            accessibilityHint="Tap to save a bookmark. Press and hold to select items."
+            accessibilityHint="Tap to save a bookmark."
             testID="add-bookmark-fab"
             right={spacing[20]}
           />

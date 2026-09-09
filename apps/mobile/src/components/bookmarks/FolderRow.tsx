@@ -22,12 +22,14 @@ export interface FolderRowProps {
   folder: FolderDto;
   onPress: (f: FolderDto) => void;
   onMore?: (f: FolderDto, anchor: MenuAnchorRect) => void;
+  /** Press-and-hold on the folder icon enters selection with this folder. */
+  onEnterSelection?: (f: FolderDto) => void;
   selected?: boolean;
   selectionMode?: boolean;
   highlighted?: boolean;
 }
 
-export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore, selected, selectionMode, highlighted: highlightedProp }: FolderRowProps) {
+export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore, onEnterSelection, selected, selectionMode, highlighted: highlightedProp }: FolderRowProps) {
   const { palette } = useTheme();
   const moreRef = React.useRef<View>(null);
   const [hovered, setHovered] = React.useState(false);
@@ -62,6 +64,41 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
         : null)}
     >
       <PressableScale
+        accessibilityRole="button"
+        accessibilityLabel={`Select ${folder.name}`}
+        accessibilityHint="Press and hold to select"
+        accessible={!selectionMode}
+        importantForAccessibility={selectionMode ? "no" : "yes"}
+        style={styles.leading}
+        scaleTo={0.95}
+        onPress={() => {
+          if (selectionMode) {
+            onPress(folder);
+            return;
+          }
+          haptics.light();
+          afterPress(() => onPress(folder));
+        }}
+        onLongPress={
+          selectionMode || !onEnterSelection ? undefined : () => onEnterSelection(folder)
+        }
+        delayLongPress={SELECTION_LONG_PRESS_MS}
+      >
+        {selectionMode ? (
+          <SelectionMark selected={!!selected} />
+        ) : (
+          <View
+            style={[
+              styles.iconFrame,
+              { backgroundColor: palette.surfaceSecondary, borderColor: palette.border },
+            ]}
+          >
+            <Ionicons name={folder.icon ?? DEFAULT_FOLDER_ICON} size={18} color={palette.accent} />
+          </View>
+        )}
+      </PressableScale>
+
+      <PressableScale
         accessibilityRole={selectionMode ? "checkbox" : "button"}
         accessibilityLabel={`${folder.name}, ${countLabel}${folder.pinned ? ", pinned" : ""}${folder.protected ? ", locked" : ""}${unread ? `, ${folder.unreadCount} unread` : ""}`}
         accessibilityState={selectionMode ? { checked: !!selected } : undefined}
@@ -86,19 +123,6 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
         onLongPress={selectionMode ? undefined : onMore ? (event) => openMore(event) : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
-        {selectionMode ? (
-          <SelectionMark selected={!!selected} />
-        ) : (
-          <View
-            style={[
-              styles.iconFrame,
-              { backgroundColor: palette.surfaceSecondary, borderColor: palette.border },
-            ]}
-          >
-            <Ionicons name={folder.icon ?? DEFAULT_FOLDER_ICON} size={18} color={palette.accent} />
-          </View>
-        )}
-
         <View style={styles.content}>
           <Text variant="headline" numberOfLines={1}>{folder.name}</Text>
           <View style={styles.metaRow}>
@@ -157,13 +181,20 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     paddingRight: spacing[8],
   },
+  leading: {
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: spacing[12],
+    paddingLeft: spacing[16],
+    ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
+  },
   body: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[12],
     paddingVertical: spacing[12],
-    paddingLeft: spacing[16],
+    paddingLeft: spacing[12],
     paddingRight: spacing[8],
   },
   iconFrame: {

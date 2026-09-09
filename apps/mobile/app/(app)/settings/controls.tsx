@@ -14,6 +14,7 @@ import { APP_NAME } from "@ordo/shared";
 import {
   useSettingsStore,
   type CreateButtonAction,
+  type CreateButtonHoldAction,
   type WebsiteBrowser,
 } from "../../../src/store/settings";
 
@@ -21,6 +22,11 @@ const tapOptions: readonly SettingsSelectOption<CreateButtonAction>[] = [
   { value: "menu", label: "Show create menu", shortLabel: "Show menu", icon: "apps-outline" },
   { value: "bookmark", label: "Save bookmark", shortLabel: "Bookmark", icon: "bookmark-outline" },
   { value: "folder", label: "New folder", icon: "folder-outline" },
+];
+
+const holdOptions: readonly SettingsSelectOption<CreateButtonHoldAction>[] = [
+  ...tapOptions,
+  { value: "none", label: "No action", icon: "remove-circle-outline" },
 ];
 
 const websiteBrowserOptions: readonly SettingsSelectOption<WebsiteBrowser>[] = [
@@ -31,8 +37,10 @@ const websiteBrowserOptions: readonly SettingsSelectOption<WebsiteBrowser>[] = [
 
 export default function ControlsScreen() {
   const tapAction = useSettingsStore((s) => s.createButtonTapAction);
+  const holdAction = useSettingsStore((s) => s.createButtonHoldAction);
   const websiteBrowser = useSettingsStore((s) => s.websiteBrowser);
   const setTapAction = useSettingsStore((s) => s.setCreateButtonTapAction);
+  const setHoldAction = useSettingsStore((s) => s.setCreateButtonHoldAction);
   const setWebsiteBrowser = useSettingsStore((s) => s.setWebsiteBrowser);
 
   return (
@@ -41,7 +49,7 @@ export default function ControlsScreen() {
         <SettingsGroup
           label="Create button"
           compact
-          footer="On the Bookmarks screen. Press and hold the create button to select items."
+          footer="On the Bookmarks screen."
         >
           <SettingRow
             icon="hand-left-outline"
@@ -52,6 +60,18 @@ export default function ControlsScreen() {
                 options={tapOptions}
                 value={tapAction}
                 onChange={setTapAction}
+              />
+            }
+          />
+          <SettingRow
+            icon="finger-print-outline"
+            label="Press and hold"
+            right={
+              <SettingsSelect
+                title="Press and hold action"
+                options={holdOptions}
+                value={holdAction}
+                onChange={setHoldAction}
               />
             }
             divider={false}

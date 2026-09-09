@@ -103,6 +103,10 @@ export default function TagDetailScreen() {
     setActionBm(b);
   }, []);
 
+  const onEnterSelection = useCallback((bookmark: BookmarkDto) => {
+    selectionRef.current.enter(bookmarkKey(bookmark.id));
+  }, []);
+
   const onToggleRead = (b: BookmarkDto) => {
     haptics.light();
     toggleRead.mutate({ id: b.id, isRead: !b.isRead });
@@ -144,6 +148,7 @@ export default function TagDetailScreen() {
               : hasDetailPane && item.id === selectedBookmarkId
           }
           onPress={onPressBookmark}
+          onEnterSelection={onEnterSelection}
           onMore={onMoreBookmark}
           omitTagIds={activeIds}
           onTagPress={onTagPress}
@@ -264,9 +269,8 @@ export default function TagDetailScreen() {
       <FABLayer maxWidth={layout.maxContentWidth}>
         <FAB
           onPress={() => setAddOpen(true)}
-          onLongPress={() => selection.enter()}
           accessibilityLabel="Save bookmark"
-          accessibilityHint="Tap to save a bookmark. Press and hold to select items."
+          accessibilityHint="Tap to save a bookmark."
           right={spacing[20]}
         />
       </FABLayer>

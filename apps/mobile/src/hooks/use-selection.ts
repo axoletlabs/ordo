@@ -1,6 +1,7 @@
 /**
- * Multi-select for library rows. Press-and-hold on the create button enters
- * the mode; further taps toggle. Android back exits without acting.
+ * Multi-select for library rows. Press-and-hold the favicon or folder icon
+ * enters the mode with that item selected; further taps toggle. Android back
+ * exits without acting.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler } from "react-native";
