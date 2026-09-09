@@ -58,6 +58,18 @@ function haystackMatches(haystack: string, tokens: readonly string[]): boolean {
   return tokens.every((token) => haystack.includes(token));
 }
 
+function passesTextQuery(
+  bookmark: BookmarkDto,
+  tokens: readonly string[],
+  allowBodyOnlyHit: boolean,
+): boolean {
+  if (tokens.length === 0) return true;
+  if (haystackMatches(bookmarkSearchHaystack(bookmark), tokens)) return true;
+  // List payloads omit article bodies. Keep a row the server already matched
+  // for this exact query (title/url/tag did not, but the article did).
+  return allowBodyOnlyHit;
+}
+
 export function compileSearchResults({
   query,
   filters,
@@ -76,23 +88,19 @@ export function compileSearchResults({
   const byId = new Map<string, BookmarkDto>();
 
   for (const bookmark of serverItems) {
-    if (!serverMatchesQuery && tokens.length > 0 && !haystackMatches(bookmarkSearchHaystack(bookmark), tokens)) {
-      continue;
-    }
+    if (!passesTextQuery(bookmark, tokens, serverMatchesQuery)) continue;
+    if (!bookmarkPassesSearchFilters(bookmark, filters)) continue;
     byId.set(bookmark.id, bookmark);
   }
 
   for (const bookmark of cachedItems) {
     if (byId.has(bookmark.id)) continue;
-    if (tokens.length > 0 && !haystackMatches(bookmarkSearchHaystack(bookmark), tokens)) continue;
+    if (!passesTextQuery(bookmark, tokens, false)) continue;
+    if (!bookmarkPassesSearchFilters(bookmark, filters)) continue;
     byId.set(bookmark.id, bookmark);
   }
 
-  const merged: BookmarkDto[] = [];
-  for (const bookmark of byId.values()) {
-    if (bookmarkPassesSearchFilters(bookmark, filters)) merged.push(bookmark);
-  }
-
+  const merged = [...byId.values()];
   const q = tokens.join(" ");
   if (!q) {
     return merged.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));

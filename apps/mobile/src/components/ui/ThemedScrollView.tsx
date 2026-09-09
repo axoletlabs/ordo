@@ -14,12 +14,14 @@ import {
   type ScrollViewProps,
 } from "react-native";
 import { FlashList, type FlashListProps } from "@shopify/flash-list";
+import Animated, { Easing, LinearTransition } from "react-native-reanimated";
 import {
   chainHandlers,
   splitScrollLayoutStyle,
   useVerticalScrollBar,
 } from "./ScrollBar";
 import { scrollViewShouldFill } from "../../theme/scrollbar";
+import { timing } from "../../theme/tokens";
 
 const nativeScrollBarProps = {
   showsVerticalScrollIndicator: Platform.OS === "web",
@@ -161,6 +163,50 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
     </View>
   );
 }) as <T>(props: FlatListProps<T> & { ref?: React.Ref<FlatList<T>> }) => React.ReactElement;
+
+const SEARCH_LAYOUT = LinearTransition.duration(timing.normal).easing(Easing.out(Easing.cubic));
+
+/** FlatList with a short layout transition for search reordering. */
+export function ThemedAnimatedFlatList<T>(
+  props: Omit<FlatListProps<T>, "CellRendererComponent">,
+) {
+  const {
+    style,
+    onScroll,
+    onLayout,
+    onContentSizeChange,
+    scrollEventThrottle,
+    showsVerticalScrollIndicator,
+    indicatorStyle: _indicatorStyle,
+    ...rest
+  } = props;
+  const bar = useVerticalScrollBar();
+  const { wrapper, inner } = splitScrollLayoutStyle(style);
+  const fill = wrapper?.flex == null && wrapper?.maxHeight == null && wrapper?.height == null;
+
+  return (
+    <View
+      style={[styles.host, fill ? styles.fill : null, wrapper]}
+      onLayout={chainHandlers(bar.onLayout, onLayout)}
+    >
+      <Animated.FlatList
+        {...rest}
+        {...nativeScrollBarProps}
+        removeClippedSubviews={false}
+        itemLayoutAnimation={SEARCH_LAYOUT}
+        showsVerticalScrollIndicator={
+          Platform.OS === "web" ? (showsVerticalScrollIndicator ?? true) : false
+        }
+        indicatorStyle={bar.indicatorStyle}
+        style={[fill ? styles.fill : null, inner]}
+        onScroll={chainHandlers(bar.onScroll, onScroll)}
+        onContentSizeChange={chainHandlers(bar.onContentSizeChange, onContentSizeChange)}
+        scrollEventThrottle={scrollEventThrottle ?? 16}
+      />
+      {bar.overlay}
+    </View>
+  );
+}
 
 const styles = StyleSheet.create({
   host: { position: "relative" },

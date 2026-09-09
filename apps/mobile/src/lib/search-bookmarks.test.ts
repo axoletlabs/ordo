@@ -207,3 +207,70 @@ test("firstSearchHighlight marks the first token in the title", () => {
   assert.equal(firstSearchHighlight("React Query", "query")?.start, 6);
   assert.equal(firstSearchHighlight("React Query", "zzz"), null);
 });
+
+test("text and tag filters are AND, even on a stale tag-only server page", () => {
+  const taggedHit = bookmark({
+    id: "hit",
+    title: "Morning brew",
+    tags: [{ id: "espresso", name: "espresso", color: "amber" }],
+  });
+  const taggedMiss = bookmark({
+    id: "miss",
+    title: "Zebra recipes",
+    tags: [{ id: "espresso", name: "espresso", color: "amber" }],
+  });
+  const untaggedHit = bookmark({
+    id: "other",
+    title: "Morning notes",
+    tags: [],
+  });
+  const hits = compileSearchResults({
+    query: "morning",
+    filters: { tagIds: ["espresso"], status: "all", kind: "all" },
+    serverItems: [taggedHit, taggedMiss],
+    cachedItems: [taggedHit, taggedMiss, untaggedHit],
+    serverMatchesQuery: false,
+  });
+  assert.deepEqual(
+    hits.map((item) => item.id),
+    ["hit"],
+  );
+});
+
+test("a fresh server hit that only matched article text is kept if filters pass", () => {
+  const bodyOnly = bookmark({
+    id: "body",
+    title: "Diary",
+    tags: [{ id: "espresso", name: "espresso", color: "amber" }],
+  });
+  const hits = compileSearchResults({
+    query: "morning",
+    filters: { tagIds: ["espresso"], status: "all", kind: "all" },
+    serverItems: [bodyOnly],
+    cachedItems: [],
+    serverMatchesQuery: true,
+  });
+  assert.deepEqual(
+    hits.map((item) => item.id),
+    ["body"],
+  );
+});
+
+test("body-only server hits still have to pass the active filters", () => {
+  const bodyOnly = bookmark({
+    id: "body",
+    title: "Diary",
+    tags: [],
+  });
+  const hits = compileSearchResults({
+    query: "morning",
+    filters: { tagIds: ["espresso"], status: "all", kind: "all" },
+    serverItems: [bodyOnly],
+    cachedItems: [],
+    serverMatchesQuery: true,
+  });
+  assert.deepEqual(
+    hits.map((item) => item.id),
+    [],
+  );
+});

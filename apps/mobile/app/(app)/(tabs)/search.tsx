@@ -15,7 +15,7 @@ import { MoveSheet } from "../../../src/components/bookmarks/MoveSheet";
 import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
 import { SearchFilterMenu } from "../../../src/components/bookmarks/SearchFilterMenu";
 import { ScreenContent } from "../../../src/components/ui/ScreenContent";
-import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
+import { ThemedAnimatedFlatList } from "../../../src/components/ui/ThemedScrollView";
 import { Input } from "../../../src/components/ui/Input";
 import { EmptyState } from "../../../src/components/ui/EmptyState";
 import { Button } from "../../../src/components/ui/Button";
@@ -106,9 +106,11 @@ export default function SearchScreen() {
       filters,
       serverItems,
       cachedItems,
-      serverMatchesQuery: trimmed === serverQ,
+      // Placeholder pages belong to the previous query key. Trusting them as
+      // body-only hits skipped the typed haystack (tag filter + unrelated text).
+      serverMatchesQuery: trimmed === serverQ && !search.isPlaceholderData,
     });
-  }, [browsing, cachedItems, filters, serverItems, serverQ, trimmed]);
+  }, [browsing, cachedItems, filters, search.isPlaceholderData, serverItems, serverQ, trimmed]);
 
   const selectedBookmarks = useMemo(
     () => items.filter((bookmark) => selection.has(bookmarkKey(bookmark.id))),
@@ -255,28 +257,29 @@ export default function SearchScreen() {
       message={errorMessage(search.error)}
       action={<Button label="Retry" onPress={() => search.refetch()} />}
     />
-  ) : items.length === 0 && search.isFetching ? (
+  ) : items.length === 0 && search.isFetching && cachedItems.length === 0 && serverItems.length === 0 ? (
     <EmptyState icon="search-outline" title="Searching…" message="Matching titles, URLs, and articles." />
   ) : items.length === 0 ? (
     <EmptyState
       icon="document-text-outline"
       title="No results"
       message={
-        trimmed
-          ? `Nothing contains “${trimmed}”.`
-          : "Nothing matches these filters."
+        trimmed && filtersOn
+          ? `Nothing matches “${trimmed}” with these filters.`
+          : trimmed
+            ? `Nothing contains “${trimmed}”.`
+            : "Nothing matches these filters."
       }
     />
   ) : null;
 
   const listPane = (
-    <ThemedFlashList
+    <ThemedAnimatedFlatList
       data={items}
-      extraData={`${selection.revision}:${selectedBookmarkId ?? ""}:${trimmed}`}
+      extraData={`${selection.revision}:${selectedBookmarkId ?? ""}:${trimmed}:${filters.tagIds.join(",")}:${filters.status}:${filters.kind}`}
       keyExtractor={(b: BookmarkDto) => b.id}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
-      estimatedItemSize={108}
       renderItem={renderBookmark}
       ListEmptyComponent={empty ? <View style={styles.emptyList}>{empty}</View> : null}
       ListFooterComponent={
