@@ -9,6 +9,10 @@ import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
 import { useFloatingDockMetrics } from "../../../src/hooks/use-floating-dock-metrics";
+import {
+  tabScreenAnimation,
+  tabTransitionSpec,
+} from "../../../src/lib/navigation-animation";
 import { useSettingsStore } from "../../../src/store/settings";
 import { StyleSheet, Text as NativeText, View, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -24,6 +28,7 @@ export default function TabsLayout() {
   const { palette, shadows } = useTheme();
   const insets = useSafeAreaInsets();
   const showNavigationLabels = useSettingsStore((s) => s.showNavigationLabels);
+  const navigationAnimation = useSettingsStore((s) => s.navigationAnimation);
   const {
     floating,
     compact,
@@ -203,10 +208,14 @@ export default function TabsLayout() {
       <Tabs
         backBehavior="history"
         tabBar={renderTabBar}
+        detachInactiveScreens={navigationAnimation === "instant"}
         screenOptions={{
           headerShown: false,
           freezeOnBlur: true,
           lazy: true,
+          animation: tabScreenAnimation(navigationAnimation),
+          transitionSpec: tabTransitionSpec(navigationAnimation),
+          sceneStyle: { backgroundColor: palette.background },
           tabBarPosition: "bottom",
           tabBarVariant: "uikit",
           tabBarLabelPosition: "below-icon",

@@ -16,7 +16,7 @@ import type { ThemeMode } from "../theme/theme";
 
 export const DEFAULT_SERVER_URL = "http://localhost:3000";
 export type NavigationStyle = "docked" | "floating" | "compactFloating";
-/** How folder, reader, and settings pages enter and leave. */
+/** How pages enter and leave, including tab switches. */
 export type NavigationAnimation = "slide" | "fade" | "instant";
 export type CreateButtonAction = "menu" | "bookmark" | "folder";
 export type CreateButtonHoldAction = CreateButtonAction | "none";

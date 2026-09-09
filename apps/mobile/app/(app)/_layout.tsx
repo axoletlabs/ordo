@@ -4,30 +4,19 @@
  * The landscape rail is owned here so it stays on those detail screens.
  */
 import React from "react";
-import { Platform, View } from "react-native";
+import { View } from "react-native";
 import { Stack } from "expo-router";
 import { enableFreeze } from "react-native-screens";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { useServerInfo, useValidateSession } from "../../src/hooks/queries";
 import { useFloatingDockMetrics } from "../../src/hooks/use-floating-dock-metrics";
 import { useAuthStore } from "../../src/store/auth";
-import { useSettingsStore, type NavigationAnimation } from "../../src/store/settings";
+import { screenAnimationDuration, stackScreenAnimation } from "../../src/lib/navigation-animation";
+import { useSettingsStore } from "../../src/store/settings";
 import { MfaEnrollmentScreen } from "../../src/components/auth/MfaEnrollmentScreen";
 import { NavigationRail, useRailSceneOffset } from "../../src/components/navigation/NavigationRail";
 
 enableFreeze(true);
-
-function stackAnimation(preference: NavigationAnimation) {
-  if (preference === "instant") return "none" as const;
-  if (preference === "fade" || Platform.OS === "web") return "fade" as const;
-  return "slide_from_right" as const;
-}
-
-function stackAnimationDuration(preference: NavigationAnimation) {
-  if (preference === "instant") return 0;
-  if (preference === "fade") return 180;
-  return 220;
-}
 
 export const unstable_settings = {
   initialRouteName: "(tabs)",
@@ -48,8 +37,8 @@ export default function AppLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        animation: stackAnimation(navigationAnimation),
-        animationDuration: stackAnimationDuration(navigationAnimation),
+        animation: stackScreenAnimation(navigationAnimation),
+        animationDuration: screenAnimationDuration(navigationAnimation),
         freezeOnBlur: true,
         contentStyle: { backgroundColor: palette.background, ...sceneOffset },
         fullScreenGestureEnabled: true,
