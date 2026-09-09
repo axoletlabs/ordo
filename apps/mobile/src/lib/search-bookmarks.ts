@@ -62,24 +62,36 @@ export function bookmarkPassesSearchFilters(bookmark: BookmarkDto, filters: Sear
 
 const haystackMemo = new Map<string, { stamp: string; haystack: string }>();
 
-function haystackStamp(bookmark: BookmarkDto): string {
-  const tagNames = namedTags(bookmark.tags)
+function tagsForTextQuery(bookmark: BookmarkDto, omitTagIds: ReadonlySet<string>) {
+  return namedTags(bookmark.tags).filter((tag) => !tag.id || !omitTagIds.has(tag.id));
+}
+
+const NO_OMIT_TAGS = new Set<string>();
+
+function haystackCacheKey(bookmarkId: string, omitTagIds: ReadonlySet<string>): string {
+  if (omitTagIds.size === 0) return bookmarkId;
+  return `${bookmarkId}\0${[...omitTagIds].sort().join(",")}`;
+}
+
+function haystackStamp(bookmark: BookmarkDto, omitTagIds: ReadonlySet<string>): string {
+  const tagNames = tagsForTextQuery(bookmark, omitTagIds)
     .map((tag) => tag.name)
     .join("\0");
   return `${bookmark.updatedAt ?? ""}\0${bookmark.title ?? ""}\0${bookmark.url ?? ""}\0${bookmark.domain ?? ""}\0${bookmark.description ?? ""}\0${bookmark.author ?? ""}\0${tagNames}`;
 }
 
 /** Cached haystack so typing does not rebuild lowercase blobs on every key. */
-function haystackFor(bookmark: BookmarkDto): string {
-  const stamp = haystackStamp(bookmark);
-  const hit = haystackMemo.get(bookmark.id);
+function haystackFor(bookmark: BookmarkDto, omitTagIds: ReadonlySet<string>): string {
+  const key = haystackCacheKey(bookmark.id, omitTagIds);
+  const stamp = haystackStamp(bookmark, omitTagIds);
+  const hit = haystackMemo.get(key);
   if (hit && hit.stamp === stamp) return hit.haystack;
   const haystack = bookmarkSearchHaystack({
     ...bookmark,
-    tags: namedTags(bookmark.tags),
+    tags: tagsForTextQuery(bookmark, omitTagIds),
   });
   if (haystackMemo.size > 4000) haystackMemo.clear();
-  haystackMemo.set(bookmark.id, { stamp, haystack });
+  haystackMemo.set(key, { stamp, haystack });
   return haystack;
 }
 
@@ -91,12 +103,17 @@ function passesTextQuery(
   bookmark: BookmarkDto,
   tokens: readonly string[],
   allowBodyOnlyHit: boolean,
+  omitTagIds: ReadonlySet<string>,
 ): boolean {
   if (tokens.length === 0) return true;
-  if (haystackMatches(haystackFor(bookmark), tokens)) return true;
-  // List payloads omit article bodies. Keep a row the server already matched
-  // for this exact query (title/url/tag did not, but the article did).
-  return allowBodyOnlyHit;
+  if (haystackMatches(haystackFor(bookmark, omitTagIds), tokens)) return true;
+  if (!allowBodyOnlyHit) return false;
+  // Server rows that only match because the active tag's name contains the
+  // query are not article-body hits.
+  if (omitTagIds.size > 0 && haystackMatches(haystackFor(bookmark, NO_OMIT_TAGS), tokens)) {
+    return false;
+  }
+  return true;
 }
 
 export function compileSearchResults({
@@ -114,17 +131,18 @@ export function compileSearchResults({
   serverMatchesQuery: boolean;
 }): BookmarkDto[] {
   const tokens = tokenizeSearchQuery(query);
+  const omitTagIds = new Set(filters.tagIds);
   const byId = new Map<string, BookmarkDto>();
 
   for (const bookmark of serverItems) {
-    if (!passesTextQuery(bookmark, tokens, serverMatchesQuery)) continue;
+    if (!passesTextQuery(bookmark, tokens, serverMatchesQuery, omitTagIds)) continue;
     if (!bookmarkPassesSearchFilters(bookmark, filters)) continue;
     byId.set(bookmark.id, bookmark);
   }
 
   for (const bookmark of cachedItems) {
     if (byId.has(bookmark.id)) continue;
-    if (!passesTextQuery(bookmark, tokens, false)) continue;
+    if (!passesTextQuery(bookmark, tokens, false, omitTagIds)) continue;
     if (!bookmarkPassesSearchFilters(bookmark, filters)) continue;
     byId.set(bookmark.id, bookmark);
   }
@@ -140,7 +158,10 @@ export function compileSearchResults({
 
   const ranked = merged.map((bookmark) => ({
     bookmark,
-    rank: bookmarkMatchRank(bookmark, q),
+    rank: bookmarkMatchRank(
+      { ...bookmark, tags: tagsForTextQuery(bookmark, omitTagIds) },
+      q,
+    ),
   }));
   ranked.sort((a, b) => {
     if (a.rank !== b.rank) return b.rank - a.rank;

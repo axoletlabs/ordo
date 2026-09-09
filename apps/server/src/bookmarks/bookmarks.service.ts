@@ -170,7 +170,19 @@ export class BookmarksService implements OnApplicationBootstrap {
                   { contentText: { contains: term } },
                   { description: { contains: term } },
                   { author: { contains: term } },
-                  { tags: { some: { tag: { name: { contains: term } } } } },
+                  // A tag used as a filter already ANDs below. Matching its
+                  // name as text would keep every tagged row for letters in
+                  // that name ("l" + "Shopping List").
+                  tagIds.length > 0
+                    ? {
+                        tags: {
+                          some: {
+                            tagId: { notIn: tagIds },
+                            tag: { name: { contains: term } },
+                          },
+                        },
+                      }
+                    : { tags: { some: { tag: { name: { contains: term } } } } },
                 ],
               } satisfies Prisma.BookmarkWhereInput,
             ]

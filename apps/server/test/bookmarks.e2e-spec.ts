@@ -1083,6 +1083,32 @@ describe("Bookmarks & Folders (e2e)", () => {
         .expect(200);
       expect(withFilter.body.items).toHaveLength(1);
 
+      const shopping = await agent.post("/api/tags").send({ name: "Shopping List", color: "red" }).expect(201);
+      const hoodie = await ctx.prisma.bookmark.create({
+        data: {
+          userId,
+          folderId: null,
+          url: "https://viralpickz.onshopbase.com/hoodie",
+          title: "Shadowflex Hoodie",
+          domain: "viralpickz.onshopbase.com",
+        },
+      });
+      const notepad = await ctx.prisma.bookmark.create({
+        data: {
+          userId,
+          folderId: null,
+          url: "https://rodanotes.com/notepad-duo",
+          title: "Notepad Duo",
+          domain: "rodanotes.com",
+        },
+      });
+      await ctx.prisma.bookmarkTag.create({ data: { bookmarkId: hoodie.id, tagId: shopping.body.id } });
+      await ctx.prisma.bookmarkTag.create({ data: { bookmarkId: notepad.id, tagId: shopping.body.id } });
+      const lettersInTagName = await agent
+        .get(`/api/bookmarks/search?q=l&tagIds=${shopping.body.id}`)
+        .expect(200);
+      expect(lettersInTagName.body.items.map((item: { id: string }) => item.id)).toEqual([hoodie.id]);
+
       const tagOnly = await agent.get(`/api/bookmarks/search?tagIds=${espresso.body.id}`).expect(200);
       expect(tagOnly.body.items).toHaveLength(1);
       expect(tagOnly.body.items[0].id).toBe(coffee.id);

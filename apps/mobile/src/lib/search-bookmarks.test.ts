@@ -209,6 +209,57 @@ test("firstSearchHighlight marks the first token in the title", () => {
   assert.equal(firstSearchHighlight("React Query", "zzz"), null);
 });
 
+test("an active tag filter's own name does not satisfy the typed query", () => {
+  const shopping = { id: "shop", name: "Shopping List", color: "coral" };
+  const hoodie = bookmark({
+    id: "hoodie",
+    title: "Shadowflex Hoodie",
+    domain: "viralpickz.onshopbase.com",
+    tags: [shopping],
+  });
+  const notepad = bookmark({
+    id: "pad",
+    title: "Notepad Duo",
+    domain: "rodanotes.com",
+    url: "https://rodanotes.com/notepad-duo",
+    tags: [shopping],
+  });
+  const hits = compileSearchResults({
+    query: "l",
+    filters: { tagIds: ["shop"], status: "all", kind: "all" },
+    serverItems: [hoodie, notepad],
+    cachedItems: [hoodie, notepad],
+    serverMatchesQuery: true,
+  });
+  assert.deepEqual(
+    hits.map((item) => item.id),
+    ["hoodie"],
+  );
+});
+
+test("other tags still match text while a tag filter is on", () => {
+  const shopping = { id: "shop", name: "Shopping List", color: "coral" };
+  const sale = { id: "sale", name: "Sale", color: "green" };
+  const notepad = bookmark({
+    id: "pad",
+    title: "Notepad Duo",
+    domain: "rodanotes.com",
+    url: "https://rodanotes.com/notepad-duo",
+    tags: [shopping, sale],
+  });
+  const hits = compileSearchResults({
+    query: "sale",
+    filters: { tagIds: ["shop"], status: "all", kind: "all" },
+    serverItems: [],
+    cachedItems: [notepad],
+    serverMatchesQuery: false,
+  });
+  assert.deepEqual(
+    hits.map((item) => item.id),
+    ["pad"],
+  );
+});
+
 test("text and tag filters are AND, even on a stale tag-only server page", () => {
   const taggedHit = bookmark({
     id: "hit",
