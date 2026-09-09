@@ -43,6 +43,23 @@ export function scrollbarColors(palette: Palette): { thumb: string; track: strin
   };
 }
 
+/**
+ * Whether a themed ScrollView should `flex: 1` its inner scroller.
+ *
+ * `maxHeight` alone is not a definite size. Filling in that case puts a
+ * flex child in a height-less wrapper, which collapses to 0 — the context
+ * menu went invisible after the scrollbar wrap for this reason.
+ */
+export function scrollViewShouldFill(wrapper: {
+  flex?: number;
+  flexGrow?: number;
+  height?: number | string;
+  maxHeight?: number | string;
+} | undefined): boolean {
+  if (!wrapper) return false;
+  return wrapper.flex != null || wrapper.flexGrow != null || wrapper.height != null;
+}
+
 export function scrollThumbLayout(
   viewport: number,
   content: number,

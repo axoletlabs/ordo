@@ -19,6 +19,7 @@ import {
   splitScrollLayoutStyle,
   useVerticalScrollBar,
 } from "./ScrollBar";
+import { scrollViewShouldFill } from "../../theme/scrollbar";
 
 const nativeScrollBarProps = {
   showsVerticalScrollIndicator: Platform.OS === "web",
@@ -58,8 +59,12 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ScrollViewProps>(
       );
     }
 
+    const fill = scrollViewShouldFill(wrapper);
     return (
-      <View style={[styles.host, wrapper]} onLayout={chainHandlers(bar.onLayout, onLayout)}>
+      <View
+        style={[styles.host, fill ? styles.fill : null, wrapper]}
+        onLayout={chainHandlers(bar.onLayout, onLayout)}
+      >
         <ScrollView
           ref={ref}
           {...props}
@@ -68,7 +73,11 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ScrollViewProps>(
             Platform.OS === "web" ? (showsVerticalScrollIndicator ?? true) : false
           }
           indicatorStyle={bar.indicatorStyle}
-          style={wrapper ? [styles.fill, inner] : inner}
+          style={[
+            fill ? styles.fill : null,
+            !fill && wrapper?.maxHeight != null ? { maxHeight: wrapper.maxHeight } : null,
+            inner,
+          ]}
           onScroll={chainHandlers(bar.onScroll, onScroll)}
           onContentSizeChange={chainHandlers(bar.onContentSizeChange, onContentSizeChange)}
           scrollEventThrottle={scrollEventThrottle ?? 16}

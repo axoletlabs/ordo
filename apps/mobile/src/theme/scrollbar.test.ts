@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { inkAlpha, scrollThumbLayout, scrollbarColors } from "./scrollbar.ts";
+import { inkAlpha, scrollThumbLayout, scrollbarColors, scrollViewShouldFill } from "./scrollbar.ts";
 import type { Palette } from "./theme.ts";
 
 function stubPalette(partial: Pick<Palette, "mode" | "amoled" | "text">): Palette {
@@ -28,6 +28,13 @@ test("AMOLED scrollbar is a light gray, not black-on-black", () => {
   assert.match(thumb, /^rgba\(214,214,214,/);
   assert.ok(Number.parseFloat(thumb.slice(thumb.lastIndexOf(",") + 1)) >= 0.5);
   assert.notEqual(track, "transparent");
+});
+
+test("maxHeight-only hosts do not flex-fill (shrink-wrapped menus)", () => {
+  assert.equal(scrollViewShouldFill(undefined), false);
+  assert.equal(scrollViewShouldFill({ maxHeight: 240 }), false);
+  assert.equal(scrollViewShouldFill({ flex: 1 }), true);
+  assert.equal(scrollViewShouldFill({ height: 400 }), true);
 });
 
 test("scrollThumbLayout hides when content fits", () => {
