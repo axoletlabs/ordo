@@ -2,7 +2,7 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
-import { FlashList } from "@shopify/flash-list";
+import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
 import { Ionicons } from "@expo/vector-icons";
 import { Header, HeaderActions, HeaderIconButton, HEADER_CONTROL_SIZE } from "../../../src/components/ui/Header";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
@@ -264,7 +264,7 @@ export default function BookmarksScreen() {
         </ScreenContent>
       ) : (
         <ScreenContent maxWidth={layout.maxContentWidth} style={styles.content}>
-          <FlashList
+          <ThemedFlashList
             data={libraryItems}
             keyExtractor={(item: LibraryItem) =>
               item.type === "folder" ? folderKey(item.folder.id) : bookmarkKey(item.bookmark.id)

@@ -83,7 +83,11 @@ function ToastItem({ toast }: { toast: Toast }) {
         style={[
           styles.toast,
           {
-            backgroundColor: palette.text,
+            backgroundColor:
+              toast.tone === "danger"
+                ? palette.dangerSoft
+                : palette.surfaceElevated,
+            borderColor: palette.borderStrong,
             borderRadius: radius.xl,
           },
           shadows.level2,
@@ -91,7 +95,7 @@ function ToastItem({ toast }: { toast: Toast }) {
         ]}
       >
         <Ionicons name={iconName as any} size={16} color={iconColor} />
-        <Text variant="footnote" style={{ flex: 1, color: palette.background }}>
+        <Text variant="footnote" style={{ flex: 1, color: palette.text }}>
           {toast.message}
         </Text>
         {toast.action ? (
@@ -148,5 +152,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[14],
     paddingVertical: spacing[12],
     marginTop: spacing[8],
+    borderWidth: StyleSheet.hairlineWidth,
   },
 });

@@ -3,13 +3,13 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StyleSheet,
   View,
 } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { TOKEN_TTL, type FolderLockType, type FolderPinLength } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
+import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
@@ -298,13 +298,12 @@ export function UnlockScreen(props: UnlockFormProps) {
       style={styles.screen}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView
+      <ThemedScrollView
         contentContainerStyle={styles.screenScroll}
         keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
       >
         <UnlockForm {...props} />
-      </ScrollView>
+      </ThemedScrollView>
     </KeyboardAvoidingView>
   );
 }

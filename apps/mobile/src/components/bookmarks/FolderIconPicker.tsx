@@ -1,9 +1,10 @@
 import React from "react";
-import { Pressable, ScrollView, StyleSheet } from "react-native";
+import { Pressable, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { FOLDER_ICONS, type FolderIcon } from "@ordo/shared";
 import { haptics } from "../../lib/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
+import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { radius, spacing } from "../../theme/tokens";
 
 export function FolderIconPicker({
@@ -16,10 +17,9 @@ export function FolderIconPicker({
   const { palette } = useTheme();
 
   return (
-    <ScrollView
+    <ThemedScrollView
       style={styles.scroll}
       contentContainerStyle={styles.grid}
-      showsVerticalScrollIndicator={false}
       nestedScrollEnabled
     >
       {FOLDER_ICONS.map((icon) => {
@@ -47,7 +47,7 @@ export function FolderIconPicker({
           </Pressable>
         );
       })}
-    </ScrollView>
+    </ThemedScrollView>
   );
 }
 

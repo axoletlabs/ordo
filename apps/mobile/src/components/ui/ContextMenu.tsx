@@ -7,7 +7,6 @@ import React from "react";
 import {
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   View,
   useWindowDimensions,
@@ -19,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "./Text";
 import { OverlayPortal } from "./overlay-host";
+import { ThemedScrollView } from "./ThemedScrollView";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { haptics } from "../../lib/haptics";
@@ -105,9 +105,8 @@ export function ContextMenu({
             menuStyle,
           ]}
         >
-          <ScrollView
+          <ThemedScrollView
             bounces={false}
-            showsVerticalScrollIndicator={contentHeight > placed.maxHeight}
             keyboardShouldPersistTaps="handled"
             style={{ maxHeight: placed.maxHeight }}
           >
@@ -120,7 +119,7 @@ export function ContextMenu({
             >
               {visible ? children : lastChildren.current}
             </View>
-          </ScrollView>
+          </ThemedScrollView>
         </Animated.View>
       </View>
     </OverlayPortal>

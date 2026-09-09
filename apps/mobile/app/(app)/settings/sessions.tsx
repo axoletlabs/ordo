@@ -2,7 +2,7 @@
  * Active sessions / devices list with per-session revoke (optimistic).
  */
 import React, { useState } from "react";
-import { ActivityIndicator, FlatList, StyleSheet, View, useWindowDimensions } from "react-native";
+import { ActivityIndicator, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -17,6 +17,7 @@ import { Skeleton } from "../../../src/components/ui/Skeleton";
 import { EmptyState } from "../../../src/components/ui/EmptyState";
 import { PressableScale } from "../../../src/components/ui/PressableScale";
 import { ConfirmDialog } from "../../../src/components/ui/ConfirmDialog";
+import { ThemedFlatList } from "../../../src/components/ui/ThemedScrollView";
 import { useSessions } from "../../../src/hooks/queries";
 import { useRevokeSession } from "../../../src/hooks/use-auth-actions";
 import { useTheme } from "../../../src/theme/ThemeProvider";
@@ -101,7 +102,7 @@ export default function SessionsScreen() {
           ))}
         </SettingsContent>
       ) : (
-        <FlatList
+        <ThemedFlatList
           data={sessions ?? []}
           keyExtractor={(s) => s.id}
           style={styles.list}

@@ -2,12 +2,13 @@
  * Stepped import overlay: pick a file → preview → confirm → done.
  */
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { DuplicatePolicy, FolderDto, ImportJobDto, ImportPreviewDto } from "@ordo/shared";
 import { IMPORT_EXPORT, normalizeImportPreview } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
+import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { PanelHeader } from "../ui/PanelHeader";
 import { SettingRow } from "../ui/SettingRow";
 import { SettingsGroup } from "./SettingsPage";
@@ -197,9 +198,8 @@ export function ImportFlow({
         dismissible={canScrimDismiss}
         maxWidth={440}
       >
-        <ScrollView
+        <ThemedScrollView
           bounces={false}
-          showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
           {phase === "uploading" || (phase === "active" && !job && !jobQuery.isError) ? (
@@ -240,7 +240,7 @@ export function ImportFlow({
           ) : (
             <BusyState title="Reading file" />
           )}
-        </ScrollView>
+        </ThemedScrollView>
       </FloatingPanel>
     </>
   );

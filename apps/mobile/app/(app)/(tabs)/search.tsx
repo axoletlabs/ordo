@@ -4,7 +4,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { FlashList } from "@shopify/flash-list";
 import { Ionicons } from "@expo/vector-icons";
 import { Header } from "../../../src/components/ui/Header";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
@@ -13,6 +12,7 @@ import { BookmarkActionsSheet } from "../../../src/components/bookmarks/Bookmark
 import { MoveSheet } from "../../../src/components/bookmarks/MoveSheet";
 import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
 import { ScreenContent } from "../../../src/components/ui/ScreenContent";
+import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
 import { Input } from "../../../src/components/ui/Input";
 import { EmptyState } from "../../../src/components/ui/EmptyState";
 import { Button } from "../../../src/components/ui/Button";
@@ -153,7 +153,7 @@ export default function SearchScreen() {
         ? spacing[32]
         : spacing[96];
   const listPane = (
-    <FlashList
+    <ThemedFlashList
       data={items}
       extraData={selection.revision}
       keyExtractor={(b: BookmarkDto) => b.id}

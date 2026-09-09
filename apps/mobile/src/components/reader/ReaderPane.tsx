@@ -35,6 +35,7 @@ import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 import { Skeleton } from "../ui/Skeleton";
 import { PressableScale } from "../ui/PressableScale";
+import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
@@ -49,6 +50,7 @@ import { READER_BODY_SIZE, resolveReaderFont } from "./reader-typography";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 import { resolveReaderPalette } from "../../theme/reader-theme";
 import { resolvePalette, type Palette } from "../../theme/theme";
+import { scrollbarColors } from "../../theme/scrollbar";
 import { queryClient } from "../../lib/query-client";
 import { bookmarksApi } from "../../lib/api/bookmarks";
 import { findBookmarkInCache, updateBookmarkEverywhere } from "../../lib/cache-helpers";
@@ -659,7 +661,7 @@ function ReaderPaneInner({
 
       {hasContent && !showWebsiteView ? (
         <View
-          style={[styles.progressTrack, { backgroundColor: palette.border }]}
+          style={[styles.progressTrack, { backgroundColor: scrollbarColors(palette).track }]}
           accessibilityRole="progressbar"
           accessibilityLabel="Reading progress"
           accessibilityValue={{ min: 0, max: 100, now: Math.round(progress * 100) }}
@@ -722,19 +724,18 @@ function ReaderPaneInner({
         </View>
       ) : (
         <View style={styles.scrollViewport}>
-          <ScrollView
+          <ThemedScrollView
             key={bookmark.id}
             ref={scrollRef}
             style={styles.scrollViewport}
             onLayout={onScrollViewLayout}
             onContentSizeChange={onContentSizeChange}
             onScroll={onScroll}
-            scrollEventThrottle={64}
+            scrollEventThrottle={16}
             contentContainerStyle={{
               paddingTop: spacing[16],
               paddingBottom: spacing[16] + (safeBottom ? insets.bottom : 0),
             }}
-            showsVerticalScrollIndicator={false}
           >
             <ScreenContent style={styles.body}>
               <View
@@ -822,7 +823,7 @@ function ReaderPaneInner({
                 )}
               </View>
             </ScreenContent>
-          </ScrollView>
+          </ThemedScrollView>
         </View>
       )}
 
@@ -932,7 +933,7 @@ function ReaderPaneInner({
       </ContextMenu>
       <FloatingPanel visible={actionPanel === "contents"} onDismiss={() => setActionPanel(null)}>
         <PanelHeader title="Table of contents" />
-        <ScrollView style={styles.tocList} showsVerticalScrollIndicator={false}>
+        <ThemedScrollView style={styles.tocList}>
           {articleHeadings.map((heading) => (
             <PressableScale
               key={heading.id}
@@ -953,7 +954,7 @@ function ReaderPaneInner({
               </Text>
             </PressableScale>
           ))}
-        </ScrollView>
+        </ThemedScrollView>
         <Button
           label="Article actions"
           variant="ghost"

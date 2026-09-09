@@ -7,7 +7,6 @@ import React from "react";
 import {
   KeyboardAvoidingView,
   Platform,
-  ScrollView,
   StyleSheet,
   View,
   type ViewStyle,
@@ -15,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../ui/Text";
 import { AUTH_LOGO_WIDTH, Logo } from "../ui/Logo";
+import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { useTheme } from "../../theme/ThemeProvider";
 import { layout, spacing } from "../../theme/tokens";
 import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
@@ -73,7 +73,8 @@ export function AuthShell({ title, subtitle, children, footer, style }: AuthShel
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.root}
       >
-        <ScrollView
+        <ThemedScrollView
+          style={styles.root}
           contentContainerStyle={[
             styles.container,
             isWideLayout ? styles.wideContainer : compactLandscape ? styles.compactContainer : styles.centeredContainer,
@@ -100,7 +101,7 @@ export function AuthShell({ title, subtitle, children, footer, style }: AuthShel
               {formBody}
             </View>
           )}
-        </ScrollView>
+        </ThemedScrollView>
       </KeyboardAvoidingView>
     </View>
   );

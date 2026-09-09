@@ -10,7 +10,7 @@
  * probe, which is what broke Save / reset the URL.)
  */
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 import Animated, {
   interpolateColor,
   useAnimatedStyle,
@@ -19,6 +19,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { FloatingPanel } from "../ui/FloatingPanel";
+import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
@@ -201,7 +202,7 @@ export function ServerConnectSheet({
 
   return (
     <FloatingPanel visible={visible} onDismiss={confirming ? () => {} : onDismiss}>
-      <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <ThemedScrollView keyboardShouldPersistTaps="handled">
       <PanelHeader
         icon="cloud-outline"
         iconColor={palette.blue}
@@ -308,7 +309,7 @@ export function ServerConnectSheet({
           />
         )}
       </View>
-      </ScrollView>
+      </ThemedScrollView>
     </FloatingPanel>
   );
 }

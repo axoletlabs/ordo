@@ -3,12 +3,13 @@
  * inline "New tag" affordance. Shared by the save sheet and edit-tags sheet.
  */
 import React, { useMemo, useState } from "react";
-import { FlatList, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { type TagColor } from "@ordo/shared";
 import { Text } from "../ui/Text";
 import { Input } from "../ui/Input";
 import { PressableScale } from "../ui/PressableScale";
+import { ThemedFlatList } from "../ui/ThemedScrollView";
 import { useTags, useCreateTag } from "../../hooks/use-tags";
 import { useTheme } from "../../theme/ThemeProvider";
 import { spacing } from "../../theme/tokens";
@@ -98,7 +99,7 @@ export function TagSelectList({
         autoCorrect={false}
         icon={<Ionicons name="search-outline" size={18} color={palette.textTertiary} />}
       />
-      <FlatList
+      <ThemedFlatList
         data={[...tags.selected, ...tags.unselected]}
         keyExtractor={(t) => t.id}
         renderItem={({ item }) => renderRow(item, selectedIds.includes(item.id))}

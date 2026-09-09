@@ -2,13 +2,13 @@
  * Floating dialog to move one or more bookmarks into another folder.
  */
 import React, { useEffect, useState } from "react";
-import { FlatList } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { UnlockForm } from "./LockPrompt";
 import { Text } from "../ui/Text";
 import { SheetActionRow } from "../ui/SheetActionRow";
+import { ThemedFlatList } from "../ui/ThemedScrollView";
 import { useFolders } from "../../hooks/queries";
 import { useFolderTokenStore } from "../../store/folder-tokens";
 import { errorMessage, isFolderProtected } from "../../lib/error-message";
@@ -133,7 +133,7 @@ export function MoveSheet({
           {destinations.length === 0 ? (
             <Text variant="body" color="secondary">No other folders available.</Text>
           ) : (
-            <FlatList
+            <ThemedFlatList
               data={destinations}
               keyExtractor={(d) => (isRootDestination(d) ? "root" : d.id)}
               renderItem={({ item }) => (

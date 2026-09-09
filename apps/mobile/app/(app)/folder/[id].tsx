@@ -6,7 +6,7 @@
 import { useCallback, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { FlashList } from "@shopify/flash-list";
+import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
 import { Header, HeaderActions, HeaderIconButton } from "../../../src/components/ui/Header";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
@@ -155,7 +155,7 @@ export default function FolderDetailScreen() {
 
   const listContentPadding = selection.active ? selectionClearance : spacing[96];
   const listPane = (
-    <FlashList
+    <ThemedFlashList
       data={items}
       extraData={selection.revision}
       keyExtractor={(b: BookmarkDto) => b.id}

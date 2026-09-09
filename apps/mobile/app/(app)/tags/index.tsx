@@ -3,12 +3,13 @@
  * delete (with confirmation showing the affected assignment count).
  */
 import React, { useMemo, useState } from "react";
-import { FlatList, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { Header } from "../../../src/components/ui/Header";
 import { FAB, FABLayer } from "../../../src/components/ui/FAB";
 import { ScreenContent } from "../../../src/components/ui/ScreenContent";
+import { ThemedFlatList } from "../../../src/components/ui/ThemedScrollView";
 import { EmptyState } from "../../../src/components/ui/EmptyState";
 import { Skeleton } from "../../../src/components/ui/Skeleton";
 import { Button } from "../../../src/components/ui/Button";
@@ -86,7 +87,7 @@ export default function TagsScreen() {
             />
           </View>
         ) : (
-          <FlatList
+          <ThemedFlatList
             data={sorted}
             keyExtractor={(t) => t.id}
             renderItem={({ item }) => (

@@ -1,7 +1,8 @@
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { APP_NAME, DEFAULT_FOLDER_ICON, type FolderDto, type FolderIcon, type FolderLockType, type FolderPinLength } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
+import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
@@ -538,7 +539,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
       ) : null}
 
       {folder && mode === "removePassword" ? (
-        <ScrollView keyboardShouldPersistTaps="handled">
+        <ThemedScrollView keyboardShouldPersistTaps="handled">
           <PanelHeader
             icon="lock-open-outline"
             iconColor={palette.danger}
@@ -632,11 +633,11 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
               />
             )}
           </View>
-        </ScrollView>
+        </ThemedScrollView>
       ) : null}
 
       {folder && mode === "removePasswordAccount" ? (
-        <ScrollView keyboardShouldPersistTaps="handled">
+        <ThemedScrollView keyboardShouldPersistTaps="handled">
           <PanelHeader
             icon="lock-open-outline"
             iconColor={palette.danger}
@@ -684,7 +685,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             loading={removing}
             cancelDisabled={removing}
           />
-        </ScrollView>
+        </ThemedScrollView>
       ) : null}
 
       {folder && mode === "icon" ? (

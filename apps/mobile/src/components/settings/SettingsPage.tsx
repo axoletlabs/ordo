@@ -1,6 +1,5 @@
 import React from "react";
 import {
-  ScrollView,
   StyleSheet,
   View,
   type StyleProp,
@@ -10,6 +9,7 @@ import {
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Header } from "../ui/Header";
+import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { Text } from "../ui/Text";
 import { Card } from "../ui/Card";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -48,7 +48,8 @@ export function SettingsScrollView({
   const insets = useSafeAreaInsets();
 
   return (
-    <ScrollView
+    <ThemedScrollView
+      style={styles.scroll}
       contentContainerStyle={[
         styles.scrollContent,
         {
@@ -57,11 +58,10 @@ export function SettingsScrollView({
         },
         contentContainerStyle,
       ]}
-      showsVerticalScrollIndicator={false}
       {...props}
     >
       <View style={[styles.contentColumn, { maxWidth: contentWidth }]}>{children}</View>
-    </ScrollView>
+    </ThemedScrollView>
   );
 }
 
@@ -149,6 +149,7 @@ export function SettingsGroup({
 
 const styles = StyleSheet.create({
   page: { flex: 1 },
+  scroll: { flex: 1 },
   // The header→content gap is defined once here; screens must not add their
   // own top padding for the first group (compact labels sit flush under it).
   scrollContent: { paddingTop: spacing[8], paddingBottom: spacing[40] },

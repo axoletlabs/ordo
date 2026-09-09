@@ -3,8 +3,9 @@
  * Shared by the library home header action and the save-bookmark sheet.
  */
 import React, { useState } from "react";
-import { ScrollView, StyleSheet, type TextInput } from "react-native";
+import { StyleSheet, type TextInput } from "react-native";
 import { FloatingPanel } from "../ui/FloatingPanel";
+import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
 import { Text } from "../ui/Text";
@@ -61,7 +62,7 @@ export function CreateFolderPanel({
       onDismiss={close}
       onShow={() => setTimeout(() => nameRef.current?.focus(), 100)}
     >
-      <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+      <ThemedScrollView keyboardShouldPersistTaps="handled">
         <PanelHeader title="New folder" />
         <Input
           ref={nameRef}
@@ -81,7 +82,7 @@ export function CreateFolderPanel({
           onCancel={close}
           loading={createFolder.isPending}
         />
-      </ScrollView>
+      </ThemedScrollView>
     </FloatingPanel>
   );
 }
