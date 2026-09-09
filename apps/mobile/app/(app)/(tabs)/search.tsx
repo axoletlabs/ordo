@@ -1,13 +1,12 @@
 /**
- * Global bookmark search. Local ranking reorders the list as you type; a
- * short debounce refreshes from the server (title, URL, article, tags).
+ * Global bookmark search. Local substring filter runs on the first keystroke;
+ * the server catches up shortly after for article-body hits.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Keyboard, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
-import Animated, { FadeIn, LinearTransition } from "react-native-reanimated";
 import { Header } from "../../../src/components/ui/Header";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
@@ -16,7 +15,7 @@ import { MoveSheet } from "../../../src/components/bookmarks/MoveSheet";
 import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
 import { SearchFilterMenu } from "../../../src/components/bookmarks/SearchFilterMenu";
 import { ScreenContent } from "../../../src/components/ui/ScreenContent";
-import { ThemedFlatList } from "../../../src/components/ui/ThemedScrollView";
+import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
 import { Input } from "../../../src/components/ui/Input";
 import { EmptyState } from "../../../src/components/ui/EmptyState";
 import { Button } from "../../../src/components/ui/Button";
@@ -45,12 +44,12 @@ import {
   useDebouncedValue,
   type SearchFilters,
 } from "../../../src/lib/search-bookmarks";
-import { layout, radius, spacing, timing } from "../../../src/theme/tokens";
+import { layout, radius, spacing } from "../../../src/theme/tokens";
 import type { BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 
-const SEARCH_DEBOUNCE_MS = 120;
-const LIST_LAYOUT = LinearTransition.duration(timing.fast);
+const SERVER_DEBOUNCE_MS = 200;
+const URL_SYNC_MS = 1000;
 
 export default function SearchScreen() {
   const { palette } = useTheme();
@@ -79,7 +78,6 @@ export default function SearchScreen() {
   const [moveTarget, setMoveTarget] = useState<BookmarkDto | null>(null);
   const [editTagsBm, setEditTagsBm] = useState<BookmarkDto | null>(null);
   const filterRef = useRef<View>(null);
-  const listRef = useRef<{ scrollToOffset?: (opts: { offset: number; animated?: boolean }) => void } | null>(null);
   const selection = useSelectionMode();
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
@@ -89,15 +87,18 @@ export default function SearchScreen() {
   const { data: allTags } = useTags();
 
   const trimmed = input.trim();
-  const debouncedQ = useDebouncedValue(trimmed, trimmed ? SEARCH_DEBOUNCE_MS : 0);
-  const browsing = trimmed.length > 0 || searchFiltersActive(filters);
+  const filtersOn = searchFiltersActive(filters);
+  const browsing = trimmed.length > 0 || filtersOn;
+  const serverQ = useDebouncedValue(trimmed, trimmed.length <= 1 ? 0 : SERVER_DEBOUNCE_MS);
+  const urlQuery = useDebouncedValue(trimmed, URL_SYNC_MS);
+  const searchEnabled = serverQ.length > 0 || filtersOn;
 
-  const search = useInfiniteSearch(debouncedQ, filters.tagIds, filters.status, browsing);
+  const search = useInfiniteSearch(serverQ, filters.tagIds, filters.status, searchEnabled);
   const serverItems = useMemo(() => flattenPages(search.data?.pages ?? []), [search.data]);
-  const cachedItems = useMemo(
-    () => collectCachedBookmarks(queryClient),
-    [debouncedQ, filters, queryClient, search.dataUpdatedAt],
-  );
+  const cachedItems = useMemo(() => {
+    if (!browsing) return [];
+    return collectCachedBookmarks(queryClient);
+  }, [browsing, queryClient, search.dataUpdatedAt]);
   const items = useMemo(() => {
     if (!browsing) return [];
     return compileSearchResults({
@@ -105,9 +106,9 @@ export default function SearchScreen() {
       filters,
       serverItems,
       cachedItems,
-      serverMatchesQuery: trimmed === debouncedQ,
+      serverMatchesQuery: trimmed === serverQ,
     });
-  }, [browsing, cachedItems, debouncedQ, filters, serverItems, trimmed]);
+  }, [browsing, cachedItems, filters, serverItems, serverQ, trimmed]);
 
   const selectedBookmarks = useMemo(
     () => items.filter((bookmark) => selection.has(bookmarkKey(bookmark.id))),
@@ -118,7 +119,14 @@ export default function SearchScreen() {
     () => (allTags ?? []).filter((tag) => filters.tagIds.includes(tag.id)),
     [allTags, filters.tagIds],
   );
-  const filtersOn = searchFiltersActive(filters);
+
+  useEffect(() => {
+    const rawQuery = Array.isArray(params.query) ? params.query[0] : params.query;
+    const rawBookmark = Array.isArray(params.bookmark) ? params.bookmark[0] : params.bookmark;
+    if (rawQuery === "undefined" || rawQuery === "null" || rawBookmark === "undefined" || rawBookmark === "null") {
+      router.setParams({ query: "", bookmark: "" });
+    }
+  }, [params.bookmark, params.query, router]);
 
   useEffect(() => {
     if (routeQuery === appliedRouteQuery.current) return;
@@ -127,22 +135,10 @@ export default function SearchScreen() {
   }, [routeQuery]);
 
   useEffect(() => {
-    const rawQuery = Array.isArray(params.query) ? params.query[0] : params.query;
-    const rawBookmark = Array.isArray(params.bookmark) ? params.bookmark[0] : params.bookmark;
-    if (rawQuery === "undefined" || rawQuery === "null" || rawBookmark === "undefined" || rawBookmark === "null") {
-      router.setParams({ query: routeQuery, bookmark: selectedBookmarkId ?? "" });
-    }
-  }, [params.bookmark, params.query, routeQuery, router, selectedBookmarkId]);
-
-  useEffect(() => {
-    if (debouncedQ === appliedRouteQuery.current) return;
-    appliedRouteQuery.current = debouncedQ;
-    router.setParams({ query: debouncedQ });
-  }, [debouncedQ, router]);
-
-  useEffect(() => {
-    listRef.current?.scrollToOffset?.({ offset: 0, animated: true });
-  }, [debouncedQ, filters]);
+    if (urlQuery === appliedRouteQuery.current) return;
+    appliedRouteQuery.current = urlQuery;
+    router.setParams({ query: urlQuery });
+  }, [router, urlQuery]);
 
   const clearBookmarkParam = useCallback(() => {
     router.setParams({ bookmark: "" });
@@ -207,6 +203,37 @@ export default function SearchScreen() {
     }, event);
   }, []);
 
+  const renderBookmark = useCallback(
+    ({ item }: { item: BookmarkDto }) => (
+      <BookmarkRow
+        bookmark={item}
+        searchQuery={trimmed}
+        selectionMode={selection.active}
+        selected={
+          selection.active
+            ? selection.has(bookmarkKey(item.id))
+            : hasDetailPane && item.id === selectedBookmarkId
+        }
+        omitTagIds={filters.tagIds}
+        onPress={onPressBookmark}
+        onEnterSelection={onEnterSelection}
+        onMore={onMoreBookmark}
+        onTagPress={toggleTag}
+      />
+    ),
+    [
+      filters.tagIds,
+      hasDetailPane,
+      onEnterSelection,
+      onMoreBookmark,
+      onPressBookmark,
+      selectedBookmarkId,
+      selection,
+      toggleTag,
+      trimmed,
+    ],
+  );
+
   const listContentPadding = selection.active
     ? selectionClearance
     : floatingNavigation
@@ -219,7 +246,7 @@ export default function SearchScreen() {
     <EmptyState
       icon="search-outline"
       title="Search your library"
-      message="Find bookmarks by title, URL, article, or tag."
+      message="Type any part of a title, URL, or tag. Every word you type has to appear."
     />
   ) : search.error && items.length === 0 ? (
     <EmptyState
@@ -236,38 +263,21 @@ export default function SearchScreen() {
       title="No results"
       message={
         trimmed
-          ? `Nothing matched “${trimmed}”.`
+          ? `Nothing contains “${trimmed}”.`
           : "Nothing matches these filters."
       }
     />
   ) : null;
 
   const listPane = (
-    <ThemedFlatList
-      ref={listRef as never}
+    <ThemedFlashList
       data={items}
-      extraData={`${selection.revision}:${selectedBookmarkId ?? ""}`}
+      extraData={`${selection.revision}:${selectedBookmarkId ?? ""}:${trimmed}`}
       keyExtractor={(b: BookmarkDto) => b.id}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
-      renderItem={({ item }: { item: BookmarkDto }) => (
-        <Animated.View layout={LIST_LAYOUT} entering={FadeIn.duration(timing.fast)}>
-          <BookmarkRow
-            bookmark={item}
-            selectionMode={selection.active}
-            selected={
-              selection.active
-                ? selection.has(bookmarkKey(item.id))
-                : hasDetailPane && item.id === selectedBookmarkId
-            }
-            omitTagIds={filters.tagIds}
-            onPress={onPressBookmark}
-            onEnterSelection={onEnterSelection}
-            onMore={onMoreBookmark}
-            onTagPress={toggleTag}
-          />
-        </Animated.View>
-      )}
+      estimatedItemSize={108}
+      renderItem={renderBookmark}
       ListEmptyComponent={empty ? <View style={styles.emptyList}>{empty}</View> : null}
       ListFooterComponent={
         search.isFetchingNextPage ? (
@@ -276,7 +286,7 @@ export default function SearchScreen() {
           </View>
         ) : null
       }
-      contentContainerStyle={{ flexGrow: 1, paddingBottom: listContentPadding }}
+      contentContainerStyle={{ paddingBottom: listContentPadding }}
       onEndReached={() => {
         if (search.hasNextPage && !search.isFetchingNextPage) void search.fetchNextPage();
       }}

@@ -18,6 +18,7 @@ import { haptics } from "../../lib/haptics";
 import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { prefetchBookmarkDetail } from "../../hooks/use-bookmarks";
 import { prefetchTaggedBookmarks } from "../../hooks/use-tags";
+import { firstSearchHighlight } from "../../lib/search-bookmarks";
 import { radius, spacing } from "../../theme/tokens";
 import { bookmarkKey, SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
 import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
@@ -25,6 +26,20 @@ import type { BookmarkDto } from "@ordo/shared";
 
 /** Compact tags shown inline on a row before overflow. */
 const MAX_ROW_TAGS = 3;
+
+function highlightTitle(title: string, query?: string) {
+  const span = query ? firstSearchHighlight(title, query) : null;
+  if (!span) return title;
+  return (
+    <>
+      {title.slice(0, span.start)}
+      <Text variant="headline" color="accent">
+        {title.slice(span.start, span.end)}
+      </Text>
+      {title.slice(span.end)}
+    </>
+  );
+}
 
 export interface BookmarkRowProps {
   bookmark: BookmarkDto;
@@ -40,6 +55,8 @@ export interface BookmarkRowProps {
   onTagPress?: (tagId: string) => void;
   /** Hide tags already expressed by the current view (e.g. the active tag filter). */
   omitTagIds?: readonly string[];
+  /** When set, the matching substring in the title is emphasized. */
+  searchQuery?: string;
 }
 
 export const BookmarkRow = React.memo(function BookmarkRow({
@@ -52,6 +69,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   highlighted: highlightedProp,
   onTagPress,
   omitTagIds,
+  searchQuery,
 }: BookmarkRowProps) {
   const { palette } = useTheme();
   const router = useRouter();
@@ -232,7 +250,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
       >
         <View style={styles.content}>
           <Text variant="headline" color={titleColor} numberOfLines={1}>
-            {title}
+            {highlightTitle(title, searchQuery)}
           </Text>
           {showDescription ? (
             <Text variant="footnote" color="secondary" numberOfLines={1} style={styles.description}>

@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { BookmarkDto } from "@ordo/shared";
 import {
   compileSearchResults,
+  firstSearchHighlight,
   sanitizeRouteParam,
   searchFiltersActive,
   type SearchFilters,
@@ -173,4 +174,36 @@ test("searchFiltersActive ignores the empty default", () => {
   assert.equal(searchFiltersActive({ tagIds: [], status: "all", kind: "all" }), false);
   assert.equal(searchFiltersActive({ tagIds: ["x"], status: "all", kind: "all" }), true);
   assert.equal(searchFiltersActive({ tagIds: [], status: "unread", kind: "all" }), true);
+});
+
+test("matching is a substring, not fuzzy", () => {
+  const react = bookmark({ id: "r", title: "React Query" });
+  const hits = compileSearchResults({
+    query: "ract",
+    filters: none,
+    serverItems: [],
+    cachedItems: [react],
+    serverMatchesQuery: true,
+  });
+  assert.deepEqual(
+    hits.map((item) => item.id),
+    [],
+  );
+  const prefix = compileSearchResults({
+    query: "reac",
+    filters: none,
+    serverItems: [],
+    cachedItems: [react],
+    serverMatchesQuery: true,
+  });
+  assert.deepEqual(
+    prefix.map((item) => item.id),
+    ["r"],
+  );
+});
+
+test("firstSearchHighlight marks the first token in the title", () => {
+  assert.deepEqual(firstSearchHighlight("React Query", "reac"), { start: 0, end: 4 });
+  assert.equal(firstSearchHighlight("React Query", "query")?.start, 6);
+  assert.equal(firstSearchHighlight("React Query", "zzz"), null);
 });

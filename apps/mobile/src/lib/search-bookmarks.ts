@@ -1,11 +1,12 @@
 /**
  * Client-side search: sanitize route params, merge cached bookmarks with the
- * server result, and rank as you type so the list can reorder immediately.
+ * server result, and filter as you type with literal substring matching.
  */
 import { useEffect, useState } from "react";
 import {
-  bookmarkMatchesQuery,
-  rankSearchResults,
+  bookmarkMatchRank,
+  bookmarkSearchHaystack,
+  tokenizeSearchQuery,
   type BookmarkDto,
 } from "@ordo/shared";
 
@@ -53,6 +54,10 @@ export function bookmarkPassesSearchFilters(bookmark: BookmarkDto, filters: Sear
   return true;
 }
 
+function haystackMatches(haystack: string, tokens: readonly string[]): boolean {
+  return tokens.every((token) => haystack.includes(token));
+}
+
 export function compileSearchResults({
   query,
   filters,
@@ -67,22 +72,52 @@ export function compileSearchResults({
   /** True when `serverItems` were fetched for this exact query string. */
   serverMatchesQuery: boolean;
 }): BookmarkDto[] {
-  const q = query.trim();
+  const tokens = tokenizeSearchQuery(query);
   const byId = new Map<string, BookmarkDto>();
 
   for (const bookmark of serverItems) {
-    if (!serverMatchesQuery && q && !bookmarkMatchesQuery(bookmark, q)) continue;
+    if (!serverMatchesQuery && tokens.length > 0 && !haystackMatches(bookmarkSearchHaystack(bookmark), tokens)) {
+      continue;
+    }
     byId.set(bookmark.id, bookmark);
   }
 
   for (const bookmark of cachedItems) {
     if (byId.has(bookmark.id)) continue;
-    if (q && !bookmarkMatchesQuery(bookmark, q)) continue;
+    if (tokens.length > 0 && !haystackMatches(bookmarkSearchHaystack(bookmark), tokens)) continue;
     byId.set(bookmark.id, bookmark);
   }
 
-  const merged = [...byId.values()].filter((bookmark) => bookmarkPassesSearchFilters(bookmark, filters));
-  return rankSearchResults(merged, q);
+  const merged: BookmarkDto[] = [];
+  for (const bookmark of byId.values()) {
+    if (bookmarkPassesSearchFilters(bookmark, filters)) merged.push(bookmark);
+  }
+
+  const q = tokens.join(" ");
+  if (!q) {
+    return merged.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
+  }
+
+  const ranked = merged.map((bookmark) => ({
+    bookmark,
+    rank: bookmarkMatchRank(bookmark, q),
+  }));
+  ranked.sort((a, b) => {
+    if (a.rank !== b.rank) return b.rank - a.rank;
+    const byDate = b.bookmark.createdAt.localeCompare(a.bookmark.createdAt);
+    if (byDate !== 0) return byDate;
+    return a.bookmark.id.localeCompare(b.bookmark.id);
+  });
+  return ranked.map((row) => row.bookmark);
+}
+
+/** First case-insensitive substring of `query`'s first token, or null. */
+export function firstSearchHighlight(text: string, query: string): { start: number; end: number } | null {
+  const token = tokenizeSearchQuery(query)[0];
+  if (!token || !text) return null;
+  const at = text.toLocaleLowerCase("en-US").indexOf(token);
+  if (at < 0) return null;
+  return { start: at, end: at + token.length };
 }
 
 export function useDebouncedValue<T>(value: T, delay: number): T {

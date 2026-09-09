@@ -1,6 +1,7 @@
 /**
- * Bookmark search matching and ranking. Used by the server (order of
- * /bookmarks/search) and the client (instant local reordering while typing).
+ * Bookmark search matching. Literal case-insensitive substring matching
+ * (not fuzzy): every query token must appear in title, URL, domain,
+ * description, author, tags, or article text. Title prefix ranks first.
  */
 
 export interface SearchableBookmark {
@@ -15,94 +16,74 @@ export interface SearchableBookmark {
   contentText?: string | null;
 }
 
-/** Trim, collapse whitespace, and lowercase for matching. */
+/** Trim, collapse whitespace, and lowercase. */
 export function normalizeSearchQuery(query: string): string {
   return query.trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
+}
+
+export function tokenizeSearchQuery(query: string): string[] {
+  const q = normalizeSearchQuery(query);
+  return q ? q.split(" ") : [];
 }
 
 function fold(value: string | null | undefined): string {
   return (value ?? "").toLocaleLowerCase("en-US");
 }
 
-function fieldScore(field: string, query: string, starts: number, includes: number): number {
-  if (!field || !query) return 0;
-  if (field === query) return starts + 20;
-  if (field.startsWith(query)) return starts;
-  if (field.includes(query)) return includes;
-  return 0;
+/** Lowercased blob used for `includes` checks. */
+export function bookmarkSearchHaystack(bookmark: SearchableBookmark): string {
+  return [
+    bookmark.title,
+    bookmark.url,
+    bookmark.domain,
+    bookmark.description ?? "",
+    bookmark.author ?? "",
+    bookmark.tags.map((tag) => tag.name).join(" "),
+    bookmark.contentText ?? "",
+  ]
+    .join("\n")
+    .toLocaleLowerCase("en-US");
 }
 
-function tokensMatch(haystack: string, tokens: readonly string[]): boolean {
+export function bookmarkMatchesQuery(bookmark: SearchableBookmark, query: string): boolean {
+  const tokens = tokenizeSearchQuery(query);
+  if (tokens.length === 0) return true;
+  const haystack = bookmarkSearchHaystack(bookmark);
   return tokens.every((token) => haystack.includes(token));
 }
 
 /**
- * Higher is a better match. `0` means the visible fields do not contain the
- * query (article-body-only hits still score 0 when `contentText` is omitted).
+ * 3 = title starts with the query, 2 = title contains it, 1 = another field,
+ * 0 = no visible-field match (body-only hits from the server stay 0).
  */
-export function scoreBookmarkMatch(bookmark: SearchableBookmark, query: string): number {
+export function bookmarkMatchRank(bookmark: SearchableBookmark, query: string): number {
   const q = normalizeSearchQuery(query);
   if (!q) return 0;
-
   const title = fold(bookmark.title);
-  const domain = fold(bookmark.domain);
-  const url = fold(bookmark.url);
-  const description = fold(bookmark.description);
-  const author = fold(bookmark.author);
-  const tags = bookmark.tags.map((tag) => fold(tag.name));
-  const body = fold(bookmark.contentText);
-  const tagHaystack = tags.join(" ");
-  const haystack = [title, domain, url, description, author, tagHaystack, body].join("\n");
-
-  const tokens = q.split(" ").filter(Boolean);
-  if (!haystack.includes(q) && !tokensMatch(haystack, tokens)) return 0;
-
-  let score = 0;
-  score += fieldScore(title, q, 100, 80);
-  const tagExact = tags.some((name) => name === q);
-  const tagStarts = tags.some((name) => name.startsWith(q));
-  const tagIncludes = tags.some((name) => name.includes(q));
-  if (tagExact) score += 70;
-  else if (tagStarts) score += 60;
-  else if (tagIncludes) score += 50;
-  score += fieldScore(domain, q, 55, 45);
-  score += fieldScore(url, q, 40, 30);
-  score += fieldScore(description, q, 28, 22);
-  score += fieldScore(author, q, 18, 14);
-  if (body.includes(q)) score += 8;
-
-  if (score === 0 && tokens.length > 1 && tokensMatch(haystack, tokens)) {
-    score += 16;
-  }
-
-  const created = Date.parse(bookmark.createdAt);
-  if (Number.isFinite(created)) {
-    const ageDays = Math.max(0, (Date.now() - created) / 86_400_000);
-    score += Math.max(0, 8 - Math.min(8, ageDays / 45));
-  }
-
-  return score;
+  if (title.startsWith(q)) return 3;
+  if (title.includes(q)) return 2;
+  const tokens = q.split(" ");
+  if (tokens.length > 1 && tokens.every((token) => title.includes(token))) return 2;
+  if (bookmarkMatchesQuery(bookmark, q)) return 1;
+  return 0;
 }
 
-export function bookmarkMatchesQuery(bookmark: SearchableBookmark, query: string): boolean {
-  return scoreBookmarkMatch(bookmark, query) > 0;
-}
-
-/** Sort already-matched bookmarks. Does not drop zero-score (body-only) hits. */
+/** Sort already-matched bookmarks. Does not drop rank-0 (body-only) hits. */
 export function rankSearchResults<T extends SearchableBookmark>(items: readonly T[], query: string): T[] {
   const q = normalizeSearchQuery(query);
   if (!q) {
-    return [...items].sort((a, b) => {
-      const byDate = b.createdAt.localeCompare(a.createdAt);
-      if (byDate !== 0) return byDate;
-      return (a.id ?? a.title).localeCompare(b.id ?? b.title);
-    });
+    return [...items].sort(compareByDateThenId);
   }
-  return [...items].sort((a, b) => {
-    const delta = scoreBookmarkMatch(b, q) - scoreBookmarkMatch(a, q);
-    if (delta !== 0) return delta;
-    const byDate = b.createdAt.localeCompare(a.createdAt);
-    if (byDate !== 0) return byDate;
-    return (a.id ?? a.title).localeCompare(b.id ?? b.title);
+  const ranked = items.map((item) => ({ item, rank: bookmarkMatchRank(item, q) }));
+  ranked.sort((a, b) => {
+    if (a.rank !== b.rank) return b.rank - a.rank;
+    return compareByDateThenId(a.item, b.item);
   });
+  return ranked.map((row) => row.item);
+}
+
+function compareByDateThenId(a: SearchableBookmark, b: SearchableBookmark): number {
+  const byDate = b.createdAt.localeCompare(a.createdAt);
+  if (byDate !== 0) return byDate;
+  return (a.id ?? a.title).localeCompare(b.id ?? b.title);
 }
