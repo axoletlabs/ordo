@@ -14,20 +14,21 @@ test("inkAlpha converts hex to rgba", () => {
 test("light scrollbar uses ink, not a black OS overlay", () => {
   const { thumb, track } = scrollbarColors(stubPalette({ mode: "light", amoled: false, text: "#15140F" }));
   assert.match(thumb, /^rgba\(21,20,15,/);
-  assert.match(track, /^rgba\(21,20,15,/);
+  assert.equal(track, "transparent");
   assert.ok(!thumb.includes("0,0,0"));
 });
 
 test("dark scrollbar uses cream ink so it reads on warm dark surfaces", () => {
-  const { thumb } = scrollbarColors(stubPalette({ mode: "dark", amoled: false, text: "#EBDDB2" }));
+  const { thumb, track } = scrollbarColors(stubPalette({ mode: "dark", amoled: false, text: "#EBDDB2" }));
   assert.match(thumb, /^rgba\(235,221,178,/);
+  assert.equal(track, "transparent");
 });
 
-test("AMOLED scrollbar is a light gray, not black-on-black", () => {
+test("AMOLED scrollbar is a light gray mark, with no track", () => {
   const { thumb, track } = scrollbarColors(stubPalette({ mode: "dark", amoled: true, text: "#E0E0E0" }));
-  assert.match(thumb, /^rgba\(214,214,214,/);
-  assert.ok(Number.parseFloat(thumb.slice(thumb.lastIndexOf(",") + 1)) >= 0.5);
-  assert.notEqual(track, "transparent");
+  assert.match(thumb, /^rgba\(224,224,224,/);
+  assert.ok(Number.parseFloat(thumb.slice(thumb.lastIndexOf(",") + 1)) >= 0.3);
+  assert.equal(track, "transparent");
 });
 
 test("maxHeight-only hosts do not flex-fill (shrink-wrapped menus)", () => {

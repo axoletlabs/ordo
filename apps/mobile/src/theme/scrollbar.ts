@@ -8,11 +8,12 @@
  */
 import type { Palette } from "./theme";
 
-export const SCROLLBAR_THUMB_WIDTH = 3;
-export const SCROLLBAR_EDGE_INSET = 3;
-export const SCROLLBAR_END_INSET = 8;
-export const SCROLLBAR_MIN_THUMB = 36;
-export const SCROLLBAR_IDLE_MS = 850;
+/** Hairline-adjacent so it reads as a divider, not OS chrome. */
+export const SCROLLBAR_THUMB_WIDTH = 2;
+export const SCROLLBAR_EDGE_INSET = 5;
+export const SCROLLBAR_END_INSET = 12;
+export const SCROLLBAR_MIN_THUMB = 28;
+export const SCROLLBAR_IDLE_MS = 1100;
 
 /** `hex` (#RRGGBB) at `alpha` (0–1) as an rgba() string. */
 export function inkAlpha(hex: string, alpha: number): string {
@@ -25,22 +26,16 @@ export function inkAlpha(hex: string, alpha: number): string {
 }
 
 export function scrollbarColors(palette: Palette): { thumb: string; track: string } {
+  // Track stays empty — a full-height rail is what made the last bar look like
+  // a grafted-on OS widget. Thumb uses the same ink as hairline borders, a
+  // little denser so a 2px mark still reads while scrolling.
   if (palette.amoled) {
-    return {
-      thumb: "rgba(214,214,214,0.58)",
-      track: "rgba(214,214,214,0.14)",
-    };
+    return { thumb: "rgba(224,224,224,0.38)", track: "transparent" };
   }
   if (palette.mode === "dark") {
-    return {
-      thumb: inkAlpha(palette.text, 0.44),
-      track: inkAlpha(palette.text, 0.10),
-    };
+    return { thumb: inkAlpha(palette.text, 0.28), track: "transparent" };
   }
-  return {
-    thumb: inkAlpha(palette.text, 0.32),
-    track: inkAlpha(palette.text, 0.10),
-  };
+  return { thumb: inkAlpha(palette.text, 0.26), track: "transparent" };
 }
 
 /**
@@ -79,11 +74,11 @@ export function scrollThumbLayout(
 export const WEB_SCROLLBAR_CSS = `
 * {
   scrollbar-width: thin;
-  scrollbar-color: var(--ordo-scrollbar-thumb) var(--ordo-scrollbar-track);
+  scrollbar-color: var(--ordo-scrollbar-thumb) transparent;
 }
 *::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 *::-webkit-scrollbar-button {
   display: none;
@@ -91,9 +86,7 @@ export const WEB_SCROLLBAR_CSS = `
   height: 0;
 }
 *::-webkit-scrollbar-track {
-  background: var(--ordo-scrollbar-track);
-  border-radius: 99px;
-  margin: 8px 2px;
+  background: transparent;
 }
 *::-webkit-scrollbar-thumb {
   background-color: var(--ordo-scrollbar-thumb);

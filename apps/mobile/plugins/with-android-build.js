@@ -18,7 +18,7 @@ const SCROLLBAR_THUMB_XML = `<?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
     <solid android:color="@color/scrollbar_thumb" />
     <corners android:radius="8dp" />
-    <size android:width="4dp" />
+    <size android:width="2dp" />
 </shape>
 `;
 
@@ -246,11 +246,11 @@ class ShareReceiverActivity : Activity() {
   config = withAndroidColors(config, (c) => {
     c.modResults = assignColorValue(c.modResults, {
       name: 'scrollbar_thumb',
-      value: '#5215140F',
+      value: '#4215140F',
     });
     c.modResults = assignColorValue(c.modResults, {
       name: 'scrollbar_track',
-      value: '#1A15140F',
+      value: '#00000000',
     });
     return c;
   });
@@ -258,11 +258,11 @@ class ShareReceiverActivity : Activity() {
   config = withAndroidColorsNight(config, (c) => {
     c.modResults = assignColorValue(c.modResults, {
       name: 'scrollbar_thumb',
-      value: '#8AE0E0E0',
+      value: '#61E0E0E0',
     });
     c.modResults = assignColorValue(c.modResults, {
       name: 'scrollbar_track',
-      value: '#24E0E0E0',
+      value: '#00000000',
     });
     return c;
   });

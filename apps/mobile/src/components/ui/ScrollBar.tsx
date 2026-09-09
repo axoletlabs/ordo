@@ -1,12 +1,14 @@
 /**
- * Overlay scrollbar that sits in the viewport gutter instead of on top of
- * row actions / the FAB, and that uses the active palette (including AMOLED).
+ * Overlay scrollbar: a 2px ink mark in the gutter, no track.
+ *
+ * Ordo is line-driven (hairline separators, no chrome). A full-height rail
+ * next to a chunky pill read as an OS widget; this matches the dividers
+ * instead, and the thumb is driven on the UI thread so it doesn't stutter.
  */
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef } from "react";
 import {
   Platform,
   StyleSheet,
-  View,
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -14,6 +16,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import Animated, {
+  type SharedValue,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
@@ -23,11 +26,11 @@ import {
   SCROLLBAR_EDGE_INSET,
   SCROLLBAR_END_INSET,
   SCROLLBAR_IDLE_MS,
+  SCROLLBAR_MIN_THUMB,
   SCROLLBAR_THUMB_WIDTH,
   scrollbarColors,
-  scrollThumbLayout,
 } from "../../theme/scrollbar";
-import { timing } from "../../theme/tokens";
+import { radius, timing } from "../../theme/tokens";
 
 export function chainHandlers<Args extends unknown[]>(
   ...handlers: Array<((...args: Args) => void) | undefined>
@@ -37,28 +40,20 @@ export function chainHandlers<Args extends unknown[]>(
   };
 }
 
-interface ScrollMetrics {
-  viewport: number;
-  content: number;
-  offset: number;
-}
-
 export function useVerticalScrollBar() {
   const { palette } = useTheme();
   const colors = scrollbarColors(palette);
-  const [metrics, setMetrics] = useState<ScrollMetrics>({
-    viewport: 1,
-    content: 1,
-    offset: 0,
-  });
+  const viewport = useSharedValue(1);
+  const content = useSharedValue(1);
+  const offset = useSharedValue(0);
   const opacity = useSharedValue(0);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const reveal = useCallback(() => {
-    opacity.value = withTiming(1, { duration: timing.fast });
+    opacity.value = withTiming(1, { duration: timing.normal });
     if (hideTimer.current) clearTimeout(hideTimer.current);
     hideTimer.current = setTimeout(() => {
-      opacity.value = withTiming(0, { duration: timing.normal });
+      opacity.value = withTiming(0, { duration: timing.slow });
     }, SCROLLBAR_IDLE_MS);
   }, [opacity]);
 
@@ -69,35 +64,40 @@ export function useVerticalScrollBar() {
     [],
   );
 
-  const onLayout = useCallback((event: LayoutChangeEvent) => {
-    const height = event.nativeEvent.layout.height;
-    setMetrics((current) =>
-      Math.abs(current.viewport - height) < 0.5 ? current : { ...current, viewport: height },
-    );
-  }, []);
+  const onLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      viewport.value = event.nativeEvent.layout.height;
+    },
+    [viewport],
+  );
 
-  const onContentSizeChange = useCallback((_width: number, height: number) => {
-    setMetrics((current) =>
-      Math.abs(current.content - height) < 0.5 ? current : { ...current, content: height },
-    );
-  }, []);
+  const onContentSizeChange = useCallback(
+    (_width: number, height: number) => {
+      content.value = height;
+    },
+    [content],
+  );
 
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-      setMetrics({
-        viewport: layoutMeasurement.height,
-        content: contentSize.height,
-        offset: contentOffset.y,
-      });
+      offset.value = contentOffset.y;
+      viewport.value = layoutMeasurement.height;
+      content.value = contentSize.height;
       if (contentSize.height > layoutMeasurement.height + 1) reveal();
     },
-    [reveal],
+    [content, offset, reveal, viewport],
   );
 
   const overlay =
     Platform.OS === "web" ? null : (
-      <ScrollBarOverlay metrics={metrics} opacity={opacity} colors={colors} />
+      <ScrollBarOverlay
+        viewport={viewport}
+        content={content}
+        offset={offset}
+        opacity={opacity}
+        thumbColor={colors.thumb}
+      />
     );
 
   return {
@@ -111,37 +111,43 @@ export function useVerticalScrollBar() {
 }
 
 function ScrollBarOverlay({
-  metrics,
+  viewport,
+  content,
+  offset,
   opacity,
-  colors,
+  thumbColor,
 }: {
-  metrics: ScrollMetrics;
-  opacity: Animated.SharedValue<number>;
-  colors: { thumb: string; track: string };
+  viewport: SharedValue<number>;
+  content: SharedValue<number>;
+  offset: SharedValue<number>;
+  opacity: SharedValue<number>;
+  thumbColor: string;
 }) {
-  const track = Math.max(0, metrics.viewport - SCROLLBAR_END_INSET * 2);
-  const layout = scrollThumbLayout(metrics.viewport, metrics.content, metrics.offset, track);
-  const fade = useAnimatedStyle(() => ({ opacity: opacity.value }));
-
-  if (!layout) return null;
+  const thumbStyle = useAnimatedStyle(() => {
+    const track = Math.max(0, viewport.value - SCROLLBAR_END_INSET * 2);
+    const view = viewport.value;
+    const size = content.value;
+    if (size <= view + 1 || track <= 0) {
+      return { opacity: 0, height: 0, transform: [{ translateY: 0 }] };
+    }
+    const thumb = Math.min(track, Math.max(SCROLLBAR_MIN_THUMB, (view / size) * track));
+    const maxScroll = size - view;
+    const travel = Math.max(0, track - thumb);
+    const clamped = Math.min(maxScroll, Math.max(0, offset.value));
+    const y = maxScroll <= 0 ? 0 : (clamped / maxScroll) * travel;
+    return {
+      opacity: opacity.value,
+      height: thumb,
+      transform: [{ translateY: y }],
+    };
+  });
 
   return (
     <Animated.View
       pointerEvents="none"
       importantForAccessibility="no-hide-descendants"
-      style={[styles.track, { backgroundColor: colors.track }, fade]}
-    >
-      <View
-        style={[
-          styles.thumb,
-          {
-            backgroundColor: colors.thumb,
-            height: layout.thumb,
-            transform: [{ translateY: layout.y }],
-          },
-        ]}
-      />
-    </Animated.View>
+      style={[styles.thumb, { backgroundColor: thumbColor }, thumbStyle]}
+    />
   );
 }
 
@@ -180,18 +186,12 @@ export function splitScrollLayoutStyle(style: StyleProp<ViewStyle>): {
 }
 
 const styles = StyleSheet.create({
-  track: {
+  thumb: {
     position: "absolute",
     top: SCROLLBAR_END_INSET,
-    bottom: SCROLLBAR_END_INSET,
     right: SCROLLBAR_EDGE_INSET,
     width: SCROLLBAR_THUMB_WIDTH,
-    borderRadius: 99,
-    overflow: "hidden",
+    borderRadius: radius.full,
     zIndex: 4,
-  },
-  thumb: {
-    width: SCROLLBAR_THUMB_WIDTH,
-    borderRadius: 99,
   },
 });
