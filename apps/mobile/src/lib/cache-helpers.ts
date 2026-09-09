@@ -120,6 +120,7 @@ function isBookmarkRecord(data: unknown): data is BookmarkDto {
     !!data &&
     typeof data === "object" &&
     typeof (data as { id?: unknown }).id === "string" &&
+    typeof (data as { createdAt?: unknown }).createdAt === "string" &&
     Array.isArray((data as { tags?: unknown }).tags)
   );
 }
@@ -259,12 +260,14 @@ export function removeBookmarksEverywhere(qc: QueryClient, ids: ReadonlySet<stri
 export function collectCachedBookmarks(qc: QueryClient): BookmarkDto[] {
   const byId = new Map<string, BookmarkDto>();
   for (const query of qc.getQueryCache().getAll()) {
+    const key = query.queryKey;
+    if (!Array.isArray(key) || key[0] !== "bookmarks") continue;
     const data = query.state.data;
     if (isPagedBookmarks(data)) {
       for (const page of data.pages) {
         if (!page || !Array.isArray(page.items)) continue;
         for (const item of page.items) {
-          if (item?.id) byId.set(item.id, item);
+          if (isBookmarkRecord(item)) byId.set(item.id, item);
         }
       }
     } else if (isBookmarkRecord(data)) {

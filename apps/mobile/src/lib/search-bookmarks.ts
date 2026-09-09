@@ -46,7 +46,8 @@ function isArticleBookmark(bookmark: BookmarkDto): boolean {
 }
 
 export function bookmarkPassesSearchFilters(bookmark: BookmarkDto, filters: SearchFilters): boolean {
-  if (filters.tagIds.some((id) => !bookmark.tags.some((tag) => tag.id === id))) return false;
+  const tags = Array.isArray(bookmark.tags) ? bookmark.tags : [];
+  if (filters.tagIds.some((id) => !tags.some((tag) => tag.id === id))) return false;
   if (filters.status === "unread" && bookmark.isRead) return false;
   if (filters.status === "read" && !bookmark.isRead) return false;
   if (filters.kind === "article" && !isArticleBookmark(bookmark)) return false;
@@ -57,7 +58,8 @@ export function bookmarkPassesSearchFilters(bookmark: BookmarkDto, filters: Sear
 const haystackMemo = new Map<string, { stamp: string; haystack: string }>();
 
 function haystackStamp(bookmark: BookmarkDto): string {
-  return `${bookmark.updatedAt}\0${bookmark.title}\0${bookmark.url}\0${bookmark.domain}\0${bookmark.description ?? ""}\0${bookmark.author ?? ""}\0${bookmark.tags.map((tag) => tag.name).join("\0")}`;
+  const tags = Array.isArray(bookmark.tags) ? bookmark.tags : [];
+  return `${bookmark.updatedAt ?? ""}\0${bookmark.title ?? ""}\0${bookmark.url ?? ""}\0${bookmark.domain ?? ""}\0${bookmark.description ?? ""}\0${bookmark.author ?? ""}\0${tags.map((tag) => tag.name).join("\0")}`;
 }
 
 /** Cached haystack so typing does not rebuild lowercase blobs on every key. */
@@ -65,7 +67,10 @@ function haystackFor(bookmark: BookmarkDto): string {
   const stamp = haystackStamp(bookmark);
   const hit = haystackMemo.get(bookmark.id);
   if (hit && hit.stamp === stamp) return hit.haystack;
-  const haystack = bookmarkSearchHaystack(bookmark);
+  const haystack = bookmarkSearchHaystack({
+    ...bookmark,
+    tags: Array.isArray(bookmark.tags) ? bookmark.tags : [],
+  });
   if (haystackMemo.size > 4000) haystackMemo.clear();
   haystackMemo.set(bookmark.id, { stamp, haystack });
   return haystack;
@@ -120,7 +125,10 @@ export function compileSearchResults({
   const merged = [...byId.values()];
   const q = tokens.join(" ");
   if (!q) {
-    return merged.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
+    return merged.sort(
+      (a, b) =>
+        (b.createdAt ?? "").localeCompare(a.createdAt ?? "") || a.id.localeCompare(b.id),
+    );
   }
 
   const ranked = merged.map((bookmark) => ({
@@ -129,7 +137,7 @@ export function compileSearchResults({
   }));
   ranked.sort((a, b) => {
     if (a.rank !== b.rank) return b.rank - a.rank;
-    const byDate = b.bookmark.createdAt.localeCompare(a.bookmark.createdAt);
+    const byDate = (b.bookmark.createdAt ?? "").localeCompare(a.bookmark.createdAt ?? "");
     if (byDate !== 0) return byDate;
     return a.bookmark.id.localeCompare(b.bookmark.id);
   });

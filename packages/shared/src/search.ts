@@ -38,7 +38,7 @@ export function bookmarkSearchHaystack(bookmark: SearchableBookmark): string {
     bookmark.domain,
     bookmark.description ?? "",
     bookmark.author ?? "",
-    bookmark.tags.map((tag) => tag.name).join(" "),
+    bookmark.tags?.map((tag) => tag.name).join(" ") ?? "",
     bookmark.contentText ?? "",
   ]
     .join("\n")

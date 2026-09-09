@@ -276,6 +276,27 @@ test("body-only server hits still have to pass the active filters", () => {
   );
 });
 
+test("compileSearchResults does not throw on incomplete cache rows", () => {
+  const broken = {
+    id: "x",
+    title: "Inbox",
+    url: "",
+    domain: "",
+    description: null,
+    tags: undefined,
+    createdAt: undefined,
+  } as unknown as BookmarkDto;
+  assert.doesNotThrow(() => {
+    compileSearchResults({
+      query: "in",
+      filters: none,
+      serverItems: [],
+      cachedItems: [broken],
+      serverMatchesQuery: false,
+    });
+  });
+});
+
 test("reuseSearchResults keeps the same array when order is unchanged", () => {
   const first = bookmark({ id: "a", title: "Morning" });
   const compiled = [first];

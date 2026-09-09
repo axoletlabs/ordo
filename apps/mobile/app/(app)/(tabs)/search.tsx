@@ -15,7 +15,7 @@ import { MoveSheet } from "../../../src/components/bookmarks/MoveSheet";
 import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
 import { SearchFilterMenu } from "../../../src/components/bookmarks/SearchFilterMenu";
 import { ScreenContent } from "../../../src/components/ui/ScreenContent";
-import { ThemedAnimatedFlatList } from "../../../src/components/ui/ThemedScrollView";
+import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
 import { Input } from "../../../src/components/ui/Input";
 import { EmptyState } from "../../../src/components/ui/EmptyState";
 import { Button } from "../../../src/components/ui/Button";
@@ -72,7 +72,7 @@ const SearchField = React.memo(function SearchField({
 
   const commit = (text: string) => {
     setInput(text);
-    React.startTransition(() => onQueryChange(text));
+    onQueryChange(text);
   };
 
   const trimmed = input.trim();
@@ -347,12 +347,13 @@ export default function SearchScreen() {
   ) : null;
 
   const listPane = (
-    <ThemedAnimatedFlatList
+    <ThemedFlashList
       data={items}
       extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}:${trimmed}:${filters.tagIds.join(",")}:${filters.status}:${filters.kind}`}
       keyExtractor={(b: BookmarkDto) => b.id}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
+      estimatedItemSize={108}
       renderItem={renderBookmark}
       ListEmptyComponent={empty ? <View style={styles.emptyList}>{empty}</View> : null}
       ListFooterComponent={

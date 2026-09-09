@@ -8,8 +8,6 @@ import {
   StyleSheet,
   TextInput,
   View,
-  type NativeSyntheticEvent,
-  type TextInputChangeEventData,
   type TextInputProps,
   type ViewStyle,
 } from "react-native";
@@ -56,12 +54,6 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
       ? resolveFont("mono", "400")
       : resolveFont("sans", "400");
 
-  const handleChange = (event: NativeSyntheticEvent<TextInputChangeEventData>) => {
-    onChange?.(event);
-    const text = event.nativeEvent.text;
-    if (typeof text === "string") onChangeText?.(text);
-  };
-
   return (
     <View style={containerStyle}>
       {label ? (
@@ -96,7 +88,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
             setFocused(false);
             onBlur?.(e);
           }}
-          onChange={handleChange}
+          onChange={onChange}
           onChangeText={onChangeText}
           style={[
             styles.input,
