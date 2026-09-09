@@ -15,6 +15,7 @@ import {
 } from "react-native";
 import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
+import { AppIcon } from "./PinIcon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "./Text";
 import { OverlayPortal } from "./overlay-host";
@@ -171,7 +172,7 @@ export function ContextMenuItem({
         (pressed || hovered) && !inactive ? { backgroundColor: highlight } : null,
       ]}
     >
-      {icon ? <Ionicons name={icon} size={18} color={color} /> : <View style={styles.iconSlot} />}
+      {icon ? <AppIcon name={icon} size={18} color={color} /> : <View style={styles.iconSlot} />}
       <Text variant="body" style={[styles.itemLabel, { color }]} numberOfLines={1}>
         {label}
       </Text>

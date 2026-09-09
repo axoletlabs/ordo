@@ -3,6 +3,7 @@
  */
 import React, { useEffect, useState } from "react";
 import { Ionicons } from "@expo/vector-icons";
+import { PinIcon } from "../ui/PinIcon";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { UnlockForm } from "./LockPrompt";
@@ -143,7 +144,7 @@ export function MoveSheet({
                   trailing={
                     isRootDestination(item) ? undefined : (
                       <>
-                        {item.pinned ? <Ionicons name="pin" size={14} color={palette.accent} /> : null}
+                        {item.pinned ? <PinIcon size={14} color={palette.accent} /> : null}
                         {item.protected ? <Ionicons name="lock-closed" size={14} color={palette.textTertiary} /> : null}
                         <Text variant="footnote" color="tertiary">{item.bookmarkCount}</Text>
                       </>

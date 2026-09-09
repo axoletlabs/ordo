@@ -1,6 +1,7 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { AppIcon } from "../ui/PinIcon";
 import { PressableScale } from "../ui/PressableScale";
 import { Text } from "../ui/Text";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -58,7 +59,7 @@ export function SelectionActionBar({
                 }}
                 style={[styles.action, muted && styles.disabled]}
               >
-                <Ionicons name={action.icon} size={22} color={color} />
+                <AppIcon name={action.icon} size={22} color={color} />
                 <Text variant="caption" style={{ color }} numberOfLines={1}>
                   {action.label}
                 </Text>

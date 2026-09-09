@@ -6,6 +6,7 @@ import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { PressableScale } from "../ui/PressableScale";
+import { PinIcon } from "../ui/PinIcon";
 import { Text } from "../ui/Text";
 import { Badge } from "../ui/Badge";
 import { SelectionMark } from "./SelectionMark";
@@ -144,7 +145,16 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         <View style={styles.content}>
-          <Text variant="headline" numberOfLines={1}>{folder.name}</Text>
+          <View style={styles.titleRow}>
+            <Text variant="headline" numberOfLines={1} style={styles.title}>
+              {folder.name}
+            </Text>
+            {folder.pinned ? (
+              <View style={styles.pin} accessible={false}>
+                <PinIcon size={15} color={palette.accent} />
+              </View>
+            ) : null}
+          </View>
           <View style={styles.metaRow}>
             <Text variant="caption" color="tertiary" numberOfLines={1} style={styles.count}>
               {countLabel}
@@ -154,15 +164,6 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
                 name="lock-closed"
                 size={12}
                 color={palette.textTertiary}
-                style={styles.statusIcon}
-                accessible={false}
-              />
-            ) : null}
-            {folder.pinned ? (
-              <Ionicons
-                name="pin"
-                size={13}
-                color={palette.accent}
                 style={styles.statusIcon}
                 accessible={false}
               />
@@ -207,6 +208,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   content: { flex: 1, minWidth: 0 },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[6] },
+  title: { flex: 1, minWidth: 0 },
+  pin: { flexShrink: 0 },
   metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[6], marginTop: spacing[6] },
   count: { flexShrink: 1 },
   statusIcon: { marginLeft: spacing[2] },
