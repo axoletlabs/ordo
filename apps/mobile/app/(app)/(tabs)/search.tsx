@@ -39,6 +39,7 @@ import { measureAnchor, type MenuAnchorRect } from "../../../src/lib/menu-anchor
 import {
   compileSearchResults,
   EMPTY_SEARCH_FILTERS,
+  reuseSearchResults,
   sanitizeRouteParam,
   searchFiltersActive,
   useDebouncedValue,
@@ -48,8 +49,68 @@ import { layout, radius, spacing } from "../../../src/theme/tokens";
 import type { BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 
-const SERVER_DEBOUNCE_MS = 200;
+const SERVER_DEBOUNCE_MS = 250;
 const URL_SYNC_MS = 1000;
+const EMPTY_BOOKMARKS: BookmarkDto[] = [];
+
+/** Owns the field so keystrokes never wait on compiling or animating the list. */
+const SearchField = React.memo(function SearchField({
+  routeQuery,
+  fetching,
+  onQueryChange,
+}: {
+  routeQuery: string;
+  fetching: boolean;
+  onQueryChange: (query: string) => void;
+}) {
+  const { palette } = useTheme();
+  const [input, setInput] = useState(routeQuery);
+
+  useEffect(() => {
+    setInput(routeQuery);
+  }, [routeQuery]);
+
+  const commit = (text: string) => {
+    setInput(text);
+    React.startTransition(() => onQueryChange(text));
+  };
+
+  const trimmed = input.trim();
+
+  return (
+    <Input
+      value={input}
+      onChangeText={commit}
+      placeholder="Search bookmarks…"
+      autoFocus={false}
+      autoCorrect={false}
+      autoCapitalize="none"
+      returnKeyType="search"
+      enablesReturnKeyAutomatically
+      onSubmitEditing={() => Keyboard.dismiss()}
+      containerStyle={styles.searchField}
+      icon={<Ionicons name="search-outline" size={18} color={palette.textTertiary} />}
+      rightAccessory={
+        trimmed ? (
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+            hitSlop={8}
+            scaleTo={0.85}
+            onPress={() => {
+              haptics.light();
+              commit("");
+            }}
+          >
+            <Ionicons name="close-circle" size={18} color={palette.textFaint} />
+          </PressableScale>
+        ) : fetching ? (
+          <ActivityIndicator size="small" color={palette.textTertiary} />
+        ) : null
+      }
+    />
+  );
+});
 
 export default function SearchScreen() {
   const { palette } = useTheme();
@@ -69,7 +130,7 @@ export default function SearchScreen() {
   const selectedBookmarkId = sanitizeRouteParam(params.bookmark) || undefined;
   const appliedRouteQuery = useRef(routeQuery);
 
-  const [input, setInput] = useState(routeQuery);
+  const [liveQuery, setLiveQuery] = useState(routeQuery);
   const [filters, setFilters] = useState<SearchFilters>(EMPTY_SEARCH_FILTERS);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterAnchor, setFilterAnchor] = useState<MenuAnchorRect | null>(null);
@@ -86,31 +147,36 @@ export default function SearchScreen() {
   const deleteBm = useDeleteBookmark(null);
   const { data: allTags } = useTags();
 
-  const trimmed = input.trim();
+  const trimmed = liveQuery.trim();
   const filtersOn = searchFiltersActive(filters);
   const browsing = trimmed.length > 0 || filtersOn;
-  const serverQ = useDebouncedValue(trimmed, trimmed.length <= 1 ? 0 : SERVER_DEBOUNCE_MS);
+  const serverQ = useDebouncedValue(trimmed, SERVER_DEBOUNCE_MS);
   const urlQuery = useDebouncedValue(trimmed, URL_SYNC_MS);
   const searchEnabled = serverQ.length > 0 || filtersOn;
 
   const search = useInfiniteSearch(serverQ, filters.tagIds, filters.status, searchEnabled);
-  const serverItems = useMemo(() => flattenPages(search.data?.pages ?? []), [search.data]);
+  const serverItems = useMemo(() => {
+    const pages = search.data?.pages;
+    if (!pages?.length) return EMPTY_BOOKMARKS;
+    return flattenPages(pages);
+  }, [search.data]);
   const cachedItems = useMemo(() => {
-    if (!browsing) return [];
+    if (!browsing) return EMPTY_BOOKMARKS;
     return collectCachedBookmarks(queryClient);
   }, [browsing, queryClient, search.dataUpdatedAt]);
-  const items = useMemo(() => {
-    if (!browsing) return [];
+  const compiledItems = useMemo(() => {
+    if (!browsing) return EMPTY_BOOKMARKS;
     return compileSearchResults({
       query: trimmed,
       filters,
       serverItems,
       cachedItems,
-      // Placeholder pages belong to the previous query key. Trusting them as
-      // body-only hits skipped the typed haystack (tag filter + unrelated text).
-      serverMatchesQuery: trimmed === serverQ && !search.isPlaceholderData,
+      serverMatchesQuery: trimmed === serverQ,
     });
-  }, [browsing, cachedItems, filters, search.isPlaceholderData, serverItems, serverQ, trimmed]);
+  }, [browsing, cachedItems, filters, serverItems, serverQ, trimmed]);
+  const itemsRef = useRef(EMPTY_BOOKMARKS);
+  const items = reuseSearchResults(itemsRef.current, compiledItems);
+  itemsRef.current = items;
 
   const selectedBookmarks = useMemo(
     () => items.filter((bookmark) => selection.has(bookmarkKey(bookmark.id))),
@@ -133,7 +199,7 @@ export default function SearchScreen() {
   useEffect(() => {
     if (routeQuery === appliedRouteQuery.current) return;
     appliedRouteQuery.current = routeQuery;
-    setInput(routeQuery);
+    setLiveQuery(routeQuery);
   }, [routeQuery]);
 
   useEffect(() => {
@@ -205,15 +271,17 @@ export default function SearchScreen() {
     }, event);
   }, []);
 
+  const selectionActive = selection.active;
+  const selectionRevision = selection.revision;
   const renderBookmark = useCallback(
     ({ item }: { item: BookmarkDto }) => (
       <BookmarkRow
         bookmark={item}
         searchQuery={trimmed}
-        selectionMode={selection.active}
+        selectionMode={selectionActive}
         selected={
-          selection.active
-            ? selection.has(bookmarkKey(item.id))
+          selectionActive
+            ? selectionRef.current.has(bookmarkKey(item.id))
             : hasDetailPane && item.id === selectedBookmarkId
         }
         omitTagIds={filters.tagIds}
@@ -230,7 +298,8 @@ export default function SearchScreen() {
       onMoreBookmark,
       onPressBookmark,
       selectedBookmarkId,
-      selection,
+      selectionActive,
+      selectionRevision,
       toggleTag,
       trimmed,
     ],
@@ -243,6 +312,10 @@ export default function SearchScreen() {
       : sideNavigation
         ? spacing[32]
         : spacing[96];
+  const listContentStyle = useMemo(
+    () => ({ paddingBottom: listContentPadding }),
+    [listContentPadding],
+  );
 
   const empty = !browsing ? (
     <EmptyState
@@ -276,7 +349,7 @@ export default function SearchScreen() {
   const listPane = (
     <ThemedAnimatedFlatList
       data={items}
-      extraData={`${selection.revision}:${selectedBookmarkId ?? ""}:${trimmed}:${filters.tagIds.join(",")}:${filters.status}:${filters.kind}`}
+      extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}:${trimmed}:${filters.tagIds.join(",")}:${filters.status}:${filters.kind}`}
       keyExtractor={(b: BookmarkDto) => b.id}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
@@ -289,7 +362,7 @@ export default function SearchScreen() {
           </View>
         ) : null
       }
-      contentContainerStyle={{ paddingBottom: listContentPadding }}
+      contentContainerStyle={listContentStyle}
       onEndReached={() => {
         if (search.hasNextPage && !search.isFetchingNextPage) void search.fetchNextPage();
       }}
@@ -328,36 +401,10 @@ export default function SearchScreen() {
       >
         <View style={styles.searchWrap}>
           <View style={styles.searchRow}>
-            <Input
-              value={input}
-              onChangeText={setInput}
-              placeholder="Search bookmarks…"
-              autoFocus={false}
-              autoCorrect={false}
-              autoCapitalize="none"
-              returnKeyType="search"
-              enablesReturnKeyAutomatically
-              onSubmitEditing={() => Keyboard.dismiss()}
-              containerStyle={styles.searchField}
-              icon={<Ionicons name="search-outline" size={18} color={palette.textTertiary} />}
-              rightAccessory={
-                trimmed ? (
-                  <PressableScale
-                    accessibilityRole="button"
-                    accessibilityLabel="Clear search"
-                    hitSlop={8}
-                    scaleTo={0.85}
-                    onPress={() => {
-                      haptics.light();
-                      setInput("");
-                    }}
-                  >
-                    <Ionicons name="close-circle" size={18} color={palette.textFaint} />
-                  </PressableScale>
-                ) : search.isFetching && browsing ? (
-                  <ActivityIndicator size="small" color={palette.textTertiary} />
-                ) : null
-              }
+            <SearchField
+              routeQuery={routeQuery}
+              fetching={search.isFetching && browsing}
+              onQueryChange={setLiveQuery}
             />
             <View ref={filterRef} collapsable={false}>
               <PressableScale
@@ -386,7 +433,7 @@ export default function SearchScreen() {
             </View>
           </View>
 
-          {filtersOn || resultMeta ? (
+          {filtersOn || resultMeta || browsing ? (
             <View style={styles.metaRow}>
               {selectedTags.map((tag) => (
                 <TagChip
@@ -524,6 +571,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexWrap: "wrap",
     gap: spacing[6],
+    minHeight: 28,
   },
   resultCount: { marginLeft: "auto" },
   emptyList: { flexGrow: 1, alignItems: "center", justifyContent: "center", minHeight: 280 },

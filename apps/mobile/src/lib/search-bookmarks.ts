@@ -54,6 +54,23 @@ export function bookmarkPassesSearchFilters(bookmark: BookmarkDto, filters: Sear
   return true;
 }
 
+const haystackMemo = new Map<string, { stamp: string; haystack: string }>();
+
+function haystackStamp(bookmark: BookmarkDto): string {
+  return `${bookmark.updatedAt}\0${bookmark.title}\0${bookmark.url}\0${bookmark.domain}\0${bookmark.description ?? ""}\0${bookmark.author ?? ""}\0${bookmark.tags.map((tag) => tag.name).join("\0")}`;
+}
+
+/** Cached haystack so typing does not rebuild lowercase blobs on every key. */
+function haystackFor(bookmark: BookmarkDto): string {
+  const stamp = haystackStamp(bookmark);
+  const hit = haystackMemo.get(bookmark.id);
+  if (hit && hit.stamp === stamp) return hit.haystack;
+  const haystack = bookmarkSearchHaystack(bookmark);
+  if (haystackMemo.size > 4000) haystackMemo.clear();
+  haystackMemo.set(bookmark.id, { stamp, haystack });
+  return haystack;
+}
+
 function haystackMatches(haystack: string, tokens: readonly string[]): boolean {
   return tokens.every((token) => haystack.includes(token));
 }
@@ -64,7 +81,7 @@ function passesTextQuery(
   allowBodyOnlyHit: boolean,
 ): boolean {
   if (tokens.length === 0) return true;
-  if (haystackMatches(bookmarkSearchHaystack(bookmark), tokens)) return true;
+  if (haystackMatches(haystackFor(bookmark), tokens)) return true;
   // List payloads omit article bodies. Keep a row the server already matched
   // for this exact query (title/url/tag did not, but the article did).
   return allowBodyOnlyHit;
@@ -117,6 +134,20 @@ export function compileSearchResults({
     return a.bookmark.id.localeCompare(b.bookmark.id);
   });
   return ranked.map((row) => row.bookmark);
+}
+
+/** Keep the previous array when the visible order did not change, so the list can skip work. */
+export function reuseSearchResults(
+  previous: readonly BookmarkDto[],
+  next: BookmarkDto[],
+): BookmarkDto[] {
+  if (previous.length !== next.length) return next;
+  for (let i = 0; i < next.length; i++) {
+    const a = previous[i]!;
+    const b = next[i]!;
+    if (a.id !== b.id || a.updatedAt !== b.updatedAt || a.isRead !== b.isRead) return next;
+  }
+  return previous as BookmarkDto[];
 }
 
 /** First case-insensitive substring of `query`'s first token, or null. */

@@ -4,6 +4,7 @@ import type { BookmarkDto } from "@ordo/shared";
 import {
   compileSearchResults,
   firstSearchHighlight,
+  reuseSearchResults,
   sanitizeRouteParam,
   searchFiltersActive,
   type SearchFilters,
@@ -273,4 +274,17 @@ test("body-only server hits still have to pass the active filters", () => {
     hits.map((item) => item.id),
     [],
   );
+});
+
+test("reuseSearchResults keeps the same array when order is unchanged", () => {
+  const first = bookmark({ id: "a", title: "Morning" });
+  const compiled = [first];
+  const again = [bookmark({ id: "a", title: "Morning" })];
+  const kept = reuseSearchResults(compiled, again);
+  assert.equal(kept, compiled);
+  const reordered = reuseSearchResults(compiled, [
+    bookmark({ id: "b", title: "Other" }),
+    first,
+  ]);
+  assert.notEqual(reordered, compiled);
 });

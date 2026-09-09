@@ -78,7 +78,6 @@ export function useInfiniteSearch(
     initialPageParam: null as string | null,
     getNextPageParam: (last) => (last.hasMore && last.nextCursor ? last.nextCursor : undefined),
     enabled,
-    placeholderData: (previous) => previous,
   });
 }
 

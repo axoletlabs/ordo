@@ -11,17 +11,20 @@ import {
   StyleSheet,
   View,
   type FlatListProps,
+  type LayoutChangeEvent,
   type ScrollViewProps,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
 import { FlashList, type FlashListProps } from "@shopify/flash-list";
-import Animated, { Easing, LinearTransition } from "react-native-reanimated";
+import Animated, { LinearTransition } from "react-native-reanimated";
 import {
   chainHandlers,
   splitScrollLayoutStyle,
   useVerticalScrollBar,
 } from "./ScrollBar";
 import { scrollViewShouldFill } from "../../theme/scrollbar";
-import { timing } from "../../theme/tokens";
+import { springs } from "../../theme/tokens";
 
 const nativeScrollBarProps = {
   showsVerticalScrollIndicator: Platform.OS === "web",
@@ -164,9 +167,31 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
   );
 }) as <T>(props: FlatListProps<T> & { ref?: React.Ref<FlatList<T>> }) => React.ReactElement;
 
-const SEARCH_LAYOUT = LinearTransition.duration(timing.normal).easing(Easing.out(Easing.cubic));
+const SEARCH_LAYOUT = LinearTransition.springify()
+  .damping(springs.snappy.damping)
+  .stiffness(springs.snappy.stiffness)
+  .mass(springs.snappy.mass);
 
-/** FlatList with a short layout transition for search reordering. */
+function SearchCellRenderer({
+  onLayout,
+  children,
+  style,
+}: {
+  onLayout?: (event: LayoutChangeEvent) => void;
+  children: React.ReactNode;
+  style?: StyleProp<ViewStyle>;
+}) {
+  return (
+    <Animated.View layout={SEARCH_LAYOUT} onLayout={onLayout} style={style} collapsable={false}>
+      {children}
+    </Animated.View>
+  );
+}
+
+/**
+ * FlatList whose rows slide when the data order changes. Windowed, no enter/exit
+ * fades — those were what made search hitch and skip the motion.
+ */
 export function ThemedAnimatedFlatList<T>(
   props: Omit<FlatListProps<T>, "CellRendererComponent">,
 ) {
@@ -189,11 +214,14 @@ export function ThemedAnimatedFlatList<T>(
       style={[styles.host, fill ? styles.fill : null, wrapper]}
       onLayout={chainHandlers(bar.onLayout, onLayout)}
     >
-      <Animated.FlatList
+      <FlatList
+        windowSize={7}
+        maxToRenderPerBatch={8}
+        initialNumToRender={12}
+        updateCellsBatchingPeriod={50}
         {...rest}
         {...nativeScrollBarProps}
-        removeClippedSubviews={false}
-        itemLayoutAnimation={SEARCH_LAYOUT}
+        CellRendererComponent={SearchCellRenderer}
         showsVerticalScrollIndicator={
           Platform.OS === "web" ? (showsVerticalScrollIndicator ?? true) : false
         }
