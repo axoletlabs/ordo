@@ -16,6 +16,7 @@ import { haptics } from "../../lib/haptics";
 import { menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { radius, spacing } from "../../theme/tokens";
 import { useFolderUnlocked } from "../../hooks/use-folders";
+import { useFolderTokenStore } from "../../store/folder-tokens";
 import { FolderLockIcon } from "./FolderLockIcon";
 import {
   EMPTY_SEARCH_FILTERS,
@@ -47,6 +48,7 @@ export function SearchFilterMenu({
   folders,
   filters,
   onChange,
+  onUnlockFolder,
 }: {
   visible: boolean;
   onDismiss: () => void;
@@ -55,6 +57,7 @@ export function SearchFilterMenu({
   folders: readonly FolderDto[];
   filters: SearchFilters;
   onChange: React.Dispatch<React.SetStateAction<SearchFilters>>;
+  onUnlockFolder?: (folder: FolderDto) => void;
 }) {
   const { palette } = useTheme();
   const [page, setPage] = useState<FilterPage>("root");
@@ -117,13 +120,19 @@ export function SearchFilterMenu({
     }));
   };
 
-  const toggleFolder = (folderId: string) => {
-    onChange((prev) => ({
-      ...prev,
-      folderIds: prev.folderIds.includes(folderId)
-        ? prev.folderIds.filter((id) => id !== folderId)
-        : [...prev.folderIds, folderId],
-    }));
+  const toggleFolder = (folder: FolderDto) => {
+    if (filters.folderIds.includes(folder.id)) {
+      onChange((prev) => ({
+        ...prev,
+        folderIds: prev.folderIds.filter((id) => id !== folder.id),
+      }));
+      return;
+    }
+    if (folder.protected && !useFolderTokenStore.getState().get(folder.id)) {
+      onUnlockFolder?.(folder);
+      return;
+    }
+    onChange((prev) => ({ ...prev, folderIds: [...prev.folderIds, folder.id] }));
   };
 
   const toggleUnfiled = () => {
@@ -236,7 +245,7 @@ export function SearchFilterMenu({
                 selected={filters.folderIds.includes(folder.id)}
                 locked={folder.protected}
                 folderId={folder.id}
-                onPress={() => toggleFolder(folder.id)}
+                onPress={() => toggleFolder(folder)}
               />
             ))
           )}

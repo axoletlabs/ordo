@@ -13,7 +13,7 @@ import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools
 import { BookmarkActionsSheet } from "../../../src/components/bookmarks/BookmarkActionsSheet";
 import { MoveSheet } from "../../../src/components/bookmarks/MoveSheet";
 import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
-import { SearchFilterMenu } from "../../../src/components/bookmarks/SearchFilterMenu";
+import { LockPrompt } from "../../../src/components/bookmarks/LockPrompt";
 import { ScreenContent } from "../../../src/components/ui/ScreenContent";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
 import { Input } from "../../../src/components/ui/Input";
@@ -50,7 +50,7 @@ import {
   type SearchFilters,
 } from "../../../src/lib/search-bookmarks";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
-import type { BookmarkDto } from "@ordo/shared";
+import type { BookmarkDto, FolderDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 import { estimateBookmarkRowSize } from "../../../src/lib/bookmark-row-layout";
 import { registerSearchFieldFocus } from "../../../src/lib/search-field-focus";
@@ -204,6 +204,7 @@ export default function SearchScreen() {
   const listFilters = useDeferredLayoutValue(filters, searchFiltersEqual);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterAnchor, setFilterAnchor] = useState<MenuAnchorRect | null>(null);
+  const [unlockFolder, setUnlockFolder] = useState<FolderDto | null>(null);
   const [actionBm, setActionBm] = useState<BookmarkDto | null>(null);
   const [bookmarkAnchor, setBookmarkAnchor] = useState<MenuAnchorRect | null>(null);
   const [moveTarget, setMoveTarget] = useState<BookmarkDto | null>(null);
@@ -661,6 +662,28 @@ export default function SearchScreen() {
         folders={allFolders ?? []}
         filters={filters}
         onChange={setFilters}
+        onUnlockFolder={(folder) => {
+          setFilterOpen(false);
+          setUnlockFolder(folder);
+        }}
+      />
+      <LockPrompt
+        visible={!!unlockFolder}
+        folderId={unlockFolder?.id ?? ""}
+        folderName={unlockFolder?.name}
+        lockType={unlockFolder?.lockType}
+        pinLength={unlockFolder?.pinLength}
+        onDismiss={() => setUnlockFolder(null)}
+        onUnlocked={() => {
+          const folder = unlockFolder;
+          setUnlockFolder(null);
+          if (!folder) return;
+          setFilters((prev) =>
+            prev.folderIds.includes(folder.id)
+              ? prev
+              : { ...prev, folderIds: [...prev.folderIds, folder.id] },
+          );
+        }}
       />
       <BookmarkActionsSheet
         visible={!!actionBm}
