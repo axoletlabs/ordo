@@ -6,7 +6,7 @@
  * Native `forceDarkOn` is skipped: it is a no-op on current Android targets
  * and would double-invert with the script.
  */
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
 import { WebView } from "react-native-webview";
 import { WEBSITE_FORCE_DARK_SCRIPT } from "../../lib/website-force-dark";
@@ -29,6 +29,12 @@ export function BookmarkBrowser({ url }: BookmarkBrowserProps) {
     ? resolvePalette("dark", amoled, "dark").background
     : palette.background;
 
+  useEffect(() => {
+    setLoading(true);
+    const hide = setTimeout(() => setLoading(false), 6000);
+    return () => clearTimeout(hide);
+  }, [url, forceWebsiteDark]);
+
   return (
     <View style={styles.wrap}>
       <WebView
@@ -39,6 +45,10 @@ export function BookmarkBrowser({ url }: BookmarkBrowserProps) {
         startInLoadingState={false}
         onLoadStart={() => setLoading(true)}
         onLoadEnd={() => setLoading(false)}
+        onLoadProgress={({ nativeEvent }) => {
+          if (nativeEvent.progress >= 1) setLoading(false);
+        }}
+        onError={() => setLoading(false)}
         setSupportMultipleWindows={false}
         nestedScrollEnabled
         sharedCookiesEnabled

@@ -78,12 +78,13 @@ test("a real dark body can still drop invert", () => {
   );
 });
 
-test("injected script keeps invert sticky and ends with the iOS sentinel", () => {
+test("injected script inverts without observing the document tree", () => {
   assert.match(WEBSITE_FORCE_DARK_SCRIPT, new RegExp(WEBSITE_FORCE_DARK_INVERT_CLASS));
-  assert.match(WEBSITE_FORCE_DARK_SCRIPT, /classList\.contains\(CLASS_NAME\)/);
   assert.match(WEBSITE_FORCE_DARK_SCRIPT, /html\{background-color:#fff/);
-  assert.match(WEBSITE_FORCE_DARK_SCRIPT, /MutationObserver/);
+  assert.match(WEBSITE_FORCE_DARK_SCRIPT, /DOMContentLoaded/);
   assert.match(WEBSITE_FORCE_DARK_SCRIPT, new RegExp(String(FORCE_DARK_LIGHT_LUMINANCE)));
+  assert.doesNotMatch(WEBSITE_FORCE_DARK_SCRIPT, /MutationObserver/);
+  assert.doesNotMatch(WEBSITE_FORCE_DARK_SCRIPT, /childList/);
   assert.doesNotMatch(WEBSITE_FORCE_DARK_SCRIPT, /color-scheme/);
   assert.match(WEBSITE_FORCE_DARK_SCRIPT, /true;\s*$/);
 });

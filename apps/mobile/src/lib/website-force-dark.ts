@@ -68,12 +68,19 @@ export function pageNeedsForceDarkInvert(
 
 /**
  * Document-start + load user script. Ends with `true;` for iOS WKWebView.
- * Keep the invert heuristic in sync with `pageNeedsForceDarkInvert`.
+ *
+ * No MutationObserver: watching html/head during parse starves the load so
+ * the WebView never reaches onLoadEnd. Keep the invert heuristic in sync
+ * with `pageNeedsForceDarkInvert`.
  */
 export const WEBSITE_FORCE_DARK_SCRIPT = `(function(){
   var CLASS_NAME = '${WEBSITE_FORCE_DARK_INVERT_CLASS}';
   var STYLE_ID = 'ordo-force-dark-style';
   var LIGHT = ${FORCE_DARK_LIGHT_LUMINANCE};
+  var INVERT_CSS =
+    'html{background-color:#fff!important;filter:invert(1) hue-rotate(180deg)!important}' +
+    'html img,html video,html picture,html canvas,html [style*="background-image"]' +
+    '{filter:invert(1) hue-rotate(180deg)!important}';
   function luminance(color) {
     if (!color) return null;
     var n = String(color).trim().toLowerCase();
@@ -90,24 +97,24 @@ export const WEBSITE_FORCE_DARK_SCRIPT = `(function(){
     }
     return true;
   }
-  var INVERT_CSS =
-    'html{background-color:#fff!important;filter:invert(1) hue-rotate(180deg)!important}' +
-    'html img,html video,html picture,html canvas,html [style*="background-image"]' +
-    '{filter:invert(1) hue-rotate(180deg)!important}';
   function ensureStyle() {
     var root = document.documentElement;
     if (!root) return null;
-    var head = document.head || root;
     var style = document.getElementById(STYLE_ID);
-    if (!style) {
-      style = document.createElement('style');
-      style.id = STYLE_ID;
-      head.appendChild(style);
-    }
+    if (style) return style;
+    style = document.createElement('style');
+    style.id = STYLE_ID;
+    var parent = document.head || root;
+    parent.appendChild(style);
     return style;
   }
   function isInverted(style) {
     return !!(style && style.textContent && style.textContent.indexOf('invert(1)') !== -1);
+  }
+  function paintInvert(style, root, on) {
+    style.textContent = on ? INVERT_CSS : '';
+    if (on) root.classList.add(CLASS_NAME);
+    else root.classList.remove(CLASS_NAME);
   }
   function applyInvert() {
     try {
@@ -118,43 +125,23 @@ export const WEBSITE_FORCE_DARK_SCRIPT = `(function(){
       var inverted = isInverted(style) || root.classList.contains(CLASS_NAME);
       var htmlBg = getComputedStyle(root).backgroundColor;
       var bodyBg = body ? getComputedStyle(body).backgroundColor : null;
-      if (shouldInvert(htmlBg, bodyBg, inverted)) {
-        style.textContent = INVERT_CSS;
-        root.classList.add(CLASS_NAME);
-      } else {
-        style.textContent = '';
-        root.classList.remove(CLASS_NAME);
-      }
+      paintInvert(style, root, shouldInvert(htmlBg, bodyBg, inverted));
     } catch (e) {}
   }
-  function watch() {
-    if (window.__ordoForceDarkWatch) return;
-    window.__ordoForceDarkWatch = true;
-    var root = document.documentElement;
-    if (!root || typeof MutationObserver === 'undefined') return;
-    var obs = new MutationObserver(function() {
-      ensureStyle();
-      applyInvert();
-    });
-    obs.observe(root, { attributes: true, attributeFilter: ['class', 'style'] });
-    var host = document.head || root;
-    obs.observe(host, { childList: true });
-    if (document.body) {
-      obs.observe(document.body, { attributes: true, attributeFilter: ['class', 'style'] });
-    }
-  }
   function boot() {
-    ensureStyle();
-    applyInvert();
-    watch();
+    try {
+      var style = ensureStyle();
+      var root = document.documentElement;
+      if (style && root) paintInvert(style, root, true);
+    } catch (e) {}
+    var refine = function() { applyInvert(); };
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', function() {
-        applyInvert();
-        watch();
-      });
+      document.addEventListener('DOMContentLoaded', refine);
+    } else {
+      refine();
     }
-    var delays = [50, 400, 1200, 2500];
-    for (var i = 0; i < delays.length; i++) setTimeout(applyInvert, delays[i]);
+    var delays = [400, 1200, 2500, 5000];
+    for (var i = 0; i < delays.length; i++) setTimeout(refine, delays[i]);
   }
   if (window.__ordoForceDark) {
     applyInvert();
