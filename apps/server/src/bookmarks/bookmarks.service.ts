@@ -12,6 +12,7 @@ import {
   type CursorPage,
   rankSearchResults,
   tokenizeSearchQuery,
+  tokensAllowArticleText,
 } from "@ordo/shared";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { AppError } from "../common/errors/app-error.js";
@@ -158,7 +159,7 @@ export class BookmarksService implements OnApplicationBootstrap {
     await this.tags.requireOwnedIds(userId, tagIds);
     const authorized = await this.access.authorizedFolderIds(userId, opts.folderTokens ?? []);
     const tokens = tokenizeSearchQuery(term);
-    const includeHiddenFields = tokens.length > 0 && tokens.every((token) => token.length >= 3);
+    const includeHiddenFields = tokensAllowArticleText(tokens);
     const where: Prisma.BookmarkWhereInput = {
       userId,
       AND: [

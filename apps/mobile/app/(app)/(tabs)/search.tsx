@@ -1,6 +1,6 @@
 /**
  * Global bookmark search. Local substring filter runs on the first keystroke;
- * the server catches up shortly after for article-body hits.
+ * the server catches up shortly after for article-body hits (five letters+).
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Keyboard, Pressable, StyleSheet, TextInput, View } from "react-native";
@@ -54,26 +54,30 @@ import { registerSearchFieldFocus } from "../../../src/lib/search-field-focus";
 const SERVER_DEBOUNCE_MS = 250;
 const URL_SYNC_MS = 1000;
 const EMPTY_BOOKMARKS: BookmarkDto[] = [];
+/** Room for the result count + clear control so the TextInput width stays put. */
+const SEARCH_FIELD_TAIL_PAD = 118;
 
 /** Owns the field so keystrokes never wait on compiling or animating the list. */
 const SearchField = React.memo(function SearchField({
   routeQuery,
-  fetching,
-  resultLabel,
+  occupyRight,
   onQueryChange,
 }: {
   routeQuery: string;
-  fetching: boolean;
-  resultLabel: string | null;
+  occupyRight: boolean;
   onQueryChange: (query: string) => void;
 }) {
   const { palette } = useTheme();
   const inputRef = useRef<TextInput>(null);
   const [input, setInput] = useState(routeQuery);
   const [focused, setFocused] = useState(false);
+  const focusedRef = useRef(false);
   const queryFrame = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
 
   useEffect(() => {
+    // Expo Router echoes a lagged `query` param. Writing that back while the
+    // field is focused drops later keystrokes ("hello" → "hel").
+    if (focusedRef.current) return;
     setInput(routeQuery);
   }, [routeQuery]);
 
@@ -106,24 +110,31 @@ const SearchField = React.memo(function SearchField({
     inputRef.current?.blur();
     Keyboard.dismiss();
   };
-  const tail = resultLabel || trimmed || fetching;
 
   return (
     <Input
       ref={inputRef}
       value={input}
       onChangeText={commit}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+      onFocus={() => {
+        focusedRef.current = true;
+        setFocused(true);
+      }}
+      onBlur={() => {
+        focusedRef.current = false;
+        setFocused(false);
+      }}
       placeholder="Search bookmarks…"
       autoFocus={false}
       autoCorrect={false}
+      spellCheck={false}
       autoCapitalize="none"
       returnKeyType="search"
       enablesReturnKeyAutomatically
       onSubmitEditing={() => Keyboard.dismiss()}
       containerStyle={styles.searchField}
       overlayRightAccessory
+      overlayPaddingRight={occupyRight || trimmed ? SEARCH_FIELD_TAIL_PAD : undefined}
       icon={
         focused ? (
           <Pressable
@@ -146,32 +157,19 @@ const SearchField = React.memo(function SearchField({
         )
       }
       rightAccessory={
-        tail ? (
-          <View style={styles.fieldTail} pointerEvents="box-none" collapsable={false}>
-            {resultLabel ? (
-              <View pointerEvents="none">
-                <Text variant="caption" color="tertiary" numberOfLines={1} style={styles.resultLabel}>
-                  {resultLabel}
-                </Text>
-              </View>
-            ) : null}
-            {trimmed ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Clear search"
-                hitSlop={8}
-                onPress={() => {
-                  haptics.light();
-                  commit("");
-                  inputRef.current?.focus();
-                }}
-              >
-                <Ionicons name="close-circle" size={18} color={palette.textFaint} />
-              </Pressable>
-            ) : fetching ? (
-              <ActivityIndicator size="small" color={palette.textTertiary} />
-            ) : null}
-          </View>
+        trimmed ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+            hitSlop={8}
+            onPress={() => {
+              haptics.light();
+              commit("");
+              inputRef.current?.focus();
+            }}
+          >
+            <Ionicons name="close-circle" size={18} color={palette.textFaint} />
+          </Pressable>
         ) : null
       }
     />
@@ -269,7 +267,12 @@ export default function SearchScreen() {
   useEffect(() => {
     if (routeQuery === appliedRouteQuery.current) return;
     appliedRouteQuery.current = routeQuery;
-    setLiveQuery(routeQuery);
+    setLiveQuery((current) => {
+      if (current === routeQuery) return current;
+      // Stale URL echo of an earlier prefix while the user kept typing.
+      if (routeQuery && current.startsWith(routeQuery)) return current;
+      return routeQuery;
+    });
   }, [routeQuery]);
 
   useEffect(() => {
@@ -485,12 +488,30 @@ export default function SearchScreen() {
       >
         <View style={styles.searchWrap}>
           <View style={styles.searchRow}>
-            <SearchField
-              routeQuery={routeQuery}
-              fetching={search.isFetching && browsing}
-              resultLabel={resultMeta}
-              onQueryChange={setLiveQuery}
-            />
+            <View style={styles.searchFieldWrap}>
+              <SearchField
+                routeQuery={routeQuery}
+                occupyRight={filtersOn}
+                onQueryChange={setLiveQuery}
+              />
+              {resultMeta || (search.isFetching && browsing && !trimmed) ? (
+                <View
+                  pointerEvents="none"
+                  style={[
+                    styles.fieldOverlay,
+                    { right: trimmed ? spacing[12] + 18 + spacing[8] : spacing[12] },
+                  ]}
+                >
+                  {resultMeta ? (
+                    <Text variant="caption" color="tertiary" numberOfLines={1} style={styles.resultLabel}>
+                      {resultMeta}
+                    </Text>
+                  ) : (
+                    <ActivityIndicator size="small" color={palette.textTertiary} />
+                  )}
+                </View>
+              ) : null}
+            </View>
             <View ref={filterRef} collapsable={false}>
               <PressableScale
                 accessibilityRole="button"
@@ -629,12 +650,13 @@ const styles = StyleSheet.create({
   content: { flex: 1, width: "100%" },
   searchWrap: { width: "100%", paddingBottom: spacing[6] },
   searchRow: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
+  searchFieldWrap: { flex: 1, minWidth: 0 },
   searchField: { flex: 1, minWidth: 0 },
-  fieldTail: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    gap: spacing[8],
+  fieldOverlay: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    justifyContent: "center",
   },
   resultLabel: { flexShrink: 1, maxWidth: 92 },
   filterBtn: {

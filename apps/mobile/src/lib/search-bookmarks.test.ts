@@ -209,6 +209,40 @@ test("firstSearchHighlight marks the first token in the title", () => {
   assert.equal(firstSearchHighlight("React Query", "zzz"), null);
 });
 
+test("article description and body need five letters", () => {
+  const vaults = bookmark({
+    id: "home",
+    title: "Home",
+    domain: "ente.com",
+    url: "https://ente.com",
+    description: "Welcome to the vaults",
+    contentKind: "article",
+    fetchStatus: "ok",
+  });
+  const four = compileSearchResults({
+    query: "vaul",
+    filters: none,
+    serverItems: [vaults],
+    cachedItems: [vaults],
+    serverMatchesQuery: true,
+  });
+  assert.deepEqual(
+    four.map((item) => item.id),
+    [],
+  );
+  const five = compileSearchResults({
+    query: "vault",
+    filters: none,
+    serverItems: [vaults],
+    cachedItems: [vaults],
+    serverMatchesQuery: true,
+  });
+  assert.deepEqual(
+    five.map((item) => item.id),
+    ["home"],
+  );
+});
+
 test("short queries only match title, URL, domain, and tags", () => {
   const viral = bookmark({
     id: "viral",

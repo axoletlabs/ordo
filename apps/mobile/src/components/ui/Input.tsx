@@ -24,6 +24,8 @@ export interface InputProps extends Omit<TextInputProps, "style"> {
   rightAccessory?: React.ReactNode;
   /** Sit the accessory on top of the field so empty space still focuses the input. */
   overlayRightAccessory?: boolean;
+  /** Skip measuring the overlay; avoids TextInput padding jumps while typing. */
+  overlayPaddingRight?: number;
   mono?: boolean;
   containerStyle?: ViewStyle;
 }
@@ -35,6 +37,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   icon,
   rightAccessory,
   overlayRightAccessory,
+  overlayPaddingRight,
   mono,
   containerStyle,
   onFocus,
@@ -58,6 +61,12 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
       ? resolveFont("mono", "400")
       : resolveFont("sans", "400");
   const overlay = overlayRightAccessory && !!rightAccessory;
+  const padRight =
+    overlayPaddingRight != null
+      ? overlayPaddingRight
+      : overlay && overlayWidth > 0
+        ? overlayWidth + spacing[8]
+        : undefined;
 
   return (
     <View style={containerStyle}>
@@ -98,14 +107,14 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
           style={[
             styles.input,
             { color: palette.text, fontFamily },
-            overlay && overlayWidth > 0 ? { paddingRight: overlayWidth + spacing[8] } : null,
+            padRight != null ? { paddingRight: padRight } : null,
           ]}
         />
         {rightAccessory ? (
           <View
             pointerEvents={overlay ? "box-none" : "auto"}
             onLayout={
-              overlay
+              overlay && overlayPaddingRight == null
                 ? (event) => {
                     const width = Math.ceil(event.nativeEvent.layout.width);
                     setOverlayWidth((current) => (current === width ? current : width));

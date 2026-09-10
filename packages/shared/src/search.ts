@@ -26,6 +26,13 @@ export function tokenizeSearchQuery(query: string): string[] {
   return q ? q.split(" ") : [];
 }
 
+/** Article body, description, and author are searched only when every token is this long. */
+export const MIN_ARTICLE_TEXT_QUERY_LENGTH = 5;
+
+export function tokensAllowArticleText(tokens: readonly string[]): boolean {
+  return tokens.length > 0 && tokens.every((token) => token.length >= MIN_ARTICLE_TEXT_QUERY_LENGTH);
+}
+
 function fold(value: string | null | undefined): string {
   return (value ?? "").toLocaleLowerCase("en-US");
 }

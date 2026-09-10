@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import {
   bookmarkMatchRank,
   bookmarkSearchHaystack,
+  tokensAllowArticleText,
   tokenizeSearchQuery,
   type BookmarkDto,
 } from "@ordo/shared";
@@ -84,12 +85,6 @@ function haystackStamp(bookmark: BookmarkDto, omitTagIds: ReadonlySet<string>): 
   return `${bookmark.updatedAt ?? ""}\0${bookmark.title ?? ""}\0${bookmark.url ?? ""}\0${bookmark.domain ?? ""}\0${bookmark.description ?? ""}\0${bookmark.author ?? ""}\0${bookmark.contentKind ?? ""}\0${bookmark.fetchStatus ?? ""}\0${tagNames}`;
 }
 
-const MIN_HIDDEN_FIELD_TOKEN = 3;
-
-function tokensAllowHiddenFields(tokens: readonly string[]): boolean {
-  return tokens.length > 0 && tokens.every((token) => token.length >= MIN_HIDDEN_FIELD_TOKEN);
-}
-
 /** Cached haystack so typing does not rebuild lowercase blobs on every key. */
 function haystackFor(
   bookmark: BookmarkDto,
@@ -125,7 +120,7 @@ function passesTextQuery(
   omitTagIds: ReadonlySet<string>,
 ): boolean {
   if (tokens.length === 0) return true;
-  const visibleOnly = !tokensAllowHiddenFields(tokens);
+  const visibleOnly = !tokensAllowArticleText(tokens);
   if (haystackMatches(haystackFor(bookmark, omitTagIds, visibleOnly), tokens)) return true;
   if (!allowBodyOnlyHit || visibleOnly || !isArticleBookmark(bookmark)) return false;
   // Server rows that only match because the active tag's name contains the

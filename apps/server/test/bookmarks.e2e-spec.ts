@@ -1363,6 +1363,26 @@ describe("Bookmarks & Folders (e2e)", () => {
       expect(res.body.items.map((b: { title: string }) => b.title)).toEqual(["Shadowflex Hoodie"]);
     });
 
+    it("does not match article text until the query is five letters", async () => {
+      const { agent, userId } = await setup();
+      await ctx.prisma.bookmark.create({
+        data: {
+          userId,
+          folderId: null,
+          url: "https://ente.com/home",
+          title: "Home",
+          domain: "ente.com",
+          contentText: "Welcome to the vaults",
+        },
+      });
+
+      const four = await agent.get("/api/bookmarks/search?q=vaul").expect(200);
+      expect(four.body.items).toHaveLength(0);
+
+      const five = await agent.get("/api/bookmarks/search?q=vault").expect(200);
+      expect(five.body.items.map((b: { title: string }) => b.title)).toEqual(["Home"]);
+    });
+
     it("filters search results to unread bookmarks", async () => {
       const { agent, userId } = await setup();
       await ctx.prisma.bookmark.create({
