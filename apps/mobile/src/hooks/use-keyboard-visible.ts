@@ -2,8 +2,12 @@ import { useEffect, useState } from "react";
 import { Keyboard, Platform } from "react-native";
 
 function readKeyboardVisible() {
-  const metrics = Keyboard.metrics();
-  return !!metrics && metrics.height > 0;
+  try {
+    const metrics = typeof Keyboard.metrics === "function" ? Keyboard.metrics() : null;
+    return !!metrics && metrics.height > 0;
+  } catch {
+    return false;
+  }
 }
 
 /**

@@ -51,6 +51,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, [themeMode, amoled, systemScheme]);
 
   useEffect(() => {
+    if (typeof Appearance.setColorScheme !== "function") return;
     Appearance.setColorScheme(themeMode === "system" ? null : themeMode);
   }, [themeMode]);
 
