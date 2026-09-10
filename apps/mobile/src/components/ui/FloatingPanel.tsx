@@ -9,7 +9,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { OverlayPortal } from "./overlay-host";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -51,9 +51,11 @@ export function FloatingPanel({
   const scrimStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
   }));
+  // Opacity only: a transform on this card (even translateY(0)) puts every
+  // nested <input> in a containing transform, and browsers then walk the
+  // caret one character off on Backspace.
   const panelStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
-    transform: [{ translateY: interpolate(progress.value, [0, 1], [6, 0]) }],
   }));
 
   if (!rendered) return null;

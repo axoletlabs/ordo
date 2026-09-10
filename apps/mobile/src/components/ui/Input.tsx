@@ -5,10 +5,12 @@
  */
 import React, { useState } from "react";
 import {
+  Platform,
   StyleSheet,
   TextInput,
   View,
   type TextInputProps,
+  type TextStyle,
   type ViewStyle,
 } from "react-native";
 import { Text } from "./Text";
@@ -45,6 +47,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   onChange,
   onChangeText,
   secureTextEntry,
+  keyboardType,
   ...rest
 }, ref) {
   const { palette } = useTheme();
@@ -67,6 +70,17 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
       : overlay && overlayWidth > 0
         ? overlayWidth + spacing[8]
         : undefined;
+  // RN-web maps keyboardType="url" onto <input type="url">, whose caret
+  // walks one extra character on Backspace. Keep a URL keyboard on native.
+  const resolvedKeyboardType =
+    Platform.OS === "web" && keyboardType === "url" ? "default" : keyboardType;
+  const webCaretFix =
+    Platform.OS === "web"
+      ? ({
+          fontVariantLigatures: "none",
+          fontFeatureSettings: '"liga" 0, "calt" 0',
+        } as TextStyle)
+      : null;
 
   return (
     <View style={containerStyle}>
@@ -93,7 +107,9 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
           autoCorrect={false}
           autoCapitalize="none"
           secureTextEntry={secureTextEntry}
+          keyboardType={resolvedKeyboardType}
           {...rest}
+          {...(Platform.OS === "web" ? { dir: "ltr" as const } : null)}
           onFocus={(e) => {
             setFocused(true);
             onFocus?.(e);
@@ -106,7 +122,12 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
           onChangeText={onChangeText}
           style={[
             styles.input,
-            { color: palette.text, fontFamily },
+            {
+              color: palette.text,
+              fontFamily,
+              writingDirection: "ltr",
+            },
+            webCaretFix,
             padRight != null ? { paddingRight: padRight } : null,
           ]}
         />
