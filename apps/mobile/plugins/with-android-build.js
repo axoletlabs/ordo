@@ -98,6 +98,59 @@ function applyCmakePath(code) {
   return code.replace(/android\s*\{/, `android {\n${CMAKE_EXTERNAL_BUILD}`);
 }
 
+/**
+ * Room for a universal APK (offset 0) plus the four ABI splits (1-4).
+ * CI passes the raw workflow run number; Gradle multiplies by this stride
+ * so a later build always outranks every ABI from an earlier one.
+ */
+const VERSION_CODE_ABI_STRIDE = 10;
+const VERSION_CODE_ABI_OFFSETS = {
+  'armeabi-v7a': 1,
+  'arm64-v8a': 2,
+  x86: 3,
+  x86_64: 4,
+};
+
+const ABI_VERSION_BLOCK_MARKER = 'ordoAbiVersionOffsets';
+
+function versionCodeForAbi(base, abi) {
+  const offset = abi == null ? 0 : (VERSION_CODE_ABI_OFFSETS[abi] ?? 0);
+  return base * VERSION_CODE_ABI_STRIDE + offset;
+}
+
+function groovyAbiOffsetMap() {
+  return `[${Object.entries(VERSION_CODE_ABI_OFFSETS)
+    .map(([abi, offset]) => `'${abi}': ${offset}`)
+    .join(', ')}]`;
+}
+
+const ABI_VERSION_BLOCK = [
+  'androidComponents {',
+  '    onVariants(selector().all()) { variant ->',
+  `        def ${ABI_VERSION_BLOCK_MARKER} = ${groovyAbiOffsetMap()}`,
+  '        variant.outputs.each { output ->',
+  "            def abi = output.filters.find { it.filterType.name() == 'ABI' }?.identifier",
+  `            def offset = abi == null ? 0 : (${ABI_VERSION_BLOCK_MARKER}.get(abi) ?: 0)`,
+  `            def base = ((rootProject.findProperty('android.versionCode') ?: '1') as int) * ${VERSION_CODE_ABI_STRIDE}`,
+  '            output.versionCode.set(base + offset)',
+  '        }',
+  '    }',
+  '}',
+].join('\n');
+
+function applyVersionCode(code) {
+  if (!/\bversionCode\s+\(\(\(rootProject\.findProperty\('android\.versionCode'\)/.test(code)) {
+    code = code.replace(
+      /(\bversionCode\s+)\d+/,
+      `$1(((rootProject.findProperty('android.versionCode') ?: '1') as int) * ${VERSION_CODE_ABI_STRIDE})`
+    );
+  }
+  if (!code.includes(ABI_VERSION_BLOCK_MARKER)) {
+    code = `${code.replace(/\s*$/, '')}\n\n${ABI_VERSION_BLOCK}\n`;
+  }
+  return code;
+}
+
 function isSendFilter(filter) {
   return filter.action?.some(
     (action) =>
@@ -115,8 +168,9 @@ function isSendFilter(filter) {
  *
  * app/build.gradle:
  *   - `versionCode` is read from `-Pandroid.versionCode` (default 1) so CI
- *     can pass `run_number * 10000`; with ABI splits enabled the per-ABI
- *     versionCode offsets can never invert ordering between builds.
+ *     can pass the workflow run number. Gradle multiplies by 10 and adds a
+ *     per-ABI offset (0-4) so split APKs stay ordered without four unused
+ *     digits of headroom.
  *   - a `splits { abi { ... } }` block gated on `-Pandroid.buildAbiSplits=true`
  *     emits one APK per ABI plus a universal APK during release builds. Dev
  *     builds instead pass `-PreactNativeArchitectures=arm64-v8a` and skip
@@ -321,10 +375,8 @@ class ShareReceiverActivity : Activity() {
     // parenthesized `as int` cast so Groovy parses it as a single versionCode(int)
     // argument — the bare `... ).toInteger()` form was parsed as
     // `versionCode(arg).toInteger()` and threw IllegalArgumentException: Value is null.
-    code = code.replace(
-      /(\bversionCode\s+)\d+/,
-      `$1((rootProject.findProperty('android.versionCode') ?: '1') as int)`
-    );
+    // Multiply by VERSION_CODE_ABI_STRIDE so ABI offsets cannot invert builds.
+    code = applyVersionCode(code);
 
     // Inject ABI splits inside the android { } block. Disabled unless
     // -Pandroid.buildAbiSplits=true is passed (release builds only).
@@ -356,4 +408,9 @@ class ShareReceiverActivity : Activity() {
 
 module.exports = withAndroidBuild;
 module.exports.APP_JNI_CMAKE = APP_JNI_CMAKE;
+module.exports.ABI_VERSION_BLOCK_MARKER = ABI_VERSION_BLOCK_MARKER;
+module.exports.VERSION_CODE_ABI_OFFSETS = VERSION_CODE_ABI_OFFSETS;
+module.exports.VERSION_CODE_ABI_STRIDE = VERSION_CODE_ABI_STRIDE;
 module.exports.applyCmakePath = applyCmakePath;
+module.exports.applyVersionCode = applyVersionCode;
+module.exports.versionCodeForAbi = versionCodeForAbi;

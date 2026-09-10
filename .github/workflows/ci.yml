@@ -61,9 +61,9 @@ jobs:
           CHANNEL=$(node "$GITHUB_WORKSPACE/.github/scripts/validate-release-tag.js" --channel "$VERSION" --branch "$BRANCH")
           echo "updates_channel=$CHANNEL" >> "$GITHUB_OUTPUT"
           echo "EAS Update channel: $CHANNEL (branch=${BRANCH:-none})"
-          # versionCode scaled by 10000 so per-ABI versionCode offsets from
-          # splits.abi can never invert ordering between builds.
-          echo "version_code=$(( ${{ github.run_number }} * 10000 ))" >> "$GITHUB_OUTPUT"
+          # Base versionCode is the workflow run number. Gradle multiplies by
+          # 10 and adds a per-ABI offset (0-4) so split APKs stay ordered.
+          echo "version_code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
           echo "build_ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
           if [ "${{ github.event_name }}" = "release" ]; then
