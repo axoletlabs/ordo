@@ -1,6 +1,6 @@
 /**
  * Last-three server recents on the Server settings page.
- * Tapping one fills the URL field so the existing health check still has to pass.
+ * Tapping one opens the change-server sheet with that address filled in.
  */
 import React from "react";
 import { StyleSheet, View } from "react-native";
@@ -9,20 +9,18 @@ import { SettingsGroup } from "./SettingsPage";
 import { PressableScale } from "../ui/PressableScale";
 import { Text } from "../ui/Text";
 import { timeAgo } from "../../lib/format";
-import { hostOf, normalizeServerUrl } from "../../lib/server-probe";
+import { hostOf } from "../../lib/server-probe";
 import type { ServerHistoryEntry } from "../../lib/server-history";
 import { useTheme } from "../../theme/ThemeProvider";
 import { radius, spacing } from "../../theme/tokens";
 
 export function ServerHistoryPanel({
   entries,
-  selectedUrl,
   busy,
   onSelect,
   onRemove,
 }: {
   entries: ServerHistoryEntry[];
-  selectedUrl: string;
   busy: boolean;
   onSelect: (url: string) => void;
   onRemove: (url: string) => void;
@@ -30,13 +28,10 @@ export function ServerHistoryPanel({
   const { palette } = useTheme();
   if (entries.length === 0) return null;
 
-  const selectedOrigin = normalizeServerUrl(selectedUrl);
-
   return (
-    <SettingsGroup label="Recent servers" footer="Tap a server to use it as the new address.">
+    <SettingsGroup label="Recent servers">
       {entries.map((entry, index) => {
         const host = hostOf(entry.url);
-        const selected = selectedOrigin === entry.url;
 
         return (
           <View
@@ -49,28 +44,25 @@ export function ServerHistoryPanel({
           >
             <PressableScale
               accessibilityRole="button"
-              accessibilityLabel={`Use recent server ${host}`}
-              accessibilityState={{ disabled: busy, selected }}
+              accessibilityLabel={`Change to recent server ${host}`}
+              accessibilityState={{ disabled: busy }}
               disabled={busy}
               dim
               onPress={() => onSelect(entry.url)}
               style={styles.select}
             >
               <View style={[styles.iconWrap, { backgroundColor: palette.surfaceSecondary }]}>
-                <Ionicons
-                  name={selected ? "checkmark" : "time-outline"}
-                  size={16}
-                  color={selected ? palette.accent : palette.textTertiary}
-                />
+                <Ionicons name="time-outline" size={16} color={palette.textTertiary} />
               </View>
               <View style={styles.body}>
-                <Text variant="bodyStrong" numberOfLines={1} color={selected ? "accent" : "primary"}>
+                <Text variant="bodyStrong" numberOfLines={1}>
                   {host}
                 </Text>
                 <Text variant="footnote" color="tertiary" numberOfLines={1}>
                   Last used {timeAgo(new Date(entry.lastConnectedAt).toISOString())}
                 </Text>
               </View>
+              <Ionicons name="chevron-forward" size={16} color={palette.textFaint} />
             </PressableScale>
             <PressableScale
               accessibilityRole="button"

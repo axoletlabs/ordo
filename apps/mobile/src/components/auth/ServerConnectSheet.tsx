@@ -116,6 +116,13 @@ export interface ServerConnectSheetProps {
   visible: boolean;
   onDismiss: () => void;
   onSaved?: () => void;
+  /** Prefill when the sheet opens. Defaults to the current server URL. */
+  initialUrl?: string;
+  /**
+   * Called with a verified origin instead of writing the URL immediately.
+   * Server settings uses this so it can confirm sign-out first.
+   */
+  onCommit?: (url: string) => void | Promise<void>;
   /** Cross-fade the Change button grey → accent once verification passes (auth flow). */
   animateReadyColor?: boolean;
 }
@@ -124,6 +131,8 @@ export function ServerConnectSheet({
   visible,
   onDismiss,
   onSaved,
+  initialUrl,
+  onCommit,
   animateReadyColor = false,
 }: ServerConnectSheetProps) {
   const { palette } = useTheme();
@@ -133,7 +142,7 @@ export function ServerConnectSheet({
   const recents = visibleServerHistory(serverHistory, currentUrl);
   const inputRef = useRef<TextInput>(null);
 
-  const [url, setUrl] = useState(currentUrl);
+  const [url, setUrl] = useState(initialUrl ?? currentUrl);
   const [probing, setProbing] = useState(false);
   const [up, setUp] = useState(false);
   const [probeDetail, setProbeDetail] = useState<string | null>(null);
@@ -144,7 +153,7 @@ export function ServerConnectSheet({
   // Reset only when the sheet opens (NOT on currentUrl changes).
   useEffect(() => {
     if (visible) {
-      setUrl(currentUrl);
+      setUrl(initialUrl ?? currentUrl);
       setProbing(false);
       setUp(false);
       setProbeDetail(null);
@@ -202,9 +211,13 @@ export function ServerConnectSheet({
     const recheck = await probeServer(normalized);
     setConfirming(false);
     if (recheck.status === "up" && recheck.url) {
-      await setServerUrl(recheck.url);
+      if (onCommit) {
+        await onCommit(recheck.url);
+      } else {
+        await setServerUrl(recheck.url);
+        onSaved?.();
+      }
       onDismiss();
-      onSaved?.();
     } else {
       setUp(false);
       setProbeDetail(recheck.detail ?? null);
