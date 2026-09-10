@@ -4,6 +4,8 @@ import {
   BROWSER_NAV_SCRIPT,
   BROWSER_PTR_SCRIPT,
   BROWSER_PTR_THRESHOLD,
+  browserBlankCoverVisible,
+  browserCanvasScript,
   browserInjectedJavaScript,
   browserProgressBarWidth,
   browserPtrHudOffset,
@@ -109,4 +111,21 @@ test("injected script includes extra user script when provided", () => {
   assert.match(browserInjectedJavaScript("true;"), /__ordoBrowser/);
   assert.match(browserInjectedJavaScript("true;"), /__ordoPtr/);
   assert.match(browserInjectedJavaScript("window.__ordoExtra = 1; true;"), /__ordoExtra/);
+});
+
+test("reload canvas uses the chrome color without locking the site's CSS", () => {
+  const script = browserCanvasScript("#1A1A16");
+  assert.match(script, /#1A1A16/);
+  assert.match(script, /ordo-browser-chrome/);
+  assert.doesNotMatch(script, /!important/);
+  assert.equal(browserCanvasScript("white"), "true;");
+  assert.match(browserInjectedJavaScript("true;", "#EFE7D2"), /#EFE7D2/);
+});
+
+test("blank cover hides the white reload document until load finishes", () => {
+  assert.equal(browserBlankCoverVisible(true, 0, false), true);
+  assert.equal(browserBlankCoverVisible(true, 0.4, false), true);
+  assert.equal(browserBlankCoverVisible(true, 1, false), false);
+  assert.equal(browserBlankCoverVisible(false, 0, false), false);
+  assert.equal(browserBlankCoverVisible(true, 0, true), false);
 });

@@ -23,6 +23,7 @@ import { ActivityIndicator, BackHandler, Linking, Platform, StyleSheet, View } f
 import { WebView, type WebViewNavigation } from "react-native-webview";
 import {
   BROWSER_PTR_THRESHOLD,
+  browserBlankCoverVisible,
   browserInjectedJavaScript,
   browserProgressBarWidth,
   browserPtrHudOffset,
@@ -71,15 +72,19 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     const [refreshing, setRefreshing] = useState(false);
     const [ptrDy, setPtrDy] = useState(0);
     const source = useMemo(() => ({ uri: url }), [url]);
-    const injected = useMemo(
-      () =>
-        browserInjectedJavaScript(forceWebsiteDark ? WEBSITE_FORCE_DARK_SCRIPT : "true;"),
-      [forceWebsiteDark],
-    );
     const chromeBackground = forceWebsiteDark
       ? resolvePalette("dark", amoled, "dark").background
       : palette.background;
+    const injected = useMemo(
+      () =>
+        browserInjectedJavaScript(
+          forceWebsiteDark ? WEBSITE_FORCE_DARK_SCRIPT : "true;",
+          chromeBackground,
+        ),
+      [forceWebsiteDark, chromeBackground],
+    );
     const barWidth = browserProgressBarWidth(progress, loading && !error);
+    const coverBlank = browserBlankCoverVisible(loading, progress, !!error);
     const hudOpacity = browserPtrHudOpacity(ptrDy, refreshing);
     const hudOffset = browserPtrHudOffset(ptrDy);
 
@@ -102,8 +107,11 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
       setError(null);
       setLoading(true);
       setProgress(0);
+      webRef.current?.injectJavaScript(
+        `try{var c=${JSON.stringify(chromeBackground)};document.documentElement.style.backgroundColor=c;if(document.body)document.body.style.backgroundColor=c;}catch(e){}true;`,
+      );
       webRef.current?.reload();
-    }, []);
+    }, [chromeBackground]);
 
     const handleRefresh = useCallback(() => {
       if (refreshingRef.current) return;
@@ -245,7 +253,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           ref={webRef}
           key={`${url}:${forceWebsiteDark ? "dark" : "auto"}`}
           source={source}
-          style={[styles.web, { backgroundColor: chromeBackground }]} // WebView defaults to #fff // WebView defaults to #fff
+          style={[styles.web, { backgroundColor: chromeBackground }]}
           containerStyle={[styles.web, { backgroundColor: chromeBackground }]}
           startInLoadingState={false}
           onLoadStart={beginLoad}
@@ -263,7 +271,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           onRenderProcessGone={recoverProcess}
           setSupportMultipleWindows={false}
           bounces
-          overScrollMode="always"
+          overScrollMode="never"
           cacheEnabled
           cacheMode="LOAD_DEFAULT"
           mixedContentMode="compatibility"
@@ -288,6 +296,12 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           injectedJavaScriptBeforeContentLoaded={injected}
           injectedJavaScript={injected}
         />
+        {coverBlank ? (
+          <View
+            pointerEvents="none"
+            style={[styles.blankCover, { backgroundColor: chromeBackground }]}
+          />
+        ) : null}
         {hudOpacity > 0 ? (
           <View
             pointerEvents="none"
@@ -340,6 +354,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
 const styles = StyleSheet.create({
   wrap: { flex: 1 },
   web: { flex: 1, ...(Platform.OS === "web" ? ({ height: "100%" } as const) : null) },
+  blankCover: { ...StyleSheet.absoluteFillObject },
   ptrHud: {
     position: "absolute",
     top: spacing[8],

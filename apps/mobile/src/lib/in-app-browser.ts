@@ -226,6 +226,42 @@ export function browserPtrHudOffset(dy: number): number {
   return Math.min(Math.max(dy, 0) * 0.4, 36);
 }
 
+/** Hex colors we inject into the document canvas (palette tokens). */
+const CHROME_HEX = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/;
+
+export function isBrowserChromeColor(value: string): boolean {
+  return CHROME_HEX.test(value.trim());
+}
+
+/**
+ * Document-start paint so a reload is not a white blank. No !important, so
+ * the site's own CSS can replace it. Force-dark invert still wins later.
+ */
+export function browserCanvasScript(background: string): string {
+  const color = background.trim();
+  if (!isBrowserChromeColor(color)) return "true;";
+  return `(function(){
+  try {
+    var s = document.getElementById('ordo-browser-chrome') || document.createElement('style');
+    s.id = 'ordo-browser-chrome';
+    s.textContent = 'html,body{background-color:${color}}';
+    var p = document.head || document.documentElement;
+    if (!s.parentNode) p.insertBefore(s, p.firstChild);
+  } catch (e) {}
+})();
+true;`;
+}
+
+/** Cover the WebView until the new document has finished replacing the blank. */
+export function browserBlankCoverVisible(
+  loading: boolean,
+  progress: number,
+  hasError: boolean,
+): boolean {
+  if (hasError || !loading) return false;
+  return progress < 1;
+}
+
 /** Width 0–1 of the top loading bar. A hair of width so a 0% load is visible. */
 export function browserProgressBarWidth(progress: number, loading: boolean): number {
   if (!loading) return 0;
@@ -233,6 +269,10 @@ export function browserProgressBarWidth(progress: number, loading: boolean): num
   return Math.min(progress, 1);
 }
 
-export function browserInjectedJavaScript(extraScript = "true;"): string {
-  return `${BROWSER_NAV_SCRIPT}\n${BROWSER_PTR_SCRIPT}\n${extraScript}`;
+export function browserInjectedJavaScript(extraScript = "true;", canvasBackground?: string): string {
+  const canvas =
+    canvasBackground && isBrowserChromeColor(canvasBackground)
+      ? `${browserCanvasScript(canvasBackground)}\n`
+      : "";
+  return `${BROWSER_NAV_SCRIPT}\n${BROWSER_PTR_SCRIPT}\n${canvas}${extraScript}`;
 }
