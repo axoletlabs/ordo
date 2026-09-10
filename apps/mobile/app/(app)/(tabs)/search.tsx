@@ -14,6 +14,7 @@ import { BookmarkActionsSheet } from "../../../src/components/bookmarks/Bookmark
 import { MoveSheet } from "../../../src/components/bookmarks/MoveSheet";
 import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
 import { LockPrompt } from "../../../src/components/bookmarks/LockPrompt";
+import { SearchFilterMenu } from "../../../src/components/bookmarks/SearchFilterMenu";
 import { ScreenContent } from "../../../src/components/ui/ScreenContent";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
 import { Input } from "../../../src/components/ui/Input";
