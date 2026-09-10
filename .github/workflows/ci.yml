@@ -259,7 +259,9 @@ jobs:
         (inputs.publish_ota == true || inputs.republish_ota_group != '') &&
         (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preview'))
     concurrency:
-      group: ci-ota-${{ github.ref }}
+      # Republish must not share a group with a JS-only push OTA — the push
+      # would cancel the republish before createdAt is rewritten.
+      group: ci-ota-${{ github.ref }}-${{ github.event.inputs.republish_ota_group || 'publish' }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
     permissions:
@@ -278,18 +280,15 @@ jobs:
         run: bash "$GITHUB_WORKSPACE/.github/scripts/wait-for-in-flight-apk.sh" "$GITHUB_REF_NAME"
 
       - name: Setup pnpm
-        if: github.event_name != 'workflow_dispatch' || inputs.republish_ota_group == ''
         uses: pnpm/action-setup@v5
 
       - name: Setup Node.js
-        if: github.event_name != 'workflow_dispatch' || inputs.republish_ota_group == ''
         uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
-        if: github.event_name != 'workflow_dispatch' || inputs.republish_ota_group == ''
         run: pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true
 
       - name: Build shared package
