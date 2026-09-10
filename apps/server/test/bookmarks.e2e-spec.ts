@@ -1105,7 +1105,7 @@ describe("Bookmarks & Folders (e2e)", () => {
       await ctx.prisma.bookmarkTag.create({ data: { bookmarkId: hoodie.id, tagId: shopping.body.id } });
       await ctx.prisma.bookmarkTag.create({ data: { bookmarkId: notepad.id, tagId: shopping.body.id } });
       const lettersInTagName = await agent
-        .get(`/api/bookmarks/search?q=l&tagIds=${shopping.body.id}`)
+        .get(`/api/bookmarks/search?q=hood&tagIds=${shopping.body.id}`)
         .expect(200);
       expect(lettersInTagName.body.items.map((item: { id: string }) => item.id)).toEqual([hoodie.id]);
 
@@ -1408,6 +1408,150 @@ describe("Bookmarks & Folders (e2e)", () => {
 
       const unread = await agent.get("/api/bookmarks/search?q=needle&unread=1").expect(200);
       expect(unread.body.items.map((b: { title: string }) => b.title)).toEqual(["Needle unread"]);
+    });
+
+    it("matches word prefixes on titles and hosts, not mid-word or short body text", async () => {
+      const { agent, userId } = await setup();
+      await ctx.prisma.bookmark.create({
+        data: {
+          userId,
+          folderId: null,
+          url: "https://ente.com/home",
+          title: "Home",
+          domain: "ente.com",
+          contentText: "Need help with vaults and hello from the team.",
+        },
+      });
+      await ctx.prisma.bookmark.create({
+        data: {
+          userId,
+          folderId: null,
+          url: "https://help.craftingstore.net/ssl",
+          title: "CraftingStore SSL Guide",
+          domain: "help.craftingstore.net",
+        },
+      });
+      await ctx.prisma.bookmark.create({
+        data: {
+          userId,
+          folderId: null,
+          url: "https://example.com/helpful",
+          title: "Helpful Guide",
+          domain: "example.com",
+        },
+      });
+      await ctx.prisma.bookmark.create({
+        data: {
+          userId,
+          folderId: null,
+          url: "https://example.com/shelf",
+          title: "Bookshelf notes",
+          domain: "example.com",
+        },
+      });
+
+      const res = await agent.get("/api/bookmarks/search?q=hel").expect(200);
+      expect(res.body.items.map((b: { title: string }) => b.title)).toEqual([
+        "Helpful Guide",
+        "CraftingStore SSL Guide",
+      ]);
+    });
+
+    it("ranks AND title hits above OR hits for multi-word queries", async () => {
+      const { agent, userId } = await setup();
+      await ctx.prisma.bookmark.create({
+        data: {
+          userId,
+          folderId: null,
+          url: "https://example.com/both",
+          title: "CraftingStore SSL Guide",
+          domain: "example.com",
+        },
+      });
+      await ctx.prisma.bookmark.create({
+        data: {
+          userId,
+          folderId: null,
+          url: "https://example.com/ssl",
+          title: "SSL certificates",
+          domain: "example.com",
+        },
+      });
+      await ctx.prisma.bookmark.create({
+        data: {
+          userId,
+          folderId: null,
+          url: "https://example.com/guide",
+          title: "Style guide",
+          domain: "example.com",
+        },
+      });
+
+      const res = await agent.get("/api/bookmarks/search?q=ssl%20guide").expect(200);
+      expect(res.body.items.map((b: { title: string }) => b.title)).toEqual([
+        "CraftingStore SSL Guide",
+        "SSL certificates",
+        "Style guide",
+      ]);
+    });
+
+    it("filters search to selected folders and unfiled bookmarks", async () => {
+      const { agent, userId } = await setup();
+      const research = await ctx.prisma.folder.create({ data: { userId, name: "Research" } });
+      const archive = await ctx.prisma.folder.create({ data: { userId, name: "Archive" } });
+      const filed = await ctx.prisma.bookmark.create({
+        data: {
+          userId,
+          folderId: research.id,
+          url: "https://example.com/filed",
+          title: "React filed",
+          domain: "example.com",
+        },
+      });
+      const unfiled = await ctx.prisma.bookmark.create({
+        data: {
+          userId,
+          folderId: null,
+          url: "https://example.com/unfiled",
+          title: "React unfiled",
+          domain: "example.com",
+        },
+      });
+      await ctx.prisma.bookmark.create({
+        data: {
+          userId,
+          folderId: archive.id,
+          url: "https://example.com/other",
+          title: "React other",
+          domain: "example.com",
+        },
+      });
+
+      const res = await agent
+        .get(`/api/bookmarks/search?q=react&folderIds=${research.id}&unfiled=1`)
+        .expect(200);
+      expect(res.body.items.map((b: { id: string }) => b.id).sort()).toEqual([filed.id, unfiled.id].sort());
+
+      await agent.get(`/api/bookmarks/search?q=react&folderIds=missing`).expect(404);
+    });
+
+    it("applies fuzzy matching only when requested", async () => {
+      const { agent, userId } = await setup();
+      await ctx.prisma.bookmark.create({
+        data: {
+          userId,
+          folderId: null,
+          url: "https://example.com/hello",
+          title: "Hello world",
+          domain: "example.com",
+        },
+      });
+
+      const exact = await agent.get("/api/bookmarks/search?q=helo").expect(200);
+      expect(exact.body.items).toHaveLength(0);
+
+      const fuzzy = await agent.get("/api/bookmarks/search?q=helo&fuzzy=1").expect(200);
+      expect(fuzzy.body.items.map((b: { title: string }) => b.title)).toEqual(["Hello world"]);
     });
   });
 

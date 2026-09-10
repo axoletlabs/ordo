@@ -66,15 +66,26 @@ export function useInfiniteBookmarks(folderId: string | null, enabled = true) {
 
 export function useInfiniteSearch(
   q: string,
-  tagIds: readonly string[] = [],
-  unread: "all" | "unread" | "read" = "all",
-  enabled = true,
+  opts: {
+    tagIds?: readonly string[];
+    folderIds?: readonly string[];
+    unfiled?: boolean;
+    unread?: "all" | "unread" | "read";
+    fuzzy?: boolean;
+    enabled?: boolean;
+  } = {},
 ) {
   const term = q.trim();
+  const tagIds = opts.tagIds ?? [];
+  const folderIds = opts.folderIds ?? [];
+  const unfiled = opts.unfiled ?? false;
+  const unread = opts.unread ?? "all";
+  const fuzzy = opts.fuzzy ?? false;
+  const enabled = opts.enabled ?? true;
   return useInfiniteQuery({
-    queryKey: qk.search(term, tagIds, unread),
+    queryKey: qk.search(term, tagIds, unread, folderIds, unfiled, fuzzy),
     queryFn: ({ pageParam }) =>
-      bookmarksApi.search(term, pageParam ?? undefined, DEFAULT_PAGE_SIZE, [...tagIds], unread),
+      bookmarksApi.search(term, pageParam ?? undefined, DEFAULT_PAGE_SIZE, [...tagIds], unread, [...folderIds], unfiled, fuzzy),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => (last.hasMore && last.nextCursor ? last.nextCursor : undefined),
     enabled,

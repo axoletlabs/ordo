@@ -3,10 +3,12 @@ import { test } from "node:test";
 import type { BookmarkDto } from "@ordo/shared";
 import {
   compileSearchResults,
+  EMPTY_SEARCH_FILTERS,
   firstSearchHighlight,
   reuseSearchResults,
   sanitizeRouteParam,
   searchFiltersActive,
+  searchScopeActive,
   type SearchFilters,
 } from "./search-bookmarks.ts";
 
@@ -37,7 +39,7 @@ function bookmark(partial: Partial<BookmarkDto> & Pick<BookmarkDto, "id" | "titl
   };
 }
 
-const none: SearchFilters = { tagIds: [], status: "all", kind: "all" };
+const none: SearchFilters = { ...EMPTY_SEARCH_FILTERS };
 
 test("sanitizeRouteParam treats Expo's stringified undefined as empty", () => {
   assert.equal(sanitizeRouteParam("undefined"), "");
@@ -100,7 +102,7 @@ test("domain and tag names are searchable from the cache", () => {
   );
 });
 
-test("multi-word queries require every token", () => {
+test("multi-word queries put AND hits above OR hits", () => {
   const both = bookmark({ id: "both", title: "React Native animation" });
   const one = bookmark({ id: "one", title: "React Query" });
   const ranked = compileSearchResults({
@@ -112,11 +114,11 @@ test("multi-word queries require every token", () => {
   });
   assert.deepEqual(
     ranked.map((item) => item.id),
-    ["both"],
+    ["both", "one"],
   );
 });
 
-test("stale server rows drop while a longer query is in flight", () => {
+test("stale server rows that still match a token stay as OR hits", () => {
   const keep = bookmark({ id: "keep", title: "React Native" });
   const drop = bookmark({ id: "drop", title: "React Query" });
   const ranked = compileSearchResults({
@@ -128,7 +130,7 @@ test("stale server rows drop while a longer query is in flight", () => {
   });
   assert.deepEqual(
     ranked.map((item) => item.id),
-    ["keep"],
+    ["keep", "drop"],
   );
 });
 
@@ -149,7 +151,7 @@ test("unread and article filters hide non-matching rows", () => {
   });
   const unread = compileSearchResults({
     query: "react",
-    filters: { tagIds: [], status: "unread", kind: "all" },
+    filters: { ...none, status: "unread" },
     serverItems: [unreadArticle, readWeb],
     cachedItems: [],
     serverMatchesQuery: true,
@@ -160,7 +162,7 @@ test("unread and article filters hide non-matching rows", () => {
   );
   const articles = compileSearchResults({
     query: "react",
-    filters: { tagIds: [], status: "all", kind: "article" },
+    filters: { ...none, kind: "article" },
     serverItems: [unreadArticle, readWeb],
     cachedItems: [],
     serverMatchesQuery: true,
@@ -172,12 +174,17 @@ test("unread and article filters hide non-matching rows", () => {
 });
 
 test("searchFiltersActive ignores the empty default", () => {
-  assert.equal(searchFiltersActive({ tagIds: [], status: "all", kind: "all" }), false);
-  assert.equal(searchFiltersActive({ tagIds: ["x"], status: "all", kind: "all" }), true);
-  assert.equal(searchFiltersActive({ tagIds: [], status: "unread", kind: "all" }), true);
+  assert.equal(searchFiltersActive(none), false);
+  assert.equal(searchFiltersActive({ ...none, tagIds: ["x"] }), true);
+  assert.equal(searchFiltersActive({ ...none, status: "unread" }), true);
+  assert.equal(searchFiltersActive({ ...none, folderIds: ["f1"] }), true);
+  assert.equal(searchFiltersActive({ ...none, unfiled: true }), true);
+  assert.equal(searchFiltersActive({ ...none, fuzzy: true }), true);
+  assert.equal(searchScopeActive({ ...none, fuzzy: true }), false);
+  assert.equal(searchScopeActive({ ...none, folderIds: ["f1"] }), true);
 });
 
-test("matching is a substring, not fuzzy", () => {
+test("matching is a word prefix, not a mid-word substring", () => {
   const react = bookmark({ id: "r", title: "React Query" });
   const hits = compileSearchResults({
     query: "ract",
@@ -281,6 +288,38 @@ test("short queries only match title, URL, domain, and tags", () => {
   );
 });
 
+test("hel does not match Home even when the article says help", () => {
+  const home = bookmark({
+    id: "home",
+    title: "Home",
+    domain: "ente.com",
+    url: "https://ente.com",
+    description: "Introduction to Ente: Products, Community and Support",
+    contentText: "Need help with vaults.",
+    contentKind: "article",
+    fetchStatus: "ok",
+  });
+  const helpHost = bookmark({
+    id: "ssl",
+    title: "CraftingStore SSL Guide",
+    domain: "help.craftingstore.net",
+    url: "https://help.craftingstore.net/ssl",
+    contentKind: "web",
+    fetchStatus: "unsupported",
+  });
+  const hits = compileSearchResults({
+    query: "hel",
+    filters: none,
+    serverItems: [home, helpHost],
+    cachedItems: [home, helpHost],
+    serverMatchesQuery: true,
+  });
+  assert.deepEqual(
+    hits.map((item) => item.id),
+    ["ssl"],
+  );
+});
+
 test("an active tag filter's own name does not satisfy the typed query", () => {
   const shopping = { id: "shop", name: "Shopping List", color: "coral" };
   const hoodie = bookmark({
@@ -303,8 +342,8 @@ test("an active tag filter's own name does not satisfy the typed query", () => {
     tags: [shopping],
   });
   const hits = compileSearchResults({
-    query: "l",
-    filters: { tagIds: ["shop"], status: "all", kind: "all" },
+    query: "hood",
+    filters: { ...none, tagIds: ["shop"] },
     serverItems: [hoodie, notepad],
     cachedItems: [hoodie, notepad],
     serverMatchesQuery: true,
@@ -327,7 +366,7 @@ test("other tags still match text while a tag filter is on", () => {
   });
   const hits = compileSearchResults({
     query: "sale",
-    filters: { tagIds: ["shop"], status: "all", kind: "all" },
+    filters: { ...none, tagIds: ["shop"] },
     serverItems: [],
     cachedItems: [notepad],
     serverMatchesQuery: false,
@@ -356,7 +395,7 @@ test("text and tag filters are AND, even on a stale tag-only server page", () =>
   });
   const hits = compileSearchResults({
     query: "morning",
-    filters: { tagIds: ["espresso"], status: "all", kind: "all" },
+    filters: { ...none, tagIds: ["espresso"] },
     serverItems: [taggedHit, taggedMiss],
     cachedItems: [taggedHit, taggedMiss, untaggedHit],
     serverMatchesQuery: false,
@@ -375,7 +414,7 @@ test("a fresh server hit that only matched article text is kept if filters pass"
   });
   const hits = compileSearchResults({
     query: "morning",
-    filters: { tagIds: ["espresso"], status: "all", kind: "all" },
+    filters: { ...none, tagIds: ["espresso"] },
     serverItems: [bodyOnly],
     cachedItems: [],
     serverMatchesQuery: true,
@@ -394,7 +433,7 @@ test("body-only server hits still have to pass the active filters", () => {
   });
   const hits = compileSearchResults({
     query: "morning",
-    filters: { tagIds: ["espresso"], status: "all", kind: "all" },
+    filters: { ...none, tagIds: ["espresso"] },
     serverItems: [bodyOnly],
     cachedItems: [],
     serverMatchesQuery: true,
@@ -402,6 +441,23 @@ test("body-only server hits still have to pass the active filters", () => {
   assert.deepEqual(
     hits.map((item) => item.id),
     [],
+  );
+});
+
+test("folder filter keeps unfiled and selected folders", () => {
+  const unfiled = bookmark({ id: "u", title: "React unfiled", folderId: null });
+  const inFolder = bookmark({ id: "f", title: "React filed", folderId: "research" });
+  const other = bookmark({ id: "o", title: "React other", folderId: "archive" });
+  const hits = compileSearchResults({
+    query: "react",
+    filters: { ...none, folderIds: ["research"], unfiled: true },
+    serverItems: [unfiled, inFolder, other],
+    cachedItems: [],
+    serverMatchesQuery: true,
+  });
+  assert.deepEqual(
+    hits.map((item) => item.id),
+    ["f", "u"],
   );
 });
 

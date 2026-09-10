@@ -77,4 +77,15 @@ export class FolderAccessService {
       ],
     };
   }
+
+  async requireOwnedIds(userId: string, folderIds: readonly string[]): Promise<void> {
+    if (folderIds.length === 0) return;
+    const unique = [...new Set(folderIds)];
+    const count = await this.prisma.folder.count({
+      where: { userId, id: { in: unique } },
+    });
+    if (count !== unique.length) {
+      throw new AppError(ErrorCode.FOLDER_NOT_FOUND, "One or more folders no longer exist.");
+    }
+  }
 }

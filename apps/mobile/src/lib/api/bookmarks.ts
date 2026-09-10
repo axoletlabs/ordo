@@ -43,6 +43,9 @@ export const bookmarksApi = {
     limit?: number,
     tagIds: string[] = [],
     unread: "all" | "unread" | "read" = "all",
+    folderIds: string[] = [],
+    unfiled = false,
+    fuzzy = false,
   ) =>
     api.get<typeof BookmarkRoutes.search.response>(BookmarkRoutes.search.path, {
       query: {
@@ -50,6 +53,9 @@ export const bookmarksApi = {
         cursor,
         limit,
         tagIds: tagIds.length > 0 ? tagIds.join(",") : undefined,
+        folderIds: folderIds.length > 0 ? folderIds.join(",") : undefined,
+        unfiled: unfiled ? "1" : undefined,
+        fuzzy: fuzzy ? "1" : undefined,
         unread: unread === "unread" ? "1" : unread === "read" ? "0" : undefined,
       },
       auth: true,

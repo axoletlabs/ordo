@@ -16,8 +16,15 @@ export const qk = {
   /** `folderId` is null for the unfiled root list ("Bookmarks"). */
   bookmarks: (folderId: string | null) => ["bookmarks", folderId ?? null] as const,
   bookmark: (id: string) => ["bookmarks", "detail", id] as const,
-  search: (q: string, tagIds: readonly string[] = [], unread?: "all" | "unread" | "read") =>
-    ["bookmarks", "search", q, [...tagIds].sort(), unread ?? "all"] as const,
+  search: (
+    q: string,
+    tagIds: readonly string[] = [],
+    unread?: "all" | "unread" | "read",
+    folderIds: readonly string[] = [],
+    unfiled = false,
+    fuzzy = false,
+  ) =>
+    ["bookmarks", "search", q, [...tagIds].sort(), unread ?? "all", [...folderIds].sort(), unfiled, fuzzy] as const,
 
   /** Whole-library lists filtered by tags (sorted for key stability). */
   tagged: (tagIds: readonly string[]) => ["bookmarks", "tagged", [...tagIds].sort()] as const,

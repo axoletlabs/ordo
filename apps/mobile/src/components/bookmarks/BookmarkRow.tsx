@@ -28,8 +28,8 @@ import type { BookmarkDto } from "@ordo/shared";
 /** Compact tags shown inline on a row before overflow. */
 const MAX_ROW_TAGS = 3;
 
-function highlightTitle(title: string, query?: string) {
-  const span = query ? firstSearchHighlight(title, query) : null;
+function highlightTitle(title: string, query?: string, fuzzy = false) {
+  const span = query ? firstSearchHighlight(title, query, fuzzy) : null;
   if (!span) return title;
   return (
     <>
@@ -56,8 +56,9 @@ export interface BookmarkRowProps {
   onTagPress?: (tagId: string) => void;
   /** Hide tags already expressed by the current view (e.g. the active tag filter). */
   omitTagIds?: readonly string[];
-  /** When set, the matching substring in the title is emphasized. */
+  /** When set, the matching word prefix in the title is emphasized. */
   searchQuery?: string;
+  searchFuzzy?: boolean;
 }
 
 export const BookmarkRow = React.memo(function BookmarkRow({
@@ -71,6 +72,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   onTagPress,
   omitTagIds,
   searchQuery,
+  searchFuzzy,
 }: BookmarkRowProps) {
   const { palette } = useTheme();
   const router = useRouter();
@@ -259,7 +261,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
         <View style={styles.content}>
           <View style={styles.titleRow}>
             <Text variant="headline" color={titleColor} numberOfLines={1} style={styles.title}>
-              {highlightTitle(title, searchQuery)}
+              {highlightTitle(title, searchQuery, searchFuzzy)}
             </Text>
             {isArticle ? (
               <Ionicons

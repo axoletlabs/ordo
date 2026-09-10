@@ -1,5 +1,5 @@
 /**
- * Global bookmark search. Local substring filter runs on the first keystroke;
+ * Global bookmark search. Local word-prefix filter runs on the first keystroke;
  * the server catches up shortly after for article-body hits (five letters+).
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -28,6 +28,7 @@ import { ReaderPane, ReaderPanePlaceholder } from "../../../src/components/reade
 import { useInfiniteSearch, useToggleRead, useDeleteBookmark } from "../../../src/hooks/use-bookmarks";
 import { bookmarkKey, useSelectionMode } from "../../../src/hooks/use-selection";
 import { useTags } from "../../../src/hooks/use-tags";
+import { useFolders } from "../../../src/hooks/use-folders";
 import { useResponsiveLayout } from "../../../src/hooks/use-responsive-layout";
 import { useFloatingDockMetrics } from "../../../src/hooks/use-floating-dock-metrics";
 import { useTheme } from "../../../src/theme/ThemeProvider";
@@ -42,6 +43,7 @@ import {
   reuseSearchResults,
   sanitizeRouteParam,
   searchFiltersActive,
+  searchScopeActive,
   useDebouncedValue,
   type SearchFilters,
 } from "../../../src/lib/search-bookmarks";
@@ -211,15 +213,24 @@ export default function SearchScreen() {
   const toggleRead = useToggleRead(null);
   const deleteBm = useDeleteBookmark(null);
   const { data: allTags } = useTags();
+  const { data: allFolders } = useFolders();
 
   const trimmed = liveQuery.trim();
   const filtersOn = searchFiltersActive(filters);
-  const browsing = trimmed.length > 0 || filtersOn;
+  const scopeOn = searchScopeActive(filters);
+  const browsing = trimmed.length > 0 || scopeOn;
   const serverQ = useDebouncedValue(trimmed, SERVER_DEBOUNCE_MS);
   const urlQuery = useDebouncedValue(trimmed, URL_SYNC_MS);
-  const searchEnabled = serverQ.length > 0 || filtersOn;
+  const searchEnabled = serverQ.length > 0 || scopeOn;
 
-  const search = useInfiniteSearch(serverQ, filters.tagIds, filters.status, searchEnabled);
+  const search = useInfiniteSearch(serverQ, {
+    tagIds: filters.tagIds,
+    folderIds: filters.folderIds,
+    unfiled: filters.unfiled,
+    unread: filters.status,
+    fuzzy: filters.fuzzy,
+    enabled: searchEnabled,
+  });
   const serverItems = useMemo(() => {
     const pages = search.data?.pages;
     if (!pages?.length) return EMPTY_BOOKMARKS;
@@ -255,6 +266,10 @@ export default function SearchScreen() {
   const selectedTags = useMemo(
     () => (allTags ?? []).filter((tag) => filters.tagIds.includes(tag.id)),
     [allTags, filters.tagIds],
+  );
+  const selectedFolders = useMemo(
+    () => (allFolders ?? []).filter((folder) => filters.folderIds.includes(folder.id)),
+    [allFolders, filters.folderIds],
   );
 
   useEffect(() => {
@@ -352,6 +367,7 @@ export default function SearchScreen() {
       <BookmarkRow
         bookmark={item}
         searchQuery={trimmed}
+        searchFuzzy={filters.fuzzy}
         selectionMode={selectionActive}
         selected={
           selectionActive
@@ -366,6 +382,7 @@ export default function SearchScreen() {
       />
     ),
     [
+      filters.fuzzy,
       filters.tagIds,
       hasDetailPane,
       onEnterSelection,
@@ -395,7 +412,7 @@ export default function SearchScreen() {
     <EmptyState
       icon="search-outline"
       title="Search your library"
-      message="Type any part of a title, URL, or tag. Every word you type has to appear."
+      message="Type the start of a title, site, or URL. Every word is required first; looser matches follow. Article text after five letters."
     />
   ) : search.error && items.length === 0 ? (
     <EmptyState
@@ -414,7 +431,7 @@ export default function SearchScreen() {
         trimmed && filtersOn
           ? `Nothing matches “${trimmed}” with these filters.`
           : trimmed
-            ? `Nothing contains “${trimmed}”.`
+            ? `Nothing starts with “${trimmed}”.`
             : "Nothing matches these filters."
       }
     />
@@ -435,7 +452,7 @@ export default function SearchScreen() {
   const listPane = (
     <ThemedFlashList
       data={items}
-      extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}:${trimmed}:${filters.tagIds.join(",")}:${filters.status}:${filters.kind}`}
+      extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}:${trimmed}:${filters.tagIds.join(",")}:${filters.folderIds.join(",")}:${filters.unfiled}:${filters.status}:${filters.kind}:${filters.fuzzy}`}
       keyExtractor={(b: BookmarkDto) => b.id}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
@@ -518,7 +535,7 @@ export default function SearchScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Search filters"
                 accessibilityState={{ expanded: filterOpen }}
-                accessibilityHint="Filter by tag, read status, or type"
+                accessibilityHint="Filter by folder, tag, read status, or type"
                 hitSlop={4}
                 scaleTo={0.92}
                 onPress={(event) => openFilters(event)}
@@ -542,6 +559,32 @@ export default function SearchScreen() {
 
           {filtersOn ? (
             <View style={styles.metaRow}>
+              {selectedFolders.map((folder) => (
+                <TagChip
+                  key={folder.id}
+                  name={folder.name}
+                  color="slate"
+                  selected
+                  compact
+                  onPress={() =>
+                    setFilters((prev) => ({
+                      ...prev,
+                      folderIds: prev.folderIds.filter((id) => id !== folder.id),
+                    }))
+                  }
+                  accessibilityLabel={`Remove ${folder.name} folder filter`}
+                />
+              ))}
+              {filters.unfiled ? (
+                <TagChip
+                  name="Unfiled"
+                  color="slate"
+                  selected
+                  compact
+                  onPress={() => setFilters((prev) => ({ ...prev, unfiled: false }))}
+                  accessibilityLabel="Clear unfiled filter"
+                />
+              ) : null}
               {selectedTags.map((tag) => (
                 <TagChip
                   key={tag.id}
@@ -571,6 +614,16 @@ export default function SearchScreen() {
                   compact
                   onPress={() => setFilters((prev) => ({ ...prev, kind: "all" }))}
                   accessibilityLabel="Clear type filter"
+                />
+              ) : null}
+              {filters.fuzzy ? (
+                <TagChip
+                  name="Fuzzy"
+                  color="slate"
+                  selected
+                  compact
+                  onPress={() => setFilters((prev) => ({ ...prev, fuzzy: false }))}
+                  accessibilityLabel="Turn off fuzzy matching"
                 />
               ) : null}
             </View>
@@ -603,6 +656,7 @@ export default function SearchScreen() {
         onDismiss={() => setFilterOpen(false)}
         anchor={filterAnchor}
         tags={allTags ?? []}
+        folders={allFolders ?? []}
         filters={filters}
         onChange={setFilters}
       />

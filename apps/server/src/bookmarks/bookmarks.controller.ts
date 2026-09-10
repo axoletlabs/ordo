@@ -92,6 +92,9 @@ export class BookmarksController {
     @Query("cursor") cursor: string | undefined,
     @Query("limit") limit: string | undefined,
     @Query("tagIds") rawTagIds: string | undefined,
+    @Query("folderIds") rawFolderIds: string | undefined,
+    @Query("unfiled") unfiled: string | undefined,
+    @Query("fuzzy") fuzzy: string | undefined,
     @Query("unread") unread: string | undefined,
     @Req() req: Request,
   ): Promise<CursorPage<BookmarkDto>> {
@@ -99,6 +102,9 @@ export class BookmarksController {
       cursor,
       limit: limit ? parseInt(limit, 10) : undefined,
       tagIds: this.parseTagIds(rawTagIds),
+      folderIds: this.parseTagIds(rawFolderIds),
+      unfiled: unfiled === "1" || unfiled === "true",
+      fuzzy: fuzzy === "1" || fuzzy === "true",
       unread: unread === "1" || unread === "true" ? true : unread === "0" || unread === "false" ? false : undefined,
       folderTokens: getPresentedFolderTokens(req),
     });

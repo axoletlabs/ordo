@@ -1,14 +1,18 @@
 /**
  * Client-side search: sanitize route params, merge cached bookmarks with the
- * server result, and filter as you type with literal substring matching.
+ * server result, and filter as you type with word-prefix matching.
  */
 import { useEffect, useState } from "react";
 import {
-  bookmarkMatchRank,
-  bookmarkSearchHaystack,
-  tokensAllowArticleText,
+  bookmarkSearchRank,
+  compareBookmarkSearchRanks,
+  firstSearchHighlight as highlightSearchText,
+  isPrimarySearchField,
+  SEARCH_MATCH_QUALITY,
   tokenizeSearchQuery,
+  tokensAllowArticleText,
   type BookmarkDto,
+  type BookmarkSearchRank,
 } from "@ordo/shared";
 
 export type SearchStatusFilter = "all" | "unread" | "read";
@@ -16,14 +20,21 @@ export type SearchKindFilter = "all" | "article" | "web";
 
 export interface SearchFilters {
   tagIds: string[];
+  folderIds: string[];
+  /** Include unfiled bookmarks when a folder filter is active. */
+  unfiled: boolean;
   status: SearchStatusFilter;
   kind: SearchKindFilter;
+  fuzzy: boolean;
 }
 
 export const EMPTY_SEARCH_FILTERS: SearchFilters = {
   tagIds: [],
+  folderIds: [],
+  unfiled: false,
   status: "all",
   kind: "all",
+  fuzzy: false,
 };
 
 /** Expo Router stringifies `undefined`, so empty params become the text "undefined". */
@@ -35,7 +46,18 @@ export function sanitizeRouteParam(value: string | string[] | undefined): string
 }
 
 export function searchFiltersActive(filters: SearchFilters): boolean {
-  return filters.tagIds.length > 0 || filters.status !== "all" || filters.kind !== "all";
+  return searchScopeActive(filters) || filters.fuzzy;
+}
+
+/** Filters that restrict which bookmarks can appear (fuzzy only changes matching). */
+export function searchScopeActive(filters: SearchFilters): boolean {
+  return (
+    filters.tagIds.length > 0 ||
+    filters.folderIds.length > 0 ||
+    filters.unfiled ||
+    filters.status !== "all" ||
+    filters.kind !== "all"
+  );
 }
 
 function isArticleBookmark(bookmark: BookmarkDto): boolean {
@@ -54,6 +76,12 @@ function namedTags(tags: BookmarkDto["tags"] | unknown): { id?: string; name: st
 export function bookmarkPassesSearchFilters(bookmark: BookmarkDto, filters: SearchFilters): boolean {
   const tags = namedTags(bookmark.tags);
   if (filters.tagIds.some((id) => !tags.some((tag) => tag.id === id))) return false;
+  if (filters.folderIds.length > 0 || filters.unfiled) {
+    const inFolder = bookmark.folderId
+      ? filters.folderIds.includes(bookmark.folderId)
+      : filters.unfiled;
+    if (!inFolder) return false;
+  }
   if (filters.status === "unread" && bookmark.isRead) return false;
   if (filters.status === "read" && !bookmark.isRead) return false;
   if (filters.kind === "article" && !isArticleBookmark(bookmark)) return false;
@@ -61,74 +89,54 @@ export function bookmarkPassesSearchFilters(bookmark: BookmarkDto, filters: Sear
   return true;
 }
 
-const haystackMemo = new Map<string, { stamp: string; haystack: string }>();
+const BODY_ONLY_RANK: BookmarkSearchRank = {
+  matched: true,
+  clause: "and",
+  field: "body",
+  quality: SEARCH_MATCH_QUALITY.prefix,
+  hits: 1,
+  usedFuzzy: false,
+};
 
-function tagsForTextQuery(bookmark: BookmarkDto, omitTagIds: ReadonlySet<string>) {
-  return namedTags(bookmark.tags).filter((tag) => !tag.id || !omitTagIds.has(tag.id));
-}
-
-const NO_OMIT_TAGS = new Set<string>();
-
-function haystackCacheKey(
-  bookmarkId: string,
-  omitTagIds: ReadonlySet<string>,
-  visibleOnly: boolean,
-): string {
-  const omit = omitTagIds.size === 0 ? "" : [...omitTagIds].sort().join(",");
-  return `${bookmarkId}\0${omit}\0${visibleOnly ? "v" : "a"}`;
-}
-
-function haystackStamp(bookmark: BookmarkDto, omitTagIds: ReadonlySet<string>): string {
-  const tagNames = tagsForTextQuery(bookmark, omitTagIds)
-    .map((tag) => tag.name)
-    .join("\0");
-  return `${bookmark.updatedAt ?? ""}\0${bookmark.title ?? ""}\0${bookmark.url ?? ""}\0${bookmark.domain ?? ""}\0${bookmark.description ?? ""}\0${bookmark.author ?? ""}\0${bookmark.contentKind ?? ""}\0${bookmark.fetchStatus ?? ""}\0${tagNames}`;
-}
-
-/** Cached haystack so typing does not rebuild lowercase blobs on every key. */
-function haystackFor(
+function rankFor(
   bookmark: BookmarkDto,
-  omitTagIds: ReadonlySet<string>,
-  visibleOnly: boolean,
-): string {
-  const key = haystackCacheKey(bookmark.id, omitTagIds, visibleOnly);
-  const stamp = haystackStamp(bookmark, omitTagIds);
-  const hit = haystackMemo.get(key);
-  if (hit && hit.stamp === stamp) return hit.haystack;
-  const filtering = omitTagIds.size > 0;
-  const article = isArticleBookmark(bookmark);
-  const haystack = bookmarkSearchHaystack({
-    ...bookmark,
-    tags: tagsForTextQuery(bookmark, omitTagIds),
-    description: visibleOnly ? null : !filtering || article ? bookmark.description : null,
-    author: visibleOnly ? null : !filtering || article ? bookmark.author : null,
-    contentText: visibleOnly || filtering ? null : bookmark.contentText,
-  });
-  if (haystackMemo.size > 4000) haystackMemo.clear();
-  haystackMemo.set(key, { stamp, haystack });
-  return haystack;
-}
-
-function haystackMatches(haystack: string, tokens: readonly string[]): boolean {
-  return tokens.every((token) => haystack.includes(token));
+  query: string,
+  filters: SearchFilters,
+): BookmarkSearchRank {
+  return bookmarkSearchRank(
+    { ...bookmark, tags: namedTags(bookmark.tags) },
+    query,
+    { fuzzy: filters.fuzzy, omitTagIds: filters.tagIds },
+  );
 }
 
 function passesTextQuery(
   bookmark: BookmarkDto,
+  query: string,
   tokens: readonly string[],
   allowBodyOnlyHit: boolean,
-  omitTagIds: ReadonlySet<string>,
-): boolean {
-  if (tokens.length === 0) return true;
-  const visibleOnly = !tokensAllowArticleText(tokens);
-  if (haystackMatches(haystackFor(bookmark, omitTagIds, visibleOnly), tokens)) return true;
-  if (!allowBodyOnlyHit || visibleOnly || !isArticleBookmark(bookmark)) return false;
-  // Server rows that only match because the active tag's name contains the
-  // query are not article-body hits.
-  if (omitTagIds.size > 0 && haystackMatches(haystackFor(bookmark, NO_OMIT_TAGS, false), tokens)) {
-    return false;
+  filters: SearchFilters,
+): { ok: boolean; rank: BookmarkSearchRank } {
+  if (tokens.length === 0) {
+    return { ok: true, rank: { ...BODY_ONLY_RANK, field: "title", hits: 0, quality: 0 } };
   }
-  return true;
+  const rank = rankFor(bookmark, query, filters);
+  if (rank.matched) return { ok: true, rank };
+  if (!allowBodyOnlyHit || !tokensAllowArticleText(tokens) || !isArticleBookmark(bookmark)) {
+    return { ok: false, rank };
+  }
+  // Server rows that only matched the active tag's name are not article-body hits.
+  if (filters.tagIds.length > 0) {
+    const withTagNames = bookmarkSearchRank(
+      { ...bookmark, tags: namedTags(bookmark.tags) },
+      query,
+      { fuzzy: filters.fuzzy, omitTagIds: [] },
+    );
+    if (withTagNames.matched && isPrimarySearchField(withTagNames.field)) {
+      return { ok: false, rank };
+    }
+  }
+  return { ok: true, rank: { ...BODY_ONLY_RANK, hits: tokens.length } };
 }
 
 export function compileSearchResults({
@@ -146,45 +154,28 @@ export function compileSearchResults({
   serverMatchesQuery: boolean;
 }): BookmarkDto[] {
   const tokens = tokenizeSearchQuery(query);
-  const omitTagIds = new Set(filters.tagIds);
-  const byId = new Map<string, BookmarkDto>();
+  const byId = new Map<string, { bookmark: BookmarkDto; rank: BookmarkSearchRank }>();
 
-  for (const bookmark of serverItems) {
-    if (!passesTextQuery(bookmark, tokens, serverMatchesQuery, omitTagIds)) continue;
-    if (!bookmarkPassesSearchFilters(bookmark, filters)) continue;
-    byId.set(bookmark.id, bookmark);
-  }
+  const consider = (bookmark: BookmarkDto, allowBodyOnlyHit: boolean) => {
+    if (byId.has(bookmark.id)) return;
+    if (!bookmarkPassesSearchFilters(bookmark, filters)) return;
+    const { ok, rank } = passesTextQuery(bookmark, query, tokens, allowBodyOnlyHit, filters);
+    if (!ok) return;
+    byId.set(bookmark.id, { bookmark, rank });
+  };
 
-  for (const bookmark of cachedItems) {
-    if (byId.has(bookmark.id)) continue;
-    if (!passesTextQuery(bookmark, tokens, false, omitTagIds)) continue;
-    if (!bookmarkPassesSearchFilters(bookmark, filters)) continue;
-    byId.set(bookmark.id, bookmark);
-  }
+  for (const bookmark of serverItems) consider(bookmark, serverMatchesQuery);
+  for (const bookmark of cachedItems) consider(bookmark, false);
 
   const merged = [...byId.values()];
-  const q = tokens.join(" ");
-  if (!q) {
-    return merged.sort(
-      (a, b) =>
-        (b.createdAt ?? "").localeCompare(a.createdAt ?? "") || a.id.localeCompare(b.id),
-    );
-  }
-
-  const ranked = merged.map((bookmark) => ({
-    bookmark,
-    rank: bookmarkMatchRank(
-      { ...bookmark, tags: tagsForTextQuery(bookmark, omitTagIds) },
-      q,
-    ),
-  }));
-  ranked.sort((a, b) => {
-    if (a.rank !== b.rank) return b.rank - a.rank;
+  merged.sort((a, b) => {
+    const byRank = compareBookmarkSearchRanks(a.rank, b.rank);
+    if (byRank !== 0) return byRank;
     const byDate = (b.bookmark.createdAt ?? "").localeCompare(a.bookmark.createdAt ?? "");
     if (byDate !== 0) return byDate;
     return a.bookmark.id.localeCompare(b.bookmark.id);
   });
-  return ranked.map((row) => row.bookmark);
+  return merged.map((row) => row.bookmark);
 }
 
 /** Keep the previous array when the visible order did not change, so the list can skip work. */
@@ -201,13 +192,13 @@ export function reuseSearchResults(
   return previous as BookmarkDto[];
 }
 
-/** First case-insensitive substring of `query`'s first token, or null. */
-export function firstSearchHighlight(text: string, query: string): { start: number; end: number } | null {
-  const token = tokenizeSearchQuery(query)[0];
-  if (!token || !text) return null;
-  const at = text.toLocaleLowerCase("en-US").indexOf(token);
-  if (at < 0) return null;
-  return { start: at, end: at + token.length };
+/** First matching word prefix of `query`'s first token, or null. */
+export function firstSearchHighlight(
+  text: string,
+  query: string,
+  fuzzy = false,
+): { start: number; end: number } | null {
+  return highlightSearchText(text, query, fuzzy);
 }
 
 export function useDebouncedValue<T>(value: T, delay: number): T {

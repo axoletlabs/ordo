@@ -6,13 +6,15 @@ import {
   EXTRACTION_VERSION,
   MAX_PAGE_SIZE,
   MAX_TAGS_PER_BOOKMARK,
+  MIN_FUZZY_TOKEN_LENGTH,
   READ_COMPLETION_THRESHOLD,
+  rankSearchResults,
+  searchTokenPrefixPatterns,
+  tokenizeSearchQuery,
+  tokensAllowArticleText,
   type BatchBookmarksInput,
   type BookmarkDto,
   type CursorPage,
-  rankSearchResults,
-  tokenizeSearchQuery,
-  tokensAllowArticleText,
 } from "@ordo/shared";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { AppError } from "../common/errors/app-error.js";
@@ -58,11 +60,17 @@ const LIST_SELECT = {
 
 type ListItem = Prisma.BookmarkGetPayload<{ select: typeof LIST_SELECT }>;
 
+const SEARCH_SELECT = {
+  ...LIST_SELECT,
+  contentText: true,
+} satisfies Prisma.BookmarkSelect;
+
 /** Background refresh tuning: small batches, finite spacing. */
 const REFRESH_BATCH_SIZE = 50;
 const REFRESH_DELAY_MS = 250;
-/** Ranked text search loads a pool, then returns it as one page. */
-const SEARCH_POOL_SIZE = 200;
+/** AND matches are loaded first so they cannot be crowded out by OR hits. */
+const SEARCH_AND_POOL_SIZE = 300;
+const SEARCH_OR_POOL_SIZE = 200;
 /** Hard stop so a pathological database can never loop forever. */
 const REFRESH_MAX_BATCHES = 500;
 
@@ -150,51 +158,29 @@ export class BookmarksService implements OnApplicationBootstrap {
       cursor?: string;
       limit?: number;
       tagIds?: string[];
+      folderIds?: string[];
+      unfiled?: boolean;
+      fuzzy?: boolean;
       unread?: boolean;
       folderTokens?: string[];
     },
   ): Promise<CursorPage<BookmarkDto>> {
     const term = q.trim();
     const tagIds = opts.tagIds ?? [];
+    const folderIds = opts.folderIds ?? [];
+    const unfiled = !!opts.unfiled;
+    const fuzzy = !!opts.fuzzy;
     await this.tags.requireOwnedIds(userId, tagIds);
+    await this.access.requireOwnedIds(userId, folderIds);
     const authorized = await this.access.authorizedFolderIds(userId, opts.folderTokens ?? []);
     const tokens = tokenizeSearchQuery(term);
     const includeHiddenFields = tokensAllowArticleText(tokens);
+    const recallOpts = { fuzzy, includeHidden: includeHiddenFields, omitTagIds: tagIds };
     const where: Prisma.BookmarkWhereInput = {
       userId,
       AND: [
         this.access.visibleBookmarksFilter(authorized),
-        ...(term
-          ? [
-              {
-                OR: [
-                  { title: { contains: term } },
-                  { url: { contains: term } },
-                  { domain: { contains: term } },
-                  ...(includeHiddenFields
-                    ? [
-                        { contentText: { contains: term } },
-                        { description: { contains: term } },
-                        { author: { contains: term } },
-                      ]
-                    : []),
-                  // A tag used as a filter already ANDs below. Matching its
-                  // name as text would keep every tagged row for letters in
-                  // that name ("l" + "Shopping List").
-                  tagIds.length > 0
-                    ? {
-                        tags: {
-                          some: {
-                            tagId: { notIn: tagIds },
-                            tag: { name: { contains: term } },
-                          },
-                        },
-                      }
-                    : { tags: { some: { tag: { name: { contains: term } } } } },
-                ],
-              } satisfies Prisma.BookmarkWhereInput,
-            ]
-          : []),
+        ...this.folderScope(folderIds, unfiled),
         ...tagIds.map((tagId) => ({ tags: { some: { tagId } } })),
         ...(opts.unread === undefined ? [] : [{ isRead: !opts.unread }]),
       ],
@@ -204,14 +190,47 @@ export class BookmarksService implements OnApplicationBootstrap {
       return this.paginate(where, opts.cursor, opts.limit, (b) => toBookmarkDto(b));
     }
 
-    const rows = await this.prisma.bookmark.findMany({
-      where,
+    const tokenClauses = tokens
+      .map((token) => tokenRecallWhere(token, recallOpts))
+      .filter((clause): clause is Prisma.BookmarkWhereInput => clause != null);
+    if (tokenClauses.length === 0) {
+      return { items: [], nextCursor: null, hasMore: false };
+    }
+
+    const andRows = await this.prisma.bookmark.findMany({
+      where: { AND: [where, ...tokenClauses] },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      take: SEARCH_POOL_SIZE,
-      select: LIST_SELECT,
+      take: SEARCH_AND_POOL_SIZE,
+      select: SEARCH_SELECT,
     });
+
+    let orRows: Prisma.BookmarkGetPayload<{ select: typeof SEARCH_SELECT }>[] = [];
+    if (tokens.length > 1) {
+      const andIds = andRows.map((row) => row.id);
+      orRows = await this.prisma.bookmark.findMany({
+        where: {
+          AND: [
+            where,
+            { OR: tokenClauses },
+            ...(andIds.length > 0 ? [{ id: { notIn: andIds } }] : []),
+          ],
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        take: SEARCH_OR_POOL_SIZE,
+        select: SEARCH_SELECT,
+      });
+    }
+
+    const ranked = rankSearchResults(
+      [...andRows, ...orRows].map((row) => ({
+        ...toBookmarkDto(row),
+        contentText: includeHiddenFields ? (row.contentText ?? null) : null,
+      })),
+      term,
+      { fuzzy, omitTagIds: tagIds },
+    );
     return {
-      items: rankSearchResults(rows.map((row) => toBookmarkDto(row)), term),
+      items: ranked.map((item) => ({ ...item, contentText: null })),
       nextCursor: null,
       hasMore: false,
     };
@@ -634,6 +653,74 @@ export class BookmarksService implements OnApplicationBootstrap {
       ? {}
       : { AND: tagIds.map((tagId) => ({ tags: { some: { tagId } } })) };
   }
+
+  private folderScope(folderIds: string[], unfiled: boolean): Prisma.BookmarkWhereInput[] {
+    if (folderIds.length === 0 && !unfiled) return [];
+    return [
+      {
+        OR: [
+          ...(folderIds.length > 0 ? [{ folderId: { in: folderIds } }] : []),
+          ...(unfiled ? [{ folderId: null }] : []),
+        ],
+      },
+    ];
+  }
+}
+
+const SEARCH_PRIMARY_FIELDS = ["title", "url", "domain"] as const;
+const SEARCH_HIDDEN_FIELDS = ["description", "author", "contentText"] as const;
+
+function prefixFieldClauses(
+  field: (typeof SEARCH_PRIMARY_FIELDS)[number] | (typeof SEARCH_HIDDEN_FIELDS)[number],
+  token: string,
+): Prisma.BookmarkWhereInput[] {
+  const { startsWith, contains } = searchTokenPrefixPatterns(token);
+  if (!startsWith) return [];
+  return [
+    { [field]: { startsWith } },
+    ...contains.map((needle) => ({ [field]: { contains: needle } })),
+  ];
+}
+
+function tagNamePrefixWhere(token: string, omitTagIds: string[]): Prisma.BookmarkWhereInput | null {
+  const { startsWith, contains } = searchTokenPrefixPatterns(token);
+  if (!startsWith) return null;
+  const nameOr = [
+    { name: { startsWith } },
+    ...contains.map((needle) => ({ name: { contains: needle } })),
+  ];
+  return {
+    tags: {
+      some: {
+        ...(omitTagIds.length > 0 ? { tagId: { notIn: omitTagIds } } : {}),
+        tag: { OR: nameOr },
+      },
+    },
+  };
+}
+
+function tokenRecallWhere(
+  token: string,
+  opts: { fuzzy: boolean; includeHidden: boolean; omitTagIds: string[] },
+): Prisma.BookmarkWhereInput | null {
+  const stems = [token];
+  if (opts.fuzzy && token.length >= MIN_FUZZY_TOKEN_LENGTH) {
+    stems.push(token.slice(0, -1));
+  }
+  const or: Prisma.BookmarkWhereInput[] = [];
+  for (const stem of stems) {
+    for (const field of SEARCH_PRIMARY_FIELDS) {
+      or.push(...prefixFieldClauses(field, stem));
+    }
+    const tag = tagNamePrefixWhere(stem, opts.omitTagIds);
+    if (tag) or.push(tag);
+    if (opts.includeHidden) {
+      for (const field of SEARCH_HIDDEN_FIELDS) {
+        or.push(...prefixFieldClauses(field, stem));
+      }
+    }
+  }
+  return or.length > 0 ? { OR: or } : null;
 }
 
 interface ArticleUndoSnapshot {
