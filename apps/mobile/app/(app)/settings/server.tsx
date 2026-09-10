@@ -387,14 +387,6 @@ function ServerEditPanel({
     }
   };
 
-  const nameHelper = !canRename
-    ? "Reach this server to rename it."
-    : hostname
-      ? hostname === name.trim()
-        ? `This machine is ${hostname}. You can rename it.`
-        : `This machine is ${hostname}.`
-      : undefined;
-
   return (
     <FloatingPanel
       visible={visible}
@@ -426,7 +418,7 @@ function ServerEditPanel({
             autoComplete="off"
             editable={canRename && !busy && !rename.isPending}
             error={nameError || undefined}
-            helper={nameError ? undefined : nameHelper}
+            helper={!nameError && !canRename ? "Reach this server to rename it." : undefined}
             onSubmitEditing={() => urlRef.current?.focus()}
           />
           <Input
