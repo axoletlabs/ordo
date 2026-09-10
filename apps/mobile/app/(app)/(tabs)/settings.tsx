@@ -74,18 +74,15 @@ export default function SettingsScreen() {
           />
         </SettingsGroup>
 
-        <SettingsGroup style={styles.signoutGroup}>
-          <View style={styles.signout}>
-            <Button
-              label="Sign out"
-              variant="danger"
-              block
-              size="lg"
-              loading={logout.isPending}
-              onPress={() => setConfirmingLogout(true)}
-            />
-          </View>
-        </SettingsGroup>
+        <Button
+          label="Sign out"
+          variant="danger"
+          block
+          size="lg"
+          loading={logout.isPending}
+          onPress={() => setConfirmingLogout(true)}
+          style={styles.signout}
+        />
       </SettingsScrollView>
 
       <ConfirmDialog
@@ -104,6 +101,5 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  signoutGroup: { marginTop: spacing[24] },
-  signout: { padding: spacing[16] },
+  signout: { marginTop: spacing[16] },
 });
