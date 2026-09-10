@@ -47,6 +47,7 @@ import {
 } from "../../../src/lib/search-bookmarks";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
 import type { BookmarkDto } from "@ordo/shared";
+import { FlashList } from "@shopify/flash-list";
 import { openListBookmark } from "../../../src/lib/open-website";
 import { estimateBookmarkRowSize } from "../../../src/lib/bookmark-row-layout";
 import { registerSearchFieldFocus } from "../../../src/lib/search-field-focus";
@@ -205,6 +206,7 @@ export default function SearchScreen() {
   const [moveTarget, setMoveTarget] = useState<BookmarkDto | null>(null);
   const [editTagsBm, setEditTagsBm] = useState<BookmarkDto | null>(null);
   const filterRef = useRef<View>(null);
+  const listRef = useRef<FlashList<BookmarkDto>>(null);
   const selection = useSelectionMode();
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
@@ -247,6 +249,10 @@ export default function SearchScreen() {
   const itemsRef = useRef(EMPTY_BOOKMARKS);
   const items = reuseSearchResults(itemsRef.current, compiledItems);
   itemsRef.current = items;
+
+  useEffect(() => {
+    listRef.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [filters.kind, filters.status, filters.tagIds, trimmed]);
 
   const selectedBookmarks = useMemo(
     () => items.filter((bookmark) => selection.has(bookmarkKey(bookmark.id))),
@@ -428,8 +434,9 @@ export default function SearchScreen() {
     }
   }, []);
 
-  const listPane = (
+  const listPane = items.length > 0 ? (
     <ThemedFlashList
+      ref={listRef}
       data={items}
       extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}:${trimmed}:${filters.tagIds.join(",")}:${filters.status}:${filters.kind}`}
       keyExtractor={(b: BookmarkDto) => b.id}
@@ -438,7 +445,6 @@ export default function SearchScreen() {
       estimatedItemSize={72}
       overrideItemLayout={overrideItemLayout}
       renderItem={renderBookmark}
-      ListEmptyComponent={empty ? <View style={styles.emptyList}>{empty}</View> : null}
       ListFooterComponent={
         search.isFetchingNextPage ? (
           <View style={styles.footer}>
@@ -452,6 +458,8 @@ export default function SearchScreen() {
       }}
       onEndReachedThreshold={0.4}
     />
+  ) : (
+    <View style={styles.emptyList}>{empty}</View>
   );
 
   const resultMeta = browsing && items.length > 0
@@ -483,7 +491,7 @@ export default function SearchScreen() {
         maxWidth={hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth}
         style={styles.content}
       >
-        <View style={styles.searchWrap}>
+        <View style={[styles.searchWrap, { backgroundColor: palette.background }]}>
           <View style={styles.searchRow}>
             <SearchField
               routeQuery={routeQuery}
@@ -627,7 +635,7 @@ export default function SearchScreen() {
 
 const styles = StyleSheet.create({
   content: { flex: 1, width: "100%" },
-  searchWrap: { width: "100%", paddingBottom: spacing[6] },
+  searchWrap: { width: "100%", paddingBottom: spacing[6], zIndex: 1, elevation: 1 },
   searchRow: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
   searchField: { flex: 1, minWidth: 0 },
   fieldTail: {
@@ -660,11 +668,11 @@ const styles = StyleSheet.create({
     gap: spacing[6],
     paddingTop: spacing[8],
   },
-  emptyList: { flexGrow: 1, alignItems: "center", justifyContent: "center", minHeight: 280 },
+  emptyList: { flex: 1, alignItems: "center", justifyContent: "center" },
   footer: { paddingVertical: spacing[20], alignItems: "center" },
-  singlePane: { flex: 1, width: "100%" },
+  singlePane: { flex: 1, width: "100%", overflow: "hidden" },
   splitPane: { flex: 1, width: "100%", flexDirection: "row", gap: spacing[16], paddingBottom: spacing[8] },
-  listPane: { width: 380, flexShrink: 0 },
+  listPane: { width: 380, flexShrink: 0, overflow: "hidden" },
   readerPane: {
     flex: 1,
     minWidth: 0,

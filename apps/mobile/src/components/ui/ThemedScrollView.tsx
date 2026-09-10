@@ -88,7 +88,10 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ScrollViewProps>(
   },
 );
 
-export function ThemedFlashList<T>(props: FlashListProps<T>) {
+export const ThemedFlashList = React.forwardRef(function ThemedFlashList<T>(
+  props: FlashListProps<T>,
+  ref: React.ForwardedRef<FlashList<T>>,
+) {
   const {
     style,
     onScroll,
@@ -107,6 +110,7 @@ export function ThemedFlashList<T>(props: FlashListProps<T>) {
   return (
     <View style={[styles.host, styles.fill, wrapper]} onLayout={chainHandlers(bar.onLayout, onLayout)}>
       <FlashList
+        ref={ref}
         estimatedItemSize={estimatedItemSize}
         drawDistance={drawDistance}
         {...rest}
@@ -123,7 +127,7 @@ export function ThemedFlashList<T>(props: FlashListProps<T>) {
       {bar.overlay}
     </View>
   );
-}
+}) as <T>(props: FlashListProps<T> & { ref?: React.Ref<FlashList<T>> }) => React.ReactElement;
 
 export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
   props: FlatListProps<T>,
@@ -167,6 +171,6 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
 }) as <T>(props: FlatListProps<T> & { ref?: React.Ref<FlatList<T>> }) => React.ReactElement;
 
 const styles = StyleSheet.create({
-  host: { position: "relative" },
+  host: { position: "relative", overflow: "hidden" },
   fill: { flex: 1 },
 });
