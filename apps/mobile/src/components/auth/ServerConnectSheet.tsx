@@ -1,16 +1,15 @@
 /**
- * Terminal-style floating "Connect to server" dialog.
+ * Floating "Connect to server" dialog.
  *
- * A monospace health-check log runs a live 2-step probe (connect → /api/server/info)
- * as the user types (debounced). The Change button stays disabled until the probe
- * reports `up`; clicking it runs one quick re-probe, then commits.
+ * A live health check runs as the user types (debounced). Change stays
+ * disabled until the probe reports the server is up; clicking it re-probes,
+ * then commits.
  *
- * Crucially, the probe runs in isolation and NEVER mutates the global server-URL
- * store — only the final commit does. (The previous version mutated the store to
- * probe, which is what broke Save / reset the URL.)
+ * The probe runs in isolation and never mutates the global server-URL store —
+ * only the final commit does.
  */
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { ActivityIndicator, StyleSheet, View, type TextInput } from "react-native";
 import Animated, {
   interpolateColor,
   useAnimatedStyle,
@@ -25,19 +24,19 @@ import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 import { Text } from "../ui/Text";
 import { PressableScale } from "../ui/PressableScale";
-import { ServerProbeLog } from "../ui/ServerProbeLog";
 import { useTheme } from "../../theme/ThemeProvider";
 import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
 import { haptics } from "../../lib/haptics";
 import { useSettingsStore } from "../../store/settings";
 import {
+  describeProbeField,
   hostOf,
   normalizeServerUrl,
   probeServer,
-  type ProbeStep,
 } from "../../lib/server-probe";
 import { visibleServerHistory } from "../../lib/server-history";
 import { timeAgo } from "../../lib/format";
+import type { ServerInfoDto } from "@ordo/shared";
 
 /**
  * Change button that sits greyed-out (neutral fill + muted label) until the
@@ -132,11 +131,13 @@ export function ServerConnectSheet({
   const setServerUrl = useSettingsStore((s) => s.setServerUrl);
   const serverHistory = useSettingsStore((s) => s.serverHistory);
   const recents = visibleServerHistory(serverHistory, currentUrl);
+  const inputRef = useRef<TextInput>(null);
 
   const [url, setUrl] = useState(currentUrl);
-  const [steps, setSteps] = useState<ProbeStep[]>([]);
   const [probing, setProbing] = useState(false);
   const [up, setUp] = useState(false);
+  const [probeDetail, setProbeDetail] = useState<string | null>(null);
+  const [probeInfo, setProbeInfo] = useState<Pick<ServerInfoDto, "name" | "version"> | null>(null);
   const [confirming, setConfirming] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -144,21 +145,23 @@ export function ServerConnectSheet({
   useEffect(() => {
     if (visible) {
       setUrl(currentUrl);
-      setSteps([]);
       setProbing(false);
       setUp(false);
+      setProbeDetail(null);
+      setProbeInfo(null);
       setConfirming(false);
     }
   }, [visible]);
 
-  // Debounced probe whenever the (normalised) URL changes.
   useEffect(() => {
     if (!visible) return;
     let cancelled = false;
     const normalized = normalizeServerUrl(url);
     if (!normalized || normalized === normalizeServerUrl(currentUrl)) {
-      setSteps([]);
       setUp(false);
+      setProbeDetail(null);
+      setProbeInfo(null);
+      setProbing(false);
       return;
     }
     if (debounceRef.current) clearTimeout(debounceRef.current);
@@ -166,12 +169,14 @@ export function ServerConnectSheet({
       if (cancelled) return;
       setProbing(true);
       setUp(false);
-      void probeServer(url, (s) => {
-        if (!cancelled) setSteps(s);
-      }).then((r) => {
+      setProbeDetail(null);
+      setProbeInfo(null);
+      void probeServer(url).then((r) => {
         if (cancelled) return;
         setProbing(false);
         setUp(r.status === "up");
+        setProbeDetail(r.detail ?? null);
+        setProbeInfo(r.info ?? null);
       });
     }, 900);
     return () => {
@@ -183,6 +188,13 @@ export function ServerConnectSheet({
   const normalized = normalizeServerUrl(url);
   const isUnchanged = !normalized || normalized === normalizeServerUrl(currentUrl);
   const canChange = !!normalized && !isUnchanged && up && !probing && !confirming;
+  const probeCopy = describeProbeField({
+    idle: isUnchanged,
+    probing,
+    reachable: up,
+    detail: probeDetail,
+    info: probeInfo,
+  });
 
   const onChange = async () => {
     if (!normalized || !canChange) return;
@@ -194,35 +206,45 @@ export function ServerConnectSheet({
       onDismiss();
       onSaved?.();
     } else {
-      // Refresh the log to show the failure detail.
       setUp(false);
-      void probeServer(normalized, (s) => setSteps(s));
+      setProbeDetail(recheck.detail ?? null);
+      setProbeInfo(null);
     }
   };
 
   return (
-    <FloatingPanel visible={visible} onDismiss={confirming ? () => {} : onDismiss}>
+    <FloatingPanel
+      visible={visible}
+      onDismiss={confirming ? () => {} : onDismiss}
+      onShow={() => {
+        setTimeout(() => inputRef.current?.focus(), 100);
+      }}
+    >
       <ThemedScrollView keyboardShouldPersistTaps="handled">
       <PanelHeader
         icon="cloud-outline"
         iconColor={palette.blue}
-        iconBackground="rgba(79,125,166,0.14)"
         title="Server URL"
+        subtitle="Address of your self-hosted Ordo server."
       />
 
       <Input
+        ref={inputRef}
         value={url}
         onChangeText={setUrl}
-        placeholder="http://localhost:3000"
-        mono
+        placeholder="https://ordo.example.com"
         keyboardType="url"
         autoCapitalize="none"
         autoCorrect={false}
-        autoFocus
-        icon={<Ionicons name="link" size={15} color={palette.textTertiary} />}
+        autoComplete="off"
+        textContentType="URL"
+        importantForAutofill="no"
+        spellCheck={false}
+        editable={!confirming}
+        error={probeCopy.error}
+        helper={probeCopy.helper}
       />
 
-      {/* Recents fill the URL so the existing health check still has to pass. */}
       {recents.length > 0 ? (
         <View style={styles.recents}>
           <Text variant="label" color="tertiary">Recent</Text>
@@ -241,13 +263,13 @@ export function ServerConnectSheet({
                 style={[
                   styles.recentRow,
                   {
-                    backgroundColor: selected ? palette.accentSoft : palette.surfaceSecondary,
+                    backgroundColor: palette.surfaceSecondary,
                     borderColor: selected ? palette.accent : "transparent",
                   },
                 ]}
               >
                 <Ionicons
-                  name="time-outline"
+                  name={selected ? "checkmark" : "time-outline"}
                   size={14}
                   color={selected ? palette.accent : palette.textTertiary}
                 />
@@ -255,7 +277,7 @@ export function ServerConnectSheet({
                   <Text variant="subhead" numberOfLines={1} color={selected ? "accent" : "primary"}>
                     {hostOf(entry.url)}
                   </Text>
-                  <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
+                  <Text variant="footnote" color="tertiary" numberOfLines={1}>
                     {timeAgo(new Date(entry.lastConnectedAt).toISOString())}
                   </Text>
                 </View>
@@ -265,22 +287,6 @@ export function ServerConnectSheet({
         </View>
       ) : null}
 
-      {/* Terminal log */}
-      {!isUnchanged ? (
-        <ServerProbeLog steps={steps} probing={probing} />
-      ) : null}
-
-      {/* Current hint */}
-      {!isUnchanged && currentUrl ? (
-        <View style={styles.currentRow}>
-          <Ionicons name="time-outline" size={11} color={palette.textTertiary} />
-          <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={{ flex: 1 }}>
-            Current: {hostOf(currentUrl)}
-          </Text>
-        </View>
-      ) : null}
-
-      {/* Actions */}
       <View style={styles.actions}>
         <Button
           label="Cancel"
@@ -315,7 +321,7 @@ export function ServerConnectSheet({
 }
 
 const styles = StyleSheet.create({
-  recents: { marginTop: spacing[10], gap: spacing[6] },
+  recents: { marginTop: spacing[12], gap: spacing[6] },
   recentRow: {
     minHeight: 44,
     borderWidth: 1,
@@ -327,12 +333,11 @@ const styles = StyleSheet.create({
     gap: spacing[10],
   },
   recentCopy: { flex: 1, minWidth: 0 },
-  currentRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: spacing[8] },
   actions: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[8],
-    marginTop: spacing[12],
+    marginTop: spacing[16],
   },
   action: { flex: 1 },
   changeBtn: {

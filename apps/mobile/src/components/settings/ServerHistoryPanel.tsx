@@ -33,7 +33,7 @@ export function ServerHistoryPanel({
   const selectedOrigin = normalizeServerUrl(selectedUrl);
 
   return (
-    <SettingsGroup label="Recent servers">
+    <SettingsGroup label="Recent servers" footer="Tap a server to use it as the new address.">
       {entries.map((entry, index) => {
         const host = hostOf(entry.url);
         const selected = selectedOrigin === entry.url;
@@ -45,7 +45,6 @@ export function ServerHistoryPanel({
               styles.row,
               { borderBottomColor: palette.border },
               index === entries.length - 1 && styles.noDivider,
-              selected && { backgroundColor: palette.accentSoft },
             ]}
           >
             <PressableScale
@@ -59,13 +58,13 @@ export function ServerHistoryPanel({
             >
               <View style={[styles.iconWrap, { backgroundColor: palette.surfaceSecondary }]}>
                 <Ionicons
-                  name={selected ? "radio-button-on" : "time-outline"}
+                  name={selected ? "checkmark" : "time-outline"}
                   size={16}
-                  color={selected ? palette.accent : palette.blue}
+                  color={selected ? palette.accent : palette.textTertiary}
                 />
               </View>
               <View style={styles.body}>
-                <Text variant="body" numberOfLines={1} color={selected ? "accent" : "primary"}>
+                <Text variant="bodyStrong" numberOfLines={1} color={selected ? "accent" : "primary"}>
                   {host}
                 </Text>
                 <Text variant="footnote" color="tertiary" numberOfLines={1}>
@@ -104,9 +103,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[12],
-    minHeight: 64,
+    minHeight: 52,
     paddingLeft: spacing[16],
-    paddingVertical: spacing[12],
+    paddingVertical: spacing[10],
     borderRadius: radius.sm,
   },
   iconWrap: {

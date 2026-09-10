@@ -65,9 +65,30 @@ export function hostOf(url: string): string {
   }
 }
 
+/** One-line copy for the URL field while a candidate server is checked. */
+export function describeProbeField(state: {
+  idle: boolean;
+  probing: boolean;
+  reachable: boolean;
+  detail?: string | null;
+  info?: Pick<ServerInfoDto, "name" | "version"> | null;
+}): { error?: string; helper?: string } {
+  if (state.idle) return {};
+  if (state.probing) return { helper: "Checking this server…" };
+  if (state.reachable) {
+    const bits = [state.info?.name, state.info?.version ? `v${state.info.version}` : null].filter(
+      (part): part is string => Boolean(part),
+    );
+    return { helper: bits.length ? `Reachable · ${bits.join(" ")}` : "This server is reachable" };
+  }
+  if (state.detail === "Invalid URL") return { error: "Enter a valid URL." };
+  if (state.detail === "timeout") return { error: "This server didn't respond." };
+  if (state.detail?.startsWith("HTTP ")) return { error: `Server responded with ${state.detail}.` };
+  return { error: "Can't reach this server." };
+}
+
 /**
- * Probe a candidate server URL. Calls `onStep` after each step resolves so a
- * terminal-style log can render progressively. Never touches global state.
+ * Probe a candidate server URL. Never touches global state.
  */
 export async function probeServer(
   rawUrl: string,

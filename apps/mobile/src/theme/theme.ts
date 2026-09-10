@@ -150,16 +150,3 @@ export function resolveShadows(p: Palette): Shadows {
     level3: makeShadow(c, 3),
   };
 }
-
-/**
- * Fixed terminal palette for the server health-check UI (always dark,
- * regardless of app theme — matches ordo-archive's hacker-style log).
- */
-export const terminalPalette = {
-  bg: "#15140F",
-  text: "#EBDDB2",
-  mute: "#928374",
-  teal: "#7DAEA3",
-  green: "#8AAA5A",
-  coral: "#ED6F5C",
-} as const;
