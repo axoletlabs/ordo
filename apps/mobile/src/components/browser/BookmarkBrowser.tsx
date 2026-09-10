@@ -267,7 +267,6 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           cacheEnabled
           cacheMode="LOAD_DEFAULT"
           mixedContentMode="compatibility"
-          decelerationRate="normal"
           allowsBackForwardNavigationGestures
           allowsFullscreenVideo
           sharedCookiesEnabled
