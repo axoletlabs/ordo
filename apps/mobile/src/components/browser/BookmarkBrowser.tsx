@@ -2,9 +2,9 @@
  * Ordo's built-in website view for bookmarks that are not articles.
  * Loads the live page (with JavaScript) inside the app.
  *
- * Pull-to-refresh: iOS uses WKWebView's native control; Android wraps the
- * WebView in a RefreshControl that only intercepts while the page is at
- * the top. A thin top bar tracks load progress instead of covering the page.
+ * Pull-to-refresh is detected inside the page (touch + scroll position) and
+ * posted to React Native. Native UIRefreshControl and wrapping ScrollViews
+ * never receive WebView pans, so they cannot drive a reload.
  *
  * When force-dark is on, a user script inverts pages that are still light.
  * It must not observe the document tree: a MutationObserver during parse
@@ -19,30 +19,26 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  BackHandler,
-  Linking,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  View,
-} from "react-native";
+import { ActivityIndicator, BackHandler, Linking, Platform, StyleSheet, View } from "react-native";
 import { WebView, type WebViewNavigation } from "react-native-webview";
 import {
-  androidPullToRefreshScrollEnabled,
+  BROWSER_PTR_THRESHOLD,
   browserInjectedJavaScript,
   browserProgressBarWidth,
-  isCancelledWebViewError,
-  pageHostFromWebViewUrl,
+  browserPtrHudOffset,
+  browserPtrHudOpacity,
+  parseBrowserPtrMessage,
+  shouldCommitBrowserPtr,
   webViewRequestAction,
+  pageHostFromWebViewUrl,
+  isCancelledWebViewError,
 } from "../../lib/in-app-browser";
 import { haptics } from "../../lib/haptics";
 import { WEBSITE_FORCE_DARK_SCRIPT } from "../../lib/website-force-dark";
 import { useSettingsStore } from "../../store/settings";
 import { useTheme } from "../../theme/ThemeProvider";
 import { resolvePalette } from "../../theme/theme";
-import { spacing } from "../../theme/tokens";
+import { radius, spacing } from "../../theme/tokens";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 
@@ -66,13 +62,14 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     const amoled = useSettingsStore((s) => s.amoled);
     const webRef = useRef<WebView>(null);
     const canGoBackRef = useRef(false);
-    const atTopRef = useRef(true);
+    const ptrDyRef = useRef(0);
+    const refreshingRef = useRef(false);
+    const armedHapticRef = useRef(false);
     const [loading, setLoading] = useState(true);
     const [progress, setProgress] = useState(0);
     const [error, setError] = useState<string | null>(null);
     const [refreshing, setRefreshing] = useState(false);
-    const [ptrEnabled, setPtrEnabled] = useState(true);
-    const [viewportHeight, setViewportHeight] = useState(0);
+    const [ptrDy, setPtrDy] = useState(0);
     const source = useMemo(() => ({ uri: url }), [url]);
     const injected = useMemo(
       () =>
@@ -82,13 +79,17 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     const chromeBackground = forceWebsiteDark
       ? resolvePalette("dark", amoled, "dark").background
       : palette.background;
-    const darkChrome = forceWebsiteDark || palette.mode === "dark";
     const barWidth = browserProgressBarWidth(progress, loading && !error);
+    const hudOpacity = browserPtrHudOpacity(ptrDy, refreshing);
+    const hudOffset = browserPtrHudOffset(ptrDy);
 
     const finishLoad = useCallback(() => {
+      refreshingRef.current = false;
       setLoading(false);
       setProgress(1);
       setRefreshing(false);
+      ptrDyRef.current = 0;
+      setPtrDy(0);
     }, []);
 
     const beginLoad = useCallback(() => {
@@ -104,6 +105,16 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
       webRef.current?.reload();
     }, []);
 
+    const handleRefresh = useCallback(() => {
+      if (refreshingRef.current) return;
+      refreshingRef.current = true;
+      haptics.light();
+      setRefreshing(true);
+      ptrDyRef.current = BROWSER_PTR_THRESHOLD;
+      setPtrDy(BROWSER_PTR_THRESHOLD);
+      reload();
+    }, [reload]);
+
     useImperativeHandle(
       ref,
       () => ({
@@ -112,9 +123,9 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           webRef.current?.goBack();
           return true;
         },
-        reload,
+        reload: handleRefresh,
       }),
-      [reload],
+      [handleRefresh],
     );
 
     useEffect(() => {
@@ -178,7 +189,10 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     const handleError = useCallback(
       (event: { nativeEvent: { code: number; description: string } }) => {
         const { code, description } = event.nativeEvent;
+        refreshingRef.current = false;
         setRefreshing(false);
+        ptrDyRef.current = 0;
+        setPtrDy(0);
         if (isCancelledWebViewError(code, description)) {
           finishLoad();
           return;
@@ -189,119 +203,110 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
       [finishLoad],
     );
 
-    const handleRefresh = useCallback(() => {
-      haptics.light();
-      setRefreshing(true);
-      reload();
-    }, [reload]);
-
-    const handleScroll = useCallback(
-      (event: { nativeEvent: { contentOffset: { y: number } } }) => {
-        const atTop = androidPullToRefreshScrollEnabled(event.nativeEvent.contentOffset.y);
-        if (atTop === atTopRef.current) return;
-        atTopRef.current = atTop;
-        setPtrEnabled(atTop);
+    const handleMessage = useCallback(
+      (event: { nativeEvent: { data: string } }) => {
+        const msg = parseBrowserPtrMessage(event.nativeEvent.data);
+        if (!msg) return;
+        if (msg.phase === "move") {
+          if (refreshingRef.current) return;
+          const dy = Math.max(0, msg.dy);
+          if (Math.abs(dy - ptrDyRef.current) >= 4) {
+            ptrDyRef.current = dy;
+            setPtrDy(dy);
+          }
+          if (dy >= BROWSER_PTR_THRESHOLD && !armedHapticRef.current) {
+            armedHapticRef.current = true;
+            haptics.selection();
+          } else if (dy < BROWSER_PTR_THRESHOLD) {
+            armedHapticRef.current = false;
+          }
+          return;
+        }
+        armedHapticRef.current = false;
+        if (msg.phase === "end" && shouldCommitBrowserPtr(msg.dy, refreshingRef.current)) {
+          handleRefresh();
+          return;
+        }
+        if (!refreshingRef.current) {
+          ptrDyRef.current = 0;
+          setPtrDy(0);
+        }
       },
-      [],
+      [handleRefresh],
     );
 
     const recoverProcess = useCallback(() => {
       webRef.current?.reload();
     }, []);
 
-    const webView = (
-      <WebView
-        ref={webRef}
-        key={`${url}:${forceWebsiteDark ? "dark" : "auto"}`}
-        source={source}
-        style={[
-          styles.web,
-          // RN WebView defaults `style` to #ffffff; that flashes on open/close.
-          { backgroundColor: chromeBackground },
-          Platform.OS === "android" && viewportHeight > 0 ? { height: viewportHeight } : null,
-        ]}
-        containerStyle={[styles.web, { backgroundColor: chromeBackground }]}
-        startInLoadingState={false}
-        onLoadStart={beginLoad}
-        onLoadEnd={finishLoad}
-        onLoadProgress={handleProgress}
-        onError={handleError}
-        onNavigationStateChange={handleNav}
-        onShouldStartLoadWithRequest={handleShouldStart}
-        onOpenWindow={handleOpenWindow}
-        onScroll={Platform.OS === "android" ? handleScroll : undefined}
-        onFileDownload={({ nativeEvent }) => {
-          void Linking.openURL(nativeEvent.downloadUrl).catch(() => {});
-        }}
-        onContentProcessDidTerminate={recoverProcess}
-        onRenderProcessGone={recoverProcess}
-        setSupportMultipleWindows={false}
-        nestedScrollEnabled={Platform.OS === "android"}
-        overScrollMode="never"
-        cacheEnabled
-        cacheMode="LOAD_DEFAULT"
-        mixedContentMode="compatibility"
-        decelerationRate="normal"
-        allowsBackForwardNavigationGestures
-        pullToRefreshEnabled={Platform.OS === "ios"}
-        refreshControlLightMode={darkChrome}
-        allowsFullscreenVideo
-        sharedCookiesEnabled
-        thirdPartyCookiesEnabled
-        javaScriptEnabled
-        javaScriptCanOpenWindowsAutomatically={false}
-        injectedJavaScriptForMainFrameOnly
-        injectedJavaScriptBeforeContentLoadedForMainFrameOnly
-        domStorageEnabled
-        allowsInlineMediaPlayback
-        mediaPlaybackRequiresUserAction={false}
-        automaticallyAdjustContentInsets={false}
-        contentInsetAdjustmentBehavior="never"
-        hideKeyboardAccessoryView
-        showsHorizontalScrollIndicator={false}
-        originWhitelist={["*"]}
-        setBuiltInZoomControls
-        setDisplayZoomControls={false}
-        injectedJavaScriptBeforeContentLoaded={injected}
-        injectedJavaScript={injected}
-      />
-    );
-
     return (
-      <View
-        collapsable={false}
-        style={[styles.wrap, { backgroundColor: chromeBackground }]}
-        onLayout={(event) => {
-          const height = event.nativeEvent.layout.height;
-          if (height > 0) setViewportHeight(height);
-        }}
-      >
-        {Platform.OS === "android" ? (
-          <ScrollView
-            style={[styles.web, { backgroundColor: chromeBackground }]}
-            contentContainerStyle={viewportHeight > 0 ? { height: viewportHeight } : styles.web}
-            scrollEnabled={ptrEnabled}
-            nestedScrollEnabled
-            showsVerticalScrollIndicator={false}
-            showsHorizontalScrollIndicator={false}
-            overScrollMode="never"
-            keyboardShouldPersistTaps="handled"
-            refreshControl={
-              <RefreshControl
-                refreshing={refreshing}
-                onRefresh={handleRefresh}
-                enabled={ptrEnabled}
-                colors={[palette.accent]}
-                tintColor={palette.accent}
-                progressBackgroundColor={chromeBackground}
-              />
-            }
+      <View collapsable={false} style={[styles.wrap, { backgroundColor: chromeBackground }]}>
+        <WebView
+          ref={webRef}
+          key={`${url}:${forceWebsiteDark ? "dark" : "auto"}`}
+          source={source}
+          style={[styles.web, { backgroundColor: chromeBackground }]} // WebView defaults to #fff // WebView defaults to #fff
+          containerStyle={[styles.web, { backgroundColor: chromeBackground }]}
+          startInLoadingState={false}
+          onLoadStart={beginLoad}
+          onLoadEnd={finishLoad}
+          onLoadProgress={handleProgress}
+          onError={handleError}
+          onNavigationStateChange={handleNav}
+          onShouldStartLoadWithRequest={handleShouldStart}
+          onOpenWindow={handleOpenWindow}
+          onMessage={handleMessage}
+          onFileDownload={({ nativeEvent }) => {
+            void Linking.openURL(nativeEvent.downloadUrl).catch(() => {});
+          }}
+          onContentProcessDidTerminate={recoverProcess}
+          onRenderProcessGone={recoverProcess}
+          setSupportMultipleWindows={false}
+          bounces
+          overScrollMode="always"
+          cacheEnabled
+          cacheMode="LOAD_DEFAULT"
+          mixedContentMode="compatibility"
+          decelerationRate="normal"
+          allowsBackForwardNavigationGestures
+          allowsFullscreenVideo
+          sharedCookiesEnabled
+          thirdPartyCookiesEnabled
+          javaScriptEnabled
+          javaScriptCanOpenWindowsAutomatically={false}
+          injectedJavaScriptForMainFrameOnly
+          injectedJavaScriptBeforeContentLoadedForMainFrameOnly
+          domStorageEnabled
+          allowsInlineMediaPlayback
+          mediaPlaybackRequiresUserAction={false}
+          automaticallyAdjustContentInsets={false}
+          contentInsetAdjustmentBehavior="never"
+          hideKeyboardAccessoryView
+          showsHorizontalScrollIndicator={false}
+          originWhitelist={["*"]}
+          setBuiltInZoomControls
+          setDisplayZoomControls={false}
+          injectedJavaScriptBeforeContentLoaded={injected}
+          injectedJavaScript={injected}
+        />
+        {hudOpacity > 0 ? (
+          <View
+            pointerEvents="none"
+            style={[
+              styles.ptrHud,
+              { opacity: hudOpacity, transform: [{ translateY: hudOffset }] },
+            ]}
           >
-            {webView}
-          </ScrollView>
-        ) : (
-          webView
-        )}
+            <View
+              style={[
+                styles.ptrChip,
+                { backgroundColor: palette.surfaceElevated, borderColor: palette.borderStrong },
+              ]}
+            >
+              <ActivityIndicator color={palette.accent} />
+            </View>
+          </View>
+        ) : null}
         {barWidth > 0 ? (
           <View
             pointerEvents="none"
@@ -324,7 +329,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
               icon="cloud-offline-outline"
               title="Couldn't load this page"
               message={error}
-              action={<Button label="Retry" variant="secondary" onPress={reload} />}
+              action={<Button label="Retry" variant="secondary" onPress={handleRefresh} />}
             />
           </View>
         ) : null}
@@ -336,6 +341,21 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
 const styles = StyleSheet.create({
   wrap: { flex: 1 },
   web: { flex: 1, ...(Platform.OS === "web" ? ({ height: "100%" } as const) : null) },
+  ptrHud: {
+    position: "absolute",
+    top: spacing[8],
+    left: 0,
+    right: 0,
+    alignItems: "center",
+  },
+  ptrChip: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.full,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   progressTrack: {
     position: "absolute",
     top: 0,

@@ -2,11 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   BROWSER_NAV_SCRIPT,
-  androidPullToRefreshScrollEnabled,
+  BROWSER_PTR_SCRIPT,
+  BROWSER_PTR_THRESHOLD,
   browserInjectedJavaScript,
   browserProgressBarWidth,
+  browserPtrHudOffset,
+  browserPtrHudOpacity,
   isCancelledWebViewError,
   pageHostFromWebViewUrl,
+  parseBrowserPtrMessage,
+  shouldCommitBrowserPtr,
   webViewRequestAction,
   webViewUrlScheme,
 } from "./in-app-browser.ts";
@@ -53,10 +58,37 @@ test("pageHostFromWebViewUrl strips www and skips blank documents", () => {
   assert.equal(pageHostFromWebViewUrl("data:text/html,x"), null);
 });
 
-test("android pull-to-refresh only owns the pan at the top of the page", () => {
-  assert.equal(androidPullToRefreshScrollEnabled(0), true);
-  assert.equal(androidPullToRefreshScrollEnabled(0.4), true);
-  assert.equal(androidPullToRefreshScrollEnabled(12), false);
+test("pull-to-refresh commits only after a long enough pull at rest", () => {
+  assert.equal(shouldCommitBrowserPtr(0, false), false);
+  assert.equal(shouldCommitBrowserPtr(BROWSER_PTR_THRESHOLD - 1, false), false);
+  assert.equal(shouldCommitBrowserPtr(BROWSER_PTR_THRESHOLD, false), true);
+  assert.equal(shouldCommitBrowserPtr(200, true), false);
+});
+
+test("parseBrowserPtrMessage ignores unrelated WebView messages", () => {
+  assert.equal(parseBrowserPtrMessage("not-json"), null);
+  assert.equal(parseBrowserPtrMessage('{"hello":1}'), null);
+  assert.deepEqual(parseBrowserPtrMessage('{"type":"ordo-ptr","phase":"end","dy":80}'), {
+    type: "ordo-ptr",
+    phase: "end",
+    dy: 80,
+  });
+});
+
+test("ptr hud follows the pull then holds while refreshing", () => {
+  assert.equal(browserPtrHudOpacity(0, false), 0);
+  assert.equal(browserPtrHudOpacity(48, false), 1);
+  assert.equal(browserPtrHudOpacity(0, true), 1);
+  assert.equal(browserPtrHudOffset(0), 0);
+  assert.ok(browserPtrHudOffset(40) > 0);
+});
+
+test("ptr script listens for touches without observing the tree", () => {
+  assert.match(BROWSER_PTR_SCRIPT, /ordo-ptr/);
+  assert.match(BROWSER_PTR_SCRIPT, /touchstart/);
+  assert.match(BROWSER_PTR_SCRIPT, /touchend/);
+  assert.doesNotMatch(BROWSER_PTR_SCRIPT, /MutationObserver/);
+  assert.match(BROWSER_PTR_SCRIPT, /true;\s*$/);
 });
 
 test("progress bar stays visible during load and has a minimum width", () => {
@@ -75,5 +107,6 @@ test("navigation shim rewrites new windows without observing the tree", () => {
 
 test("injected script includes extra user script when provided", () => {
   assert.match(browserInjectedJavaScript("true;"), /__ordoBrowser/);
+  assert.match(browserInjectedJavaScript("true;"), /__ordoPtr/);
   assert.match(browserInjectedJavaScript("window.__ordoExtra = 1; true;"), /__ordoExtra/);
 });

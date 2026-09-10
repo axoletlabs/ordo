@@ -912,6 +912,16 @@ function ReaderPaneInner({
             onPress={() => setActionPanel("contents")}
           />
         ) : null}
+        {showWebsiteView ? (
+          <ContextMenuItem
+            icon="refresh-outline"
+            label="Refresh"
+            onPress={() => {
+              setActionPanel(null);
+              browserRef.current?.reload();
+            }}
+          />
+        ) : null}
         <ContextMenuItem
           icon="share-social-outline"
           label={showWebsiteView ? "Share page" : "Share article"}
@@ -920,16 +930,6 @@ function ReaderPaneInner({
             handleShare();
           }}
         />
-        {showWebsiteView ? (
-          <ContextMenuItem
-            icon="refresh-outline"
-            label="Reload"
-            onPress={() => {
-              setActionPanel(null);
-              browserRef.current?.reload();
-            }}
-          />
-        ) : null}
         <ContextMenuItem
           icon="link-outline"
           label="Copy link"

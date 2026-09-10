@@ -106,12 +106,124 @@ export function pageHostFromWebViewUrl(url: string): string | null {
   }
 }
 
+/** Finger travel (CSS px) before a top-of-page pull commits a reload. */
+export const BROWSER_PTR_THRESHOLD = 72;
+
+export type BrowserPtrPhase = "move" | "end" | "cancel";
+export interface BrowserPtrMessage {
+  type: "ordo-ptr";
+  phase: BrowserPtrPhase;
+  dy: number;
+}
+
 /**
- * Android: the wrapping ScrollView must only intercept when the page is at
- * the top, otherwise it steals vertical pans from the WebView.
+ * Runs inside the page so the pull is measured where scrolling actually
+ * happens. Native UIRefreshControl / wrapping ScrollView never see WebView
+ * pans. No MutationObserver — that starves the load.
  */
-export function androidPullToRefreshScrollEnabled(contentOffsetY: number): boolean {
-  return contentOffsetY <= 0.5;
+export const BROWSER_PTR_SCRIPT = `(function(){
+  if (window.__ordoPtr) return;
+  window.__ordoPtr = true;
+  var startY = 0;
+  var startX = 0;
+  var armed = false;
+  var lastDy = 0;
+  var lastAt = 0;
+  function send(phase, dy) {
+    try {
+      if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
+        window.ReactNativeWebView.postMessage(JSON.stringify({
+          type: 'ordo-ptr',
+          phase: phase,
+          dy: dy
+        }));
+      }
+    } catch (e) {}
+  }
+  function nodeEl(n) {
+    if (!n) return document.documentElement;
+    return n.nodeType === 1 ? n : (n.parentElement || document.documentElement);
+  }
+  function isAtTop(from) {
+    var n = nodeEl(from);
+    while (n && n !== document && n !== document.documentElement) {
+      if (n.scrollHeight > n.clientHeight + 1 && n.scrollTop > 1) return false;
+      n = n.parentElement;
+    }
+    var se = document.scrollingElement || document.documentElement;
+    if (se && se.scrollTop > 1) return false;
+    if (document.body && document.body.scrollTop > 1) return false;
+    if ((window.scrollY || window.pageYOffset || 0) > 1) return false;
+    return true;
+  }
+  document.addEventListener('touchstart', function(e) {
+    if (!e.touches || e.touches.length !== 1) { armed = false; return; }
+    startY = e.touches[0].clientY;
+    startX = e.touches[0].clientX;
+    armed = isAtTop(e.target);
+    lastDy = 0;
+    lastAt = 0;
+  }, { capture: true, passive: true });
+  document.addEventListener('touchmove', function(e) {
+    if (!armed || !e.touches || e.touches.length !== 1) return;
+    var dy = e.touches[0].clientY - startY;
+    var dx = e.touches[0].clientX - startX;
+    if (Math.abs(dx) > 24 && Math.abs(dx) > dy) {
+      armed = false;
+      send('cancel', 0);
+      return;
+    }
+    if (dy < 0) return;
+    if (!isAtTop(e.target)) {
+      armed = false;
+      send('cancel', 0);
+      return;
+    }
+    var now = Date.now();
+    if (Math.abs(dy - lastDy) < 6 && now - lastAt < 32) return;
+    lastDy = dy;
+    lastAt = now;
+    send('move', dy);
+  }, { capture: true, passive: true });
+  function finish(e) {
+    if (!armed) return;
+    armed = false;
+    var y = e.changedTouches && e.changedTouches[0] ? e.changedTouches[0].clientY : startY;
+    send('end', y - startY);
+  }
+  document.addEventListener('touchend', finish, { capture: true, passive: true });
+  document.addEventListener('touchcancel', function() {
+    if (!armed) return;
+    armed = false;
+    send('cancel', 0);
+  }, { capture: true, passive: true });
+})();
+true;`;
+
+export function parseBrowserPtrMessage(raw: string): BrowserPtrMessage | null {
+  try {
+    const data = JSON.parse(raw) as { type?: unknown; phase?: unknown; dy?: unknown };
+    if (data?.type !== "ordo-ptr") return null;
+    if (data.phase !== "move" && data.phase !== "end" && data.phase !== "cancel") return null;
+    const dy = Number(data.dy);
+    return { type: "ordo-ptr", phase: data.phase, dy: Number.isFinite(dy) ? dy : 0 };
+  } catch {
+    return null;
+  }
+}
+
+export function shouldCommitBrowserPtr(dy: number, refreshing: boolean): boolean {
+  return !refreshing && dy >= BROWSER_PTR_THRESHOLD;
+}
+
+export function browserPtrHudOpacity(dy: number, refreshing: boolean): number {
+  if (refreshing) return 1;
+  if (dy <= 0) return 0;
+  return Math.min(1, dy / 48);
+}
+
+export function browserPtrHudOffset(dy: number): number {
+  return Math.min(Math.max(dy, 0) * 0.4, 36);
 }
 
 /** Width 0–1 of the top loading bar. A hair of width so a 0% load is visible. */
@@ -122,5 +234,5 @@ export function browserProgressBarWidth(progress: number, loading: boolean): num
 }
 
 export function browserInjectedJavaScript(extraScript = "true;"): string {
-  return `${BROWSER_NAV_SCRIPT}\n${extraScript}`;
+  return `${BROWSER_NAV_SCRIPT}\n${BROWSER_PTR_SCRIPT}\n${extraScript}`;
 }
