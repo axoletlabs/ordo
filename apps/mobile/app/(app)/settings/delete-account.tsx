@@ -78,10 +78,7 @@ export default function DeleteAccountScreen() {
         style={{ flex: 1 }}
       >
         <SettingsScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-          <SettingsGroup
-            compact
-            footer="Bookmarks, folders, and sessions are permanently deleted."
-          >
+          <SettingsGroup compact>
             <SettingsForm style={styles.form}>
               <Input
                 label="Password"

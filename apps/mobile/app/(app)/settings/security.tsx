@@ -33,15 +33,10 @@ export default function SecurityScreen() {
         <SettingsScrollView keyboardShouldPersistTaps="handled">
           {user?.mfaEnabled ? (
             <>
-              <SettingsGroup
-                label="Authenticator"
-                compact
-                footer="Backup codes are shown only when you create them."
-              >
+              <SettingsGroup label="Authenticator" compact>
                 <SettingRow
                   icon="key-outline"
                   label="New backup codes"
-                  description="Previous codes will stop working."
                   onPress={() => setStepUp("regenerate")}
                   showChevron
                   divider={false}

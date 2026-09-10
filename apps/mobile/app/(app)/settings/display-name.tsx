@@ -52,7 +52,7 @@ export default function ChangeDisplayNameScreen() {
         style={{ flex: 1 }}
       >
         <SettingsScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-          <SettingsGroup compact footer="Shown on your account. Not used to sign in.">
+          <SettingsGroup compact>
             <SettingsForm style={styles.form}>
               <Input
                 label="Display name"
