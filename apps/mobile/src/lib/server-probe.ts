@@ -6,6 +6,9 @@
  */
 import { APP_NAME, type ServerInfoDto } from "@ordo/shared";
 import { isAbortError, isDeadlineError, raceDeadline } from "./fetch-timeout";
+import { hostOf } from "./instance-name";
+
+export { hostOf } from "./instance-name";
 
 export type ProbeStepState = "pending" | "success" | "failure";
 
@@ -53,15 +56,6 @@ export function normalizeServerUrl(raw: string): string | null {
     return u.origin;
   } catch {
     return null;
-  }
-}
-
-/** Pretty host (without scheme) for display. */
-export function hostOf(url: string): string {
-  try {
-    return new URL(url).host;
-  } catch {
-    return url;
   }
 }
 

@@ -37,7 +37,7 @@ import { serverApi } from "../../../src/lib/api/server";
 import { qk } from "../../../src/lib/api/query-keys";
 import { queryClient } from "../../../src/lib/query-client";
 import { visibleServerHistory } from "../../../src/lib/server-history";
-import { hostOf } from "../../../src/lib/server-probe";
+import { hostOf, instanceNameOf } from "../../../src/lib/instance-name";
 import { errorMessage } from "../../../src/lib/error-message";
 import { useAuthStore } from "../../../src/store/auth";
 import { useFolderTokenStore } from "../../../src/store/folder-tokens";
@@ -70,7 +70,7 @@ export default function ServerScreen() {
       ? "Connected"
       : "Checking…";
   const statusTone = serverInfo.error ? "danger" : serverInfo.data ? "green" : "neutral";
-  const displayName = serverInfo.data?.name?.trim() || hostOf(currentUrl);
+  const displayName = instanceNameOf(serverInfo.data, currentUrl);
   const hostname = serverInfo.data?.hostname?.trim() || "";
 
   const openSheet = (url: string) => {
