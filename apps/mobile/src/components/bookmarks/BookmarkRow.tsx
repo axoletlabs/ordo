@@ -3,7 +3,7 @@
  * reveals actions. Hold the favicon to multi-select.
  */
 import React from "react";
-import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -14,6 +14,7 @@ import { SelectionMark } from "./SelectionMark";
 import { useTheme } from "../../theme/ThemeProvider";
 import { domainFromUrl, relativeTime } from "../../lib/format";
 import { bookmarkIsArticle, bookmarkOpensAsWebsite } from "../../lib/bookmark-reader";
+import { openBookmarkInExternalBrowser } from "../../lib/open-website";
 import { haptics } from "../../lib/haptics";
 import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { prefetchBookmarkDetail } from "../../hooks/use-bookmarks";
@@ -139,6 +140,13 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   const openMore = (event?: { nativeEvent: { pageX: number; pageY: number } }) => {
     haptics.light();
     measureAnchor(rowRef.current, (anchor) => onMore?.(bookmark, anchor), event);
+  };
+
+  const openExternal = (event?: { stopPropagation?: () => void }) => {
+    event?.stopPropagation?.();
+    if (selectionMode) return;
+    haptics.light();
+    openBookmarkInExternalBrowser(bookmark);
   };
 
   const rowFill = selected || highlighted
@@ -320,13 +328,30 @@ export const BookmarkRow = React.memo(function BookmarkRow({
                 accessible={false}
               />
             ) : opensAsWebsite ? (
-              <Ionicons
-                name="open-outline"
-                size={13}
-                color={palette.textTertiary}
-                style={styles.statusIcon}
-                accessible={false}
-              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${title} in the browser`}
+                accessibilityHint="Opens the original page in your browser app."
+                hitSlop={{ top: 6, bottom: 8, left: 2, right: 10 }}
+                disabled={selectionMode}
+                onPressIn={(event) => event.stopPropagation()}
+                onPress={openExternal}
+                onLongPress={
+                  selectionMode || !onMore ? undefined : (event) => {
+                    event.stopPropagation();
+                    openMore(event);
+                  }
+                }
+                delayLongPress={SELECTION_LONG_PRESS_MS}
+                style={({ pressed }) => [styles.openExternal, pressed ? styles.openExternalPressed : null]}
+              >
+                <Ionicons
+                  name="open-outline"
+                  size={13}
+                  color={palette.textTertiary}
+                  accessible={false}
+                />
+              </Pressable>
             ) : null}
           </View>
         </View>
@@ -397,4 +422,9 @@ const styles = StyleSheet.create({
   domain: { flexShrink: 1 },
   separator: { width: 3, height: 3, borderRadius: radius.full },
   statusIcon: { marginLeft: spacing[2] },
+  openExternal: {
+    marginLeft: spacing[2],
+    ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
+  },
+  openExternalPressed: { opacity: 0.72 },
 });

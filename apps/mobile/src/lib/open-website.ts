@@ -68,6 +68,12 @@ function markOpened(bookmark: BookmarkDto): void {
     });
 }
 
+/** Open the live page in the device browser app, even if websites usually stay in ordo. */
+export function openBookmarkInExternalBrowser(bookmark: BookmarkDto): void {
+  markOpened(bookmark);
+  void openExternalBrowser(bookmark.url);
+}
+
 /**
  * Open a library bookmark. Returns after handing off to a system browser, or
  * calls `openReader` when the page should stay in ordo.
