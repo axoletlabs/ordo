@@ -1,4 +1,4 @@
-/** Preferences for shortcuts, gestures, and where websites open. */
+/** Preferences for shortcuts, gestures, and the in-app website browser. */
 import React from "react";
 import {
   SettingsGroup,
@@ -10,6 +10,7 @@ import {
   type SettingsSelectOption,
 } from "../../../src/components/settings/SettingsSelect";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
+import { Toggle } from "../../../src/components/ui/Toggle";
 import { APP_NAME } from "@ordo/shared";
 import {
   useSettingsStore,
@@ -39,9 +40,11 @@ export default function ControlsScreen() {
   const tapAction = useSettingsStore((s) => s.createButtonTapAction);
   const holdAction = useSettingsStore((s) => s.createButtonHoldAction);
   const websiteBrowser = useSettingsStore((s) => s.websiteBrowser);
+  const forceWebsiteDark = useSettingsStore((s) => s.forceWebsiteDark);
   const setTapAction = useSettingsStore((s) => s.setCreateButtonTapAction);
   const setHoldAction = useSettingsStore((s) => s.setCreateButtonHoldAction);
   const setWebsiteBrowser = useSettingsStore((s) => s.setWebsiteBrowser);
+  const setForceWebsiteDark = useSettingsStore((s) => s.setForceWebsiteDark);
 
   return (
     <SettingsPage title="Controls">
@@ -85,6 +88,15 @@ export default function ControlsScreen() {
                 onChange={setWebsiteBrowser}
               />
             }
+          />
+          <SettingRow
+            icon="moon-outline"
+            label="Force dark mode"
+            description={`Darkens websites opened in ${APP_NAME}`}
+            right={
+              <Toggle value={forceWebsiteDark} onValueChange={setForceWebsiteDark} />
+            }
+            rightFit="content"
             divider={false}
           />
         </SettingsGroup>

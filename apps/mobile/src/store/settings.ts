@@ -1,7 +1,8 @@
 /**
  * Client/UI settings store: server URL, recent server history, theme mode,
- * AMOLED, navigation, haptics, and website-browser preferences. Persisted to
- * AsyncStorage (non-secret). Hydrated explicitly on app start.
+ * AMOLED, navigation, haptics, website-browser, and in-app force-dark
+ * preferences. Persisted to AsyncStorage (non-secret). Hydrated explicitly
+ * on app start.
  */
 import { create } from "zustand";
 import { setHapticsEnabled as applyHapticsEnabled } from "../lib/haptics";
@@ -45,6 +46,8 @@ export interface SettingsState {
   createButtonTapAction: CreateButtonAction;
   createButtonHoldAction: CreateButtonHoldAction;
   websiteBrowser: WebsiteBrowser;
+  /** Darken live pages in ordo's WebView (BookmarkBrowser). */
+  forceWebsiteDark: boolean;
   hapticsEnabled: boolean;
   /** One-time tip: OTP is printed to the server console when SMTP is unset. */
   consoleOtpTipDismissed: boolean;
@@ -63,6 +66,7 @@ export interface SettingsState {
   setCreateButtonTapAction: (action: CreateButtonAction) => void;
   setCreateButtonHoldAction: (action: CreateButtonHoldAction) => void;
   setWebsiteBrowser: (browser: WebsiteBrowser) => void;
+  setForceWebsiteDark: (on: boolean) => void;
   setHapticsEnabled: (on: boolean) => void;
   dismissConsoleOtpTip: () => void;
 }
@@ -77,6 +81,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   createButtonTapAction: "menu",
   createButtonHoldAction: "bookmark",
   websiteBrowser: "ordo",
+  forceWebsiteDark: false,
   hapticsEnabled: true,
   consoleOtpTipDismissed: false,
   serverHistory: [],
@@ -104,6 +109,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           ? saved.createButtonHoldAction
           : "bookmark",
       websiteBrowser: isWebsiteBrowser(saved?.websiteBrowser) ? saved.websiteBrowser : "ordo",
+      forceWebsiteDark: saved?.forceWebsiteDark === true,
       hapticsEnabled: saved?.hapticsEnabled !== false,
       consoleOtpTipDismissed: saved?.consoleOtpTipDismissed === true,
       serverHistory: parseServerHistory(saved?.serverHistory),
@@ -154,6 +160,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setWebsiteBrowser: (websiteBrowser) => {
     set({ websiteBrowser });
     void prefsSet(StorageKeys.SETTINGS, { ...get(), websiteBrowser });
+  },
+  setForceWebsiteDark: (forceWebsiteDark) => {
+    set({ forceWebsiteDark });
+    void prefsSet(StorageKeys.SETTINGS, { ...get(), forceWebsiteDark });
   },
   setHapticsEnabled: (hapticsEnabled) => {
     set({ hapticsEnabled });
