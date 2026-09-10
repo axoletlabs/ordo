@@ -258,6 +258,10 @@ describe("PrismaService legacy schema migration", () => {
       "BookmarkTagSuggestion",
       "Tag",
     ]);
+    const instanceTables = (await service.$queryRawUnsafe(
+      `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'InstanceSettings'`,
+    )) as Array<{ name: string }>;
+    expect(instanceTables).toHaveLength(1);
 
     // indexes and foreign keys survive the rebuild
     const indexes = (await service.$queryRawUnsafe(

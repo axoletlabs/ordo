@@ -251,3 +251,10 @@ model ImportJob {
   @@index([userId])
   @@index([expiresAt])
 }
+
+/// Singleton row for this self-hosted instance (display name, etc.).
+model InstanceSettings {
+  id        String   @id
+  name      String
+  updatedAt DateTime @updatedAt
+}

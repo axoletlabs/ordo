@@ -116,6 +116,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
 
       await this.ensureMfaTables();
       await this.ensureTagTables();
+      await this.ensureInstanceSettings();
 
       // --- 4. fold legacy default folders into unfiled bookmarks ---
       const folderColumns = await this.$queryRaw<SqliteColumn[]>(
@@ -224,6 +225,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
     await this.$executeRawUnsafe(
       `CREATE INDEX IF NOT EXISTS "MfaChallenge_userId_idx" ON "MfaChallenge"("userId")`,
     );
+  }
+
+  private async ensureInstanceSettings(): Promise<void> {
+    await this.$executeRawUnsafe(INSTANCE_SETTINGS_DDL);
   }
 
   private async ensureTagTables(): Promise<void> {
@@ -443,6 +448,13 @@ CREATE TABLE IF NOT EXISTS "BookmarkTag" (
     PRIMARY KEY ("bookmarkId", "tagId"),
     CONSTRAINT "BookmarkTag_bookmarkId_fkey" FOREIGN KEY ("bookmarkId") REFERENCES "Bookmark" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "BookmarkTag_tagId_fkey" FOREIGN KEY ("tagId") REFERENCES "Tag" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+)`;
+
+const INSTANCE_SETTINGS_DDL = `
+CREATE TABLE IF NOT EXISTS "InstanceSettings" (
+    "id" TEXT NOT NULL PRIMARY KEY,
+    "name" TEXT NOT NULL,
+    "updatedAt" DATETIME NOT NULL
 )`;
 
 const BOOKMARK_TAG_SUGGESTION_DDL = `

@@ -200,7 +200,10 @@ export interface CursorPage<T> {
 }
 
 export interface ServerInfoDto {
+  /** Editable instance name. Defaults to the machine hostname. */
   name: string;
+  /** OS hostname of this server (e.g. a VPS label like `v67xxxx`). */
+  hostname: string;
   version: string;
   registrationEnabled: boolean;
   emailVerificationRequired: boolean;

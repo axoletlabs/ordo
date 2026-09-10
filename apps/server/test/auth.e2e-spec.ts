@@ -1,6 +1,7 @@
 import request from "supertest";
 import { DELETE_ACCOUNT_CONFIRMATION, EMAIL_OTP, ErrorCode } from "@ordo/shared";
 import { MailService } from "../src/auth/mail.service.js";
+import { machineHostname } from "../src/server/server.service.js";
 import {
   authedAgent,
   clearDb,
@@ -135,9 +136,11 @@ describe("Auth (e2e)", () => {
 
   describe("server info", () => {
     it("reports smtpConfigured false when SMTP_URL is unset", async () => {
+      const host = machineHostname();
       const res = await request(ctx.app.getHttpServer()).get("/api/server/info").expect(200);
       expect(res.body).toMatchObject({
-        name: "ordo",
+        name: host,
+        hostname: host,
         registrationEnabled: true,
         emailVerificationRequired: false,
         smtpConfigured: false,
@@ -146,6 +149,22 @@ describe("Auth (e2e)", () => {
         folderLockTypes: true,
       });
       expect(res.body.profilePictureMaxBytes).toBe(2 * 1024 * 1024);
+    });
+
+    it("lets a signed-in user rename the instance", async () => {
+      const host = machineHostname();
+      await request(ctx.app.getHttpServer())
+        .patch("/api/server/name")
+        .send({ name: "Home lab" })
+        .expect(401);
+
+      const agent = await authedAgent(ctx.app, "server-name@ordo.app");
+      const renamed = await agent.patch("/api/server/name").send({ name: "  Home lab  " }).expect(200);
+      expect(renamed.body).toMatchObject({ name: "Home lab", hostname: host });
+
+      const info = await request(ctx.app.getHttpServer()).get("/api/server/info").expect(200);
+      expect(info.body.name).toBe("Home lab");
+      expect(info.body.hostname).toBe(host);
     });
   });
 

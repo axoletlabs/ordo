@@ -37,6 +37,7 @@ import type {
   UpdateReaderPreferencesInput,
   UpdateTagInput,
   CreateTagInput,
+  ChangeServerNameInput,
 } from "./schemas/index.js";
 
 export const API_PREFIX = "/api";
@@ -504,6 +505,14 @@ export const ServerRoutes = {
     path: `${API_PREFIX}/server/info`,
     method: "GET",
     body: {} as Empty,
+    query: {} as Empty,
+    params: {} as Empty,
+    response: {} as ServerInfoDto,
+  },
+  rename: {
+    path: `${API_PREFIX}/server/name`,
+    method: "PATCH",
+    body: {} as ChangeServerNameInput,
     query: {} as Empty,
     params: {} as Empty,
     response: {} as ServerInfoDto,

@@ -74,6 +74,7 @@ export async function clearDb(prisma: PrismaService): Promise<void> {
   await prisma.session.deleteMany();
   await prisma.folder.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.instanceSettings.deleteMany();
 }
 
 export async function teardownApp(ctx: TestCtx): Promise<void> {

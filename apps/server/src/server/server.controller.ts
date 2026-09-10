@@ -1,30 +1,28 @@
-import { Controller, Get, Inject } from "@nestjs/common";
-import { APP_CONFIG } from "../config/config.module.js";
-import type { AppConfig } from "../config/config.module.js";
-import { APP_NAME, type ServerInfoDto } from "@ordo/shared";
-import { MailService } from "../auth/mail.service.js";
-
-const VERSION = "0.1.0";
+import { Body, Controller, Get, Patch, UseGuards } from "@nestjs/common";
+import {
+  ChangeServerNameSchema,
+  type ChangeServerNameInput,
+  type ServerInfoDto,
+} from "@ordo/shared";
+import { AuthGuard } from "../auth/auth.guard.js";
+import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe.js";
+import { ServerService } from "./server.service.js";
 
 @Controller("api/server")
 export class ServerController {
-  constructor(
-    @Inject(APP_CONFIG) private readonly cfg: AppConfig,
-    private readonly mail: MailService,
-  ) {}
+  constructor(private readonly server: ServerService) {}
 
   @Get("info")
-  info(): ServerInfoDto {
-    return {
-      name: APP_NAME,
-      version: VERSION,
-      registrationEnabled: this.cfg.registrationEnabled,
-      emailVerificationRequired: this.cfg.emailVerificationRequired,
-      smtpConfigured: this.mail.isConfigured,
-      profilePictureMaxBytes: this.cfg.profilePictureMaxBytes,
-      avatarAllowAnimated: this.cfg.avatarAllowAnimated,
-      mfaRequired: this.cfg.mfaRequired,
-      folderLockTypes: true,
-    };
+  info(): Promise<ServerInfoDto> {
+    return this.server.info();
+  }
+
+  @Patch("name")
+  @UseGuards(AuthGuard)
+  async rename(
+    @Body(new ZodValidationPipe(ChangeServerNameSchema)) body: ChangeServerNameInput,
+  ): Promise<ServerInfoDto> {
+    await this.server.setDisplayName(body.name);
+    return this.server.info();
   }
 }
