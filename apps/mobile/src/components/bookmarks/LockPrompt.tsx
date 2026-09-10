@@ -17,7 +17,6 @@ import { useUnlockFolder } from "../../hooks/use-folders";
 import { getDeviceLockCredential } from "../../lib/device-folder-lock";
 import { errorMessage } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
-import { useTheme } from "../../theme/ThemeProvider";
 import { spacing } from "../../theme/tokens";
 
 const UNLOCK_MINUTES = Math.round(TOKEN_TTL.FOLDER_MS / 60_000);
@@ -60,7 +59,6 @@ export function UnlockForm({
   cancelLabel = "Cancel",
   autoPromptDevice = false,
 }: UnlockFormProps) {
-  const { palette } = useTheme();
   const unlock = useUnlockFolder();
   const [focused, setFocused] = useState(true);
   const [password, setPassword] = useState("");
@@ -184,13 +182,7 @@ export function UnlockForm({
 
   return (
     <View style={styles.form}>
-      <PanelHeader
-        icon={lockType === "device" ? "finger-print-outline" : "lock-closed-outline"}
-        iconColor={palette.accent}
-        iconBackground={palette.accentSoft}
-        title={title}
-        subtitle={unlockSubtitle(lockType, digits)}
-      />
+      <PanelHeader title={title} subtitle={unlockSubtitle(lockType, digits)} />
       {lockType === "device" ? (
         <Button
           label="Use device lock"
