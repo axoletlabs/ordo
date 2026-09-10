@@ -106,13 +106,7 @@ export function OtaUpdateCard() {
             key={`${phase.kind}-${phase.action}`}
             icon={phase.kind === "native" ? "phone-portrait-outline" : "cloud-download-outline"}
             label={phase.kind === "native" ? "Install update" : "App update"}
-            description={
-              phase.kind === "native"
-                ? `${nativeVersion} APK`
-                : phase.action === "restart"
-                  ? "Restart to apply"
-                  : "Download and restart"
-            }
+            description={phase.kind === "native" ? `${nativeVersion} APK` : undefined}
             right={
               <Button
                 label={phaseLabel(phase)}
