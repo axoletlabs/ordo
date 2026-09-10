@@ -5,6 +5,8 @@ import {
   WEBSITE_FORCE_DARK_INVERT_CLASS,
   WEBSITE_FORCE_DARK_SCRIPT,
   cssColorLuminance,
+  forceDarkBackgroundSamples,
+  pageNeedsForceDarkInvert,
   shouldInvertForForceDark,
 } from "./website-force-dark.ts";
 
@@ -43,9 +45,45 @@ test("first parseable background wins", () => {
   assert.equal(shouldInvertForForceDark(["rgb(255, 255, 255)", "rgb(0, 0, 0)"]), true);
 });
 
-test("injected script carries the invert heuristic and iOS sentinel", () => {
+test("body is sampled before html so a light page stays inverted", () => {
+  assert.deepEqual(
+    forceDarkBackgroundSamples("rgb(17, 17, 17)", "rgb(255, 255, 255)", false),
+    ["rgb(255, 255, 255)", "rgb(17, 17, 17)"],
+  );
+  assert.equal(
+    pageNeedsForceDarkInvert("rgb(17, 17, 17)", "rgb(255, 255, 255)", false),
+    true,
+  );
+});
+
+test("invert backdrop on html does not undo force dark", () => {
+  assert.deepEqual(
+    forceDarkBackgroundSamples("rgb(17, 17, 17)", "rgb(255, 255, 255)", true),
+    ["rgb(255, 255, 255)"],
+  );
+  assert.equal(
+    pageNeedsForceDarkInvert("rgb(17, 17, 17)", "rgb(255, 255, 255)", true),
+    true,
+  );
+  assert.equal(
+    pageNeedsForceDarkInvert("rgb(17, 17, 17)", "transparent", true),
+    true,
+  );
+});
+
+test("a real dark body can still drop invert", () => {
+  assert.equal(
+    pageNeedsForceDarkInvert("rgb(255, 255, 255)", "rgb(18, 18, 18)", true),
+    false,
+  );
+});
+
+test("injected script keeps invert sticky and ends with the iOS sentinel", () => {
   assert.match(WEBSITE_FORCE_DARK_SCRIPT, new RegExp(WEBSITE_FORCE_DARK_INVERT_CLASS));
-  assert.match(WEBSITE_FORCE_DARK_SCRIPT, /color-scheme/);
+  assert.match(WEBSITE_FORCE_DARK_SCRIPT, /classList\.contains\(CLASS_NAME\)/);
+  assert.match(WEBSITE_FORCE_DARK_SCRIPT, /html\{background-color:#fff/);
+  assert.match(WEBSITE_FORCE_DARK_SCRIPT, /MutationObserver/);
   assert.match(WEBSITE_FORCE_DARK_SCRIPT, new RegExp(String(FORCE_DARK_LIGHT_LUMINANCE)));
+  assert.doesNotMatch(WEBSITE_FORCE_DARK_SCRIPT, /color-scheme/);
   assert.match(WEBSITE_FORCE_DARK_SCRIPT, /true;\s*$/);
 });

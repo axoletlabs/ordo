@@ -2,9 +2,9 @@
  * Ordo's built-in website view for bookmarks that are not articles.
  * Loads the live page (with JavaScript) inside the app.
  *
- * When force-dark is on, a user script sets color-scheme and inverts pages
- * that are still light. Native `forceDarkOn` is skipped: it is a no-op on
- * current Android targets and would double-invert with the script.
+ * When force-dark is on, a user script inverts pages that are still light.
+ * Native `forceDarkOn` is skipped: it is a no-op on current Android targets
+ * and would double-invert with the script.
  */
 import React, { useMemo, useState } from "react";
 import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
