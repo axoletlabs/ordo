@@ -18,6 +18,8 @@ export interface SettingRowProps {
   /** `column` (default) reserves the settings picker width so labels align. */
   rightFit?: "column" | "content";
   destructive?: boolean;
+  /** Override the icon tint when the row is not destructive. */
+  iconColor?: string;
   showChevron?: boolean;
   divider?: boolean;
 }
@@ -31,11 +33,12 @@ export function SettingRow({
   right,
   rightFit = "column",
   destructive,
+  iconColor,
   showChevron,
   divider = true,
 }: SettingRowProps) {
   const { palette } = useTheme();
-  const tint = destructive ? palette.danger : palette.accent;
+  const tint = destructive ? palette.danger : iconColor ?? palette.accent;
   const valueColor = destructive ? palette.danger : palette.textTertiary;
 
   const content = (

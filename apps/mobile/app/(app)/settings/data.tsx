@@ -158,6 +158,7 @@ export default function DataScreen() {
                   <SettingRow
                     key={folder.id}
                     icon={folder.protected ? "lock-open-outline" : "folder-outline"}
+                    iconColor={folder.protected ? palette.success : undefined}
                     label={folder.name}
                     description={`${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}`}
                     right={check(selectedFolderIds.includes(folder.id))}

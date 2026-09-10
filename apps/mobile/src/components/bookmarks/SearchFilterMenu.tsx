@@ -15,6 +15,8 @@ import { tagColorValue } from "../../lib/tag-colors";
 import { haptics } from "../../lib/haptics";
 import { menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { radius, spacing } from "../../theme/tokens";
+import { useFolderUnlocked } from "../../hooks/use-folders";
+import { FolderLockIcon } from "./FolderLockIcon";
 import {
   EMPTY_SEARCH_FILTERS,
   searchFiltersActive,
@@ -233,6 +235,7 @@ export function SearchFilterMenu({
                 icon={folder.icon ?? DEFAULT_FOLDER_ICON}
                 selected={filters.folderIds.includes(folder.id)}
                 locked={folder.protected}
+                folderId={folder.id}
                 onPress={() => toggleFolder(folder.id)}
               />
             ))
@@ -326,22 +329,25 @@ function FolderFilterRow({
   icon,
   selected,
   locked,
+  folderId,
   onPress,
 }: {
   name: string;
   icon: string;
   selected: boolean;
   locked?: boolean;
+  folderId?: string;
   onPress: () => void;
 }) {
   const { palette } = useTheme();
+  const unlocked = useFolderUnlocked(folderId);
   const [hovered, setHovered] = useState(false);
   const highlight = menuHoverFill(palette.mode, true);
 
   return (
     <Pressable
       accessibilityRole="menuitem"
-      accessibilityLabel={name}
+      accessibilityLabel={`${name}${locked ? (unlocked ? ", unlocked" : ", locked") : ""}`}
       accessibilityState={{ selected }}
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
@@ -359,7 +365,7 @@ function FolderFilterRow({
       <Text variant="body" numberOfLines={1} style={styles.tagName}>
         {name}
       </Text>
-      {locked ? <Ionicons name="lock-closed-outline" size={14} color={palette.textFaint} /> : null}
+      {locked ? <FolderLockIcon unlocked={unlocked} size={14} outline /> : null}
       {selected ? <Ionicons name="checkmark" size={18} color={palette.accent} /> : null}
     </Pressable>
   );

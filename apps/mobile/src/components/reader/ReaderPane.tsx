@@ -46,7 +46,7 @@ import { ArticleHtml, type ArticleHeading } from "./ArticleHtml";
 import { Markdown } from "./Markdown";
 import { ReaderControlsSheet } from "./ReaderControlsSheet";
 import { EditTagsSheet } from "../tags/EditTagsSheet";
-import { UnlockScreen } from "../bookmarks/LockPrompt";
+import { LockPrompt } from "../bookmarks/LockPrompt";
 import { READER_BODY_SIZE, resolveReaderFont } from "./reader-typography";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 import { resolveReaderPalette } from "../../theme/reader-theme";
@@ -199,6 +199,7 @@ function ReaderPaneInner({
     !!detail.error;
 
   const [controlsOpen, setControlsOpen] = useState(false);
+  const [unlockOpen, setUnlockOpen] = useState(false);
   const [actionPanel, setActionPanel] = useState<"actions" | "contents" | null>(null);
   const [actionsAnchor, setActionsAnchor] = useState<MenuAnchorRect | null>(null);
   const [editTagsOpen, setEditTagsOpen] = useState(false);
@@ -230,6 +231,10 @@ function ReaderPaneInner({
       toggleRead.mutate({ id: bookmark.id, isRead: true });
     }
   }, [bookmark?.id, bookmark?.isRead, protectedDetail]);
+
+  useEffect(() => {
+    setUnlockOpen(protectedDetail && Boolean(lockedFolderId));
+  }, [lockedFolderId, protectedDetail]);
 
   const domain = bookmark ? bookmark.domain || domainFromUrl(bookmark.url) : "";
   const displayTitle = bookmark
@@ -712,21 +717,16 @@ function ReaderPaneInner({
         </ScreenContent>
       ) : protectedDetail ? (
         <ScreenContent style={styles.stateCenter}>
-          {lockedFolderId ? (
-            <UnlockScreen
-              folderId={lockedFolderId}
-              folderName={lockedFolder?.name}
-              lockType={lockedFolder?.lockType}
-              pinLength={lockedFolder?.pinLength}
-              onUnlocked={() => void detail.refetch()}
-            />
-          ) : (
-            <EmptyState
-              icon="lock-closed-outline"
-              title="This folder is locked"
-              message="Unlock the folder to read it."
-            />
-          )}
+          <EmptyState
+            icon="lock-closed-outline"
+            title="This folder is locked"
+            message="Unlock the folder to read it."
+            action={
+              lockedFolderId ? (
+                <Button label="Unlock" onPress={() => setUnlockOpen(true)} />
+              ) : undefined
+            }
+          />
         </ScreenContent>
       ) : !bookmark ? (
         <ScreenContent style={styles.stateCenter}>
@@ -986,6 +986,18 @@ function ReaderPaneInner({
           />
         ) : null}
       </ContextMenu>
+      <LockPrompt
+        visible={unlockOpen && Boolean(lockedFolderId)}
+        folderId={lockedFolderId ?? ""}
+        folderName={lockedFolder?.name}
+        lockType={lockedFolder?.lockType}
+        pinLength={lockedFolder?.pinLength}
+        onDismiss={() => setUnlockOpen(false)}
+        onUnlocked={() => {
+          setUnlockOpen(false);
+          void detail.refetch();
+        }}
+      />
       <FloatingPanel visible={actionPanel === "contents"} onDismiss={() => setActionPanel(null)}>
         <PanelHeader title="Table of contents" />
         <ThemedScrollView style={styles.tocList}>

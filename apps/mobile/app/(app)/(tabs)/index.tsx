@@ -20,11 +20,13 @@ import { BookmarkActionsSheet } from "../../../src/components/bookmarks/Bookmark
 import { FolderRow } from "../../../src/components/bookmarks/FolderRow";
 import { FolderActionsSheet } from "../../../src/components/bookmarks/FolderActionsSheet";
 import { CreateFolderPanel } from "../../../src/components/bookmarks/CreateFolderPanel";
+import { LockPrompt } from "../../../src/components/bookmarks/LockPrompt";
 import { MoveSheet } from "../../../src/components/bookmarks/MoveSheet";
 import { BookmarkRow } from "../../../src/components/bookmarks/BookmarkRow";
 import { ExtractionProgressLine } from "../../../src/components/bookmarks/ExtractionProgressLine";
 import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
 import { useFolders } from "../../../src/hooks/use-folders";
+import { useFolderTokenStore } from "../../../src/store/folder-tokens";
 import { useTags } from "../../../src/hooks/use-tags";
 import {
   prefetchFolderBookmarks,
@@ -73,6 +75,7 @@ export default function BookmarksScreen() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [createAnchor, setCreateAnchor] = useState<MenuAnchorRect | null>(null);
+  const [unlockFolder, setUnlockFolder] = useState<FolderDto | null>(null);
   const [actionsFolder, setActionsFolder] = useState<FolderDto | null>(null);
   const [folderAnchor, setFolderAnchor] = useState<MenuAnchorRect | null>(null);
   const [actionBookmark, setActionBookmark] = useState<BookmarkDto | null>(null);
@@ -142,10 +145,18 @@ export default function BookmarksScreen() {
     });
   }, [router]);
 
-  const openFolder = useCallback((folder: FolderDto) => {
-    if (!folder.protected) void prefetchFolderBookmarks(folder.id);
+  const enterFolder = useCallback((folder: FolderDto) => {
+    void prefetchFolderBookmarks(folder.id);
     router.push(`/folder/${folder.id}`);
   }, [router]);
+
+  const openFolder = useCallback((folder: FolderDto) => {
+    if (folder.protected && !useFolderTokenStore.getState().get(folder.id)) {
+      setUnlockFolder(folder);
+      return;
+    }
+    enterFolder(folder);
+  }, [enterFolder]);
 
   const onPressFolder = useCallback((selectedFolder: FolderDto) => {
     const sel = selectionRef.current;
@@ -433,6 +444,20 @@ export default function BookmarksScreen() {
       />
 
       <CreateFolderPanel visible={createOpen} onDismiss={() => setCreateOpen(false)} />
+
+      <LockPrompt
+        visible={!!unlockFolder}
+        folderId={unlockFolder?.id ?? ""}
+        folderName={unlockFolder?.name}
+        lockType={unlockFolder?.lockType}
+        pinLength={unlockFolder?.pinLength}
+        onDismiss={() => setUnlockFolder(null)}
+        onUnlocked={() => {
+          const folder = unlockFolder;
+          setUnlockFolder(null);
+          if (folder) enterFolder(folder);
+        }}
+      />
 
       <FolderActionsSheet
         visible={!!actionsFolder}

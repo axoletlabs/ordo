@@ -1,15 +1,9 @@
 /** Unlock UI for device, pattern, PIN, and password folder locks. */
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { TOKEN_TTL, type FolderLockType, type FolderPinLength } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
-import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
@@ -291,23 +285,6 @@ export function UnlockForm({
   );
 }
 
-/** Full-screen unlock: same form as the sheet, no second popup. */
-export function UnlockScreen(props: UnlockFormProps) {
-  return (
-    <KeyboardAvoidingView
-      style={styles.screen}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
-    >
-      <ThemedScrollView
-        contentContainerStyle={styles.screenScroll}
-        keyboardShouldPersistTaps="handled"
-      >
-        <UnlockForm {...props} />
-      </ThemedScrollView>
-    </KeyboardAvoidingView>
-  );
-}
-
 export function LockPrompt({
   visible,
   folderId,
@@ -357,15 +334,5 @@ const styles = StyleSheet.create({
   },
   footnote: {
     marginTop: spacing[8],
-  },
-  screen: {
-    flex: 1,
-    width: "100%",
-  },
-  screenScroll: {
-    flexGrow: 1,
-    justifyContent: "center",
-    paddingVertical: spacing[24],
-    paddingHorizontal: spacing[8],
   },
 });

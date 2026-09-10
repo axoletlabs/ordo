@@ -414,16 +414,20 @@ function PreviewState({
           <Text variant="footnote" color="secondary">
             Unlock to import into these folders.
           </Text>
-          {lockedMatches.map((folder) => (
-            <SettingRow
-              key={folder.id}
-              icon="lock-closed-outline"
-              label={folder.name}
-              onPress={() => onUnlock(folder)}
-              value={tokenFor(folder.id) ? "Unlocked" : "Unlock"}
-              divider={false}
-            />
-          ))}
+          {lockedMatches.map((folder) => {
+            const unlocked = Boolean(tokenFor(folder.id));
+            return (
+              <SettingRow
+                key={folder.id}
+                icon={unlocked ? "lock-open-outline" : "lock-closed-outline"}
+                iconColor={unlocked ? palette.success : undefined}
+                label={folder.name}
+                onPress={() => onUnlock(folder)}
+                value={unlocked ? "Unlocked" : "Unlock"}
+                divider={false}
+              />
+            );
+          })}
         </View>
       ) : null}
 

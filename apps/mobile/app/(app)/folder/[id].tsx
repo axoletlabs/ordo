@@ -1,9 +1,9 @@
 /**
  * Folder detail: cursor-paginated bookmark list with infinite scroll.
- * Handles protected folders (inline unlock → token cached → list loads),
+ * Handles protected folders (unlock sheet → token cached → list loads),
  * optimistic toggle/delete/move, mark-all-read, and folder actions.
  */
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
@@ -19,7 +19,7 @@ import { BookmarkRow } from "../../../src/components/bookmarks/BookmarkRow";
 import { ExtractionProgressLine } from "../../../src/components/bookmarks/ExtractionProgressLine";
 import { AddBookmarkSheet } from "../../../src/components/bookmarks/AddBookmarkSheet";
 import { MoveSheet } from "../../../src/components/bookmarks/MoveSheet";
-import { UnlockScreen } from "../../../src/components/bookmarks/LockPrompt";
+import { LockPrompt } from "../../../src/components/bookmarks/LockPrompt";
 import { BookmarkActionsSheet } from "../../../src/components/bookmarks/BookmarkActionsSheet";
 import { FolderActionsSheet } from "../../../src/components/bookmarks/FolderActionsSheet";
 import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
@@ -77,6 +77,7 @@ export default function FolderDetailScreen() {
   const [actionBm, setActionBm] = useState<BookmarkDto | null>(null);
   const [bookmarkAnchor, setBookmarkAnchor] = useState<MenuAnchorRect | null>(null);
   const [editTagsBm, setEditTagsBm] = useState<BookmarkDto | null>(null);
+  const [unlockOpen, setUnlockOpen] = useState(false);
   const [folderActions, setFolderActions] = useState(false);
   const [folderAnchor, setFolderAnchor] = useState<MenuAnchorRect | null>(null);
   const selection = useSelectionMode();
@@ -85,6 +86,9 @@ export default function FolderDetailScreen() {
 
   const protectedError = !!bookmarks.error && isFolderProtected(bookmarks.error) && !unlocked;
   const showLocked = locked || protectedError;
+  useEffect(() => {
+    setUnlockOpen(showLocked);
+  }, [showLocked]);
   const loadFailed = !!bookmarks.error && !showLocked && !bookmarks.data;
   const items = useMemo(() => flattenPages(bookmarks.data?.pages ?? []), [bookmarks.data]);
   const selectedBookmarks = useMemo(
@@ -250,11 +254,11 @@ export default function FolderDetailScreen() {
 
       {showLocked && folderId ? (
         <ScreenContent maxWidth={layout.maxContentWidth} style={styles.center}>
-          <UnlockScreen
-            folderId={folderId}
-            folderName={folder?.name}
-            lockType={folder?.lockType}
-            pinLength={folder?.pinLength}
+          <EmptyState
+            icon="lock-closed-outline"
+            title="This folder is locked"
+            message="Unlock it to view its bookmarks."
+            action={<Button label="Unlock" onPress={() => setUnlockOpen(true)} />}
           />
         </ScreenContent>
       ) : loadFailed ? (
@@ -373,6 +377,15 @@ export default function FolderDetailScreen() {
         bookmark={moveTarget}
         fromFolderId={folderId}
         onDismiss={() => setMoveTarget(null)}
+      />
+
+      <LockPrompt
+        visible={showLocked && unlockOpen && Boolean(folderId)}
+        folderId={folderId ?? ""}
+        folderName={folder?.name}
+        lockType={folder?.lockType}
+        pinLength={folder?.pinLength}
+        onDismiss={() => setUnlockOpen(false)}
       />
 
       <FolderActionsSheet

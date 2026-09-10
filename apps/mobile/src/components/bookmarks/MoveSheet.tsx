@@ -2,11 +2,11 @@
  * Floating dialog to move one or more bookmarks into another folder.
  */
 import React, { useEffect, useState } from "react";
-import { Ionicons } from "@expo/vector-icons";
 import { PinIcon } from "../ui/PinIcon";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { UnlockForm } from "./LockPrompt";
+import { FolderLockIcon } from "./FolderLockIcon";
 import { Text } from "../ui/Text";
 import { SheetActionRow } from "../ui/SheetActionRow";
 import { ThemedFlatList } from "../ui/ThemedScrollView";
@@ -55,7 +55,12 @@ export function MoveSheet({
   const { height } = useResponsiveLayout();
   const [error, setError] = useState("");
   const [lockedTarget, setLockedTarget] = useState<FolderDto | null>(null);
+  const accessRevision = useFolderTokenStore((s) => s.accessRevision);
   const targets = bookmarks ?? (bookmark ? [bookmark] : []);
+  const destinationUnlocked = (id: string) => {
+    void accessRevision;
+    return Boolean(useFolderTokenStore.getState().get(id));
+  };
 
   useEffect(() => {
     if (visible) {
@@ -145,7 +150,7 @@ export function MoveSheet({
                     isRootDestination(item) ? undefined : (
                       <>
                         {item.pinned ? <PinIcon size={14} color={palette.accent} /> : null}
-                        {item.protected ? <Ionicons name="lock-closed" size={14} color={palette.textTertiary} /> : null}
+                        {item.protected ? <FolderLockIcon unlocked={destinationUnlocked(item.id)} size={14} /> : null}
                         <Text variant="footnote" color="tertiary">{item.bookmarkCount}</Text>
                       </>
                     )

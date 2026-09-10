@@ -17,7 +17,9 @@ import { radius, spacing } from "../../theme/tokens";
 import { folderKey, SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
 import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
 import { prefetchFolderBookmarks } from "../../hooks/use-bookmarks";
+import { useFolderUnlocked } from "../../hooks/use-folders";
 import { DEFAULT_FOLDER_ICON, type FolderDto } from "@ordo/shared";
+import { FolderLockIcon } from "./FolderLockIcon";
 
 export interface FolderRowProps {
   folder: FolderDto;
@@ -38,7 +40,9 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
   const highlightedFromMenu = useMenuHighlightStore((s) => s.key === menuKey);
   const highlighted = highlightedProp ?? highlightedFromMenu;
   const unread = folder.unreadCount > 0;
+  const sessionUnlocked = useFolderUnlocked(folder.protected ? folder.id : null);
   const countLabel = `${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}`;
+  const lockLabel = folder.protected ? (sessionUnlocked ? ", unlocked" : ", locked") : "";
   const openFolder = () => {
     if (selectionMode) {
       onPress(folder);
@@ -48,7 +52,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
     onPress(folder);
   };
   const warmFolder = () => {
-    if (selectionMode || folder.protected) return;
+    if (selectionMode || (folder.protected && !sessionUnlocked)) return;
     void prefetchFolderBookmarks(folder.id);
   };
   const openMore = (event?: { nativeEvent: { pageX: number; pageY: number } }) => {
@@ -116,7 +120,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
 
       <ListPressable
         accessibilityRole={selectionMode ? "checkbox" : "button"}
-        accessibilityLabel={`${folder.name}, ${countLabel}${folder.pinned ? ", pinned" : ""}${folder.protected ? ", locked" : ""}${unread ? `, ${folder.unreadCount} unread` : ""}`}
+        accessibilityLabel={`${folder.name}, ${countLabel}${folder.pinned ? ", pinned" : ""}${lockLabel}${unread ? `, ${folder.unreadCount} unread` : ""}`}
         accessibilityState={selectionMode ? { checked: !!selected } : undefined}
         accessibilityHint={
           selectionMode
@@ -159,13 +163,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
               {countLabel}
             </Text>
             {folder.protected ? (
-              <Ionicons
-                name="lock-closed"
-                size={12}
-                color={palette.textTertiary}
-                style={styles.statusIcon}
-                accessible={false}
-              />
+              <FolderLockIcon unlocked={sessionUnlocked} style={styles.statusIcon} />
             ) : null}
           </View>
         </View>
