@@ -3,8 +3,8 @@
  * Loads the live page (with JavaScript) inside the app.
  *
  * When force-dark is on, a user script inverts pages that are still light.
- * Native `forceDarkOn` is skipped: it is a no-op on current Android targets
- * and would double-invert with the script.
+ * It must not observe the document tree: a MutationObserver during parse
+ * prevents the WebView from ever finishing the load.
  */
 import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Platform, StyleSheet, View } from "react-native";
