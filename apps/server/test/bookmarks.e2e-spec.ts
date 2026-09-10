@@ -1337,6 +1337,32 @@ describe("Bookmarks & Folders (e2e)", () => {
       expect(byDomain.body.items[0].domain).toBe("react.dev");
     });
 
+    it("does not treat a single letter as an article-body match", async () => {
+      const { agent, userId } = await setup();
+      await ctx.prisma.bookmark.create({
+        data: {
+          userId,
+          folderId: null,
+          url: "https://ente.com/home",
+          title: "Home",
+          domain: "ente.com",
+          contentText: "Every vault and every device.",
+        },
+      });
+      await ctx.prisma.bookmark.create({
+        data: {
+          userId,
+          folderId: null,
+          url: "https://viralpickz.onshopbase.com/hoodie",
+          title: "Shadowflex Hoodie",
+          domain: "viralpickz.onshopbase.com",
+        },
+      });
+
+      const res = await agent.get("/api/bookmarks/search?q=v").expect(200);
+      expect(res.body.items.map((b: { title: string }) => b.title)).toEqual(["Shadowflex Hoodie"]);
+    });
+
     it("filters search results to unread bookmarks", async () => {
       const { agent, userId } = await setup();
       await ctx.prisma.bookmark.create({

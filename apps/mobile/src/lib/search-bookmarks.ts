@@ -68,9 +68,13 @@ function tagsForTextQuery(bookmark: BookmarkDto, omitTagIds: ReadonlySet<string>
 
 const NO_OMIT_TAGS = new Set<string>();
 
-function haystackCacheKey(bookmarkId: string, omitTagIds: ReadonlySet<string>): string {
-  if (omitTagIds.size === 0) return bookmarkId;
-  return `${bookmarkId}\0${[...omitTagIds].sort().join(",")}`;
+function haystackCacheKey(
+  bookmarkId: string,
+  omitTagIds: ReadonlySet<string>,
+  visibleOnly: boolean,
+): string {
+  const omit = omitTagIds.size === 0 ? "" : [...omitTagIds].sort().join(",");
+  return `${bookmarkId}\0${omit}\0${visibleOnly ? "v" : "a"}`;
 }
 
 function haystackStamp(bookmark: BookmarkDto, omitTagIds: ReadonlySet<string>): string {
@@ -80,9 +84,19 @@ function haystackStamp(bookmark: BookmarkDto, omitTagIds: ReadonlySet<string>): 
   return `${bookmark.updatedAt ?? ""}\0${bookmark.title ?? ""}\0${bookmark.url ?? ""}\0${bookmark.domain ?? ""}\0${bookmark.description ?? ""}\0${bookmark.author ?? ""}\0${bookmark.contentKind ?? ""}\0${bookmark.fetchStatus ?? ""}\0${tagNames}`;
 }
 
+const MIN_HIDDEN_FIELD_TOKEN = 3;
+
+function tokensAllowHiddenFields(tokens: readonly string[]): boolean {
+  return tokens.length > 0 && tokens.every((token) => token.length >= MIN_HIDDEN_FIELD_TOKEN);
+}
+
 /** Cached haystack so typing does not rebuild lowercase blobs on every key. */
-function haystackFor(bookmark: BookmarkDto, omitTagIds: ReadonlySet<string>): string {
-  const key = haystackCacheKey(bookmark.id, omitTagIds);
+function haystackFor(
+  bookmark: BookmarkDto,
+  omitTagIds: ReadonlySet<string>,
+  visibleOnly: boolean,
+): string {
+  const key = haystackCacheKey(bookmark.id, omitTagIds, visibleOnly);
   const stamp = haystackStamp(bookmark, omitTagIds);
   const hit = haystackMemo.get(key);
   if (hit && hit.stamp === stamp) return hit.haystack;
@@ -91,11 +105,9 @@ function haystackFor(bookmark: BookmarkDto, omitTagIds: ReadonlySet<string>): st
   const haystack = bookmarkSearchHaystack({
     ...bookmark,
     tags: tagsForTextQuery(bookmark, omitTagIds),
-    // Website rows hide description/author. Matching those while a tag
-    // filter is on looks like the tag name itself matched ("l" in Shopping List).
-    description: !filtering || article ? bookmark.description : null,
-    author: !filtering || article ? bookmark.author : null,
-    contentText: filtering ? null : bookmark.contentText,
+    description: visibleOnly ? null : !filtering || article ? bookmark.description : null,
+    author: visibleOnly ? null : !filtering || article ? bookmark.author : null,
+    contentText: visibleOnly || filtering ? null : bookmark.contentText,
   });
   if (haystackMemo.size > 4000) haystackMemo.clear();
   haystackMemo.set(key, { stamp, haystack });
@@ -113,11 +125,12 @@ function passesTextQuery(
   omitTagIds: ReadonlySet<string>,
 ): boolean {
   if (tokens.length === 0) return true;
-  if (haystackMatches(haystackFor(bookmark, omitTagIds), tokens)) return true;
-  if (!allowBodyOnlyHit || !isArticleBookmark(bookmark)) return false;
+  const visibleOnly = !tokensAllowHiddenFields(tokens);
+  if (haystackMatches(haystackFor(bookmark, omitTagIds, visibleOnly), tokens)) return true;
+  if (!allowBodyOnlyHit || visibleOnly || !isArticleBookmark(bookmark)) return false;
   // Server rows that only match because the active tag's name contains the
   // query are not article-body hits.
-  if (omitTagIds.size > 0 && haystackMatches(haystackFor(bookmark, NO_OMIT_TAGS), tokens)) {
+  if (omitTagIds.size > 0 && haystackMatches(haystackFor(bookmark, NO_OMIT_TAGS, false), tokens)) {
     return false;
   }
   return true;

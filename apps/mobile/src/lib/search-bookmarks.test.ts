@@ -209,6 +209,44 @@ test("firstSearchHighlight marks the first token in the title", () => {
   assert.equal(firstSearchHighlight("React Query", "zzz"), null);
 });
 
+test("short queries only match title, URL, domain, and tags", () => {
+  const viral = bookmark({
+    id: "viral",
+    title: "Shadowflex Hoodie",
+    domain: "viralpickz.onshopbase.com",
+    url: "https://viralpickz.onshopbase.com/hoodie",
+    contentKind: "web",
+    fetchStatus: "unsupported",
+  });
+  const visualDesc = bookmark({
+    id: "mc",
+    title: "Minecraft DAT Editor",
+    description: "Visual editor for Minecraft NBT files",
+    contentKind: "article",
+    fetchStatus: "ok",
+  });
+  const bodyOnly = bookmark({
+    id: "home",
+    title: "Home",
+    domain: "ente.com",
+    url: "https://ente.com",
+    description: "Every product overview",
+    contentKind: "article",
+    fetchStatus: "ok",
+  });
+  const hits = compileSearchResults({
+    query: "v",
+    filters: none,
+    serverItems: [viral, visualDesc, bodyOnly],
+    cachedItems: [viral, visualDesc, bodyOnly],
+    serverMatchesQuery: true,
+  });
+  assert.deepEqual(
+    hits.map((item) => item.id),
+    ["viral"],
+  );
+});
+
 test("an active tag filter's own name does not satisfy the typed query", () => {
   const shopping = { id: "shop", name: "Shopping List", color: "coral" };
   const hoodie = bookmark({

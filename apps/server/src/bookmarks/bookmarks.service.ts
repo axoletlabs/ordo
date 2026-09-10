@@ -11,6 +11,7 @@ import {
   type BookmarkDto,
   type CursorPage,
   rankSearchResults,
+  tokenizeSearchQuery,
 } from "@ordo/shared";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { AppError } from "../common/errors/app-error.js";
@@ -156,6 +157,8 @@ export class BookmarksService implements OnApplicationBootstrap {
     const tagIds = opts.tagIds ?? [];
     await this.tags.requireOwnedIds(userId, tagIds);
     const authorized = await this.access.authorizedFolderIds(userId, opts.folderTokens ?? []);
+    const tokens = tokenizeSearchQuery(term);
+    const includeHiddenFields = tokens.length > 0 && tokens.every((token) => token.length >= 3);
     const where: Prisma.BookmarkWhereInput = {
       userId,
       AND: [
@@ -167,9 +170,13 @@ export class BookmarksService implements OnApplicationBootstrap {
                   { title: { contains: term } },
                   { url: { contains: term } },
                   { domain: { contains: term } },
-                  { contentText: { contains: term } },
-                  { description: { contains: term } },
-                  { author: { contains: term } },
+                  ...(includeHiddenFields
+                    ? [
+                        { contentText: { contains: term } },
+                        { description: { contains: term } },
+                        { author: { contains: term } },
+                      ]
+                    : []),
                   // A tag used as a filter already ANDs below. Matching its
                   // name as text would keep every tagged row for letters in
                   // that name ("l" + "Shopping List").
