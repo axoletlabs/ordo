@@ -12,14 +12,13 @@ import Animated, {
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { APP_NAME, ChangeServerNameSchema } from "@ordo/shared";
+import { APP_NAME, ChangeServerNameSchema, type ServerInfoDto } from "@ordo/shared";
 import {
   SettingsGroup,
   SettingsPage,
   SettingsScrollView,
 } from "../../../src/components/settings/SettingsPage";
 import { ServerHistoryPanel } from "../../../src/components/settings/ServerHistoryPanel";
-import { ServerConnectSheet } from "../../../src/components/auth/ServerConnectSheet";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
 import { Badge } from "../../../src/components/ui/Badge";
 import { ConfirmDialog } from "../../../src/components/ui/ConfirmDialog";
@@ -28,6 +27,7 @@ import { ThemedScrollView } from "../../../src/components/ui/ThemedScrollView";
 import { PanelHeader } from "../../../src/components/ui/PanelHeader";
 import { Input } from "../../../src/components/ui/Input";
 import { PanelActions } from "../../../src/components/ui/SheetActionRow";
+import { PressableScale } from "../../../src/components/ui/PressableScale";
 import { Text } from "../../../src/components/ui/Text";
 import { toast } from "../../../src/components/ui/toast-store";
 import { useServerInfo } from "../../../src/hooks/queries";
@@ -37,6 +37,11 @@ import { qk } from "../../../src/lib/api/query-keys";
 import { queryClient } from "../../../src/lib/query-client";
 import { visibleServerHistory } from "../../../src/lib/server-history";
 import { hostOf, instanceNameOf } from "../../../src/lib/instance-name";
+import {
+  describeProbeField,
+  normalizeServerUrl,
+  probeServer,
+} from "../../../src/lib/server-probe";
 import { errorMessage } from "../../../src/lib/error-message";
 import { useAuthStore } from "../../../src/store/auth";
 import { useFolderTokenStore } from "../../../src/store/folder-tokens";
@@ -44,7 +49,7 @@ import { useSettingsStore } from "../../../src/store/settings";
 import { restartRuntime } from "../../../src/store/update-restart";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { haptics } from "../../../src/lib/haptics";
-import { spacing } from "../../../src/theme/tokens";
+import { radius, spacing } from "../../../src/theme/tokens";
 
 export default function ServerScreen() {
   const { palette } = useTheme();
@@ -56,10 +61,9 @@ export default function ServerScreen() {
   const clearAuth = useAuthStore((s) => s.clear);
   const clearFolderTokens = useFolderTokenStore((s) => s.clearAll);
   const serverInfo = useServerInfo();
-  const [sheetUrl, setSheetUrl] = useState<string | null>(null);
+  const [editorUrl, setEditorUrl] = useState<string | null>(null);
   const [confirmedUrl, setConfirmedUrl] = useState<string | null>(null);
   const [switching, setSwitching] = useState(false);
-  const [nameOpen, setNameOpen] = useState(false);
 
   const recents = visibleServerHistory(serverHistory, currentUrl);
   const connected = Boolean(serverInfo.data && !serverInfo.error);
@@ -72,13 +76,9 @@ export default function ServerScreen() {
   const displayName = instanceNameOf(serverInfo.data, currentUrl);
   const hostname = serverInfo.data?.hostname?.trim() || "";
 
-  const openSheet = (url: string) => {
-    setSheetUrl(url);
-  };
-
-  const refreshConnection = () => {
-    if (serverInfo.isFetching) return;
-    void serverInfo.refetch();
+  const openEditor = (url: string) => {
+    haptics.light();
+    setEditorUrl(url);
   };
 
   const confirmSwitch = async () => {
@@ -117,42 +117,50 @@ export default function ServerScreen() {
     <SettingsPage title="Server">
       <SettingsScrollView>
         <SettingsGroup label="This server" compact>
-          <SettingRow
-            icon="text-outline"
-            label="Name"
-            value={displayName}
-            onPress={serverInfo.data ? () => setNameOpen(true) : undefined}
-            showChevron={Boolean(serverInfo.data)}
-          />
-          <SettingRow
-            icon="link-outline"
-            label="Address"
-            description={currentUrl}
-            onPress={() => openSheet(currentUrl)}
-            showChevron
-          />
-          <SettingRow
-            icon={
-              serverInfo.isLoading
-                ? "cloud-outline"
-                : connected
-                  ? "checkmark-circle-outline"
-                  : "cloud-offline-outline"
-            }
-            label="Connection"
-            right={
-              <View style={styles.connection}>
-                <Badge tone={statusTone}>{statusLabel}</Badge>
-                <RefreshSpinIcon
-                  spinning={serverInfo.isFetching}
-                  color={serverInfo.isFetching ? palette.accent : palette.textTertiary}
+          <View
+            style={[
+              styles.current,
+              { borderBottomColor: palette.border },
+              !serverInfo.data && styles.noDivider,
+            ]}
+          >
+            <PressableScale
+              accessibilityRole="button"
+              accessibilityLabel={`Edit server ${displayName}, ${currentUrl}. ${statusLabel}`}
+              dim
+              onPress={() => openEditor(currentUrl)}
+              style={styles.currentMain}
+            >
+              <View style={[styles.iconWrap, { backgroundColor: palette.surfaceSecondary }]}>
+                <Ionicons
+                  name={
+                    serverInfo.isLoading
+                      ? "cloud-outline"
+                      : connected
+                        ? "checkmark-circle-outline"
+                        : "cloud-offline-outline"
+                  }
+                  size={16}
+                  color={palette.accent}
                 />
               </View>
-            }
-            rightFit="content"
-            onPress={refreshConnection}
-            divider={Boolean(serverInfo.data)}
-          />
+              <View style={styles.currentBody}>
+                <Text variant="bodyStrong" numberOfLines={1}>
+                  {displayName}
+                </Text>
+                <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.currentUrl}>
+                  {currentUrl}
+                </Text>
+              </View>
+              <View style={styles.status}>
+                <Badge tone={statusTone}>{statusLabel}</Badge>
+                {serverInfo.isFetching ? (
+                  <RefreshSpinIcon spinning color={palette.accent} />
+                ) : null}
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={palette.textFaint} />
+            </PressableScale>
+          </View>
           {serverInfo.data ? (
             <SettingRow
               icon="pricetag-outline"
@@ -166,10 +174,7 @@ export default function ServerScreen() {
         <ServerHistoryPanel
           entries={recents}
           busy={switching}
-          onSelect={(url) => {
-            haptics.light();
-            openSheet(url);
-          }}
+          onSelect={openEditor}
           onRemove={(target) => {
             haptics.light();
             removeServerHistory(target);
@@ -177,26 +182,24 @@ export default function ServerScreen() {
         />
       </SettingsScrollView>
 
-      <ServerNamePanel
-        visible={nameOpen}
-        initialName={displayName}
-        hostname={hostname}
-        onDismiss={() => setNameOpen(false)}
-        onSaved={(info) => {
-          queryClient.setQueryData(qk.serverInfo(currentUrl), info);
-          setNameOpen(false);
-        }}
-      />
-
-      <ServerConnectSheet
-        visible={sheetUrl != null}
-        initialUrl={sheetUrl ?? currentUrl}
-        onDismiss={() => setSheetUrl(null)}
-        onCommit={(url) => {
-          setSheetUrl(null);
-          setConfirmedUrl(url);
-        }}
-      />
+      {editorUrl != null ? (
+        <ServerEditPanel
+          key={editorUrl}
+          visible
+          initialName={displayName}
+          initialUrl={editorUrl}
+          hostname={hostname}
+          canRename={Boolean(serverInfo.data)}
+          onDismiss={() => setEditorUrl(null)}
+          onRenamed={(info) => {
+            queryClient.setQueryData(qk.serverInfo(currentUrl), info);
+          }}
+          onChangeUrl={(url) => {
+            setEditorUrl(null);
+            setConfirmedUrl(url);
+          }}
+        />
+      ) : null}
 
       <ConfirmDialog
         visible={!!confirmedUrl}
@@ -254,91 +257,204 @@ function RefreshSpinIcon({ spinning, color }: { spinning: boolean; color: string
   );
 }
 
-function ServerNamePanel({
+function ServerEditPanel({
   visible,
   initialName,
+  initialUrl,
   hostname,
+  canRename,
   onDismiss,
-  onSaved,
+  onRenamed,
+  onChangeUrl,
 }: {
   visible: boolean;
   initialName: string;
+  initialUrl: string;
   hostname: string;
+  canRename: boolean;
   onDismiss: () => void;
-  onSaved: (info: Awaited<ReturnType<typeof serverApi.rename>>) => void;
+  onRenamed: (info: Awaited<ReturnType<typeof serverApi.rename>>) => void;
+  onChangeUrl: (url: string) => void;
 }) {
-  const inputRef = useRef<TextInput>(null);
+  const nameRef = useRef<TextInput>(null);
+  const urlRef = useRef<TextInput>(null);
+  const currentUrl = useSettingsStore((s) => s.serverUrl);
   const [name, setName] = useState(initialName);
-  const [error, setError] = useState("");
+  const [url, setUrl] = useState(initialUrl);
+  const [nameError, setNameError] = useState("");
+  const [probing, setProbing] = useState(false);
+  const [up, setUp] = useState(false);
+  const [probeDetail, setProbeDetail] = useState<string | null>(null);
+  const [probeInfo, setProbeInfo] = useState<Pick<ServerInfoDto, "name" | "version"> | null>(null);
+  const [busy, setBusy] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rename = useMutation({ mutationFn: serverApi.rename });
 
   useEffect(() => {
-    if (visible) {
-      setName(initialName);
-      setError("");
+    if (!visible) return;
+    let cancelled = false;
+    const normalized = normalizeServerUrl(url);
+    if (!normalized || normalized === normalizeServerUrl(currentUrl)) {
+      setUp(false);
+      setProbeDetail(null);
+      setProbeInfo(null);
+      setProbing(false);
+      return;
     }
-  }, [initialName, visible]);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      if (cancelled) return;
+      setProbing(true);
+      setUp(false);
+      setProbeDetail(null);
+      setProbeInfo(null);
+      void probeServer(url).then((result) => {
+        if (cancelled) return;
+        setProbing(false);
+        setUp(result.status === "up");
+        setProbeDetail(result.detail ?? null);
+        setProbeInfo(result.info ?? null);
+      });
+    }, 900);
+    return () => {
+      cancelled = true;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [currentUrl, url, visible]);
+
+  const normalized = normalizeServerUrl(url);
+  const urlDirty = Boolean(normalized && normalized !== normalizeServerUrl(currentUrl));
+  const nameDirty = canRename && name.trim() !== initialName.trim();
+  const probeCopy = describeProbeField({
+    idle: !urlDirty,
+    probing,
+    reachable: up,
+    detail: probeDetail,
+    info: probeInfo,
+  });
+  const canChangeUrl = urlDirty && up && !probing;
+  const confirmDisabled =
+    busy ||
+    rename.isPending ||
+    (canRename && !name.trim()) ||
+    (urlDirty ? !canChangeUrl : !nameDirty);
+  const confirmLabel = urlDirty ? "Change" : "Save";
 
   const close = () => {
-    if (rename.isPending) return;
+    if (busy || rename.isPending) return;
     onDismiss();
   };
 
-  const submit = async () => {
-    setError("");
+  const saveNameIfNeeded = async () => {
+    if (!canRename || !nameDirty) return;
     const parsed = ChangeServerNameSchema.safeParse({ name });
     if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message || "Please check your input.");
-      return;
+      setNameError(parsed.error.issues[0]?.message || "Please check your input.");
+      throw new Error("invalid_name");
     }
-    if (parsed.data.name === initialName.trim()) {
-      onDismiss();
-      return;
-    }
+    const info = await rename.mutateAsync(parsed.data);
+    onRenamed(info);
+  };
+
+  const submit = async () => {
+    setNameError("");
     try {
-      const info = await rename.mutateAsync(parsed.data);
+      if (urlDirty) {
+        if (!normalized || !canChangeUrl) return;
+        setBusy(true);
+        const recheck = await probeServer(normalized);
+        if (recheck.status !== "up" || !recheck.url) {
+          setUp(false);
+          setProbeDetail(recheck.detail ?? null);
+          setProbeInfo(null);
+          return;
+        }
+        await saveNameIfNeeded();
+        haptics.light();
+        onChangeUrl(recheck.url);
+        return;
+      }
+      await saveNameIfNeeded();
       haptics.success();
       toast.success("Server name updated");
-      onSaved(info);
+      onDismiss();
     } catch (cause) {
+      if ((cause as Error).message === "invalid_name") return;
       haptics.error();
-      setError(errorMessage(cause));
+      setNameError(errorMessage(cause));
+    } finally {
+      setBusy(false);
     }
   };
 
-  const helper = hostname
-    ? hostname === name.trim()
-      ? `This machine is ${hostname}. You can rename it.`
-      : `This machine is ${hostname}.`
-    : undefined;
+  const nameHelper = !canRename
+    ? "Reach this server to rename it."
+    : hostname
+      ? hostname === name.trim()
+        ? `This machine is ${hostname}. You can rename it.`
+        : `This machine is ${hostname}.`
+      : undefined;
 
   return (
     <FloatingPanel
       visible={visible}
       onDismiss={close}
-      dismissible={!rename.isPending}
-      onShow={() => setTimeout(() => inputRef.current?.focus(), 100)}
+      dismissible={!busy && !rename.isPending}
+      onShow={() =>
+        setTimeout(() => {
+          if (normalizeServerUrl(initialUrl) !== normalizeServerUrl(currentUrl)) {
+            urlRef.current?.focus();
+          } else {
+            (canRename ? nameRef : urlRef).current?.focus();
+          }
+        }, 100)
+      }
     >
       <ThemedScrollView keyboardShouldPersistTaps="handled">
-        <PanelHeader title="Server name" />
-        <Input
-          ref={inputRef}
-          label="Name"
-          value={name}
-          onChangeText={setName}
-          placeholder={hostname || "Server name"}
-          autoCapitalize="words"
-          autoComplete="off"
-          error={error || undefined}
-          helper={error ? undefined : helper}
-          onSubmitEditing={() => void submit()}
-        />
+        <PanelHeader title="Server" />
+        <View style={styles.fields}>
+          <Input
+            ref={nameRef}
+            label="Name"
+            value={name}
+            onChangeText={(next) => {
+              setNameError("");
+              setName(next);
+            }}
+            placeholder={hostname || "Server name"}
+            autoCapitalize="words"
+            autoComplete="off"
+            editable={canRename && !busy && !rename.isPending}
+            error={nameError || undefined}
+            helper={nameError ? undefined : nameHelper}
+            onSubmitEditing={() => urlRef.current?.focus()}
+          />
+          <Input
+            ref={urlRef}
+            label="Address"
+            value={url}
+            onChangeText={setUrl}
+            placeholder="https://ordo.example.com"
+            keyboardType="url"
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="off"
+            textContentType="URL"
+            importantForAutofill="no"
+            spellCheck={false}
+            mono
+            editable={!busy && !rename.isPending}
+            error={probeCopy.error}
+            helper={probeCopy.helper}
+            onSubmitEditing={() => void submit()}
+          />
+        </View>
         <PanelActions
-          confirmLabel="Save"
+          confirmLabel={confirmLabel}
           onConfirm={() => void submit()}
           onCancel={close}
-          loading={rename.isPending}
-          confirmDisabled={!name.trim()}
+          loading={busy || rename.isPending}
+          confirmDisabled={confirmDisabled}
         />
       </ThemedScrollView>
     </FloatingPanel>
@@ -346,6 +462,39 @@ function ServerNamePanel({
 }
 
 const styles = StyleSheet.create({
-  connection: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
+  current: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  noDivider: { borderBottomWidth: 0 },
+  currentMain: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[12],
+    minHeight: 52,
+    paddingHorizontal: spacing[16],
+    paddingVertical: spacing[10],
+    borderRadius: radius.sm,
+  },
+  iconWrap: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  currentBody: { flex: 1, minWidth: 0 },
+  currentUrl: { marginTop: spacing[2] },
+  status: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[8],
+    flexShrink: 0,
+  },
+  fields: { gap: spacing[16] },
   hostChange: { gap: spacing[6], paddingHorizontal: spacing[8] },
 });
