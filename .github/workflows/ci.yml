@@ -17,6 +17,11 @@ on:
         required: false
         default: 'false'
         type: boolean
+      republish_ota_group:
+        description: 'Republish an existing EAS update group (new createdAt, same bundle)'
+        required: false
+        default: ''
+        type: string
 
 # Native GitHub Releases:
 #   Latest (stable): tag vX.Y.Z, "Set as the latest release", pre-release unchecked.
@@ -27,6 +32,8 @@ on:
 #   preview     — `preview` git branch dogfood APKs only (not feature branches)
 # JS-only updates on main or preview go to that stream's channel when the
 # Android fingerprint matches the last (or in-flight) APK on the same branch.
+# The OTA job waits for that APK to finish packaging so createdAt is newer
+# than the binary's embedded commitTime; expo-updates ignores older OTAs.
 # Concurrency is per-job, not workflow-wide. A workflow-level group would
 # cancel an in-flight APK when a later JS-only push starts OTA, leaving that
 # native fingerprint with no binary.
@@ -242,42 +249,58 @@ jobs:
     # Publishes a JS-only update to this stream's channel:
     #   main    → production (stable version) or development (alpha/beta/rc)
     #   preview → preview
-    # including JS follow-ups while an APK for the same fingerprint is still
-    # building. Native fingerprint changes and commits marked -apk build an APK.
+    # Native fingerprint changes and commits marked -apk build an APK.
     # Feature branches never OTA (last-write-wins would clobber the stream).
     if: >
       (github.event_name == 'push' &&
         (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preview') &&
         needs.detect.outputs.should_build != 'true') ||
       (github.event_name == 'workflow_dispatch' &&
-        inputs.publish_ota == true &&
+        (inputs.publish_ota == true || inputs.republish_ota_group != '') &&
         (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preview'))
     concurrency:
       group: ci-ota-${{ github.ref }}
       cancel-in-progress: true
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@v5
 
+      # expo-updates compares OTA createdAt to the APK's embedded commitTime
+      # (stamped during :app:createReleaseUpdatesResources). Publishing while
+      # that task is still running makes Check report "up to date".
+      - name: Wait for in-flight APK
+        if: github.event_name != 'workflow_dispatch' || inputs.republish_ota_group == ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/wait-for-in-flight-apk.sh" "$GITHUB_REF_NAME"
+
       - name: Setup pnpm
+        if: github.event_name != 'workflow_dispatch' || inputs.republish_ota_group == ''
         uses: pnpm/action-setup@v5
 
       - name: Setup Node.js
+        if: github.event_name != 'workflow_dispatch' || inputs.republish_ota_group == ''
         uses: actions/setup-node@v5
         with:
           node-version: '22'
           cache: 'pnpm'
 
       - name: Install dependencies
+        if: github.event_name != 'workflow_dispatch' || inputs.republish_ota_group == ''
         run: pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true
 
       - name: Build shared package
+        if: github.event_name != 'workflow_dispatch' || inputs.republish_ota_group == ''
         run: pnpm --filter @ordo/shared build
 
       # Prebuild so the fingerprint matches the APK build (which also runs
       # prebuild). Without this, bareNativeDir (android/) differs and the
       # OTA update gets a different runtime version than the installed binary.
       - name: Expo prebuild
+        if: github.event_name != 'workflow_dispatch' || inputs.republish_ota_group == ''
         working-directory: apps/mobile
         env:
           EXPO_UPDATES_CHANNEL: ${{ needs.detect.outputs.updates_channel }}
@@ -288,7 +311,19 @@ jobs:
       - name: Install EAS CLI
         run: npm install -g eas-cli
 
+      - name: Republish update
+        if: github.event_name == 'workflow_dispatch' && inputs.republish_ota_group != ''
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: >
+          eas update:republish
+          --group ${{ inputs.republish_ota_group }}
+          --non-interactive
+          --message "Republish so createdAt is newer than the APK embedded bundle."
+
       - name: Publish update
+        if: github.event_name != 'workflow_dispatch' || inputs.republish_ota_group == ''
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
