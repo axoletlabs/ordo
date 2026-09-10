@@ -44,7 +44,7 @@ export interface LockPromptProps extends UnlockFormProps {
 }
 
 function unlockSubtitle(lockType: FolderLockType | null | undefined, digits: FolderPinLength): string {
-  if (lockType === "device") return "Face ID, fingerprint, or device passcode.";
+  if (lockType === "device") return "Fingerprint, face unlock, or device passcode.";
   if (lockType === "pattern") return "Draw your pattern.";
   if (lockType === "pin") return `${digits}-digit PIN.`;
   return "Enter the folder password.";
