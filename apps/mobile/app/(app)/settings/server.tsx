@@ -28,7 +28,6 @@ import { ThemedScrollView } from "../../../src/components/ui/ThemedScrollView";
 import { PanelHeader } from "../../../src/components/ui/PanelHeader";
 import { Input } from "../../../src/components/ui/Input";
 import { PanelActions } from "../../../src/components/ui/SheetActionRow";
-import { PressableScale } from "../../../src/components/ui/PressableScale";
 import { Text } from "../../../src/components/ui/Text";
 import { toast } from "../../../src/components/ui/toast-store";
 import { useServerInfo } from "../../../src/hooks/queries";
@@ -45,7 +44,7 @@ import { useSettingsStore } from "../../../src/store/settings";
 import { restartRuntime } from "../../../src/store/update-restart";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { haptics } from "../../../src/lib/haptics";
-import { radius, spacing } from "../../../src/theme/tokens";
+import { spacing } from "../../../src/theme/tokens";
 
 export default function ServerScreen() {
   const { palette } = useTheme();
@@ -74,13 +73,11 @@ export default function ServerScreen() {
   const hostname = serverInfo.data?.hostname?.trim() || "";
 
   const openSheet = (url: string) => {
-    haptics.light();
     setSheetUrl(url);
   };
 
   const refreshConnection = () => {
     if (serverInfo.isFetching) return;
-    haptics.light();
     void serverInfo.refetch();
   };
 
@@ -120,83 +117,42 @@ export default function ServerScreen() {
     <SettingsPage title="Server">
       <SettingsScrollView>
         <SettingsGroup label="This server" compact>
-          <View
-            style={[
-              styles.current,
-              { borderBottomColor: palette.border },
-              !serverInfo.data && styles.noDivider,
-            ]}
-          >
-            <View style={styles.currentMain}>
-              <PressableScale
-                accessibilityRole="button"
-                accessibilityLabel={`Change server URL. Current server: ${currentUrl}`}
-                dim
-                onPress={() => openSheet(currentUrl)}
-                style={[styles.iconWrap, { backgroundColor: palette.surfaceSecondary }]}
-              >
-                <Ionicons
-                  name={
-                    serverInfo.isLoading
-                      ? "cloud-outline"
-                      : connected
-                        ? "checkmark-circle-outline"
-                        : "cloud-offline-outline"
-                  }
-                  size={16}
-                  color={palette.accent}
+          <SettingRow
+            icon="text-outline"
+            label="Name"
+            value={displayName}
+            onPress={serverInfo.data ? () => setNameOpen(true) : undefined}
+            showChevron={Boolean(serverInfo.data)}
+          />
+          <SettingRow
+            icon="link-outline"
+            label="Address"
+            description={currentUrl}
+            onPress={() => openSheet(currentUrl)}
+            showChevron
+          />
+          <SettingRow
+            icon={
+              serverInfo.isLoading
+                ? "cloud-outline"
+                : connected
+                  ? "checkmark-circle-outline"
+                  : "cloud-offline-outline"
+            }
+            label="Connection"
+            right={
+              <View style={styles.connection}>
+                <Badge tone={statusTone}>{statusLabel}</Badge>
+                <RefreshSpinIcon
+                  spinning={serverInfo.isFetching}
+                  color={serverInfo.isFetching ? palette.accent : palette.textTertiary}
                 />
-              </PressableScale>
-              <View style={styles.currentBody}>
-                <PressableScale
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    serverInfo.data
-                      ? `Edit server name. Current name: ${displayName}`
-                      : displayName
-                  }
-                  accessibilityState={{ disabled: !serverInfo.data }}
-                  disabled={!serverInfo.data}
-                  dim={Boolean(serverInfo.data)}
-                  onPress={() => {
-                    haptics.light();
-                    setNameOpen(true);
-                  }}
-                  style={styles.nameHit}
-                >
-                  <Text variant="bodyStrong" numberOfLines={1}>
-                    {displayName}
-                  </Text>
-                </PressableScale>
-                <PressableScale
-                  accessibilityRole="button"
-                  accessibilityLabel={`Change server URL. Current server: ${currentUrl}`}
-                  dim
-                  onPress={() => openSheet(currentUrl)}
-                  style={styles.urlHit}
-                >
-                  <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
-                    {currentUrl}
-                  </Text>
-                </PressableScale>
               </View>
-            </View>
-            <PressableScale
-              accessibilityRole="button"
-              accessibilityLabel="Recheck connection"
-              accessibilityState={{ busy: serverInfo.isFetching }}
-              hitSlop={8}
-              disabled={serverInfo.isFetching}
-              onPress={refreshConnection}
-              style={styles.status}
-            >
-              <Badge tone={statusTone}>{statusLabel}</Badge>
-              <RefreshSpinIcon
-                spinning={serverInfo.isFetching}
-                color={serverInfo.isFetching ? palette.accent : palette.textTertiary}
-              />
-            </PressableScale>
-          </View>
+            }
+            rightFit="content"
+            onPress={refreshConnection}
+            divider={Boolean(serverInfo.data)}
+          />
           {serverInfo.data ? (
             <SettingRow
               icon="pricetag-outline"
@@ -210,7 +166,10 @@ export default function ServerScreen() {
         <ServerHistoryPanel
           entries={recents}
           busy={switching}
-          onSelect={openSheet}
+          onSelect={(url) => {
+            haptics.light();
+            openSheet(url);
+          }}
           onRemove={(target) => {
             haptics.light();
             removeServerHistory(target);
@@ -387,48 +346,6 @@ function ServerNamePanel({
 }
 
 const styles = StyleSheet.create({
-  current: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  noDivider: { borderBottomWidth: 0 },
-  currentMain: {
-    flex: 1,
-    minWidth: 0,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[12],
-    minHeight: 52,
-    paddingLeft: spacing[16],
-    paddingVertical: spacing[8],
-  },
-  iconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: radius.sm,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  currentBody: { flex: 1, minWidth: 0 },
-  nameHit: {
-    alignSelf: "stretch",
-    borderRadius: radius.sm,
-    paddingVertical: spacing[2],
-  },
-  urlHit: {
-    alignSelf: "stretch",
-    borderRadius: radius.sm,
-    paddingVertical: spacing[2],
-    marginTop: spacing[2],
-  },
-  status: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[8],
-    paddingRight: spacing[12],
-    paddingLeft: spacing[4],
-    minHeight: 44,
-  },
+  connection: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
   hostChange: { gap: spacing[6], paddingHorizontal: spacing[8] },
 });
