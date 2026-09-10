@@ -251,11 +251,14 @@ export default function TabsLayout() {
             ),
             tabBarLabel: ({ color }) => tabLabel("Search", color),
           }}
-          listeners={{
+          listeners={({ navigation }) => ({
             tabPress: () => {
+              // Only the retap while Search is already showing. Focusing a
+              // frozen off-screen field on the way *to* Search sticks the input.
+              if (!navigation.isFocused()) return;
               requestSearchFieldFocus();
             },
-          }}
+          })}
         />
         <Tabs.Screen
           name="settings"

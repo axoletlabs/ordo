@@ -4,7 +4,7 @@
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, Keyboard, Pressable, StyleSheet, TextInput, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { Header } from "../../../src/components/ui/Header";
@@ -81,10 +81,11 @@ const SearchField = React.memo(function SearchField({
     setInput(routeQuery);
   }, [routeQuery]);
 
-  useEffect(() => {
-    registerSearchFieldFocus(() => inputRef.current?.focus());
-    return () => registerSearchFieldFocus(null);
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      return registerSearchFieldFocus(() => inputRef.current?.focus());
+    }, []),
+  );
 
   useEffect(
     () => () => {
