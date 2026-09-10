@@ -156,6 +156,8 @@ function ReaderPaneInner({
   readerPalette,
 }: ReaderPaneInnerProps) {
   const { palette: appPalette } = useTheme();
+  const forceWebsiteDark = useSettingsStore((s) => s.forceWebsiteDark);
+  const settingsAmoled = useSettingsStore((s) => s.amoled);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { width: windowWidth } = useWindowDimensions();
@@ -326,6 +328,9 @@ function ReaderPaneInner({
   const browserMounted = showWebsiteView || (!!bookmarkId && keptBrowserId === bookmarkId);
   websiteViewRef.current = showWebsiteView;
   const palette = showWebsiteView ? appPalette : readerPalette;
+  const websiteChrome = forceWebsiteDark
+    ? resolvePalette("dark", settingsAmoled, "dark").background
+    : palette.background;
   const effectiveDark = palette.mode === "dark";
 
   useEffect(() => {
@@ -743,7 +748,11 @@ function ReaderPaneInner({
         {browserMounted ? (
         <View
           collapsable={false}
-          style={[styles.browserPane, !showWebsiteView && styles.browserParked]}
+          style={[
+            styles.browserPane,
+            { backgroundColor: websiteChrome },
+            !showWebsiteView && styles.browserParked,
+          ]}
           pointerEvents={showWebsiteView ? "auto" : "none"}
           accessibilityElementsHidden={!showWebsiteView}
           importantForAccessibility={showWebsiteView ? "yes" : "no-hide-descendants"}

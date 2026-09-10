@@ -216,6 +216,8 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
         source={source}
         style={[
           styles.web,
+          // RN WebView defaults `style` to #ffffff; that flashes on open/close.
+          { backgroundColor: chromeBackground },
           Platform.OS === "android" && viewportHeight > 0 ? { height: viewportHeight } : null,
         ]}
         containerStyle={[styles.web, { backgroundColor: chromeBackground }]}
@@ -268,7 +270,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     return (
       <View
         collapsable={false}
-        style={styles.wrap}
+        style={[styles.wrap, { backgroundColor: chromeBackground }]}
         onLayout={(event) => {
           const height = event.nativeEvent.layout.height;
           if (height > 0) setViewportHeight(height);
@@ -276,7 +278,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
       >
         {Platform.OS === "android" ? (
           <ScrollView
-            style={styles.web}
+            style={[styles.web, { backgroundColor: chromeBackground }]}
             contentContainerStyle={viewportHeight > 0 ? { height: viewportHeight } : styles.web}
             scrollEnabled={ptrEnabled}
             nestedScrollEnabled

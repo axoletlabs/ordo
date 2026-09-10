@@ -92,7 +92,6 @@ export default function ControlsScreen() {
           <SettingRow
             icon="moon-outline"
             label="Force dark mode"
-            description={`Darkens websites opened in ${APP_NAME}`}
             right={
               <Toggle value={forceWebsiteDark} onValueChange={setForceWebsiteDark} />
             }
