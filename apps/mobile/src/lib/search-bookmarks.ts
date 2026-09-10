@@ -2,7 +2,7 @@
  * Client-side search: sanitize route params, merge cached bookmarks with the
  * server result, and filter as you type with word-prefix matching.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   bookmarkSearchRank,
   compareBookmarkSearchRanks,
@@ -58,6 +58,47 @@ export function searchScopeActive(filters: SearchFilters): boolean {
     filters.status !== "all" ||
     filters.kind !== "all"
   );
+}
+
+export function searchFiltersEqual(a: SearchFilters, b: SearchFilters): boolean {
+  return (
+    a.status === b.status &&
+    a.kind === b.kind &&
+    a.unfiled === b.unfiled &&
+    a.fuzzy === b.fuzzy &&
+    a.tagIds.length === b.tagIds.length &&
+    a.folderIds.length === b.folderIds.length &&
+    a.tagIds.every((id, index) => id === b.tagIds[index]) &&
+    a.folderIds.every((id, index) => id === b.folderIds[index])
+  );
+}
+
+/**
+ * Commit a value after the current native press/layout has finished.
+ * FlashList freezes when its data and a sibling layout change in the same
+ * event (the search field already defers keystrokes for the same reason).
+ */
+export function useDeferredLayoutValue<T>(value: T, equal?: (a: T, b: T) => boolean): T {
+  const [committed, setCommitted] = useState(value);
+  const valueRef = useRef(value);
+  const committedRef = useRef(committed);
+  valueRef.current = value;
+  committedRef.current = committed;
+  const isEqual = equal ?? Object.is;
+  useEffect(() => {
+    if (isEqual(value, committedRef.current)) return;
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => {
+        setCommitted(valueRef.current);
+      });
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      if (inner) cancelAnimationFrame(inner);
+    };
+  }, [isEqual, value]);
+  return committed;
 }
 
 function isArticleBookmark(bookmark: BookmarkDto): boolean {

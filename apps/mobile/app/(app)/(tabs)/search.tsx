@@ -43,8 +43,10 @@ import {
   reuseSearchResults,
   sanitizeRouteParam,
   searchFiltersActive,
+  searchFiltersEqual,
   searchScopeActive,
   useDebouncedValue,
+  useDeferredLayoutValue,
   type SearchFilters,
 } from "../../../src/lib/search-bookmarks";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
@@ -62,11 +64,9 @@ const SEARCH_FIELD_TAIL_PAD = 118;
 /** Owns the field so keystrokes never wait on compiling or animating the list. */
 const SearchField = React.memo(function SearchField({
   routeQuery,
-  occupyRight,
   onQueryChange,
 }: {
   routeQuery: string;
-  occupyRight: boolean;
   onQueryChange: (query: string) => void;
 }) {
   const { palette } = useTheme();
@@ -137,7 +137,7 @@ const SearchField = React.memo(function SearchField({
       onSubmitEditing={() => Keyboard.dismiss()}
       containerStyle={styles.searchField}
       overlayRightAccessory
-      overlayPaddingRight={occupyRight || trimmed ? SEARCH_FIELD_TAIL_PAD : undefined}
+      overlayPaddingRight={SEARCH_FIELD_TAIL_PAD}
       icon={
         focused ? (
           <Pressable
@@ -199,6 +199,9 @@ export default function SearchScreen() {
 
   const [liveQuery, setLiveQuery] = useState(routeQuery);
   const [filters, setFilters] = useState<SearchFilters>(EMPTY_SEARCH_FILTERS);
+  // Menu/chips update immediately; FlashList waits a frame so it is not
+  // recycling rows in the same native press that just changed the chip row.
+  const listFilters = useDeferredLayoutValue(filters, searchFiltersEqual);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterAnchor, setFilterAnchor] = useState<MenuAnchorRect | null>(null);
   const [actionBm, setActionBm] = useState<BookmarkDto | null>(null);
@@ -217,18 +220,18 @@ export default function SearchScreen() {
 
   const trimmed = liveQuery.trim();
   const filtersOn = searchFiltersActive(filters);
-  const scopeOn = searchScopeActive(filters);
-  const browsing = trimmed.length > 0 || scopeOn;
+  const listScopeOn = searchScopeActive(listFilters);
+  const browsing = trimmed.length > 0 || listScopeOn;
   const serverQ = useDebouncedValue(trimmed, SERVER_DEBOUNCE_MS);
   const urlQuery = useDebouncedValue(trimmed, URL_SYNC_MS);
-  const searchEnabled = serverQ.length > 0 || scopeOn;
+  const searchEnabled = serverQ.length > 0 || listScopeOn;
 
   const search = useInfiniteSearch(serverQ, {
-    tagIds: filters.tagIds,
-    folderIds: filters.folderIds,
-    unfiled: filters.unfiled,
-    unread: filters.status,
-    fuzzy: filters.fuzzy,
+    tagIds: listFilters.tagIds,
+    folderIds: listFilters.folderIds,
+    unfiled: listFilters.unfiled,
+    unread: listFilters.status,
+    fuzzy: listFilters.fuzzy,
     enabled: searchEnabled,
   });
   const serverItems = useMemo(() => {
@@ -245,7 +248,7 @@ export default function SearchScreen() {
     try {
       return compileSearchResults({
         query: trimmed,
-        filters,
+        filters: listFilters,
         serverItems,
         cachedItems,
         serverMatchesQuery: trimmed === serverQ,
@@ -253,7 +256,7 @@ export default function SearchScreen() {
     } catch {
       return EMPTY_BOOKMARKS;
     }
-  }, [browsing, cachedItems, filters, serverItems, serverQ, trimmed]);
+  }, [browsing, cachedItems, listFilters, serverItems, serverQ, trimmed]);
   const itemsRef = useRef(EMPTY_BOOKMARKS);
   const items = reuseSearchResults(itemsRef.current, compiledItems);
   itemsRef.current = items;
@@ -367,14 +370,14 @@ export default function SearchScreen() {
       <BookmarkRow
         bookmark={item}
         searchQuery={trimmed}
-        searchFuzzy={filters.fuzzy}
+        searchFuzzy={listFilters.fuzzy}
         selectionMode={selectionActive}
         selected={
           selectionActive
             ? selectionRef.current.has(bookmarkKey(item.id))
             : hasDetailPane && item.id === selectedBookmarkId
         }
-        omitTagIds={filters.tagIds}
+        omitTagIds={listFilters.tagIds}
         onPress={onPressBookmark}
         onEnterSelection={onEnterSelection}
         onMore={onMoreBookmark}
@@ -382,9 +385,9 @@ export default function SearchScreen() {
       />
     ),
     [
-      filters.fuzzy,
-      filters.tagIds,
       hasDetailPane,
+      listFilters.fuzzy,
+      listFilters.tagIds,
       onEnterSelection,
       onMoreBookmark,
       onPressBookmark,
@@ -452,7 +455,7 @@ export default function SearchScreen() {
   const listPane = (
     <ThemedFlashList
       data={items}
-      extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}:${trimmed}:${filters.tagIds.join(",")}:${filters.folderIds.join(",")}:${filters.unfiled}:${filters.status}:${filters.kind}:${filters.fuzzy}`}
+      extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}:${trimmed}:${listFilters.tagIds.join(",")}:${listFilters.folderIds.join(",")}:${listFilters.unfiled}:${listFilters.status}:${listFilters.kind}:${listFilters.fuzzy}`}
       keyExtractor={(b: BookmarkDto) => b.id}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
@@ -509,7 +512,6 @@ export default function SearchScreen() {
             <View style={styles.searchFieldWrap}>
               <SearchField
                 routeQuery={routeQuery}
-                occupyRight={filtersOn}
                 onQueryChange={setLiveQuery}
               />
               {resultMeta || (search.isFetching && browsing && !trimmed) ? (

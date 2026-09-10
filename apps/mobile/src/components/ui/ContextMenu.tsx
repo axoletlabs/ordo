@@ -52,9 +52,18 @@ export function ContextMenu({
   const insets = useSafeAreaInsets();
   const { rendered, progress } = useOverlayPresence(visible, onDismiss);
   const [contentHeight, setContentHeight] = React.useState(0);
+  const contentHeightRef = React.useRef(0);
+  const heightFrame = React.useRef<number | null>(null);
   const lastPlacement = React.useRef<ReturnType<typeof placeMenu> | null>(null);
   const lastChildren = React.useRef(children);
   if (visible) lastChildren.current = children;
+
+  React.useEffect(
+    () => () => {
+      if (heightFrame.current != null) cancelAnimationFrame(heightFrame.current);
+    },
+    [],
+  );
 
   const menuWidth = Math.min(width, Math.max(160, windowWidth - spacing[32]));
   // Keep the last real placement and items through dismiss. Callers clear
@@ -115,7 +124,13 @@ export function ContextMenu({
               onLayout={(event) => {
                 if (!visible) return;
                 const next = event.nativeEvent.layout.height;
-                if (next > 0 && Math.abs(next - contentHeight) > 0.5) setContentHeight(next);
+                if (next <= 0 || Math.abs(next - contentHeightRef.current) < 1) return;
+                contentHeightRef.current = next;
+                if (heightFrame.current != null) cancelAnimationFrame(heightFrame.current);
+                heightFrame.current = requestAnimationFrame(() => {
+                  heightFrame.current = null;
+                  setContentHeight(next);
+                });
               }}
             >
               {visible ? children : lastChildren.current}

@@ -52,7 +52,7 @@ export function SearchFilterMenu({
   tags: readonly TagDto[];
   folders: readonly FolderDto[];
   filters: SearchFilters;
-  onChange: (next: SearchFilters) => void;
+  onChange: React.Dispatch<React.SetStateAction<SearchFilters>>;
 }) {
   const { palette } = useTheme();
   const [page, setPage] = useState<FilterPage>("root");
@@ -97,39 +97,39 @@ export function SearchFilterMenu({
   };
 
   const setStatus = (status: SearchStatusFilter) => {
-    onChange({ ...filters, status });
+    onChange((prev) => ({ ...prev, status }));
     setPage("root");
   };
 
   const setKind = (kind: SearchKindFilter) => {
-    onChange({ ...filters, kind });
+    onChange((prev) => ({ ...prev, kind }));
     setPage("root");
   };
 
   const toggleTag = (tagId: string) => {
-    onChange({
-      ...filters,
-      tagIds: filters.tagIds.includes(tagId)
-        ? filters.tagIds.filter((id) => id !== tagId)
-        : [...filters.tagIds, tagId],
-    });
+    onChange((prev) => ({
+      ...prev,
+      tagIds: prev.tagIds.includes(tagId)
+        ? prev.tagIds.filter((id) => id !== tagId)
+        : [...prev.tagIds, tagId],
+    }));
   };
 
   const toggleFolder = (folderId: string) => {
-    onChange({
-      ...filters,
-      folderIds: filters.folderIds.includes(folderId)
-        ? filters.folderIds.filter((id) => id !== folderId)
-        : [...filters.folderIds, folderId],
-    });
+    onChange((prev) => ({
+      ...prev,
+      folderIds: prev.folderIds.includes(folderId)
+        ? prev.folderIds.filter((id) => id !== folderId)
+        : [...prev.folderIds, folderId],
+    }));
   };
 
   const toggleUnfiled = () => {
-    onChange({ ...filters, unfiled: !filters.unfiled });
+    onChange((prev) => ({ ...prev, unfiled: !prev.unfiled }));
   };
 
   const toggleFuzzy = () => {
-    onChange({ ...filters, fuzzy: !filters.fuzzy });
+    onChange((prev) => ({ ...prev, fuzzy: !prev.fuzzy }));
   };
 
   const clear = () => {

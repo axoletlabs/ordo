@@ -8,6 +8,7 @@ import {
   reuseSearchResults,
   sanitizeRouteParam,
   searchFiltersActive,
+  searchFiltersEqual,
   searchScopeActive,
   type SearchFilters,
 } from "./search-bookmarks.ts";
@@ -182,6 +183,13 @@ test("searchFiltersActive ignores the empty default", () => {
   assert.equal(searchFiltersActive({ ...none, fuzzy: true }), true);
   assert.equal(searchScopeActive({ ...none, fuzzy: true }), false);
   assert.equal(searchScopeActive({ ...none, folderIds: ["f1"] }), true);
+});
+
+test("searchFiltersEqual ignores object identity", () => {
+  assert.equal(searchFiltersEqual(none, { ...none }), true);
+  assert.equal(searchFiltersEqual(none, { ...none, fuzzy: true }), false);
+  assert.equal(searchFiltersEqual({ ...none, tagIds: ["a"] }, { ...none, tagIds: ["a"] }), true);
+  assert.equal(searchFiltersEqual({ ...none, tagIds: ["a"] }, { ...none, tagIds: ["b"] }), false);
 });
 
 test("matching is a word prefix, not a mid-word substring", () => {
