@@ -12,7 +12,7 @@
     "start": "expo start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/lib/app-version.test.ts src/lib/app-update-action.test.ts src/lib/haptic-policy.test.ts src/lib/native-release.test.ts src/lib/menu-anchor.test.ts src/lib/auth-session-policy.test.ts src/theme/scrollbar.test.ts src/lib/search-bookmarks.test.ts src/lib/bookmark-row-layout.test.ts plugins/with-high-refresh-rate.test.js plugins/with-android-build.test.js",
+    "test": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/lib/app-version.test.ts src/lib/app-update-action.test.ts src/lib/haptic-policy.test.ts src/lib/native-release.test.ts src/lib/menu-anchor.test.ts src/lib/auth-session-policy.test.ts src/theme/scrollbar.test.ts src/lib/search-bookmarks.test.ts src/lib/bookmark-row-layout.test.ts src/lib/reading-progress.test.ts src/components/reader/article-html-table.test.ts plugins/with-high-refresh-rate.test.js plugins/with-android-build.test.js",
     "clean": "rimraf .expo node_modules/.cache"
   },
   "dependencies": {

@@ -8,8 +8,15 @@
  * is purely presentation: token-driven typography scaled by the reader
  * preferences, responsive images, select-to-share text, and external links.
  */
-import React, { useCallback, useMemo } from "react";
-import { Linking, StyleSheet, View, type View as ViewType } from "react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  InteractionManager,
+  Linking,
+  StyleSheet,
+  Text,
+  View,
+  type View as ViewType,
+} from "react-native";
 import RenderHTML, {
   defaultSystemFonts,
   useRendererProps,
@@ -22,9 +29,14 @@ import RenderHTML, {
 } from "react-native-render-html";
 import { useTheme } from "../../theme/ThemeProvider";
 import type { Palette } from "../../theme/theme";
-import { resolveFont, spacing, type FontFamily } from "../../theme/tokens";
+import { radius, resolveFont, spacing, type FontFamily } from "../../theme/tokens";
 import type { ReaderPreferences } from "@ordo/shared";
 import { READER_BODY_SIZE, resolveReaderFontFamily } from "./reader-typography";
+import {
+  collectTableRows,
+  plainTextFromNode,
+  splitTableHeader,
+} from "./article-html-table";
 
 /** Custom fonts loaded via useFonts must be registered to avoid warnings. */
 const SYSTEM_FONTS = [
@@ -165,10 +177,9 @@ function buildTagsStyles(
     },
     img: { borderRadius: 8 },
     picture: { marginTop: spacing[16] },
-    table: { marginTop: spacing[16], borderWidth: StyleSheet.hairlineWidth, borderColor: palette.border },
+    table: { marginTop: spacing[16] },
     th: {
       ...cell,
-      backgroundColor: palette.surfaceSecondary,
       fontFamily: bodyFont("600"),
       fontSize: monoSize,
       color: palette.text,
@@ -196,6 +207,8 @@ export interface ArticleHtmlProps {
   contentWidth: number;
   onHeadingsChange?: (headings: readonly ArticleHeading[]) => void;
   onHeadingRef?: (id: string, view: ViewType | null) => void;
+  /** Fires once the native HTML tree is actually mounted (after first paint). */
+  onReady?: () => void;
 }
 
 export interface ArticleHeading {
@@ -224,10 +237,78 @@ const headingRenderer: CustomBlockRenderer = ({ tnode, TDefaultRenderer, ...prop
   );
 };
 
-const HEADING_RENDERERS = {
+interface TableRendererProps {
+  base: number;
+  family: FontFamily;
+}
+
+/**
+ * GitHub-style markdown tables (and other wide grids) are Yoga-flex cells
+ * in render-html's default UA stylesheet. A dozen of those on first paint
+ * stalls navigation for a second or more. Stack each row as labeled fields
+ * instead so the article chrome can show immediately.
+ */
+const tableRenderer: CustomBlockRenderer = ({ tnode, TNodeChildrenRenderer }) => {
+  const { palette } = useTheme();
+  const tableProps = useRendererProps<
+    RenderersProps & { table: TableRendererProps },
+    "table"
+  >("table");
+  const base = tableProps?.base ?? READER_BODY_SIZE.medium;
+  const family = tableProps?.family ?? "sans";
+  const { header, body } = splitTableHeader(collectTableRows(tnode));
+  const labels = header?.map(plainTextFromNode) ?? [];
+  const labelSize = Math.max(11, base - 3);
+
+  if (body.length === 0 && !header) return null;
+
+  const records = body.length > 0 ? body : header ? [header] : [];
+  const showLabels = labels.some(Boolean) && body.length > 0;
+
+  return (
+    <View
+      style={[
+        styles.table,
+        { borderColor: palette.border, backgroundColor: palette.surfaceSecondary },
+      ]}
+    >
+      {records.map((row, rowIndex) => (
+        <View
+          key={rowIndex}
+          style={[
+            styles.tableRecord,
+            rowIndex > 0 ? { borderTopColor: palette.border, borderTopWidth: StyleSheet.hairlineWidth } : null,
+          ]}
+        >
+          {row.map((cell, cellIndex) => (
+            <View key={cellIndex}>
+              {showLabels && labels[cellIndex] ? (
+                <Text
+                  style={{
+                    fontFamily: resolveFont(family, "600"),
+                    fontSize: labelSize,
+                    lineHeight: Math.round(labelSize * 1.35),
+                    color: palette.textTertiary,
+                    marginBottom: spacing[2],
+                  }}
+                >
+                  {labels[cellIndex]}
+                </Text>
+              ) : null}
+              <TNodeChildrenRenderer tnode={cell as TNode} />
+            </View>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+};
+
+const ARTICLE_RENDERERS = {
   h1: headingRenderer,
   h2: headingRenderer,
   h3: headingRenderer,
+  table: tableRenderer,
 };
 
 function textFromNode(node: TNode): string {
@@ -260,10 +341,34 @@ export const ArticleHtml = React.memo(function ArticleHtml({
   contentWidth,
   onHeadingsChange,
   onHeadingRef,
+  onReady,
 }: ArticleHtmlProps) {
   const { palette } = useTheme();
   const family = resolveReaderFontFamily(preferences.fontFamily);
   const base = READER_BODY_SIZE[preferences.fontSize];
+  const [readyHtml, setReadyHtml] = useState<string | null>(null);
+
+  // Let the reader chrome commit (and the push animation run) before building
+  // a native view tree. Large tables otherwise freeze the JS thread on open.
+  useEffect(() => {
+    let cancelled = false;
+    const handle = InteractionManager.runAfterInteractions(() => {
+      requestAnimationFrame(() => {
+        if (!cancelled) setReadyHtml(html);
+      });
+    });
+    return () => {
+      cancelled = true;
+      handle.cancel();
+    };
+  }, [html]);
+  const ready = readyHtml === html;
+
+  useEffect(() => {
+    if (!ready) return;
+    const frame = requestAnimationFrame(() => onReady?.());
+    return () => cancelAnimationFrame(frame);
+  }, [ready, onReady]);
 
   const tagsStyles = useMemo(
     () => buildTagsStyles(palette, family, base),
@@ -279,20 +384,22 @@ export const ArticleHtml = React.memo(function ArticleHtml({
     }),
     [palette, family, base],
   );
-  const renderersProps = useMemo<Partial<RenderersProps>>(
-    () => ({
-      a: {
-        onPress: (_event, href) => {
-          if (isExternalHref(href)) Linking.openURL(href).catch(() => {});
+  const renderersProps = useMemo(
+    () =>
+      ({
+        a: {
+          onPress: (_event: unknown, href: string) => {
+            if (isExternalHref(href)) Linking.openURL(href).catch(() => {});
+          },
         },
-      },
-      ul: { markerTextStyle },
-      ol: { markerTextStyle },
-      h1: { onHeadingRef },
-      h2: { onHeadingRef },
-      h3: { onHeadingRef },
-    }),
-    [markerTextStyle, onHeadingRef],
+        ul: { markerTextStyle },
+        ol: { markerTextStyle },
+        h1: { onHeadingRef },
+        h2: { onHeadingRef },
+        h3: { onHeadingRef },
+        table: { base, family },
+      }) as Partial<RenderersProps>,
+    [markerTextStyle, onHeadingRef, base, family],
   );
   const domVisitors = useMemo<NonNullable<RenderHTMLProps["domVisitors"]>>(() => {
     let headingIndex = 0;
@@ -314,6 +421,27 @@ export const ArticleHtml = React.memo(function ArticleHtml({
   );
 
   if (contentWidth <= 0) return null;
+  if (!ready) {
+    return (
+      <View>
+        <View style={[styles.placeholder, { backgroundColor: palette.surfaceSecondary }]} />
+        <View
+          style={[
+            styles.placeholder,
+            styles.placeholderShort,
+            { backgroundColor: palette.surfaceSecondary },
+          ]}
+        />
+        <View
+          style={[
+            styles.placeholder,
+            styles.placeholderMid,
+            { backgroundColor: palette.surfaceSecondary },
+          ]}
+        />
+      </View>
+    );
+  }
 
   return (
     <RenderHTML
@@ -321,11 +449,32 @@ export const ArticleHtml = React.memo(function ArticleHtml({
       contentWidth={contentWidth}
       tagsStyles={tagsStyles}
       renderersProps={renderersProps}
-      renderers={HEADING_RENDERERS}
+      renderers={ARTICLE_RENDERERS}
       domVisitors={domVisitors}
       onTTreeChange={handleTreeChange}
       systemFonts={SYSTEM_FONTS}
       defaultTextProps={{ selectable: true }}
     />
   );
+});
+
+const styles = StyleSheet.create({
+  table: {
+    marginTop: spacing[16],
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.sm,
+    overflow: "hidden",
+  },
+  tableRecord: {
+    paddingHorizontal: spacing[12],
+    paddingVertical: spacing[10],
+    gap: spacing[8],
+  },
+  placeholder: {
+    height: 16,
+    borderRadius: radius.xs,
+    marginTop: spacing[14],
+  },
+  placeholderShort: { width: "92%" },
+  placeholderMid: { width: "68%" },
 });

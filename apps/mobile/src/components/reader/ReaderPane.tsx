@@ -20,6 +20,7 @@ import {
   type NativeSyntheticEvent,
 } from "react-native";
 import { useColorScheme, useWindowDimensions } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { StatusBar, setStatusBarStyle } from "expo-status-bar";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -74,6 +75,7 @@ import {
 } from "../../lib/bookmark-reader";
 import { copyLink } from "../../lib/copy-link";
 import { openExternalBrowser, openLivePage } from "../../lib/open-website";
+import { scrollReadingProgress, shouldFlushReadingProgress } from "../../lib/reading-progress";
 
 function useSetContentKindMissing() {
   return { mutate: () => undefined, isPending: false };
@@ -332,6 +334,7 @@ function ReaderPaneInner({
   const latestProgressRef = useRef(0);
   const persistedProgressRef = useRef<number | null>(null);
   const restoredRef = useRef(false);
+  const htmlReadyRef = useRef(false);
   const offsetRef = useRef(0);
   const viewHeightRef = useRef(0);
   const contentHeightRef = useRef(0);
@@ -441,26 +444,28 @@ function ReaderPaneInner({
     persistProgress(article.id, article.folderId, value);
   }, [persistProgress]);
 
+  const progressSV = useSharedValue(0);
+  const trackWidthSV = useSharedValue(0);
+  const progressFillStyle = useAnimatedStyle(() => ({
+    width: Math.max(0, trackWidthSV.value * progressSV.value),
+  }));
+
   const handleFraction = useCallback(
     (fraction: number) => {
       if (!trackProgressRef.current) return;
-      setProgress(fraction);
-      // Persisted progress never regresses within a session.
-      const next = Math.max(latestProgressRef.current, fraction);
-      latestProgressRef.current = next;
+      progressSV.value = fraction;
+      const pct = Math.round(fraction * 100);
+      setProgress((prev) => (Math.round(prev * 100) === pct ? prev : fraction));
+      latestProgressRef.current = fraction;
       const last = persistedProgressRef.current;
-      if (
-        next >= READ_COMPLETION_THRESHOLD ||
-        last === null ||
-        next - last >= PROGRESS_DELTA
-      ) {
+      if (shouldFlushReadingProgress(fraction, last, PROGRESS_DELTA, READ_COMPLETION_THRESHOLD)) {
         flushProgress();
       } else {
         if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
         flushTimerRef.current = setTimeout(flushProgress, PROGRESS_DEBOUNCE_MS);
       }
     },
-    [flushProgress],
+    [flushProgress, progressSV],
   );
 
   // Per-article baseline from the server; flush best-effort when leaving.
@@ -473,8 +478,10 @@ function ReaderPaneInner({
     latestProgressRef.current = baseline;
     persistedProgressRef.current = baseline;
     restoredRef.current = false;
+    htmlReadyRef.current = false;
     offsetRef.current = 0;
     articleHeaderHeightRef.current = 0;
+    progressSV.value = baseline;
     setProgress(baseline);
     if (contentsShortcutTimerRef.current) {
       clearTimeout(contentsShortcutTimerRef.current);
@@ -490,12 +497,16 @@ function ReaderPaneInner({
   // Restore the saved reading position once layout + content size are known.
   const maybeRestore = useCallback(() => {
     if (restoredRef.current || !trackProgressRef.current) return;
+    if (hasHtml && !htmlReadyRef.current) return;
     const viewH = viewHeightRef.current;
     const contentH = contentHeightRef.current;
     if (viewH <= 0 || contentH <= 0) return;
-    restoredRef.current = true;
     const scrollable = contentH - viewH;
-    if (scrollable <= 0) return; // short articles are complete as-is
+    // Placeholder/chrome can fit the viewport; wait until the article body
+    // actually overflows before locking the restore.
+    if (scrollable <= 0) return;
+    restoredRef.current = true;
+    if (offsetRef.current > 8) return;
     const target = initialProgressRef.current;
     if (target > 0.02 && target < READ_COMPLETION_THRESHOLD) {
       const y = target * scrollable;
@@ -503,7 +514,12 @@ function ReaderPaneInner({
       offsetRef.current = y;
       syncContentsShortcut(y);
     }
-  }, [syncContentsShortcut]);
+  }, [hasHtml, syncContentsShortcut]);
+
+  const handleArticleReady = useCallback(() => {
+    htmlReadyRef.current = true;
+    maybeRestore();
+  }, [maybeRestore]);
 
   // Start tracking once content exists; retry restore in case the native
   // layout events fired before tracking was armed.
@@ -520,12 +536,12 @@ function ReaderPaneInner({
       contentHeightRef.current = contentSize.height;
       syncContentsShortcut(contentOffset.y, articleHeaderHeightRef.current, true);
       if (contentSize.height <= 0 || layoutMeasurement.height <= 0) return;
-      const scrollable = contentSize.height - layoutMeasurement.height;
+      if (hasHtml && !htmlReadyRef.current) return;
       handleFraction(
-        scrollable <= 0 ? 1 : Math.min(1, Math.max(0, contentOffset.y / scrollable)),
+        scrollReadingProgress(contentOffset.y, layoutMeasurement.height, contentSize.height),
       );
     },
-    [handleFraction, syncContentsShortcut],
+    [handleFraction, hasHtml, syncContentsShortcut],
   );
 
   // Recompute when content settles/grows (images loading, HTML rendering).
@@ -534,12 +550,10 @@ function ReaderPaneInner({
       contentHeightRef.current = h;
       maybeRestore();
       if (h <= 0 || viewHeightRef.current <= 0) return;
-      const scrollable = h - viewHeightRef.current;
-      handleFraction(
-        scrollable <= 0 ? 1 : Math.min(1, Math.max(0, offsetRef.current / scrollable)),
-      );
+      if (hasHtml && !htmlReadyRef.current) return;
+      handleFraction(scrollReadingProgress(offsetRef.current, viewHeightRef.current, h));
     },
-    [handleFraction, maybeRestore],
+    [handleFraction, hasHtml, maybeRestore],
   );
 
   const onScrollViewLayout = useCallback(
@@ -658,14 +672,15 @@ function ReaderPaneInner({
           accessibilityRole="progressbar"
           accessibilityLabel="Reading progress"
           accessibilityValue={{ min: 0, max: 100, now: Math.round(progress * 100) }}
+          onLayout={(event) => {
+            trackWidthSV.value = event.nativeEvent.layout.width;
+          }}
         >
-          <View
+          <Animated.View
             style={[
               styles.progressFill,
-              {
-                width: `${Math.round(progress * 100)}%`,
-                backgroundColor: palette.accent,
-              },
+              { backgroundColor: palette.accent },
+              progressFillStyle,
             ]}
           />
         </View>
@@ -753,6 +768,7 @@ function ReaderPaneInner({
                     contentWidth={articleWidth || fallbackArticleWidth}
                     onHeadingsChange={handleHeadingsChange}
                     onHeadingRef={handleHeadingRef}
+                    onReady={handleArticleReady}
                   />
                 </View>
               ) : legacyMarkdown ? (
@@ -984,7 +1000,7 @@ const styles = StyleSheet.create({
   tocList: { maxHeight: 420 },
   tocRow: { minHeight: 44, justifyContent: "center" },
   progressTrack: { height: 2, width: "100%", overflow: "hidden" },
-  progressFill: { height: 2 },
+  progressFill: { height: 2, alignSelf: "flex-start" },
   stateBody: {
     flex: 1,
     width: "100%",
