@@ -66,7 +66,7 @@ import { haptics } from "../../lib/haptics";
 import { layout, spacing } from "../../theme/tokens";
 import { toast } from "../ui/toast-store";
 import type { MenuAnchorRect } from "../../lib/menu-anchor";
-import { BookmarkBrowser } from "../browser/BookmarkBrowser";
+import { BookmarkBrowser, type BookmarkBrowserHandle } from "../browser/BookmarkBrowser";
 import {
   bookmarkCanBeArticle,
   bookmarkIsArticle,
@@ -214,6 +214,10 @@ function ReaderPaneInner({
   const toggleRead = useToggleRead(bookmark?.folderId ?? null);
   const setContentKind = useSetContentKind();
   const markedRef = useRef<string | null>(null);
+  const browserRef = useRef<BookmarkBrowserHandle>(null);
+  const websiteViewRef = useRef(false);
+  const [keptBrowserId, setKeptBrowserId] = useState<string | null>(null);
+  const [pageHost, setPageHost] = useState<string | null>(null);
 
   // Auto-mark read on open — filed and unfiled (folderId null) alike.
   // Completion is driven by reading progress, never by opening.
@@ -256,6 +260,7 @@ function ReaderPaneInner({
   );
 
   const handleBack = () => {
+    if (websiteViewRef.current && browserRef.current?.goBack()) return;
     if (onBack) {
       onBack();
       return;
@@ -318,12 +323,19 @@ function ReaderPaneInner({
   const showWebsiteView =
     surface === "browser" || (surface === "auto" && !!bookmark && bookmarkOpensAsWebsite(bookmark));
   const showReadInOrdo = !!bookmark && canReadInOrdo(bookmark);
+  const browserMounted = showWebsiteView || (!!bookmarkId && keptBrowserId === bookmarkId);
+  websiteViewRef.current = showWebsiteView;
   const palette = showWebsiteView ? appPalette : readerPalette;
   const effectiveDark = palette.mode === "dark";
 
   useEffect(() => {
     setSurface(initialSurface === "browser" ? "browser" : "auto");
+    setPageHost(null);
   }, [bookmarkId, initialSurface]);
+
+  useEffect(() => {
+    if (showWebsiteView && bookmarkId) setKeptBrowserId(bookmarkId);
+  }, [showWebsiteView, bookmarkId]);
 
   /* ------------------------------ reading progress ----------------------------- */
 
@@ -654,7 +666,7 @@ function ReaderPaneInner({
       ) : null}
     <View style={[styles.container, { backgroundColor: palette.background }]}>
       <Header
-        title={bookmark ? domain : "Reader"}
+        title={bookmark ? (showWebsiteView && pageHost ? pageHost : domain) : "Reader"}
         subtitle={showWebsiteView ? "Website" : headerSubtitle}
         showBack={!embedded}
         onBack={!embedded ? handleBack : undefined}
@@ -726,11 +738,25 @@ function ReaderPaneInner({
             }
           />
         </ScreenContent>
-      ) : showWebsiteView ? (
-        <View style={styles.browserPane}>
-          <BookmarkBrowser url={bookmark.url} />
-        </View>
       ) : (
+        <>
+        {browserMounted ? (
+        <View
+          collapsable={false}
+          style={[styles.browserPane, !showWebsiteView && styles.browserParked]}
+          pointerEvents={showWebsiteView ? "auto" : "none"}
+          accessibilityElementsHidden={!showWebsiteView}
+          importantForAccessibility={showWebsiteView ? "yes" : "no-hide-descendants"}
+        >
+          <BookmarkBrowser
+            ref={browserRef}
+            url={bookmark.url}
+            active={showWebsiteView}
+            onPageHost={setPageHost}
+          />
+        </View>
+        ) : null}
+        {!showWebsiteView ? (
         <View style={styles.scrollViewport}>
           <ThemedScrollView
             key={bookmark.id}
@@ -834,6 +860,8 @@ function ReaderPaneInner({
             </ScreenContent>
           </ThemedScrollView>
         </View>
+        ) : null}
+        </>
       )}
 
       {contentsShortcutVisible && actionPanel === null && !controlsOpen && !showWebsiteView ? (
@@ -883,6 +911,16 @@ function ReaderPaneInner({
             handleShare();
           }}
         />
+        {showWebsiteView ? (
+          <ContextMenuItem
+            icon="refresh-outline"
+            label="Reload"
+            onPress={() => {
+              setActionPanel(null);
+              browserRef.current?.reload();
+            }}
+          />
+        ) : null}
         <ContextMenuItem
           icon="link-outline"
           label="Copy link"
@@ -1024,4 +1062,9 @@ const styles = StyleSheet.create({
   },
   preparingText: { marginTop: spacing[16], textAlign: "center" },
   browserPane: { flex: 1 },
+  browserParked: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0,
+    zIndex: -1,
+  },
 });

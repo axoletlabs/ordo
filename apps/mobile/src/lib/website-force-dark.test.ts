@@ -86,5 +86,6 @@ test("injected script inverts without observing the document tree", () => {
   assert.doesNotMatch(WEBSITE_FORCE_DARK_SCRIPT, /MutationObserver/);
   assert.doesNotMatch(WEBSITE_FORCE_DARK_SCRIPT, /childList/);
   assert.doesNotMatch(WEBSITE_FORCE_DARK_SCRIPT, /color-scheme/);
+  assert.match(WEBSITE_FORCE_DARK_SCRIPT, /requestAnimationFrame/);
   assert.match(WEBSITE_FORCE_DARK_SCRIPT, /true;\s*$/);
 });

@@ -135,12 +135,13 @@ export const WEBSITE_FORCE_DARK_SCRIPT = `(function(){
       if (style && root) paintInvert(style, root, true);
     } catch (e) {}
     var refine = function() { applyInvert(); };
+    if (typeof requestAnimationFrame === 'function') requestAnimationFrame(refine);
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', refine);
     } else {
       refine();
     }
-    var delays = [400, 1200, 2500, 5000];
+    var delays = [0, 250, 1000, 2200];
     for (var i = 0; i < delays.length; i++) setTimeout(refine, delays[i]);
   }
   if (window.__ordoForceDark) {
