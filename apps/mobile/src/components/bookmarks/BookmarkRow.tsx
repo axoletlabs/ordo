@@ -104,6 +104,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
     ...tags.map((t) => `Tag ${t.name}`),
     hasSuggestions ? `${suggestedTags.length} tag suggestions` : undefined,
     !bookmark.isRead ? "Unread" : undefined,
+    isArticle ? "Article" : undefined,
     isPending ? "Article processing" : undefined,
     opensAsWebsite ? "Opens as website" : undefined,
   ]
@@ -248,9 +249,20 @@ export const BookmarkRow = React.memo(function BookmarkRow({
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         <View style={styles.content}>
-          <Text variant="headline" color={titleColor} numberOfLines={1}>
-            {highlightTitle(title, searchQuery)}
-          </Text>
+          <View style={styles.titleRow}>
+            <Text variant="headline" color={titleColor} numberOfLines={1} style={styles.title}>
+              {highlightTitle(title, searchQuery)}
+            </Text>
+            {isArticle ? (
+              <Ionicons
+                name="document-text-outline"
+                size={14}
+                color={palette.textTertiary}
+                style={styles.articleIcon}
+                accessible={false}
+              />
+            ) : null}
+          </View>
           {showDescription ? (
             <Text variant="footnote" color="secondary" numberOfLines={1} style={styles.description}>
               {bookmark.description}
@@ -363,6 +375,9 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
   },
   content: { flex: 1, minWidth: 0 },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[6] },
+  title: { flex: 1, minWidth: 0 },
+  articleIcon: { flexShrink: 0 },
   description: { marginTop: spacing[4] },
   tagRow: {
     flexDirection: "row",
