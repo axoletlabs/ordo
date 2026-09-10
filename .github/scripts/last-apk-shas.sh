@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Print unique head SHAs of the most recent successful build_apk jobs on the
-# given branch, newest first. Optional second arg is the max count (default 5).
+# given branch, newest first. Optional second arg is the max count (default 3).
 set -euo pipefail
 
 REPO="${GITHUB_REPOSITORY:?}"
 BRANCH="${1:-main}"
-LIMIT="${2:-5}"
+LIMIT="${2:-3}"
 count=0
 declare -A seen=()
 

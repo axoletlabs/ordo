@@ -34,8 +34,8 @@ on:
 # Android fingerprint matches the last (or in-flight) APK on the same branch.
 # Detect ignores packageJson:scripts and extra.ordo so a test-file list edit
 # does not mint a new APK. eas update --auto still hashes those sources, so
-# the OTA job also publishes the same JS to older APK runtimes whose native
-# fingerprint matches (last 5 successful build_apk SHAs).
+# after the current-fingerprint publish the OTA job reuses that bundle for
+# the previous compatible APK runtime (if its hash differs).
 # The OTA job waits for that APK to finish packaging so createdAt is newer
 # than the binary's embedded commitTime; expo-updates ignores older OTAs.
 # Concurrency is per-job, not workflow-wide. A workflow-level group would
@@ -99,9 +99,8 @@ jobs:
         id: eligibility
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preview')
         continue-on-error: true
-        # Last-resort cap if createFingerprintAsync never resolves. Extra
-        # APK worktrees need time for pnpm install; keep this above that.
-        timeout-minutes: 15
+        # Last-resort cap if createFingerprintAsync never resolves.
+        timeout-minutes: 8
         env:
           CURRENT_SHA: ${{ github.sha }}
           GITHUB_RUN_ID: ${{ github.run_id }}
@@ -205,21 +204,27 @@ jobs:
           if cmp -s /tmp/fingerprint-previous.json.normalized /tmp/fingerprint-current.json.normalized; then
             echo "native_changed=false" >> "$GITHUB_OUTPUT"
             collect_runtime_if_compatible "$BASELINE_SHA" /tmp/fingerprint-previous.json
-            while read -r apk_sha; do
-              [[ -z "$apk_sha" ]] && continue
-              if [[ "$apk_sha" == "$CURRENT_SHA" || "$apk_sha" == "$BASELINE_SHA" ]]; then
-                continue
-              fi
-              extra_dir="${RUNNER_TEMP}/fp-${apk_sha:0:8}"
-              rm -rf "$extra_dir"
-              git worktree add --detach "$extra_dir" "$apk_sha"
-              if generate_fingerprint "$extra_dir" "/tmp/fingerprint-${apk_sha}.json"; then
-                collect_runtime_if_compatible "$apk_sha" "/tmp/fingerprint-${apk_sha}.json"
-              else
-                echo "Skipping APK ${apk_sha}: fingerprint failed"
-              fi
-              git worktree remove --force "$extra_dir" 2>/dev/null || true
-            done < <(bash "$GITHUB_WORKSPACE/.github/scripts/last-apk-shas.sh" "$GITHUB_REF_NAME" 5 || true)
+            # One extra runtime is enough: the previous APK still in the wild.
+            if (( ${#extra_runtimes[@]} < 1 )); then
+              while read -r apk_sha; do
+                [[ -z "$apk_sha" ]] && continue
+                if [[ "$apk_sha" == "$CURRENT_SHA" || "$apk_sha" == "$BASELINE_SHA" ]]; then
+                  continue
+                fi
+                extra_dir="${RUNNER_TEMP}/fp-${apk_sha:0:8}"
+                rm -rf "$extra_dir"
+                git worktree add --detach "$extra_dir" "$apk_sha"
+                if generate_fingerprint "$extra_dir" "/tmp/fingerprint-${apk_sha}.json"; then
+                  collect_runtime_if_compatible "$apk_sha" "/tmp/fingerprint-${apk_sha}.json"
+                else
+                  echo "Skipping APK ${apk_sha}: fingerprint failed"
+                fi
+                git worktree remove --force "$extra_dir" 2>/dev/null || true
+                if (( ${#extra_runtimes[@]} >= 1 )); then
+                  break
+                fi
+              done < <(bash "$GITHUB_WORKSPACE/.github/scripts/last-apk-shas.sh" "$GITHUB_REF_NAME" 3 || true)
+            fi
           else
             echo "native_changed=true" >> "$GITHUB_OUTPUT"
           fi
@@ -382,14 +387,12 @@ jobs:
           EXTRA_RUNTIMES: ${{ needs.detect.outputs.extra_runtime_versions }}
         run: |
           eas update --channel "$CHANNEL" --non-interactive --auto
-          # --auto addresses this commit's fingerprint. Older APKs can have a
-          # different hash (e.g. package.json test lists) even when native
-          # code matches. eas update has no --runtime-version flag; app.config.js
-          # reads ORDO_OTA_RUNTIME_VERSION so we can retarget without dirtying git.
+          # --auto addresses this commit's fingerprint. Reuse that export for
+          # the previous APK hash (scripts-only drift) instead of rebundling.
           for runtime in $EXTRA_RUNTIMES; do
-            echo "Publishing Android bundle for APK runtime ${runtime}"
+            echo "Reusing bundle for previous APK runtime ${runtime}"
             ORDO_OTA_RUNTIME_VERSION="$runtime" eas update \
-              --channel "$CHANNEL" --platform android --non-interactive \
+              --channel "$CHANNEL" --platform android --skip-bundler --non-interactive \
               --message "Same JS for APK runtime ${runtime}"
           done
 
