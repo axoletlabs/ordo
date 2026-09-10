@@ -384,31 +384,12 @@ jobs:
           eas update --channel "$CHANNEL" --non-interactive --auto
           # --auto addresses this commit's fingerprint. Older APKs can have a
           # different hash (e.g. package.json test lists) even when native
-          # code matches. eas update has no --runtime-version flag, so patch
-          # app.config.js for each extra publish (fingerprint policy otherwise
-          # would retarget the current hash).
-          ORIG_CONFIG="$(mktemp)"
-          cp app.config.js "$ORIG_CONFIG"
-          restore_config() { cp "$ORIG_CONFIG" app.config.js; }
-          trap restore_config EXIT
+          # code matches. eas update has no --runtime-version flag; app.config.js
+          # reads ORDO_OTA_RUNTIME_VERSION so we can retarget without dirtying git.
           for runtime in $EXTRA_RUNTIMES; do
             echo "Publishing Android bundle for APK runtime ${runtime}"
-            cp "$ORIG_CONFIG" app.config.js
-            RT="$runtime" node -e '
-              const fs = require("fs");
-              const rt = process.env.RT;
-              if (!rt) throw new Error("RT is empty");
-              const src = fs.readFileSync("app.config.js", "utf8");
-              const out = src.replace(
-                /runtimeVersion:\s*\{\s*policy:\s*"fingerprint"\s*\}/,
-                `runtimeVersion: ${JSON.stringify(rt)}`
-              );
-              if (out === src) {
-                throw new Error("Could not patch runtimeVersion in app.config.js");
-              }
-              fs.writeFileSync("app.config.js", out);
-            '
-            eas update --channel "$CHANNEL" --platform android --non-interactive \
+            ORDO_OTA_RUNTIME_VERSION="$runtime" eas update \
+              --channel "$CHANNEL" --platform android --non-interactive \
               --message "Same JS for APK runtime ${runtime}"
           done
 

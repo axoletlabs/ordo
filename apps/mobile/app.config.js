@@ -29,6 +29,10 @@ const gitHash = git("rev-parse HEAD");
 const gitHashShort = git("rev-parse --short HEAD");
 const gitDirty = git("status --porcelain").length > 0;
 
+// CI extra-publishes the same JS onto older APK fingerprints. eas update has
+// no --runtime-version flag, so the job sets this to that APK's raw hash.
+const otaRuntime = process.env.ORDO_OTA_RUNTIME_VERSION;
+
 /** @type {import('expo/config').ExpoConfig} */
 module.exports = {
   name: "ordo",
@@ -42,7 +46,7 @@ module.exports = {
   updates: {
     url: "https://u.expo.dev/c044b586-2816-42c7-b564-bef8556e21da",
   },
-  runtimeVersion: { policy: "fingerprint" },
+  runtimeVersion: otaRuntime || { policy: "fingerprint" },
   plugins: [
     "expo-asset",
     [
