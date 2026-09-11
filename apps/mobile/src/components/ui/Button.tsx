@@ -6,8 +6,9 @@
  *  - danger:    coral outline (coral border + coral label)
  */
 import React from "react";
-import { ActivityIndicator, StyleSheet, View, type ViewStyle } from "react-native";
+import { StyleSheet, View, type ViewStyle } from "react-native";
 import { PressableScale } from "./PressableScale";
+import { Spinner } from "./Spinner";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { radius, spacing } from "../../theme/tokens";
@@ -96,7 +97,7 @@ export function Button({
     >
       <View style={styles.content}>
         {loading ? (
-          <ActivityIndicator size="small" color={fg} />
+          <Spinner size="sm" color={fg} />
         ) : (
           <>
             {icon ? <View style={styles.iconWrap}>{icon}</View> : null}

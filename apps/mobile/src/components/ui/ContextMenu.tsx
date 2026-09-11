@@ -10,12 +10,12 @@ import {
   StyleSheet,
   View,
   useWindowDimensions,
-  ActivityIndicator,
   type ViewStyle,
 } from "react-native";
 import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { AppIcon } from "./PinIcon";
+import { Spinner } from "./Spinner";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "./Text";
 import { OverlayPortal } from "./overlay-host";
@@ -218,7 +218,7 @@ export function ContextMenuItem({
         {label}
       </Text>
       {busy ? (
-        <ActivityIndicator size="small" color={color} />
+        <Spinner size="sm" color={color} />
       ) : selected ? (
         <Ionicons name="checkmark" size={18} color={palette.accent} />
       ) : trailing ? (

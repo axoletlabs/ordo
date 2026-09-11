@@ -2,7 +2,7 @@
  * Stepped import overlay: pick a file → preview → confirm → done.
  */
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { DuplicatePolicy, FolderDto, ImportJobDto, ImportPreviewDto } from "@ordo/shared";
@@ -10,6 +10,7 @@ import { IMPORT_EXPORT, normalizeImportPreview } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { PanelHeader } from "../ui/PanelHeader";
+import { Spinner } from "../ui/Spinner";
 import { SettingRow } from "../ui/SettingRow";
 import { SettingsGroup } from "./SettingsPage";
 import { Segmented } from "../ui/Segmented";
@@ -252,7 +253,7 @@ function BusyState({ title, subtitle }: { title: string; subtitle?: string }) {
     <View>
       <PanelHeader title={title} subtitle={subtitle} />
       <View style={styles.busy}>
-        <ActivityIndicator color={palette.accent} />
+        <Spinner color={palette.accent} />
       </View>
     </View>
   );

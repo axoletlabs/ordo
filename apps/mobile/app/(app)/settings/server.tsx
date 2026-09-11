@@ -1,14 +1,6 @@
 /** Current self-hosted server, recents, and a verified switch. */
 import React, { useEffect, useRef, useState } from "react";
 import { StyleSheet, View, type TextInput } from "react-native";
-import Animated, {
-  Easing,
-  cancelAnimation,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
-} from "react-native-reanimated";
 import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -29,6 +21,7 @@ import { Input } from "../../../src/components/ui/Input";
 import { PanelActions } from "../../../src/components/ui/SheetActionRow";
 import { PressableScale } from "../../../src/components/ui/PressableScale";
 import { Text } from "../../../src/components/ui/Text";
+import { Spinner } from "../../../src/components/ui/Spinner";
 import { toast } from "../../../src/components/ui/toast-store";
 import { useServerInfo } from "../../../src/hooks/queries";
 import { cancelProactiveRefresh } from "../../../src/lib/api/client";
@@ -155,7 +148,7 @@ export default function ServerScreen() {
               <View style={styles.status}>
                 <Badge tone={statusTone}>{statusLabel}</Badge>
                 {serverInfo.isFetching ? (
-                  <RefreshSpinIcon spinning color={palette.accent} />
+                  <Spinner size="sm" color={palette.accent} />
                 ) : null}
               </View>
               <Ionicons name="chevron-forward" size={16} color={palette.textFaint} />
@@ -225,35 +218,6 @@ export default function ServerScreen() {
         </View>
       </ConfirmDialog>
     </SettingsPage>
-  );
-}
-
-function RefreshSpinIcon({ spinning, color }: { spinning: boolean; color: string }) {
-  const rotation = useSharedValue(0);
-
-  useEffect(() => {
-    if (spinning) {
-      rotation.value = 0;
-      rotation.value = withRepeat(
-        withTiming(360, { duration: 750, easing: Easing.linear }),
-        -1,
-        false,
-      );
-    } else {
-      cancelAnimation(rotation);
-      rotation.value = withTiming(0, { duration: 160 });
-    }
-    return () => cancelAnimation(rotation);
-  }, [rotation, spinning]);
-
-  const spinStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rotation.value}deg` }],
-  }));
-
-  return (
-    <Animated.View style={spinStyle}>
-      <Ionicons name="refresh" size={16} color={color} />
-    </Animated.View>
   );
 }
 

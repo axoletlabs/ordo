@@ -3,11 +3,12 @@
  * reveals actions. Hold the favicon to multi-select.
  */
 import React from "react";
-import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from "react-native";
+import { Platform, Pressable, StyleSheet, View } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { ListPressable } from "../ui/ListPressable";
+import { Spinner } from "../ui/Spinner";
 import { Text } from "../ui/Text";
 import { TagChip } from "../tags/TagChip";
 import { SelectionMark } from "./SelectionMark";
@@ -323,8 +324,8 @@ export const BookmarkRow = React.memo(function BookmarkRow({
               </>
             ) : null}
             {isPending ? (
-              <ActivityIndicator
-                size="small"
+              <Spinner
+                size="sm"
                 color={palette.textTertiary}
                 style={styles.statusIcon}
                 accessible={false}

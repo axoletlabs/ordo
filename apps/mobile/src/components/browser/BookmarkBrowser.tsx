@@ -19,7 +19,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { ActivityIndicator, BackHandler, Linking, Platform, StyleSheet, View } from "react-native";
+import { BackHandler, Linking, Platform, StyleSheet, View } from "react-native";
 import { WebView, type WebViewNavigation } from "react-native-webview";
 import {
   BROWSER_PTR_THRESHOLD,
@@ -39,9 +39,10 @@ import { WEBSITE_FORCE_DARK_SCRIPT } from "../../lib/website-force-dark";
 import { useSettingsStore } from "../../store/settings";
 import { useTheme } from "../../theme/ThemeProvider";
 import { resolvePalette } from "../../theme/theme";
-import { radius, spacing } from "../../theme/tokens";
+import { spacing } from "../../theme/tokens";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
+import { ReloadSpinner } from "../ui/Spinner";
 
 export interface BookmarkBrowserProps {
   url: string;
@@ -310,14 +311,11 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
               { opacity: hudOpacity, transform: [{ translateY: hudOffset }] },
             ]}
           >
-            <View
-              style={[
-                styles.ptrChip,
-                { backgroundColor: palette.surfaceElevated, borderColor: palette.borderStrong },
-              ]}
-            >
-              <ActivityIndicator color={palette.accent} />
-            </View>
+            <ReloadSpinner
+              color={palette.accent}
+              backgroundColor={palette.surfaceElevated}
+              borderColor={palette.borderStrong}
+            />
           </View>
         ) : null}
         {barWidth > 0 ? (
@@ -361,14 +359,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     alignItems: "center",
-  },
-  ptrChip: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.full,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: "center",
-    justifyContent: "center",
   },
   progressTrack: {
     position: "absolute",

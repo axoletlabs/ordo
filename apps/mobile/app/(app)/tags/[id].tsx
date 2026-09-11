@@ -3,9 +3,10 @@
  * each row (except the one you are already viewing) and open that tag.
  */
 import { useCallback, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
+import { Spinner } from "../../../src/components/ui/Spinner";
 import { Header, HeaderActions, HeaderIconButton } from "../../../src/components/ui/Header";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
@@ -187,7 +188,7 @@ export default function TagDetailScreen() {
       ListFooterComponent={
         list.isFetchingNextPage ? (
           <View style={styles.footer}>
-            <ActivityIndicator color={palette.accent} />
+            <Spinner color={palette.accent} />
           </View>
         ) : null
       }

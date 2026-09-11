@@ -9,7 +9,7 @@
  * only the final commit does.
  */
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, View, type TextInput } from "react-native";
+import { StyleSheet, View, type TextInput } from "react-native";
 import Animated, {
   interpolateColor,
   useAnimatedStyle,
@@ -18,6 +18,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { FloatingPanel } from "../ui/FloatingPanel";
+import { Spinner } from "../ui/Spinner";
 import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
@@ -90,7 +91,7 @@ function AnimatedChangeButton({
       />
       <View style={styles.changeContent}>
         {loading ? (
-          <ActivityIndicator size="small" color={palette.onAccent} />
+          <Spinner size="sm" color={palette.onAccent} />
         ) : (
           <Animated.Text
             style={[

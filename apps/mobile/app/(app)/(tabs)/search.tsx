@@ -3,11 +3,12 @@
  * the server catches up shortly after for article-body hits (five letters+).
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Keyboard, Pressable, StyleSheet, TextInput, View } from "react-native";
+import { Keyboard, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Ionicons } from "@expo/vector-icons";
 import { Header } from "../../../src/components/ui/Header";
+import { Spinner } from "../../../src/components/ui/Spinner";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
 import { BookmarkActionsSheet } from "../../../src/components/bookmarks/BookmarkActionsSheet";
@@ -468,7 +469,7 @@ export default function SearchScreen() {
       ListFooterComponent={
         search.isFetchingNextPage ? (
           <View style={styles.footer}>
-            <ActivityIndicator color={palette.accent} />
+            <Spinner color={palette.accent} />
           </View>
         ) : null
       }
@@ -529,7 +530,7 @@ export default function SearchScreen() {
                       {resultMeta}
                     </Text>
                   ) : (
-                    <ActivityIndicator size="small" color={palette.textTertiary} />
+                    <Spinner size="sm" color={palette.textTertiary} />
                   )}
                 </View>
               ) : null}

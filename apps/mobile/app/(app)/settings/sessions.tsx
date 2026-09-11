@@ -2,7 +2,7 @@
  * Active sessions / devices list with per-session revoke (optimistic).
  */
 import React, { useState } from "react";
-import { ActivityIndicator, StyleSheet, View, useWindowDimensions } from "react-native";
+import { StyleSheet, View, useWindowDimensions } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
@@ -11,6 +11,7 @@ import {
   SettingsSectionLabel,
 } from "../../../src/components/settings/SettingsPage";
 import { Text } from "../../../src/components/ui/Text";
+import { Spinner } from "../../../src/components/ui/Spinner";
 import { Badge } from "../../../src/components/ui/Badge";
 import { Button } from "../../../src/components/ui/Button";
 import { Skeleton } from "../../../src/components/ui/Skeleton";
@@ -146,7 +147,7 @@ export default function SessionsScreen() {
                   onPress={() => setPendingRevoke(item)}
                 >
                   {revoke.isPending && revoke.variables === item.id ? (
-                    <ActivityIndicator size="small" color={palette.danger} />
+                    <Spinner size="sm" color={palette.danger} />
                   ) : (
                     <Text variant="subhead" style={{ color: palette.danger }}>Revoke</Text>
                   )}

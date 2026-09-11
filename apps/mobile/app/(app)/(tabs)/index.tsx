@@ -1,8 +1,9 @@
 /** Bookmarks home: folders and unfiled bookmarks in one library list. */
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
+import { Spinner } from "../../../src/components/ui/Spinner";
 import { Ionicons } from "@expo/vector-icons";
 import { Header, HeaderActions, HeaderIconButton, HEADER_CONTROL_SIZE } from "../../../src/components/ui/Header";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
@@ -357,7 +358,7 @@ export default function BookmarksScreen() {
             }
             ListFooterComponent={
               bookmarks.isFetchingNextPage ? (
-                <View style={styles.footer}><ActivityIndicator color={palette.accent} /></View>
+                <View style={styles.footer}><Spinner color={palette.accent} /></View>
               ) : null
             }
             contentContainerStyle={listContentStyle}

@@ -4,9 +4,10 @@
  * optimistic toggle/delete/move, mark-all-read, and folder actions.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
+import { Spinner } from "../../../src/components/ui/Spinner";
 import { Header, HeaderActions, HeaderIconButton } from "../../../src/components/ui/Header";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
@@ -198,7 +199,7 @@ export default function FolderDetailScreen() {
       ListFooterComponent={
         bookmarks.isFetchingNextPage ? (
           <View style={styles.footer}>
-            <ActivityIndicator color={palette.accent} />
+            <Spinner color={palette.accent} />
           </View>
         ) : null
       }
