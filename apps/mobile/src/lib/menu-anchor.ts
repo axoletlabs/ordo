@@ -1,7 +1,9 @@
 /**
  * Window-space placement for floating context menus. Aligns to the trailing
  * edge of a trigger (a library row, a header icon, the FAB) and flips above
- * when a long bookmark list leaves no room below.
+ * when a long bookmark list leaves no room below. Callers can pass
+ * `preferredPlacement` so a shorter follow-up (delete confirm) stays on the
+ * same side instead of jumping under the row.
  */
 
 export interface MenuAnchorRect {
@@ -95,6 +97,7 @@ export function placeMenu({
   insets = { top: 0, right: 0, bottom: 0, left: 0 },
   gap = CONTEXT_MENU_GAP,
   padding = CONTEXT_MENU_EDGE,
+  preferredPlacement,
 }: {
   anchor: MenuAnchorRect;
   menuWidth: number;
@@ -104,6 +107,8 @@ export function placeMenu({
   insets?: MenuInsets;
   gap?: number;
   padding?: number;
+  /** Keep this side when shrinking (e.g. delete confirm) as long as it still fits. */
+  preferredPlacement?: MenuPlacement["placement"];
 }): MenuPlacement {
   const maxHeight = Math.max(0, windowHeight - insets.top - insets.bottom - padding * 2);
   const height = Math.min(Math.max(menuHeight, 0), maxHeight);
@@ -119,6 +124,15 @@ export function placeMenu({
   const aboveTop = anchor.y - gap - height;
   const fitsBelow = belowTop <= topMax + 0.5;
   const fitsAbove = aboveTop >= topMin - 0.5;
+
+  // Default prefers below. A shorter follow-up (delete confirm) would otherwise
+  // jump under a lower row after the tall menu had already flipped above.
+  if (preferredPlacement === "below" && fitsBelow) {
+    return { left, top: belowTop, placement: "below", maxHeight };
+  }
+  if (preferredPlacement === "above" && fitsAbove) {
+    return { left, top: aboveTop, placement: "above", maxHeight };
+  }
 
   if (fitsBelow) {
     return { left, top: belowTop, placement: "below", maxHeight };

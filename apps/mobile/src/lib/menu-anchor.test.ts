@@ -72,3 +72,32 @@ test("respects safe-area insets when flipping above a bottom-row bookmark", () =
   assert.ok(placed.top >= 48 + 12);
   assert.ok(placed.top + 300 <= 800 - 34 - 12 + 0.5);
 });
+
+test("keeps an above placement when a shorter confirm would now fit below", () => {
+  const opts = {
+    anchor: anchor(320, 520, 40, 72),
+    menuWidth: 252,
+    windowWidth: 390,
+    windowHeight: 844,
+    insets: { top: 47, right: 0, bottom: 34, left: 0 },
+  };
+  const full = placeMenu({ ...opts, menuHeight: 360 });
+  assert.equal(full.placement, "above");
+  const confirm = placeMenu({ ...opts, menuHeight: 150, preferredPlacement: full.placement });
+  assert.equal(confirm.placement, "above");
+  assert.equal(confirm.top, 520 - 6 - 150);
+});
+
+test("abandons a preferred side that no longer fits", () => {
+  const placed = placeMenu({
+    anchor: anchor(700, 820),
+    menuWidth: 252,
+    menuHeight: 280,
+    windowWidth: 800,
+    windowHeight: 900,
+    insets,
+    preferredPlacement: "below",
+  });
+  assert.equal(placed.placement, "above");
+  assert.equal(placed.top, 820 - 6 - 280);
+});

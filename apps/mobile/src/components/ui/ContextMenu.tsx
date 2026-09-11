@@ -29,6 +29,7 @@ import {
   menuHoverFill,
   placeMenu,
   type MenuAnchorRect,
+  type MenuPlacement,
 } from "../../lib/menu-anchor";
 import { radius, spacing } from "../../theme/tokens";
 
@@ -55,8 +56,23 @@ export function ContextMenu({
   const contentHeightRef = React.useRef(0);
   const heightFrame = React.useRef<number | null>(null);
   const lastPlacement = React.useRef<ReturnType<typeof placeMenu> | null>(null);
+  const placementLock = React.useRef<MenuPlacement["placement"] | null>(null);
+  const wasVisibleRef = React.useRef(visible);
   const lastChildren = React.useRef(children);
   if (visible) lastChildren.current = children;
+  // New open: drop the previous row's measured height and side so a leftover
+  // delete-confirm size cannot flash below, then jump above.
+  if (visible && !wasVisibleRef.current) {
+    if (heightFrame.current != null) {
+      cancelAnimationFrame(heightFrame.current);
+      heightFrame.current = null;
+    }
+    contentHeightRef.current = 0;
+    placementLock.current = null;
+    if (contentHeight !== 0) setContentHeight(0);
+  }
+  wasVisibleRef.current = visible;
+  const measuredHeight = contentHeightRef.current;
 
   React.useEffect(
     () => () => {
@@ -73,17 +89,22 @@ export function ContextMenu({
     lastPlacement.current = placeMenu({
       anchor,
       menuWidth,
-      menuHeight: contentHeight || 240,
+      menuHeight: measuredHeight || 240,
       windowWidth,
       windowHeight,
       insets,
+      preferredPlacement: placementLock.current ?? undefined,
     });
+    if (measuredHeight > 0) {
+      placementLock.current = lastPlacement.current.placement;
+    }
   }
   const placed = lastPlacement.current;
   const fromY = placed?.placement === "above" ? 6 : -6;
+  const awaitingMeasure = visible && measuredHeight <= 0;
 
   const menuStyle = useAnimatedStyle(() => ({
-    opacity: progress.value,
+    opacity: awaitingMeasure ? 0 : progress.value,
     transform: [{ translateY: interpolate(progress.value, [0, 1], [fromY, 0]) }],
   }));
 
@@ -121,16 +142,27 @@ export function ContextMenu({
             style={{ maxHeight: placed.maxHeight }}
           >
             <View
+              collapsable={false}
               onLayout={(event) => {
                 if (!visible) return;
                 const next = event.nativeEvent.layout.height;
                 if (next <= 0 || Math.abs(next - contentHeightRef.current) < 1) return;
                 contentHeightRef.current = next;
-                if (heightFrame.current != null) cancelAnimationFrame(heightFrame.current);
-                heightFrame.current = requestAnimationFrame(() => {
+                if (heightFrame.current != null) {
+                  cancelAnimationFrame(heightFrame.current);
+                  heightFrame.current = null;
+                }
+                const apply = () => {
                   heightFrame.current = null;
                   setContentHeight(next);
-                });
+                };
+                // First paint is hidden until we know the height; apply it
+                // now so the menu does not wait an extra frame to appear.
+                if (measuredHeight <= 0) {
+                  apply();
+                  return;
+                }
+                heightFrame.current = requestAnimationFrame(apply);
               }}
             >
               {visible ? children : lastChildren.current}
