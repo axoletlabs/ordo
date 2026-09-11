@@ -1,9 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
-import { Text } from "../ui/Text";
-import { spacing } from "../../theme/tokens";
 import { copyLink } from "../../lib/copy-link";
 import { openLivePage } from "../../lib/open-website";
 import { useSettingsStore } from "../../store/settings";
@@ -73,9 +70,6 @@ export function BookmarkActionsSheet({
     <ContextMenu visible={visible} onDismiss={onDismiss} anchor={anchor}>
       {mode === "delete" ? (
         <>
-          <Text variant="footnote" color="secondary" style={styles.confirmNote}>
-            This can’t be undone.
-          </Text>
           <ContextMenuItem
             icon="trash-outline"
             label="Confirm deletion"
@@ -190,7 +184,3 @@ export function BookmarkActionsSheet({
     </ContextMenu>
   );
 }
-
-const styles = StyleSheet.create({
-  confirmNote: { marginHorizontal: spacing[12], marginBottom: spacing[8], marginTop: spacing[4] },
-});
