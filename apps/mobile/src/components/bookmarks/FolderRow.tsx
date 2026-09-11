@@ -176,11 +176,12 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
 const styles = StyleSheet.create({
   wrap: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     borderBottomWidth: StyleSheet.hairlineWidth,
     paddingRight: spacing[16],
   },
   leading: {
+    alignSelf: "stretch",
     justifyContent: "center",
     alignItems: "center",
     paddingVertical: spacing[12],

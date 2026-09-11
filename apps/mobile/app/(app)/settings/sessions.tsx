@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
   listContent: { paddingTop: spacing[8], paddingBottom: spacing[40] },
   listContentEmpty: { flexGrow: 1, justifyContent: "center" },
   card: { width: "100%", borderWidth: StyleSheet.hairlineWidth, borderRadius: radius["2xl"], padding: spacing[14] },
-  cardHead: { flexDirection: "row", gap: spacing[12], alignItems: "flex-start" },
+  cardHead: { flexDirection: "row", gap: spacing[12], alignItems: "center" },
   iconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[8], marginBottom: 2 },
   revokeBtn: { alignSelf: "flex-start", marginTop: spacing[12], paddingHorizontal: spacing[14], paddingVertical: spacing[8], borderRadius: 10, borderWidth: 1 },

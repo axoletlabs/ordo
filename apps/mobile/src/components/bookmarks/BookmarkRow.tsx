@@ -365,11 +365,12 @@ export const BookmarkRow = React.memo(function BookmarkRow({
 const styles = StyleSheet.create({
   wrap: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     borderBottomWidth: StyleSheet.hairlineWidth,
     paddingRight: spacing[16],
   },
   leading: {
+    alignSelf: "stretch",
     justifyContent: "center",
     alignItems: "center",
     paddingVertical: spacing[12],
