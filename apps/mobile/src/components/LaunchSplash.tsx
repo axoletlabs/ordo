@@ -1,11 +1,8 @@
 import React, { useEffect, useRef } from "react";
-import { Animated, Easing, StyleSheet, useColorScheme } from "react-native";
+import { Animated, Easing, StyleSheet, View } from "react-native";
+import { StatusBar } from "expo-status-bar";
 import { Logo, SPLASH_LOGO_WIDTH } from "./ui/Logo";
-
-const SPLASH_BACKGROUND = {
-  light: "#EFE7D2",
-  dark: "#1A1A16",
-} as const;
+import { useTheme } from "../theme/ThemeProvider";
 
 interface LaunchSplashProps {
   transitionIn?: boolean;
@@ -14,8 +11,8 @@ interface LaunchSplashProps {
 
 /** React fallback matching the native splash for JS reloads and handoff gaps. */
 export function LaunchSplash({ transitionIn = false, onPresented }: LaunchSplashProps) {
-  const colorScheme = useColorScheme();
-  const backgroundColor = SPLASH_BACKGROUND[colorScheme === "dark" ? "dark" : "light"];
+  const { palette } = useTheme();
+  const backgroundColor = palette.background;
   const progress = useRef(new Animated.Value(transitionIn ? 0 : 1)).current;
 
   useEffect(() => {
@@ -39,14 +36,20 @@ export function LaunchSplash({ transitionIn = false, onPresented }: LaunchSplash
   }, [onPresented, progress, transitionIn]);
 
   return (
-    <Animated.View
+    <View
       pointerEvents="auto"
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      style={[styles.root, { backgroundColor, opacity: progress }]}
+      collapsable={false}
+      style={[styles.root, { backgroundColor }]}
     >
+      <StatusBar
+        style={palette.mode === "dark" ? "light" : "dark"}
+        backgroundColor={backgroundColor}
+      />
       <Animated.View
         style={{
+          opacity: progress,
           transform: [
             {
               scale: progress.interpolate({
@@ -59,7 +62,7 @@ export function LaunchSplash({ transitionIn = false, onPresented }: LaunchSplash
       >
         <Logo width={SPLASH_LOGO_WIDTH} />
       </Animated.View>
-    </Animated.View>
+    </View>
   );
 }
 
@@ -69,5 +72,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     zIndex: 1000,
+    elevation: 1000,
   },
 });

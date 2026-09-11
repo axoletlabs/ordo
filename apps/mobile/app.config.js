@@ -42,6 +42,14 @@ module.exports = {
   userInterfaceStyle: "automatic",
   icon: "./assets/icon.png",
   backgroundColor: "#EFE7D2",
+  // Translucent so a JS reload cannot restore an opaque light status bar
+  // over a dark window. Color matches the light splash; night uses the
+  // splashscreen_background resource from the Android config plugin.
+  androidStatusBar: {
+    barStyle: "dark-content",
+    backgroundColor: "#EFE7D2",
+    translucent: true,
+  },
   newArchEnabled: true,
   updates: {
     url: "https://u.expo.dev/c044b586-2816-42c7-b564-bef8556e21da",

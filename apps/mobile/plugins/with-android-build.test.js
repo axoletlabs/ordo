@@ -3,6 +3,10 @@ const { test } = require('node:test');
 const {
   ABI_VERSION_BLOCK_MARKER,
   APP_JNI_CMAKE,
+  APP_WINDOW_CHROME_API27_ITEMS,
+  APP_WINDOW_CHROME_API29_ITEMS,
+  APP_WINDOW_CHROME_ITEMS,
+  LIGHT_SYSTEM_BARS_BOOL,
   VERSION_CODE_ABI_STRIDE,
   applyCmakePath,
   applyVersionCode,
@@ -35,6 +39,23 @@ test("normalises versionCode to run number * 10 plus a one-digit ABI offset", ()
   assert.equal(versionCodeForAbi(353, 'arm64-v8a'), 3532);
   assert.equal(versionCodeForAbi(353, 'x86_64'), 3534);
   assert.ok(versionCodeForAbi(6, null) > versionCodeForAbi(5, 'x86_64'));
+});
+
+test("keeps system bars transparent or splash-colored so reloads cannot flash light chrome", () => {
+  assert.equal(LIGHT_SYSTEM_BARS_BOOL, 'ordo_light_system_bars');
+  assert.deepEqual(APP_WINDOW_CHROME_ITEMS, [
+    ['android:statusBarColor', '@android:color/transparent'],
+    ['android:navigationBarColor', '@color/splashscreen_background'],
+    ['android:windowDrawsSystemBarBackgrounds', 'true'],
+    ['android:windowLightStatusBar', `@bool/${LIGHT_SYSTEM_BARS_BOOL}`],
+  ]);
+  assert.deepEqual(APP_WINDOW_CHROME_API27_ITEMS, [
+    ['android:windowLightNavigationBar', `@bool/${LIGHT_SYSTEM_BARS_BOOL}`],
+  ]);
+  assert.deepEqual(APP_WINDOW_CHROME_API29_ITEMS, [
+    ['android:enforceStatusBarContrast', 'false'],
+    ['android:enforceNavigationBarContrast', 'false'],
+  ]);
 });
 
 test("wires CI versionCode through a * 10 default and per-output ABI offsets", () => {

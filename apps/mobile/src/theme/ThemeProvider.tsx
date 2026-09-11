@@ -5,7 +5,7 @@
  * sync so native chrome is not stuck on a Light activity theme.
  */
 import React, { createContext, useContext, useEffect, useMemo } from "react";
-import { Appearance, Platform, useColorScheme } from "react-native";
+import { Appearance, Platform, View, useColorScheme } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSettingsStore } from "../store/settings";
 import {
@@ -14,6 +14,7 @@ import {
   type Palette,
   type Shadows,
 } from "./theme";
+import { pinWindowBackground } from "./pin-system-chrome";
 import { scrollbarColors, WEB_SCROLLBAR_CSS } from "./scrollbar";
 
 interface ThemeContextValue {
@@ -59,10 +60,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     applyWebScrollbarTheme(value.palette);
   }, [value.palette]);
 
+  useEffect(() => {
+    void pinWindowBackground(value.palette.background).catch(() => {});
+  }, [value.palette.background]);
+
   return (
     <ThemeContext.Provider value={value}>
-      <StatusBar style={value.palette.mode === "dark" ? "light" : "dark"} />
-      {children}
+      <View style={{ flex: 1, backgroundColor: value.palette.background }}>
+        <StatusBar style={value.palette.mode === "dark" ? "light" : "dark"} />
+        {children}
+      </View>
     </ThemeContext.Provider>
   );
 }
