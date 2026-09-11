@@ -236,9 +236,9 @@ export default function BookmarksScreen() {
     (item: LibraryItem) => (item.type === "folder" ? folderKey(item.folder.id) : bookmarkKey(item.bookmark.id)),
     [],
   );
+  // No paddingTop — FolderRow / BookmarkRow already pad the header gap.
   const listContentStyle = useMemo(
     () => ({
-      paddingTop: spacing[8],
       paddingBottom: selection.active
         ? selectionClearance
         : floatingNavigation
