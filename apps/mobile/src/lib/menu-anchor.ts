@@ -2,8 +2,9 @@
  * Window-space placement for floating context menus. Aligns to the trailing
  * edge of a trigger (a library row, a header icon, the FAB) and flips above
  * when a long bookmark list leaves no room below. Callers can pass
- * `preferredPlacement` so a shorter follow-up (delete confirm) stays on the
- * same side instead of jumping under the row.
+ * `preferredPlacement` so a later recompute (window resize) stays on the
+ * same side. Context menus also freeze the first measured origin so a
+ * shorter delete confirm shrinks in place instead of sliding.
  */
 
 export interface MenuAnchorRect {

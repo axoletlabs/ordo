@@ -54,49 +54,57 @@ export function ContextMenu({
   const { rendered, progress } = useOverlayPresence(visible, onDismiss);
   const [contentHeight, setContentHeight] = React.useState(0);
   const contentHeightRef = React.useRef(0);
-  const heightFrame = React.useRef<number | null>(null);
-  const lastPlacement = React.useRef<ReturnType<typeof placeMenu> | null>(null);
-  const placementLock = React.useRef<MenuPlacement["placement"] | null>(null);
+  const lastPlacement = React.useRef<MenuPlacement | null>(null);
+  const placementLock = React.useRef<MenuPlacement | null>(null);
+  const sessionSide = React.useRef<MenuPlacement["placement"] | null>(null);
   const wasVisibleRef = React.useRef(visible);
+  const layoutKeyRef = React.useRef("");
   const lastChildren = React.useRef(children);
   if (visible) lastChildren.current = children;
-  // New open: drop the previous row's measured height and side so a leftover
+  // New open: drop the previous row's measured height so a leftover
   // delete-confirm size cannot flash below, then jump above.
   if (visible && !wasVisibleRef.current) {
-    if (heightFrame.current != null) {
-      cancelAnimationFrame(heightFrame.current);
-      heightFrame.current = null;
-    }
     contentHeightRef.current = 0;
     placementLock.current = null;
+    sessionSide.current = null;
     if (contentHeight !== 0) setContentHeight(0);
   }
   wasVisibleRef.current = visible;
-  const measuredHeight = contentHeightRef.current;
-
-  React.useEffect(
-    () => () => {
-      if (heightFrame.current != null) cancelAnimationFrame(heightFrame.current);
-    },
-    [],
-  );
 
   const menuWidth = Math.min(width, Math.max(160, windowWidth - spacing[32]));
+  const layoutKey = [
+    windowWidth,
+    windowHeight,
+    menuWidth,
+    isMenuAnchorRect(anchor) ? `${anchor.x}:${anchor.y}:${anchor.width}:${anchor.height}` : "",
+  ].join("|");
+  if (layoutKeyRef.current !== layoutKey) {
+    layoutKeyRef.current = layoutKey;
+    placementLock.current = null;
+  }
+  const measuredHeight = contentHeightRef.current;
   // Keep the last real placement and items through dismiss. Callers clear
   // `anchor` and empty `children` on close; the old fallback sat at the top
   // of the screen, so a fading scrap of the menu flashed there.
+  // After the first measured layout, freeze that origin so delete confirm
+  // shrinks in place instead of jumping when the panel gets shorter.
   if (visible && isMenuAnchorRect(anchor)) {
-    lastPlacement.current = placeMenu({
-      anchor,
-      menuWidth,
-      menuHeight: measuredHeight || 240,
-      windowWidth,
-      windowHeight,
-      insets,
-      preferredPlacement: placementLock.current ?? undefined,
-    });
-    if (measuredHeight > 0) {
-      placementLock.current = lastPlacement.current.placement;
+    if (placementLock.current) {
+      lastPlacement.current = placementLock.current;
+    } else {
+      lastPlacement.current = placeMenu({
+        anchor,
+        menuWidth,
+        menuHeight: measuredHeight || 240,
+        windowWidth,
+        windowHeight,
+        insets,
+        preferredPlacement: sessionSide.current ?? undefined,
+      });
+      if (measuredHeight > 0) {
+        placementLock.current = lastPlacement.current;
+        sessionSide.current = lastPlacement.current.placement;
+      }
     }
   }
   const placed = lastPlacement.current;
@@ -144,25 +152,11 @@ export function ContextMenu({
             <View
               collapsable={false}
               onLayout={(event) => {
-                if (!visible) return;
+                if (!visible || placementLock.current) return;
                 const next = event.nativeEvent.layout.height;
                 if (next <= 0 || Math.abs(next - contentHeightRef.current) < 1) return;
                 contentHeightRef.current = next;
-                if (heightFrame.current != null) {
-                  cancelAnimationFrame(heightFrame.current);
-                  heightFrame.current = null;
-                }
-                const apply = () => {
-                  heightFrame.current = null;
-                  setContentHeight(next);
-                };
-                // First paint is hidden until we know the height; apply it
-                // now so the menu does not wait an extra frame to appear.
-                if (measuredHeight <= 0) {
-                  apply();
-                  return;
-                }
-                heightFrame.current = requestAnimationFrame(apply);
+                setContentHeight(next);
               }}
             >
               {visible ? children : lastChildren.current}
