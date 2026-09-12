@@ -21,11 +21,9 @@ import { AddBookmarkSheet } from "../../../src/components/bookmarks/AddBookmarkS
 import { BookmarkActionsSheet } from "../../../src/components/bookmarks/BookmarkActionsSheet";
 import { MoveSheet } from "../../../src/components/bookmarks/MoveSheet";
 import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
-import { EditTagPanel } from "../../../src/components/tags/EditTagPanel";
-import { ConfirmDialog } from "../../../src/components/ui/ConfirmDialog";
-import { ContextMenu, ContextMenuItem } from "../../../src/components/ui/ContextMenu";
+import { TagActionsSheet } from "../../../src/components/tags/TagActionsSheet";
 import { ReaderPane, ReaderPanePlaceholder } from "../../../src/components/reader/ReaderPane";
-import { useTags, useTaggedBookmarks, useDeleteTag } from "../../../src/hooks/use-tags";
+import { useTags, useTaggedBookmarks } from "../../../src/hooks/use-tags";
 import {
   useToggleRead,
   useDeleteBookmark,
@@ -59,7 +57,6 @@ export default function TagDetailScreen() {
   const list = useTaggedBookmarks(activeIds, !!routeId);
   const toggleRead = useToggleRead(null);
   const deleteBm = useDeleteBookmark(null);
-  const deleteTag = useDeleteTag();
 
   const [addOpen, setAddOpen] = useState(false);
   const [actionBm, setActionBm] = useState<BookmarkDto | null>(null);
@@ -68,8 +65,6 @@ export default function TagDetailScreen() {
   const [editTagsBm, setEditTagsBm] = useState<BookmarkDto | null>(null);
   const [tagActionsOpen, setTagActionsOpen] = useState(false);
   const [tagAnchor, setTagAnchor] = useState<MenuAnchorRect | null>(null);
-  const [editTagOpen, setEditTagOpen] = useState(false);
-  const [deleteTagOpen, setDeleteTagOpen] = useState(false);
   const selection = useSelectionMode();
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
@@ -334,55 +329,17 @@ export default function TagDetailScreen() {
         onDismiss={() => setEditTagsBm(null)}
       />
 
-      <ContextMenu visible={tagActionsOpen} onDismiss={() => setTagActionsOpen(false)} anchor={tagAnchor}>
-        <ContextMenuItem
-          icon="create-outline"
-          label="Edit tag"
-          onPress={() => {
-            setTagActionsOpen(false);
-            setEditTagOpen(true);
-          }}
-        />
-        <ContextMenuItem
-          icon="trash-outline"
-          label="Delete tag"
-          tone="danger"
-          onPress={() => {
-            setTagActionsOpen(false);
-            setDeleteTagOpen(true);
-          }}
-        />
-      </ContextMenu>
-
-      <EditTagPanel
-        visible={editTagOpen}
+      <TagActionsSheet
+        visible={tagActionsOpen}
         tag={anchor ?? null}
-        onDismiss={() => setEditTagOpen(false)}
-      />
-      <ConfirmDialog
-        visible={deleteTagOpen}
-        icon="trash-outline"
-        onDismiss={() => setDeleteTagOpen(false)}
-        title={
-          anchor
-            ? anchor.bookmarkCount > 0
-              ? `Delete "${anchor.name}" from ${anchor.bookmarkCount} bookmarks?`
-              : `Delete "${anchor.name}"?`
-            : ""
-        }
-        message="The tag is removed. Bookmarks are kept. You can undo this."
-        confirmLabel="Delete tag"
-        onConfirm={() => {
-          if (!anchor) return;
-          haptics.medium();
-          const target = anchor;
-          setDeleteTagOpen(false);
-          deleteTag.mutate(target, {
-            onDeleted: () => {
-              if (router.canGoBack()) router.back();
-              else router.replace("/tags");
-            },
-          });
+        anchor={tagAnchor}
+        onDismiss={() => {
+          setTagActionsOpen(false);
+          setTagAnchor(null);
+        }}
+        onDeleted={() => {
+          if (router.canGoBack()) router.back();
+          else router.replace("/tags");
         }}
       />
       <SelectionTools
