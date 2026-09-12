@@ -3,13 +3,13 @@ import {
   StyleSheet,
   View,
   type StyleProp,
-  type ScrollViewProps,
   type ViewStyle,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Header } from "../ui/Header";
-import { ThemedScrollView } from "../ui/ThemedScrollView";
+import { ThemedScrollView, type ThemedScrollViewProps } from "../ui/ThemedScrollView";
+import { useScrollBarInsets } from "../ui/ScrollBar";
 import { Text } from "../ui/Text";
 import { Card } from "../ui/Card";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -43,9 +43,11 @@ export function SettingsScrollView({
   children,
   contentContainerStyle,
   contentWidth = layout.maxSettingsWidth,
+  scrollBarInsets: scrollBarInsetsOverride,
   ...props
-}: ScrollViewProps & { contentWidth?: number }) {
+}: ThemedScrollViewProps & { contentWidth?: number }) {
   const insets = useSafeAreaInsets();
+  const chromeInsets = useScrollBarInsets();
 
   return (
     <ThemedScrollView
@@ -58,6 +60,7 @@ export function SettingsScrollView({
         },
         contentContainerStyle,
       ]}
+      scrollBarInsets={scrollBarInsetsOverride ?? chromeInsets}
       {...props}
     >
       <View style={[styles.contentColumn, { maxWidth: contentWidth }]}>{children}</View>

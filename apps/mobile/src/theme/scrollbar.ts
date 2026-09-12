@@ -14,6 +14,46 @@ export const SCROLLBAR_EDGE_INSET = 5;
 export const SCROLLBAR_END_INSET = 12;
 export const SCROLLBAR_MIN_THUMB = 28;
 export const SCROLLBAR_IDLE_MS = 1100;
+/** 48px FAB plus the usual end gap, so the thumb stops above the + button. */
+export const SCROLLBAR_FAB_CLEARANCE = 48 + SCROLLBAR_END_INSET;
+
+export type ScrollBarInsets = {
+  top?: number;
+  bottom?: number;
+};
+
+/**
+ * Bottom inset for the overlay thumb. `chromeClearance` is the floating dock
+ * / selection bar / home-indicator band; pass `fab` when a + button sits in
+ * that same trailing corner.
+ */
+export function scrollBarBottomInset(chromeClearance: number, fab = false): number {
+  return Math.max(
+    SCROLLBAR_END_INSET,
+    chromeClearance + (fab ? SCROLLBAR_FAB_CLEARANCE : 0),
+  );
+}
+
+/**
+ * How much of a list viewport is covered by overlay chrome.
+ *
+ * Window-absolute toasts use a different number: they must also clear a
+ * docked tab bar. The overlay scrollbar lives in the scene, which that bar
+ * already shrinks.
+ */
+export function listScrollOverlayClearance(args: {
+  hideBottomNav: boolean;
+  selectionClearance: number;
+  floatingDockVisible: boolean;
+  floatingDockClearance: number;
+  dockedTabScene: boolean;
+  safeBottomClearance: number;
+}): number {
+  if (args.hideBottomNav) return args.selectionClearance;
+  if (args.floatingDockVisible) return args.floatingDockClearance;
+  if (args.dockedTabScene) return 0;
+  return args.safeBottomClearance;
+}
 
 /** `hex` (#RRGGBB) at `alpha` (0–1) as an rgba() string. */
 export function inkAlpha(hex: string, alpha: number): string {

@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { inkAlpha, scrollThumbLayout, scrollbarColors, scrollViewShouldFill } from "./scrollbar.ts";
+import {
+  inkAlpha,
+  SCROLLBAR_END_INSET,
+  SCROLLBAR_FAB_CLEARANCE,
+  listScrollOverlayClearance,
+  scrollBarBottomInset,
+  scrollThumbLayout,
+  scrollbarColors,
+  scrollViewShouldFill,
+} from "./scrollbar.ts";
 import type { Palette } from "./theme.ts";
 
 function stubPalette(partial: Pick<Palette, "mode" | "amoled" | "text">): Palette {
@@ -42,6 +51,61 @@ test("maxHeight-only hosts do not flex-fill (shrink-wrapped menus)", () => {
 test("scrollThumbLayout hides when content fits", () => {
   assert.equal(scrollThumbLayout(400, 400, 0, 384), null);
   assert.equal(scrollThumbLayout(400, 399, 0, 384), null);
+});
+
+test("listScrollOverlayClearance ignores a docked tab bar", () => {
+  assert.equal(
+    listScrollOverlayClearance({
+      hideBottomNav: false,
+      selectionClearance: 90,
+      floatingDockVisible: true,
+      floatingDockClearance: 118,
+      dockedTabScene: true,
+      safeBottomClearance: 50,
+    }),
+    118,
+  );
+  assert.equal(
+    listScrollOverlayClearance({
+      hideBottomNav: false,
+      selectionClearance: 90,
+      floatingDockVisible: false,
+      floatingDockClearance: 118,
+      dockedTabScene: true,
+      safeBottomClearance: 50,
+    }),
+    0,
+  );
+  assert.equal(
+    listScrollOverlayClearance({
+      hideBottomNav: true,
+      selectionClearance: 90,
+      floatingDockVisible: false,
+      floatingDockClearance: 118,
+      dockedTabScene: true,
+      safeBottomClearance: 50,
+    }),
+    90,
+  );
+  assert.equal(
+    listScrollOverlayClearance({
+      hideBottomNav: false,
+      selectionClearance: 90,
+      floatingDockVisible: false,
+      floatingDockClearance: 118,
+      dockedTabScene: false,
+      safeBottomClearance: 50,
+    }),
+    50,
+  );
+});
+
+test("scrollBarBottomInset stays above floating chrome and the FAB", () => {
+  assert.equal(scrollBarBottomInset(0), SCROLLBAR_END_INSET);
+  assert.equal(scrollBarBottomInset(8), SCROLLBAR_END_INSET);
+  assert.equal(scrollBarBottomInset(118), 118);
+  assert.equal(scrollBarBottomInset(118, true), 118 + SCROLLBAR_FAB_CLEARANCE);
+  assert.equal(scrollBarBottomInset(0, true), SCROLLBAR_FAB_CLEARANCE);
 });
 
 test("scrollThumbLayout maps offset onto the track", () => {

@@ -22,15 +22,29 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useTheme } from "../../theme/ThemeProvider";
+import { useFloatingDockMetrics } from "../../hooks/use-floating-dock-metrics";
 import {
   SCROLLBAR_EDGE_INSET,
   SCROLLBAR_END_INSET,
   SCROLLBAR_IDLE_MS,
   SCROLLBAR_MIN_THUMB,
   SCROLLBAR_THUMB_WIDTH,
+  scrollBarBottomInset,
   scrollbarColors,
+  type ScrollBarInsets,
 } from "../../theme/scrollbar";
 import { radius, timing } from "../../theme/tokens";
+
+export type { ScrollBarInsets };
+
+/** Overlay track insets that clear the floating dock, and optionally the FAB. */
+export function useScrollBarInsets(options?: { fab?: boolean }): Required<ScrollBarInsets> {
+  const { listOverlayClearance } = useFloatingDockMetrics();
+  return {
+    top: SCROLLBAR_END_INSET,
+    bottom: scrollBarBottomInset(listOverlayClearance, options?.fab === true),
+  };
+}
 
 export function chainHandlers<Args extends unknown[]>(
   ...handlers: Array<((...args: Args) => void) | undefined>
@@ -40,9 +54,11 @@ export function chainHandlers<Args extends unknown[]>(
   };
 }
 
-export function useVerticalScrollBar() {
+export function useVerticalScrollBar(insets?: ScrollBarInsets) {
   const { palette } = useTheme();
   const colors = scrollbarColors(palette);
+  const topInset = insets?.top ?? SCROLLBAR_END_INSET;
+  const bottomInset = insets?.bottom ?? SCROLLBAR_END_INSET;
   const viewport = useSharedValue(1);
   const content = useSharedValue(1);
   const offset = useSharedValue(0);
@@ -97,6 +113,8 @@ export function useVerticalScrollBar() {
         offset={offset}
         opacity={opacity}
         thumbColor={colors.thumb}
+        topInset={topInset}
+        bottomInset={bottomInset}
       />
     );
 
@@ -116,15 +134,24 @@ function ScrollBarOverlay({
   offset,
   opacity,
   thumbColor,
+  topInset,
+  bottomInset,
 }: {
   viewport: SharedValue<number>;
   content: SharedValue<number>;
   offset: SharedValue<number>;
   opacity: SharedValue<number>;
   thumbColor: string;
+  topInset: number;
+  bottomInset: number;
 }) {
+  const top = useSharedValue(topInset);
+  const bottom = useSharedValue(bottomInset);
+  top.value = topInset;
+  bottom.value = bottomInset;
+
   const thumbStyle = useAnimatedStyle(() => {
-    const track = Math.max(0, viewport.value - SCROLLBAR_END_INSET * 2);
+    const track = Math.max(0, viewport.value - top.value - bottom.value);
     const view = viewport.value;
     const size = content.value;
     if (size <= view + 1 || track <= 0) {
@@ -146,7 +173,7 @@ function ScrollBarOverlay({
     <Animated.View
       pointerEvents="none"
       importantForAccessibility="no-hide-descendants"
-      style={[styles.thumb, { backgroundColor: thumbColor }, thumbStyle]}
+      style={[styles.thumb, { top: topInset, backgroundColor: thumbColor }, thumbStyle]}
     />
   );
 }

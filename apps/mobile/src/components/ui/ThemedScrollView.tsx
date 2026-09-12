@@ -17,17 +17,33 @@ import { FlashList, type FlashListProps } from "@shopify/flash-list";
 import {
   chainHandlers,
   splitScrollLayoutStyle,
+  useScrollBarInsets,
   useVerticalScrollBar,
+  type ScrollBarInsets,
 } from "./ScrollBar";
 import { useBrandedRefresh } from "./RefreshHud";
 import { scrollViewShouldFill } from "../../theme/scrollbar";
+
+export type ThemedScrollViewProps = ScrollViewProps & {
+  scrollBarInsets?: ScrollBarInsets;
+};
+
+export type ThemedFlashListProps<T> = FlashListProps<T> & {
+  scrollBarInsets?: ScrollBarInsets;
+  /** Reserve the + button's corner. Library lists default to on. */
+  scrollBarClearsFab?: boolean;
+};
+
+export type ThemedFlatListProps<T> = FlatListProps<T> & {
+  scrollBarInsets?: ScrollBarInsets;
+};
 
 const nativeScrollBarProps = {
   showsVerticalScrollIndicator: Platform.OS === "web",
   persistentScrollbar: false,
 } as const;
 
-export const ThemedScrollView = React.forwardRef<ScrollView, ScrollViewProps>(
+export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewProps>(
   function ThemedScrollView(
     {
       style,
@@ -38,11 +54,12 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ScrollViewProps>(
       scrollEventThrottle,
       showsVerticalScrollIndicator,
       indicatorStyle: _indicatorStyle,
+      scrollBarInsets,
       ...props
     },
     ref,
   ) {
-    const bar = useVerticalScrollBar();
+    const bar = useVerticalScrollBar(scrollBarInsets);
     const { wrapper, inner } = splitScrollLayoutStyle(style);
     if (horizontal) {
       return (
@@ -89,7 +106,7 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ScrollViewProps>(
   },
 );
 
-export function ThemedFlashList<T>(props: FlashListProps<T>) {
+export function ThemedFlashList<T>(props: ThemedFlashListProps<T>) {
   const {
     style,
     onScroll,
@@ -104,9 +121,12 @@ export function ThemedFlashList<T>(props: FlashListProps<T>) {
     onRefresh,
     refreshControl,
     onScrollEndDrag,
+    scrollBarInsets,
+    scrollBarClearsFab = true,
     ...rest
   } = props;
-  const bar = useVerticalScrollBar();
+  const chromeInsets = useScrollBarInsets({ fab: scrollBarClearsFab });
+  const bar = useVerticalScrollBar(scrollBarInsets ?? chromeInsets);
   const { wrapper, inner } = splitScrollLayoutStyle(style);
   const branded = useBrandedRefresh(refreshing, onRefresh, refreshControl);
 
@@ -141,7 +161,7 @@ export function ThemedFlashList<T>(props: FlashListProps<T>) {
 }
 
 export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
-  props: FlatListProps<T>,
+  props: ThemedFlatListProps<T>,
   ref: React.ForwardedRef<FlatList<T>>,
 ) {
   const {
@@ -156,9 +176,10 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
     onRefresh,
     refreshControl,
     onScrollEndDrag,
+    scrollBarInsets,
     ...rest
   } = props;
-  const bar = useVerticalScrollBar();
+  const bar = useVerticalScrollBar(scrollBarInsets);
   const { wrapper, inner } = splitScrollLayoutStyle(style);
   const branded = useBrandedRefresh(refreshing, onRefresh, refreshControl);
   const fill = wrapper?.flex == null && wrapper?.maxHeight == null && wrapper?.height == null;
@@ -190,7 +211,7 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
       {branded.hud}
     </View>
   );
-}) as <T>(props: FlatListProps<T> & { ref?: React.Ref<FlatList<T>> }) => React.ReactElement;
+}) as <T>(props: ThemedFlatListProps<T> & { ref?: React.Ref<FlatList<T>> }) => React.ReactElement;
 
 const styles = StyleSheet.create({
   host: { position: "relative", overflow: "visible" },

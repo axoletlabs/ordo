@@ -460,6 +460,7 @@ export default function SearchScreen() {
       data={items}
       extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}:${trimmed}:${listFilters.tagIds.join(",")}:${listFilters.folderIds.join(",")}:${listFilters.unfiled}:${listFilters.status}:${listFilters.kind}:${listFilters.fuzzy}`}
       keyExtractor={(b: BookmarkDto) => b.id}
+      scrollBarClearsFab={false}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
       estimatedItemSize={72}
