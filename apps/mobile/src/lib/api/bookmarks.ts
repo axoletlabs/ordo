@@ -1,7 +1,12 @@
 /**
  * Bookmarks API endpoints.
  */
-import { BookmarkRoutes, buildPath, type BatchBookmarksInput } from "@ordo/shared";
+import {
+  BookmarkRoutes,
+  buildPath,
+  type BatchBookmarksInput,
+  type BookmarkListSort,
+} from "@ordo/shared";
 import { api } from "./client";
 
 /** `folderId` is null for the unfiled root list ("Bookmarks"). */
@@ -9,6 +14,7 @@ export interface ListBookmarksParams {
   folderId: string | null;
   cursor?: string | null;
   limit?: number;
+  sort?: BookmarkListSort;
 }
 
 export const bookmarksApi = {
@@ -19,9 +25,9 @@ export const bookmarksApi = {
       { folderId },
     ),
 
-  list: ({ folderId, cursor, limit }: ListBookmarksParams) =>
+  list: ({ folderId, cursor, limit, sort }: ListBookmarksParams) =>
     api.get<typeof BookmarkRoutes.list.response>(BookmarkRoutes.list.path, {
-      query: { folderId, cursor, limit },
+      query: { folderId, cursor, limit, sort },
       folderId,
     }),
 

@@ -1,7 +1,7 @@
 /**
  * Centralised React Query key factory. Keeps cache keys stable & typed.
  */
-import type { CursorPage } from "@ordo/shared";
+import type { BookmarkListSort, CursorPage } from "@ordo/shared";
 
 export const qk = {
   me: ["auth", "me"] as const,
@@ -13,8 +13,11 @@ export const qk = {
   importJob: (id: string) => ["import", id] as const,
   extractionProgress: ["bookmarks", "extraction-progress"] as const,
 
-  /** `folderId` is null for the unfiled root list ("Bookmarks"). */
-  bookmarks: (folderId: string | null) => ["bookmarks", folderId ?? null] as const,
+  /** `folderId` is null for the unfiled root list ("Bookmarks"). Omit `sort` to match every order. */
+  bookmarks: (folderId: string | null, sort?: BookmarkListSort) =>
+    sort
+      ? (["bookmarks", folderId ?? null, sort] as const)
+      : (["bookmarks", folderId ?? null] as const),
   bookmark: (id: string) => ["bookmarks", "detail", id] as const,
   search: (
     q: string,

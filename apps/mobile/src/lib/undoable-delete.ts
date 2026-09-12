@@ -166,7 +166,7 @@ function listKeyAllowsRestore(queryKey: readonly unknown[], folderId: string | n
   const scope = queryKey[1];
   if (scope === "detail" || scope === "extraction-progress") return false;
   if (scope === "search" || scope === "tagged") return true;
-  return queryKey.length === 2 && scope === folderId;
+  return scope === folderId && (queryKey.length === 2 || queryKey.length === 3);
 }
 
 function collectBookmarksInFolders(folderIds: ReadonlySet<string>): BookmarkDto[] {

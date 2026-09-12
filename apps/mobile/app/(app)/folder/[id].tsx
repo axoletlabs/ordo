@@ -23,9 +23,11 @@ import { MoveSheet } from "../../../src/components/bookmarks/MoveSheet";
 import { LockPrompt } from "../../../src/components/bookmarks/LockPrompt";
 import { BookmarkActionsSheet } from "../../../src/components/bookmarks/BookmarkActionsSheet";
 import { FolderActionsSheet } from "../../../src/components/bookmarks/FolderActionsSheet";
+import { SortMenu } from "../../../src/components/bookmarks/SortMenu";
 import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
 import { ReaderPane, ReaderPanePlaceholder } from "../../../src/components/reader/ReaderPane";
 import { useFolders } from "../../../src/hooks/queries";
+import { useListSortStore } from "../../../src/store/list-sort";
 import { useFolderUnlocked } from "../../../src/hooks/use-folders";
 import {
   useInfiniteBookmarks,
@@ -43,7 +45,7 @@ import { markedAsReadToast } from "../../../src/lib/copy";
 import { errorMessage, isFolderProtected } from "../../../src/lib/error-message";
 import { flattenPages } from "../../../src/lib/api/query-keys";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
-import { type BookmarkDto } from "@ordo/shared";
+import { DEFAULT_BOOKMARK_LIST_SORT, type BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 import { estimateBookmarkRowSize } from "../../../src/lib/bookmark-row-layout";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
@@ -81,6 +83,13 @@ export default function FolderDetailScreen() {
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [folderActions, setFolderActions] = useState(false);
   const [folderAnchor, setFolderAnchor] = useState<MenuAnchorRect | null>(null);
+  const [sortOpen, setSortOpen] = useState(false);
+  const [sortAnchor, setSortAnchor] = useState<MenuAnchorRect | null>(null);
+  const bookmarkSort = useListSortStore((state) =>
+    folderId ? (state.folderBookmarkSorts[folderId] ?? DEFAULT_BOOKMARK_LIST_SORT) : state.unfiledSort,
+  );
+  const setUnfiledSort = useListSortStore((state) => state.setUnfiledSort);
+  const setFolderBookmarkSort = useListSortStore((state) => state.setFolderBookmarkSort);
   const selection = useSelectionMode();
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
@@ -226,16 +235,28 @@ export default function FolderDetailScreen() {
         showBack
         maxWidth={hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth}
         right={
-          folder ? (
-            <HeaderActions>
-              {hasUnread && !showLocked && !loadFailed ? (
-                <HeaderIconButton
-                  name="checkmark-done"
-                  color={palette.accent}
-                  onPress={onMarkAllRead}
-                  accessibilityLabel="Mark all as read"
-                />
-              ) : null}
+          <HeaderActions>
+            {!showLocked && !loadFailed ? (
+              <HeaderIconButton
+                name="swap-vertical-outline"
+                color={palette.text}
+                onPress={(anchor) => {
+                  setSortAnchor(anchor);
+                  setSortOpen(true);
+                }}
+                accessibilityLabel="Sort"
+                accessibilityHint="Change how bookmarks are ordered."
+              />
+            ) : null}
+            {hasUnread && !showLocked && !loadFailed ? (
+              <HeaderIconButton
+                name="checkmark-done"
+                color={palette.accent}
+                onPress={onMarkAllRead}
+                accessibilityLabel="Mark all as read"
+              />
+            ) : null}
+            {folder ? (
               <HeaderIconButton
                 name="ellipsis-horizontal"
                 color={palette.text}
@@ -245,8 +266,8 @@ export default function FolderDetailScreen() {
                 }}
                 accessibilityLabel="Folder actions"
               />
-            </HeaderActions>
-          ) : undefined
+            ) : null}
+          </HeaderActions>
         }
       />
       )}
@@ -387,6 +408,21 @@ export default function FolderDetailScreen() {
         lockType={folder?.lockType}
         pinLength={folder?.pinLength}
         onDismiss={() => setUnlockOpen(false)}
+      />
+
+      <SortMenu
+        visible={sortOpen}
+        onDismiss={() => {
+          setSortOpen(false);
+          setSortAnchor(null);
+        }}
+        anchor={sortAnchor}
+        variant="bookmarks"
+        bookmarkSort={bookmarkSort}
+        onBookmarkSort={(sort) => {
+          if (folderId) setFolderBookmarkSort(folderId, sort);
+          else setUnfiledSort(sort);
+        }}
       />
 
       <FolderActionsSheet

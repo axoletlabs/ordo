@@ -1,7 +1,6 @@
 import { BackHandler, Platform, ToastAndroid } from "react-native";
 import { bookmarksApi } from "./api/bookmarks";
-import { qk } from "./api/query-keys";
-import { prependBookmarkToPages } from "./cache-helpers";
+import { insertCreatedBookmark } from "./cache-helpers";
 import { queryClient } from "./query-client";
 
 /**
@@ -19,7 +18,7 @@ export function returnToShareSender(message?: string): void {
 /** Save an unfiled bookmark and prepend it to the root list cache. */
 export async function saveUnfiledBookmark(url: string): Promise<void> {
   const bookmark = await bookmarksApi.create(url, null);
-  prependBookmarkToPages(queryClient, qk.bookmarks(null), bookmark);
+  insertCreatedBookmark(queryClient, bookmark);
   if (bookmark.tags.length > 0) {
     void queryClient.invalidateQueries({ queryKey: ["tags"] });
   }

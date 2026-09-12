@@ -4,20 +4,18 @@ import { StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
 import { Spinner } from "../../../src/components/ui/Spinner";
-import { Ionicons } from "@expo/vector-icons";
-import { Header, HeaderActions, HeaderIconButton, HEADER_CONTROL_SIZE } from "../../../src/components/ui/Header";
+import { Header, HeaderActions, HeaderIconButton } from "../../../src/components/ui/Header";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
 import { FAB, FABLayer } from "../../../src/components/ui/FAB";
 import { ContextMenu, ContextMenuItem } from "../../../src/components/ui/ContextMenu";
 import { Button } from "../../../src/components/ui/Button";
-import { Text } from "../../../src/components/ui/Text";
-import { PressableScale } from "../../../src/components/ui/PressableScale";
 import { ScreenContent } from "../../../src/components/ui/ScreenContent";
 import { BookmarkListSkeleton } from "../../../src/components/ui/BookmarkListSkeleton";
 import { EmptyState } from "../../../src/components/ui/EmptyState";
 import { AddBookmarkSheet } from "../../../src/components/bookmarks/AddBookmarkSheet";
 import { BookmarkActionsSheet } from "../../../src/components/bookmarks/BookmarkActionsSheet";
+import { SortMenu } from "../../../src/components/bookmarks/SortMenu";
 import { FolderRow } from "../../../src/components/bookmarks/FolderRow";
 import { FolderActionsSheet } from "../../../src/components/bookmarks/FolderActionsSheet";
 import { CreateFolderPanel } from "../../../src/components/bookmarks/CreateFolderPanel";
@@ -28,6 +26,8 @@ import { ExtractionProgressLine } from "../../../src/components/bookmarks/Extrac
 import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
 import { useFolders } from "../../../src/hooks/use-folders";
 import { useFolderTokenStore } from "../../../src/store/folder-tokens";
+import { useListSortStore } from "../../../src/store/list-sort";
+import { sortFoldersBy } from "../../../src/lib/list-sort";
 import { useTags } from "../../../src/hooks/use-tags";
 import {
   prefetchFolderBookmarks,
@@ -65,6 +65,10 @@ export default function BookmarksScreen() {
   const { visible: floatingNavigation, clearance: bottomClearance, bottom: dockInset, selectionClearance } = useFloatingDockMetrics();
   const folders = useFolders();
   const tags = useTags();
+  const folderSort = useListSortStore((state) => state.folderSort);
+  const unfiledSort = useListSortStore((state) => state.unfiledSort);
+  const setFolderSort = useListSortStore((state) => state.setFolderSort);
+  const setUnfiledSort = useListSortStore((state) => state.setUnfiledSort);
   const bookmarks = useInfiniteBookmarks(null);
   const toggleRead = useToggleRead(null);
   const deleteBookmark = useDeleteBookmark(null);
@@ -76,6 +80,8 @@ export default function BookmarksScreen() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [createAnchor, setCreateAnchor] = useState<MenuAnchorRect | null>(null);
+  const [sortOpen, setSortOpen] = useState(false);
+  const [sortAnchor, setSortAnchor] = useState<MenuAnchorRect | null>(null);
   const [unlockFolder, setUnlockFolder] = useState<FolderDto | null>(null);
   const [actionsFolder, setActionsFolder] = useState<FolderDto | null>(null);
   const [folderAnchor, setFolderAnchor] = useState<MenuAnchorRect | null>(null);
@@ -89,7 +95,10 @@ export default function BookmarksScreen() {
 
   const items = useMemo(() => flattenPages(bookmarks.data?.pages ?? []), [bookmarks.data]);
   const hasUnread = items.some((bookmark) => !bookmark.isRead);
-  const folderItems = folders.data ?? [];
+  const folderItems = useMemo(
+    () => sortFoldersBy(folders.data ?? [], folderSort),
+    [folders.data, folderSort],
+  );
   const tagCount = tags.data?.length ?? 0;
   const libraryItems = useMemo<LibraryItem[]>(
     () => [
@@ -271,23 +280,24 @@ export default function BookmarksScreen() {
   };
 
   const headerRight = (
-    <HeaderActions style={styles.headerActions}>
-      <PressableScale
-        style={styles.tagsLink}
-        onPress={() => {
-          haptics.light();
-          router.push("/tags");
-        }}
-        hitSlop={8}
-        accessibilityRole="button"
+    <HeaderActions>
+      <HeaderIconButton
+        name="pricetags-outline"
+        color={palette.text}
+        onPress={() => router.push("/tags")}
         accessibilityLabel={`Tags, ${tagCount} ${tagCount === 1 ? "tag" : "tags"}`}
         accessibilityHint="Browse and manage tags."
-      >
-        <Ionicons name="pricetags-outline" size={11} color={palette.textTertiary} />
-        <Text variant="label" color="secondary">
-          Tags
-        </Text>
-      </PressableScale>
+      />
+      <HeaderIconButton
+        name="swap-vertical-outline"
+        color={palette.text}
+        onPress={(anchor) => {
+          setSortAnchor(anchor);
+          setSortOpen(true);
+        }}
+        accessibilityLabel="Sort"
+        accessibilityHint="Change how folders and bookmarks are ordered."
+      />
       {hasUnread ? (
         <HeaderIconButton
           name="checkmark-done"
@@ -391,6 +401,20 @@ export default function BookmarksScreen() {
       </FABLayer>
       ) : null}
 
+      <SortMenu
+        visible={sortOpen}
+        onDismiss={() => {
+          setSortOpen(false);
+          setSortAnchor(null);
+        }}
+        anchor={sortAnchor}
+        variant="home"
+        folderSort={folderSort}
+        bookmarkSort={unfiledSort}
+        onFolderSort={setFolderSort}
+        onBookmarkSort={setUnfiledSort}
+      />
+
       <ContextMenu visible={createMenuOpen} onDismiss={() => setCreateMenuOpen(false)} anchor={createAnchor}>
         <ContextMenuItem
           icon="bookmark-outline"
@@ -490,14 +514,6 @@ export default function BookmarksScreen() {
 const styles = StyleSheet.create({
   content: { flex: 1, width: "100%" },
   center: { flex: 1, width: "100%", justifyContent: "center" },
-  headerActions: { gap: spacing[4] },
-  tagsLink: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[6],
-    height: HEADER_CONTROL_SIZE,
-    paddingHorizontal: spacing[4],
-  },
   emptyBookmarks: { minHeight: 300, justifyContent: "center" },
   footer: { paddingVertical: spacing[20], alignItems: "center" },
 });

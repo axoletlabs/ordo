@@ -3,7 +3,13 @@
  * full refetches — this is what keeps the UI snappy and lists stable.
  */
 import type { QueryClient, InfiniteData } from "@tanstack/react-query";
-import type { BookmarkDetailDto, BookmarkDto, CursorPage, FolderDto } from "@ordo/shared";
+import {
+  DEFAULT_BOOKMARK_LIST_SORT,
+  type BookmarkDetailDto,
+  type BookmarkDto,
+  type CursorPage,
+  type FolderDto,
+} from "@ordo/shared";
 import { qk } from "./api/query-keys";
 
 type BookmarkData = InfiniteData<CursorPage<BookmarkDto>, string | null>;
@@ -46,6 +52,16 @@ export function removeBookmarkFromPages(
     });
     if (totalRemoved === 0) return data;
     return { ...data, pages };
+  });
+}
+
+/** Drop a created bookmark into the newest list; other orders refetch. */
+export function insertCreatedBookmark(qc: QueryClient, bookmark: BookmarkDto) {
+  const prefix = qk.bookmarks(bookmark.folderId);
+  prependBookmarkToPages(qc, qk.bookmarks(bookmark.folderId, DEFAULT_BOOKMARK_LIST_SORT), bookmark);
+  void qc.invalidateQueries({
+    queryKey: prefix,
+    predicate: (query) => query.queryKey[2] !== DEFAULT_BOOKMARK_LIST_SORT,
   });
 }
 
