@@ -37,12 +37,12 @@ import { radius, timing } from "../../theme/tokens";
 
 export type { ScrollBarInsets };
 
-/** Overlay track insets that clear the floating dock, and optionally the FAB. */
-export function useScrollBarInsets(options?: { fab?: boolean }): Required<ScrollBarInsets> {
+/** Overlay track insets that stop just above the floating dock / selection bar. */
+export function useScrollBarInsets(): Required<ScrollBarInsets> {
   const { listOverlayClearance } = useFloatingDockMetrics();
   return {
     top: SCROLLBAR_END_INSET,
-    bottom: scrollBarBottomInset(listOverlayClearance, options?.fab === true),
+    bottom: scrollBarBottomInset(listOverlayClearance),
   };
 }
 

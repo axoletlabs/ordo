@@ -10,12 +10,15 @@ import type { Palette } from "./theme";
 
 /** Hairline-adjacent so it reads as a divider, not OS chrome. */
 export const SCROLLBAR_THUMB_WIDTH = 2;
-export const SCROLLBAR_EDGE_INSET = 5;
+/**
+ * Library lists sit in ScreenContent's 16px pad. A small negative right
+ * parks the mark in that gutter — flush with the row hairline's ending and
+ * just past the FAB, which is 20px off the same edge.
+ */
+export const SCROLLBAR_EDGE_INSET = -8;
 export const SCROLLBAR_END_INSET = 12;
 export const SCROLLBAR_MIN_THUMB = 28;
 export const SCROLLBAR_IDLE_MS = 1100;
-/** 48px FAB plus the usual end gap, so the thumb stops above the + button. */
-export const SCROLLBAR_FAB_CLEARANCE = 48 + SCROLLBAR_END_INSET;
 
 export type ScrollBarInsets = {
   top?: number;
@@ -24,14 +27,11 @@ export type ScrollBarInsets = {
 
 /**
  * Bottom inset for the overlay thumb. `chromeClearance` is the floating dock
- * / selection bar / home-indicator band; pass `fab` when a + button sits in
- * that same trailing corner.
+ * / selection bar / home-indicator band — the same pad that keeps the last
+ * bookmark above the nav.
  */
-export function scrollBarBottomInset(chromeClearance: number, fab = false): number {
-  return Math.max(
-    SCROLLBAR_END_INSET,
-    chromeClearance + (fab ? SCROLLBAR_FAB_CLEARANCE : 0),
-  );
+export function scrollBarBottomInset(chromeClearance: number): number {
+  return Math.max(SCROLLBAR_END_INSET, chromeClearance);
 }
 
 /**

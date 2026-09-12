@@ -3,7 +3,6 @@ import { test } from "node:test";
 import {
   inkAlpha,
   SCROLLBAR_END_INSET,
-  SCROLLBAR_FAB_CLEARANCE,
   listScrollOverlayClearance,
   scrollBarBottomInset,
   scrollThumbLayout,
@@ -100,12 +99,10 @@ test("listScrollOverlayClearance ignores a docked tab bar", () => {
   );
 });
 
-test("scrollBarBottomInset stays above floating chrome and the FAB", () => {
+test("scrollBarBottomInset follows the dock, not the FAB", () => {
   assert.equal(scrollBarBottomInset(0), SCROLLBAR_END_INSET);
   assert.equal(scrollBarBottomInset(8), SCROLLBAR_END_INSET);
   assert.equal(scrollBarBottomInset(118), 118);
-  assert.equal(scrollBarBottomInset(118, true), 118 + SCROLLBAR_FAB_CLEARANCE);
-  assert.equal(scrollBarBottomInset(0, true), SCROLLBAR_FAB_CLEARANCE);
 });
 
 test("scrollThumbLayout maps offset onto the track", () => {

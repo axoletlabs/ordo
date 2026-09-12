@@ -51,8 +51,6 @@ export type ThemedScrollViewProps = ScrollViewProps & {
 
 export type ThemedFlashListProps<T> = FlashListProps<T> & {
   scrollBarInsets?: ScrollBarInsets;
-  /** Reserve the + button's corner. Library lists default to on. */
-  scrollBarClearsFab?: boolean;
 };
 
 export type ThemedFlatListProps<T> = FlatListProps<T> & {
@@ -142,10 +140,9 @@ export function ThemedFlashList<T>(props: ThemedFlashListProps<T>) {
     onRefresh,
     refreshControl,
     scrollBarInsets,
-    scrollBarClearsFab = true,
     ...rest
   } = props;
-  const chromeInsets = useScrollBarInsets({ fab: scrollBarClearsFab });
+  const chromeInsets = useScrollBarInsets();
   const bar = useVerticalScrollBar(scrollBarInsets ?? chromeInsets);
   const { wrapper, inner } = splitScrollLayoutStyle(style);
   const themedRefresh = useThemedRefreshControl(refreshing, onRefresh, refreshControl);
