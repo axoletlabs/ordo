@@ -6,9 +6,10 @@
  * posted to React Native. Native UIRefreshControl and wrapping ScrollViews
  * never receive WebView pans, so they cannot drive a reload.
  *
- * When force-dark is on, a user script inverts pages that are still light.
- * It must not observe the document tree: a MutationObserver during parse
- * prevents the WebView from ever finishing the load.
+ * When force-dark is on, a user script asks the page for its own dark
+ * theme, then inverts body if the page is still light. It must not observe
+ * the document tree: a MutationObserver during parse prevents the WebView
+ * from ever finishing the load.
  */
 import React, {
   forwardRef,
@@ -277,6 +278,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           sharedCookiesEnabled
           thirdPartyCookiesEnabled
           javaScriptEnabled
+          forceDarkOn={forceWebsiteDark}
           javaScriptCanOpenWindowsAutomatically={false}
           injectedJavaScriptForMainFrameOnly
           injectedJavaScriptBeforeContentLoadedForMainFrameOnly
