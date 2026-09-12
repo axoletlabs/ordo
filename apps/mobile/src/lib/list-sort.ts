@@ -10,8 +10,8 @@ export const DEFAULT_FOLDER_LIST_SORT: FolderListSort = "oldest";
 export const BOOKMARK_SORT_LABEL: Record<BookmarkListSort, string> = {
   newest: "Newest",
   oldest: "Oldest",
-  title: "Title A–Z",
-  titleDesc: "Title Z–A",
+  title: "A–Z",
+  titleDesc: "Z–A",
 };
 
 export const FOLDER_SORT_LABEL: Record<FolderListSort, string> = {

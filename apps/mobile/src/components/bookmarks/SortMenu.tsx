@@ -23,12 +23,12 @@ const FOLDER_SORTS: readonly FolderListSort[] = ["name", "newest", "oldest"];
 const BOOKMARK_SORT_ICON: Record<BookmarkListSort, keyof typeof Ionicons.glyphMap> = {
   newest: "time-outline",
   oldest: "hourglass-outline",
-  title: "text-outline",
-  titleDesc: "text-outline",
+  title: "swap-vertical-outline",
+  titleDesc: "swap-vertical-outline",
 };
 
 const FOLDER_SORT_ICON: Record<FolderListSort, keyof typeof Ionicons.glyphMap> = {
-  name: "text-outline",
+  name: "list-outline",
   newest: "time-outline",
   oldest: "hourglass-outline",
 };
