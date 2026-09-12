@@ -82,20 +82,10 @@ export default function ControlsScreen() {
           />
         </SettingsGroup>
         {Platform.OS === "android" ? (
-          <SettingsGroup
-            label="Share sheet"
-            footer={
-              shareShowQuickAction
-                ? "The share sheet lists Quick Bookmark next to ordo. Quick Bookmark saves as unfiled and returns you to the other app."
-                : shareQuickBookmark
-                  ? "Sharing to ordo saves the link as unfiled and returns you to the other app."
-                  : "Off by default. Quick Bookmark saves a shared link as unfiled without the save form."
-            }
-          >
+          <SettingsGroup label="Share sheet">
             <SettingRow
               icon="flash-outline"
               label="Quick Bookmark"
-              description="Save shared links as unfiled and return to the other app."
               right={
                 <Toggle value={shareQuickBookmark} onValueChange={setShareQuickBookmark} />
               }
@@ -106,7 +96,6 @@ export default function ControlsScreen() {
               <SettingRow
                 icon="share-outline"
                 label="Show alongside Save"
-                description="Keep the normal Save action and add Quick Bookmark as a second share target."
                 right={
                   <Toggle value={shareShowQuickAction} onValueChange={setShareShowQuickAction} />
                 }
