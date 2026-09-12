@@ -551,6 +551,78 @@ describe("Bookmarks & Folders (e2e)", () => {
       expect(page2.body.hasMore).toBe(false);
     });
 
+    it("paginates unfiled bookmarks by title", async () => {
+      const { agent, userId } = await setup();
+      const titles = ["Echo", "Bravo", "Delta", "Alpha", "Charlie"];
+      const base = Date.now() - 60_000;
+      await ctx.prisma.bookmark.createMany({
+        data: titles.map((title, i) => ({
+          userId,
+          folderId: null,
+          url: `https://example.com/${title.toLowerCase()}`,
+          title,
+          domain: "example.com",
+          createdAt: new Date(base + i * 1000),
+        })),
+      });
+
+      const page1 = await agent.get("/api/bookmarks?limit=2&sort=title").expect(200);
+      expect(page1.body.items.map((item: { title: string }) => item.title)).toEqual(["Alpha", "Bravo"]);
+      expect(page1.body.hasMore).toBe(true);
+
+      const page2 = await agent
+        .get(`/api/bookmarks?limit=2&sort=title&cursor=${page1.body.nextCursor}`)
+        .expect(200);
+      expect(page2.body.items.map((item: { title: string }) => item.title)).toEqual(["Charlie", "Delta"]);
+
+      const page3 = await agent
+        .get(`/api/bookmarks?limit=2&sort=title&cursor=${page2.body.nextCursor}`)
+        .expect(200);
+      expect(page3.body.items.map((item: { title: string }) => item.title)).toEqual(["Echo"]);
+      expect(page3.body.hasMore).toBe(false);
+      expect(page3.body.nextCursor).toBeNull();
+    });
+
+    it("paginates unfiled bookmarks oldest first", async () => {
+      const { agent, userId } = await setup();
+      const base = Date.now() - 60_000;
+      await ctx.prisma.bookmark.createMany({
+        data: Array.from({ length: 5 }, (_, i) => ({
+          userId,
+          folderId: null,
+          url: `https://example.com/old${i}`,
+          title: `Post ${i}`,
+          domain: "example.com",
+          createdAt: new Date(base + i * 1000),
+        })),
+      });
+
+      const page1 = await agent.get("/api/bookmarks?limit=2&sort=oldest").expect(200);
+      expect(page1.body.items.map((item: { title: string }) => item.title)).toEqual(["Post 0", "Post 1"]);
+      const page2 = await agent
+        .get(`/api/bookmarks?limit=2&sort=oldest&cursor=${page1.body.nextCursor}`)
+        .expect(200);
+      expect(page2.body.items.map((item: { title: string }) => item.title)).toEqual(["Post 2", "Post 3"]);
+    });
+
+    it("treats an unknown sort as newest", async () => {
+      const { agent, userId } = await setup();
+      const base = Date.now() - 60_000;
+      await ctx.prisma.bookmark.createMany({
+        data: Array.from({ length: 3 }, (_, i) => ({
+          userId,
+          folderId: null,
+          url: `https://example.com/n${i}`,
+          title: `Post ${i}`,
+          domain: "example.com",
+          createdAt: new Date(base + i * 1000),
+        })),
+      });
+
+      const listed = await agent.get("/api/bookmarks?sort=nope").expect(200);
+      expect(listed.body.items[0].title).toBe("Post 2");
+    });
+
     it("returns bookmark detail including contentHtml", async () => {
       const { agent } = await setup();
       const created = await agent

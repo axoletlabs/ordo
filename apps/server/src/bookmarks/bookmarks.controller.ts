@@ -21,6 +21,7 @@ import {
   UpdateBookmarkSchema,
   UpdateBookmarkTagsSchema,
   SetBookmarkContentKindSchema,
+  parseBookmarkListSort,
   type BatchBookmarksInput,
   type BookmarkDto,
   type CursorPage,
@@ -69,6 +70,7 @@ export class BookmarksController {
     @Query("limit") limit: string | undefined,
     @Query("scope") scope: string | undefined,
     @Query("tagIds") rawTagIds: string | undefined,
+    @Query("sort") sort: string | undefined,
     @Req() req: Request,
   ): Promise<CursorPage<BookmarkDto>> {
     // Without a folderId only the user's unfiled bookmarks are listed.
@@ -82,6 +84,7 @@ export class BookmarksController {
       scopeAll: scope === "all",
       tagIds: this.parseTagIds(rawTagIds),
       folderTokens: tokens,
+      sort: parseBookmarkListSort(sort),
     });
   }
 

@@ -20,6 +20,7 @@ import type {
   TotpConfirmDto,
   UserDto,
 } from "./types.js";
+import type { BookmarkListSort } from "./list-sort.js";
 import type {
   BatchBookmarksInput,
   BatchFoldersInput,
@@ -408,7 +409,14 @@ export const BookmarkRoutes = {
     path: `${API_PREFIX}/bookmarks`,
     method: "GET",
     body: {} as Empty,
-    query: {} as { folderId?: string | null; scope?: "all"; tagIds?: string; cursor?: string; limit?: number },
+    query: {} as {
+      folderId?: string | null;
+      scope?: "all";
+      tagIds?: string;
+      cursor?: string;
+      limit?: number;
+      sort?: BookmarkListSort;
+    },
     params: {} as Empty,
     response: {} as CursorPage<BookmarkDto>,
   },

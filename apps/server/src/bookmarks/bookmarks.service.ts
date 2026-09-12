@@ -1,6 +1,7 @@
 import { Injectable, Logger, type OnApplicationBootstrap } from "@nestjs/common";
 import type { Folder, Prisma } from "@prisma/client";
 import {
+  DEFAULT_BOOKMARK_LIST_SORT,
   DEFAULT_PAGE_SIZE,
   ErrorCode,
   EXTRACTION_VERSION,
@@ -8,12 +9,14 @@ import {
   MAX_TAGS_PER_BOOKMARK,
   MIN_FUZZY_TOKEN_LENGTH,
   READ_COMPLETION_THRESHOLD,
+  parseBookmarkListSort,
   rankSearchResults,
   searchTokenPrefixPatterns,
   tokenizeSearchQuery,
   tokensAllowArticleText,
   type BatchBookmarksInput,
   type BookmarkDto,
+  type BookmarkListSort,
   type CursorPage,
 } from "@ordo/shared";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -27,6 +30,8 @@ import {
   clampLimit,
   decodeCursor,
   encodeCursor,
+  encodeTitleCursor,
+  decodeTitleCursor,
 } from "../common/utils/cursor.js";
 
 const LIST_SELECT = {
@@ -59,6 +64,49 @@ const LIST_SELECT = {
 } satisfies Prisma.BookmarkSelect;
 
 type ListItem = Prisma.BookmarkGetPayload<{ select: typeof LIST_SELECT }>;
+
+function listOrderBy(sort: BookmarkListSort): Prisma.BookmarkOrderByWithRelationInput[] {
+  if (sort === "oldest") return [{ createdAt: "asc" }, { id: "asc" }];
+  if (sort === "title") return [{ title: "asc" }, { id: "asc" }];
+  if (sort === "titleDesc") return [{ title: "desc" }, { id: "desc" }];
+  return [{ createdAt: "desc" }, { id: "desc" }];
+}
+
+function listCursorWhere(
+  sort: BookmarkListSort,
+  rawCursor: string | undefined,
+): Prisma.BookmarkWhereInput | null {
+  if (sort === "title" || sort === "titleDesc") {
+    const cursor = decodeTitleCursor(rawCursor ?? null);
+    if (!cursor) return null;
+    const idOp = sort === "title" ? "gt" : "lt";
+    const titleOp = sort === "title" ? "gt" : "lt";
+    return {
+      OR: [
+        { title: { [titleOp]: cursor.title } },
+        { title: cursor.title, id: { [idOp]: cursor.id } },
+      ],
+    };
+  }
+  const cursor = decodeCursor(rawCursor ?? null);
+  if (!cursor) return null;
+  const date = new Date(cursor.createdAt);
+  const idOp = sort === "oldest" ? "gt" : "lt";
+  const dateOp = sort === "oldest" ? "gt" : "lt";
+  return {
+    OR: [
+      { createdAt: { [dateOp]: date } },
+      { createdAt: date, id: { [idOp]: cursor.id } },
+    ],
+  };
+}
+
+function encodeListCursor(sort: BookmarkListSort, row: ListItem): string {
+  if (sort === "title" || sort === "titleDesc") {
+    return encodeTitleCursor({ title: row.title, id: row.id });
+  }
+  return encodeCursor({ createdAt: row.createdAt.toISOString(), id: row.id });
+}
 
 const SEARCH_SELECT = {
   ...LIST_SELECT,
@@ -130,7 +178,14 @@ export class BookmarksService implements OnApplicationBootstrap {
   async list(
     userId: string,
     folder: Folder | null,
-    opts: { cursor?: string; limit?: number; scopeAll?: boolean; tagIds?: string[]; folderTokens?: string[] },
+    opts: {
+      cursor?: string;
+      limit?: number;
+      scopeAll?: boolean;
+      tagIds?: string[];
+      folderTokens?: string[];
+      sort?: BookmarkListSort;
+    },
   ): Promise<CursorPage<BookmarkDto>> {
     const tagIds = opts.tagIds ?? [];
     await this.tags.requireOwnedIds(userId, tagIds);
@@ -148,6 +203,7 @@ export class BookmarksService implements OnApplicationBootstrap {
       opts.cursor,
       opts.limit,
       (b) => toBookmarkDto(b),
+      parseBookmarkListSort(opts.sort),
     );
   }
 
@@ -600,38 +656,22 @@ export class BookmarksService implements OnApplicationBootstrap {
     rawCursor: string | undefined,
     rawLimit: number | undefined,
     map: (row: ListItem) => T,
+    sort: BookmarkListSort = DEFAULT_BOOKMARK_LIST_SORT,
   ): Promise<CursorPage<T>> {
     const limit = clampLimit(rawLimit, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
-    const cursor = decodeCursor(rawCursor ?? null);
+    const cursorWhere = listCursorWhere(sort, rawCursor);
 
     const items: ListItem[] = await this.prisma.bookmark.findMany({
-      where: cursor
-        ? {
-            AND: [
-              where,
-              {
-                OR: [
-                 { createdAt: { lt: new Date(cursor.createdAt) } },
-                 { createdAt: new Date(cursor.createdAt), id: { lt: cursor.id } },
-                ],
-              },
-            ],
-          }
-        : where,
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      where: cursorWhere ? { AND: [where, cursorWhere] } : where,
+      orderBy: listOrderBy(sort),
       take: limit + 1,
       select: LIST_SELECT,
     });
 
     const hasMore = items.length > limit;
     const slice = hasMore ? items.slice(0, limit) : items;
-    const nextCursor =
-      hasMore && slice.length > 0
-        ? encodeCursor({
-            createdAt: slice[slice.length - 1].createdAt.toISOString(),
-            id: slice[slice.length - 1].id,
-          })
-        : null;
+    const last = slice[slice.length - 1];
+    const nextCursor = hasMore && last ? encodeListCursor(sort, last) : null;
 
     return {
       items: slice.map(map),

@@ -1,7 +1,9 @@
 import {
   clampLimit,
   decodeCursor,
+  decodeTitleCursor,
   encodeCursor,
+  encodeTitleCursor,
 } from "./utils/cursor.js";
 
 describe("cursor pagination", () => {
@@ -18,6 +20,18 @@ describe("cursor pagination", () => {
     expect(decodeCursor("!!!not-base64!!!")).toBeNull();
     expect(decodeCursor(Buffer.from("onlyonepart").toString("base64url"))).toBeNull();
     expect(decodeCursor(Buffer.from("not-a-date|abc").toString("base64url"))).toBeNull();
+  });
+
+  it("round-trips a title cursor including pipes in the title", () => {
+    const c = { title: "A | B", id: "abc123" };
+    const encoded = encodeTitleCursor(c);
+    expect(decodeTitleCursor(encoded)).toEqual(c);
+    expect(decodeCursor(encoded)).toBeNull();
+  });
+
+  it("returns null for invalid title cursors", () => {
+    expect(decodeTitleCursor(null)).toBeNull();
+    expect(decodeTitleCursor(encodeCursor({ createdAt: "2026-01-01T00:00:00.000Z", id: "x" }))).toBeNull();
   });
 
   it("clamps limit to bounds", () => {
