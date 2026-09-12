@@ -27,7 +27,7 @@ import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
 import { useFolders } from "../../../src/hooks/use-folders";
 import { useFolderTokenStore } from "../../../src/store/folder-tokens";
 import { useListSortStore } from "../../../src/store/list-sort";
-import { sortFoldersBy } from "../../../src/lib/list-sort";
+import { sortBookmarksBy, sortFoldersBy } from "../../../src/lib/list-sort";
 import { useTags } from "../../../src/hooks/use-tags";
 import {
   prefetchFolderBookmarks,
@@ -93,7 +93,10 @@ export default function BookmarksScreen() {
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
 
-  const items = useMemo(() => flattenPages(bookmarks.data?.pages ?? []), [bookmarks.data]);
+  const items = useMemo(
+    () => sortBookmarksBy(flattenPages(bookmarks.data?.pages ?? []), unfiledSort),
+    [bookmarks.data, unfiledSort],
+  );
   const hasUnread = items.some((bookmark) => !bookmark.isRead);
   const folderItems = useMemo(
     () => sortFoldersBy(folders.data ?? [], folderSort),
@@ -346,7 +349,8 @@ export default function BookmarksScreen() {
         <ScreenContent maxWidth={layout.maxContentWidth} style={styles.content}>
           <ThemedFlashList
             data={libraryItems}
-            extraData={selectionRevision}
+            extraData={`${selectionRevision}:${folderSort}:${unfiledSort}`}
+            key={`home:${folderSort}:${unfiledSort}`}
             keyExtractor={libraryKeyExtractor}
             getItemType={(item: LibraryItem) => item.type}
             overrideItemLayout={overrideLibraryLayout}
@@ -372,7 +376,12 @@ export default function BookmarksScreen() {
               ) : null
             }
             contentContainerStyle={listContentStyle}
-            refreshing={(bookmarks.isFetching || folders.isFetching || tags.isFetching) && !bookmarks.isLoading}
+            refreshing={
+              ((bookmarks.isFetching && !bookmarks.isPlaceholderData) ||
+                folders.isFetching ||
+                tags.isFetching) &&
+              !bookmarks.isLoading
+            }
             onRefresh={refresh}
             onEndReached={loadMore}
             onEndReachedThreshold={0.4}

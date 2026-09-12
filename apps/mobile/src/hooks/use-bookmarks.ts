@@ -3,6 +3,7 @@
  * background refetch reconciles with the server.
  */
 import {
+  keepPreviousData,
   useInfiniteQuery,
   useMutation,
   useQuery,
@@ -87,6 +88,7 @@ export function useInfiniteBookmarks(folderId: string | null, enabled = true) {
       bookmarksApi.list({ folderId, cursor: pageParam ?? undefined, limit: DEFAULT_PAGE_SIZE, sort }),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => (last.hasMore ? last.nextCursor : undefined),
+    placeholderData: keepPreviousData,
     enabled,
   });
 }
