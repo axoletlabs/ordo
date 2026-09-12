@@ -1,18 +1,19 @@
 /**
- * Tag catalogue row — same chrome as FolderRow / BookmarkRow so the Tags
- * screen reads as part of the library, not a separate admin list.
+ * Tag catalogue row — same muted chrome as FolderRow. Color is a small
+ * leading dot, not a filled badge, so the list stays quiet.
  */
 import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { ListPressable } from "../ui/ListPressable";
 import { Text } from "../ui/Text";
-import { TagMark } from "./TagMark";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
 import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
 import { prefetchTaggedBookmarks } from "../../hooks/use-tags";
-import { spacing } from "../../theme/tokens";
+import { tagColorValue } from "../../lib/tag-colors";
+import { radius, spacing } from "../../theme/tokens";
 import type { TagDto } from "@ordo/shared";
 
 export const TAG_ROW_SIZE = 72;
@@ -97,11 +98,21 @@ export const TagRow = React.memo(function TagRow({
         onLongPress={onMore ? (event) => openMore(event) : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
-        <TagMark color={tag.color} />
+        <View
+          style={[
+            styles.iconFrame,
+            { backgroundColor: palette.surfaceSecondary, borderColor: palette.border },
+          ]}
+        >
+          <Ionicons name="pricetag-outline" size={18} color={palette.accent} />
+        </View>
         <View style={styles.content}>
-          <Text variant="headline" numberOfLines={1}>
-            {tag.name}
-          </Text>
+          <View style={styles.titleRow}>
+            <View style={[styles.dot, { backgroundColor: tagColorValue(tag.color).dot }]} />
+            <Text variant="headline" numberOfLines={1} style={styles.title}>
+              {tag.name}
+            </Text>
+          </View>
           <Text variant="caption" color="tertiary" numberOfLines={1} style={styles.count}>
             {countLabel}
           </Text>
@@ -124,6 +135,18 @@ const styles = StyleSheet.create({
     paddingRight: spacing[16],
     ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
   },
+  iconFrame: {
+    width: 36,
+    height: 36,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
   content: { flex: 1, minWidth: 0 },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
+  title: { flex: 1, minWidth: 0 },
+  dot: { width: 7, height: 7, borderRadius: 9999, flexShrink: 0 },
   count: { marginTop: spacing[6] },
 });

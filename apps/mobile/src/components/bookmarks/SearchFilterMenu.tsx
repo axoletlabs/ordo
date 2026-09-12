@@ -10,8 +10,8 @@ import { DEFAULT_FOLDER_ICON } from "@ordo/shared";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
 import { Input } from "../ui/Input";
 import { Text } from "../ui/Text";
-import { TagMark } from "../tags/TagMark";
 import { useTheme } from "../../theme/ThemeProvider";
+import { tagColorValue } from "../../lib/tag-colors";
 import { haptics } from "../../lib/haptics";
 import { menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { radius, spacing } from "../../theme/tokens";
@@ -412,7 +412,7 @@ function TagFilterRow({
         (pressed || hovered) ? { backgroundColor: highlight } : null,
       ]}
     >
-      <TagMark color={color} size="compact" />
+      <View style={[styles.dot, { backgroundColor: tagColorValue(color).dot }]} />
       <Text variant="body" numberOfLines={1} style={styles.tagName}>
         {name}
       </Text>
@@ -439,5 +439,6 @@ const styles = StyleSheet.create({
     transitionProperty: "background-color",
     transitionDuration: "120ms",
   } as ViewStyle,
+  dot: { width: 7, height: 7, borderRadius: 9999 },
   tagName: { flex: 1, minWidth: 0 },
 });

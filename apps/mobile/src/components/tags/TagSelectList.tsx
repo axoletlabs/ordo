@@ -10,9 +10,9 @@ import { Text } from "../ui/Text";
 import { Input } from "../ui/Input";
 import { PressableScale } from "../ui/PressableScale";
 import { useTags, useCreateTag } from "../../hooks/use-tags";
-import { TagMark } from "./TagMark";
 import { useTheme } from "../../theme/ThemeProvider";
-import { radius, spacing } from "../../theme/tokens";
+import { spacing } from "../../theme/tokens";
+import { tagColorValue } from "../../lib/tag-colors";
 import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
 
 export interface TagSelectListProps {
@@ -83,7 +83,7 @@ export function TagSelectList({
       style={styles.row}
       onPress={() => onToggle(tag.id)}
     >
-      <TagMark color={tag.color} size="compact" />
+      <View style={[styles.dot, { backgroundColor: tagColorValue(tag.color).dot }]} />
       <Text variant="body" numberOfLines={1} style={{ flex: 1 }}>
         {tag.name}
       </Text>
@@ -99,9 +99,7 @@ export function TagSelectList({
         style={styles.row}
         onPress={() => void createAndSelect(query.trim())}
       >
-        <View style={[styles.createMark, { backgroundColor: palette.accentSoft, borderColor: palette.accent }]}>
-          <Ionicons name="add" size={11} color={palette.accent} />
-        </View>
+        <View style={[styles.dot, { backgroundColor: palette.accent }]} />
         <Text variant="body" color="accent" numberOfLines={1} style={{ flex: 1 }}>
           Create “{query.trim()}”
         </Text>
@@ -117,9 +115,7 @@ export function TagSelectList({
           onRequestCreateTag?.();
         }}
       >
-        <View style={[styles.createMark, { backgroundColor: palette.accentSoft, borderColor: palette.accent }]}>
-          <Ionicons name="add" size={11} color={palette.accent} />
-        </View>
+        <View style={[styles.dot, { backgroundColor: palette.accent }]} />
         <Text variant="body" color="accent">
           New tag
         </Text>
@@ -163,14 +159,6 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingVertical: spacing[8],
   },
-  createMark: {
-    width: 22,
-    height: 22,
-    borderRadius: radius.xs,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
+  dot: { width: 7, height: 7, borderRadius: 9999 },
   empty: { paddingVertical: spacing[12] },
 });
