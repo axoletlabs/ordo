@@ -12,6 +12,7 @@ import { Spinner } from "../ui/Spinner";
 import { Text } from "../ui/Text";
 import { TagChip } from "../tags/TagChip";
 import { SelectionMark } from "./SelectionMark";
+import { RowStatusSlot, ROW_STATUS_ICON_SIZE } from "./RowStatusIcon";
 import { useTheme } from "../../theme/ThemeProvider";
 import { domainFromUrl, relativeTime } from "../../lib/format";
 import { bookmarkIsArticle, bookmarkOpensAsWebsite } from "../../lib/bookmark-reader";
@@ -260,20 +261,9 @@ export const BookmarkRow = React.memo(function BookmarkRow({
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         <View style={styles.content}>
-          <View style={styles.titleRow}>
-            <Text variant="headline" color={titleColor} numberOfLines={1} style={styles.title}>
-              {highlightTitle(title, searchQuery, searchFuzzy)}
-            </Text>
-            {isArticle ? (
-              <Ionicons
-                name="document-text-outline"
-                size={14}
-                color={palette.textTertiary}
-                style={styles.articleIcon}
-                accessible={false}
-              />
-            ) : null}
-          </View>
+          <Text variant="headline" color={titleColor} numberOfLines={1}>
+            {highlightTitle(title, searchQuery, searchFuzzy)}
+          </Text>
           {showDescription ? (
             <Text variant="footnote" color="secondary" numberOfLines={1} style={styles.description}>
               {bookmark.description}
@@ -308,28 +298,40 @@ export const BookmarkRow = React.memo(function BookmarkRow({
             </View>
           ) : null}
           <View style={styles.metaRow}>
-            <Text variant="caption" color="tertiary" numberOfLines={1} style={styles.domain}>
-              {domain}
-            </Text>
-            <View style={[styles.separator, { backgroundColor: palette.textFaint }]} />
-            <Text variant="caption" color="tertiary" numberOfLines={1}>
-              {createdLabel}
-            </Text>
-            {showReadingTime ? (
-              <>
-                <View style={[styles.separator, { backgroundColor: palette.textFaint }]} />
-                <Text variant="caption" color="tertiary" numberOfLines={1}>
-                  {bookmark.readingTimeMinutes} min read
-                </Text>
-              </>
-            ) : null}
+            <View style={styles.metaFacts}>
+              <Text variant="caption" color="tertiary" numberOfLines={1} style={styles.domain}>
+                {domain}
+              </Text>
+              <View style={[styles.separator, { backgroundColor: palette.textFaint }]} />
+              <Text variant="caption" color="tertiary" numberOfLines={1}>
+                {createdLabel}
+              </Text>
+              {showReadingTime ? (
+                <>
+                  <View style={[styles.separator, { backgroundColor: palette.textFaint }]} />
+                  <Text variant="caption" color="tertiary" numberOfLines={1}>
+                    {bookmark.readingTimeMinutes} min read
+                  </Text>
+                </>
+              ) : null}
+            </View>
             {isPending ? (
-              <Spinner
-                size="sm"
-                color={palette.textTertiary}
-                style={styles.statusIcon}
-                accessible={false}
-              />
+              <RowStatusSlot>
+                <Spinner
+                  size={ROW_STATUS_ICON_SIZE}
+                  color={palette.textTertiary}
+                  accessible={false}
+                />
+              </RowStatusSlot>
+            ) : isArticle ? (
+              <RowStatusSlot>
+                <Ionicons
+                  name="document-text-outline"
+                  size={ROW_STATUS_ICON_SIZE}
+                  color={palette.textTertiary}
+                  accessible={false}
+                />
+              </RowStatusSlot>
             ) : opensAsWebsite ? (
               <Pressable
                 accessibilityRole="button"
@@ -348,12 +350,14 @@ export const BookmarkRow = React.memo(function BookmarkRow({
                 delayLongPress={SELECTION_LONG_PRESS_MS}
                 style={({ pressed }) => [styles.openExternal, pressed ? styles.openExternalPressed : null]}
               >
-                <Ionicons
-                  name="open-outline"
-                  size={13}
-                  color={palette.textTertiary}
-                  accessible={false}
-                />
+                <RowStatusSlot>
+                  <Ionicons
+                    name="open-outline"
+                    size={ROW_STATUS_ICON_SIZE}
+                    color={palette.textTertiary}
+                    accessible={false}
+                  />
+                </RowStatusSlot>
               </Pressable>
             ) : null}
           </View>
@@ -404,9 +408,6 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
   },
   content: { flex: 1, minWidth: 0 },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[6] },
-  title: { flex: 1, minWidth: 0 },
-  articleIcon: { flexShrink: 0 },
   description: { marginTop: spacing[4] },
   tagRow: {
     flexDirection: "row",
@@ -422,12 +423,17 @@ const styles = StyleSheet.create({
     gap: spacing[4],
     marginTop: spacing[4],
   },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[6], marginTop: spacing[6] },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[8], marginTop: spacing[6] },
+  metaFacts: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[6],
+    minWidth: 0,
+  },
   domain: { flexShrink: 1 },
   separator: { width: 3, height: 3, borderRadius: radius.full },
-  statusIcon: { marginLeft: spacing[2] },
   openExternal: {
-    marginLeft: spacing[2],
     ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
   },
   openExternalPressed: { opacity: 0.72 },

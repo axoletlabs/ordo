@@ -20,6 +20,7 @@ import { prefetchFolderBookmarks } from "../../hooks/use-bookmarks";
 import { useFolderUnlocked } from "../../hooks/use-folders";
 import { DEFAULT_FOLDER_ICON, type FolderDto } from "@ordo/shared";
 import { FolderLockIcon } from "./FolderLockIcon";
+import { RowStatusSlot } from "./RowStatusIcon";
 
 export interface FolderRowProps {
   folder: FolderDto;
@@ -163,7 +164,9 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
               {countLabel}
             </Text>
             {folder.protected ? (
-              <FolderLockIcon unlocked={sessionUnlocked} style={styles.statusIcon} />
+              <RowStatusSlot>
+                <FolderLockIcon unlocked={sessionUnlocked} outline />
+              </RowStatusSlot>
             ) : null}
           </View>
         </View>
@@ -209,7 +212,6 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[6] },
   title: { flex: 1, minWidth: 0 },
   pin: { flexShrink: 0 },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[6], marginTop: spacing[6] },
-  count: { flexShrink: 1 },
-  statusIcon: { marginLeft: spacing[2] },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[8], marginTop: spacing[6] },
+  count: { flex: 1, minWidth: 0 },
 });

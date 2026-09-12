@@ -1,12 +1,13 @@
-/** Lock / session-unlock glyph for folder lists and pickers. */
+/** Lock / session-unlock glyph for folder lists and pickers. Unlocked folders show a key. */
 import type { ComponentProps } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../theme/ThemeProvider";
+import { ROW_STATUS_ICON_SIZE } from "./RowStatusIcon";
 
 export function FolderLockIcon({
   unlocked,
-  size = 12,
-  outline = false,
+  size = ROW_STATUS_ICON_SIZE,
+  outline = true,
   style,
 }: {
   unlocked: boolean;
@@ -20,14 +21,14 @@ export function FolderLockIcon({
       name={
         unlocked
           ? outline
-            ? "lock-open-outline"
-            : "lock-open"
+            ? "key-outline"
+            : "key"
           : outline
             ? "lock-closed-outline"
             : "lock-closed"
       }
       size={size}
-      color={unlocked ? palette.success : palette.textTertiary}
+      color={palette.textTertiary}
       style={style}
       accessible={false}
     />
