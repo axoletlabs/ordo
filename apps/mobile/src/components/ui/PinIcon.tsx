@@ -7,11 +7,13 @@ import { type StyleProp, type ViewStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Path } from "react-native-svg";
 
-/** Lucide pin body — T-bar head with flared collar. */
+/** Lucide pin body — T-bar head with flared collar. Used filled in menus. */
 const BODY =
   "M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 7 17h10a2 2 0 0 0 1.11-3.55l-1.78-.9A2 2 0 0 1 15 10.76V7a1 2 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 2 0 0 1 1 1z";
-const NEEDLE_STROKE = "M12 17v5";
 const NEEDLE_FILL = "M11 16.25h2V21a1 1 0 0 1-2 0z";
+/** Simpler T-bar + needle so the 14px list glyph matches the other outline icons. */
+const OUTLINE_BODY = "M7 4.5h10M9 4.5v6.2L7.25 14.25h9.5L15 10.7V4.5";
+const OUTLINE_NEEDLE = "M12 14.25v6.25";
 
 export function PinIcon({
   size = 16,
@@ -41,7 +43,7 @@ export function PinIcon({
       ) : (
         <>
           <Path
-            d={BODY}
+            d={OUTLINE_BODY}
             fill="none"
             stroke={color}
             strokeWidth={2}
@@ -49,7 +51,7 @@ export function PinIcon({
             strokeLinejoin="round"
           />
           <Path
-            d={NEEDLE_STROKE}
+            d={OUTLINE_NEEDLE}
             fill="none"
             stroke={color}
             strokeWidth={2}

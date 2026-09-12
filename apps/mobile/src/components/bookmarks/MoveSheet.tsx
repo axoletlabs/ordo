@@ -149,7 +149,7 @@ export function MoveSheet({
                   trailing={
                     isRootDestination(item) ? undefined : (
                       <>
-                        {item.pinned ? <PinIcon size={14} color={palette.accent} /> : null}
+                        {item.pinned ? <PinIcon size={14} color={palette.textTertiary} filled={false} /> : null}
                         {item.protected ? <FolderLockIcon unlocked={destinationUnlocked(item.id)} size={14} /> : null}
                         <Text variant="footnote" color="tertiary">{item.bookmarkCount}</Text>
                       </>

@@ -1,5 +1,5 @@
 /**
- * One seat for the small list glyphs (article, lock, website-open).
+ * One seat for the small list glyphs (article, lock, pin, website-open).
  * They sit immediately after the title, in the same 16px cell.
  */
 import React from "react";

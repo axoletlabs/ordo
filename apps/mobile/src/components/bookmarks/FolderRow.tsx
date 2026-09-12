@@ -20,7 +20,7 @@ import { prefetchFolderBookmarks } from "../../hooks/use-bookmarks";
 import { useFolderUnlocked } from "../../hooks/use-folders";
 import { DEFAULT_FOLDER_ICON, type FolderDto } from "@ordo/shared";
 import { FolderLockIcon } from "./FolderLockIcon";
-import { RowStatusSlot } from "./RowStatusIcon";
+import { RowStatusSlot, ROW_STATUS_ICON_SIZE } from "./RowStatusIcon";
 
 export interface FolderRowProps {
   folder: FolderDto;
@@ -156,9 +156,9 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
               </Text>
             </View>
             {folder.pinned ? (
-              <View style={styles.pin} accessible={false}>
-                <PinIcon size={15} color={palette.accent} />
-              </View>
+              <RowStatusSlot>
+                <PinIcon size={ROW_STATUS_ICON_SIZE} color={palette.textTertiary} filled={false} />
+              </RowStatusSlot>
             ) : null}
             {folder.protected ? (
               <RowStatusSlot>
@@ -213,7 +213,6 @@ const styles = StyleSheet.create({
   content: { flex: 1, minWidth: 0 },
   titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[6] },
   titleWrap: { flexShrink: 1, minWidth: 0 },
-  pin: { flexShrink: 0 },
   metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[6], marginTop: spacing[6] },
   count: { flexShrink: 1 },
 });
