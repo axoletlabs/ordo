@@ -26,8 +26,6 @@ import {
   browserBlankCoverVisible,
   browserInjectedJavaScript,
   browserProgressBarWidth,
-  browserPtrHudOffset,
-  browserPtrHudOpacity,
   parseBrowserPtrMessage,
   shouldCommitBrowserPtr,
   webViewRequestAction,
@@ -42,7 +40,7 @@ import { resolvePalette } from "../../theme/theme";
 import { spacing } from "../../theme/tokens";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
-import { ReloadSpinner } from "../ui/Spinner";
+import { RefreshHud } from "../ui/RefreshHud";
 
 export interface BookmarkBrowserProps {
   url: string;
@@ -86,8 +84,6 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     );
     const barWidth = browserProgressBarWidth(progress, loading && !error);
     const coverBlank = browserBlankCoverVisible(loading, progress, !!error);
-    const hudOpacity = browserPtrHudOpacity(ptrDy, refreshing);
-    const hudOffset = browserPtrHudOffset(ptrDy);
 
     const finishLoad = useCallback(() => {
       refreshingRef.current = false;
@@ -303,21 +299,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
             style={[styles.blankCover, { backgroundColor: chromeBackground }]}
           />
         ) : null}
-        {hudOpacity > 0 ? (
-          <View
-            pointerEvents="none"
-            style={[
-              styles.ptrHud,
-              { opacity: hudOpacity, transform: [{ translateY: hudOffset }] },
-            ]}
-          >
-            <ReloadSpinner
-              color={palette.accent}
-              backgroundColor={palette.surfaceElevated}
-              borderColor={palette.borderStrong}
-            />
-          </View>
-        ) : null}
+        <RefreshHud dy={ptrDy} refreshing={refreshing} />
         {barWidth > 0 ? (
           <View
             pointerEvents="none"
@@ -353,13 +335,6 @@ const styles = StyleSheet.create({
   wrap: { flex: 1 },
   web: { flex: 1, ...(Platform.OS === "web" ? ({ height: "100%" } as const) : null) },
   blankCover: { ...StyleSheet.absoluteFillObject },
-  ptrHud: {
-    position: "absolute",
-    top: spacing[8],
-    left: 0,
-    right: 0,
-    alignItems: "center",
-  },
   progressTrack: {
     position: "absolute",
     top: 0,
