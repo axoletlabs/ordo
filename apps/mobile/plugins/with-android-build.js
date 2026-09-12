@@ -50,6 +50,23 @@ const SHARE_RECEIVER_ACTIVITIES = [SHARE_RECEIVER_ACTIVITY, QUICK_SHARE_RECEIVER
 const QUICK_SHARE_ENABLED_FILE = 'ordo-quick-share-enabled';
 const QUICK_SHARE_FLAG_FILE = 'ordo-quick-share';
 const QUICK_SHARE_LABEL = 'Quick Bookmark';
+const QUICK_SHARE_SHORTCUT_ID = 'ordo_quick_bookmark';
+const SHORTCUTS_META = 'android.app.shortcuts';
+
+function quickShareCategory(packageName) {
+  return `${packageName}.QUICK_BOOKMARK`;
+}
+
+function shortcutsXml(packageName) {
+  return `<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <share-target android:targetClass="${packageName}.QuickShareReceiverActivity">
+        <data android:mimeType="text/plain" />
+        <category android:name="${quickShareCategory(packageName)}" />
+    </share-target>
+</shortcuts>
+`;
+}
 
 function sendIntentFilter() {
   return {
@@ -74,6 +91,7 @@ function shareReceiverActivity(name, extras = {}) {
 }
 
 function shareIntakeKotlin(packageName) {
+  const category = quickShareCategory(packageName);
   return `package ${packageName}
 
 import android.app.Activity
@@ -81,11 +99,25 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.pm.ShortcutInfo
+import android.content.pm.ShortcutManager
+import android.graphics.drawable.Icon
+import android.os.Build
+import android.os.FileObserver
+import android.os.Handler
+import android.os.Looper
 import java.io.File
 
 internal object ShareIntake {
   const val ENABLED_FILE = "${QUICK_SHARE_ENABLED_FILE}"
   const val FLAG_FILE = "${QUICK_SHARE_FLAG_FILE}"
+  const val SHORTCUT_ID = "${QUICK_SHARE_SHORTCUT_ID}"
+  const val CATEGORY = "${category}"
+  const val LABEL = "${QUICK_SHARE_LABEL}"
+
+  private val main = Handler(Looper.getMainLooper())
+  private var filesWatcher: FileObserver? = null
+  private var cacheWatcher: FileObserver? = null
 
   @JvmStatic
   fun forwardToMain(activity: Activity, quick: Boolean) {
@@ -111,15 +143,79 @@ internal object ShareIntake {
   }
 
   @JvmStatic
+  fun watchAndSync(context: Context) {
+    watch(context)
+    syncQuickTarget(context)
+  }
+
+  @JvmStatic
   fun syncQuickTarget(context: Context) {
-    val enabled = File(context.filesDir, ENABLED_FILE).exists()
-    val component = ComponentName(context, QuickShareReceiverActivity::class.java)
-    context.packageManager.setComponentEnabledSetting(
-      component,
-      if (enabled) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
-      else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
-      PackageManager.DONT_KILL_APP
-    )
+    val enabled = enabledFileExists(context)
+    try {
+      val component = ComponentName(context, QuickShareReceiverActivity::class.java)
+      context.packageManager.setComponentEnabledSetting(
+        component,
+        if (enabled) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+        else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+        PackageManager.DONT_KILL_APP
+      )
+    } catch (_: Exception) {
+    }
+    syncQuickShortcut(context, enabled)
+  }
+
+  private fun enabledFileExists(context: Context): Boolean {
+    return File(context.filesDir, ENABLED_FILE).exists() ||
+      File(context.cacheDir, ENABLED_FILE).exists()
+  }
+
+  private fun watch(context: Context) {
+    val app = context.applicationContext
+    if (filesWatcher != null) return
+    filesWatcher = observe(app.filesDir, app)
+    cacheWatcher = observe(app.cacheDir, app)
+  }
+
+  private fun observe(dir: File, app: Context): FileObserver {
+    val mask = FileObserver.CREATE or FileObserver.DELETE or FileObserver.MOVED_FROM or
+      FileObserver.MOVED_TO or FileObserver.CLOSE_WRITE
+    @Suppress("DEPRECATION")
+    val observer = object : FileObserver(dir.absolutePath, mask) {
+      override fun onEvent(event: Int, path: String?) {
+        if (path == ENABLED_FILE) main.post { syncQuickTarget(app) }
+      }
+    }
+    observer.startWatching()
+    return observer
+  }
+
+  private fun syncQuickShortcut(context: Context, enabled: Boolean) {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N_MR1) return
+    try {
+      val sm = context.getSystemService(ShortcutManager::class.java) ?: return
+      if (!enabled) {
+        sm.removeDynamicShortcuts(listOf(SHORTCUT_ID))
+        return
+      }
+      val iconRes = context.applicationInfo.icon
+      val icon = Icon.createWithResource(
+        context,
+        if (iconRes != 0) iconRes else android.R.drawable.ic_menu_save
+      )
+      val builder = ShortcutInfo.Builder(context, SHORTCUT_ID)
+        .setShortLabel(LABEL)
+        .setLongLabel(LABEL)
+        .setIcon(icon)
+        .setCategories(setOf(CATEGORY))
+        .setActivity(ComponentName(context, MainActivity::class.java))
+        .setRank(0)
+        .setIntent(Intent(context, MainActivity::class.java).setAction(Intent.ACTION_VIEW))
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        builder.setLongLived(true)
+      }
+      sm.addDynamicShortcuts(listOf(builder.build()))
+    } catch (_: Exception) {
+    }
   }
 }
 `;
@@ -156,7 +252,7 @@ class QuickShareReceiverActivity : Activity() {
 }
 
 function shareTargetSyncCall(isJava) {
-  return isJava ? 'ShareIntake.syncQuickTarget(this);' : 'ShareIntake.syncQuickTarget(this)';
+  return isJava ? 'ShareIntake.watchAndSync(this);' : 'ShareIntake.watchAndSync(this)';
 }
 
 function shareTargetPauseMethod(isJava) {
@@ -165,14 +261,14 @@ function shareTargetPauseMethod(isJava) {
       '  @Override',
       '  public void onPause() {',
       '    super.onPause();',
-      '    ShareIntake.syncQuickTarget(this);',
+      '    ShareIntake.watchAndSync(this);',
       '  }',
     ].join('\n');
   }
   return [
     '  override fun onPause() {',
     '    super.onPause()',
-    '    ShareIntake.syncQuickTarget(this)',
+    '    ShareIntake.watchAndSync(this)',
     '  }',
   ].join('\n');
 }
@@ -385,6 +481,15 @@ const withAndroidBuild = (config) => {
       mainActivity['intent-filter'] = mainActivity['intent-filter']?.filter(
         (filter) => !isSendFilter(filter)
       );
+      mainActivity['meta-data'] = (mainActivity['meta-data'] ?? []).filter(
+        (item) => item.$?.['android:name'] !== SHORTCUTS_META
+      );
+      mainActivity['meta-data'].push({
+        $: {
+          'android:name': SHORTCUTS_META,
+          'android:resource': '@xml/shortcuts',
+        },
+      });
 
       app.activity = (app.activity ?? []).filter(
         (activity) => !SHARE_RECEIVER_ACTIVITIES.includes(activity.$?.['android:name'])
@@ -403,8 +508,10 @@ const withAndroidBuild = (config) => {
   // Receive shares outside React, then forward them into Ordo's own task. Some
   // sender apps otherwise embed MainActivity in their task and create a second
   // Expo Router tree despite launchMode="singleTask".
-  // QuickShareReceiverActivity is the optional second share-sheet action;
-  // it stays disabled until Settings → Controls writes the sidecar file.
+  // QuickShareReceiverActivity stays disabled until Settings writes the
+  // sidecar file. Android 11+ stacks every SEND activity from one package
+  // into a single tile, so "Show alongside Save" also publishes a sharing
+  // shortcut labeled Quick Bookmark.
   config = withDangerousMod(config, [
     'android',
     async (c) => {
@@ -465,6 +572,16 @@ const withAndroidBuild = (config) => {
         path.join(sourceDir, 'QuickShareReceiverActivity.kt'),
         quickShareReceiverKotlin(packageName)
       );
+      const xmlDir = path.join(
+        c.modRequest.platformProjectRoot,
+        'app',
+        'src',
+        'main',
+        'res',
+        'xml'
+      );
+      await fs.mkdir(xmlDir, { recursive: true });
+      await fs.writeFile(path.join(xmlDir, 'shortcuts.xml'), shortcutsXml(packageName));
       return c;
     },
   ]);
@@ -622,6 +739,9 @@ module.exports.LIGHT_SYSTEM_BARS_BOOL = LIGHT_SYSTEM_BARS_BOOL;
 module.exports.QUICK_SHARE_ENABLED_FILE = QUICK_SHARE_ENABLED_FILE;
 module.exports.QUICK_SHARE_FLAG_FILE = QUICK_SHARE_FLAG_FILE;
 module.exports.QUICK_SHARE_LABEL = QUICK_SHARE_LABEL;
+module.exports.QUICK_SHARE_SHORTCUT_ID = QUICK_SHARE_SHORTCUT_ID;
+module.exports.quickShareCategory = quickShareCategory;
+module.exports.shortcutsXml = shortcutsXml;
 module.exports.shareIntakeKotlin = shareIntakeKotlin;
 module.exports.shareReceiverKotlin = shareReceiverKotlin;
 module.exports.quickShareReceiverKotlin = quickShareReceiverKotlin;

@@ -10,13 +10,16 @@ const {
   QUICK_SHARE_ENABLED_FILE,
   QUICK_SHARE_FLAG_FILE,
   QUICK_SHARE_LABEL,
+  QUICK_SHARE_SHORTCUT_ID,
   VERSION_CODE_ABI_STRIDE,
   applyCmakePath,
   applyVersionCode,
   patchMainActivityForShareTargets,
+  quickShareCategory,
   quickShareReceiverKotlin,
   shareIntakeKotlin,
   shareReceiverKotlin,
+  shortcutsXml,
   versionCodeForAbi,
 } = require('./with-android-build.js');
 
@@ -123,6 +126,24 @@ test("share intake uses sidecar files that match the JS constants", () => {
   assert.equal(QUICK_SHARE_LABEL, 'Quick Bookmark');
 });
 
+test("share intake publishes a sharing shortcut so Android 11+ can show both actions", () => {
+  const source = shareIntakeKotlin('com.axolet.ordo');
+  const category = quickShareCategory('com.axolet.ordo');
+  assert.match(source, /ShortcutManager/);
+  assert.match(source, /addDynamicShortcuts/);
+  assert.match(source, new RegExp(`SHORTCUT_ID = "${QUICK_SHARE_SHORTCUT_ID}"`));
+  assert.match(source, new RegExp(`CATEGORY = "${category.replace(/\./g, '\\.')}"`));
+  assert.match(source, /filesDir/);
+  assert.match(source, /cacheDir/);
+});
+
+test("shortcuts.xml points the Quick Bookmark share-target at the quick activity", () => {
+  const xml = shortcutsXml('com.axolet.ordo');
+  assert.match(xml, /com\.axolet\.ordo\.QuickShareReceiverActivity/);
+  assert.match(xml, /android:mimeType="text\/plain"/);
+  assert.match(xml, new RegExp(quickShareCategory('com.axolet.ordo').replace(/\./g, '\\.')));
+});
+
 test("share receivers forward into MainActivity and mark only the quick target", () => {
   const share = shareReceiverKotlin('com.axolet.ordo');
   const quick = quickShareReceiverKotlin('com.axolet.ordo');
@@ -133,14 +154,14 @@ test("share receivers forward into MainActivity and mark only the quick target",
 
 test("MainActivity syncs the disabled Quick Bookmark target on create and pause", () => {
   const patched = patchMainActivityForShareTargets(KOTLIN_ACTIVITY, 'kt');
-  assert.match(patched, /ShareIntake\.syncQuickTarget\(this\)/);
+  assert.match(patched, /ShareIntake\.watchAndSync\(this\)/);
   assert.match(patched, /override fun onPause\(\)/);
-  assert.equal(patched.split('ShareIntake.syncQuickTarget(this)').length - 1, 2);
+  assert.equal(patched.split('ShareIntake.watchAndSync(this)').length - 1, 2);
   assert.equal(patchMainActivityForShareTargets(patched, 'kt'), patched);
 });
 
 test("patches Java MainActivity for the Quick Bookmark target", () => {
   const patched = patchMainActivityForShareTargets(JAVA_ACTIVITY, 'java');
-  assert.match(patched, /ShareIntake\.syncQuickTarget\(this\);/);
+  assert.match(patched, /ShareIntake\.watchAndSync\(this\);/);
   assert.match(patched, /public void onPause\(\)/);
 });

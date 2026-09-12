@@ -1,7 +1,7 @@
 /**
  * Sidecar files that the Android share activities read/write.
- * Enabling the Quick Bookmark target happens on MainActivity pause so the
- * share sheet is updated before the user leaves ordo.
+ * Enabling the Quick Bookmark target publishes a sharing shortcut so it can
+ * appear next to ordo — Android 11+ stacks same-app SEND activities into one tile.
  */
 import { Platform } from "react-native";
 import * as FileSystem from "expo-file-system";
@@ -12,15 +12,24 @@ function androidFile(directory: string | null, name: string): string | null {
   return `${directory}${name}`;
 }
 
+function enabledFlagPaths(): string[] {
+  return [
+    androidFile(FileSystem.documentDirectory, QUICK_SHARE_ENABLED_FILE),
+    androidFile(FileSystem.cacheDirectory, QUICK_SHARE_ENABLED_FILE),
+  ].filter((path): path is string => !!path);
+}
+
 export async function syncQuickShareTargetEnabled(enabled: boolean): Promise<void> {
-  const path = androidFile(FileSystem.documentDirectory, QUICK_SHARE_ENABLED_FILE);
-  if (!path) return;
-  try {
-    if (enabled) await FileSystem.writeAsStringAsync(path, "1");
-    else await FileSystem.deleteAsync(path, { idempotent: true });
-  } catch {
-    /* ignore — best effort */
-  }
+  await Promise.all(
+    enabledFlagPaths().map(async (path) => {
+      try {
+        if (enabled) await FileSystem.writeAsStringAsync(path, "1");
+        else await FileSystem.deleteAsync(path, { idempotent: true });
+      } catch {
+        /* ignore — best effort */
+      }
+    }),
+  );
 }
 
 export async function consumeQuickShareFlag(): Promise<boolean> {
