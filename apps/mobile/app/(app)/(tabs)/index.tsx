@@ -282,13 +282,6 @@ export default function BookmarksScreen() {
   const headerRight = (
     <HeaderActions>
       <HeaderIconButton
-        name="pricetags-outline"
-        color={palette.text}
-        onPress={() => router.push("/tags")}
-        accessibilityLabel={`Tags, ${tagCount} ${tagCount === 1 ? "tag" : "tags"}`}
-        accessibilityHint="Browse and manage tags."
-      />
-      <HeaderIconButton
         name="swap-vertical-outline"
         color={palette.text}
         onPress={(anchor) => {
@@ -306,6 +299,13 @@ export default function BookmarksScreen() {
           accessibilityLabel="Mark all as read"
         />
       ) : null}
+      <HeaderIconButton
+        name="pricetags-outline"
+        color={palette.text}
+        onPress={() => router.push("/tags")}
+        accessibilityLabel={`Tags, ${tagCount} ${tagCount === 1 ? "tag" : "tags"}`}
+        accessibilityHint="Browse and manage tags."
+      />
     </HeaderActions>
   );
 
