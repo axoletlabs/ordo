@@ -103,6 +103,7 @@ export function ThemedFlashList<T>(props: FlashListProps<T>) {
     refreshing,
     onRefresh,
     refreshControl,
+    onScrollEndDrag,
     ...rest
   } = props;
   const bar = useVerticalScrollBar();
@@ -110,7 +111,12 @@ export function ThemedFlashList<T>(props: FlashListProps<T>) {
   const branded = useBrandedRefresh(refreshing, onRefresh, refreshControl);
 
   return (
-    <View style={[styles.host, styles.fill, wrapper]} onLayout={chainHandlers(bar.onLayout, onLayout)}>
+    <View
+      collapsable={false}
+      style={[styles.host, styles.fill, wrapper]}
+      onLayout={chainHandlers(bar.onLayout, onLayout)}
+      {...branded.panHandlers}
+    >
       <FlashList
         estimatedItemSize={estimatedItemSize}
         drawDistance={drawDistance}
@@ -121,8 +127,10 @@ export function ThemedFlashList<T>(props: FlashListProps<T>) {
         }
         indicatorStyle={bar.indicatorStyle}
         refreshControl={branded.refreshControl}
+        overScrollMode="never"
         style={[styles.fill, inner]}
         onScroll={chainHandlers(branded.onScroll, bar.onScroll, onScroll)}
+        onScrollEndDrag={chainHandlers(branded.onScrollEndDrag, onScrollEndDrag)}
         onContentSizeChange={chainHandlers(bar.onContentSizeChange, onContentSizeChange)}
         scrollEventThrottle={scrollEventThrottle ?? 16}
       />
@@ -147,6 +155,7 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
     refreshing,
     onRefresh,
     refreshControl,
+    onScrollEndDrag,
     ...rest
   } = props;
   const bar = useVerticalScrollBar();
@@ -156,8 +165,10 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
 
   return (
     <View
+      collapsable={false}
       style={[styles.host, fill ? styles.fill : null, wrapper]}
       onLayout={chainHandlers(bar.onLayout, onLayout)}
+      {...branded.panHandlers}
     >
       <FlatList
         ref={ref}
@@ -168,8 +179,10 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
         }
         indicatorStyle={bar.indicatorStyle}
         refreshControl={branded.refreshControl}
+        overScrollMode="never"
         style={[fill ? styles.fill : null, inner]}
         onScroll={chainHandlers(branded.onScroll, bar.onScroll, onScroll)}
+        onScrollEndDrag={chainHandlers(branded.onScrollEndDrag, onScrollEndDrag)}
         onContentSizeChange={chainHandlers(bar.onContentSizeChange, onContentSizeChange)}
         scrollEventThrottle={scrollEventThrottle ?? 16}
       />

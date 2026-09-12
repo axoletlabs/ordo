@@ -29,17 +29,24 @@ export function Spinner({
   color,
   style,
   accessible = true,
+  spinning = true,
 }: {
   size?: SpinnerSize | number;
   color?: string;
   style?: StyleProp<ViewStyle>;
   accessible?: boolean;
+  spinning?: boolean;
 }) {
   const { palette } = useTheme();
   const extent = spinnerExtent(size);
   const rotation = useSharedValue(0);
 
   useEffect(() => {
+    if (!spinning) {
+      cancelAnimation(rotation);
+      rotation.value = 0;
+      return;
+    }
     rotation.value = 0;
     rotation.value = withRepeat(
       withTiming(360, { duration: 750, easing: Easing.linear }),
@@ -47,7 +54,7 @@ export function Spinner({
       false,
     );
     return () => cancelAnimation(rotation);
-  }, [rotation]);
+  }, [rotation, spinning]);
 
   const spinStyle = useAnimatedStyle(() => ({
     transform: [{ rotate: `${rotation.value}deg` }],
@@ -86,14 +93,16 @@ export function ReloadSpinner({
   color,
   backgroundColor,
   borderColor,
+  spinning = true,
 }: {
   color?: string;
   backgroundColor: string;
   borderColor: string;
+  spinning?: boolean;
 }) {
   return (
     <View style={[styles.chip, { backgroundColor, borderColor }]}>
-      <Spinner color={color} />
+      <Spinner color={color} spinning={spinning} />
     </View>
   );
 }

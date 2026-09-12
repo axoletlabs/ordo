@@ -219,11 +219,13 @@ export function shouldCommitBrowserPtr(dy: number, refreshing: boolean): boolean
 export function browserPtrHudOpacity(dy: number, refreshing: boolean): number {
   if (refreshing) return 1;
   if (dy <= 0) return 0;
-  return Math.min(1, dy / 48);
+  return Math.min(1, Math.min(1, dy / BROWSER_PTR_THRESHOLD) / 0.32);
 }
 
 export function browserPtrHudOffset(dy: number): number {
-  return Math.min(Math.max(dy, 0) * 0.4, 36);
+  const raw = Math.max(0, dy);
+  if (raw <= BROWSER_PTR_THRESHOLD) return raw * 0.55;
+  return Math.min(72, BROWSER_PTR_THRESHOLD * 0.55 + (raw - BROWSER_PTR_THRESHOLD) * 0.18);
 }
 
 /** Hex colors we inject into the document canvas (palette tokens). */
