@@ -37,6 +37,8 @@ on:
 # OTA job publishes to the last compatible APK runtime instead of --auto
 # (which would mint a runtime no binary exists for). In-flight JS-only runs
 # are not a baseline — only an APK-producing run or the last shipped APK.
+# An in-flight SHA must be an ancestor of this commit; a later overlapping
+# push is not in this clone and must not be used as the fingerprint baseline.
 # The OTA job waits for that APK to finish packaging so createdAt is newer
 # than the binary's embedded commitTime; expo-updates ignores older OTAs.
 # Concurrency is per-job, not workflow-wide. A workflow-level group would
@@ -139,13 +141,24 @@ jobs:
             echo "extra_runtime_versions=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          if ! git cat-file -e "${BASELINE_SHA}^{commit}" 2>/dev/null; then
+            echo "Baseline ${BASELINE_SHA} is not in this clone; skipping fingerprint compare"
+            echo "native_changed=false" >> "$GITHUB_OUTPUT"
+            echo "extra_runtime_versions=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
 
           # Isolated worktree + a wrapper that process.exit()s after JSON so
           # leftover autolinking children cannot wedge detect.
           SCRIPT="$GITHUB_WORKSPACE/.github/scripts/generate-android-fingerprint.js"
           PREV_DIR="${RUNNER_TEMP}/fp-prev"
           rm -rf "$PREV_DIR"
-          git worktree add --detach "$PREV_DIR" "$BASELINE_SHA"
+          if ! git worktree add --detach "$PREV_DIR" "$BASELINE_SHA"; then
+            echo "Could not check out baseline ${BASELINE_SHA}; skipping fingerprint compare"
+            echo "native_changed=false" >> "$GITHUB_OUTPUT"
+            echo "extra_runtime_versions=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           cleanup() { git worktree remove --force "$PREV_DIR" 2>/dev/null || true; }
           trap cleanup EXIT
 
@@ -214,7 +227,14 @@ jobs:
               fi
               extra_dir="${RUNNER_TEMP}/fp-${apk_sha:0:8}"
               rm -rf "$extra_dir"
-              git worktree add --detach "$extra_dir" "$apk_sha"
+              if ! git cat-file -e "${apk_sha}^{commit}" 2>/dev/null; then
+                echo "Skipping APK ${apk_sha}: commit is not in this clone"
+                continue
+              fi
+              if ! git worktree add --detach "$extra_dir" "$apk_sha"; then
+                echo "Skipping APK ${apk_sha}: worktree failed"
+                continue
+              fi
               if generate_fingerprint "$extra_dir" "/tmp/fingerprint-${apk_sha}.json"; then
                 collect_runtime_if_compatible "$apk_sha" "/tmp/fingerprint-${apk_sha}.json"
               else

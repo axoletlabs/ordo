@@ -7,12 +7,27 @@
 # onto that runtime instead of starting a second APK. Skip JS-only in-flight
 # runs — their fingerprint is not a binary. Fall back to the last successful
 # APK on the same branch.
+#
+# The in-flight SHA must already be an ancestor of CURRENT_SHA. A later push
+# can look like an APK-producing run while its detect is still running; that
+# commit is not in this clone, and `git worktree add` then exits 128, which
+# detect treats as native-incompatible and mints a spare APK.
 set -euo pipefail
 
 REPO="${GITHUB_REPOSITORY:?}"
 CURRENT_RUN="${GITHUB_RUN_ID:-0}"
+CURRENT_SHA="${CURRENT_SHA:-${GITHUB_SHA:-}}"
 BRANCH="${1:-${GITHUB_REF_NAME:-main}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+usable_baseline() {
+  local sha="$1"
+  [[ -n "$sha" ]] || return 1
+  git cat-file -e "${sha}^{commit}" 2>/dev/null || return 1
+  [[ -n "$CURRENT_SHA" ]] || return 1
+  [[ "$sha" == "$CURRENT_SHA" ]] && return 0
+  git merge-base --is-ancestor "$sha" "$CURRENT_SHA"
+}
 
 list_runs() {
   local status="$1"
@@ -58,9 +73,13 @@ if [[ -n "$in_flight" && "$in_flight" != "null" && "$in_flight" != "[]" ]]; then
   while read -r run_id sha; do
     [[ -z "$run_id" || -z "$sha" ]] && continue
     if might_produce_apk "$run_id"; then
-      echo "Using in-flight CI run ${run_id} on ${BRANCH} as fingerprint baseline" >&2
-      echo "$sha"
-      exit 0
+      if usable_baseline "$sha"; then
+        echo "Using in-flight CI run ${run_id} on ${BRANCH} as fingerprint baseline" >&2
+        echo "$sha"
+        exit 0
+      fi
+      echo "Skipping in-flight run ${run_id}: ${sha} is not an ancestor of ${CURRENT_SHA:-unknown}" >&2
+      continue
     fi
     echo "Skipping in-flight run ${run_id}: JS-only (no APK)" >&2
   done < <(jq -r '.[] | "\(.id) \(.head_sha // empty)"' <<<"$in_flight")
