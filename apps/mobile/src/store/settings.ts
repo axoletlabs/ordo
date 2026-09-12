@@ -1,8 +1,8 @@
 /**
  * Client/UI settings store: server URL, recent server history, theme mode,
- * AMOLED, navigation, haptics, website-browser, and in-app force-dark
- * preferences. Persisted to AsyncStorage (non-secret). Hydrated explicitly
- * on app start.
+ * AMOLED, navigation, haptics, website-browser, in-app force-dark, and
+ * share-sheet preferences. Persisted to AsyncStorage (non-secret). Hydrated
+ * explicitly on app start.
  */
 import { create } from "zustand";
 import { setHapticsEnabled as applyHapticsEnabled } from "../lib/haptics";
@@ -12,6 +12,7 @@ import {
   removeServerHistoryEntry,
   type ServerHistoryEntry,
 } from "../lib/server-history";
+import { syncQuickShareTargetEnabled } from "../lib/share-targets";
 import { prefsGet, prefsSet, StorageKeys } from "../lib/storage";
 import type { ThemeMode } from "../theme/theme";
 
@@ -48,6 +49,10 @@ export interface SettingsState {
   websiteBrowser: WebsiteBrowser;
   /** Darken live pages in ordo's WebView (BookmarkBrowser). */
   forceWebsiteDark: boolean;
+  /** Save a shared link as unfiled without opening the save form. Off by default. */
+  shareQuickBookmark: boolean;
+  /** When Quick Bookmark is on, also keep the normal Save share target. */
+  shareShowQuickAction: boolean;
   hapticsEnabled: boolean;
   /** One-time tip: OTP is printed to the server console when SMTP is unset. */
   consoleOtpTipDismissed: boolean;
@@ -67,6 +72,8 @@ export interface SettingsState {
   setCreateButtonHoldAction: (action: CreateButtonHoldAction) => void;
   setWebsiteBrowser: (browser: WebsiteBrowser) => void;
   setForceWebsiteDark: (on: boolean) => void;
+  setShareQuickBookmark: (on: boolean) => void;
+  setShareShowQuickAction: (on: boolean) => void;
   setHapticsEnabled: (on: boolean) => void;
   dismissConsoleOtpTip: () => void;
 }
@@ -82,6 +89,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   createButtonHoldAction: "bookmark",
   websiteBrowser: "ordo",
   forceWebsiteDark: false,
+  shareQuickBookmark: false,
+  shareShowQuickAction: false,
   hapticsEnabled: true,
   consoleOtpTipDismissed: false,
   serverHistory: [],
@@ -110,12 +119,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           : "bookmark",
       websiteBrowser: isWebsiteBrowser(saved?.websiteBrowser) ? saved.websiteBrowser : "ordo",
       forceWebsiteDark: saved?.forceWebsiteDark === true,
+      shareQuickBookmark: saved?.shareQuickBookmark === true,
+      shareShowQuickAction:
+        saved?.shareQuickBookmark === true && saved?.shareShowQuickAction === true,
       hapticsEnabled: saved?.hapticsEnabled !== false,
       consoleOtpTipDismissed: saved?.consoleOtpTipDismissed === true,
       serverHistory: parseServerHistory(saved?.serverHistory),
       hydrated: true,
     });
     applyHapticsEnabled(get().hapticsEnabled);
+    void syncQuickShareTargetEnabled(get().shareShowQuickAction);
   },
 
   setServerUrl: async (url) => {
@@ -164,6 +177,18 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setForceWebsiteDark: (forceWebsiteDark) => {
     set({ forceWebsiteDark });
     void prefsSet(StorageKeys.SETTINGS, { ...get(), forceWebsiteDark });
+  },
+  setShareQuickBookmark: (shareQuickBookmark) => {
+    const shareShowQuickAction = shareQuickBookmark ? get().shareShowQuickAction : false;
+    set({ shareQuickBookmark, shareShowQuickAction });
+    void prefsSet(StorageKeys.SETTINGS, { ...get(), shareQuickBookmark, shareShowQuickAction });
+    void syncQuickShareTargetEnabled(shareShowQuickAction);
+  },
+  setShareShowQuickAction: (on) => {
+    const shareShowQuickAction = on && get().shareQuickBookmark;
+    set({ shareShowQuickAction });
+    void prefsSet(StorageKeys.SETTINGS, { ...get(), shareShowQuickAction });
+    void syncQuickShareTargetEnabled(shareShowQuickAction);
   },
   setHapticsEnabled: (hapticsEnabled) => {
     set({ hapticsEnabled });

@@ -7,9 +7,16 @@ const {
   APP_WINDOW_CHROME_API29_ITEMS,
   APP_WINDOW_CHROME_ITEMS,
   LIGHT_SYSTEM_BARS_BOOL,
+  QUICK_SHARE_ENABLED_FILE,
+  QUICK_SHARE_FLAG_FILE,
+  QUICK_SHARE_LABEL,
   VERSION_CODE_ABI_STRIDE,
   applyCmakePath,
   applyVersionCode,
+  patchMainActivityForShareTargets,
+  quickShareReceiverKotlin,
+  shareIntakeKotlin,
+  shareReceiverKotlin,
   versionCodeForAbi,
 } = require('./with-android-build.js');
 
@@ -76,4 +83,64 @@ test("wires CI versionCode through a * 10 default and per-output ABI offsets", (
   assert.match(patched, /output\.filters\.find \{ it\.filterType\.name\(\) == 'ABI' \}/);
   assert.match(patched, /output\.versionCode\.set\(base \+ offset\)/);
   assert.equal(applyVersionCode(patched), patched);
+});
+
+const KOTLIN_ACTIVITY = `package com.axolet.ordo
+
+import android.os.Bundle
+
+import com.facebook.react.ReactActivity
+
+class MainActivity : ReactActivity() {
+  override fun onCreate(savedInstanceState: Bundle?) {
+    setTheme(R.style.AppTheme);
+    super.onCreate(null)
+  }
+}
+`;
+
+const JAVA_ACTIVITY = `package com.axolet.ordo;
+
+import android.os.Bundle;
+import com.facebook.react.ReactActivity;
+
+public class MainActivity extends ReactActivity {
+  @Override
+  protected void onCreate(Bundle savedInstanceState) {
+    setTheme(R.style.AppTheme);
+    super.onCreate(null);
+  }
+}
+`;
+
+test("share intake uses sidecar files that match the JS constants", () => {
+  const source = shareIntakeKotlin('com.axolet.ordo');
+  assert.match(source, /package com\.axolet\.ordo/);
+  assert.match(source, new RegExp(`ENABLED_FILE = "${QUICK_SHARE_ENABLED_FILE}"`));
+  assert.match(source, new RegExp(`FLAG_FILE = "${QUICK_SHARE_FLAG_FILE}"`));
+  assert.match(source, /QuickShareReceiverActivity::class\.java/);
+  assert.match(source, /COMPONENT_ENABLED_STATE_DISABLED/);
+  assert.equal(QUICK_SHARE_LABEL, 'Quick Bookmark');
+});
+
+test("share receivers forward into MainActivity and mark only the quick target", () => {
+  const share = shareReceiverKotlin('com.axolet.ordo');
+  const quick = quickShareReceiverKotlin('com.axolet.ordo');
+  assert.match(share, /ShareIntake\.forwardToMain\(this, false\)/);
+  assert.match(quick, /ShareIntake\.forwardToMain\(this, true\)/);
+  assert.doesNotMatch(share, /markQuick/);
+});
+
+test("MainActivity syncs the disabled Quick Bookmark target on create and pause", () => {
+  const patched = patchMainActivityForShareTargets(KOTLIN_ACTIVITY, 'kt');
+  assert.match(patched, /ShareIntake\.syncQuickTarget\(this\)/);
+  assert.match(patched, /override fun onPause\(\)/);
+  assert.equal(patched.split('ShareIntake.syncQuickTarget(this)').length - 1, 2);
+  assert.equal(patchMainActivityForShareTargets(patched, 'kt'), patched);
+});
+
+test("patches Java MainActivity for the Quick Bookmark target", () => {
+  const patched = patchMainActivityForShareTargets(JAVA_ACTIVITY, 'java');
+  assert.match(patched, /ShareIntake\.syncQuickTarget\(this\);/);
+  assert.match(patched, /public void onPause\(\)/);
 });

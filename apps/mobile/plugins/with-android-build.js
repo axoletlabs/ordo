@@ -6,8 +6,10 @@ const {
   withAndroidStyles,
   withAndroidColors,
   withAndroidColorsNight,
+  withMainActivity,
   AndroidConfig,
 } = require('expo/config-plugins');
+const { mergeContents } = require('@expo/config-plugins/build/utils/generateCode');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 
@@ -43,6 +45,158 @@ const DARK_SYSTEM_BARS_BOOL_XML = `<?xml version="1.0" encoding="utf-8"?>
 `;
 
 const SHARE_RECEIVER_ACTIVITY = '.ShareReceiverActivity';
+const QUICK_SHARE_RECEIVER_ACTIVITY = '.QuickShareReceiverActivity';
+const SHARE_RECEIVER_ACTIVITIES = [SHARE_RECEIVER_ACTIVITY, QUICK_SHARE_RECEIVER_ACTIVITY];
+const QUICK_SHARE_ENABLED_FILE = 'ordo-quick-share-enabled';
+const QUICK_SHARE_FLAG_FILE = 'ordo-quick-share';
+const QUICK_SHARE_LABEL = 'Quick Bookmark';
+
+function sendIntentFilter() {
+  return {
+    action: [{ $: { 'android:name': 'android.intent.action.SEND' } }],
+    data: [{ $: { 'android:mimeType': 'text/plain' } }],
+    category: [{ $: { 'android:name': 'android.intent.category.DEFAULT' } }],
+  };
+}
+
+function shareReceiverActivity(name, extras = {}) {
+  return {
+    $: {
+      'android:name': name,
+      'android:theme': '@android:style/Theme.Translucent.NoTitleBar',
+      'android:exported': 'true',
+      'android:noHistory': 'true',
+      'android:excludeFromRecents': 'true',
+      ...extras,
+    },
+    'intent-filter': [sendIntentFilter()],
+  };
+}
+
+function shareIntakeKotlin(packageName) {
+  return `package ${packageName}
+
+import android.app.Activity
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
+import java.io.File
+
+internal object ShareIntake {
+  const val ENABLED_FILE = "${QUICK_SHARE_ENABLED_FILE}"
+  const val FLAG_FILE = "${QUICK_SHARE_FLAG_FILE}"
+
+  @JvmStatic
+  fun forwardToMain(activity: Activity, quick: Boolean) {
+    if (quick) markQuick(activity)
+    val intent = activity.intent
+    val mainIntent = Intent(activity, MainActivity::class.java).apply {
+      action = intent.action
+      setDataAndType(intent.data, intent.type)
+      clipData = intent.clipData
+      intent.extras?.let { putExtras(it) }
+      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
+      addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
+      addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+    activity.startActivity(mainIntent)
+    activity.finish()
+  }
+
+  @JvmStatic
+  fun markQuick(context: Context) {
+    File(context.cacheDir, FLAG_FILE).writeText("1")
+  }
+
+  @JvmStatic
+  fun syncQuickTarget(context: Context) {
+    val enabled = File(context.filesDir, ENABLED_FILE).exists()
+    val component = ComponentName(context, QuickShareReceiverActivity::class.java)
+    context.packageManager.setComponentEnabledSetting(
+      component,
+      if (enabled) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
+      else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+      PackageManager.DONT_KILL_APP
+    )
+  }
+}
+`;
+}
+
+function shareReceiverKotlin(packageName) {
+  return `package ${packageName}
+
+import android.app.Activity
+import android.os.Bundle
+
+class ShareReceiverActivity : Activity() {
+  override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    ShareIntake.forwardToMain(this, false)
+  }
+}
+`;
+}
+
+function quickShareReceiverKotlin(packageName) {
+  return `package ${packageName}
+
+import android.app.Activity
+import android.os.Bundle
+
+class QuickShareReceiverActivity : Activity() {
+  override fun onCreate(savedInstanceState: Bundle?) {
+    super.onCreate(savedInstanceState)
+    ShareIntake.forwardToMain(this, true)
+  }
+}
+`;
+}
+
+function shareTargetSyncCall(isJava) {
+  return isJava ? 'ShareIntake.syncQuickTarget(this);' : 'ShareIntake.syncQuickTarget(this)';
+}
+
+function shareTargetPauseMethod(isJava) {
+  if (isJava) {
+    return [
+      '  @Override',
+      '  public void onPause() {',
+      '    super.onPause();',
+      '    ShareIntake.syncQuickTarget(this);',
+      '  }',
+    ].join('\n');
+  }
+  return [
+    '  override fun onPause() {',
+    '    super.onPause()',
+    '    ShareIntake.syncQuickTarget(this)',
+    '  }',
+  ].join('\n');
+}
+
+function patchMainActivityForShareTargets(contents, language) {
+  const isJava = language === 'java';
+  let next = mergeContents({
+    src: contents,
+    tag: 'ordo-share-targets-create',
+    comment: '    //',
+    offset: 1,
+    anchor: /super\.onCreate\(null\)/,
+    newSrc: `    ${shareTargetSyncCall(isJava)}`,
+  }).contents;
+  next = mergeContents({
+    src: next,
+    tag: 'ordo-share-targets-pause',
+    comment: '  //',
+    offset: 1,
+    anchor: /class MainActivity/,
+    newSrc: shareTargetPauseMethod(isJava),
+  }).contents;
+  return next;
+}
 
 // Keep the default -O / source-map flags; only suppress the two hermesc
 // categories that RN's own bundle cannot satisfy at compile time.
@@ -233,24 +387,15 @@ const withAndroidBuild = (config) => {
       );
 
       app.activity = (app.activity ?? []).filter(
-        (activity) => activity.$?.['android:name'] !== SHARE_RECEIVER_ACTIVITY
+        (activity) => !SHARE_RECEIVER_ACTIVITIES.includes(activity.$?.['android:name'])
       );
-      app.activity.push({
-        $: {
-          'android:name': SHARE_RECEIVER_ACTIVITY,
-          'android:theme': '@android:style/Theme.Translucent.NoTitleBar',
-          'android:exported': 'true',
-          'android:noHistory': 'true',
-          'android:excludeFromRecents': 'true',
-        },
-        'intent-filter': [
-          {
-            action: [{ $: { 'android:name': 'android.intent.action.SEND' } }],
-            data: [{ $: { 'android:mimeType': 'text/plain' } }],
-            category: [{ $: { 'android:name': 'android.intent.category.DEFAULT' } }],
-          },
-        ],
-      });
+      app.activity.push(shareReceiverActivity(SHARE_RECEIVER_ACTIVITY));
+      app.activity.push(
+        shareReceiverActivity(QUICK_SHARE_RECEIVER_ACTIVITY, {
+          'android:label': QUICK_SHARE_LABEL,
+          'android:enabled': 'false',
+        })
+      );
     }
     return c;
   });
@@ -258,6 +403,8 @@ const withAndroidBuild = (config) => {
   // Receive shares outside React, then forward them into Ordo's own task. Some
   // sender apps otherwise embed MainActivity in their task and create a second
   // Expo Router tree despite launchMode="singleTask".
+  // QuickShareReceiverActivity is the optional second share-sheet action;
+  // it stays disabled until Settings → Controls writes the sidecar file.
   config = withDangerousMod(config, [
     'android',
     async (c) => {
@@ -309,38 +456,26 @@ const withAndroidBuild = (config) => {
       await fs.writeFile(path.join(valuesDir, 'bools.xml'), LIGHT_SYSTEM_BARS_BOOL_XML);
       await fs.writeFile(path.join(valuesNightDir, 'bools.xml'), DARK_SYSTEM_BARS_BOOL_XML);
 
+      await fs.writeFile(path.join(sourceDir, 'ShareIntake.kt'), shareIntakeKotlin(packageName));
       await fs.writeFile(
         path.join(sourceDir, 'ShareReceiverActivity.kt'),
-        `package ${packageName}
-
-import android.app.Activity
-import android.content.Intent
-import android.os.Bundle
-
-class ShareReceiverActivity : Activity() {
-  override fun onCreate(savedInstanceState: Bundle?) {
-    super.onCreate(savedInstanceState)
-
-    val mainIntent = Intent(this, MainActivity::class.java).apply {
-      action = intent.action
-      setDataAndType(intent.data, intent.type)
-      clipData = intent.clipData
-      intent.extras?.let { putExtras(it) }
-      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-      addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-      addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-      addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-    }
-
-    startActivity(mainIntent)
-    finish()
-  }
-}
-`
+        shareReceiverKotlin(packageName)
+      );
+      await fs.writeFile(
+        path.join(sourceDir, 'QuickShareReceiverActivity.kt'),
+        quickShareReceiverKotlin(packageName)
       );
       return c;
     },
   ]);
+
+  config = withMainActivity(config, (c) => {
+    c.modResults.contents = patchMainActivityForShareTargets(
+      c.modResults.contents,
+      c.modResults.language
+    );
+    return c;
+  });
 
   config = withAndroidColors(config, (c) => {
     c.modResults = assignColorValue(c.modResults, {
@@ -484,3 +619,10 @@ module.exports.APP_WINDOW_CHROME_ITEMS = APP_WINDOW_CHROME_ITEMS;
 module.exports.APP_WINDOW_CHROME_API27_ITEMS = APP_WINDOW_CHROME_API27_ITEMS;
 module.exports.APP_WINDOW_CHROME_API29_ITEMS = APP_WINDOW_CHROME_API29_ITEMS;
 module.exports.LIGHT_SYSTEM_BARS_BOOL = LIGHT_SYSTEM_BARS_BOOL;
+module.exports.QUICK_SHARE_ENABLED_FILE = QUICK_SHARE_ENABLED_FILE;
+module.exports.QUICK_SHARE_FLAG_FILE = QUICK_SHARE_FLAG_FILE;
+module.exports.QUICK_SHARE_LABEL = QUICK_SHARE_LABEL;
+module.exports.shareIntakeKotlin = shareIntakeKotlin;
+module.exports.shareReceiverKotlin = shareReceiverKotlin;
+module.exports.quickShareReceiverKotlin = quickShareReceiverKotlin;
+module.exports.patchMainActivityForShareTargets = patchMainActivityForShareTargets;

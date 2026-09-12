@@ -1,5 +1,6 @@
-/** Preferences for shortcuts, gestures, and the in-app website browser. */
+/** Preferences for shortcuts, gestures, the share sheet, and the in-app website browser. */
 import React from "react";
+import { Platform } from "react-native";
 import {
   SettingsGroup,
   SettingsPage,
@@ -41,10 +42,14 @@ export default function ControlsScreen() {
   const holdAction = useSettingsStore((s) => s.createButtonHoldAction);
   const websiteBrowser = useSettingsStore((s) => s.websiteBrowser);
   const forceWebsiteDark = useSettingsStore((s) => s.forceWebsiteDark);
+  const shareQuickBookmark = useSettingsStore((s) => s.shareQuickBookmark);
+  const shareShowQuickAction = useSettingsStore((s) => s.shareShowQuickAction);
   const setTapAction = useSettingsStore((s) => s.setCreateButtonTapAction);
   const setHoldAction = useSettingsStore((s) => s.setCreateButtonHoldAction);
   const setWebsiteBrowser = useSettingsStore((s) => s.setWebsiteBrowser);
   const setForceWebsiteDark = useSettingsStore((s) => s.setForceWebsiteDark);
+  const setShareQuickBookmark = useSettingsStore((s) => s.setShareQuickBookmark);
+  const setShareShowQuickAction = useSettingsStore((s) => s.setShareShowQuickAction);
 
   return (
     <SettingsPage title="Controls">
@@ -76,6 +81,41 @@ export default function ControlsScreen() {
             divider={false}
           />
         </SettingsGroup>
+        {Platform.OS === "android" ? (
+          <SettingsGroup
+            label="Share sheet"
+            footer={
+              shareShowQuickAction
+                ? "The share sheet lists Quick Bookmark next to ordo. Quick Bookmark saves as unfiled and returns you to the other app."
+                : shareQuickBookmark
+                  ? "Sharing to ordo saves the link as unfiled and returns you to the other app."
+                  : "Off by default. Quick Bookmark saves a shared link as unfiled without the save form."
+            }
+          >
+            <SettingRow
+              icon="flash-outline"
+              label="Quick Bookmark"
+              description="Save shared links as unfiled and return to the other app."
+              right={
+                <Toggle value={shareQuickBookmark} onValueChange={setShareQuickBookmark} />
+              }
+              rightFit="content"
+              divider={shareQuickBookmark}
+            />
+            {shareQuickBookmark ? (
+              <SettingRow
+                icon="share-outline"
+                label="Show alongside Save"
+                description="Keep the normal Save action and add Quick Bookmark as a second share target."
+                right={
+                  <Toggle value={shareShowQuickAction} onValueChange={setShareShowQuickAction} />
+                }
+                rightFit="content"
+                divider={false}
+              />
+            ) : null}
+          </SettingsGroup>
+        ) : null}
         <SettingsGroup label="Browser">
           <SettingRow
             icon="globe-outline"
