@@ -241,6 +241,14 @@ export default function FolderDetailScreen() {
         maxWidth={hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth}
         right={
           <HeaderActions>
+            {hasUnread && !showLocked && !loadFailed ? (
+              <HeaderIconButton
+                name="checkmark-done"
+                color={palette.accent}
+                onPress={onMarkAllRead}
+                accessibilityLabel="Mark all as read"
+              />
+            ) : null}
             {!showLocked && !loadFailed ? (
               <HeaderIconButton
                 name="swap-vertical-outline"
@@ -251,14 +259,6 @@ export default function FolderDetailScreen() {
                 }}
                 accessibilityLabel="Sort"
                 accessibilityHint="Change how bookmarks are ordered."
-              />
-            ) : null}
-            {hasUnread && !showLocked && !loadFailed ? (
-              <HeaderIconButton
-                name="checkmark-done"
-                color={palette.accent}
-                onPress={onMarkAllRead}
-                accessibilityLabel="Mark all as read"
               />
             ) : null}
             {folder ? (

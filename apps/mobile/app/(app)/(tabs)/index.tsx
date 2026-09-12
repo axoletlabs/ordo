@@ -284,6 +284,14 @@ export default function BookmarksScreen() {
 
   const headerRight = (
     <HeaderActions>
+      {hasUnread ? (
+        <HeaderIconButton
+          name="checkmark-done"
+          color={palette.accent}
+          onPress={onMarkAllRead}
+          accessibilityLabel="Mark all as read"
+        />
+      ) : null}
       <HeaderIconButton
         name="swap-vertical-outline"
         color={palette.text}
@@ -294,14 +302,6 @@ export default function BookmarksScreen() {
         accessibilityLabel="Sort"
         accessibilityHint="Change how folders and bookmarks are ordered."
       />
-      {hasUnread ? (
-        <HeaderIconButton
-          name="checkmark-done"
-          color={palette.accent}
-          onPress={onMarkAllRead}
-          accessibilityLabel="Mark all as read"
-        />
-      ) : null}
       <HeaderIconButton
         name="pricetags-outline"
         color={palette.text}
