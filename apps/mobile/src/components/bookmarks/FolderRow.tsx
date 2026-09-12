@@ -150,24 +150,26 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
       >
         <View style={styles.content}>
           <View style={styles.titleRow}>
-            <Text variant="headline" numberOfLines={1} style={styles.title}>
-              {folder.name}
-            </Text>
+            <View style={styles.titleWrap}>
+              <Text variant="headline" numberOfLines={1}>
+                {folder.name}
+              </Text>
+            </View>
             {folder.pinned ? (
               <View style={styles.pin} accessible={false}>
                 <PinIcon size={15} color={palette.accent} />
               </View>
+            ) : null}
+            {folder.protected ? (
+              <RowStatusSlot>
+                <FolderLockIcon unlocked={sessionUnlocked} outline />
+              </RowStatusSlot>
             ) : null}
           </View>
           <View style={styles.metaRow}>
             <Text variant="caption" color="tertiary" numberOfLines={1} style={styles.count}>
               {countLabel}
             </Text>
-            {folder.protected ? (
-              <RowStatusSlot>
-                <FolderLockIcon unlocked={sessionUnlocked} outline />
-              </RowStatusSlot>
-            ) : null}
           </View>
         </View>
         {unread && !selectionMode ? <Badge tone="accent">{folder.unreadCount}</Badge> : null}
@@ -210,8 +212,8 @@ const styles = StyleSheet.create({
   },
   content: { flex: 1, minWidth: 0 },
   titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[6] },
-  title: { flex: 1, minWidth: 0 },
+  titleWrap: { flexShrink: 1, minWidth: 0 },
   pin: { flexShrink: 0 },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[8], marginTop: spacing[6] },
-  count: { flex: 1, minWidth: 0 },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[6], marginTop: spacing[6] },
+  count: { flexShrink: 1 },
 });

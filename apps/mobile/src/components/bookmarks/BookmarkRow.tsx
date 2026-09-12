@@ -261,59 +261,11 @@ export const BookmarkRow = React.memo(function BookmarkRow({
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         <View style={styles.content}>
-          <Text variant="headline" color={titleColor} numberOfLines={1}>
-            {highlightTitle(title, searchQuery, searchFuzzy)}
-          </Text>
-          {showDescription ? (
-            <Text variant="footnote" color="secondary" numberOfLines={1} style={styles.description}>
-              {bookmark.description}
-            </Text>
-          ) : null}
-          {rowTags.length > 0 ? (
-            <View style={styles.tagRow}>
-              {visibleTags.map((tag) => (
-                <TagChip
-                  key={tag.id}
-                  name={tag.name}
-                  color={tag.color}
-                  compact
-                  onPress={() => handleTagPress(tag.id)}
-                  accessibilityLabel={`Show bookmarks tagged ${tag.name}`}
-                />
-              ))}
-              {overflowCount > 0 ? (
-                <Text variant="caption" color="tertiary" style={styles.overflow}>
-                  +{overflowCount}
-                </Text>
-              ) : null}
-            </View>
-          ) : null}
-          {hasSuggestions ? (
-            <View style={styles.suggestionRow}>
-              <Ionicons name="sparkles-outline" size={12} color={palette.accent} />
-              <Text variant="caption" color="accent">
-                {suggestedTags.length} tag{" "}
-                {suggestedTags.length === 1 ? "suggestion" : "suggestions"}
+          <View style={styles.titleRow}>
+            <View style={styles.titleWrap}>
+              <Text variant="headline" color={titleColor} numberOfLines={1}>
+                {highlightTitle(title, searchQuery, searchFuzzy)}
               </Text>
-            </View>
-          ) : null}
-          <View style={styles.metaRow}>
-            <View style={styles.metaFacts}>
-              <Text variant="caption" color="tertiary" numberOfLines={1} style={styles.domain}>
-                {domain}
-              </Text>
-              <View style={[styles.separator, { backgroundColor: palette.textFaint }]} />
-              <Text variant="caption" color="tertiary" numberOfLines={1}>
-                {createdLabel}
-              </Text>
-              {showReadingTime ? (
-                <>
-                  <View style={[styles.separator, { backgroundColor: palette.textFaint }]} />
-                  <Text variant="caption" color="tertiary" numberOfLines={1}>
-                    {bookmark.readingTimeMinutes} min read
-                  </Text>
-                </>
-              ) : null}
             </View>
             {isPending ? (
               <RowStatusSlot>
@@ -359,6 +311,56 @@ export const BookmarkRow = React.memo(function BookmarkRow({
                   />
                 </RowStatusSlot>
               </Pressable>
+            ) : null}
+          </View>
+          {showDescription ? (
+            <Text variant="footnote" color="secondary" numberOfLines={1} style={styles.description}>
+              {bookmark.description}
+            </Text>
+          ) : null}
+          {rowTags.length > 0 ? (
+            <View style={styles.tagRow}>
+              {visibleTags.map((tag) => (
+                <TagChip
+                  key={tag.id}
+                  name={tag.name}
+                  color={tag.color}
+                  compact
+                  onPress={() => handleTagPress(tag.id)}
+                  accessibilityLabel={`Show bookmarks tagged ${tag.name}`}
+                />
+              ))}
+              {overflowCount > 0 ? (
+                <Text variant="caption" color="tertiary" style={styles.overflow}>
+                  +{overflowCount}
+                </Text>
+              ) : null}
+            </View>
+          ) : null}
+          {hasSuggestions ? (
+            <View style={styles.suggestionRow}>
+              <Ionicons name="sparkles-outline" size={12} color={palette.accent} />
+              <Text variant="caption" color="accent">
+                {suggestedTags.length} tag{" "}
+                {suggestedTags.length === 1 ? "suggestion" : "suggestions"}
+              </Text>
+            </View>
+          ) : null}
+          <View style={styles.metaRow}>
+            <Text variant="caption" color="tertiary" numberOfLines={1} style={styles.domain}>
+              {domain}
+            </Text>
+            <View style={[styles.separator, { backgroundColor: palette.textFaint }]} />
+            <Text variant="caption" color="tertiary" numberOfLines={1}>
+              {createdLabel}
+            </Text>
+            {showReadingTime ? (
+              <>
+                <View style={[styles.separator, { backgroundColor: palette.textFaint }]} />
+                <Text variant="caption" color="tertiary" numberOfLines={1}>
+                  {bookmark.readingTimeMinutes} min read
+                </Text>
+              </>
             ) : null}
           </View>
         </View>
@@ -408,6 +410,8 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
   },
   content: { flex: 1, minWidth: 0 },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[6] },
+  titleWrap: { flexShrink: 1, minWidth: 0 },
   description: { marginTop: spacing[4] },
   tagRow: {
     flexDirection: "row",
@@ -423,14 +427,7 @@ const styles = StyleSheet.create({
     gap: spacing[4],
     marginTop: spacing[4],
   },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[8], marginTop: spacing[6] },
-  metaFacts: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[6],
-    minWidth: 0,
-  },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[6], marginTop: spacing[6] },
   domain: { flexShrink: 1 },
   separator: { width: 3, height: 3, borderRadius: radius.full },
   openExternal: {

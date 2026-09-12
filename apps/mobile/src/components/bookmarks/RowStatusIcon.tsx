@@ -1,6 +1,6 @@
 /**
  * One seat for the small list glyphs (article, lock, website-open).
- * They all live at the end of the meta line, in the same 16px cell.
+ * They sit immediately after the title, in the same 16px cell.
  */
 import React from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
