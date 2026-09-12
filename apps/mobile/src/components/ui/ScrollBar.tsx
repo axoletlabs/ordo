@@ -37,11 +37,11 @@ import { radius, timing } from "../../theme/tokens";
 
 export type { ScrollBarInsets };
 
-/** Overlay track insets that stop just above the floating dock / selection bar. */
+/** Overlay track insets: flush with the first row, stop just above the dock. */
 export function useScrollBarInsets(): Required<ScrollBarInsets> {
   const { listOverlayClearance } = useFloatingDockMetrics();
   return {
-    top: SCROLLBAR_END_INSET,
+    top: 0,
     bottom: scrollBarBottomInset(listOverlayClearance),
   };
 }
