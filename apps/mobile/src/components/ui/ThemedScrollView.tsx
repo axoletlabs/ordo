@@ -7,6 +7,7 @@ import React from "react";
 import {
   FlatList,
   Platform,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   View,
@@ -21,8 +22,28 @@ import {
   useVerticalScrollBar,
   type ScrollBarInsets,
 } from "./ScrollBar";
-import { useBrandedRefresh } from "./RefreshHud";
 import { scrollViewShouldFill } from "../../theme/scrollbar";
+import { useTheme } from "../../theme/ThemeProvider";
+
+/** Native pull-to-refresh with the branded coral-on-chip colors. */
+function useThemedRefreshControl(
+  refreshing: boolean | null | undefined,
+  onRefresh: (() => void) | null | undefined,
+  refreshControl?: React.ReactElement,
+) {
+  const { palette } = useTheme();
+  if (refreshControl) return refreshControl;
+  if (refreshing == null && onRefresh == null) return undefined;
+  return (
+    <RefreshControl
+      refreshing={!!refreshing}
+      onRefresh={onRefresh ?? undefined}
+      tintColor={palette.accent}
+      colors={[palette.accent]}
+      progressBackgroundColor={palette.surfaceElevated}
+    />
+  );
+}
 
 export type ThemedScrollViewProps = ScrollViewProps & {
   scrollBarInsets?: ScrollBarInsets;
@@ -120,7 +141,6 @@ export function ThemedFlashList<T>(props: ThemedFlashListProps<T>) {
     refreshing,
     onRefresh,
     refreshControl,
-    onScrollEndDrag,
     scrollBarInsets,
     scrollBarClearsFab = true,
     ...rest
@@ -128,15 +148,10 @@ export function ThemedFlashList<T>(props: ThemedFlashListProps<T>) {
   const chromeInsets = useScrollBarInsets({ fab: scrollBarClearsFab });
   const bar = useVerticalScrollBar(scrollBarInsets ?? chromeInsets);
   const { wrapper, inner } = splitScrollLayoutStyle(style);
-  const branded = useBrandedRefresh(refreshing, onRefresh, refreshControl);
+  const themedRefresh = useThemedRefreshControl(refreshing, onRefresh, refreshControl);
 
   return (
-    <View
-      collapsable={false}
-      style={[styles.host, styles.fill, wrapper]}
-      onLayout={chainHandlers(bar.onLayout, onLayout)}
-      {...branded.panHandlers}
-    >
+    <View style={[styles.host, styles.fill, wrapper]} onLayout={chainHandlers(bar.onLayout, onLayout)}>
       <FlashList
         estimatedItemSize={estimatedItemSize}
         drawDistance={drawDistance}
@@ -146,16 +161,13 @@ export function ThemedFlashList<T>(props: ThemedFlashListProps<T>) {
           Platform.OS === "web" ? (showsVerticalScrollIndicator ?? true) : false
         }
         indicatorStyle={bar.indicatorStyle}
-        refreshControl={branded.refreshControl}
-        overScrollMode="never"
+        refreshControl={themedRefresh}
         style={[styles.fill, inner]}
-        onScroll={chainHandlers(branded.onScroll, bar.onScroll, onScroll)}
-        onScrollEndDrag={chainHandlers(branded.onScrollEndDrag, onScrollEndDrag)}
+        onScroll={chainHandlers(bar.onScroll, onScroll)}
         onContentSizeChange={chainHandlers(bar.onContentSizeChange, onContentSizeChange)}
         scrollEventThrottle={scrollEventThrottle ?? 16}
       />
       {bar.overlay}
-      {branded.hud}
     </View>
   );
 }
@@ -175,21 +187,18 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
     refreshing,
     onRefresh,
     refreshControl,
-    onScrollEndDrag,
     scrollBarInsets,
     ...rest
   } = props;
   const bar = useVerticalScrollBar(scrollBarInsets);
   const { wrapper, inner } = splitScrollLayoutStyle(style);
-  const branded = useBrandedRefresh(refreshing, onRefresh, refreshControl);
+  const themedRefresh = useThemedRefreshControl(refreshing, onRefresh, refreshControl);
   const fill = wrapper?.flex == null && wrapper?.maxHeight == null && wrapper?.height == null;
 
   return (
     <View
-      collapsable={false}
       style={[styles.host, fill ? styles.fill : null, wrapper]}
       onLayout={chainHandlers(bar.onLayout, onLayout)}
-      {...branded.panHandlers}
     >
       <FlatList
         ref={ref}
@@ -199,16 +208,13 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
           Platform.OS === "web" ? (showsVerticalScrollIndicator ?? true) : false
         }
         indicatorStyle={bar.indicatorStyle}
-        refreshControl={branded.refreshControl}
-        overScrollMode="never"
+        refreshControl={themedRefresh}
         style={[fill ? styles.fill : null, inner]}
-        onScroll={chainHandlers(branded.onScroll, bar.onScroll, onScroll)}
-        onScrollEndDrag={chainHandlers(branded.onScrollEndDrag, onScrollEndDrag)}
+        onScroll={chainHandlers(bar.onScroll, onScroll)}
         onContentSizeChange={chainHandlers(bar.onContentSizeChange, onContentSizeChange)}
         scrollEventThrottle={scrollEventThrottle ?? 16}
       />
       {bar.overlay}
-      {branded.hud}
     </View>
   );
 }) as <T>(props: ThemedFlatListProps<T> & { ref?: React.Ref<FlatList<T>> }) => React.ReactElement;
