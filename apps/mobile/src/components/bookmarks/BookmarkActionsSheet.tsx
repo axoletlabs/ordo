@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { useRouter } from "expo-router";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
 import { copyLink } from "../../lib/copy-link";
@@ -10,6 +10,7 @@ import { toast } from "../ui/toast-store";
 import { errorMessage } from "../../lib/error-message";
 import { bookmarkKey } from "../../hooks/use-selection";
 import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
+import { useOverlaySessionMode } from "../../lib/overlay-session-mode";
 import type { MenuAnchorRect } from "../../lib/menu-anchor";
 import type { BookmarkDto } from "@ordo/shared";
 
@@ -45,14 +46,10 @@ export function BookmarkActionsSheet({
 }: BookmarkActionsSheetProps) {
   const router = useRouter();
   const setContentKind = useSetContentKind();
-  const [mode, setMode] = useState<"menu" | "delete">("menu");
+  const [mode, setMode] = useOverlaySessionMode<"menu" | "delete">(visible, "menu");
   const bookmarkRef = React.useRef(bookmark);
   if (bookmark) bookmarkRef.current = bookmark;
   const displayBookmark = bookmark ?? bookmarkRef.current;
-
-  useEffect(() => {
-    if (visible) setMode("menu");
-  }, [visible]);
 
   useEffect(() => {
     if (!visible || !displayBookmark) return;

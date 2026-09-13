@@ -39,6 +39,7 @@ import { useServerInfo } from "../../hooks/queries";
 import { useFolderTokenStore } from "../../store/folder-tokens";
 import { folderKey } from "../../hooks/use-selection";
 import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
+import { useOverlaySessionMode } from "../../lib/overlay-session-mode";
 
 type Mode = "menu" | "rename" | "lockChoice" | "lockCredential" | "icon" | "delete" | "removePassword" | "removePasswordAccount";
 
@@ -59,7 +60,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
   const update = useUpdateFolder();
   const del = useDeleteFolder();
   const clearToken = useFolderTokenStore((state) => state.clear);
-  const [mode, setMode] = useState<Mode>("menu");
+  const [mode, setMode] = useOverlaySessionMode<Mode>(visible, "menu");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");

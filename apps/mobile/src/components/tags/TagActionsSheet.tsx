@@ -1,13 +1,14 @@
 /**
  * Edit / delete a tag from the catalogue list or a tag's own header.
  */
-import React, { useState } from "react";
+import React from "react";
 import type { TagDto } from "@ordo/shared";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { EditTagPanel } from "./EditTagPanel";
 import { useDeleteTag } from "../../hooks/use-tags";
 import { haptics } from "../../lib/haptics";
+import { useOverlaySessionMode } from "../../lib/overlay-session-mode";
 import type { MenuAnchorRect } from "../../lib/menu-anchor";
 
 type Mode = "menu" | "edit" | "delete";
@@ -28,14 +29,10 @@ export function TagActionsSheet({
   onDeleted,
 }: TagActionsSheetProps) {
   const deleteTag = useDeleteTag();
-  const [mode, setMode] = useState<Mode>("menu");
+  const [mode, setMode] = useOverlaySessionMode<Mode>(visible, "menu");
   const tagRef = React.useRef(tag);
   if (tag) tagRef.current = tag;
   const display = tag ?? tagRef.current;
-
-  React.useEffect(() => {
-    if (visible) setMode("menu");
-  }, [visible]);
 
   if (!display) return null;
 
