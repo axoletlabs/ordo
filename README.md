@@ -13,13 +13,13 @@
 
 ## What you get
 
-- **Bookmarks** with a reader that extracts the article, not the page chrome
-- **Folders** (optional password) and **tags**
-- **Import / export** as JSON, Netscape HTML, or CSV
-- **Accounts** with sessions, optional MFA, and profile pictures
-- **Your own backend** — SQLite, no extra services required
+- **Bookmarks** with a reader that pulls out the article
+- **Folders and tags** so things stay easy to find
+- **Import and export** as JSON, HTML, or CSV
+- **Accounts** with MFA and profile pictures if you want them
+- **Your own backend**, running on SQLite. Nothing else to install.
 
-There is no hosted Ordo cloud. You run the API, then point the app at it.
+There isn't a hosted Ordo cloud. You run the API, then point the app at it.
 
 ## Run the backend
 
@@ -41,7 +41,7 @@ pnpm --filter @ordo/server db:setup
 ```
 
 That generates the Prisma client and creates a SQLite database at
-`apps/server/prisma/ordo.db`. You do not need a `.env` file to start.
+`apps/server/prisma/ordo.db`. You don't need a `.env` file to start.
 
 ### 3. Start the server
 
@@ -57,7 +57,7 @@ curl http://localhost:3000/api/server/info
 
 You should see JSON with `name`, `version`, and `registrationEnabled`.
 
-For a production process (no file watching):
+To run it without file watching:
 
 ```bash
 pnpm --filter @ordo/shared build
@@ -67,32 +67,25 @@ pnpm --filter @ordo/server start
 ```
 
 Back up `apps/server/prisma/ordo.db` and `apps/server/.ordo-secret`. The secret
-file is created automatically if you do not set `JWT_SECRET`.
+file is created on first start if you don't set `JWT_SECRET`.
 
-### 4. Create an account, then lock registration
+### 4. Create an account
 
-Registration is **on** by default. Open the app, connect to your server, and
-sign up.
+Open the app, connect to your server, and sign up. Registration is on by default.
 
-After you have an account, copy `apps/server/.env.example` to
-`apps/server/.env`, set `REGISTRATION_ENABLED=false`, and restart the server.
+If you don't want anyone else creating an account, copy
+`apps/server/.env.example` to `apps/server/.env`, set
+`REGISTRATION_ENABLED=false`, and restart.
 
-If you skip SMTP, one-time email codes are printed in the **server console**.
+If you skip SMTP, one-time email codes are printed in the server console.
 
 ## Point the app at your server
 
 1. Install the Android APK from [Releases](https://github.com/axoletlabs/ordo/releases).
-2. On the login screen, tap the server URL (it starts as `http://localhost:3000`).
-3. Enter the URL of the backend you started, then register or sign in.
+2. On the login screen, tap the server URL and enter yours.
+3. Register or sign in.
 
-| Where the app runs | Server URL |
-| --- | --- |
-| Same computer, or iOS simulator | `http://localhost:3000` |
-| Android emulator | `http://10.0.2.2:3000` |
-| Phone on your Wi-Fi | `http://YOUR_LAN_IP:3000` |
-| Reverse proxy / public host | `https://your.domain` |
-
-You can change the URL later from **Settings → Server**.
+You can change the URL later under Settings.
 
 To run the app from source instead of the APK:
 
@@ -108,15 +101,15 @@ only when you want to change a default.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `3000` | HTTP port |
-| `DATABASE_URL` | `file:./ordo.db` | SQLite file (resolved under `apps/server/prisma/`) |
-| `JWT_SECRET` | auto-saved to `.ordo-secret` | Session secret — keep this file |
+| `DATABASE_URL` | `file:./ordo.db` | SQLite file (under `apps/server/prisma/`) |
+| `JWT_SECRET` | auto-saved to `.ordo-secret` | Session secret. Keep this file. |
 | `REGISTRATION_ENABLED` | `true` | Allow new sign-ups |
 | `EMAIL_VERIFICATION_REQUIRED` | `false` | Require a code on sign-up |
-| `SMTP_URL` | unset | Mail for verification / reset codes. Unset → codes go to the console |
+| `SMTP_URL` | unset | Mail for verification and reset codes. Leave empty to print codes in the console. |
 | `SMTP_FROM` | `ordo <noreply@ordo.local>` | From address when SMTP is set |
 | `TRUST_PROXY` | `0` | Set to `1` behind nginx, Caddy, or Cloudflare |
 | `MFA_REQUIRED` | `false` | Require MFA for every account |
-| `CORS_ALLOWED_ORIGINS` | reflect the request | Comma-separated origins; empty allows the caller |
+| `CORS_ALLOWED_ORIGINS` | reflect the request | Comma-separated origins. Empty allows the caller. |
 
 ## Layout
 
