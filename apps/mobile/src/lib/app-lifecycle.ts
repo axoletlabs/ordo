@@ -10,6 +10,7 @@ import { AppState, Platform } from "react-native";
 import type { AppStateStatus } from "react-native";
 import { focusManager } from "@tanstack/react-query";
 import { cancelProactiveRefresh, ensureFreshAccessToken } from "./api/client";
+import { useAuthStore } from "../store/auth";
 
 let started = false;
 let lastState: AppStateStatus = AppState.currentState;
@@ -21,6 +22,7 @@ function setNativeFocused(focused: boolean) {
 
 async function onBecameActive() {
   try {
+    await useAuthStore.getState().reconcileShareSession();
     await ensureFreshAccessToken();
   } catch {
     /* ensureFresh already swallows refresh failures into a result union */

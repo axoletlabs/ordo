@@ -138,6 +138,7 @@ function RootShell() {
             folderId={null}
             allowFolderSelection
             initialUrl={sharedUrl ?? undefined}
+            shareIntake
           />
         ) : null}
         <UpdateReadyWatcher />
@@ -174,7 +175,13 @@ export default function RootLayout() {
         await useAuthStore.getState().hydrate();
       } catch (error) {
         console.warn("Auth bootstrap failed", error);
-        useAuthStore.setState({ user: null, tokens: null, accessExpiresAt: null, status: "unauthenticated" });
+        useAuthStore.setState({
+          user: null,
+          tokens: null,
+          accessExpiresAt: null,
+          sessionUpdatedAt: null,
+          status: "unauthenticated",
+        });
       } finally {
         setBooted(true);
       }

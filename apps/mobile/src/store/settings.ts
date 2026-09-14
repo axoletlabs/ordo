@@ -12,7 +12,7 @@ import {
   removeServerHistoryEntry,
   type ServerHistoryEntry,
 } from "../lib/server-history";
-import { syncQuickShareTargetEnabled } from "../lib/share-targets";
+import { patchQuickShareSessionServerUrl, syncQuickShareFlags } from "../lib/share-targets";
 import { prefsGet, prefsSet, StorageKeys } from "../lib/storage";
 import type { ThemeMode } from "../theme/theme";
 
@@ -128,7 +128,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       hydrated: true,
     });
     applyHapticsEnabled(get().hapticsEnabled);
-    void syncQuickShareTargetEnabled(get().shareShowQuickAction);
+    void syncQuickShareFlags({
+      quickBookmark: get().shareQuickBookmark,
+      showAlongside: get().shareShowQuickAction,
+    });
   },
 
   setServerUrl: async (url) => {
@@ -136,6 +139,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const serverHistory = recordServerSwitch(get().serverHistory, previous, url);
     set({ serverUrl: url, serverHistory });
     await prefsSet(StorageKeys.SETTINGS, { ...get(), serverUrl: url, serverHistory });
+    void patchQuickShareSessionServerUrl(url);
   },
   removeServerHistory: (url) => {
     const serverHistory = removeServerHistoryEntry(get().serverHistory, url);
@@ -182,13 +186,16 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const shareShowQuickAction = shareQuickBookmark ? get().shareShowQuickAction : false;
     set({ shareQuickBookmark, shareShowQuickAction });
     void prefsSet(StorageKeys.SETTINGS, { ...get(), shareQuickBookmark, shareShowQuickAction });
-    void syncQuickShareTargetEnabled(shareShowQuickAction);
+    void syncQuickShareFlags({ quickBookmark: shareQuickBookmark, showAlongside: shareShowQuickAction });
   },
   setShareShowQuickAction: (on) => {
     const shareShowQuickAction = on && get().shareQuickBookmark;
     set({ shareShowQuickAction });
     void prefsSet(StorageKeys.SETTINGS, { ...get(), shareShowQuickAction });
-    void syncQuickShareTargetEnabled(shareShowQuickAction);
+    void syncQuickShareFlags({
+      quickBookmark: get().shareQuickBookmark,
+      showAlongside: shareShowQuickAction,
+    });
   },
   setHapticsEnabled: (hapticsEnabled) => {
     set({ hapticsEnabled });

@@ -27,8 +27,9 @@ import { errorMessage, isFolderProtected } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
 import { prefetchExtraction } from "../../lib/prefetch-extraction";
 import { toast } from "../ui/toast-store";
-import { spacing } from "../../theme/tokens";
+import { spacing, radius } from "../../theme/tokens";
 import { useTheme } from "../../theme/ThemeProvider";
+import { domainFromUrl } from "../../lib/format";
 
 export interface AddBookmarkSheetProps {
   visible: boolean;
@@ -40,6 +41,12 @@ export interface AddBookmarkSheetProps {
   initialUrl?: string;
   /** Tags preselected for the new bookmark (e.g. from a tag view). */
   initialTagIds?: string[];
+  /**
+   * Share-sheet intake: URL is already known, so don't autofocus the keyboard,
+   * don't dismiss on a scrim tap (that returns to the sender on Android), and
+   * show the link as a confirmed preview until the user edits it.
+   */
+  shareIntake?: boolean;
 }
 
 const ROOT_DESTINATION = "__bookmarks__";
@@ -61,6 +68,7 @@ export function AddBookmarkSheet({
   allowFolderSelection = false,
   initialUrl,
   initialTagIds = NO_TAGS,
+  shareIntake = false,
 }: AddBookmarkSheetProps) {
   const { palette } = useTheme();
   const create = useCreateBookmark();
@@ -72,6 +80,7 @@ export function AddBookmarkSheet({
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const [createTagOpen, setCreateTagOpen] = useState(false);
   const [showTagPicker, setShowTagPicker] = useState(false);
+  const [urlEditing, setUrlEditing] = useState(false);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>(initialTagIds);
   const [selectedDestination, setSelectedDestination] = useState(folderId ?? ROOT_DESTINATION);
   const selectedFolderId = selectedDestination === ROOT_DESTINATION ? null : selectedDestination;
@@ -105,6 +114,7 @@ export function AddBookmarkSheet({
     setError("");
     setLockedFolderId(null);
     setShowTagPicker(false);
+    setUrlEditing(false);
     setSelectedTagIds(initialTagIds);
   }, [folderId, initialUrl, initialTagIds, visible]);
 
@@ -120,6 +130,7 @@ export function AddBookmarkSheet({
     setLockedFolderId(null);
     setSelectedDestination(folderId ?? ROOT_DESTINATION);
     setShowTagPicker(false);
+    setUrlEditing(false);
     setSelectedTagIds(initialTagIds);
   };
 
@@ -134,6 +145,7 @@ export function AddBookmarkSheet({
     const trimmed = url.trim();
     if (!trimmed) {
       setError("Enter a URL.");
+      if (shareIntake) setUrlEditing(true);
       return;
     }
     let normalized = trimmed;
@@ -142,6 +154,7 @@ export function AddBookmarkSheet({
       new URL(normalized);
     } catch {
       setError("Enter a valid URL.");
+      if (shareIntake) setUrlEditing(true);
       return;
     }
     if (selectedFolderId && !useFolderTokenStore.getState().get(selectedFolderId)) {
@@ -169,11 +182,13 @@ export function AddBookmarkSheet({
   const lockedFolder = folders?.find((folder) => folder.id === lockedFolderId);
 
   const unlocking = Boolean(lockedFolderId);
+  const showUrlPreview = shareIntake && !urlEditing && Boolean(url.trim());
 
   return (
     <>
       <FloatingPanel
         visible={visible}
+        dismissible={!shareIntake}
         onDismiss={() => {
           if (unlocking) setLockedFolderId(null);
           else close();
@@ -211,19 +226,50 @@ export function AddBookmarkSheet({
               </Text>
             ) : null}
 
-            <Input
-              value={url}
-              onChangeText={setUrl}
-              placeholder="Paste a link"
-              keyboardType="url"
-              autoCapitalize="none"
-              autoCorrect={false}
-              autoFocus
-              error={error || undefined}
-              icon={<Ionicons name="link-outline" size={18} color={palette.textTertiary} />}
-              onSubmitEditing={() => void submit()}
-              returnKeyType="done"
-            />
+            {showUrlPreview ? (
+              <PressableScale
+                accessibilityRole="button"
+                accessibilityLabel="Edit link"
+                onPress={() => setUrlEditing(true)}
+                style={[
+                  styles.urlPreview,
+                  {
+                    borderColor: error ? palette.danger : palette.border,
+                    backgroundColor: palette.background,
+                  },
+                ]}
+              >
+                <Ionicons name="link-outline" size={18} color={palette.textTertiary} />
+                <View style={styles.urlPreviewText}>
+                  <Text variant="subhead" numberOfLines={1}>
+                    {domainFromUrl(url) || url}
+                  </Text>
+                  <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
+                    {url}
+                  </Text>
+                </View>
+                <Ionicons name="pencil-outline" size={16} color={palette.textTertiary} />
+              </PressableScale>
+            ) : (
+              <Input
+                value={url}
+                onChangeText={setUrl}
+                placeholder="Paste a link"
+                keyboardType="url"
+                autoCapitalize="none"
+                autoCorrect={false}
+                autoFocus={!shareIntake || urlEditing}
+                error={error || undefined}
+                icon={<Ionicons name="link-outline" size={18} color={palette.textTertiary} />}
+                onSubmitEditing={() => void submit()}
+                returnKeyType="done"
+              />
+            )}
+            {showUrlPreview && error ? (
+              <Text variant="footnote" color="danger" style={styles.urlPreviewError}>
+                {error}
+              </Text>
+            ) : null}
 
             <View style={styles.tagsRow}>
               <Text variant="label" color="tertiary">Tags</Text>
@@ -304,6 +350,18 @@ const styles = StyleSheet.create({
     gap: spacing[12],
     marginBottom: spacing[8],
   },
+  urlPreview: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[8],
+    minHeight: 46,
+    paddingHorizontal: spacing[12],
+    paddingVertical: spacing[8],
+    borderWidth: 1,
+    borderRadius: radius.sm,
+  },
+  urlPreviewText: { flex: 1, minWidth: 0, gap: spacing[2] },
+  urlPreviewError: { marginTop: spacing[6] },
   tagsRow: {
     flexDirection: "row",
     alignItems: "center",

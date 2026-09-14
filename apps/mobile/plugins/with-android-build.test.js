@@ -9,6 +9,8 @@ const {
   LIGHT_SYSTEM_BARS_BOOL,
   QUICK_SHARE_ENABLED_FILE,
   QUICK_SHARE_FLAG_FILE,
+  QUICK_SHARE_BOOKMARK_FILE,
+  QUICK_SHARE_SESSION_FILE,
   QUICK_SHARE_LABEL,
   QUICK_SHARE_SHORTCUT_ID,
   SAVE_SHARE_LABEL,
@@ -20,6 +22,7 @@ const {
   patchMainActivityForShareTargets,
   quickShareCategory,
   quickShareReceiverKotlin,
+  quickShareSaveKotlin,
   shareIntakeKotlin,
   shareReceiverActivity,
   shareReceiverAlias,
@@ -127,7 +130,11 @@ test("share intake uses sidecar files that match the JS constants", () => {
   assert.match(source, /package com\.axolet\.ordo/);
   assert.match(source, new RegExp(`ENABLED_FILE = "${QUICK_SHARE_ENABLED_FILE}"`));
   assert.match(source, new RegExp(`FLAG_FILE = "${QUICK_SHARE_FLAG_FILE}"`));
-  assert.match(source, /QuickShareReceiverActivity::class\.java/);
+  assert.match(source, new RegExp(`BOOKMARK_FILE = "${QUICK_SHARE_BOOKMARK_FILE}"`));
+  assert.match(source, new RegExp(`SESSION_FILE = "${QUICK_SHARE_SESSION_FILE}"`));
+  assert.match(source, /handleIncoming/);
+  assert.match(source, /isQuickDefault/);
+  assert.match(source, /QuickShareSave\.save/);
   assert.match(source, /COMPONENT_ENABLED_STATE_DISABLED/);
   assert.equal(SAVE_SHARE_LABEL, 'Save');
   assert.equal(QUICK_SHARE_LABEL, 'Quick Save');
@@ -179,12 +186,26 @@ test("shortcuts.xml points the Quick Save share-target at the quick activity", (
   assert.match(xml, new RegExp(quickShareCategory('com.axolet.ordo').replace(/\./g, '\\.')));
 });
 
-test("share receivers forward into MainActivity and mark only the quick target", () => {
+test("share receivers hand off to ShareIntake so Quick Save can stay off-screen", () => {
   const share = shareReceiverKotlin('com.axolet.ordo');
   const quick = quickShareReceiverKotlin('com.axolet.ordo');
-  assert.match(share, /ShareIntake\.forwardToMain\(this, false\)/);
-  assert.match(quick, /ShareIntake\.forwardToMain\(this, true\)/);
+  assert.match(share, /ShareIntake\.handleIncoming\(this, false\)/);
+  assert.match(quick, /ShareIntake\.handleIncoming\(this, true\)/);
   assert.doesNotMatch(share, /markQuick/);
+});
+
+test("Quick Save posts from the translucent activity using the session sidecar", () => {
+  const source = quickShareSaveKotlin('com.axolet.ordo');
+  assert.match(source, /package com\.axolet\.ordo/);
+  assert.match(source, /\/api\/bookmarks/);
+  assert.match(source, /\/api\/auth\/refresh/);
+  assert.match(source, /x-client-type/);
+  assert.match(source, /x-refresh-token/);
+  assert.match(source, /Saved to Bookmarks/);
+  assert.match(source, /Sign in to save bookmarks/);
+  assert.match(source, /ShareIntake\.SESSION_FILE/);
+  assert.match(source, /Theme\.Translucent|forwardToMain/);
+  assert.match(source, /https\?:\/\//);
 });
 
 test("MainActivity syncs the disabled Quick Bookmark target on create and pause", () => {

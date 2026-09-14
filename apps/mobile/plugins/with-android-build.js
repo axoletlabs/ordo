@@ -15,6 +15,7 @@ const path = require('node:path');
 
 const { assignStylesValue, getAppThemeGroup } = AndroidConfig.Styles;
 const { assignColorValue } = AndroidConfig.Colors;
+const quickShareSaveKotlin = require('./quick-share-save-kotlin');
 
 const SCROLLBAR_THUMB_XML = `<?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
@@ -52,6 +53,8 @@ const SHARE_RECEIVER_ACTIVITIES = [SHARE_RECEIVER_ACTIVITY, QUICK_SHARE_RECEIVER
 const SHARE_RECEIVER_ALIASES = [SHARE_RECEIVER_DEFAULT_ALIAS, SHARE_RECEIVER_SAVE_ALIAS];
 const QUICK_SHARE_ENABLED_FILE = 'ordo-quick-share-enabled';
 const QUICK_SHARE_FLAG_FILE = 'ordo-quick-share';
+const QUICK_SHARE_BOOKMARK_FILE = 'ordo-quick-share-bookmark';
+const QUICK_SHARE_SESSION_FILE = 'ordo-quick-share-session';
 const SAVE_SHARE_LABEL = 'Save';
 const QUICK_SHARE_LABEL = 'Quick Save';
 const QUICK_SHARE_SHORTCUT_ID = 'ordo_quick_bookmark';
@@ -133,6 +136,8 @@ import java.io.File
 internal object ShareIntake {
   const val ENABLED_FILE = "${QUICK_SHARE_ENABLED_FILE}"
   const val FLAG_FILE = "${QUICK_SHARE_FLAG_FILE}"
+  const val BOOKMARK_FILE = "${QUICK_SHARE_BOOKMARK_FILE}"
+  const val SESSION_FILE = "${QUICK_SHARE_SESSION_FILE}"
   const val SHORTCUT_ID = "${QUICK_SHARE_SHORTCUT_ID}"
   const val CATEGORY = "${category}"
   const val LABEL = "${QUICK_SHARE_LABEL}"
@@ -142,6 +147,40 @@ internal object ShareIntake {
   private val main = Handler(Looper.getMainLooper())
   private var filesWatcher: FileObserver? = null
   private var cacheWatcher: FileObserver? = null
+
+  @JvmStatic
+  fun handleIncoming(activity: Activity, quick: Boolean) {
+    if (!quick && !isQuickDefault(activity)) {
+      forwardToMain(activity, false)
+      return
+    }
+    QuickShareSave.save(activity, quick)
+  }
+
+  @JvmStatic
+  fun isQuickDefault(context: Context): Boolean {
+    return sidecarExists(context, BOOKMARK_FILE) && !sidecarExists(context, ENABLED_FILE)
+  }
+
+  @JvmStatic
+  fun sidecarExists(context: Context, name: String): Boolean {
+    return File(context.filesDir, name).exists() || File(context.cacheDir, name).exists()
+  }
+
+  @JvmStatic
+  fun readSidecar(context: Context, name: String): String? {
+    val files = File(context.filesDir, name)
+    if (files.exists()) return files.readText()
+    val cache = File(context.cacheDir, name)
+    if (cache.exists()) return cache.readText()
+    return null
+  }
+
+  @JvmStatic
+  fun writeSidecar(context: Context, name: String, text: String) {
+    File(context.filesDir, name).writeText(text)
+    File(context.cacheDir, name).writeText(text)
+  }
 
   @JvmStatic
   fun forwardToMain(activity: Activity, quick: Boolean) {
@@ -174,7 +213,7 @@ internal object ShareIntake {
 
   @JvmStatic
   fun syncQuickTarget(context: Context) {
-    val enabled = enabledFileExists(context)
+    val enabled = sidecarExists(context, ENABLED_FILE)
     setEnabled(context, DEFAULT_ALIAS, !enabled)
     setEnabled(context, SAVE_ALIAS, enabled)
     setEnabled(context, QuickShareReceiverActivity::class.java.name, enabled)
@@ -191,11 +230,6 @@ internal object ShareIntake {
       )
     } catch (_: Exception) {
     }
-  }
-
-  private fun enabledFileExists(context: Context): Boolean {
-    return File(context.filesDir, ENABLED_FILE).exists() ||
-      File(context.cacheDir, ENABLED_FILE).exists()
   }
 
   private fun watch(context: Context) {
@@ -259,7 +293,7 @@ import android.os.Bundle
 class ShareReceiverActivity : Activity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    ShareIntake.forwardToMain(this, false)
+    ShareIntake.handleIncoming(this, false)
   }
 }
 `;
@@ -274,7 +308,7 @@ import android.os.Bundle
 class QuickShareReceiverActivity : Activity() {
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
-    ShareIntake.forwardToMain(this, true)
+    ShareIntake.handleIncoming(this, true)
   }
 }
 `;
@@ -612,6 +646,7 @@ const withAndroidBuild = (config) => {
       await fs.writeFile(path.join(valuesNightDir, 'bools.xml'), DARK_SYSTEM_BARS_BOOL_XML);
 
       await fs.writeFile(path.join(sourceDir, 'ShareIntake.kt'), shareIntakeKotlin(packageName));
+      await fs.writeFile(path.join(sourceDir, 'QuickShareSave.kt'), quickShareSaveKotlin(packageName));
       await fs.writeFile(
         path.join(sourceDir, 'ShareReceiverActivity.kt'),
         shareReceiverKotlin(packageName)
@@ -786,6 +821,8 @@ module.exports.APP_WINDOW_CHROME_API29_ITEMS = APP_WINDOW_CHROME_API29_ITEMS;
 module.exports.LIGHT_SYSTEM_BARS_BOOL = LIGHT_SYSTEM_BARS_BOOL;
 module.exports.QUICK_SHARE_ENABLED_FILE = QUICK_SHARE_ENABLED_FILE;
 module.exports.QUICK_SHARE_FLAG_FILE = QUICK_SHARE_FLAG_FILE;
+module.exports.QUICK_SHARE_BOOKMARK_FILE = QUICK_SHARE_BOOKMARK_FILE;
+module.exports.QUICK_SHARE_SESSION_FILE = QUICK_SHARE_SESSION_FILE;
 module.exports.SAVE_SHARE_LABEL = SAVE_SHARE_LABEL;
 module.exports.QUICK_SHARE_LABEL = QUICK_SHARE_LABEL;
 module.exports.QUICK_SHARE_SHORTCUT_ID = QUICK_SHARE_SHORTCUT_ID;
@@ -794,6 +831,7 @@ module.exports.SHARE_RECEIVER_SAVE_ALIAS = SHARE_RECEIVER_SAVE_ALIAS;
 module.exports.quickShareCategory = quickShareCategory;
 module.exports.shortcutsXml = shortcutsXml;
 module.exports.shareIntakeKotlin = shareIntakeKotlin;
+module.exports.quickShareSaveKotlin = quickShareSaveKotlin;
 module.exports.shareReceiverKotlin = shareReceiverKotlin;
 module.exports.quickShareReceiverKotlin = quickShareReceiverKotlin;
 module.exports.shareReceiverActivity = shareReceiverActivity;

@@ -13,7 +13,9 @@ import { useAuthStore } from "../store/auth";
 import { useIncomingShareStore } from "../store/incoming-share";
 import { useSettingsStore } from "../store/settings";
 
-/** Bridges Android ACTION_SEND intents into Ordo's existing bookmark flow. */
+/** Bridges Android ACTION_SEND intents into Ordo's existing bookmark flow.
+ *  Quick Save usually never reaches here: the translucent receiver POSTs
+ *  natively. This handler is the Save sheet plus the JS fallback. */
 export function IncomingShareHandler() {
   const setPendingUrl = useIncomingShareStore((state) => state.setPendingUrl);
   const { hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntentContext();
