@@ -421,6 +421,9 @@ const APP_WINDOW_CHROME_API27_ITEMS = [
 const APP_WINDOW_CHROME_API29_ITEMS = [
   ['android:enforceStatusBarContrast', 'false'],
   ['android:enforceNavigationBarContrast', 'false'],
+  // The app paints its own light/dark/AMOLED/sepia palettes. Night-mode force
+  // dark would invert parchment reader pages into unreadably dark surfaces.
+  ['android:forceDarkAllowed', 'false'],
 ];
 
 function versionCodeForAbi(base, abi) {
@@ -504,6 +507,8 @@ const withAndroidBuild = (config) => {
     if (app) {
       if (!app.$) app.$ = {};
       app.$['android:usesCleartextTraffic'] = 'true';
+      // Own light/dark/AMOLED/sepia palettes — night-mode force-dark inverts parchment.
+      app.$['android:forceDarkAllowed'] = 'false';
 
       const mainActivity = AndroidConfig.Manifest.getMainActivityOrThrow(c.modResults);
       mainActivity.$['android:launchMode'] = 'singleTask';

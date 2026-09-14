@@ -70,6 +70,7 @@ test("keeps system bars transparent or splash-colored so reloads cannot flash li
   assert.deepEqual(APP_WINDOW_CHROME_API29_ITEMS, [
     ['android:enforceStatusBarContrast', 'false'],
     ['android:enforceNavigationBarContrast', 'false'],
+    ['android:forceDarkAllowed', 'false'],
   ]);
 });
 

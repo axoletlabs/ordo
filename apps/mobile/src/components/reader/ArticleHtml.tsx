@@ -81,12 +81,17 @@ function buildTagsStyles(
     borderWidth: StyleSheet.hairlineWidth,
   };
 
+  const body = {
+    fontFamily: bodyFont(),
+    fontSize: base,
+    lineHeight: Math.round(base * 1.65),
+    color: palette.textSecondary,
+  };
+
   return {
+    body,
     p: {
-      fontFamily: bodyFont(),
-      fontSize: base,
-      lineHeight: Math.round(base * 1.65),
-      color: palette.textSecondary,
+      ...body,
       marginTop: spacing[14],
       textAlign: "left",
     },
@@ -374,6 +379,22 @@ export const ArticleHtml = React.memo(function ArticleHtml({
     () => buildTagsStyles(palette, family, base),
     [palette, family, base],
   );
+  // Default RN text follows the activity (often night-mode white). Untagged
+  // nodes would then paint white ink on parchment. Pin every run of text to
+  // the reader palette so light/sepia never mix with the app's dark scheme.
+  const baseStyle = useMemo(
+    () => ({
+      color: palette.textSecondary,
+      fontFamily: resolveFont(family),
+      fontSize: base,
+      lineHeight: Math.round(base * 1.65),
+    }),
+    [palette.textSecondary, family, base],
+  );
+  const defaultTextProps = useMemo(
+    () => ({ selectable: true as const, style: { color: palette.textSecondary } }),
+    [palette.textSecondary],
+  );
 
   // List markers should match the article's font (and accent color).
   const markerTextStyle = useMemo(
@@ -447,13 +468,14 @@ export const ArticleHtml = React.memo(function ArticleHtml({
     <RenderHTML
       source={{ html }}
       contentWidth={contentWidth}
+      baseStyle={baseStyle}
       tagsStyles={tagsStyles}
       renderersProps={renderersProps}
       renderers={ARTICLE_RENDERERS}
       domVisitors={domVisitors}
       onTTreeChange={handleTreeChange}
       systemFonts={SYSTEM_FONTS}
-      defaultTextProps={{ selectable: true }}
+      defaultTextProps={defaultTextProps}
     />
   );
 });

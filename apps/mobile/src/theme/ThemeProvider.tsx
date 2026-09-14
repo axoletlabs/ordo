@@ -84,6 +84,8 @@ export function useTheme(): ThemeContextValue {
  * Overrides the ambient palette for a subtree — e.g. the reader surface,
  * which themes itself independently of the app theme. Every nested
  * `useTheme()` consumer (Text, sheets, buttons…) picks up the override.
+ * Overlays published through OverlayPortal must re-provide this palette
+ * themselves; the overlay host is not a descendant of this provider.
  */
 export function ThemeOverrideProvider({
   palette,

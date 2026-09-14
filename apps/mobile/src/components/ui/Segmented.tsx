@@ -32,6 +32,10 @@ function Cell<T extends string>({
 }) {
   const { palette } = useTheme();
   const a = useSharedValue(active ? 1 : 0);
+  const idleColor = useSharedValue(palette.textTertiary);
+  const activeColor = useSharedValue(palette.accent);
+  idleColor.value = palette.textTertiary;
+  activeColor.value = palette.accent;
 
   React.useEffect(() => {
     a.value = withSpring(active ? 1 : 0, springs.snappy);
@@ -43,7 +47,7 @@ function Cell<T extends string>({
   }));
 
   const labelStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(a.value, [0, 1], [palette.textTertiary, palette.accent]),
+    color: interpolateColor(a.value, [0, 1], [idleColor.value, activeColor.value]),
   }));
 
   return (

@@ -5,9 +5,14 @@
  *
  * Layer state lives in a sibling so publishing a menu does not re-render
  * the whole app tree (that hitch made closes look like a jump).
+ *
+ * This is not React's createPortal: the node is re-parented under OverlayHost,
+ * so ThemeOverrideProvider in the publisher (the reader, for example) is not
+ * an ancestor. OverlayPortal snapshots that palette and re-provides it here.
  */
 import React, { createContext, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
+import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 
 type OverlayLayer = { id: string; node: React.ReactNode };
 
@@ -66,16 +71,20 @@ function OverlayLayers({ dispatchRef }: { dispatchRef: React.MutableRefObject<Ov
 /** Render `children` into the root overlay host. Falls back in-place if none. */
 export function OverlayPortal({ children }: { children: React.ReactNode }) {
   const ctx = useContext(OverlayContext);
+  const { palette } = useTheme();
   const idRef = useRef<string>();
   if (!idRef.current) {
     nextId += 1;
     idRef.current = `overlay-${nextId}`;
   }
   const id = idRef.current;
+  const node = (
+    <ThemeOverrideProvider palette={palette}>{children}</ThemeOverrideProvider>
+  );
 
   useLayoutEffect(() => {
     if (!ctx) return;
-    ctx.upsert(id, children);
+    ctx.upsert(id, node);
   });
 
   useLayoutEffect(() => {

@@ -30,6 +30,12 @@ export interface ToggleProps {
 export function Toggle({ value, onValueChange, disabled }: ToggleProps) {
   const { palette } = useTheme();
   const pressed = useSharedValue(value ? 1 : 0);
+  const offFill = useSharedValue(palette.surfaceSecondary);
+  const onFill = useSharedValue(palette.accent);
+  const offBorder = useSharedValue(palette.borderStrong);
+  offFill.value = palette.surfaceSecondary;
+  onFill.value = palette.accent;
+  offBorder.value = palette.borderStrong;
 
   React.useEffect(() => {
     pressed.value = withSpring(value ? 1 : 0, springs.snappy);
@@ -42,8 +48,8 @@ export function Toggle({ value, onValueChange, disabled }: ToggleProps) {
   }, [disabled, onValueChange, value]);
 
   const trackStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(pressed.value, [0, 1], [palette.surfaceSecondary, palette.accent]),
-    borderColor: interpolateColor(pressed.value, [0, 1], [palette.borderStrong, palette.accent]),
+    backgroundColor: interpolateColor(pressed.value, [0, 1], [offFill.value, onFill.value]),
+    borderColor: interpolateColor(pressed.value, [0, 1], [offBorder.value, onFill.value]),
   }));
 
   const knobStyle = useAnimatedStyle(() => ({

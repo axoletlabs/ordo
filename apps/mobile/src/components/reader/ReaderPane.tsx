@@ -50,6 +50,7 @@ import { LockPrompt } from "../bookmarks/LockPrompt";
 import { READER_BODY_SIZE, resolveReaderFont } from "./reader-typography";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 import { resolveReaderPalette } from "../../theme/reader-theme";
+import { pinSystemChrome } from "../../theme/pin-system-chrome";
 import { resolvePalette, type Palette } from "../../theme/theme";
 import { scrollbarColors } from "../../theme/scrollbar";
 import { queryClient } from "../../lib/query-client";
@@ -337,6 +338,26 @@ function ReaderPaneInner({
     ? resolvePalette("dark", settingsAmoled, "dark").background
     : palette.background;
   const effectiveDark = palette.mode === "dark";
+
+  // Full-screen reader: match the native color scheme to the reader palette
+  // so Android night-mode force-dark cannot invert parchment pages. Embedded
+  // split-view keeps the app scheme so the library pane does not flash.
+  useEffect(() => {
+    if (embedded || showWebsiteView) return;
+    if (typeof Appearance.setColorScheme === "function") {
+      Appearance.setColorScheme(readerPalette.mode);
+    }
+    void pinSystemChrome(readerPalette).catch(() => {});
+    return () => {
+      const { themeMode, amoled } = useSettingsStore.getState();
+      const app = resolvePalette(themeMode, amoled, Appearance.getColorScheme());
+      if (typeof Appearance.setColorScheme === "function") {
+        Appearance.setColorScheme(themeMode === "system" ? null : themeMode);
+      }
+      void pinSystemChrome(app).catch(() => {});
+      setStatusBarStyle(app.mode === "dark" ? "light" : "dark");
+    };
+  }, [embedded, showWebsiteView, readerPalette]);
 
   useEffect(() => {
     setSurface(initialSurface === "browser" ? "browser" : "auto");
