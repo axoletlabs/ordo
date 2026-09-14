@@ -11,6 +11,9 @@ const {
   QUICK_SHARE_FLAG_FILE,
   QUICK_SHARE_LABEL,
   QUICK_SHARE_SHORTCUT_ID,
+  SAVE_SHARE_LABEL,
+  SHARE_RECEIVER_DEFAULT_ALIAS,
+  SHARE_RECEIVER_SAVE_ALIAS,
   VERSION_CODE_ABI_STRIDE,
   applyCmakePath,
   applyVersionCode,
@@ -18,6 +21,8 @@ const {
   quickShareCategory,
   quickShareReceiverKotlin,
   shareIntakeKotlin,
+  shareReceiverActivity,
+  shareReceiverAlias,
   shareReceiverKotlin,
   shortcutsXml,
   versionCodeForAbi,
@@ -123,7 +128,36 @@ test("share intake uses sidecar files that match the JS constants", () => {
   assert.match(source, new RegExp(`FLAG_FILE = "${QUICK_SHARE_FLAG_FILE}"`));
   assert.match(source, /QuickShareReceiverActivity::class\.java/);
   assert.match(source, /COMPONENT_ENABLED_STATE_DISABLED/);
-  assert.equal(QUICK_SHARE_LABEL, 'Quick Bookmark');
+  assert.equal(SAVE_SHARE_LABEL, 'Save');
+  assert.equal(QUICK_SHARE_LABEL, 'Quick Save');
+});
+
+test("alongside share targets are labeled Save and Quick Save", () => {
+  const source = shareIntakeKotlin('com.axolet.ordo');
+  assert.match(source, /LABEL = "Quick Save"/);
+  assert.match(source, /DEFAULT_ALIAS = "com\.axolet\.ordo\.ShareReceiverDefault"/);
+  assert.match(source, /SAVE_ALIAS = "com\.axolet\.ordo\.ShareReceiverSave"/);
+  assert.match(source, /setEnabled\(context, DEFAULT_ALIAS, !enabled\)/);
+  assert.match(source, /setEnabled\(context, SAVE_ALIAS, enabled\)/);
+
+  const save = shareReceiverAlias(SHARE_RECEIVER_SAVE_ALIAS, {
+    'android:label': SAVE_SHARE_LABEL,
+    'android:enabled': 'false',
+  });
+  assert.equal(save.$['android:label'], 'Save');
+  assert.equal(save.$['android:targetActivity'], '.ShareReceiverActivity');
+
+  const quick = shareReceiverActivity(
+    '.QuickShareReceiverActivity',
+    { 'android:label': QUICK_SHARE_LABEL, 'android:enabled': 'false' },
+    { defaultCategory: false }
+  );
+  assert.equal(quick.$['android:label'], 'Quick Save');
+  assert.equal(quick['intent-filter'][0].category, undefined);
+
+  const receiver = shareReceiverActivity('.ShareReceiverActivity', {}, { intentFilter: false });
+  assert.equal(receiver['intent-filter'], undefined);
+  assert.equal(SHARE_RECEIVER_DEFAULT_ALIAS, '.ShareReceiverDefault');
 });
 
 test("share intake publishes a sharing shortcut so Android 11+ can show both actions", () => {
@@ -137,7 +171,7 @@ test("share intake publishes a sharing shortcut so Android 11+ can show both act
   assert.match(source, /cacheDir/);
 });
 
-test("shortcuts.xml points the Quick Bookmark share-target at the quick activity", () => {
+test("shortcuts.xml points the Quick Save share-target at the quick activity", () => {
   const xml = shortcutsXml('com.axolet.ordo');
   assert.match(xml, /com\.axolet\.ordo\.QuickShareReceiverActivity/);
   assert.match(xml, /android:mimeType="text\/plain"/);

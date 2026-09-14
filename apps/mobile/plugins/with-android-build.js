@@ -46,10 +46,14 @@ const DARK_SYSTEM_BARS_BOOL_XML = `<?xml version="1.0" encoding="utf-8"?>
 
 const SHARE_RECEIVER_ACTIVITY = '.ShareReceiverActivity';
 const QUICK_SHARE_RECEIVER_ACTIVITY = '.QuickShareReceiverActivity';
+const SHARE_RECEIVER_DEFAULT_ALIAS = '.ShareReceiverDefault';
+const SHARE_RECEIVER_SAVE_ALIAS = '.ShareReceiverSave';
 const SHARE_RECEIVER_ACTIVITIES = [SHARE_RECEIVER_ACTIVITY, QUICK_SHARE_RECEIVER_ACTIVITY];
+const SHARE_RECEIVER_ALIASES = [SHARE_RECEIVER_DEFAULT_ALIAS, SHARE_RECEIVER_SAVE_ALIAS];
 const QUICK_SHARE_ENABLED_FILE = 'ordo-quick-share-enabled';
 const QUICK_SHARE_FLAG_FILE = 'ordo-quick-share';
-const QUICK_SHARE_LABEL = 'Quick Bookmark';
+const SAVE_SHARE_LABEL = 'Save';
+const QUICK_SHARE_LABEL = 'Quick Save';
 const QUICK_SHARE_SHORTCUT_ID = 'ordo_quick_bookmark';
 const SHORTCUTS_META = 'android.app.shortcuts';
 
@@ -68,22 +72,40 @@ function shortcutsXml(packageName) {
 `;
 }
 
-function sendIntentFilter() {
-  return {
+function sendIntentFilter(includeDefault = true) {
+  const filter = {
     action: [{ $: { 'android:name': 'android.intent.action.SEND' } }],
     data: [{ $: { 'android:mimeType': 'text/plain' } }],
-    category: [{ $: { 'android:name': 'android.intent.category.DEFAULT' } }],
   };
+  if (includeDefault) {
+    filter.category = [{ $: { 'android:name': 'android.intent.category.DEFAULT' } }];
+  }
+  return filter;
 }
 
-function shareReceiverActivity(name, extras = {}) {
-  return {
+function shareReceiverActivity(name, extras = {}, opts = {}) {
+  const activity = {
     $: {
       'android:name': name,
       'android:theme': '@android:style/Theme.Translucent.NoTitleBar',
       'android:exported': 'true',
       'android:noHistory': 'true',
       'android:excludeFromRecents': 'true',
+      ...extras,
+    },
+  };
+  if (opts.intentFilter !== false) {
+    activity['intent-filter'] = [sendIntentFilter(opts.defaultCategory !== false)];
+  }
+  return activity;
+}
+
+function shareReceiverAlias(name, extras = {}) {
+  return {
+    $: {
+      'android:name': name,
+      'android:targetActivity': SHARE_RECEIVER_ACTIVITY,
+      'android:exported': 'true',
       ...extras,
     },
     'intent-filter': [sendIntentFilter()],
@@ -114,6 +136,8 @@ internal object ShareIntake {
   const val SHORTCUT_ID = "${QUICK_SHARE_SHORTCUT_ID}"
   const val CATEGORY = "${category}"
   const val LABEL = "${QUICK_SHARE_LABEL}"
+  const val DEFAULT_ALIAS = "${packageName}${SHARE_RECEIVER_DEFAULT_ALIAS}"
+  const val SAVE_ALIAS = "${packageName}${SHARE_RECEIVER_SAVE_ALIAS}"
 
   private val main = Handler(Looper.getMainLooper())
   private var filesWatcher: FileObserver? = null
@@ -151,17 +175,22 @@ internal object ShareIntake {
   @JvmStatic
   fun syncQuickTarget(context: Context) {
     val enabled = enabledFileExists(context)
+    setEnabled(context, DEFAULT_ALIAS, !enabled)
+    setEnabled(context, SAVE_ALIAS, enabled)
+    setEnabled(context, QuickShareReceiverActivity::class.java.name, enabled)
+    syncQuickShortcut(context, enabled)
+  }
+
+  private fun setEnabled(context: Context, className: String, enabled: Boolean) {
     try {
-      val component = ComponentName(context, QuickShareReceiverActivity::class.java)
       context.packageManager.setComponentEnabledSetting(
-        component,
+        ComponentName(context.packageName, className),
         if (enabled) PackageManager.COMPONENT_ENABLED_STATE_ENABLED
         else PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
         PackageManager.DONT_KILL_APP
       )
     } catch (_: Exception) {
     }
-    syncQuickShortcut(context, enabled)
   }
 
   private fun enabledFileExists(context: Context): Boolean {
@@ -494,10 +523,24 @@ const withAndroidBuild = (config) => {
       app.activity = (app.activity ?? []).filter(
         (activity) => !SHARE_RECEIVER_ACTIVITIES.includes(activity.$?.['android:name'])
       );
-      app.activity.push(shareReceiverActivity(SHARE_RECEIVER_ACTIVITY));
+      app.activity.push(shareReceiverActivity(SHARE_RECEIVER_ACTIVITY, {}, { intentFilter: false }));
       app.activity.push(
-        shareReceiverActivity(QUICK_SHARE_RECEIVER_ACTIVITY, {
-          'android:label': QUICK_SHARE_LABEL,
+        shareReceiverActivity(
+          QUICK_SHARE_RECEIVER_ACTIVITY,
+          {
+            'android:label': QUICK_SHARE_LABEL,
+            'android:enabled': 'false',
+          },
+          { defaultCategory: false }
+        )
+      );
+      app['activity-alias'] = (app['activity-alias'] ?? []).filter(
+        (alias) => !SHARE_RECEIVER_ALIASES.includes(alias.$?.['android:name'])
+      );
+      app['activity-alias'].push(shareReceiverAlias(SHARE_RECEIVER_DEFAULT_ALIAS));
+      app['activity-alias'].push(
+        shareReceiverAlias(SHARE_RECEIVER_SAVE_ALIAS, {
+          'android:label': SAVE_SHARE_LABEL,
           'android:enabled': 'false',
         })
       );
@@ -510,8 +553,8 @@ const withAndroidBuild = (config) => {
   // Expo Router tree despite launchMode="singleTask".
   // QuickShareReceiverActivity stays disabled until Settings writes the
   // sidecar file. Android 11+ stacks every SEND activity from one package
-  // into a single tile, so "Show alongside Save" also publishes a sharing
-  // shortcut labeled Quick Bookmark.
+  // into a single tile, so "Show alongside Save" publishes a Quick Save
+  // shortcut and switches the chooser entry from the app name to Save.
   config = withDangerousMod(config, [
     'android',
     async (c) => {
@@ -738,11 +781,16 @@ module.exports.APP_WINDOW_CHROME_API29_ITEMS = APP_WINDOW_CHROME_API29_ITEMS;
 module.exports.LIGHT_SYSTEM_BARS_BOOL = LIGHT_SYSTEM_BARS_BOOL;
 module.exports.QUICK_SHARE_ENABLED_FILE = QUICK_SHARE_ENABLED_FILE;
 module.exports.QUICK_SHARE_FLAG_FILE = QUICK_SHARE_FLAG_FILE;
+module.exports.SAVE_SHARE_LABEL = SAVE_SHARE_LABEL;
 module.exports.QUICK_SHARE_LABEL = QUICK_SHARE_LABEL;
 module.exports.QUICK_SHARE_SHORTCUT_ID = QUICK_SHARE_SHORTCUT_ID;
+module.exports.SHARE_RECEIVER_DEFAULT_ALIAS = SHARE_RECEIVER_DEFAULT_ALIAS;
+module.exports.SHARE_RECEIVER_SAVE_ALIAS = SHARE_RECEIVER_SAVE_ALIAS;
 module.exports.quickShareCategory = quickShareCategory;
 module.exports.shortcutsXml = shortcutsXml;
 module.exports.shareIntakeKotlin = shareIntakeKotlin;
 module.exports.shareReceiverKotlin = shareReceiverKotlin;
 module.exports.quickShareReceiverKotlin = quickShareReceiverKotlin;
+module.exports.shareReceiverActivity = shareReceiverActivity;
+module.exports.shareReceiverAlias = shareReceiverAlias;
 module.exports.patchMainActivityForShareTargets = patchMainActivityForShareTargets;
