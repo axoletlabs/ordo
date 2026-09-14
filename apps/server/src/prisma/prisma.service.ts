@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { Prisma, PrismaClient } from "@prisma/client";
+import { ensureBookmarkSearchIndex } from "./bookmark-fts.js";
 import { APP_CONFIG } from "../config/config.module.js";
 import { Inject } from "@nestjs/common";
 
@@ -41,6 +42,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
           `CREATE INDEX IF NOT EXISTS "Bookmark_userId_fetchStatus_idx" ON "Bookmark"("userId", "fetchStatus")`,
         );
       }
+      await ensureBookmarkSearchIndex(this);
     }
     this.logger.log(`Connected to database (${this.mask(this.cfg.databaseUrl)})`);
   }

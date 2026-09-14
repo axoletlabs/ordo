@@ -29,10 +29,13 @@ import { toBookmarkDto, toBookmarkDetailDto } from "../common/mappers.js";
 import {
   clampLimit,
   decodeCursor,
+  decodeSearchOffsetCursor,
   encodeCursor,
+  encodeSearchOffsetCursor,
   encodeTitleCursor,
   decodeTitleCursor,
 } from "../common/utils/cursor.js";
+import { findFtsBookmarkIds, ftsBodyQuery, ftsPrefixQuery } from "../prisma/bookmark-fts.js";
 
 const LIST_SELECT = {
   id: true,
@@ -107,11 +110,6 @@ function encodeListCursor(sort: BookmarkListSort, row: ListItem): string {
   }
   return encodeCursor({ createdAt: row.createdAt.toISOString(), id: row.id });
 }
-
-const SEARCH_SELECT = {
-  ...LIST_SELECT,
-  contentText: true,
-} satisfies Prisma.BookmarkSelect;
 
 /** Background refresh tuning: small batches, finite spacing. */
 const REFRESH_BATCH_SIZE = 50;
@@ -231,7 +229,6 @@ export class BookmarksService implements OnApplicationBootstrap {
     const authorized = await this.access.authorizedFolderIds(userId, opts.folderTokens ?? []);
     const tokens = tokenizeSearchQuery(term);
     const includeHiddenFields = tokensAllowArticleText(tokens);
-    const recallOpts = { fuzzy, includeHidden: includeHiddenFields, omitTagIds: tagIds };
     const where: Prisma.BookmarkWhereInput = {
       userId,
       AND: [
@@ -246,49 +243,67 @@ export class BookmarksService implements OnApplicationBootstrap {
       return this.paginate(where, opts.cursor, opts.limit, (b) => toBookmarkDto(b));
     }
 
-    const tokenClauses = tokens
-      .map((token) => tokenRecallWhere(token, recallOpts))
-      .filter((clause): clause is Prisma.BookmarkWhereInput => clause != null);
-    if (tokenClauses.length === 0) {
+    const andMatch = ftsPrefixQuery(tokens, { fuzzy, includeHidden: includeHiddenFields, op: "AND" });
+    const orMatch =
+      tokens.length > 1
+        ? ftsPrefixQuery(tokens, { fuzzy, includeHidden: includeHiddenFields, op: "OR" })
+        : null;
+    const bodyMatch = includeHiddenFields ? ftsBodyQuery(tokens, fuzzy) : null;
+    if (!andMatch && tokens.every((token) => !searchTokenPrefixPatterns(token).startsWith)) {
       return { items: [], nextCursor: null, hasMore: false };
     }
 
-    const andRows = await this.prisma.bookmark.findMany({
-      where: { AND: [where, ...tokenClauses] },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      take: SEARCH_AND_POOL_SIZE,
-      select: SEARCH_SELECT,
+    const [andFts, orFts, tagIdsByToken] = await Promise.all([
+      andMatch
+        ? findFtsBookmarkIds(this.prisma, { userId, match: andMatch, limit: SEARCH_AND_POOL_SIZE })
+        : Promise.resolve([] as string[]),
+      orMatch
+        ? findFtsBookmarkIds(this.prisma, { userId, match: orMatch, limit: SEARCH_OR_POOL_SIZE })
+        : Promise.resolve([] as string[]),
+      Promise.all(tokens.map((token) => this.tagMatchIds(userId, token, tagIds, fuzzy))),
+    ]);
+
+    const candidateIds = uniqueIds([
+      ...andFts,
+      ...orFts,
+      ...tagIdsByToken.flat(),
+    ]).slice(0, SEARCH_AND_POOL_SIZE + SEARCH_OR_POOL_SIZE);
+    if (candidateIds.length === 0) {
+      return { items: [], nextCursor: null, hasMore: false };
+    }
+
+    const rows = await this.prisma.bookmark.findMany({
+      where: { AND: [where, { id: { in: candidateIds } }] },
+      select: LIST_SELECT,
     });
 
-    let orRows: Prisma.BookmarkGetPayload<{ select: typeof SEARCH_SELECT }>[] = [];
-    if (tokens.length > 1) {
-      const andIds = andRows.map((row) => row.id);
-      orRows = await this.prisma.bookmark.findMany({
-        where: {
-          AND: [
-            where,
-            { OR: tokenClauses },
-            ...(andIds.length > 0 ? [{ id: { notIn: andIds } }] : []),
-          ],
-        },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: SEARCH_OR_POOL_SIZE,
-        select: SEARCH_SELECT,
-      });
+    let bodyIds = new Set<string>();
+    if (bodyMatch && rows.length > 0) {
+      bodyIds = new Set(
+        await findFtsBookmarkIds(this.prisma, {
+          userId,
+          match: bodyMatch,
+          limit: SEARCH_AND_POOL_SIZE + SEARCH_OR_POOL_SIZE,
+        }),
+      );
     }
 
     const ranked = rankSearchResults(
-      [...andRows, ...orRows].map((row) => ({
+      rows.map((row) => ({
         ...toBookmarkDto(row),
-        contentText: includeHiddenFields ? (row.contentText ?? null) : null,
+        contentText: includeHiddenFields && bodyIds.has(row.id) ? tokens.join(" ") : null,
       })),
       term,
       { fuzzy, omitTagIds: tagIds },
     );
+    const limit = clampLimit(opts.limit, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+    const offset = decodeSearchOffsetCursor(opts.cursor) ?? 0;
+    const slice = ranked.slice(offset, offset + limit);
+    const hasMore = ranked.length > offset + limit;
     return {
-      items: ranked.map((item) => ({ ...item, contentText: null })),
-      nextCursor: null,
-      hasMore: false,
+      items: slice.map(({ contentText: _body, ...item }) => item),
+      nextCursor: hasMore ? encodeSearchOffsetCursor(offset + slice.length) : null,
+      hasMore,
     };
   }
 
@@ -348,8 +363,6 @@ export class BookmarksService implements OnApplicationBootstrap {
       publishedAt?: Date | null;
       readingTimeMinutes?: number | null;
       contentHtml?: string | null;
-      contentMarkdown?: string | null;
-      contentText?: string | null;
       extractionVersion?: number | null;
     } = {};
     if (changes.isRead !== undefined) {
@@ -705,21 +718,30 @@ export class BookmarksService implements OnApplicationBootstrap {
       },
     ];
   }
+
+  private async tagMatchIds(
+    userId: string,
+    token: string,
+    omitTagIds: string[],
+    fuzzy: boolean,
+  ): Promise<string[]> {
+    const stems = [token];
+    if (fuzzy && token.length >= MIN_FUZZY_TOKEN_LENGTH) stems.push(token.slice(0, -1));
+    const clauses = stems
+      .map((stem) => tagNamePrefixWhere(stem, omitTagIds))
+      .filter((clause): clause is Prisma.BookmarkWhereInput => clause != null);
+    if (clauses.length === 0) return [];
+    const rows = await this.prisma.bookmark.findMany({
+      where: { userId, OR: clauses },
+      select: { id: true },
+      take: SEARCH_AND_POOL_SIZE,
+    });
+    return rows.map((row) => row.id);
+  }
 }
 
-const SEARCH_PRIMARY_FIELDS = ["title", "url", "domain"] as const;
-const SEARCH_HIDDEN_FIELDS = ["description", "author", "contentText"] as const;
-
-function prefixFieldClauses(
-  field: (typeof SEARCH_PRIMARY_FIELDS)[number] | (typeof SEARCH_HIDDEN_FIELDS)[number],
-  token: string,
-): Prisma.BookmarkWhereInput[] {
-  const { startsWith, contains } = searchTokenPrefixPatterns(token);
-  if (!startsWith) return [];
-  return [
-    { [field]: { startsWith } },
-    ...contains.map((needle) => ({ [field]: { contains: needle } })),
-  ];
+function uniqueIds(ids: readonly string[]): string[] {
+  return [...new Set(ids)];
 }
 
 function tagNamePrefixWhere(token: string, omitTagIds: string[]): Prisma.BookmarkWhereInput | null {
@@ -739,30 +761,6 @@ function tagNamePrefixWhere(token: string, omitTagIds: string[]): Prisma.Bookmar
   };
 }
 
-function tokenRecallWhere(
-  token: string,
-  opts: { fuzzy: boolean; includeHidden: boolean; omitTagIds: string[] },
-): Prisma.BookmarkWhereInput | null {
-  const stems = [token];
-  if (opts.fuzzy && token.length >= MIN_FUZZY_TOKEN_LENGTH) {
-    stems.push(token.slice(0, -1));
-  }
-  const or: Prisma.BookmarkWhereInput[] = [];
-  for (const stem of stems) {
-    for (const field of SEARCH_PRIMARY_FIELDS) {
-      or.push(...prefixFieldClauses(field, stem));
-    }
-    const tag = tagNamePrefixWhere(stem, opts.omitTagIds);
-    if (tag) or.push(tag);
-    if (opts.includeHidden) {
-      for (const field of SEARCH_HIDDEN_FIELDS) {
-        or.push(...prefixFieldClauses(field, stem));
-      }
-    }
-  }
-  return or.length > 0 ? { OR: or } : null;
-}
-
 interface ArticleUndoSnapshot {
   title: string;
   description: string | null;
@@ -770,8 +768,6 @@ interface ArticleUndoSnapshot {
   publishedAt: string | null;
   readingTimeMinutes: number | null;
   contentHtml: string | null;
-  contentMarkdown: string | null;
-  contentText: string | null;
   fetchStatus: string;
   extractionReason: string | null;
   extractionVersion: number | null;
@@ -784,8 +780,6 @@ function serializeArticleUndoSnapshot(bookmark: {
   publishedAt: Date | null;
   readingTimeMinutes: number | null;
   contentHtml: string | null;
-  contentMarkdown: string | null;
-  contentText: string | null;
   fetchStatus: string;
   extractionReason: string | null;
   extractionVersion: number | null;
@@ -797,8 +791,6 @@ function serializeArticleUndoSnapshot(bookmark: {
     publishedAt: bookmark.publishedAt?.toISOString() ?? null,
     readingTimeMinutes: bookmark.readingTimeMinutes,
     contentHtml: bookmark.contentHtml,
-    contentMarkdown: bookmark.contentMarkdown,
-    contentText: bookmark.contentText,
     fetchStatus: bookmark.fetchStatus,
     extractionReason: bookmark.extractionReason,
     extractionVersion: bookmark.extractionVersion,
@@ -818,8 +810,6 @@ function parseArticleUndoSnapshot(raw: string | null | undefined): ArticleUndoSn
       publishedAt: value.publishedAt ?? null,
       readingTimeMinutes: value.readingTimeMinutes ?? null,
       contentHtml: value.contentHtml ?? null,
-      contentMarkdown: value.contentMarkdown ?? null,
-      contentText: value.contentText ?? null,
       fetchStatus: value.fetchStatus,
       extractionReason: value.extractionReason ?? null,
       extractionVersion: value.extractionVersion ?? null,
@@ -837,8 +827,6 @@ function restoreArticleUndoSnapshot(snapshot: ArticleUndoSnapshot) {
     publishedAt: snapshot.publishedAt ? new Date(snapshot.publishedAt) : null,
     readingTimeMinutes: snapshot.readingTimeMinutes,
     contentHtml: snapshot.contentHtml,
-    contentMarkdown: snapshot.contentMarkdown,
-    contentText: snapshot.contentText,
     fetchStatus: snapshot.fetchStatus,
     extractionReason: snapshot.extractionReason,
     extractionVersion: snapshot.extractionVersion,

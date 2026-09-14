@@ -24,7 +24,7 @@ import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanima
 import { StatusBar, setStatusBarStyle } from "expo-status-bar";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { APP_NAME, EXTRACTION_VERSION, READ_COMPLETION_THRESHOLD } from "@ordo/shared";
+import { APP_NAME, READ_COMPLETION_THRESHOLD } from "@ordo/shared";
 import type {
   ReaderPreferences,
   UpdateReaderPreferencesInput,
@@ -43,7 +43,6 @@ import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
 import { sheetMenuStyles } from "../ui/SheetActionRow";
 import { FAB, FABLayer } from "../ui/FAB";
 import { ArticleHtml, type ArticleHeading } from "./ArticleHtml";
-import { Markdown } from "./Markdown";
 import { ReaderControlsSheet } from "./ReaderControlsSheet";
 import { EditTagsSheet } from "../tags/EditTagsSheet";
 import { LockPrompt } from "../bookmarks/LockPrompt";
@@ -181,14 +180,7 @@ function ReaderPaneInner({
   const bookmark = protectedDetail ? undefined : detail.data ?? cached;
   const loading = !!bookmarkId && !bookmark && detail.isLoading;
   const hasHtml = !protectedDetail && !!detail.data?.contentHtml;
-  // Compatibility: pre-versioning rows may only carry Markdown; current-version
-  // content renders exclusively from detail HTML.
-  const legacyMarkdown =
-    !hasHtml &&
-    bookmark?.fetchStatus === "ok" &&
-    (bookmark.extractionVersion ?? 0) < EXTRACTION_VERSION &&
-    !!bookmark?.contentMarkdown;
-  const hasContent = hasHtml || legacyMarkdown;
+  const hasContent = hasHtml;
   const preparingContent = bookmark?.fetchStatus === "pending";
   // Ok row whose detail (HTML) hasn't arrived yet, or failed to arrive.
   const waitingForHtml =
@@ -826,10 +818,6 @@ function ReaderPaneInner({
                     onHeadingRef={handleHeadingRef}
                     onReady={handleArticleReady}
                   />
-                </View>
-              ) : legacyMarkdown ? (
-                <View style={styles.content}>
-                  <Markdown>{bookmark.contentMarkdown ?? ""}</Markdown>
                 </View>
               ) : detailFetchFailed ? (
                 <EmptyState

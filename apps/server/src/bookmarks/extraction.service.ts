@@ -14,6 +14,7 @@ import {
   type ArticleMetadata,
 } from "./reader.service.js";
 import { TagSuggestionService } from "./tag-suggestion.service.js";
+import { htmlToSearchText } from "./html-text.js";
 
 /** `full` overwrites title/metadata; `content` keeps the imported title. */
 export type ExtractionMode = "full" | "content";
@@ -159,8 +160,6 @@ export class ExtractionService {
                 publishedAt: extracted.publishedAt ? new Date(extracted.publishedAt) : null,
                 readingTimeMinutes: extracted.readingTimeMinutes,
                 contentHtml: extracted.contentHtml,
-                contentMarkdown: extracted.contentMarkdown || null,
-                contentText: extracted.contentText,
                 fetchStatus: "ok",
                 extractionReason: null,
                 extractionVersion: EXTRACTION_VERSION,
@@ -168,8 +167,6 @@ export class ExtractionService {
             : {
                 readingTimeMinutes: extracted.readingTimeMinutes,
                 contentHtml: extracted.contentHtml,
-                contentMarkdown: extracted.contentMarkdown || null,
-                contentText: extracted.contentText,
                 fetchStatus: "ok",
                 extractionReason: null,
                 extractionVersion: EXTRACTION_VERSION,
@@ -185,11 +182,11 @@ export class ExtractionService {
       );
       const existing = await this.prisma.bookmark.findUnique({
         where: { id: bookmarkId },
-        select: { contentHtml: true, contentText: true },
+        select: { contentHtml: true },
       });
       if (this.canceled.has(bookmarkId)) return;
-      const storedContentIsShell = existing?.contentText
-        ? this.reader.classifyShellText(existing.contentText) !== null
+      const storedContentIsShell = existing?.contentHtml
+        ? this.reader.classifyShellText(htmlToSearchText(existing.contentHtml)) !== null
         : false;
       const definitivelyUnreadable =
         unsupported &&
@@ -210,8 +207,6 @@ export class ExtractionService {
                   author: null,
                   publishedAt: null,
                   contentHtml: null,
-                  contentMarkdown: null,
-                  contentText: null,
                   readingTimeMinutes: null,
                 }
               : existing?.contentHtml

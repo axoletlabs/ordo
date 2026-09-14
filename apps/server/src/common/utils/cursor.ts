@@ -39,6 +39,26 @@ export function encodeTitleCursor(c: TitleCursor): string {
   return Buffer.from(`${TITLE_CURSOR_PREFIX}${c.id}|${c.title}`, "utf8").toString("base64url");
 }
 
+const SEARCH_OFFSET_PREFIX = "s|";
+
+/** Ranked-search pagination. Offset is into the in-memory ranked candidate list. */
+export function encodeSearchOffsetCursor(offset: number): string {
+  return Buffer.from(`${SEARCH_OFFSET_PREFIX}${offset}`, "utf8").toString("base64url");
+}
+
+export function decodeSearchOffsetCursor(raw: string | null | undefined): number | null {
+  if (!raw) return null;
+  try {
+    const decoded = Buffer.from(raw, "base64url").toString("utf8");
+    if (!decoded.startsWith(SEARCH_OFFSET_PREFIX)) return null;
+    const n = Number(decoded.slice(SEARCH_OFFSET_PREFIX.length));
+    if (!Number.isInteger(n) || n < 0) return null;
+    return n;
+  } catch {
+    return null;
+  }
+}
+
 export function decodeTitleCursor(raw: string | null | undefined): TitleCursor | null {
   if (!raw) return null;
   try {

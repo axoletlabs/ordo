@@ -19,7 +19,6 @@ const FAKE_EXTRACTED = {
   domain: "example.com",
   readingTimeMinutes: 4,
   contentHtml: "<p>Hello world.</p>",
-  contentMarkdown: "Hello world.",
   contentText: "Hello world.",
 };
 

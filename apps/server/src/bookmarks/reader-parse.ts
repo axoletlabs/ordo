@@ -21,7 +21,6 @@ export interface ExtractedContent {
   domain: string;
   readingTimeMinutes: number;
   contentHtml: string;
-  contentMarkdown: string;
   contentText: string;
 }
 
@@ -464,7 +463,6 @@ export function extractFromHtml(html: string, url: string, options: ExtractOptio
       domain,
       readingTimeMinutes,
       contentHtml,
-      contentMarkdown: "",
       contentText: contentText.slice(0, 200_000),
     };
   } finally {

@@ -239,8 +239,6 @@ export function useSetContentKind() {
             fetchStatus: "unsupported",
             extractionReason: bookmark.extractionReason ?? "not_an_article",
             readingTimeMinutes: null,
-            contentMarkdown: null,
-            contentText: null,
             ...("contentHtml" in bookmark ? { contentHtml: null } : {}),
           };
         }

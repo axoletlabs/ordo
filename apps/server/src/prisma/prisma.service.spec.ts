@@ -235,6 +235,12 @@ describe("PrismaService legacy schema migration", () => {
     ]) {
       expect(bookmarkCols.some((c) => c.name === column)).toBe(true);
     }
+    expect(bookmarkCols.some((c) => c.name === "contentMarkdown")).toBe(false);
+    expect(bookmarkCols.some((c) => c.name === "contentText")).toBe(false);
+    const fts = (await service.$queryRawUnsafe(
+      `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'BookmarkFts'`,
+    )) as Array<{ name: string }>;
+    expect(fts).toHaveLength(1);
     const progress = (await service.$queryRawUnsafe(
       `SELECT "readProgress" FROM "Bookmark" WHERE "id" = 'b-kept'`,
     )) as Array<{ readProgress: number | bigint }>;

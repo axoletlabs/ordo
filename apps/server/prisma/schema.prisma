@@ -150,8 +150,6 @@ model Bookmark {
   description     String?
   domain          String
   contentHtml     String?
-  contentMarkdown String?
-  contentText     String?
   fetchStatus     String   @default("ok")
   /** Why extraction ended in `unsupported`/`failed` (ExtractionReason in @ordo/shared). */
   extractionReason String?
