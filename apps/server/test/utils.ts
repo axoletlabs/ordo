@@ -1,6 +1,4 @@
-import { execSync } from "node:child_process";
 import { existsSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
 import { Test, type TestingModuleBuilder } from "@nestjs/testing";
 import type { INestApplication } from "@nestjs/common";
 import cookieParser from "cookie-parser";
@@ -15,9 +13,7 @@ export interface TestCtx {
   dbPath: string;
 }
 
-const SERVER_DIR = join(__dirname, "..");
-
-/** Provisions a fresh temp SQLite DB with the current schema and boots the app. */
+/** Provisions a fresh temp SQLite DB; PrismaService applies migrations on boot. */
 export async function createTestApp(
   options: {
     config?: Record<string, unknown>;
@@ -28,12 +24,6 @@ export async function createTestApp(
     .toString(36)
     .slice(2)}.db`;
   if (existsSync(dbPath)) unlinkSync(dbPath);
-
-  execSync(`DATABASE_URL="file:${dbPath}" prisma db push --skip-generate`, {
-    cwd: SERVER_DIR,
-    stdio: ["ignore", "ignore", "ignore"],
-    env: { ...process.env, DATABASE_URL: `file:${dbPath}` },
-  });
 
   const base = loadConfig();
   const cfg = {
@@ -63,6 +53,7 @@ export async function createTestApp(
 
 /** Truncate all tables (order respects foreign keys via cascade). */
 export async function clearDb(prisma: PrismaService): Promise<void> {
+  await prisma.importJob.deleteMany();
   await prisma.bookmark.deleteMany();
   await prisma.bookmarkTagSuggestion.deleteMany();
   await prisma.bookmarkTag.deleteMany();

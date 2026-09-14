@@ -38,7 +38,6 @@ import { flattenPages } from "../../../src/lib/api/query-keys";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
 import type { BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
-import { estimateBookmarkRowSize } from "../../../src/lib/bookmark-row-layout";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
 
 export default function TagDetailScreen() {
@@ -161,9 +160,6 @@ export default function TagDetailScreen() {
       selectionRevision,
     ],
   );
-  const overrideItemLayout = useCallback((layout: { size?: number }, item: BookmarkDto) => {
-    layout.size = estimateBookmarkRowSize(item);
-  }, []);
 
   const listPane = (
     <ThemedFlashList
@@ -171,8 +167,6 @@ export default function TagDetailScreen() {
       extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}`}
       keyExtractor={(b: BookmarkDto) => b.id}
       renderItem={renderBookmark}
-      estimatedItemSize={72}
-      overrideItemLayout={overrideItemLayout}
       contentContainerStyle={{
         paddingBottom: selection.active ? selectionClearance : spacing[96],
       }}

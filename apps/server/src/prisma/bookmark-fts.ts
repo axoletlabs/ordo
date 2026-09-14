@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma } from "./client.js";
 import { MIN_FUZZY_TOKEN_LENGTH, searchSqlToken } from "@ordo/shared";
 
 /**

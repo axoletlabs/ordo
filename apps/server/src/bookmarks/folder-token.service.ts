@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import bcrypt from "bcryptjs";
-import type { Folder } from "@prisma/client";
+import type { Folder } from "../prisma/client.js";
 import { ErrorCode, TOKEN_TTL, isFolderPinLength, type FolderLockType } from "@ordo/shared";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { AppError } from "../common/errors/app-error.js";

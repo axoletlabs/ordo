@@ -4,7 +4,7 @@
  */
 import React from "react";
 import { Tabs } from "expo-router";
-import { BottomTabBar, type BottomTabBarProps } from "@react-navigation/bottom-tabs";
+import { BottomTabBar, type BottomTabBarProps } from "expo-router/tabs";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
@@ -15,7 +15,7 @@ import {
 } from "../../../src/lib/navigation-animation";
 import { requestSearchFieldFocus } from "../../../src/lib/search-field-focus";
 import { useSettingsStore } from "../../../src/store/settings";
-import { StyleSheet, Text as NativeText, View, type ViewStyle } from "react-native";
+import { StyleSheet, Text as NativeText, View, type ColorValue, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 function tabBarStyleIsHidden(
@@ -189,7 +189,7 @@ export default function TabsLayout() {
     ],
   );
 
-  const tabLabel = (label: string, color: string) => (
+  const tabLabel = (label: string, color: ColorValue) => (
     <NativeText
       numberOfLines={1}
       ellipsizeMode="tail"

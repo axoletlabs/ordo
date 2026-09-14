@@ -7,7 +7,7 @@
  * reading sessions.
  */
 import type { ReaderTheme } from "@ordo/shared";
-import { resolvePalette, type Palette } from "./theme";
+import { resolvePalette, type Palette, type SystemColorScheme } from "./theme";
 
 /** Sepia: aged-paper surfaces with deep umber ink and a terracotta accent. */
 const sepia: Palette = {
@@ -41,7 +41,7 @@ const sepia: Palette = {
 export function resolveReaderPalette(
   theme: ReaderTheme,
   amoled: boolean,
-  systemColorScheme: "light" | "dark" | null | undefined,
+  systemColorScheme: SystemColorScheme,
 ): Palette {
   if (theme === "sepia") return sepia;
   return resolvePalette(theme, amoled, systemColorScheme);

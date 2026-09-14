@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import type { User } from "@prisma/client";
+import type { User } from "../prisma/client.js";
 import * as OTPAuth from "otpauth";
 import {
   EMAIL_OTP,

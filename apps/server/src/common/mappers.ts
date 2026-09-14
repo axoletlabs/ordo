@@ -1,4 +1,4 @@
-import type { Bookmark, Folder, Session, Tag, User } from "@prisma/client";
+import type { Bookmark, Folder, Session, Tag, User } from "../prisma/client.js";
 import {
   isFolderPinLength,
   normalizeFolderIcon,

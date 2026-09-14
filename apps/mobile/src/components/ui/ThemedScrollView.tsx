@@ -134,7 +134,6 @@ export function ThemedFlashList<T>(props: ThemedFlashListProps<T>) {
     scrollEventThrottle,
     showsVerticalScrollIndicator,
     indicatorStyle: _indicatorStyle,
-    estimatedItemSize = 80,
     drawDistance = 280,
     refreshing,
     onRefresh,
@@ -150,7 +149,6 @@ export function ThemedFlashList<T>(props: ThemedFlashListProps<T>) {
   return (
     <View style={[styles.host, styles.fill, wrapper]} onLayout={chainHandlers(bar.onLayout, onLayout)}>
       <FlashList
-        estimatedItemSize={estimatedItemSize}
         drawDistance={drawDistance}
         {...rest}
         {...nativeScrollBarProps}

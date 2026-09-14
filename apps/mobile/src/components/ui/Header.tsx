@@ -248,7 +248,7 @@ const styles = StyleSheet.create({
     textAlignVertical: "center",
   },
   sides: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",

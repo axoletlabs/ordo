@@ -1,5 +1,5 @@
 import { Injectable, Logger, type OnApplicationBootstrap } from "@nestjs/common";
-import type { Folder, Prisma } from "@prisma/client";
+import type { Folder, Prisma } from "../prisma/client.js";
 import {
   DEFAULT_BOOKMARK_LIST_SORT,
   DEFAULT_PAGE_SIZE,

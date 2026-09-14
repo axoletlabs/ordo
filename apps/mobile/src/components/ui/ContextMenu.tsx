@@ -229,7 +229,7 @@ export function ContextMenuItem({
 }
 
 const styles = StyleSheet.create({
-  modalRoot: { ...StyleSheet.absoluteFillObject },
+  modalRoot: { ...StyleSheet.absoluteFill },
   menu: {
     position: "absolute",
     overflow: "hidden",

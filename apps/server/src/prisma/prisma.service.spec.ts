@@ -1,7 +1,10 @@
 import { execSync } from "node:child_process";
-import { existsSync, unlinkSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "./client.js";
+import { createPrismaAdapter, sqliteAdapterUrl } from "./create-adapter.js";
+import { listMigrations, splitSqlStatements } from "./schema-migrate.js";
 import { PrismaService } from "./prisma.service.js";
 
 /**
@@ -87,10 +90,14 @@ function tempDbPath(): string {
   return path;
 }
 
+function rawClient(path: string): PrismaClient {
+  return new PrismaClient({ adapter: createPrismaAdapter(`file:${path}`) });
+}
+
 /** Build a legacy database with the pre-unfiled schema and seed data.
  *  Raw SQL throughout: the generated client no longer knows `isDefault`. */
 async function createLegacyDb(path: string): Promise<void> {
-  const db = new PrismaClient({ datasources: { db: { url: `file:${path}` } } });
+  const db = rawClient(path);
   for (const statement of [...LEGACY_DDL, ...LEGACY_SEED]) {
     await db.$executeRawUnsafe(statement);
   }
@@ -268,6 +275,14 @@ describe("PrismaService legacy schema migration", () => {
       `SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'InstanceSettings'`,
     )) as Array<{ name: string }>;
     expect(instanceTables).toHaveLength(1);
+    const adoptedTables = (await service.$queryRawUnsafe(
+      `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('Session', 'ImportJob', '_prisma_migrations')`,
+    )) as Array<{ name: string }>;
+    expect(adoptedTables.map((table) => table.name).sort()).toEqual([
+      "ImportJob",
+      "Session",
+      "_prisma_migrations",
+    ]);
 
     // indexes and foreign keys survive the rebuild
     const indexes = (await service.$queryRawUnsafe(
@@ -300,7 +315,7 @@ describe("PrismaService legacy schema migration", () => {
 
   it("adds the reader-rework columns to a post-unfiled, pre-reader database", async () => {
     const path = tempDbPath();
-    const db = new PrismaClient({ datasources: { db: { url: `file:${path}` } } });
+    const db = rawClient(path);
     for (const statement of PRE_READER_DDL) {
       await db.$executeRawUnsafe(statement);
     }
@@ -340,7 +355,7 @@ describe("PrismaService legacy schema migration", () => {
 
   it("adds purpose to EmailVerificationToken tables created before password reset", async () => {
     const path = tempDbPath();
-    const db = new PrismaClient({ datasources: { db: { url: `file:${path}` } } });
+    const db = rawClient(path);
     for (const statement of [
       ...PRE_READER_DDL,
       `CREATE TABLE "EmailVerificationToken" (
@@ -384,35 +399,201 @@ describe("PrismaService legacy schema migration", () => {
     await service.onModuleDestroy();
   });
 
-  it("leaves fresh (current-schema) databases untouched", async () => {
+  it("applies versioned migrations to a current-schema database and keeps data", async () => {
     const path = tempDbPath();
-    execSync(`npx prisma db push --skip-generate`, {
-      cwd: join(__dirname, "../.."),
-      stdio: ["ignore", "ignore", "pipe"],
-      env: { ...process.env, DATABASE_URL: `file:${path}` },
-    });
-
     const service = await boot(path);
     await service.user.create({
       data: { id: "u1", displayName: "one", email: "one@ordo.app", passwordHash: "x" },
     });
-    // unfiled bookmarks work end-to-end on the current schema
     const created = await service.bookmark.create({
       data: { userId: "u1", folderId: null, url: "https://example.com/x", title: "X", domain: "example.com" },
     });
     expect(created.folderId).toBeNull();
     expect(await service.folder.count()).toBe(0);
     await service.onModuleDestroy();
-  }, 60_000);
+  });
 
-  it("is a no-op on an empty (not yet pushed) database file", async () => {
+  it("creates the full schema on an empty database file", async () => {
     const path = tempDbPath();
     const service = await boot(path);
-    // booting must not fabricate any tables on a database with no schema yet
     const tables = (await service.$queryRawUnsafe(
-      `SELECT name FROM sqlite_master WHERE type = 'table'`,
+      `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_prisma%' AND name NOT LIKE 'BookmarkFts_%'`,
     )) as Array<{ name: string }>;
-    expect(tables).toHaveLength(0);
+    expect(tables.map((row) => row.name).sort()).toEqual([
+      "Bookmark",
+      "BookmarkFts",
+      "BookmarkTag",
+      "BookmarkTagSuggestion",
+      "EmailVerificationToken",
+      "Folder",
+      "FolderToken",
+      "ImportJob",
+      "InstanceSettings",
+      "MfaBackupCode",
+      "MfaChallenge",
+      "Session",
+      "Tag",
+      "User",
+    ]);
+    const applied = (await service.$queryRawUnsafe(
+      `SELECT "migration_name" AS name FROM "_prisma_migrations"`,
+    )) as Array<{ name: string }>;
+    const init = listMigrations(join(__dirname, "../../prisma/migrations"))[0];
+    expect(init).toBeDefined();
+    expect(applied.map((row) => row.name)).toEqual([init!.name]);
+    const checksums = (await service.$queryRawUnsafe(
+      `SELECT checksum FROM "_prisma_migrations"`,
+    )) as Array<{ checksum: string }>;
+    expect(checksums[0]?.checksum).toBe(init!.checksum);
     await service.onModuleDestroy();
+  });
+
+  it("is a no-op when the database already has the init migration recorded", async () => {
+    const path = tempDbPath();
+    const first = await boot(path);
+    await first.user.create({
+      data: { id: "u1", displayName: "one", email: "one@ordo.app", passwordHash: "x" },
+    });
+    await first.onModuleDestroy();
+
+    const second = await boot(path);
+    expect(await second.user.count()).toBe(1);
+    const applied = (await second.$queryRawUnsafe(
+      `SELECT COUNT(*) AS count FROM "_prisma_migrations"`,
+    )) as Array<{ count: number | bigint }>;
+    expect(Number(applied[0]?.count)).toBe(1);
+    await second.onModuleDestroy();
+  });
+
+  it("baselines a db-push database that already matches the current schema", async () => {
+    const path = tempDbPath();
+    const db = rawClient(path);
+    const migrationsDir = join(__dirname, "../../prisma/migrations");
+    const [init] = listMigrations(migrationsDir);
+    if (!init) throw new Error("missing init migration");
+    for (const statement of splitSqlStatements(init.sql)) {
+      await db.$executeRawUnsafe(statement);
+    }
+    await db.$executeRawUnsafe(
+      `INSERT INTO "User" ("id","displayName","email","passwordHash","createdAt","updatedAt")
+       VALUES ('u1','one','one@ordo.app','x',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)`,
+    );
+    await db.$disconnect();
+
+    const service = await boot(path);
+    expect(await service.user.findUniqueOrThrow({ where: { id: "u1" } })).toMatchObject({
+      displayName: "one",
+      email: "one@ordo.app",
+    });
+    const applied = (await service.$queryRawUnsafe(
+      `SELECT "migration_name" AS name FROM "_prisma_migrations"`,
+    )) as Array<{ name: string }>;
+    expect(applied.map((row) => row.name)).toEqual([init.name]);
+    await service.onModuleDestroy();
+  });
+
+  it("applies later Prisma migrations after adopting a legacy database", async () => {
+    const path = tempDbPath();
+    await createLegacyDb(path);
+    const source = join(__dirname, "../../prisma/migrations");
+    const extraDir = mkdtempSync(join(tmpdir(), "ordo-migrations-"));
+    try {
+      cpSync(source, extraDir, { recursive: true });
+      const extraName = "20990101000000_extra_column";
+      mkdirSync(join(extraDir, extraName));
+      writeFileSync(
+        join(extraDir, extraName, "migration.sql"),
+        `ALTER TABLE "User" ADD COLUMN "extraLegacy" TEXT;\n`,
+      );
+      const previous = process.env.ORDO_MIGRATIONS_DIR;
+      process.env.ORDO_MIGRATIONS_DIR = extraDir;
+      try {
+        const service = await boot(path);
+        const cols = (await service.$queryRawUnsafe(`PRAGMA table_info("User")`)) as Array<{
+          name: string;
+        }>;
+        expect(cols.some((c) => c.name === "extraLegacy")).toBe(true);
+        expect(await service.user.findUniqueOrThrow({ where: { id: "u1" } })).toMatchObject({
+          displayName: "one",
+        });
+        const applied = (await service.$queryRawUnsafe(
+          `SELECT "migration_name" AS name FROM "_prisma_migrations" ORDER BY "migration_name"`,
+        )) as Array<{ name: string }>;
+        expect(applied.map((row) => row.name)).toEqual([
+          listMigrations(extraDir)[0]!.name,
+          extraName,
+        ]);
+        await service.onModuleDestroy();
+      } finally {
+        if (previous === undefined) delete process.env.ORDO_MIGRATIONS_DIR;
+        else process.env.ORDO_MIGRATIONS_DIR = previous;
+      }
+    } finally {
+      rmSync(extraDir, { recursive: true, force: true });
+    }
+  });
+
+  it("applies a pending extra migration on an already-migrated database", async () => {
+    const path = tempDbPath();
+    const first = await boot(path);
+    await first.user.create({
+      data: { id: "u1", displayName: "one", email: "one@ordo.app", passwordHash: "x" },
+    });
+    await first.onModuleDestroy();
+
+    const source = join(__dirname, "../../prisma/migrations");
+    const extraDir = mkdtempSync(join(tmpdir(), "ordo-migrations-"));
+    try {
+      cpSync(source, extraDir, { recursive: true });
+      const extraName = "20990101000000_extra_column";
+      mkdirSync(join(extraDir, extraName));
+      writeFileSync(
+        join(extraDir, extraName, "migration.sql"),
+        `ALTER TABLE "User" ADD COLUMN "extraPending" TEXT;\n`,
+      );
+      const previous = process.env.ORDO_MIGRATIONS_DIR;
+      process.env.ORDO_MIGRATIONS_DIR = extraDir;
+      try {
+        const service = await boot(path);
+        const cols = (await service.$queryRawUnsafe(`PRAGMA table_info("User")`)) as Array<{
+          name: string;
+        }>;
+        expect(cols.some((c) => c.name === "extraPending")).toBe(true);
+        expect(await service.user.count()).toBe(1);
+        await service.onModuleDestroy();
+      } finally {
+        if (previous === undefined) delete process.env.ORDO_MIGRATIONS_DIR;
+        else process.env.ORDO_MIGRATIONS_DIR = previous;
+      }
+    } finally {
+      rmSync(extraDir, { recursive: true, force: true });
+    }
+  });
+
+  it("matches prisma migrate deploy checksums so later CLI deploys stay no-ops", async () => {
+    const path = tempDbPath();
+    execSync(`npx prisma migrate deploy`, {
+      cwd: join(__dirname, "../.."),
+      stdio: ["ignore", "ignore", "pipe"],
+      env: { ...process.env, DATABASE_URL: `file:${path}` },
+    });
+    const service = await boot(path);
+    await service.user.create({
+      data: { id: "u1", displayName: "one", email: "one@ordo.app", passwordHash: "x" },
+    });
+    expect(await service.user.count()).toBe(1);
+    const applied = (await service.$queryRawUnsafe(
+      `SELECT checksum, "migration_name" AS name FROM "_prisma_migrations"`,
+    )) as Array<{ checksum: string; name: string }>;
+    const [init] = listMigrations(join(__dirname, "../../prisma/migrations"));
+    expect(applied).toEqual([{ checksum: init!.checksum, name: init!.name }]);
+    await service.onModuleDestroy();
+  }, 60_000);
+});
+
+describe("sqliteAdapterUrl", () => {
+  it("strips query parameters from file URLs", () => {
+    expect(sqliteAdapterUrl("file:./ordo.db?connection_limit=1")).toBe("file:./ordo.db");
+    expect(sqliteAdapterUrl("file:/tmp/ordo.db")).toBe("file:/tmp/ordo.db");
   });
 });

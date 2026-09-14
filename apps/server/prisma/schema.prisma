@@ -1,13 +1,13 @@
 // ordo — SQLite schema
-// Run `pnpm --filter @ordo/server db:setup` to generate the client + create the DB.
+// Run `pnpm --filter @ordo/server db:setup` to generate the client and apply migrations.
 
 generator client {
-  provider = "prisma-client-js"
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL")
 }
 
 model User {

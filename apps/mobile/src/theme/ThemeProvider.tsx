@@ -9,6 +9,7 @@ import { Appearance, Platform, View, useColorScheme } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSettingsStore } from "../store/settings";
 import {
+  appearanceOverride,
   resolvePalette,
   resolveShadows,
   type Palette,
@@ -53,7 +54,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (typeof Appearance.setColorScheme !== "function") return;
-    Appearance.setColorScheme(themeMode === "system" ? null : themeMode);
+    Appearance.setColorScheme(appearanceOverride(themeMode));
   }, [themeMode]);
 
   useEffect(() => {

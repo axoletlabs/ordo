@@ -54,7 +54,6 @@ import {
 import { layout, radius, spacing } from "../../../src/theme/tokens";
 import type { BookmarkDto, FolderDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
-import { estimateBookmarkRowSize } from "../../../src/lib/bookmark-row-layout";
 import { registerSearchFieldFocus } from "../../../src/lib/search-field-focus";
 
 const SERVER_DEBOUNCE_MS = 250;
@@ -443,18 +442,6 @@ export default function SearchScreen() {
     />
   ) : null;
 
-  const overrideItemLayout = useCallback((layout: { size?: number }, item: BookmarkDto) => {
-    if (!item) {
-      layout.size = 72;
-      return;
-    }
-    try {
-      layout.size = estimateBookmarkRowSize(item);
-    } catch {
-      layout.size = 72;
-    }
-  }, []);
-
   const listPane = (
     <ThemedFlashList
       data={items}
@@ -462,8 +449,6 @@ export default function SearchScreen() {
       keyExtractor={(b: BookmarkDto) => b.id}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
-      estimatedItemSize={72}
-      overrideItemLayout={overrideItemLayout}
       renderItem={renderBookmark}
       ListEmptyComponent={empty ? <View style={styles.emptyList}>{empty}</View> : null}
       ListFooterComponent={

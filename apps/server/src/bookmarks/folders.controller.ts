@@ -23,7 +23,6 @@ import {
   type SetFolderPasswordInput,
   type UpdateFolderInput,
 } from "@ordo/shared";
-import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe.js";
 import { AuthGuard } from "../auth/auth.guard.js";
 import {
   CurrentUser,
@@ -45,7 +44,7 @@ export class FoldersController {
   @Post()
   async create(
     @CurrentUser() user: AuthContext,
-    @Body(new ZodValidationPipe(CreateFolderSchema)) body: CreateFolderInput,
+    @Body({ schema: CreateFolderSchema }) body: CreateFolderInput,
   ): Promise<FolderDto> {
     return this.folders.create(user.userId, body);
   }
@@ -54,7 +53,7 @@ export class FoldersController {
   @HttpCode(200)
   async batch(
     @CurrentUser() user: AuthContext,
-    @Body(new ZodValidationPipe(BatchFoldersSchema)) body: BatchFoldersInput,
+    @Body({ schema: BatchFoldersSchema }) body: BatchFoldersInput,
   ): Promise<{ updated: number }> {
     return this.folders.batch(user.userId, body);
   }
@@ -63,7 +62,7 @@ export class FoldersController {
   async update(
     @CurrentUser() user: AuthContext,
     @Param("id") id: string,
-    @Body(new ZodValidationPipe(UpdateFolderSchema)) body: UpdateFolderInput,
+    @Body({ schema: UpdateFolderSchema }) body: UpdateFolderInput,
   ): Promise<FolderDto> {
     return this.folders.update(id, user.userId, body);
   }
@@ -83,7 +82,7 @@ export class FoldersController {
   async setPassword(
     @CurrentUser() user: AuthContext,
     @Param("id") id: string,
-    @Body(new ZodValidationPipe(SetFolderPasswordSchema)) body: SetFolderPasswordInput,
+    @Body({ schema: SetFolderPasswordSchema }) body: SetFolderPasswordInput,
   ): Promise<{ success: true }> {
     await this.folders.setPassword(id, user.userId, body);
     return { success: true };
@@ -94,7 +93,7 @@ export class FoldersController {
   async removePassword(
     @CurrentUser() user: AuthContext,
     @Param("id") id: string,
-    @Body(new ZodValidationPipe(RemoveFolderPasswordSchema)) body: RemoveFolderPasswordInput,
+    @Body({ schema: RemoveFolderPasswordSchema }) body: RemoveFolderPasswordInput,
   ): Promise<{ success: true }> {
     await this.folders.removePassword(id, user.userId, body);
     return { success: true };
@@ -105,7 +104,7 @@ export class FoldersController {
   async unlock(
     @CurrentUser() user: AuthContext,
     @Param("id") id: string,
-    @Body(new ZodValidationPipe(UnlockFolderSchema)) body: { password: string },
+    @Body({ schema: UnlockFolderSchema }) body: { password: string },
   ): Promise<{ token: string; expiresIn: number }> {
     return this.folders.unlock(id, user.userId, body.password);
   }

@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import type { Session } from "@prisma/client";
+import type { Session } from "../prisma/client.js";
 import { ErrorCode, type SessionDeviceType } from "@ordo/shared";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { AppError } from "../common/errors/app-error.js";

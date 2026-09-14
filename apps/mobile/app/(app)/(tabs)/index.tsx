@@ -52,7 +52,6 @@ import {
 import { layout, spacing } from "../../../src/theme/tokens";
 import { type BookmarkDto, type FolderDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
-import { estimateBookmarkRowSize, FOLDER_ROW_SIZE } from "../../../src/lib/bookmark-row-layout";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
 
 type LibraryItem =
@@ -242,9 +241,6 @@ export default function BookmarksScreen() {
       selectionRevision,
     ],
   );
-  const overrideLibraryLayout = useCallback((layout: { size?: number }, item: LibraryItem) => {
-    layout.size = item.type === "folder" ? FOLDER_ROW_SIZE : estimateBookmarkRowSize(item.bookmark);
-  }, []);
   const libraryKeyExtractor = useCallback(
     (item: LibraryItem) => (item.type === "folder" ? folderKey(item.folder.id) : bookmarkKey(item.bookmark.id)),
     [],
@@ -353,9 +349,7 @@ export default function BookmarksScreen() {
             key={`home:${folderSort}:${unfiledSort}`}
             keyExtractor={libraryKeyExtractor}
             getItemType={(item: LibraryItem) => item.type}
-            overrideItemLayout={overrideLibraryLayout}
             renderItem={renderLibraryItem}
-            estimatedItemSize={72}
             ListEmptyComponent={
               libraryLoading ? (
                 <BookmarkListSkeleton />

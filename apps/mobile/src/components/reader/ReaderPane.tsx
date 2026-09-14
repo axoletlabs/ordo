@@ -50,7 +50,7 @@ import { READER_BODY_SIZE, resolveReaderFont } from "./reader-typography";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 import { resolveReaderPalette } from "../../theme/reader-theme";
 import { pinSystemChrome } from "../../theme/pin-system-chrome";
-import { resolvePalette, type Palette } from "../../theme/theme";
+import { appearanceOverride, resolvePalette, type Palette } from "../../theme/theme";
 import { scrollbarColors } from "../../theme/scrollbar";
 import { queryClient } from "../../lib/query-client";
 import { bookmarksApi } from "../../lib/api/bookmarks";
@@ -344,7 +344,7 @@ function ReaderPaneInner({
       const { themeMode, amoled } = useSettingsStore.getState();
       const app = resolvePalette(themeMode, amoled, Appearance.getColorScheme());
       if (typeof Appearance.setColorScheme === "function") {
-        Appearance.setColorScheme(themeMode === "system" ? null : themeMode);
+        Appearance.setColorScheme(appearanceOverride(themeMode));
       }
       void pinSystemChrome(app).catch(() => {});
       setStatusBarStyle(app.mode === "dark" ? "light" : "dark");
@@ -1093,7 +1093,7 @@ const styles = StyleSheet.create({
   preparingText: { marginTop: spacing[16], textAlign: "center" },
   browserPane: { flex: 1 },
   browserParked: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     opacity: 0,
     zIndex: -1,
   },

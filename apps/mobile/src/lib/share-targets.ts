@@ -9,7 +9,7 @@
  * are deleted after the encrypted write. Deleted on logout.
  */
 import { NativeModules, Platform } from "react-native";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import {
   QUICK_SHARE_BOOKMARK_FILE,
   QUICK_SHARE_ENABLED_FILE,

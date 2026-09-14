@@ -48,7 +48,6 @@ import { sortBookmarksBy } from "../../../src/lib/list-sort";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
 import { DEFAULT_BOOKMARK_LIST_SORT, type BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
-import { estimateBookmarkRowSize } from "../../../src/lib/bookmark-row-layout";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
 
 export default function FolderDetailScreen() {
@@ -161,9 +160,6 @@ export default function FolderDetailScreen() {
     ),
     [hasDetailPane, onEnterSelection, onMoreBookmark, onPressBookmark, selectedBookmarkId, selectionActive, selectionRevision],
   );
-  const overrideItemLayout = useCallback((layout: { size?: number }, item: BookmarkDto) => {
-    layout.size = estimateBookmarkRowSize(item);
-  }, []);
 
   const loadMore = () => {
     if (bookmarks.hasNextPage && !bookmarks.isFetchingNextPage) {
@@ -203,8 +199,6 @@ export default function FolderDetailScreen() {
       key={`folder:${folderId ?? "root"}:${bookmarkSort}`}
       keyExtractor={(b: BookmarkDto) => b.id}
       renderItem={renderBookmark}
-      estimatedItemSize={72}
-      overrideItemLayout={overrideItemLayout}
       contentContainerStyle={{ paddingBottom: listContentPadding }}
       refreshing={bookmarks.isFetching && !bookmarks.isFetchingNextPage && !bookmarks.isPlaceholderData}
       onRefresh={() => bookmarks.refetch()}

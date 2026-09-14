@@ -23,7 +23,7 @@ There isn't a hosted Ordo cloud. You run the API, then point the app at it.
 
 ## Run the backend
 
-You need **Node.js 20+** and **[pnpm](https://pnpm.io)** (this repo uses pnpm 11).
+You need **Node.js 22.13+** and **[pnpm](https://pnpm.io)** (this repo uses pnpm 11).
 
 ### 1. Clone and install
 
@@ -40,8 +40,14 @@ pnpm --filter @ordo/shared build
 pnpm --filter @ordo/server db:setup
 ```
 
-That generates the Prisma client and creates a SQLite database at
+That generates the Prisma client and applies versioned migrations to
 `apps/server/prisma/ordo.db`. You don't need a `.env` file to start.
+
+If you already have a database from an older Ordo that used `prisma db push`,
+start the server once instead of `db:setup`. Boot adopts that file onto
+Prisma migrate and keeps your data. Do not run `prisma migrate deploy` on a
+database that has never been adopted — it would try to create tables that
+already exist.
 
 ### 3. Start the server
 

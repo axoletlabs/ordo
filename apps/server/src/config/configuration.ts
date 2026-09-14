@@ -47,12 +47,12 @@ const EnvSchema = z.object({
   JWT_SECRET: z.string().optional(),
   REGISTRATION_ENABLED: z
     .string()
-    .transform((v) => v.toLowerCase())
-    .default("true"),
+    .default("true")
+    .transform((v) => v.toLowerCase()),
   EMAIL_VERIFICATION_REQUIRED: z
     .string()
-    .transform((v) => v.toLowerCase())
-    .default("false"),
+    .default("false")
+    .transform((v) => v.toLowerCase()),
   CORS_ALLOWED_ORIGINS: z.string().default(""),
   SMTP_URL: z.string().optional(),
   SMTP_FROM: z.string().default(`${APP_NAME} <noreply@ordo.local>`),
@@ -68,12 +68,12 @@ const EnvSchema = z.object({
   AVATAR_DIR: z.string().optional(),
   AVATAR_ALLOW_ANIMATED: z
     .string()
-    .transform((v) => v.toLowerCase())
-    .default("false"),
+    .default("false")
+    .transform((v) => v.toLowerCase()),
   MFA_REQUIRED: z
     .string()
-    .transform((v) => v.toLowerCase())
-    .default("false"),
+    .default("false")
+    .transform((v) => v.toLowerCase()),
 });
 
 function toBool(v: string): boolean {
@@ -109,7 +109,7 @@ function isAbsoluteFilePath(path: string): boolean {
 }
 
 /**
- * Prisma Client resolves relative `file:` URLs from cwd, while `prisma db push`
+ * Prisma Client resolves relative `file:` URLs from cwd, while `prisma migrate`
  * resolves them from the schema directory. Normalize so `file:./ordo.db` (as
  * documented in `.env.example`) always targets `prisma/ordo.db`.
  */

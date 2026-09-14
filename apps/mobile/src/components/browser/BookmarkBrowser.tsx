@@ -336,7 +336,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
 const styles = StyleSheet.create({
   wrap: { flex: 1 },
   web: { flex: 1, ...(Platform.OS === "web" ? ({ height: "100%" } as const) : null) },
-  blankCover: { ...StyleSheet.absoluteFillObject },
+  blankCover: { ...StyleSheet.absoluteFill },
   progressTrack: {
     position: "absolute",
     top: 0,
@@ -347,7 +347,7 @@ const styles = StyleSheet.create({
   },
   progressFill: { height: 2, alignSelf: "flex-start" },
   error: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
     padding: spacing[16],

@@ -49,7 +49,6 @@ import {
   type VerifyEmailChangeInput,
   type VerifyEmailInput,
 } from "@ordo/shared";
-import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe.js";
 import {
   CurrentUser,
   type AuthContext,
@@ -98,7 +97,7 @@ export class AuthController {
   @Post("register")
   @RateLimit("register")
   async register(
-    @Body(new ZodValidationPipe(RegisterSchema)) body: { displayName: string; email: string; password: string },
+    @Body({ schema: RegisterSchema }) body: { displayName: string; email: string; password: string },
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthResponse> {
@@ -111,7 +110,7 @@ export class AuthController {
   @Post("login")
   @HttpCode(200)
   async login(
-    @Body(new ZodValidationPipe(LoginSchema)) body: { identifier: string; password: string },
+    @Body({ schema: LoginSchema }) body: { identifier: string; password: string },
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<LoginResponse> {
@@ -126,7 +125,7 @@ export class AuthController {
   @RateLimit("mfa-verify")
   @HttpCode(200)
   async loginMfa(
-    @Body(new ZodValidationPipe(LoginMfaSchema)) body: { challengeToken: string; code: string },
+    @Body({ schema: LoginMfaSchema }) body: { challengeToken: string; code: string },
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthResponse> {
@@ -140,7 +139,7 @@ export class AuthController {
   @RateLimit("mfa-verify")
   @HttpCode(200)
   async loginMfaEmail(
-    @Body(new ZodValidationPipe(LoginMfaEmailSchema)) body: { challengeToken: string },
+    @Body({ schema: LoginMfaEmailSchema }) body: { challengeToken: string },
   ): Promise<{ success: true }> {
     await this.auth.requestMfaEmailRecovery(body.challengeToken);
     return { success: true };
@@ -150,7 +149,7 @@ export class AuthController {
   @RateLimit("mfa-verify")
   @HttpCode(200)
   async loginMfaEmailVerify(
-    @Body(new ZodValidationPipe(LoginMfaEmailVerifySchema)) body: { challengeToken: string; token: string },
+    @Body({ schema: LoginMfaEmailVerifySchema }) body: { challengeToken: string; token: string },
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthResponse> {
@@ -180,7 +179,7 @@ export class AuthController {
   @RateLimit("forgot-password")
   @HttpCode(200)
   async forgotPassword(
-    @Body(new ZodValidationPipe(ForgotPasswordSchema)) body: ForgotPasswordInput,
+    @Body({ schema: ForgotPasswordSchema }) body: ForgotPasswordInput,
   ): Promise<{ success: true }> {
     await this.auth.requestPasswordReset(body.email);
     return { success: true };
@@ -190,7 +189,7 @@ export class AuthController {
   @RateLimit("reset-password")
   @HttpCode(200)
   async resetPassword(
-    @Body(new ZodValidationPipe(ResetPasswordSchema)) body: ResetPasswordInput,
+    @Body({ schema: ResetPasswordSchema }) body: ResetPasswordInput,
   ): Promise<{ success: true }> {
     await this.auth.resetPassword(body.email, body.token, body.newPassword);
     return { success: true };
@@ -223,7 +222,7 @@ export class AuthController {
   @HttpCode(200)
   async updatePreferences(
     @CurrentUser() user: AuthContext,
-    @Body(new ZodValidationPipe(UpdateReaderPreferencesSchema))
+    @Body({ schema: UpdateReaderPreferencesSchema })
     body: UpdateReaderPreferencesInput,
   ): Promise<UserDto> {
     return this.auth.updatePreferences(user.userId, body);
@@ -249,7 +248,7 @@ export class AuthController {
   @Post("verify-email")
   @HttpCode(200)
   async verifyEmail(
-    @Body(new ZodValidationPipe(VerifyEmailSchema)) body: VerifyEmailInput,
+    @Body({ schema: VerifyEmailSchema }) body: VerifyEmailInput,
   ): Promise<{ success: true }> {
     await this.auth.verifyEmail(body.email, body.token);
     return { success: true };
@@ -260,7 +259,7 @@ export class AuthController {
   @HttpCode(200)
   async changeDisplayName(
     @CurrentUser() user: AuthContext,
-    @Body(new ZodValidationPipe(ChangeDisplayNameSchema)) body: { displayName: string },
+    @Body({ schema: ChangeDisplayNameSchema }) body: { displayName: string },
   ): Promise<UserDto> {
     return this.auth.changeDisplayName(user.userId, body.displayName);
   }
@@ -270,7 +269,7 @@ export class AuthController {
   @HttpCode(200)
   async changeEmail(
     @CurrentUser() user: AuthContext,
-    @Body(new ZodValidationPipe(ChangeEmailSchema))
+    @Body({ schema: ChangeEmailSchema })
     body: { currentPassword: string; newEmail: string },
   ): Promise<{ success: true }> {
     await this.auth.requestEmailChange(user.userId, body.currentPassword, body.newEmail);
@@ -290,7 +289,7 @@ export class AuthController {
   @HttpCode(200)
   async verifyEmailChange(
     @CurrentUser() user: AuthContext,
-    @Body(new ZodValidationPipe(VerifyEmailChangeSchema)) body: VerifyEmailChangeInput,
+    @Body({ schema: VerifyEmailChangeSchema }) body: VerifyEmailChangeInput,
   ): Promise<UserDto> {
     return this.auth.verifyEmailChange(user.userId, body.token);
   }
@@ -300,7 +299,7 @@ export class AuthController {
   @HttpCode(200)
   async changePassword(
     @CurrentUser() user: AuthContext,
-    @Body(new ZodValidationPipe(ChangePasswordSchema))
+    @Body({ schema: ChangePasswordSchema })
     body: { currentPassword: string; newPassword: string },
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
@@ -321,7 +320,7 @@ export class AuthController {
   @HttpCode(200)
   async deleteAccount(
     @CurrentUser() user: AuthContext,
-    @Body(new ZodValidationPipe(DeleteAccountSchema))
+    @Body({ schema: DeleteAccountSchema })
     body: { currentPassword: string; confirmation: string; mfaCode?: string },
     @Res({ passthrough: true }) res: Response,
   ): Promise<{ success: true }> {
@@ -343,7 +342,7 @@ export class AuthController {
   @HttpCode(200)
   async totpBegin(
     @CurrentUser() user: AuthContext,
-    @Body(new ZodValidationPipe(TotpBeginSchema)) body: { mfaCode?: string },
+    @Body({ schema: TotpBeginSchema }) body: { mfaCode?: string },
   ): Promise<TotpBeginDto> {
     return this.mfa.beginTotp(user.userId, body.mfaCode);
   }
@@ -354,7 +353,7 @@ export class AuthController {
   @HttpCode(200)
   async totpConfirm(
     @CurrentUser() user: AuthContext,
-    @Body(new ZodValidationPipe(TotpConfirmSchema)) body: { code: string },
+    @Body({ schema: TotpConfirmSchema }) body: { code: string },
   ): Promise<TotpConfirmDto> {
     return this.mfa.confirmTotp(user.userId, body.code);
   }
@@ -364,7 +363,7 @@ export class AuthController {
   @HttpCode(200)
   async totpDisable(
     @CurrentUser() user: AuthContext,
-    @Body(new ZodValidationPipe(MfaCodeBodySchema)) body: { mfaCode: string },
+    @Body({ schema: MfaCodeBodySchema }) body: { mfaCode: string },
   ): Promise<UserDto> {
     const updated = await this.mfa.disableTotp(user.userId, body.mfaCode);
     return toUserDto(updated);
@@ -375,7 +374,7 @@ export class AuthController {
   @HttpCode(200)
   async regenerateBackupCodes(
     @CurrentUser() user: AuthContext,
-    @Body(new ZodValidationPipe(MfaCodeBodySchema)) body: { mfaCode: string },
+    @Body({ schema: MfaCodeBodySchema }) body: { mfaCode: string },
   ): Promise<BackupCodesDto> {
     const backupCodes = await this.mfa.regenerateBackupCodes(user.userId, body.mfaCode);
     return { backupCodes };
