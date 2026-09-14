@@ -46,10 +46,9 @@ export async function syncQuickShareFlags(opts: {
   quickBookmark: boolean;
   showAlongside: boolean;
 }): Promise<void> {
-  await Promise.all([
-    syncSidecarFile(QUICK_SHARE_ENABLED_FILE, opts.showAlongside ? "1" : null),
-    syncSidecarFile(QUICK_SHARE_BOOKMARK_FILE, opts.quickBookmark ? "1" : null),
-  ]);
+  // Bookmark first so a FileObserver on the alongside file sees both flags.
+  await syncSidecarFile(QUICK_SHARE_BOOKMARK_FILE, opts.quickBookmark ? "1" : null);
+  await syncSidecarFile(QUICK_SHARE_ENABLED_FILE, opts.showAlongside ? "1" : null);
 }
 
 export async function syncQuickShareSession(session: QuickShareSession | null): Promise<void> {

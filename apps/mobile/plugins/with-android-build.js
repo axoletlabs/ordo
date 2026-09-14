@@ -147,6 +147,10 @@ internal object ShareIntake {
   private val main = Handler(Looper.getMainLooper())
   private var filesWatcher: FileObserver? = null
   private var cacheWatcher: FileObserver? = null
+  private var delayedApp: Context? = null
+  private val delayedSync = Runnable {
+    delayedApp?.let { syncQuickTarget(it) }
+  }
 
   @JvmStatic
   fun handleIncoming(activity: Activity, quick: Boolean) {
@@ -207,17 +211,22 @@ internal object ShareIntake {
 
   @JvmStatic
   fun watchAndSync(context: Context) {
-    watch(context)
-    syncQuickTarget(context)
+    val app = context.applicationContext
+    watch(app)
+    syncQuickTarget(app)
+    main.removeCallbacks(delayedSync)
+    delayedApp = app
+    main.postDelayed(delayedSync, 2500)
   }
 
   @JvmStatic
   fun syncQuickTarget(context: Context) {
-    val enabled = sidecarExists(context, ENABLED_FILE)
-    setEnabled(context, DEFAULT_ALIAS, !enabled)
-    setEnabled(context, SAVE_ALIAS, enabled)
-    setEnabled(context, QuickShareReceiverActivity::class.java.name, enabled)
-    syncQuickShortcut(context, enabled)
+    val alongside = sidecarExists(context, ENABLED_FILE)
+    val quick = sidecarExists(context, BOOKMARK_FILE) || alongside
+    setEnabled(context, DEFAULT_ALIAS, !alongside && !sidecarExists(context, BOOKMARK_FILE))
+    setEnabled(context, SAVE_ALIAS, alongside)
+    setEnabled(context, QuickShareReceiverActivity::class.java.name, quick)
+    syncQuickShortcut(context, alongside)
   }
 
   private fun setEnabled(context: Context, className: String, enabled: Boolean) {
@@ -245,7 +254,7 @@ internal object ShareIntake {
     @Suppress("DEPRECATION")
     val observer = object : FileObserver(dir.absolutePath, mask) {
       override fun onEvent(event: Int, path: String?) {
-        if (path == ENABLED_FILE) main.post { syncQuickTarget(app) }
+        if (path == ENABLED_FILE || path == BOOKMARK_FILE) main.post { syncQuickTarget(app) }
       }
     }
     observer.startWatching()
@@ -270,13 +279,21 @@ internal object ShareIntake {
         .setLongLabel(LABEL)
         .setIcon(icon)
         .setCategories(setOf(CATEGORY))
-        .setActivity(ComponentName(context, MainActivity::class.java))
+        .setActivity(ComponentName(context, QuickShareReceiverActivity::class.java))
         .setRank(0)
-        .setIntent(Intent(context, MainActivity::class.java).setAction(Intent.ACTION_VIEW))
+        .setIntent(
+          Intent(context, QuickShareReceiverActivity::class.java)
+            .setAction(Intent.ACTION_SEND)
+            .setType("text/plain")
+        )
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         builder.setLongLived(true)
       }
-      sm.addDynamicShortcuts(listOf(builder.build()))
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        sm.pushDynamicShortcut(builder.build())
+      } else {
+        sm.addDynamicShortcuts(listOf(builder.build()))
+      }
     } catch (_: Exception) {
     }
   }
@@ -564,14 +581,10 @@ const withAndroidBuild = (config) => {
       );
       app.activity.push(shareReceiverActivity(SHARE_RECEIVER_ACTIVITY, {}, { intentFilter: false }));
       app.activity.push(
-        shareReceiverActivity(
-          QUICK_SHARE_RECEIVER_ACTIVITY,
-          {
-            'android:label': QUICK_SHARE_LABEL,
-            'android:enabled': 'false',
-          },
-          { defaultCategory: false }
-        )
+        shareReceiverActivity(QUICK_SHARE_RECEIVER_ACTIVITY, {
+          'android:label': QUICK_SHARE_LABEL,
+          'android:enabled': 'false',
+        })
       );
       app['activity-alias'] = (app['activity-alias'] ?? []).filter(
         (alias) => !SHARE_RECEIVER_ALIASES.includes(alias.$?.['android:name'])
@@ -590,10 +603,10 @@ const withAndroidBuild = (config) => {
   // Receive shares outside React, then forward them into Ordo's own task. Some
   // sender apps otherwise embed MainActivity in their task and create a second
   // Expo Router tree despite launchMode="singleTask".
-  // QuickShareReceiverActivity stays disabled until Settings writes the
-  // sidecar file. Android 11+ stacks every SEND activity from one package
-  // into a single tile, so "Show alongside Save" publishes a Quick Save
-  // shortcut and switches the chooser entry from the app name to Save.
+  // QuickShareReceiverActivity stays disabled until Settings writes a sidecar.
+  // It is a SEND/DEFAULT target labeled Quick Save so the chooser lists it
+  // even when sharing shortcuts don't show. "Show alongside Save" also
+  // publishes a shortcut and relabels the other tile Save.
   config = withDangerousMod(config, [
     'android',
     async (c) => {

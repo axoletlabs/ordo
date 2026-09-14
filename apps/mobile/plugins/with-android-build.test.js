@@ -145,8 +145,9 @@ test("alongside share targets are labeled Save and Quick Save", () => {
   assert.match(source, /LABEL = "Quick Save"/);
   assert.match(source, /DEFAULT_ALIAS = "com\.axolet\.ordo\.ShareReceiverDefault"/);
   assert.match(source, /SAVE_ALIAS = "com\.axolet\.ordo\.ShareReceiverSave"/);
-  assert.match(source, /setEnabled\(context, DEFAULT_ALIAS, !enabled\)/);
-  assert.match(source, /setEnabled\(context, SAVE_ALIAS, enabled\)/);
+  assert.match(source, /setEnabled\(context, DEFAULT_ALIAS, !alongside && !sidecarExists\(context, BOOKMARK_FILE\)\)/);
+  assert.match(source, /setEnabled\(context, SAVE_ALIAS, alongside\)/);
+  assert.match(source, /QuickShareReceiverActivity::class\.java\.name, quick/);
 
   const save = shareReceiverAlias(SHARE_RECEIVER_SAVE_ALIAS, {
     'android:label': SAVE_SHARE_LABEL,
@@ -155,13 +156,15 @@ test("alongside share targets are labeled Save and Quick Save", () => {
   assert.equal(save.$['android:label'], 'Save');
   assert.equal(save.$['android:targetActivity'], '.ShareReceiverActivity');
 
-  const quick = shareReceiverActivity(
-    '.QuickShareReceiverActivity',
-    { 'android:label': QUICK_SHARE_LABEL, 'android:enabled': 'false' },
-    { defaultCategory: false }
-  );
+  const quick = shareReceiverActivity('.QuickShareReceiverActivity', {
+    'android:label': QUICK_SHARE_LABEL,
+    'android:enabled': 'false',
+  });
   assert.equal(quick.$['android:label'], 'Quick Save');
-  assert.equal(quick['intent-filter'][0].category, undefined);
+  assert.equal(
+    quick['intent-filter'][0].category[0].$['android:name'],
+    'android.intent.category.DEFAULT',
+  );
 
   const receiver = shareReceiverActivity('.ShareReceiverActivity', {}, { intentFilter: false });
   assert.equal(receiver['intent-filter'], undefined);
@@ -172,9 +175,13 @@ test("share intake publishes a sharing shortcut so Android 11+ can show both act
   const source = shareIntakeKotlin('com.axolet.ordo');
   const category = quickShareCategory('com.axolet.ordo');
   assert.match(source, /ShortcutManager/);
-  assert.match(source, /addDynamicShortcuts/);
+  assert.match(source, /pushDynamicShortcut|addDynamicShortcuts/);
   assert.match(source, new RegExp(`SHORTCUT_ID = "${QUICK_SHARE_SHORTCUT_ID}"`));
   assert.match(source, new RegExp(`CATEGORY = "${category.replace(/\./g, '\\.')}"`));
+  assert.match(source, /QuickShareReceiverActivity::class\.java/);
+  assert.match(source, /ACTION_SEND/);
+  assert.match(source, /BOOKMARK_FILE/);
+  assert.match(source, /postDelayed/);
   assert.match(source, /filesDir/);
   assert.match(source, /cacheDir/);
 });
