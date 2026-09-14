@@ -162,7 +162,7 @@ internal object QuickShareSave {
   }
 
   private fun readSession(context: Context): Session? {
-    val raw = ShareIntake.readSidecar(context, ShareIntake.SESSION_FILE) ?: return null
+    val raw = ShareSessionStore.read(context) ?: return null
     return try {
       val json = JSONObject(raw)
       val server = json.optString("serverUrl").trim().trimEnd('/')
@@ -184,7 +184,7 @@ internal object QuickShareSave {
       .put("updatedAt", System.currentTimeMillis())
     if (session.accessExpiresAt != null) json.put("accessExpiresAt", session.accessExpiresAt as Long)
     else json.put("accessExpiresAt", JSONObject.NULL)
-    ShareIntake.writeSidecar(context, ShareIntake.SESSION_FILE, json.toString())
+    ShareSessionStore.write(context, json.toString())
   }
 
   private fun extractFromIntent(intent: Intent): String? {

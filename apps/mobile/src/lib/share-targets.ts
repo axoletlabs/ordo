@@ -3,10 +3,12 @@
  * Enabling the Quick Bookmark target publishes a sharing shortcut so it can
  * appear next to ordo — Android 11+ stacks same-app SEND activities into one tile.
  *
- * The session snapshot is app-private (filesDir / cacheDir) so the translucent
- * Quick Save activity can POST without launching React. Deleted on logout.
+ * Access/refresh tokens stay in SecureStore. Android Quick Save also keeps an
+ * EncryptedSharedPreferences copy so the translucent activity can POST without
+ * React. Older builds wrote that JSON to filesDir/cacheDir; those leftovers
+ * are deleted after the encrypted write. Deleted on logout.
  */
-import { Platform } from "react-native";
+import { NativeModules, Platform } from "react-native";
 import * as FileSystem from "expo-file-system";
 import {
   QUICK_SHARE_BOOKMARK_FILE,
@@ -16,6 +18,12 @@ import {
   parseQuickShareSession,
   type QuickShareSession,
 } from "./share-intake";
+
+interface ShareSessionNative {
+  get(): Promise<string | null>;
+  set(json: string): Promise<void>;
+  clear(): Promise<void>;
+}
 
 function androidFile(directory: string | null, name: string): string | null {
   if (Platform.OS !== "android" || !directory) return null;
@@ -42,6 +50,15 @@ async function syncSidecarFile(name: string, contents: string | null): Promise<v
   );
 }
 
+function shareSessionNative(): ShareSessionNative | null {
+  if (Platform.OS !== "android") return null;
+  const mod = NativeModules.OrdoShareSession as ShareSessionNative | undefined;
+  if (!mod || typeof mod.get !== "function" || typeof mod.set !== "function" || typeof mod.clear !== "function") {
+    return null;
+  }
+  return mod;
+}
+
 export async function syncQuickShareFlags(opts: {
   quickBookmark: boolean;
   showAlongside: boolean;
@@ -52,10 +69,30 @@ export async function syncQuickShareFlags(opts: {
 }
 
 export async function syncQuickShareSession(session: QuickShareSession | null): Promise<void> {
+  const native = shareSessionNative();
+  if (native) {
+    try {
+      if (session) await native.set(JSON.stringify(session));
+      else await native.clear();
+    } catch {
+      /* ignore — best effort */
+    }
+    await syncSidecarFile(QUICK_SHARE_SESSION_FILE, null);
+    return;
+  }
   await syncSidecarFile(QUICK_SHARE_SESSION_FILE, session ? JSON.stringify(session) : null);
 }
 
 export async function readQuickShareSession(): Promise<QuickShareSession | null> {
+  const native = shareSessionNative();
+  if (native) {
+    try {
+      const parsed = parseQuickShareSession(await native.get());
+      if (parsed) return parsed;
+    } catch {
+      /* fall through to leftover files from an older APK */
+    }
+  }
   for (const path of sidecarPaths(QUICK_SHARE_SESSION_FILE)) {
     try {
       const info = await FileSystem.getInfoAsync(path);
