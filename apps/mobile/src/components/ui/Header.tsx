@@ -27,6 +27,18 @@ export const HEADER_TITLE_INSET = 48;
 export const HEADER_CONTROL_SIZE = 32;
 /** Trailing header glyphs (back chevron stays 24). */
 export const HEADER_ICON_SIZE = 22;
+/**
+ * Ionicons share one em-square, but some glyphs fill more of it than others.
+ * Shrink the heavy ones so a header row matches optically.
+ */
+const HEADER_ICON_OPTICAL_SIZE: Partial<Record<keyof typeof Ionicons.glyphMap, number>> = {
+  "pricetag-outline": 18,
+  "pricetags-outline": 18,
+};
+
+function headerIconSize(name: keyof typeof Ionicons.glyphMap): number {
+  return HEADER_ICON_OPTICAL_SIZE[name] ?? HEADER_ICON_SIZE;
+}
 
 export const headerTitleTextStyle: TextStyle = {
   width: "100%",
@@ -203,7 +215,7 @@ export function HeaderIconButton({
         accessibilityLabel={accessibilityLabel}
         accessibilityHint={accessibilityHint}
       >
-        <Ionicons name={name} size={HEADER_ICON_SIZE} color={color} style={headerIconGlyphStyle} />
+        <Ionicons name={name} size={headerIconSize(name)} color={color} style={headerIconGlyphStyle} />
       </PressableScale>
     </View>
   );
