@@ -423,4 +423,60 @@ export function useBatchBookmarks() {
   });
 }
 
+export function useCreateHighlight() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      folderId,
+      exact,
+      prefix,
+      suffix,
+      href,
+    }: {
+      id: string;
+      folderId: string | null;
+      exact: string;
+      prefix?: string;
+      suffix?: string;
+      href?: string | null;
+    }) => bookmarksApi.createHighlight(id, { exact, prefix, suffix, href }, { folderId }),
+    onSuccess: (highlight, { id }) => {
+      qc.setQueryData<BookmarkDetailDto>(qk.bookmark(id), (current) => {
+        if (!current) return current;
+        const highlights = current.highlights ?? [];
+        if (highlights.some((row) => row.id === highlight.id)) return current;
+        return { ...current, highlights: [...highlights, highlight] };
+      });
+    },
+  });
+}
+
+export function useRemoveHighlight() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      highlightId,
+      folderId,
+    }: {
+      id: string;
+      highlightId: string;
+      folderId: string | null;
+    }) => bookmarksApi.removeHighlight(id, highlightId, { folderId }),
+    onMutate: ({ id, highlightId }) => {
+      const previous = qc.getQueryData<BookmarkDetailDto>(qk.bookmark(id));
+      qc.setQueryData<BookmarkDetailDto>(qk.bookmark(id), (current) =>
+        current
+          ? { ...current, highlights: (current.highlights ?? []).filter((row) => row.id !== highlightId) }
+          : current,
+      );
+      return { previous };
+    },
+    onError: (_error, { id }, context) => {
+      if (context?.previous) qc.setQueryData(qk.bookmark(id), context.previous);
+    },
+  });
+}
+
 export type { BookmarkDetailDto };

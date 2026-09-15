@@ -134,4 +134,21 @@ export const bookmarksApi = {
 
   prefetch: (url: string) =>
     api.post<typeof BookmarkRoutes.prefetch.response>(BookmarkRoutes.prefetch.path, { url }),
+
+  createHighlight: (
+    id: string,
+    body: { exact: string; prefix?: string; suffix?: string; href?: string | null },
+    opts?: { folderId?: string | null },
+  ) =>
+    api.post<typeof BookmarkRoutes.createHighlight.response>(
+      buildPath(BookmarkRoutes.createHighlight.path, { id }),
+      body,
+      opts,
+    ),
+
+  removeHighlight: (id: string, highlightId: string, opts?: { folderId?: string | null }) =>
+    api.delete<typeof BookmarkRoutes.removeHighlight.response>(
+      buildPath(BookmarkRoutes.removeHighlight.path, { id, highlightId }),
+      opts,
+    ),
 };

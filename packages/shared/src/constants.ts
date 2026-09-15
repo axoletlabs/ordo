@@ -98,6 +98,15 @@ export function extractionPollIntervalMs(dataUpdateCount: number): number {
 /** readProgress at or above this fraction marks a bookmark read/completed. */
 export const READ_COMPLETION_THRESHOLD = 0.98;
 
+/** Article highlights (TextQuoteSelector-style anchors). */
+export const HIGHLIGHT_QUOTE_MAX_LENGTH = 2_000;
+export const HIGHLIGHT_CONTEXT_MAX_LENGTH = 64;
+export const HIGHLIGHTS_PER_BOOKMARK_MAX = 100;
+/** Prefix/suffix copied from the surrounding text when creating a highlight. */
+export const HIGHLIGHT_CONTEXT_LENGTH = 32;
+/** `id` written onto `<mark>` tags in the reader HTML. */
+export const HIGHLIGHT_MARK_ID_PREFIX = "ordo-hl-";
+
 export const TAG_NAME_MAX_LENGTH = 40;
 export const MAX_TAGS_PER_BOOKMARK = 20;
 export const MAX_TAG_SUGGESTIONS = 3;

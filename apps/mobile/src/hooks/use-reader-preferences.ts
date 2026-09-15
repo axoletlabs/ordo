@@ -1,7 +1,7 @@
 /**
  * Reader preferences (font size/family, theme, AMOLED) sourced from the
  * authenticated user's account-synced preferences. The persisted local
- * account acts as the offline cache; the server account is canonical.
+ * account is a launch cache; the server account is canonical.
  */
 import { useMemo } from "react";
 import { DEFAULT_READER_PREFERENCES, normalizeReaderPreferences } from "@ordo/shared";

@@ -172,6 +172,7 @@ model Bookmark {
   folder Folder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
   tags        BookmarkTag[]
   suggestions BookmarkTagSuggestion[]
+  highlights  BookmarkHighlight[]
 
   @@index([userId])
   @@index([userId, fetchStatus])
@@ -221,6 +222,21 @@ model BookmarkTagSuggestion {
   @@id([bookmarkId, tagId])
   @@index([tagId])
   @@index([bookmarkId, status])
+}
+
+/// A reader highlight, anchored by quote rather than HTML offsets.
+model BookmarkHighlight {
+  id         String   @id @default(cuid())
+  bookmarkId String
+  exact      String
+  prefix     String   @default("")
+  suffix     String   @default("")
+  href       String?
+  createdAt  DateTime @default(now())
+
+  bookmark Bookmark @relation(fields: [bookmarkId], references: [id], onDelete: Cascade)
+
+  @@index([bookmarkId, createdAt])
 }
 
 /// Staged import job: uploaded file → parsed preview → confirmed commit.

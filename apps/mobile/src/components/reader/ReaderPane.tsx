@@ -15,17 +15,27 @@ import {
   Share,
   StyleSheet,
   View,
+  type GestureResponderEvent,
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
 import { useColorScheme, useWindowDimensions } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import { Ionicons } from "@expo/vector-icons";
 import { StatusBar, setStatusBarStyle } from "expo-status-bar";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { APP_NAME, READ_COMPLETION_THRESHOLD } from "@ordo/shared";
+import {
+  APP_NAME,
+  HIGHLIGHT_QUOTE_MAX_LENGTH,
+  HIGHLIGHTS_PER_BOOKMARK_MAX,
+  READ_COMPLETION_THRESHOLD,
+  canAnchorHighlight,
+} from "@ordo/shared";
 import type {
+  HighlightAnchor,
+  HighlightDto,
   ReaderPreferences,
   UpdateReaderPreferencesInput,
 } from "@ordo/shared";
@@ -55,7 +65,7 @@ import { scrollbarColors } from "../../theme/scrollbar";
 import { queryClient } from "../../lib/query-client";
 import { bookmarksApi } from "../../lib/api/bookmarks";
 import { findBookmarkInCache, updateBookmarkEverywhere } from "../../lib/cache-helpers";
-import { useBookmarkDetail, useToggleRead } from "../../hooks/use-bookmarks";
+import { useBookmarkDetail, useCreateHighlight, useRemoveHighlight, useToggleRead } from "../../hooks/use-bookmarks";
 import * as bookmarkHooks from "../../hooks/use-bookmarks";
 import { useFolders } from "../../hooks/queries";
 import { useReaderPreferences } from "../../hooks/use-reader-preferences";
@@ -63,7 +73,7 @@ import { useSettingsStore } from "../../store/settings";
 import { domainFromUrl, formatDate } from "../../lib/format";
 import { errorMessage, folderProtectedId, isFolderProtected } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
-import { layout, spacing } from "../../theme/tokens";
+import { layout, radius, spacing } from "../../theme/tokens";
 import { toast } from "../ui/toast-store";
 import type { MenuAnchorRect } from "../../lib/menu-anchor";
 import { BookmarkBrowser, type BookmarkBrowserHandle } from "../browser/BookmarkBrowser";
@@ -73,7 +83,7 @@ import {
   bookmarkOpensAsWebsite,
   canReadInOrdo,
 } from "../../lib/bookmark-reader";
-import { copyLink } from "../../lib/copy-link";
+import { copyLink, copyText } from "../../lib/copy-link";
 import { openExternalBrowser, openLivePage } from "../../lib/open-website";
 import { scrollReadingProgress, shouldFlushReadingProgress } from "../../lib/reading-progress";
 
@@ -104,6 +114,15 @@ const CONTENTS_IDLE_DELAY_MS = 450;
 /** Collapse whitespace/newlines so stored titles render as one line-ish. */
 function normalizeTitle(raw: string | null | undefined): string {
   return (raw ?? "").replace(/\s+/g, " ").trim();
+}
+
+function pointAnchor(event: GestureResponderEvent): MenuAnchorRect {
+  return {
+    x: event.nativeEvent.pageX,
+    y: event.nativeEvent.pageY,
+    width: 1,
+    height: 1,
+  };
 }
 
 /**
@@ -193,7 +212,7 @@ function ReaderPaneInner({
 
   const [controlsOpen, setControlsOpen] = useState(false);
   const [unlockOpen, setUnlockOpen] = useState(false);
-  const [actionPanel, setActionPanel] = useState<"actions" | "contents" | null>(null);
+  const [actionPanel, setActionPanel] = useState<"actions" | "contents" | "highlights" | null>(null);
   const [actionsAnchor, setActionsAnchor] = useState<MenuAnchorRect | null>(null);
   const [editTagsOpen, setEditTagsOpen] = useState(false);
   const [headingState, setHeadingState] = useState<{
@@ -206,9 +225,20 @@ function ReaderPaneInner({
   const [surface, setSurface] = useState<"auto" | "reader" | "browser">(
     initialSurface === "browser" ? "browser" : "auto",
   );
+  const [textDraft, setTextDraft] = useState<HighlightAnchor | null>(null);
+  const [linkMenu, setLinkMenu] = useState<{
+    quote: HighlightAnchor & { href: string };
+    anchor: MenuAnchorRect;
+  } | null>(null);
+  const [highlightMenu, setHighlightMenu] = useState<{
+    highlight: HighlightDto;
+    anchor: MenuAnchorRect;
+  } | null>(null);
 
   const toggleRead = useToggleRead(bookmark?.folderId ?? null);
   const setContentKind = useSetContentKind();
+  const createHighlight = useCreateHighlight();
+  const removeHighlight = useRemoveHighlight();
   const markedRef = useRef<string | null>(null);
   const browserRef = useRef<BookmarkBrowserHandle>(null);
   const websiteViewRef = useRef(false);
@@ -251,6 +281,7 @@ function ReaderPaneInner({
   const readerFont = resolveReaderFont(preferences.fontFamily);
   const readerBoldFont = resolveReaderFont(preferences.fontFamily, "700");
   const articleHeadings = headingState.bookmarkId === bookmark?.id ? headingState.headings : [];
+  const highlights = detail.data?.highlights ?? [];
 
   const handleHeadingsChange = useCallback(
     (headings: readonly ArticleHeading[]) => {
@@ -298,6 +329,65 @@ function ReaderPaneInner({
     if (!bookmark) return;
     void copyLink(bookmark.url);
   };
+
+  const handleTextSelect = useCallback((draft: HighlightAnchor | null) => {
+    setTextDraft(draft);
+    if (draft) setActionPanel(null);
+  }, []);
+
+  const saveHighlight = useCallback(
+    (draft: HighlightAnchor & { href?: string | null }) => {
+      if (!bookmark) return;
+      if (draft.exact.length > HIGHLIGHT_QUOTE_MAX_LENGTH) {
+        toast.error("Select a shorter passage.");
+        return;
+      }
+      if (highlights.length >= HIGHLIGHTS_PER_BOOKMARK_MAX) {
+        toast.error(`A bookmark can have at most ${HIGHLIGHTS_PER_BOOKMARK_MAX} highlights.`);
+        return;
+      }
+      const html = detail.data?.contentHtml;
+      if (html && !canAnchorHighlight(html, draft)) {
+        toast.error("That passage is not in the article.");
+        return;
+      }
+      haptics.light();
+      createHighlight.mutate(
+        {
+          id: bookmark.id,
+          folderId: bookmark.folderId,
+          exact: draft.exact,
+          prefix: draft.prefix ?? "",
+          suffix: draft.suffix ?? "",
+          href: draft.href ?? null,
+        },
+        {
+          onSuccess: () => {
+            setTextDraft(null);
+            setLinkMenu(null);
+            toast.success("Highlighted");
+          },
+          onError: (err) => toast.error(errorMessage(err, "Couldn't save the highlight.")),
+        },
+      );
+    },
+    [bookmark, createHighlight, detail.data?.contentHtml, highlights.length],
+  );
+
+  const dropHighlight = useCallback(
+    (highlightId: string) => {
+      if (!bookmark) return;
+      haptics.light();
+      removeHighlight.mutate(
+        { id: bookmark.id, highlightId, folderId: bookmark.folderId },
+        {
+          onSuccess: () => toast.success("Highlight removed"),
+          onError: (err) => toast.error(errorMessage(err, "Couldn't remove the highlight.")),
+        },
+      );
+    },
+    [bookmark, removeHighlight],
+  );
 
   const handleClassify = (asArticle: boolean) => {
     if (!bookmark) return;
@@ -524,6 +614,9 @@ function ReaderPaneInner({
     }
     contentsShortcutVisibleRef.current = false;
     setContentsShortcutVisible(false);
+    setTextDraft(null);
+    setLinkMenu(null);
+    setHighlightMenu(null);
     return () => {
       flushProgress();
     };
@@ -814,6 +907,18 @@ function ReaderPaneInner({
                     html={detail.data?.contentHtml ?? ""}
                     preferences={preferences}
                     contentWidth={articleWidth || fallbackArticleWidth}
+                    highlights={highlights}
+                    onTextSelect={handleTextSelect}
+                    onHighlightPress={(id, event) => {
+                      const highlight = highlights.find((row) => row.id === id);
+                      if (!highlight) return;
+                      setTextDraft(null);
+                      setHighlightMenu({ highlight, anchor: pointAnchor(event) });
+                    }}
+                    onLinkLongPress={(quote, event) => {
+                      setTextDraft(null);
+                      setLinkMenu({ quote, anchor: pointAnchor(event) });
+                    }}
                     onHeadingsChange={handleHeadingsChange}
                     onHeadingRef={handleHeadingRef}
                     onReady={handleArticleReady}
@@ -882,7 +987,7 @@ function ReaderPaneInner({
         </>
       )}
 
-      {contentsShortcutVisible && actionPanel === null && !controlsOpen && !showWebsiteView ? (
+      {contentsShortcutVisible && actionPanel === null && !controlsOpen && !showWebsiteView && !textDraft ? (
         <FABLayer maxWidth={layout.maxLibraryWidth}>
           <FAB
             icon="list-outline"
@@ -919,6 +1024,13 @@ function ReaderPaneInner({
             icon="list-outline"
             label="Table of contents"
             onPress={() => setActionPanel("contents")}
+          />
+        ) : null}
+        {hasHtml && !showWebsiteView ? (
+          <ContextMenuItem
+            icon="color-fill-outline"
+            label="Highlights"
+            onPress={() => setActionPanel("highlights")}
           />
         ) : null}
         {showWebsiteView ? (
@@ -1039,6 +1151,159 @@ function ReaderPaneInner({
           style={sheetMenuStyles.cancel}
         />
       </FloatingPanel>
+      <FloatingPanel visible={actionPanel === "highlights"} onDismiss={() => setActionPanel(null)}>
+        <PanelHeader
+          title="Highlights"
+          subtitle={
+            highlights.length === 0
+              ? "Long-press a sentence or a link, then tap Highlight. They stay in sync across your devices."
+              : undefined
+          }
+        />
+        {highlights.length > 0 ? (
+          <ThemedScrollView style={styles.highlightList}>
+            {highlights.map((row) => (
+              <View key={row.id} style={styles.highlightRow}>
+                <PressableScale
+                  style={styles.highlightBody}
+                  onPress={() => void copyText(row.exact, "Highlight copied")}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Copy highlight: ${row.exact}`}
+                >
+                  <Text variant="body" numberOfLines={3}>
+                    {row.exact}
+                  </Text>
+                  {row.href ? (
+                    <Text variant="footnote" color="secondary" numberOfLines={1} style={styles.highlightMeta}>
+                      {domainFromUrl(row.href)}
+                    </Text>
+                  ) : null}
+                </PressableScale>
+                <PressableScale
+                  style={styles.removeHit}
+                  onPress={() => dropHighlight(row.id)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Remove highlight"
+                >
+                  <Ionicons name="trash-outline" size={18} color={palette.danger} />
+                </PressableScale>
+              </View>
+            ))}
+          </ThemedScrollView>
+        ) : null}
+        <Button
+          label="Article actions"
+          variant="ghost"
+          block
+          onPress={() => setActionPanel("actions")}
+          style={sheetMenuStyles.cancel}
+        />
+      </FloatingPanel>
+      <ContextMenu
+        visible={linkMenu !== null}
+        onDismiss={() => setLinkMenu(null)}
+        anchor={linkMenu?.anchor ?? null}
+      >
+        <ContextMenuItem
+          icon="color-fill-outline"
+          label="Highlight"
+          busy={createHighlight.isPending}
+          onPress={() => {
+            if (!linkMenu) return;
+            saveHighlight(linkMenu.quote);
+          }}
+        />
+        <ContextMenuItem
+          icon="document-text-outline"
+          label="Copy text"
+          onPress={() => {
+            if (!linkMenu) return;
+            setLinkMenu(null);
+            void copyText(linkMenu.quote.exact);
+          }}
+        />
+        <ContextMenuItem
+          icon="link-outline"
+          label="Copy link"
+          onPress={() => {
+            if (!linkMenu) return;
+            setLinkMenu(null);
+            void copyLink(linkMenu.quote.href);
+          }}
+        />
+      </ContextMenu>
+      <ContextMenu
+        visible={highlightMenu !== null}
+        onDismiss={() => setHighlightMenu(null)}
+        anchor={highlightMenu?.anchor ?? null}
+      >
+        <ContextMenuItem
+          icon="copy-outline"
+          label="Copy"
+          onPress={() => {
+            if (!highlightMenu) return;
+            setHighlightMenu(null);
+            void copyText(highlightMenu.highlight.exact, "Highlight copied");
+          }}
+        />
+        {highlightMenu?.highlight.href ? (
+          <ContextMenuItem
+            icon="link-outline"
+            label="Copy link"
+            onPress={() => {
+              const href = highlightMenu.highlight.href;
+              setHighlightMenu(null);
+              if (href) void copyLink(href);
+            }}
+          />
+        ) : null}
+        <ContextMenuItem
+          icon="trash-outline"
+          label="Remove"
+          tone="danger"
+          onPress={() => {
+            if (!highlightMenu) return;
+            const id = highlightMenu.highlight.id;
+            setHighlightMenu(null);
+            dropHighlight(id);
+          }}
+        />
+      </ContextMenu>
+      {textDraft && !showWebsiteView ? (
+        <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+          <View pointerEvents="box-none" style={[styles.draftLayer, { maxWidth: layout.maxLibraryWidth }]}>
+            <View
+              style={[
+                styles.draftBar,
+                {
+                  backgroundColor: palette.surfaceElevated,
+                  borderColor: palette.borderStrong,
+                  marginBottom: spacing[20] + (safeBottom ? insets.bottom : 0),
+                },
+              ]}
+            >
+              <Text variant="footnote" color="secondary" numberOfLines={2}>
+                {textDraft.exact}
+              </Text>
+              <View style={styles.draftActions}>
+                <Button
+                  label="Cancel"
+                  variant="ghost"
+                  onPress={() => setTextDraft(null)}
+                  style={styles.draftButton}
+                />
+                <Button
+                  label="Highlight"
+                  onPress={() => saveHighlight(textDraft)}
+                  loading={createHighlight.isPending}
+                  disabled={createHighlight.isPending}
+                  style={styles.draftButton}
+                />
+              </View>
+            </View>
+          </View>
+        </View>
+      ) : null}
     </View>
     </ThemeOverrideProvider>
   );
@@ -1067,6 +1332,37 @@ const styles = StyleSheet.create({
   actionLabel: { flex: 1 },
   tocList: { maxHeight: 420 },
   tocRow: { minHeight: 44, justifyContent: "center" },
+  highlightList: { maxHeight: 420 },
+  highlightRow: {
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[8],
+    paddingVertical: spacing[8],
+  },
+  highlightBody: { flex: 1, minWidth: 0 },
+  highlightMeta: { marginTop: spacing[4] },
+  removeHit: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  draftLayer: {
+    flex: 1,
+    width: "100%",
+    alignSelf: "center",
+    justifyContent: "flex-end",
+  },
+  draftBar: {
+    marginHorizontal: spacing[16],
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius["3xl"],
+    padding: spacing[12],
+    gap: spacing[10],
+  },
+  draftActions: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
+  draftButton: { flex: 1 },
   progressTrack: { height: 2, width: "100%", overflow: "hidden" },
   progressFill: { height: 2, alignSelf: "flex-start" },
   stateBody: {

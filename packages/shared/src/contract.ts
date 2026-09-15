@@ -10,6 +10,7 @@ import type {
   BookmarkDetailDto,
   BookmarkDto,
   CursorPage,
+  HighlightDto,
   FolderDto,
   LoginResponse,
   MfaStatusDto,
@@ -34,6 +35,7 @@ import type {
   SetFolderPasswordInput,
   UpdateBookmarkTagsInput,
   SetBookmarkContentKindInput,
+  CreateHighlightInput,
   UpdateFolderInput,
   UpdateReaderPreferencesInput,
   UpdateTagInput,
@@ -513,6 +515,22 @@ export const BookmarkRoutes = {
     query: {} as Empty,
     params: {} as Empty,
     response: {} as BatchResult,
+  },
+  createHighlight: {
+    path: `${API_PREFIX}/bookmarks/:id/highlights`,
+    method: "POST",
+    body: {} as CreateHighlightInput,
+    query: {} as Empty,
+    params: {} as { id: string },
+    response: {} as HighlightDto,
+  },
+  removeHighlight: {
+    path: `${API_PREFIX}/bookmarks/:id/highlights/:highlightId`,
+    method: "DELETE",
+    body: {} as Empty,
+    query: {} as Empty,
+    params: {} as { id: string; highlightId: string },
+    response: {} as { success: true },
   },
 } satisfies Record<string, RouteDef>;
 

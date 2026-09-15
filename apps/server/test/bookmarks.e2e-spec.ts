@@ -63,6 +63,15 @@ describe("Bookmarks & Folders (e2e)", () => {
     return { agent, userId: auth.user.id };
   }
 
+  async function waitUntilExtracted(id: string) {
+    let stored = await ctx.prisma.bookmark.findUnique({ where: { id } });
+    for (let attempt = 0; attempt < 20 && stored?.fetchStatus === "pending"; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      stored = await ctx.prisma.bookmark.findUnique({ where: { id } });
+    }
+    return stored;
+  }
+
   describe("folders", () => {
     it("creates a folder and lists folders for a fresh account", async () => {
       const { agent } = await setup();
@@ -624,6 +633,76 @@ describe("Bookmarks & Folders (e2e)", () => {
       expect(detail.body.id).toBe(created.body.id);
       expect(detail.body.folderId).toBeNull();
       expect(detail.body.contentHtml).toBe("<p>Hello world.</p>");
+      expect(detail.body.highlights).toEqual([]);
+    });
+
+    it("creates, lists, and deletes highlights that sync with the article", async () => {
+      const { agent } = await setup();
+      const created = await agent
+        .post("/api/bookmarks")
+        .send({ url: "https://example.com/article" })
+        .expect(201);
+      await waitUntilExtracted(created.body.id);
+
+      const highlight = await agent
+        .post(`/api/bookmarks/${created.body.id}/highlights`)
+        .send({ exact: "Hello", prefix: "", suffix: " world." })
+        .expect(201);
+      expect(highlight.body).toMatchObject({
+        exact: "Hello",
+        prefix: "",
+        suffix: " world.",
+        href: null,
+      });
+      expect(highlight.body.id).toBeTruthy();
+
+      const again = await agent
+        .post(`/api/bookmarks/${created.body.id}/highlights`)
+        .send({ exact: "Hello", prefix: "", suffix: " world." })
+        .expect(201);
+      expect(again.body.id).toBe(highlight.body.id);
+
+      await ctx.prisma.bookmark.update({
+        where: { id: created.body.id },
+        data: { contentHtml: '<p>See <a href="https://example.com/x">the docs</a> now.</p>' },
+      });
+      const link = await agent
+        .post(`/api/bookmarks/${created.body.id}/highlights`)
+        .send({
+          exact: "the docs",
+          prefix: "See ",
+          suffix: " now.",
+          href: "https://example.com/x",
+        })
+        .expect(201);
+      expect(link.body.href).toBe("https://example.com/x");
+
+      const missing = await agent
+        .post(`/api/bookmarks/${created.body.id}/highlights`)
+        .send({ exact: "not in the article", prefix: "", suffix: "" })
+        .expect(400);
+      expect(missing.body.error.code).toBe(ErrorCode.VALIDATION_ERROR);
+
+      const listed = await agent.get("/api/bookmarks").expect(200);
+      expect(listed.body.items[0].highlights).toBeUndefined();
+
+      const detail = await agent.get(`/api/bookmarks/${created.body.id}`).expect(200);
+      expect(detail.body.highlights.map((row: { exact: string }) => row.exact)).toEqual([
+        "Hello",
+        "the docs",
+      ]);
+
+      await agent
+        .delete(`/api/bookmarks/${created.body.id}/highlights/${highlight.body.id}`)
+        .expect(200);
+      const after = await agent.get(`/api/bookmarks/${created.body.id}`).expect(200);
+      expect(after.body.highlights).toHaveLength(1);
+      expect(after.body.highlights[0].id).toBe(link.body.id);
+
+      const gone = await agent
+        .delete(`/api/bookmarks/${created.body.id}/highlights/${highlight.body.id}`)
+        .expect(404);
+      expect(gone.body.error.code).toBe(ErrorCode.HIGHLIGHT_NOT_FOUND);
     });
 
     it("toggles read state and deletes an unfiled bookmark without a folder token", async () => {

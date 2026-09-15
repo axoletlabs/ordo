@@ -23,6 +23,7 @@ const STATUS_BY_CODE: Record<string, HttpStatus> = {
 
   [ErrorCode.BOOKMARK_NOT_FOUND]: HttpStatus.NOT_FOUND,
   [ErrorCode.FETCH_FAILED]: HttpStatus.BAD_REQUEST,
+  [ErrorCode.HIGHLIGHT_NOT_FOUND]: HttpStatus.NOT_FOUND,
 
   [ErrorCode.TAG_NOT_FOUND]: HttpStatus.NOT_FOUND,
   [ErrorCode.TAG_ALREADY_EXISTS]: HttpStatus.CONFLICT,

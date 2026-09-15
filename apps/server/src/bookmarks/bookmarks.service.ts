@@ -15,6 +15,7 @@ import {
   tokenizeSearchQuery,
   tokensAllowArticleText,
   type BatchBookmarksInput,
+  type BookmarkDetailDto,
   type BookmarkDto,
   type BookmarkListSort,
   type CursorPage,
@@ -311,12 +312,13 @@ export class BookmarksService implements OnApplicationBootstrap {
     userId: string,
     bookmarkId: string,
     tokens: readonly string[],
-  ): Promise<BookmarkDto & { contentHtml: string | null }> {
+  ): Promise<BookmarkDetailDto> {
     const bookmark = await this.prisma.bookmark.findFirst({
       where: { id: bookmarkId, userId },
       include: {
         tags: { include: { tag: true } },
         suggestions: { where: { status: "pending" }, include: { tag: true } },
+        highlights: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
       },
     });
     if (!bookmark) throw new AppError(ErrorCode.BOOKMARK_NOT_FOUND, "This bookmark no longer exists.");

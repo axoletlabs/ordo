@@ -5,11 +5,13 @@ import {
   normalizeReaderPreferences,
   normalizeTagColor,
   bookmarkContentKind,
+  type BookmarkDetailDto,
   type BookmarkDto,
   type ContentKindOverride,
   type ExtractionReason,
   type FetchStatus,
   type FolderDto,
+  type HighlightDto,
   type SessionDto,
   type TagDto,
   type TagSummaryDto,
@@ -135,6 +137,14 @@ export type BookmarkDtoFields = Pick<
 > & {
   tags?: Array<{ tag: Pick<Tag, "id" | "name" | "color"> }>;
   suggestions?: Array<{ tag: Pick<Tag, "id" | "name" | "color"> }>;
+  highlights?: Array<{
+    id: string;
+    exact: string;
+    prefix: string;
+    suffix: string;
+    href: string | null;
+    createdAt: Date;
+  }>;
 };
 
 export function toTagSummaryDto(tag: Pick<Tag, "id" | "name" | "color">): TagSummaryDto {
@@ -192,6 +202,33 @@ export function toBookmarkDto(b: BookmarkDtoFields): BookmarkDto {
   };
 }
 
-export function toBookmarkDetailDto(b: BookmarkDtoFields & Pick<Bookmark, "contentHtml">): BookmarkDto & { contentHtml: string | null } {
-  return { ...toBookmarkDto(b), contentHtml: b.contentHtml };
+export function toHighlightDto(row: {
+  id: string;
+  exact: string;
+  prefix: string;
+  suffix: string;
+  href: string | null;
+  createdAt: Date;
+}): HighlightDto {
+  return {
+    id: row.id,
+    exact: row.exact,
+    prefix: row.prefix,
+    suffix: row.suffix,
+    href: row.href,
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+export function toBookmarkDetailDto(
+  b: BookmarkDtoFields & Pick<Bookmark, "contentHtml">,
+): BookmarkDetailDto {
+  return {
+    ...toBookmarkDto(b),
+    contentHtml: b.contentHtml,
+    highlights: (b.highlights ?? [])
+      .slice()
+      .sort((a, c) => a.createdAt.getTime() - c.createdAt.getTime() || a.id.localeCompare(c.id))
+      .map(toHighlightDto),
+  };
 }

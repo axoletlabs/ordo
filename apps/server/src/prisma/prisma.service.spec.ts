@@ -422,6 +422,7 @@ describe("PrismaService legacy schema migration", () => {
     expect(tables.map((row) => row.name).sort()).toEqual([
       "Bookmark",
       "BookmarkFts",
+      "BookmarkHighlight",
       "BookmarkTag",
       "BookmarkTagSuggestion",
       "EmailVerificationToken",
@@ -436,15 +437,14 @@ describe("PrismaService legacy schema migration", () => {
       "User",
     ]);
     const applied = (await service.$queryRawUnsafe(
-      `SELECT "migration_name" AS name FROM "_prisma_migrations"`,
+      `SELECT "migration_name" AS name FROM "_prisma_migrations" ORDER BY "finished_at"`,
     )) as Array<{ name: string }>;
-    const init = listMigrations(join(__dirname, "../../prisma/migrations"))[0];
-    expect(init).toBeDefined();
-    expect(applied.map((row) => row.name)).toEqual([init!.name]);
+    const migrations = listMigrations(join(__dirname, "../../prisma/migrations"));
+    expect(applied.map((row) => row.name)).toEqual(migrations.map((migration) => migration.name));
     const checksums = (await service.$queryRawUnsafe(
-      `SELECT checksum FROM "_prisma_migrations"`,
+      `SELECT checksum FROM "_prisma_migrations" ORDER BY "finished_at"`,
     )) as Array<{ checksum: string }>;
-    expect(checksums[0]?.checksum).toBe(init!.checksum);
+    expect(checksums.map((row) => row.checksum)).toEqual(migrations.map((migration) => migration.checksum));
     await service.onModuleDestroy();
   });
 
@@ -461,7 +461,9 @@ describe("PrismaService legacy schema migration", () => {
     const applied = (await second.$queryRawUnsafe(
       `SELECT COUNT(*) AS count FROM "_prisma_migrations"`,
     )) as Array<{ count: number | bigint }>;
-    expect(Number(applied[0]?.count)).toBe(1);
+    expect(Number(applied[0]?.count)).toBe(
+      listMigrations(join(__dirname, "../../prisma/migrations")).length,
+    );
     await second.onModuleDestroy();
   });
 
@@ -488,7 +490,9 @@ describe("PrismaService legacy schema migration", () => {
     const applied = (await service.$queryRawUnsafe(
       `SELECT "migration_name" AS name FROM "_prisma_migrations"`,
     )) as Array<{ name: string }>;
-    expect(applied.map((row) => row.name)).toEqual([init.name]);
+    expect(applied.map((row) => row.name)).toEqual(
+      listMigrations(migrationsDir).map((migration) => migration.name),
+    );
     await service.onModuleDestroy();
   });
 
@@ -519,10 +523,7 @@ describe("PrismaService legacy schema migration", () => {
         const applied = (await service.$queryRawUnsafe(
           `SELECT "migration_name" AS name FROM "_prisma_migrations" ORDER BY "migration_name"`,
         )) as Array<{ name: string }>;
-        expect(applied.map((row) => row.name)).toEqual([
-          listMigrations(extraDir)[0]!.name,
-          extraName,
-        ]);
+        expect(applied.map((row) => row.name)).toEqual(listMigrations(extraDir).map((migration) => migration.name));
         await service.onModuleDestroy();
       } finally {
         if (previous === undefined) delete process.env.ORDO_MIGRATIONS_DIR;
@@ -583,10 +584,10 @@ describe("PrismaService legacy schema migration", () => {
     });
     expect(await service.user.count()).toBe(1);
     const applied = (await service.$queryRawUnsafe(
-      `SELECT checksum, "migration_name" AS name FROM "_prisma_migrations"`,
+      `SELECT checksum, "migration_name" AS name FROM "_prisma_migrations" ORDER BY "finished_at"`,
     )) as Array<{ checksum: string; name: string }>;
-    const [init] = listMigrations(join(__dirname, "../../prisma/migrations"));
-    expect(applied).toEqual([{ checksum: init!.checksum, name: init!.name }]);
+    const migrations = listMigrations(join(__dirname, "../../prisma/migrations"));
+    expect(applied).toEqual(migrations.map((migration) => ({ checksum: migration.checksum, name: migration.name })));
     await service.onModuleDestroy();
   }, 60_000);
 });

@@ -26,7 +26,7 @@ import { cancelProactiveRefresh, ensureFreshAccessToken } from "../src/lib/api/c
 import { initAppLifecycle } from "../src/lib/app-lifecycle";
 import { ToastHost } from "../src/components/ui/ToastHost";
 import { OverlayHost } from "../src/components/ui/overlay-host";
-import { Banner } from "../src/components/ui/Banner";
+import { OfflineGate } from "../src/components/OfflineGate";
 import { UpdateReadyWatcher } from "../src/components/UpdateReadyWatcher";
 import { NativeUpdateProgress } from "../src/components/NativeUpdateProgress";
 import { ErrorBoundary } from "../src/components/ErrorBoundary";
@@ -53,17 +53,6 @@ SplashScreen.setOptions({ duration: 200, fade: true });
 // Brand beat: keep the native splash up for at least this long once mounted.
 const MIN_SPLASH_MS = 600;
 
-function ConnectionBanner() {
-  const online = useOnline();
-  return (
-    <Banner
-      visible={!online}
-      message="You're offline — some actions may be unavailable."
-      tone="warning"
-    />
-  );
-}
-
 function RootShell() {
   const { palette } = useTheme();
   const router = useRouter();
@@ -72,6 +61,7 @@ function RootShell() {
   const tokens = useAuthStore((s) => s.tokens);
   const userId = useAuthStore((s) => s.user?.id);
   const serverUrl = useSettingsStore((s) => s.serverUrl);
+  const online = useOnline();
   const restarting = useUpdateRestartStore((s) => s.restarting);
   const sharedUrl = useIncomingShareStore((s) => s.pendingUrl);
   const clearSharedUrl = useIncomingShareStore((s) => s.clear);
@@ -104,12 +94,12 @@ function RootShell() {
   }, [status, tokens?.accessToken]);
 
   useEffect(() => {
-    if (status === "authenticated" && userId) {
+    if (status === "authenticated" && userId && online) {
       void restoreQueryPersistence(userId, serverUrl);
       return;
     }
-    if (status === "unauthenticated") stopQueryPersistence();
-  }, [status, userId, serverUrl]);
+    stopQueryPersistence();
+  }, [status, userId, serverUrl, online]);
 
   // Keep the native splash visible while the redirect reconciles with auth so
   // the wrong group (e.g. login for an authenticated user) is never shown.
@@ -137,7 +127,6 @@ function RootShell() {
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(app)" />
         </Stack>
-        <ConnectionBanner />
         <IncomingShareHandler />
         {!showSplash && !restarting && routeMatchesAuth && status === "authenticated" ? (
           <AddBookmarkSheet
@@ -156,6 +145,7 @@ function RootShell() {
         <NativeUpdateProgress />
       </OverlayHost>
       <ToastHost />
+      <OfflineGate />
       {(showSplash || restarting) && (
         <LaunchSplash
           transitionIn={restarting}
