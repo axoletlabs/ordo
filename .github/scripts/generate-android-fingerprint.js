@@ -20,10 +20,14 @@ const projectRoot = process.cwd();
 const { createFingerprintAsync } = require(
   require.resolve("@expo/fingerprint", { paths: [projectRoot] }),
 );
+const { fileHookTransform } = require("./masked-view-fingerprint-hook.js");
 
 createFingerprintAsync(projectRoot, {
   silent: true,
   platforms: [platform],
+  // Same hook as fingerprint.config.js so an old APK worktree (no config
+  // yet) still hashes the Gradle-mutated masked-view manifest.
+  fileHookTransform,
 })
   .then((result) => {
     process.stdout.write(`${JSON.stringify(result)}\n`);

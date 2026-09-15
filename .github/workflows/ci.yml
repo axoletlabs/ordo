@@ -38,8 +38,13 @@ on:
 # Detect ignores packageJson:scripts and extra.ordo so a test-file list edit
 # does not mint a new APK. When those sources still change the raw hash, the
 # OTA job publishes to the last compatible APK runtime instead of --auto
-# (which would mint a runtime no binary exists for). In-flight JS-only runs
-# are not a baseline — only an APK-producing run or the last shipped APK.
+# (which would mint a runtime no binary exists for). Gradle can still bake a
+# different hash than detect (a native module rewriting its sources during
+# the APK build). Fingerprint hooks plus EXPO_UPDATES_FINGERPRINT_OVERRIDE
+# keep those aligned; if they still differ, extra_runtimes uses the hash
+# actually embedded in the APK, not detect's hash of that commit.
+# In-flight JS-only runs are not a baseline — only an APK-producing run or
+# the last shipped APK.
 # An in-flight SHA must be an ancestor of this commit; a later overlapping
 # push is not in this clone and must not be used as the fingerprint baseline.
 # The OTA job waits for that APK to finish packaging so createdAt is newer
@@ -198,21 +203,37 @@ jobs:
 
           extra_runtimes=()
           current_hash="$(jq -r '.hash' /tmp/fingerprint-current.json)"
+          add_extra_runtime() {
+            local runtime="$1"
+            local sha="$2"
+            [[ -z "$runtime" || "$runtime" == "null" ]] && return 0
+            case " ${extra_runtimes[*]} " in
+              *" $runtime "*) return 0 ;;
+            esac
+            echo "Compatible APK runtime ${runtime} from ${sha}"
+            extra_runtimes+=("$runtime")
+          }
           collect_runtime_if_compatible() {
             local sha="$1"
             local fp="$2"
-            local hash
+            local hash embedded
             hash="$(jq -r '.hash' "$fp")"
-            if [[ -z "$hash" || "$hash" == "null" || "$hash" == "$current_hash" ]]; then
+            if [[ -z "$hash" || "$hash" == "null" ]]; then
+              return 0
+            fi
+            # Detect hash matching is not enough: the APK may have baked
+            # Gradle's post-compile fingerprint. Pin to that when it differs.
+            if [[ "$hash" == "$current_hash" ]]; then
+              embedded="$(bash "$GITHUB_WORKSPACE/.github/scripts/apk-embedded-runtime.sh" --sha "$sha" || true)"
+              if [[ -n "$embedded" && "$embedded" != "$current_hash" ]]; then
+                add_extra_runtime "$embedded" "$sha"
+              fi
               return 0
             fi
             normalize_fingerprint "$fp"
             if cmp -s /tmp/fingerprint-current.json.normalized "$fp.normalized"; then
-              case " ${extra_runtimes[*]} " in
-                *" $hash "*) return 0 ;;
-              esac
-              echo "Compatible APK runtime ${hash} from ${sha}"
-              extra_runtimes+=("$hash")
+              embedded="$(bash "$GITHUB_WORKSPACE/.github/scripts/apk-embedded-runtime.sh" --sha "$sha" || true)"
+              add_extra_runtime "${embedded:-$hash}" "$sha"
             else
               echo "Skipping APK ${sha}: native fingerprint differs"
             fi
@@ -411,9 +432,10 @@ jobs:
           CHANNEL: ${{ needs.detect.outputs.updates_channel }}
           EXTRA_RUNTIMES: ${{ needs.detect.outputs.extra_runtime_versions }}
         run: |
-          # Pin to a shipped (or in-flight) APK runtime when the raw hash
-          # drifted. --auto would publish this commit's fingerprint — a
-          # runtime no binary exists for — and devices would never see it.
+          # Pin to a shipped APK runtime when detect's hash is not the
+          # hash Gradle baked in, or when extra.ordo / scripts drifted.
+          # --auto would publish detect's fingerprint — a runtime no
+          # installed binary uses — and devices would never see it.
           if [[ -n "$EXTRA_RUNTIMES" ]]; then
             first=1
             for runtime in $EXTRA_RUNTIMES; do
@@ -497,6 +519,26 @@ jobs:
           CHANNEL="${{ needs.detect.outputs.updates_channel }}"
           grep -q "expo-channel-name" android/app/src/main/AndroidManifest.xml
           grep -q "$CHANNEL" android/app/src/main/AndroidManifest.xml
+
+      # Hash before Gradle compiles. expo-updates otherwise fingerprints
+      # after modules like masked-view rewrite their own sources, so the
+      # APK runtime would not match detect / eas update --auto.
+      - name: Fingerprint Android runtime
+        working-directory: apps/mobile
+        run: |
+          node "$GITHUB_WORKSPACE/.github/scripts/generate-android-fingerprint.js" --platform android \
+            > /tmp/android-fingerprint.json
+          HASH="$(jq -r '.hash' /tmp/android-fingerprint.json)"
+          echo "$HASH" > "$RUNNER_TEMP/android-runtime-version.txt"
+          echo "EXPO_UPDATES_FINGERPRINT_OVERRIDE=$HASH" >> "$GITHUB_ENV"
+          echo "Android runtime (pre-Gradle): $HASH"
+
+      - name: Upload Android runtime version
+        uses: actions/upload-artifact@v6
+        with:
+          name: android-runtime-version
+          path: ${{ runner.temp }}/android-runtime-version.txt
+          retention-days: 90
 
       - name: Restore upload keystore
         env:
