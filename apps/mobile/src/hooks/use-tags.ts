@@ -9,7 +9,8 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { DEFAULT_PAGE_SIZE, type TagColor, type TagDto } from "@ordo/shared";
+import { LIST_PAGE_SIZE } from "../lib/list-pagination";
+import { type TagColor, type TagDto } from "@ordo/shared";
 import { tagsApi } from "../lib/api/tags";
 import { queryClient } from "../lib/query-client";
 import { nextPageCursor, qk, tagsAnyAccess } from "../lib/api/query-keys";
@@ -100,7 +101,7 @@ export function prefetchTaggedBookmarks(tagId: string) {
   return queryClient.prefetchInfiniteQuery({
     queryKey: qk.tagged([tagId]),
     queryFn: ({ pageParam }) =>
-      bookmarksApi.listTagged([tagId], pageParam ?? undefined, DEFAULT_PAGE_SIZE),
+      bookmarksApi.listTagged([tagId], pageParam ?? undefined, LIST_PAGE_SIZE),
     initialPageParam: null as string | null,
     getNextPageParam: nextPageCursor,
   });
@@ -111,7 +112,7 @@ export function useTaggedBookmarks(tagIds: readonly string[], enabled = true) {
   return useInfiniteQuery({
     queryKey: qk.tagged(tagIds),
     queryFn: ({ pageParam }) =>
-      bookmarksApi.listTagged([...tagIds], pageParam ?? undefined, DEFAULT_PAGE_SIZE),
+      bookmarksApi.listTagged([...tagIds], pageParam ?? undefined, LIST_PAGE_SIZE),
     initialPageParam: null as string | null,
     getNextPageParam: nextPageCursor,
     enabled,

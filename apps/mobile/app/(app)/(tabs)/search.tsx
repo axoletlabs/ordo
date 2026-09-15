@@ -35,8 +35,9 @@ import { useResponsiveLayout } from "../../../src/hooks/use-responsive-layout";
 import { useFloatingDockMetrics } from "../../../src/hooks/use-floating-dock-metrics";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { flattenPages } from "../../../src/lib/api/query-keys";
-import { bookmarkListItemType } from "../../../src/lib/bookmark-row-layout";
 import { collectCachedBookmarks } from "../../../src/lib/cache-helpers";
+import { useLoadMore } from "../../../src/hooks/use-list-controls";
+import { ListLoadingFooter } from "../../../src/components/ui/ListLoadingFooter";
 import { errorMessage } from "../../../src/lib/error-message";
 import { haptics } from "../../../src/lib/haptics";
 import { measureAnchor, type MenuAnchorRect } from "../../../src/lib/menu-anchor";
@@ -236,6 +237,12 @@ export default function SearchScreen() {
     unread: listFilters.status,
     fuzzy: listFilters.fuzzy,
     enabled: searchEnabled,
+  });
+  const { onEndReached, loadingMore } = useLoadMore({
+    hasNextPage: !!search.hasNextPage,
+    isFetchingNextPage: search.isFetchingNextPage,
+    fetchNextPage: search.fetchNextPage,
+    data: search.data,
   });
   const serverItems = useMemo(() => {
     const pages = search.data?.pages;
@@ -448,23 +455,13 @@ export default function SearchScreen() {
       data={items}
       extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}:${trimmed}:${listFilters.tagIds.join(",")}:${listFilters.folderIds.join(",")}:${listFilters.unfiled}:${listFilters.status}:${listFilters.kind}:${listFilters.fuzzy}`}
       keyExtractor={(b: BookmarkDto) => b.id}
-      getItemType={bookmarkListItemType}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
       renderItem={renderBookmark}
       ListEmptyComponent={empty ? <View style={styles.emptyList}>{empty}</View> : null}
-      ListFooterComponent={
-        search.isFetchingNextPage ? (
-          <View style={styles.footer}>
-            <Spinner color={palette.accent} />
-          </View>
-        ) : null
-      }
+      ListFooterComponent={<ListLoadingFooter loading={loadingMore} />}
       contentContainerStyle={listContentStyle}
-      onEndReached={() => {
-        if (search.hasNextPage && !search.isFetchingNextPage) void search.fetchNextPage();
-      }}
-      onEndReachedThreshold={0.4}
+      onEndReached={onEndReached}
     />
   );
 
@@ -752,7 +749,6 @@ const styles = StyleSheet.create({
     paddingTop: spacing[8],
   },
   emptyList: { flexGrow: 1, alignItems: "center", justifyContent: "center", minHeight: 280 },
-  footer: { paddingVertical: spacing[20], alignItems: "center" },
   singlePane: { flex: 1, width: "100%" },
   splitPane: { flex: 1, width: "100%", flexDirection: "row", gap: spacing[16], paddingBottom: spacing[8] },
   listPane: { width: 380, flexShrink: 0 },

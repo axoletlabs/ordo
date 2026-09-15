@@ -7,7 +7,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
-import { Spinner } from "../../../src/components/ui/Spinner";
 import { Header, HeaderActions, HeaderIconButton } from "../../../src/components/ui/Header";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
@@ -45,10 +44,11 @@ import { markedAsReadToast } from "../../../src/lib/copy";
 import { errorMessage, isFolderProtected } from "../../../src/lib/error-message";
 import { flattenPages } from "../../../src/lib/api/query-keys";
 import { sortBookmarksBy } from "../../../src/lib/list-sort";
-import { bookmarkListItemType } from "../../../src/lib/bookmark-row-layout";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
 import { DEFAULT_BOOKMARK_LIST_SORT, type BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
+import { useLoadMore, usePullToRefresh } from "../../../src/hooks/use-list-controls";
+import { ListLoadingFooter } from "../../../src/components/ui/ListLoadingFooter";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
 
 export default function FolderDetailScreen() {
@@ -162,11 +162,17 @@ export default function FolderDetailScreen() {
     [hasDetailPane, onEnterSelection, onMoreBookmark, onPressBookmark, selectedBookmarkId, selectionActive, selectionRevision],
   );
 
-  const loadMore = () => {
-    if (bookmarks.hasNextPage && !bookmarks.isFetchingNextPage) {
-      bookmarks.fetchNextPage();
-    }
-  };
+  const { onEndReached, loadingMore, resetPaging } = useLoadMore({
+    hasNextPage: !!bookmarks.hasNextPage,
+    isFetchingNextPage: bookmarks.isFetchingNextPage,
+    fetchNextPage: bookmarks.fetchNextPage,
+    data: bookmarks.data,
+  });
+  const refetchBookmarks = useCallback(async () => {
+    resetPaging();
+    await bookmarks.refetch();
+  }, [bookmarks.refetch, resetPaging]);
+  const { refreshing, onRefresh } = usePullToRefresh(refetchBookmarks);
 
   const onToggleRead = (b: BookmarkDto) => {
     haptics.light();
@@ -199,20 +205,12 @@ export default function FolderDetailScreen() {
       extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}:${bookmarkSort}`}
       key={`folder:${folderId ?? "root"}:${bookmarkSort}`}
       keyExtractor={(b: BookmarkDto) => b.id}
-      getItemType={bookmarkListItemType}
       renderItem={renderBookmark}
       contentContainerStyle={{ paddingBottom: listContentPadding }}
-      refreshing={bookmarks.isFetching && !bookmarks.isFetchingNextPage && !bookmarks.isPlaceholderData}
-      onRefresh={() => bookmarks.refetch()}
-      onEndReached={loadMore}
-      onEndReachedThreshold={0.4}
-      ListFooterComponent={
-        bookmarks.isFetchingNextPage ? (
-          <View style={styles.footer}>
-            <Spinner color={palette.accent} />
-          </View>
-        ) : null
-      }
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+      onEndReached={onEndReached}
+      ListFooterComponent={<ListLoadingFooter loading={loadingMore} />}
     />
   );
 
@@ -468,5 +466,4 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     overflow: "hidden",
   },
-  footer: { paddingVertical: spacing[20], alignItems: "center" },
 });

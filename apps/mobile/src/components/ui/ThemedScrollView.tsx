@@ -24,6 +24,7 @@ import {
 } from "./ScrollBar";
 import { scrollViewShouldFill } from "../../theme/scrollbar";
 import { useTheme } from "../../theme/ThemeProvider";
+import { LIST_END_REACHED_THRESHOLD } from "../../lib/list-pagination";
 
 /** Native pull-to-refresh with the branded coral-on-chip colors. */
 function useThemedRefreshControl(
@@ -126,13 +127,9 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
 );
 
 /**
- * Bookmark lists used FlashList v2 after the Expo 57 upgrade. v2 caches
- * per-index heights (default estimate 200px) and on delete only truncates
- * that cache from the end — remaining rows keep oversized slots, which is
- * the stretched PERSONAL list after "Bookmark deleted". Duplicate ids in
- * the page cache made that worse: FlashList recycled by key so the extra
- * copy was an empty slot; FlatList painted it. Lists now size from content
- * and flattenPages keeps the first copy of each id.
+ * Bookmark lists are FlatLists. FlashList v2 cached 200px slots and
+ * duplicate page rows showed as gaps; a fetch-next also set `isFetching`,
+ * which spun the native refresh bar at the bottom in a loop.
  */
 export function ThemedFlashList<T>(props: ThemedFlashListProps<T>) {
   const chromeInsets = useScrollBarInsets();
@@ -158,10 +155,12 @@ export function ThemedFlashList<T>(props: ThemedFlashListProps<T>) {
 
   return (
     <ThemedFlatList
-      initialNumToRender={14}
-      maxToRenderPerBatch={10}
-      windowSize={9}
+      removeClippedSubviews={false}
+      initialNumToRender={12}
+      maxToRenderPerBatch={8}
+      windowSize={7}
       updateCellsBatchingPeriod={50}
+      onEndReachedThreshold={LIST_END_REACHED_THRESHOLD}
       {...(flatListProps as ThemedFlatListProps<T>)}
       scrollBarInsets={scrollBarInsets ?? chromeInsets}
     />
@@ -205,6 +204,7 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
         }
         indicatorStyle={bar.indicatorStyle}
         refreshControl={themedRefresh}
+        removeClippedSubviews={false}
         style={[fill ? styles.fill : null, inner]}
         onScroll={chainHandlers(bar.onScroll, onScroll)}
         onContentSizeChange={chainHandlers(bar.onContentSizeChange, onContentSizeChange)}

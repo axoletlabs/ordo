@@ -16,6 +16,7 @@ import { CreateTagPanel } from "../../../src/components/tags/CreateTagPanel";
 import { TagRow } from "../../../src/components/tags/TagRow";
 import { TagActionsSheet } from "../../../src/components/tags/TagActionsSheet";
 import { useTags } from "../../../src/hooks/use-tags";
+import { usePullToRefresh } from "../../../src/hooks/use-list-controls";
 import { errorMessage } from "../../../src/lib/error-message";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { layout, spacing } from "../../../src/theme/tokens";
@@ -25,7 +26,8 @@ import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
 export default function TagsScreen() {
   const { palette } = useTheme();
   const router = useRouter();
-  const { data: tags, isLoading, isFetching, error, refetch } = useTags();
+  const { data: tags, isLoading, error, refetch } = useTags();
+  const { refreshing, onRefresh } = usePullToRefresh(() => refetch());
 
   const [createOpen, setCreateOpen] = useState(false);
   const [actionsTag, setActionsTag] = useState<TagDto | null>(null);
@@ -104,8 +106,8 @@ export default function TagsScreen() {
             keyExtractor={(tag: TagDto) => tag.id}
             renderItem={renderTag}
             contentContainerStyle={listContentStyle}
-            refreshing={isFetching && !isLoading}
-            onRefresh={() => refetch()}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
           />
         )}
       </ScreenContent>

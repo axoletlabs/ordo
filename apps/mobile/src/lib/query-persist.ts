@@ -12,7 +12,7 @@ import { isBookmarkListSort, type FolderDto } from "@ordo/shared";
 /** Keep restored lists around for the persist maxAge window. */
 export const PERSISTED_QUERY_GC_TIME_MS = 7 * 24 * 60 * 60_000;
 export const PERSISTED_QUERY_MAX_AGE_MS = PERSISTED_QUERY_GC_TIME_MS;
-export const QUERY_CACHE_BUSTER = "ordo-query-v1";
+export const QUERY_CACHE_BUSTER = "ordo-query-v2";
 export const MAX_PERSISTED_LIST_PAGES = 3;
 export const QUERY_CACHE_STORAGE_PREFIX = "ordo.rq.";
 

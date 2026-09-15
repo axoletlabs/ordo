@@ -1,7 +1,7 @@
 /**
  * Centralised React Query key factory. Keeps cache keys stable & typed.
  */
-import type { BookmarkListSort, CursorPage } from "@ordo/shared";
+import type { BookmarkListSort } from "@ordo/shared";
 
 export const qk = {
   me: ["auth", "me"] as const,
@@ -54,7 +54,7 @@ function itemId(item: unknown): string | undefined {
  * same items twice. Sorting that array groups copies as A,A,B,B — FlashList
  * recycled by key so those copies were empty 200px slots; FlatList paints them.
  */
-export function flattenPages<T>(pages: CursorPage<T>[]): T[] {
+export function flattenPages<T>(pages: readonly { items: readonly T[] }[]): T[] {
   const seen = new Set<string>();
   const items: T[] = [];
   for (const page of pages) {

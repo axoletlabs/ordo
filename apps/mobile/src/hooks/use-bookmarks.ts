@@ -30,13 +30,13 @@ import { deleteBookmarksUndoable } from "../lib/undoable-delete";
 import {
   BATCH_ITEM_LIMIT,
   DEFAULT_BOOKMARK_LIST_SORT,
-  DEFAULT_PAGE_SIZE,
   extractionPollIntervalMs,
   type BookmarkDetailDto,
   type BookmarkDto,
   type FolderDto,
   type HighlightDto,
 } from "@ordo/shared";
+import { LIST_PAGE_SIZE } from "../lib/list-pagination";
 import { PERSISTED_QUERY_GC_TIME_MS } from "../lib/query-persist";
 
 function snapshotLists(qc: QueryClient, folderId: string | null) {
@@ -63,7 +63,7 @@ export function prefetchFolderBookmarks(folderId: string) {
   return queryClient.prefetchInfiniteQuery({
     queryKey: qk.bookmarks(folderId, sort),
     queryFn: ({ pageParam }) =>
-      bookmarksApi.list({ folderId, cursor: pageParam ?? undefined, limit: DEFAULT_PAGE_SIZE, sort }),
+      bookmarksApi.list({ folderId, cursor: pageParam ?? undefined, limit: LIST_PAGE_SIZE, sort }),
     initialPageParam: null as string | null,
     getNextPageParam: nextPageCursor,
     gcTime: PERSISTED_QUERY_GC_TIME_MS,
@@ -89,7 +89,7 @@ export function useInfiniteBookmarks(folderId: string | null, enabled = true) {
   return useInfiniteQuery({
     queryKey: qk.bookmarks(folderId, sort),
     queryFn: ({ pageParam }) =>
-      bookmarksApi.list({ folderId, cursor: pageParam ?? undefined, limit: DEFAULT_PAGE_SIZE, sort }),
+      bookmarksApi.list({ folderId, cursor: pageParam ?? undefined, limit: LIST_PAGE_SIZE, sort }),
     initialPageParam: null as string | null,
     getNextPageParam: nextPageCursor,
     placeholderData: keepPreviousData,
@@ -119,7 +119,7 @@ export function useInfiniteSearch(
   return useInfiniteQuery({
     queryKey: qk.search(term, tagIds, unread, folderIds, unfiled, fuzzy),
     queryFn: ({ pageParam }) =>
-      bookmarksApi.search(term, pageParam ?? undefined, DEFAULT_PAGE_SIZE, [...tagIds], unread, [...folderIds], unfiled, fuzzy),
+      bookmarksApi.search(term, pageParam ?? undefined, LIST_PAGE_SIZE, [...tagIds], unread, [...folderIds], unfiled, fuzzy),
     initialPageParam: null as string | null,
     getNextPageParam: nextPageCursor,
     enabled,

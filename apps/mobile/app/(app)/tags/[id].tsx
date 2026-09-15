@@ -6,8 +6,8 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
-import { Spinner } from "../../../src/components/ui/Spinner";
 import { Header, HeaderActions, HeaderIconButton } from "../../../src/components/ui/Header";
+import { ListLoadingFooter } from "../../../src/components/ui/ListLoadingFooter";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
 import { FAB, FABLayer } from "../../../src/components/ui/FAB";
@@ -35,7 +35,7 @@ import { useTheme } from "../../../src/theme/ThemeProvider";
 import { haptics } from "../../../src/lib/haptics";
 import { errorMessage } from "../../../src/lib/error-message";
 import { flattenPages } from "../../../src/lib/api/query-keys";
-import { bookmarkListItemType } from "../../../src/lib/bookmark-row-layout";
+import { useLoadMore, usePullToRefresh } from "../../../src/hooks/use-list-controls";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
 import type { BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
@@ -120,9 +120,17 @@ export default function TagDetailScreen() {
     });
   };
 
-  const loadMore = () => {
-    if (list.hasNextPage && !list.isFetchingNextPage) list.fetchNextPage();
-  };
+  const { onEndReached, loadingMore, resetPaging } = useLoadMore({
+    hasNextPage: !!list.hasNextPage,
+    isFetchingNextPage: list.isFetchingNextPage,
+    fetchNextPage: list.fetchNextPage,
+    data: list.data,
+  });
+  const refetchList = useCallback(async () => {
+    resetPaging();
+    await list.refetch();
+  }, [list.refetch, resetPaging]);
+  const { refreshing, onRefresh } = usePullToRefresh(refetchList);
 
   const onTagPress = useCallback((tagId: string) => {
     if (selectionRef.current.active) return;
@@ -167,22 +175,14 @@ export default function TagDetailScreen() {
       data={items}
       extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}`}
       keyExtractor={(b: BookmarkDto) => b.id}
-      getItemType={bookmarkListItemType}
       renderItem={renderBookmark}
       contentContainerStyle={{
         paddingBottom: selection.active ? selectionClearance : spacing[96],
       }}
-      refreshing={list.isFetching && !list.isFetchingNextPage}
-      onRefresh={() => list.refetch()}
-      onEndReached={loadMore}
-      onEndReachedThreshold={0.4}
-      ListFooterComponent={
-        list.isFetchingNextPage ? (
-          <View style={styles.footer}>
-            <Spinner color={palette.accent} />
-          </View>
-        ) : null
-      }
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+      onEndReached={onEndReached}
+      ListFooterComponent={<ListLoadingFooter loading={loadingMore} />}
     />
   );
 
@@ -368,5 +368,4 @@ const styles = StyleSheet.create({
     borderRadius: radius.lg,
     overflow: "hidden",
   },
-  footer: { paddingVertical: spacing[20], alignItems: "center" },
 });

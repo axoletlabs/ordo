@@ -3,8 +3,8 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
-import { Spinner } from "../../../src/components/ui/Spinner";
 import { Header, HeaderActions, HeaderIconButton } from "../../../src/components/ui/Header";
+import { ListLoadingFooter } from "../../../src/components/ui/ListLoadingFooter";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
 import { FAB, FABLayer } from "../../../src/components/ui/FAB";
@@ -28,8 +28,8 @@ import { useFolders } from "../../../src/hooks/use-folders";
 import { useFolderTokenStore } from "../../../src/store/folder-tokens";
 import { useListSortStore } from "../../../src/store/list-sort";
 import { sortBookmarksBy, sortFoldersBy } from "../../../src/lib/list-sort";
-import { bookmarkListItemType } from "../../../src/lib/bookmark-row-layout";
 import { useTags } from "../../../src/hooks/use-tags";
+import { useLoadMore, usePullToRefresh } from "../../../src/hooks/use-list-controls";
 import {
   prefetchFolderBookmarks,
   useDeleteBookmark,
@@ -142,15 +142,17 @@ export default function BookmarksScreen() {
     });
   };
 
-  const refresh = async () => {
+  const { onEndReached, loadingMore, resetPaging } = useLoadMore({
+    hasNextPage: !!bookmarks.hasNextPage,
+    isFetchingNextPage: bookmarks.isFetchingNextPage,
+    fetchNextPage: bookmarks.fetchNextPage,
+    data: bookmarks.data,
+  });
+  const refreshAll = useCallback(async () => {
+    resetPaging();
     await Promise.all([bookmarks.refetch(), folders.refetch(), tags.refetch()]);
-  };
-
-  const loadMore = () => {
-    if (bookmarks.hasNextPage && !bookmarks.isFetchingNextPage) {
-      void bookmarks.fetchNextPage();
-    }
-  };
+  }, [bookmarks.refetch, folders.refetch, tags.refetch, resetPaging]);
+  const { refreshing, onRefresh } = usePullToRefresh(refreshAll);
 
   const openBookmark = useCallback((bookmark: BookmarkDto) => {
     openListBookmark(bookmark, () => {
@@ -339,7 +341,7 @@ export default function BookmarksScreen() {
             icon="cloud-offline-outline"
             title="Couldn't load bookmarks"
             message={errorMessage(bookmarks.error)}
-            action={<Button label="Retry" onPress={refresh} />}
+            action={<Button label="Retry" onPress={onRefresh} />}
           />
         </ScreenContent>
       ) : (
@@ -349,9 +351,6 @@ export default function BookmarksScreen() {
             extraData={`${selectionRevision}:${folderSort}:${unfiledSort}`}
             key={`home:${folderSort}:${unfiledSort}`}
             keyExtractor={libraryKeyExtractor}
-            getItemType={(item: LibraryItem) =>
-              item.type === "folder" ? "folder" : bookmarkListItemType(item.bookmark)
-            }
             renderItem={renderLibraryItem}
             ListEmptyComponent={
               libraryLoading ? (
@@ -367,21 +366,11 @@ export default function BookmarksScreen() {
                 </View>
               )
             }
-            ListFooterComponent={
-              bookmarks.isFetchingNextPage ? (
-                <View style={styles.footer}><Spinner color={palette.accent} /></View>
-              ) : null
-            }
+            ListFooterComponent={<ListLoadingFooter loading={loadingMore} />}
             contentContainerStyle={listContentStyle}
-            refreshing={
-              ((bookmarks.isFetching && !bookmarks.isPlaceholderData) ||
-                folders.isFetching ||
-                tags.isFetching) &&
-              !bookmarks.isLoading
-            }
-            onRefresh={refresh}
-            onEndReached={loadMore}
-            onEndReachedThreshold={0.4}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            onEndReached={onEndReached}
           />
         </ScreenContent>
       )}
@@ -521,5 +510,4 @@ const styles = StyleSheet.create({
   content: { flex: 1, width: "100%" },
   center: { flex: 1, width: "100%", justifyContent: "center" },
   emptyBookmarks: { minHeight: 300, justifyContent: "center" },
-  footer: { paddingVertical: spacing[20], alignItems: "center" },
 });
