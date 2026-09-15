@@ -45,6 +45,7 @@ import { errorMessage, isFolderProtected } from "../../../src/lib/error-message"
 import { flattenPages } from "../../../src/lib/api/query-keys";
 import { sortBookmarksBy } from "../../../src/lib/list-sort";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
+import { FAB_LIST_CLEARANCE } from "../../../src/lib/list-pagination";
 import { DEFAULT_BOOKMARK_LIST_SORT, type BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 import { useLoadMore, usePullToRefresh } from "../../../src/hooks/use-list-controls";
@@ -198,7 +199,7 @@ export default function FolderDetailScreen() {
     });
   };
 
-  const listContentPadding = selection.active ? selectionClearance : spacing[96];
+  const listContentPadding = selection.active ? selectionClearance : FAB_LIST_CLEARANCE;
   const listPane = (
     <ThemedFlashList
       data={items}
@@ -210,7 +211,7 @@ export default function FolderDetailScreen() {
       refreshing={refreshing}
       onRefresh={onRefresh}
       onEndReached={onEndReached}
-      ListFooterComponent={<ListLoadingFooter loading={loadingMore} />}
+      ListFooterComponent={loadingMore ? <ListLoadingFooter /> : null}
     />
   );
 

@@ -37,6 +37,7 @@ import { errorMessage } from "../../../src/lib/error-message";
 import { flattenPages } from "../../../src/lib/api/query-keys";
 import { useLoadMore, usePullToRefresh } from "../../../src/hooks/use-list-controls";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
+import { FAB_LIST_CLEARANCE } from "../../../src/lib/list-pagination";
 import type { BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
@@ -177,12 +178,12 @@ export default function TagDetailScreen() {
       keyExtractor={(b: BookmarkDto) => b.id}
       renderItem={renderBookmark}
       contentContainerStyle={{
-        paddingBottom: selection.active ? selectionClearance : spacing[96],
+        paddingBottom: selection.active ? selectionClearance : FAB_LIST_CLEARANCE,
       }}
       refreshing={refreshing}
       onRefresh={onRefresh}
       onEndReached={onEndReached}
-      ListFooterComponent={<ListLoadingFooter loading={loadingMore} />}
+      ListFooterComponent={loadingMore ? <ListLoadingFooter /> : null}
     />
   );
 

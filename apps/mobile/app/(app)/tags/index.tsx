@@ -20,6 +20,7 @@ import { usePullToRefresh } from "../../../src/hooks/use-list-controls";
 import { errorMessage } from "../../../src/lib/error-message";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { layout, spacing } from "../../../src/theme/tokens";
+import { FAB_LIST_CLEARANCE } from "../../../src/lib/list-pagination";
 import type { TagDto } from "@ordo/shared";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
 
@@ -60,7 +61,7 @@ export default function TagsScreen() {
   );
 
   const listContentStyle = useMemo(
-    () => ({ paddingBottom: spacing[96] }),
+    () => ({ paddingBottom: FAB_LIST_CLEARANCE }),
     [],
   );
 

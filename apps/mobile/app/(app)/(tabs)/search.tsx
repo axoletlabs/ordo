@@ -54,6 +54,7 @@ import {
   type SearchFilters,
 } from "../../../src/lib/search-bookmarks";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
+import { FAB_LIST_CLEARANCE } from "../../../src/lib/list-pagination";
 import type { BookmarkDto, FolderDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 import { registerSearchFieldFocus } from "../../../src/lib/search-field-focus";
@@ -415,7 +416,7 @@ export default function SearchScreen() {
       ? bottomClearance
       : sideNavigation
         ? spacing[32]
-        : spacing[96];
+        : FAB_LIST_CLEARANCE;
   const listContentStyle = useMemo(
     () => ({ paddingBottom: listContentPadding }),
     [listContentPadding],
@@ -459,7 +460,7 @@ export default function SearchScreen() {
       keyboardDismissMode="on-drag"
       renderItem={renderBookmark}
       ListEmptyComponent={empty ? <View style={styles.emptyList}>{empty}</View> : null}
-      ListFooterComponent={<ListLoadingFooter loading={loadingMore} />}
+      ListFooterComponent={loadingMore ? <ListLoadingFooter /> : null}
       contentContainerStyle={listContentStyle}
       onEndReached={onEndReached}
     />

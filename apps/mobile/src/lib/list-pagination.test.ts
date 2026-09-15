@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { MAX_PAGE_SIZE } from "@ordo/shared";
 import {
+  FAB_LIST_CLEARANCE,
   LIST_END_REACHED_THRESHOLD,
   LIST_PAGE_SIZE,
   pageLoadMadeProgress,
@@ -11,6 +12,11 @@ import {
 test("list pages use the server maximum so a typical folder is one request", () => {
   assert.equal(LIST_PAGE_SIZE, MAX_PAGE_SIZE);
   assert.ok(LIST_END_REACHED_THRESHOLD < 0.4);
+});
+
+test("FAB list clearance is the button plus a small gap, not a full extra row", () => {
+  assert.equal(FAB_LIST_CLEARANCE, 80);
+  assert.ok(FAB_LIST_CLEARANCE < 96);
 });
 
 test("shouldFetchNextPage refuses a fetch while busy, locked, or stalled", () => {

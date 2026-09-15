@@ -183,12 +183,15 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
     onRefresh,
     refreshControl,
     scrollBarInsets,
+    contentContainerStyle,
+    data,
     ...rest
   } = props;
   const bar = useVerticalScrollBar(scrollBarInsets);
   const { wrapper, inner } = splitScrollLayoutStyle(style);
   const themedRefresh = useThemedRefreshControl(refreshing, onRefresh, refreshControl);
   const fill = wrapper?.flex == null && wrapper?.maxHeight == null && wrapper?.height == null;
+  const itemCount = Array.isArray(data) ? data.length : data == null ? 0 : 1;
 
   return (
     <View
@@ -197,6 +200,7 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
     >
       <FlatList
         ref={ref}
+        data={data}
         {...rest}
         {...nativeScrollBarProps}
         showsVerticalScrollIndicator={
@@ -205,6 +209,10 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
         indicatorStyle={bar.indicatorStyle}
         refreshControl={themedRefresh}
         removeClippedSubviews={false}
+        contentContainerStyle={[
+          { flexGrow: itemCount === 0 ? 1 : 0 },
+          contentContainerStyle,
+        ]}
         style={[fill ? styles.fill : null, inner]}
         onScroll={chainHandlers(bar.onScroll, onScroll)}
         onContentSizeChange={chainHandlers(bar.onContentSizeChange, onContentSizeChange)}

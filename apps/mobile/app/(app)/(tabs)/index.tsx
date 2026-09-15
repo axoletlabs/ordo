@@ -51,6 +51,7 @@ import {
   type CreateButtonHoldAction,
 } from "../../../src/store/settings";
 import { layout, spacing } from "../../../src/theme/tokens";
+import { FAB_LIST_CLEARANCE } from "../../../src/lib/list-pagination";
 import { type BookmarkDto, type FolderDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
@@ -255,7 +256,7 @@ export default function BookmarksScreen() {
         ? selectionClearance
         : floatingNavigation
           ? bottomClearance
-          : spacing[96],
+          : FAB_LIST_CLEARANCE,
     }),
     [bottomClearance, floatingNavigation, selection.active, selectionClearance],
   );
@@ -366,7 +367,7 @@ export default function BookmarksScreen() {
                 </View>
               )
             }
-            ListFooterComponent={<ListLoadingFooter loading={loadingMore} />}
+            ListFooterComponent={loadingMore ? <ListLoadingFooter /> : null}
             contentContainerStyle={listContentStyle}
             refreshing={refreshing}
             onRefresh={onRefresh}
