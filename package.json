@@ -14,7 +14,9 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
+    "test:scripts": "node --test scripts/deploy-server.test.js",
     "db:generate": "turbo run db:generate",
+    "deploy:server": "node scripts/deploy-server.js",
     "clean": "turbo run clean && rimraf node_modules"
   },
   "devDependencies": {

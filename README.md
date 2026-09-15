@@ -25,37 +25,14 @@ There isn't a hosted Ordo cloud. You run the API, then point the app at it.
 
 You need **Node.js 22.13+** and **[pnpm](https://pnpm.io)** (this repo uses pnpm 11).
 
-### 1. Clone and install
-
 ```bash
 git clone https://github.com/axoletlabs/ordo.git
 cd ordo
-pnpm install
+./scripts/deploy-server
 ```
 
-### 2. Prepare the database
-
-```bash
-pnpm --filter @ordo/shared build
-pnpm --filter @ordo/server db:setup
-```
-
-That generates the Prisma client and applies versioned migrations to
-`apps/server/prisma/ordo.db`. You don't need a `.env` file to start.
-
-If you already have a database from an older Ordo that used `prisma db push`,
-start the server once instead of `db:setup`. Boot adopts that file onto
-Prisma migrate and keeps your data. Do not run `prisma migrate deploy` on a
-database that has never been adopted — it would try to create tables that
-already exist.
-
-### 3. Start the server
-
-```bash
-pnpm --filter @ordo/server dev
-```
-
-The API listens on [http://localhost:3000](http://localhost:3000). Check it:
+On a terminal the script asks a few questions (port, sign-ups, mail, reverse
+proxy), then installs, builds, and sets up SQLite. Check it:
 
 ```bash
 curl http://localhost:3000/api/server/info
@@ -63,25 +40,43 @@ curl http://localhost:3000/api/server/info
 
 You should see JSON with `name`, `version`, and `registrationEnabled`.
 
-To run it without file watching:
+### Non-interactive
+
+Same steps, no prompts. Flags override defaults. Use this in scripts and CI.
 
 ```bash
-pnpm --filter @ordo/shared build
-pnpm --filter @ordo/server db:setup
-pnpm --filter @ordo/server build
-pnpm --filter @ordo/server start
+./scripts/deploy-server --yes
+./scripts/deploy-server --yes --port 8080 --trust-proxy 1 --registration false --start
 ```
+
+`./scripts/deploy-server --help` lists every flag. `--dry-run` prints the plan
+without changing anything. `pnpm deploy:server` is the same command.
+
+The first run writes `apps/server/.env`. Later runs leave that file alone
+unless you pass `--force-env`. The server reads `.env` on boot; values already
+in the environment still win.
+
+If you already have a database from an older Ordo that used `prisma db push`,
+the script generates the Prisma client and **skips** `migrate deploy`. The
+first server start adopts that file and keeps your data. Do not run
+`prisma migrate deploy` until then.
 
 Back up `apps/server/prisma/ordo.db` and `apps/server/.ordo-secret`. The secret
 file is created on first start if you don't set `JWT_SECRET`.
 
-### 4. Create an account
+For day-to-day hacking without a production build:
+
+```bash
+pnpm --filter @ordo/server dev
+```
+
+### Create an account
 
 Open the app, connect to your server, and sign up. Registration is on by default.
 
-If you don't want anyone else creating an account, copy
-`apps/server/.env.example` to `apps/server/.env`, set
-`REGISTRATION_ENABLED=false`, and restart.
+If you don't want anyone else creating an account, pass
+`--registration false` to the deploy script, or set
+`REGISTRATION_ENABLED=false` in `apps/server/.env` and restart.
 
 If you skip SMTP, one-time email codes are printed in the server console.
 
@@ -101,8 +96,8 @@ pnpm --filter @ordo/mobile start
 
 ## Configuration
 
-Everything is optional. Copy `apps/server/.env.example` to `apps/server/.env`
-only when you want to change a default.
+Everything is optional. `./scripts/deploy-server` writes `apps/server/.env` on
+first run. You can also copy `apps/server/.env.example` yourself.
 
 | Variable | Default | Purpose |
 | --- | --- | --- |

@@ -80,6 +80,36 @@ function toBool(v: string): boolean {
   return v === "true" || v === "1" || v === "yes" || v === "on";
 }
 
+/** Parse a dotenv file. Quotes are stripped; existing keys in `env` win. */
+export function parseDotEnv(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const raw of text.split(/\r?\n/)) {
+    const line = raw.trim();
+    if (!line || line.startsWith("#")) continue;
+    const eq = line.indexOf("=");
+    if (eq <= 0) continue;
+    const key = line.slice(0, eq).trim();
+    let value = line.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    out[key] = value;
+  }
+  return out;
+}
+
+/** Fill missing keys on `env` from a dotenv file. No-op if the file is absent. */
+export function applyDotEnvFile(filePath: string, env: NodeJS.ProcessEnv = process.env): void {
+  if (!existsSync(filePath)) return;
+  const parsed = parseDotEnv(readFileSync(filePath, "utf8"));
+  for (const [key, value] of Object.entries(parsed)) {
+    if (env[key] === undefined) env[key] = value;
+  }
+}
+
 /** Generate and persist a stable secret so tokens survive restarts. */
 function resolveSecret(): string {
   const fromEnv = process.env.JWT_SECRET?.trim();
@@ -131,6 +161,10 @@ export function defaultAvatarDir(databaseUrl: string): string {
 }
 
 export function loadConfig(): AppConfig {
+  // Tests pass env explicitly. A local `.env` should not leak into Jest.
+  if (process.env.NODE_ENV !== "test") {
+    applyDotEnvFile(join(process.cwd(), ".env"));
+  }
   const parsed = EnvSchema.parse(process.env);
   const secret = resolveSecret();
 

@@ -1,5 +1,7 @@
-import { resolve } from "node:path";
-import { loadConfig, resolveDatabaseUrl } from "./configuration.js";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
+import { applyDotEnvFile, loadConfig, parseDotEnv, resolveDatabaseUrl } from "./configuration.js";
 
 describe("loadConfig rate-limit flags", () => {
   const original = {
@@ -76,6 +78,31 @@ describe("loadConfig identity flags", () => {
     expect(cfg.avatarStorage).toBe("database");
     expect(cfg.avatarAllowAnimated).toBe(true);
     expect(cfg.profilePictureMaxBytes).toBe(512000);
+  });
+});
+
+describe("parseDotEnv", () => {
+  it("skips comments and does not override existing env keys", () => {
+    expect(
+      parseDotEnv(`
+# PORT=9
+PORT=3001
+DATABASE_URL="file:./ordo.db"
+SMTP_FROM='ordo <a@b.c>'
+`),
+    ).toEqual({
+      PORT: "3001",
+      DATABASE_URL: "file:./ordo.db",
+      SMTP_FROM: "ordo <a@b.c>",
+    });
+
+    const env: NodeJS.ProcessEnv = { PORT: "80" };
+    const dir = mkdtempSync(join(tmpdir(), "ordo-dotenv-"));
+    const file = join(dir, ".env");
+    writeFileSync(file, "PORT=3001\nTRUST_PROXY=1\n");
+    applyDotEnvFile(file, env);
+    expect(env.PORT).toBe("80");
+    expect(env.TRUST_PROXY).toBe("1");
   });
 });
 
