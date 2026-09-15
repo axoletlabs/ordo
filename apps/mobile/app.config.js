@@ -53,6 +53,9 @@ module.exports = {
   newArchEnabled: true,
   updates: {
     url: "https://u.expo.dev/c044b586-2816-42c7-b564-bef8556e21da",
+    // Custom Check / Download / Restart UI owns the fetch. Native ON_LOAD
+    // would race that JS path (pending bundle vs advertised update).
+    checkAutomatically: "NEVER",
   },
   runtimeVersion: otaRuntime || { policy: "fingerprint" },
   plugins: [
