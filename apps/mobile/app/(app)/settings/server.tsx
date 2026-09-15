@@ -28,6 +28,7 @@ import { cancelProactiveRefresh } from "../../../src/lib/api/client";
 import { serverApi } from "../../../src/lib/api/server";
 import { qk } from "../../../src/lib/api/query-keys";
 import { queryClient } from "../../../src/lib/query-client";
+import { discardQueryCache } from "../../../src/lib/query-cache";
 import { visibleServerHistory } from "../../../src/lib/server-history";
 import { hostOf, instanceNameOf } from "../../../src/lib/instance-name";
 import {
@@ -82,7 +83,7 @@ export default function ServerScreen() {
     try {
       await restartRuntime(async () => {
         cancelProactiveRefresh();
-        queryClient.clear();
+        discardQueryCache();
         await Promise.all([
           clearAuth(),
           clearFolderTokens(),

@@ -36,6 +36,7 @@ import {
   type BookmarkDto,
   type FolderDto,
 } from "@ordo/shared";
+import { PERSISTED_QUERY_GC_TIME_MS } from "../lib/query-persist";
 
 function snapshotLists(qc: QueryClient, folderId: string | null) {
   return qc.getQueriesData({ queryKey: qk.bookmarks(folderId) });
@@ -63,6 +64,7 @@ export function prefetchFolderBookmarks(folderId: string) {
     queryFn: ({ pageParam }) =>
       bookmarksApi.list({ folderId, cursor: pageParam ?? undefined, limit: DEFAULT_PAGE_SIZE, sort }),
     initialPageParam: null as string | null,
+    gcTime: PERSISTED_QUERY_GC_TIME_MS,
   });
 }
 
@@ -89,6 +91,7 @@ export function useInfiniteBookmarks(folderId: string | null, enabled = true) {
     initialPageParam: null as string | null,
     getNextPageParam: (last) => (last.hasMore ? last.nextCursor : undefined),
     placeholderData: keepPreviousData,
+    gcTime: PERSISTED_QUERY_GC_TIME_MS,
     enabled,
   });
 }

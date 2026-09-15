@@ -17,6 +17,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider, useTheme } from "../src/theme/ThemeProvider";
 import { queryClient } from "../src/lib/query-client";
+import { restoreQueryPersistence, stopQueryPersistence } from "../src/lib/query-cache";
 import { useAuthStore } from "../src/store/auth";
 import { useSettingsStore } from "../src/store/settings";
 import { useFolderTokenStore } from "../src/store/folder-tokens";
@@ -69,6 +70,8 @@ function RootShell() {
   const segments = useSegments();
   const status = useAuthStore((s) => s.status);
   const tokens = useAuthStore((s) => s.tokens);
+  const userId = useAuthStore((s) => s.user?.id);
+  const serverUrl = useSettingsStore((s) => s.serverUrl);
   const restarting = useUpdateRestartStore((s) => s.restarting);
   const sharedUrl = useIncomingShareStore((s) => s.pendingUrl);
   const clearSharedUrl = useIncomingShareStore((s) => s.clear);
@@ -99,6 +102,14 @@ function RootShell() {
     }
     void ensureFreshAccessToken();
   }, [status, tokens?.accessToken]);
+
+  useEffect(() => {
+    if (status === "authenticated" && userId) {
+      void restoreQueryPersistence(userId, serverUrl);
+      return;
+    }
+    if (status === "unauthenticated") stopQueryPersistence();
+  }, [status, userId, serverUrl]);
 
   // Keep the native splash visible while the redirect reconciles with auth so
   // the wrong group (e.g. login for an authenticated user) is never shown.
@@ -182,6 +193,15 @@ export default function RootLayout() {
           sessionUpdatedAt: null,
           status: "unauthenticated",
         });
+      }
+
+      try {
+        const auth = useAuthStore.getState();
+        if (auth.status === "authenticated" && auth.user) {
+          await restoreQueryPersistence(auth.user.id, useSettingsStore.getState().serverUrl);
+        }
+      } catch (error) {
+        console.warn("Query cache restore failed", error);
       } finally {
         setBooted(true);
       }

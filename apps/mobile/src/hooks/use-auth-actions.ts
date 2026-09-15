@@ -11,6 +11,7 @@ import {
   type UserDto,
 } from "@ordo/shared";
 import { queryClient } from "../lib/query-client";
+import { discardQueryCache } from "../lib/query-cache";
 import { authApi } from "../lib/api/auth";
 import { useAuthStore } from "../store/auth";
 import { useFolderTokenStore } from "../store/folder-tokens";
@@ -104,12 +105,11 @@ export function useDeleteAccount() {
     mutationFn: authApi.deleteAccount,
     onSuccess: async () => {
       cancelProactiveRefresh();
-      const cleanup = Promise.allSettled([
+      discardQueryCache();
+      await Promise.allSettled([
         clear(),
         useFolderTokenStore.getState().clearAll(),
       ]);
-      queryClient.clear();
-      await cleanup;
     },
   });
 }
@@ -193,8 +193,8 @@ export function useLogout() {
     },
     onSettled: () => {
       cancelProactiveRefresh();
+      discardQueryCache();
       void clear();
-      queryClient.clear();
     },
   });
 }
