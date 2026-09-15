@@ -182,6 +182,9 @@ const styles = StyleSheet.create({
   wrap: {
     flexDirection: "row",
     alignItems: "center",
+    alignSelf: "stretch",
+    width: "100%",
+    flexGrow: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
     paddingRight: spacing[16],
   },

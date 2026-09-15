@@ -35,6 +35,7 @@ import { useResponsiveLayout } from "../../../src/hooks/use-responsive-layout";
 import { useFloatingDockMetrics } from "../../../src/hooks/use-floating-dock-metrics";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { flattenPages } from "../../../src/lib/api/query-keys";
+import { bookmarkListItemType } from "../../../src/lib/bookmark-row-layout";
 import { collectCachedBookmarks } from "../../../src/lib/cache-helpers";
 import { errorMessage } from "../../../src/lib/error-message";
 import { haptics } from "../../../src/lib/haptics";
@@ -447,6 +448,7 @@ export default function SearchScreen() {
       data={items}
       extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}:${trimmed}:${listFilters.tagIds.join(",")}:${listFilters.folderIds.join(",")}:${listFilters.unfiled}:${listFilters.status}:${listFilters.kind}:${listFilters.fuzzy}`}
       keyExtractor={(b: BookmarkDto) => b.id}
+      getItemType={bookmarkListItemType}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
       renderItem={renderBookmark}

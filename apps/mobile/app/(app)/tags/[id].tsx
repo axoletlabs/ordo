@@ -35,6 +35,7 @@ import { useTheme } from "../../../src/theme/ThemeProvider";
 import { haptics } from "../../../src/lib/haptics";
 import { errorMessage } from "../../../src/lib/error-message";
 import { flattenPages } from "../../../src/lib/api/query-keys";
+import { bookmarkListItemType } from "../../../src/lib/bookmark-row-layout";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
 import type { BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
@@ -166,6 +167,7 @@ export default function TagDetailScreen() {
       data={items}
       extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}`}
       keyExtractor={(b: BookmarkDto) => b.id}
+      getItemType={bookmarkListItemType}
       renderItem={renderBookmark}
       contentContainerStyle={{
         paddingBottom: selection.active ? selectionClearance : spacing[96],

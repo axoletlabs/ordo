@@ -28,6 +28,7 @@ import { useFolders } from "../../../src/hooks/use-folders";
 import { useFolderTokenStore } from "../../../src/store/folder-tokens";
 import { useListSortStore } from "../../../src/store/list-sort";
 import { sortBookmarksBy, sortFoldersBy } from "../../../src/lib/list-sort";
+import { bookmarkListItemType } from "../../../src/lib/bookmark-row-layout";
 import { useTags } from "../../../src/hooks/use-tags";
 import {
   prefetchFolderBookmarks,
@@ -348,7 +349,9 @@ export default function BookmarksScreen() {
             extraData={`${selectionRevision}:${folderSort}:${unfiledSort}`}
             key={`home:${folderSort}:${unfiledSort}`}
             keyExtractor={libraryKeyExtractor}
-            getItemType={(item: LibraryItem) => item.type}
+            getItemType={(item: LibraryItem) =>
+              item.type === "folder" ? "folder" : bookmarkListItemType(item.bookmark)
+            }
             renderItem={renderLibraryItem}
             ListEmptyComponent={
               libraryLoading ? (

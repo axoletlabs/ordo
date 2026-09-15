@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { BookmarkDto } from "@ordo/shared";
-import { estimateBookmarkRowSize, FOLDER_ROW_SIZE } from "./bookmark-row-layout.ts";
+import { bookmarkListItemType, estimateBookmarkRowSize, FOLDER_ROW_SIZE } from "./bookmark-row-layout.ts";
 
 function bookmark(partial: Partial<BookmarkDto> & Pick<BookmarkDto, "id" | "title">): BookmarkDto {
   return {
@@ -40,4 +40,6 @@ test("compact website rows are shorter than tagged articles", () => {
   });
   assert.ok(estimateBookmarkRowSize(web) < estimateBookmarkRowSize(article));
   assert.ok(FOLDER_ROW_SIZE <= estimateBookmarkRowSize(web));
+  assert.equal(bookmarkListItemType(web), "bookmark");
+  assert.equal(bookmarkListItemType(article), "bookmark:article-tags");
 });

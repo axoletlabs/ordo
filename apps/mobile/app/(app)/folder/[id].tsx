@@ -45,6 +45,7 @@ import { markedAsReadToast } from "../../../src/lib/copy";
 import { errorMessage, isFolderProtected } from "../../../src/lib/error-message";
 import { flattenPages } from "../../../src/lib/api/query-keys";
 import { sortBookmarksBy } from "../../../src/lib/list-sort";
+import { bookmarkListItemType } from "../../../src/lib/bookmark-row-layout";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
 import { DEFAULT_BOOKMARK_LIST_SORT, type BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
@@ -198,6 +199,7 @@ export default function FolderDetailScreen() {
       extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}:${bookmarkSort}`}
       key={`folder:${folderId ?? "root"}:${bookmarkSort}`}
       keyExtractor={(b: BookmarkDto) => b.id}
+      getItemType={bookmarkListItemType}
       renderItem={renderBookmark}
       contentContainerStyle={{ paddingBottom: listContentPadding }}
       refreshing={bookmarks.isFetching && !bookmarks.isFetchingNextPage && !bookmarks.isPlaceholderData}

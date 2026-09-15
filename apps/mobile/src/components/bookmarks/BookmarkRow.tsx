@@ -89,6 +89,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   const createdLabel = relativeTime(bookmark.createdAt);
   const faviconUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
   const [failedFavicon, setFailedFavicon] = React.useState<string | null>(null);
+  if (failedFavicon != null && failedFavicon !== faviconUrl) setFailedFavicon(null);
   const opensAsWebsite = bookmarkOpensAsWebsite(bookmark);
   const isArticle = bookmarkIsArticle(bookmark);
   const showReadingTime = isArticle && !!bookmark.readingTimeMinutes;
@@ -217,6 +218,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
             ) : (
               <Image
                 source={{ uri: faviconUrl }}
+                recyclingKey={bookmark.id}
                 style={styles.favicon}
                 contentFit="contain"
                 cachePolicy="memory-disk"
@@ -373,6 +375,9 @@ const styles = StyleSheet.create({
   wrap: {
     flexDirection: "row",
     alignItems: "center",
+    alignSelf: "stretch",
+    width: "100%",
+    flexGrow: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
     paddingRight: spacing[16],
   },
