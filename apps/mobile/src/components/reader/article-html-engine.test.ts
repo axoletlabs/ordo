@@ -3,6 +3,8 @@ import { createRequire } from "node:module";
 import { test } from "node:test";
 import {
   collectTableRows,
+  highlightIdCoveringRange,
+  nodeTextContent,
   plainTextFromNode,
   splitTableHeader,
   type HtmlTableNode,
@@ -52,4 +54,16 @@ test("TRE 12 keeps heading text and nested inline spaces", () => {
   const p = findByTag(tree, "p");
   assert.equal(textFromNode(h1!).replace(/\s+/g, " ").trim(), "Title");
   assert.equal(textFromNode(p!), "Hello world.");
+});
+
+test("TRE keeps mark ids so a highlight selection can be removed", () => {
+  const engine = new TRenderEngine();
+  const tree = engine.buildTTree('<p>Hello <mark id="ordo-hl-h1">world</mark> today.</p>');
+  const p = findByTag(tree, "p");
+  assert.ok(p);
+  const text = nodeTextContent(p);
+  const start = text.indexOf("world");
+  assert.ok(start >= 0);
+  assert.equal(highlightIdCoveringRange(p, start, start + "world".length), "h1");
+  assert.equal(highlightIdCoveringRange(p, 0, start + "world".length), null);
 });

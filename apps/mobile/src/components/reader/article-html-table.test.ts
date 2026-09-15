@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   collectTableRows,
+  highlightIdCoveringRange,
   hrefCoveringRange,
   nodeTextContent,
   offsetFromLayout,
@@ -73,6 +74,38 @@ test("hrefCoveringRange is set only when the selection sits inside one link", ()
   assert.equal(hrefCoveringRange(paragraph, 0, 8), null);
   assert.equal(hrefCoveringRange(paragraph, 0, 3), null);
   assert.equal(hrefCoveringRange(paragraph, 9, 13), null);
+});
+
+test("highlightIdCoveringRange is set only when the selection sits inside one mark", () => {
+  const paragraph = el("p", [
+    text("Hello "),
+    el("mark", [text("world")], { id: "ordo-hl-h1" }),
+    text(" today"),
+  ]);
+  assert.equal(highlightIdCoveringRange(paragraph, 6, 11), "h1");
+  assert.equal(highlightIdCoveringRange(paragraph, 7, 10), "h1");
+  assert.equal(highlightIdCoveringRange(paragraph, 0, 11), null);
+  assert.equal(highlightIdCoveringRange(paragraph, 0, 5), null);
+});
+
+test("highlightIdCoveringRange keeps one id split across nested tags", () => {
+  const paragraph = el("p", [
+    text("Hel"),
+    el("mark", [text("lo ")], { id: "ordo-hl-h1" }),
+    el("em", [el("mark", [text("wor")], { id: "ordo-hl-h1" }), text("ld")]),
+  ]);
+  assert.equal(highlightIdCoveringRange(paragraph, 3, 9), "h1");
+  assert.equal(highlightIdCoveringRange(paragraph, 3, 11), null);
+});
+
+test("highlightIdCoveringRange reads a flattened TRE mark text node", () => {
+  const paragraph = el("p", [
+    text("Hello "),
+    { type: "text", tagName: "mark", data: "world", attributes: { id: "ordo-hl-h1" } },
+    text(" today"),
+  ]);
+  assert.equal(highlightIdCoveringRange(paragraph, 6, 11), "h1");
+  assert.equal(highlightIdCoveringRange(paragraph, 0, 11), null);
 });
 
 test("offsetFromLayout maps a press onto a character index", () => {

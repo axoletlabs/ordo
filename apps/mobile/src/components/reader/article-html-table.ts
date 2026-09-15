@@ -1,3 +1,5 @@
+import { highlightIdFromMark } from "@ordo/shared";
+
 /**
  * Walk a render-html TNode (or a test double) and pull out table rows.
  * Nested thead/tbody/tr wrappers are flattened so the reader can render a
@@ -76,6 +78,41 @@ export function hrefCoveringRange(node: HtmlTableNode, start: number, end: numbe
   walk(node, null);
   if (hrefs.size !== 1) return null;
   const only = [...hrefs][0]!;
+  return only || null;
+}
+
+/**
+ * Highlight id when `[start, end)` sits entirely inside one mark (including
+ * the same id split across nested tags). Mixed highlighted/plain text, or two
+ * different highlights, return null.
+ */
+export function highlightIdCoveringRange(
+  node: HtmlTableNode,
+  start: number,
+  end: number,
+): string | null {
+  if (end <= start) return null;
+  const ids = new Set<string>();
+  let offset = 0;
+  const walk = (current: HtmlTableNode, highlightId: string | null) => {
+    const nested = highlightIdFromMark(current.attributes?.id) ?? highlightId;
+    if (current.type === "text") {
+      const from = offset;
+      offset += (current.data ?? "").length;
+      if (offset > start && from < end) ids.add(nested ?? "");
+      return;
+    }
+    if (current.tagName === "br") {
+      const from = offset;
+      offset += 1;
+      if (offset > start && from < end) ids.add(nested ?? "");
+      return;
+    }
+    (current.children ?? []).forEach((child) => walk(child, nested ?? null));
+  };
+  walk(node, null);
+  if (ids.size !== 1) return null;
+  const only = [...ids][0]!;
   return only || null;
 }
 

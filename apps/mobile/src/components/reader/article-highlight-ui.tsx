@@ -35,7 +35,12 @@ import {
   quoteFromRange,
   type HighlightAnchor,
 } from "@ordo/shared";
-import { hrefCoveringRange, nodeTextContent, type HtmlTableNode } from "./article-html-table";
+import {
+  highlightIdCoveringRange,
+  hrefCoveringRange,
+  nodeTextContent,
+  type HtmlTableNode,
+} from "./article-html-table";
 
 function isExternalHref(href: string): boolean {
   return /^https?:/i.test(href) || /^mailto:/i.test(href);
@@ -134,18 +139,21 @@ function webSelectedText(): string {
   return selection?.toString() ?? "";
 }
 
+/** Selection draft; `highlightId` is set when the range sits inside a mark. */
+export type HighlightSelectDraft = HighlightAnchor & { highlightId?: string };
+
 export interface HighlightUiHandlers {
   articlePlain: string;
   selectionColor: string;
   textStyle?: StyleProp<TextStyle>;
-  onTextSelect: (draft: HighlightAnchor | null) => void;
+  onTextSelect: (draft: HighlightSelectDraft | null) => void;
   onHighlightPress: (id: string, event: GestureResponderEvent) => void;
   onLinkLongPress: (draft: HighlightAnchor & { href: string }, event: GestureResponderEvent) => void;
 }
 
 export const HighlightUiContext = createContext<HighlightUiHandlers | null>(null);
 
-export function ignoreTextSelect(_draft: HighlightAnchor | null) {}
+export function ignoreTextSelect(_draft: HighlightSelectDraft | null) {}
 export function ignoreHighlightPress(_id: string, _event: GestureResponderEvent) {}
 export function ignoreLinkLongPress(
   _draft: HighlightAnchor & { href: string },
@@ -196,8 +204,14 @@ export function SelectablePhrase({
         ui.onTextSelect(null);
         return;
       }
-      const href = hrefCoveringRange(asHtmlNode(tnode), start, end);
-      ui.onTextSelect(href ? { ...quote, href } : quote);
+      const htmlNode = asHtmlNode(tnode);
+      const href = hrefCoveringRange(htmlNode, start, end);
+      const highlightId = highlightIdCoveringRange(htmlNode, start, end) ?? undefined;
+      ui.onTextSelect({
+        ...quote,
+        ...(href ? { href } : {}),
+        ...(highlightId ? { highlightId } : {}),
+      });
     },
     [text, tnode, ui],
   );

@@ -32,6 +32,7 @@ import {
   HIGHLIGHTS_PER_BOOKMARK_MAX,
   READ_COMPLETION_THRESHOLD,
   canAnchorHighlight,
+  findHighlightForSelection,
 } from "@ordo/shared";
 import type {
   HighlightAnchor,
@@ -53,6 +54,7 @@ import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
 import { sheetMenuStyles } from "../ui/SheetActionRow";
 import { FAB, FABLayer } from "../ui/FAB";
 import { ArticleHtml, type ArticleHeading } from "./ArticleHtml";
+import type { HighlightSelectDraft } from "./article-highlight-ui";
 import { ReaderControlsSheet } from "./ReaderControlsSheet";
 import { EditTagsSheet } from "../tags/EditTagsSheet";
 import { LockPrompt } from "../bookmarks/LockPrompt";
@@ -227,7 +229,7 @@ function ReaderPaneInner({
   const [surface, setSurface] = useState<"auto" | "reader" | "browser">(
     initialSurface === "browser" ? "browser" : "auto",
   );
-  const [textDraft, setTextDraft] = useState<HighlightAnchor | null>(null);
+  const [textDraft, setTextDraft] = useState<HighlightSelectDraft | null>(null);
   const [linkMenu, setLinkMenu] = useState<{
     quote: HighlightAnchor & { href: string };
     anchor: MenuAnchorRect;
@@ -332,7 +334,7 @@ function ReaderPaneInner({
     void copyLink(bookmark.url);
   };
 
-  const handleTextSelect = useCallback((draft: HighlightAnchor | null) => {
+  const handleTextSelect = useCallback((draft: HighlightSelectDraft | null) => {
     setTextDraft(draft);
     if (draft) setActionPanel(null);
   }, []);
@@ -380,6 +382,8 @@ function ReaderPaneInner({
     (highlightId: string) => {
       if (!bookmark) return;
       haptics.light();
+      setTextDraft(null);
+      setHighlightMenu(null);
       removeHighlight.mutate(
         { id: bookmark.id, highlightId, folderId: bookmark.folderId },
         {
@@ -390,6 +394,14 @@ function ReaderPaneInner({
     },
     [bookmark, removeHighlight],
   );
+
+  const selectedHighlightId = useMemo(() => {
+    if (!textDraft) return null;
+    if (textDraft.highlightId) return textDraft.highlightId;
+    const html = detail.data?.contentHtml;
+    if (!html) return null;
+    return findHighlightForSelection(html, highlights, textDraft);
+  }, [detail.data?.contentHtml, highlights, textDraft]);
 
   const handleClassify = (asArticle: boolean) => {
     if (!bookmark) return;
@@ -1295,13 +1307,24 @@ function ReaderPaneInner({
                   onPress={() => setTextDraft(null)}
                   style={styles.draftButton}
                 />
-                <Button
-                  label="Highlight"
-                  onPress={() => saveHighlight(textDraft)}
-                  loading={createHighlight.isPending}
-                  disabled={createHighlight.isPending}
-                  style={styles.draftButton}
-                />
+                {selectedHighlightId ? (
+                  <Button
+                    label="Remove highlight"
+                    variant="danger"
+                    onPress={() => dropHighlight(selectedHighlightId)}
+                    loading={removeHighlight.isPending}
+                    disabled={removeHighlight.isPending}
+                    style={styles.draftButton}
+                  />
+                ) : (
+                  <Button
+                    label="Highlight"
+                    onPress={() => saveHighlight(textDraft)}
+                    loading={createHighlight.isPending}
+                    disabled={createHighlight.isPending}
+                    style={styles.draftButton}
+                  />
+                )}
               </View>
             </View>
           </View>

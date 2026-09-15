@@ -190,6 +190,43 @@ export function findHighlightRange(html: string, anchor: HighlightAnchor): Highl
   return findHrefRange(plain, pieces, anchor.href, anchor.exact);
 }
 
+type HighlightQuote = Pick<HighlightDto, "id" | "exact" | "prefix" | "suffix" | "href">;
+
+/**
+ * Highlight whose wrapped range fully contains the current selection.
+ * Used to offer "Remove highlight" when the user selects already-highlighted text.
+ */
+export function findHighlightForSelection(
+  html: string,
+  highlights: readonly HighlightQuote[],
+  selection: HighlightAnchor,
+): string | null {
+  if (highlights.length === 0) return null;
+  if (html) {
+    const selected = findHighlightRange(html, selection);
+    if (selected) {
+      let best: { id: string; span: number } | null = null;
+      for (const highlight of highlights) {
+        const range = findHighlightRange(html, highlight);
+        if (!range) continue;
+        if (selected.start >= range.start && selected.end <= range.end) {
+          const span = range.end - range.start;
+          if (!best || span < best.span) best = { id: highlight.id, span };
+        }
+      }
+      if (best) return best.id;
+    }
+  }
+  const prefix = selection.prefix ?? "";
+  const suffix = selection.suffix ?? "";
+  const tight = highlights.find(
+    (row) => row.exact === selection.exact && row.prefix === prefix && row.suffix === suffix,
+  );
+  if (tight) return tight.id;
+  const sameExact = highlights.filter((row) => row.exact === selection.exact);
+  return sameExact.length === 1 ? sameExact[0]!.id : null;
+}
+
 /** Wrap every anchored highlight in `<mark id="ordo-hl-…">`. Unmatched rows are skipped. */
 export function applyHighlightsToHtml(
   html: string,

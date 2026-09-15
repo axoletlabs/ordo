@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   applyHighlightsToHtml,
   canAnchorHighlight,
+  findHighlightForSelection,
   findHighlightRange,
   highlightIdFromMark,
   highlightMarkId,
@@ -97,6 +98,38 @@ test("skips overlapping highlights and unmatched quotes", () => {
   ]);
   assert.equal(wrapped, '<p>a<mark id="ordo-hl-a">bcd</mark>ef</p>');
   assert.equal(findHighlightRange(html, { exact: "missing" }), null);
+});
+
+test("finds the highlight that contains a selection", () => {
+  const html = "<p>Hello world today.</p>";
+  const highlights = [
+    { id: "h1", exact: "world", prefix: "Hello ", suffix: " today", href: null },
+    { id: "h2", exact: "Hello", prefix: "", suffix: " world", href: null },
+  ];
+  assert.equal(
+    findHighlightForSelection(html, highlights, {
+      exact: "world",
+      prefix: "Hello ",
+      suffix: " today",
+    }),
+    "h1",
+  );
+  assert.equal(
+    findHighlightForSelection(html, highlights, {
+      exact: "orl",
+      prefix: "w",
+      suffix: "d",
+    }),
+    "h1",
+  );
+  assert.equal(
+    findHighlightForSelection(html, highlights, {
+      exact: "Hello world",
+      prefix: "",
+      suffix: " today",
+    }),
+    null,
+  );
 });
 
 test("falls back to wrapping a link when the quote moved", () => {
