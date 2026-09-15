@@ -28,6 +28,11 @@ apps/server/src/generated/
 # auto-generated secret
 .ordo-secret
 
+# Android upload keystore (CI secret; never commit)
+*.keystore
+*.jks
+*.p12
+
 # expo
 .expo/
 expo-env.d.ts

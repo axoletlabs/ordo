@@ -436,6 +436,45 @@ function applySecurityCrypto(code) {
   return code.replace(/^dependencies \{/m, `dependencies {\n${SECURITY_CRYPTO_LINE}`);
 }
 
+const RELEASE_SIGNING_MARKER = 'ordoReleaseSigning';
+const DEBUG_SIGNING_LINE = 'signingConfig signingConfigs.debug';
+const RELEASE_SIGNING_LINE = 'signingConfig signingConfigs.release';
+
+const RELEASE_SIGNING_BLOCK = [
+  '        release {',
+  `            // ${RELEASE_SIGNING_MARKER}`,
+  '            def storeFilePath = System.getenv("ORDO_UPLOAD_STORE_FILE")',
+  '            if (storeFilePath) {',
+  '                storeFile file(storeFilePath)',
+  '                storeType (System.getenv("ORDO_UPLOAD_STORE_TYPE") ?: "PKCS12")',
+  '                storePassword System.getenv("ORDO_UPLOAD_STORE_PASSWORD")',
+  '                keyAlias (System.getenv("ORDO_UPLOAD_KEY_ALIAS") ?: "ordo")',
+  '                keyPassword (System.getenv("ORDO_UPLOAD_KEY_PASSWORD") ?: System.getenv("ORDO_UPLOAD_STORE_PASSWORD"))',
+  '            }',
+  '        }',
+].join('\n');
+
+/**
+ * Point release APKs at a stored upload keystore (CI env), not the
+ * debug key Expo's template uses. Debug builds keep the debug keystore.
+ * assembleRelease without ORDO_UPLOAD_STORE_FILE fails at package time.
+ */
+function applyReleaseSigning(code) {
+  if (!code.includes(RELEASE_SIGNING_MARKER)) {
+    if (!/signingConfigs\s*\{/.test(code)) return code;
+    code = code.replace(/signingConfigs\s*\{/, `signingConfigs {\n${RELEASE_SIGNING_BLOCK}`);
+  }
+
+  if (!code.includes(RELEASE_SIGNING_LINE)) {
+    const last = code.lastIndexOf(DEBUG_SIGNING_LINE);
+    if (last !== -1) {
+      code =
+        code.slice(0, last) + RELEASE_SIGNING_LINE + code.slice(last + DEBUG_SIGNING_LINE.length);
+    }
+  }
+  return code;
+}
+
 // Keep the default -O / source-map flags; only suppress the two hermesc
 // categories that RN's own bundle cannot satisfy at compile time.
 const HERMES_FLAGS_LINE =
@@ -607,6 +646,8 @@ function isSendFilter(filter) {
  *     dumps into the Gradle log during `:app:createBundleReleaseJsAndAssets`.
  *   - a jni CMakeLists.txt silences Fabric codegen's `$event` clang warnings
  *     on autolinked modules (safe-area, screens, svg).
+ *   - release signing reads ORDO_UPLOAD_STORE_FILE / _PASSWORD / _TYPE
+ *     (and optional KEY_ALIAS / KEY_PASSWORD) so CI APKs share one upload key.
  */
 const withAndroidBuild = (config) => {
   // ── AndroidManifest.xml ────────────────────────────────────────────────
@@ -895,6 +936,7 @@ const withAndroidBuild = (config) => {
     code = applyHermesFlags(code);
     code = applyCmakePath(code);
     code = applySecurityCrypto(code);
+    code = applyReleaseSigning(code);
 
     c.modResults.contents = code;
     return c;
@@ -910,6 +952,8 @@ module.exports.VERSION_CODE_ABI_OFFSETS = VERSION_CODE_ABI_OFFSETS;
 module.exports.VERSION_CODE_ABI_STRIDE = VERSION_CODE_ABI_STRIDE;
 module.exports.applyCmakePath = applyCmakePath;
 module.exports.applyVersionCode = applyVersionCode;
+module.exports.applyReleaseSigning = applyReleaseSigning;
+module.exports.RELEASE_SIGNING_MARKER = RELEASE_SIGNING_MARKER;
 module.exports.versionCodeForAbi = versionCodeForAbi;
 module.exports.APP_WINDOW_CHROME_ITEMS = APP_WINDOW_CHROME_ITEMS;
 module.exports.APP_WINDOW_CHROME_API27_ITEMS = APP_WINDOW_CHROME_API27_ITEMS;

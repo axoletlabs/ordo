@@ -25,8 +25,10 @@ const {
   SHARE_RECEIVER_SAVE_ALIAS,
   VERSION_CODE_ABI_STRIDE,
   applyCmakePath,
+  applyReleaseSigning,
   applySecurityCrypto,
   applyVersionCode,
+  RELEASE_SIGNING_MARKER,
   ordoShareSessionModuleKotlin,
   patchMainActivityForShareTargets,
   patchMainApplicationForShareSession,
@@ -244,6 +246,45 @@ test("Quick Save session lives in EncryptedSharedPreferences, not files/cache", 
   assert.match(bridge, /ShareSessionStore\.read/);
   assert.match(bridge, /ShareSessionStore\.write/);
   assert.match(bridge, /ShareSessionStore\.clear/);
+});
+
+const EXPO_APP_GRADLE = `
+android {
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
+        release {
+            // Caution! In production, you need to generate your own keystore file.
+            // see https://reactnative.dev/docs/signed-apk-android.
+            signingConfig signingConfigs.debug
+            minifyEnabled false
+        }
+    }
+}
+`;
+
+test("release APKs sign with the upload keystore env, debug stays on the debug key", () => {
+  const patched = applyReleaseSigning(EXPO_APP_GRADLE);
+  assert.match(patched, new RegExp(RELEASE_SIGNING_MARKER));
+  assert.match(patched, /ORDO_UPLOAD_STORE_FILE/);
+  assert.match(patched, /storeType \(System\.getenv\("ORDO_UPLOAD_STORE_TYPE"\) \?: "PKCS12"\)/);
+  assert.match(patched, /keyAlias \(System\.getenv\("ORDO_UPLOAD_KEY_ALIAS"\) \?: "ordo"\)/);
+  assert.match(patched, /debug \{\s*signingConfig signingConfigs\.debug/);
+  assert.match(patched, /release \{[\s\S]*signingConfig signingConfigs\.release/);
+  assert.doesNotMatch(
+    patched,
+    /release \{[\s\S]*\/\/ Caution![\s\S]*signingConfig signingConfigs\.debug/,
+  );
+  assert.equal(applyReleaseSigning(patched), patched);
 });
 
 test("app Gradle pulls androidx.security-crypto for the session store", () => {

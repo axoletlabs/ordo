@@ -26,6 +26,9 @@ on:
 # Native GitHub Releases:
 #   Latest (stable): tag vX.Y.Z, "Set as the latest release", pre-release unchecked.
 #   Early: tag vX.Y.Z-alpha.N | -beta.N | -rc.N, "This is a pre-release" checked.
+# Release APKs are signed with one stored upload key (alias `ordo`):
+#   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD. Missing secrets fail
+#   assembleRelease instead of minting a new debug key each run.
 # EAS Update channels (baked into the APK, not switched in-app):
 #   production  — GitHub Latest / `main` while apps/mobile version is stable X.Y.Z
 #   development — GitHub pre-release / `main` while version is alpha|beta|rc
@@ -437,6 +440,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      ORDO_UPLOAD_STORE_FILE: ${{ runner.temp }}/ordo-upload.p12
+      ORDO_UPLOAD_STORE_TYPE: PKCS12
+      ORDO_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ORDO_UPLOAD_KEY_ALIAS: ordo
+      ORDO_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
     steps:
       - uses: actions/checkout@v5
 
@@ -489,6 +498,20 @@ jobs:
           CHANNEL="${{ needs.detect.outputs.updates_channel }}"
           grep -q "expo-channel-name" android/app/src/main/AndroidManifest.xml
           grep -q "$CHANNEL" android/app/src/main/AndroidManifest.xml
+
+      - name: Restore upload keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ORDO_UPLOAD_STORE_PASSWORD" ]; then
+            echo "::error::Set ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD repository secrets so release APKs share one upload key."
+            exit 1
+          fi
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$ORDO_UPLOAD_STORE_FILE"
+          if [ ! -s "$ORDO_UPLOAD_STORE_FILE" ]; then
+            echo "::error::Decoded ANDROID_KEYSTORE_BASE64 is empty."
+            exit 1
+          fi
 
       - name: Build APK (dev, arm64 only)
         if: needs.detect.outputs.is_release != 'true'
