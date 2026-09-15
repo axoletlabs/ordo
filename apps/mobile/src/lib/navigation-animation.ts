@@ -1,6 +1,11 @@
 /**
  * Map the Appearance "Page animation" setting onto stack pushes and tab switches.
+ *
+ * Changing the native animation type while a slide/shift is on screen leaves
+ * translateX on frozen views. Hold the in-flight type until tabs are focused
+ * again, and keep a 0px translateX on fade so the native driver can clear it.
  */
+import { SceneStyleInterpolators } from "@react-navigation/bottom-tabs";
 import { Easing, Platform } from "react-native";
 import type { NavigationAnimation } from "../store/settings";
 
@@ -32,4 +37,32 @@ export function tabTransitionSpec(preference: NavigationAnimation) {
       easing: preference === "slide" ? Easing.inOut(Easing.ease) : Easing.in(Easing.linear),
     },
   };
+}
+
+/**
+ * Fade normally drops transform, so a leftover shift translateX stays on the
+ * native view. Drive translateX to 0 on the same animated node instead.
+ */
+function forFadeClearingShift(
+  props: Parameters<typeof SceneStyleInterpolators.forFade>[0],
+) {
+  const faded = SceneStyleInterpolators.forFade(props);
+  return {
+    sceneStyle: {
+      ...faded.sceneStyle,
+      transform: [
+        {
+          translateX: props.current.progress.interpolate({
+            inputRange: [-1, 0, 1],
+            outputRange: [0, 0, 0],
+          }),
+        },
+      ],
+    },
+  };
+}
+
+export function tabSceneStyleInterpolator(preference: NavigationAnimation) {
+  if (tabScreenAnimation(preference) !== "fade") return undefined;
+  return forFadeClearingShift;
 }
