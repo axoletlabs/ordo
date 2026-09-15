@@ -437,7 +437,7 @@ function PreviewState({
           <Button label="Done" block onPress={onDiscard} disabled={confirming} />
         ) : (
           <PanelActions
-            confirmLabel={count === 1 ? "Import 1 bookmark" : `Import ${count} bookmarks`}
+            confirmLabel="Import"
             cancelLabel="Discard"
             onConfirm={onConfirm}
             onCancel={onDiscard}

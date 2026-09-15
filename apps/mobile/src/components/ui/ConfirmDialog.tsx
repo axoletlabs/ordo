@@ -45,39 +45,29 @@ export function ConfirmDialog({
     <FloatingPanel
       visible={visible}
       onDismiss={onDismiss}
-      maxWidth={360}
       dismissible={canDismiss}
     >
-      <View style={styles.body}>
-        <PanelHeader
-          title={title}
-          subtitle={message}
-          icon={icon}
-          iconColor={danger ? palette.danger : palette.accent}
-          titleVariant="title2"
-          style={styles.header}
-        />
-        {children ? <View style={styles.extra}>{children}</View> : null}
-        <PanelActions
-          confirmLabel={confirmLabel}
-          confirmVariant={danger ? "danger" : "primary"}
-          onConfirm={onConfirm}
-          onCancel={onDismiss}
-          cancelLabel={cancelLabel}
-          loading={loading}
-          cancelDisabled={!canDismiss}
-        />
-      </View>
+      <PanelHeader
+        title={title}
+        subtitle={message}
+        icon={icon}
+        iconColor={danger ? palette.danger : palette.accent}
+        iconBackground={danger ? palette.dangerSoft : palette.accentSoft}
+      />
+      {children ? <View style={styles.extra}>{children}</View> : null}
+      <PanelActions
+        confirmLabel={confirmLabel}
+        confirmVariant={danger ? "danger" : "primary"}
+        onConfirm={onConfirm}
+        onCancel={onDismiss}
+        cancelLabel={cancelLabel}
+        loading={loading}
+        cancelDisabled={!canDismiss}
+      />
     </FloatingPanel>
   );
 }
 
 const styles = StyleSheet.create({
-  body: {
-    paddingHorizontal: spacing[12],
-    paddingTop: spacing[12],
-    paddingBottom: spacing[8],
-  },
-  header: { marginBottom: spacing[20] },
   extra: { marginBottom: spacing[12] },
 });

@@ -9,7 +9,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { type BookmarkDto, type TagSummaryDto } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
-import { Button } from "../ui/Button";
+import { PanelActions } from "../ui/SheetActionRow";
 import { Text } from "../ui/Text";
 import { PressableScale } from "../ui/PressableScale";
 import { TagChip } from "./TagChip";
@@ -166,15 +166,12 @@ export function EditTagsSheet({ visible, onDismiss, bookmark }: EditTagsSheetPro
         </Text>
       ) : null}
 
-      <View style={styles.actions}>
-        <Button label="Cancel" variant="secondary" onPress={onDismiss} style={{ flex: 1 }} />
-        <Button
-          label="Save"
-          onPress={save}
-          loading={updateTags.isPending}
-          style={{ flex: 1 }}
-        />
-      </View>
+      <PanelActions
+        confirmLabel="Save"
+        onConfirm={() => void save()}
+        onCancel={onDismiss}
+        loading={updateTags.isPending}
+      />
       </FloatingPanel>
       {/* Sibling of the edit sheet: nested modals are not supported on Android. */}
       <CreateTagPanel
@@ -222,5 +219,4 @@ const styles = StyleSheet.create({
   suggestionActions: { flexDirection: "row", gap: spacing[2] },
   section: { marginTop: spacing[10] },
   error: { marginTop: spacing[8] },
-  actions: { flexDirection: "row", gap: spacing[8], marginTop: spacing[12] },
 });

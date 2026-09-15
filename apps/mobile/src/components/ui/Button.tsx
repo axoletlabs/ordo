@@ -6,7 +6,7 @@
  *  - danger:    coral outline (coral border + coral label)
  */
 import React from "react";
-import { StyleSheet, View, type ViewStyle } from "react-native";
+import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { PressableScale } from "./PressableScale";
 import { Spinner } from "./Spinner";
 import { Text } from "./Text";
@@ -26,7 +26,7 @@ export interface ButtonProps {
   disabled?: boolean;
   icon?: React.ReactNode;
   block?: boolean;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   testID?: string;
 }
 
@@ -101,7 +101,7 @@ export function Button({
         ) : (
           <>
             {icon ? <View style={styles.iconWrap}>{icon}</View> : null}
-            <Text variant="header" style={{ color: fg }}>
+            <Text variant="header" numberOfLines={1} style={[styles.label, { color: fg }]}>
               {label}
             </Text>
           </>
@@ -113,11 +113,19 @@ export function Button({
 
 const styles = StyleSheet.create({
   base: {
-    paddingHorizontal: spacing[20],
+    paddingHorizontal: spacing[16],
+    minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
   },
-  content: { flexDirection: "row", alignItems: "center", justifyContent: "center" },
-  iconWrap: { marginRight: spacing[8] },
+  content: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    minWidth: 0,
+    maxWidth: "100%",
+  },
+  label: { flexShrink: 1 },
+  iconWrap: { marginRight: spacing[8], flexShrink: 0 },
 });

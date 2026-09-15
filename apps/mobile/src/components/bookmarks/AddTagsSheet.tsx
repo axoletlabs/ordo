@@ -2,11 +2,11 @@
  * Add tags to every selected bookmark. Existing tags are kept; new ones are unioned.
  */
 import React, { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet } from "react-native";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
-import { Button } from "../ui/Button";
 import { Text } from "../ui/Text";
+import { PanelActions } from "../ui/SheetActionRow";
 import { TagSelectList } from "../tags/TagSelectList";
 import { CreateTagPanel } from "../tags/CreateTagPanel";
 import { useBatchBookmarks } from "../../hooks/use-bookmarks";
@@ -68,8 +68,6 @@ export function AddTagsSheet({
     }
   };
 
-  const count = bookmarkIds.length;
-
   return (
     <>
       <FloatingPanel visible={visible} onDismiss={onDismiss}>
@@ -84,16 +82,13 @@ export function AddTagsSheet({
             {error}
           </Text>
         ) : null}
-        <View style={styles.actions}>
-          <Button label="Cancel" variant="secondary" onPress={onDismiss} style={{ flex: 1 }} />
-          <Button
-            label={count === 1 ? "Add tags" : `Add to ${count}`}
-            onPress={() => void save()}
-            loading={batch.isPending}
-            disabled={selectedIds.length === 0}
-            style={{ flex: 1 }}
-          />
-        </View>
+        <PanelActions
+          confirmLabel="Add tags"
+          onConfirm={() => void save()}
+          onCancel={onDismiss}
+          loading={batch.isPending}
+          confirmDisabled={selectedIds.length === 0}
+        />
       </FloatingPanel>
       <CreateTagPanel
         visible={visible && createTagOpen}
@@ -106,5 +101,4 @@ export function AddTagsSheet({
 
 const styles = StyleSheet.create({
   error: { marginTop: spacing[8] },
-  actions: { flexDirection: "row", gap: spacing[8], marginTop: spacing[12] },
 });

@@ -7,7 +7,17 @@ import { spacing } from "../../theme/tokens";
 
 export const sheetMenuStyles = StyleSheet.create({
   stack: { gap: spacing[8], marginTop: spacing[8] },
-  row: { flexDirection: "row", alignItems: "center", gap: spacing[10], marginTop: spacing[16] },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[10],
+    marginTop: spacing[16],
+  },
+  action: {
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: spacing[12],
+  },
   cancel: { marginTop: spacing[4] },
 });
 
@@ -38,7 +48,7 @@ export function PanelActions({
         variant="ghost"
         onPress={onCancel}
         disabled={cancelDisabled}
-        style={{ flex: 1 }}
+        style={sheetMenuStyles.action}
       />
       <Button
         label={confirmLabel}
@@ -46,7 +56,7 @@ export function PanelActions({
         onPress={onConfirm}
         loading={loading}
         disabled={confirmDisabled}
-        style={{ flex: 1 }}
+        style={sheetMenuStyles.action}
       />
     </View>
   );

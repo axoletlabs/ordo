@@ -200,17 +200,7 @@ export function SelectionTools({
         icon="trash-outline"
         title={deleteTitle}
         message={deleteMessage}
-        confirmLabel={
-          mixed
-            ? "Delete"
-            : foldersOnly
-              ? folders.length === 1
-                ? "Delete folder"
-                : "Delete folders"
-              : bookmarks.length === 1
-                ? "Delete bookmark"
-                : "Delete bookmarks"
-        }
+        confirmLabel="Delete"
         loading={busy}
         onDismiss={() => setDeleteOpen(false)}
         onConfirm={confirmDelete}
