@@ -31,8 +31,10 @@ import {
   HIGHLIGHT_QUOTE_MAX_LENGTH,
   HIGHLIGHTS_PER_BOOKMARK_MAX,
   READ_COMPLETION_THRESHOLD,
-  canAnchorHighlight,
+  carveHighlight,
   findHighlightForSelection,
+  formatHighlightQuote,
+  unionWithHighlights,
 } from "@ordo/shared";
 import type {
   HighlightAnchor,
@@ -67,7 +69,13 @@ import { scrollbarColors } from "../../theme/scrollbar";
 import { queryClient } from "../../lib/query-client";
 import { bookmarksApi } from "../../lib/api/bookmarks";
 import { findBookmarkInCache, updateBookmarkEverywhere } from "../../lib/cache-helpers";
-import { useBookmarkDetail, useCreateHighlight, useRemoveHighlight, useToggleRead } from "../../hooks/use-bookmarks";
+import {
+  useBookmarkDetail,
+  useCreateHighlight,
+  useRemoveHighlight,
+  useToggleRead,
+  useUpdateHighlight,
+} from "../../hooks/use-bookmarks";
 import * as bookmarkHooks from "../../hooks/use-bookmarks";
 import { useFolders } from "../../hooks/queries";
 import { useReaderPreferences } from "../../hooks/use-reader-preferences";
@@ -242,6 +250,7 @@ function ReaderPaneInner({
   const toggleRead = useToggleRead(bookmark?.folderId ?? null);
   const setContentKind = useSetContentKind();
   const createHighlight = useCreateHighlight();
+  const updateHighlight = useUpdateHighlight();
   const removeHighlight = useRemoveHighlight();
   const markedRef = useRef<string | null>(null);
   const browserRef = useRef<BookmarkBrowserHandle>(null);
@@ -336,23 +345,34 @@ function ReaderPaneInner({
 
   const handleTextSelect = useCallback((draft: HighlightSelectDraft | null) => {
     setTextDraft(draft);
-    if (draft) setActionPanel(null);
+    if (draft) {
+      setActionPanel(null);
+      setHighlightMenu(null);
+      setLinkMenu(null);
+    }
   }, []);
 
   const saveHighlight = useCallback(
     (draft: HighlightAnchor & { href?: string | null }) => {
       if (!bookmark) return;
-      if (draft.exact.length > HIGHLIGHT_QUOTE_MAX_LENGTH) {
+      const html = detail.data?.contentHtml;
+      let quote = draft;
+      let absorbIds: string[] = [];
+      if (html) {
+        const union = unionWithHighlights(html, highlights, draft);
+        if (!union) {
+          toast.error("That passage is not in the article.");
+          return;
+        }
+        quote = union.quote;
+        absorbIds = union.absorbIds;
+      }
+      if (quote.exact.length > HIGHLIGHT_QUOTE_MAX_LENGTH) {
         toast.error("Select a shorter passage.");
         return;
       }
-      if (highlights.length >= HIGHLIGHTS_PER_BOOKMARK_MAX) {
+      if (highlights.length - absorbIds.length >= HIGHLIGHTS_PER_BOOKMARK_MAX) {
         toast.error(`A bookmark can have at most ${HIGHLIGHTS_PER_BOOKMARK_MAX} highlights.`);
-        return;
-      }
-      const html = detail.data?.contentHtml;
-      if (html && !canAnchorHighlight(html, draft)) {
-        toast.error("That passage is not in the article.");
         return;
       }
       haptics.light();
@@ -360,22 +380,23 @@ function ReaderPaneInner({
         {
           id: bookmark.id,
           folderId: bookmark.folderId,
-          exact: draft.exact,
-          prefix: draft.prefix ?? "",
-          suffix: draft.suffix ?? "",
-          href: draft.href ?? null,
+          exact: quote.exact,
+          prefix: quote.prefix ?? "",
+          suffix: quote.suffix ?? "",
+          href: quote.href ?? null,
+          absorbIds,
         },
         {
           onSuccess: () => {
             setTextDraft(null);
             setLinkMenu(null);
-            toast.success("Highlighted");
+            toast.success(absorbIds.length > 0 ? "Highlight updated" : "Highlighted");
           },
           onError: (err) => toast.error(errorMessage(err, "Couldn't save the highlight.")),
         },
       );
     },
-    [bookmark, createHighlight, detail.data?.contentHtml, highlights.length],
+    [bookmark, createHighlight, detail.data?.contentHtml, highlights],
   );
 
   const dropHighlight = useCallback(
@@ -402,6 +423,64 @@ function ReaderPaneInner({
     if (!html) return null;
     return findHighlightForSelection(html, highlights, textDraft);
   }, [detail.data?.contentHtml, highlights, textDraft]);
+
+  const unhighlightSelection = useCallback(async () => {
+    if (!bookmark || !textDraft || !selectedHighlightId) return;
+    const html = detail.data?.contentHtml;
+    const current = highlights.find((row) => row.id === selectedHighlightId);
+    if (html && current) {
+      const carved = carveHighlight(html, current, textDraft);
+      if (carved.kind === "remain") {
+        if (highlights.length + carved.quotes.length - 1 > HIGHLIGHTS_PER_BOOKMARK_MAX) {
+          toast.error(`A bookmark can have at most ${HIGHLIGHTS_PER_BOOKMARK_MAX} highlights.`);
+          return;
+        }
+        const [first, ...extras] = carved.quotes;
+        if (!first) return;
+        const others = highlights.filter((row) => row.id !== selectedHighlightId);
+        const union = unionWithHighlights(html, others, first);
+        const quote = union?.quote ?? first;
+        haptics.light();
+        try {
+          await updateHighlight.mutateAsync({
+            id: bookmark.id,
+            highlightId: selectedHighlightId,
+            folderId: bookmark.folderId,
+            exact: quote.exact,
+            prefix: quote.prefix ?? "",
+            suffix: quote.suffix ?? "",
+            href: quote.href ?? null,
+            absorbIds: union?.absorbIds ?? [],
+          });
+          for (const extra of extras) {
+            await createHighlight.mutateAsync({
+              id: bookmark.id,
+              folderId: bookmark.folderId,
+              exact: extra.exact,
+              prefix: extra.prefix ?? "",
+              suffix: extra.suffix ?? "",
+              href: extra.href ?? null,
+            });
+          }
+          setTextDraft(null);
+          toast.success("Highlight updated");
+        } catch (err) {
+          toast.error(errorMessage(err, "Couldn't update the highlight."));
+        }
+        return;
+      }
+    }
+    dropHighlight(selectedHighlightId);
+  }, [
+    bookmark,
+    createHighlight,
+    detail.data?.contentHtml,
+    dropHighlight,
+    highlights,
+    selectedHighlightId,
+    textDraft,
+    updateHighlight,
+  ]);
 
   const handleClassify = (asArticle: boolean) => {
     if (!bookmark) return;
@@ -1181,12 +1260,12 @@ function ReaderPaneInner({
               <View key={row.id} style={styles.highlightRow}>
                 <PressableScale
                   style={styles.highlightBody}
-                  onPress={() => void copyText(row.exact, "Highlight copied")}
+                  onPress={() => void copyText(formatHighlightQuote(row.exact), "Highlight copied")}
                   accessibilityRole="button"
-                  accessibilityLabel={`Copy highlight: ${row.exact}`}
+                  accessibilityLabel={`Copy highlight: ${formatHighlightQuote(row.exact)}`}
                 >
                   <Text variant="body" numberOfLines={3}>
-                    {row.exact}
+                    {formatHighlightQuote(row.exact)}
                   </Text>
                   {row.href ? (
                     <Text variant="footnote" color="secondary" numberOfLines={1} style={styles.highlightMeta}>
@@ -1234,7 +1313,7 @@ function ReaderPaneInner({
           onPress={() => {
             if (!linkMenu) return;
             setLinkMenu(null);
-            void copyText(linkMenu.quote.exact);
+            void copyText(formatHighlightQuote(linkMenu.quote.exact));
           }}
         />
         <ContextMenuItem
@@ -1258,7 +1337,7 @@ function ReaderPaneInner({
           onPress={() => {
             if (!highlightMenu) return;
             setHighlightMenu(null);
-            void copyText(highlightMenu.highlight.exact, "Highlight copied");
+            void copyText(formatHighlightQuote(highlightMenu.highlight.exact), "Highlight copied");
           }}
         />
         {highlightMenu?.highlight.href ? (
@@ -1298,7 +1377,7 @@ function ReaderPaneInner({
               ]}
             >
               <Text variant="footnote" color="secondary" numberOfLines={2}>
-                {textDraft.exact}
+                {formatHighlightQuote(textDraft.exact)}
               </Text>
               <View style={styles.draftActions}>
                 <Button
@@ -1311,9 +1390,17 @@ function ReaderPaneInner({
                   <Button
                     label="Remove highlight"
                     variant="danger"
-                    onPress={() => dropHighlight(selectedHighlightId)}
-                    loading={removeHighlight.isPending}
-                    disabled={removeHighlight.isPending}
+                    onPress={() => void unhighlightSelection()}
+                    loading={
+                      removeHighlight.isPending ||
+                      updateHighlight.isPending ||
+                      createHighlight.isPending
+                    }
+                    disabled={
+                      removeHighlight.isPending ||
+                      updateHighlight.isPending ||
+                      createHighlight.isPending
+                    }
                     style={styles.draftButton}
                   />
                 ) : (

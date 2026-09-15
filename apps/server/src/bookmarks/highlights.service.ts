@@ -2,14 +2,24 @@ import { Injectable } from "@nestjs/common";
 import {
   ErrorCode,
   HIGHLIGHTS_PER_BOOKMARK_MAX,
-  canAnchorHighlight,
+  unionWithHighlights,
   type CreateHighlightInput,
   type HighlightDto,
+  type UpdateHighlightInput,
 } from "@ordo/shared";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { AppError } from "../common/errors/app-error.js";
 import { toHighlightDto } from "../common/mappers.js";
 import { FolderAccessService } from "./folder-access.service.js";
+
+type HighlightRow = {
+  id: string;
+  exact: string;
+  prefix: string;
+  suffix: string;
+  href: string | null;
+  createdAt: Date;
+};
 
 @Injectable()
 export class HighlightsService {
@@ -25,40 +35,24 @@ export class HighlightsService {
     tokens: readonly string[],
   ): Promise<HighlightDto> {
     const bookmark = await this.requireBookmark(userId, bookmarkId, tokens);
-    if (!bookmark.contentHtml) {
-      throw new AppError(ErrorCode.VALIDATION_ERROR, "This article has no text to highlight yet.");
+    const rows = await this.prisma.bookmarkHighlight.findMany({ where: { bookmarkId } });
+    return this.persistMerged(bookmarkId, bookmark.contentHtml, rows, input);
+  }
+
+  async update(
+    userId: string,
+    bookmarkId: string,
+    highlightId: string,
+    input: UpdateHighlightInput,
+    tokens: readonly string[],
+  ): Promise<HighlightDto> {
+    const bookmark = await this.requireBookmark(userId, bookmarkId, tokens);
+    const rows = await this.prisma.bookmarkHighlight.findMany({ where: { bookmarkId } });
+    const current = rows.find((row) => row.id === highlightId);
+    if (!current) {
+      throw new AppError(ErrorCode.HIGHLIGHT_NOT_FOUND, "This highlight no longer exists.");
     }
-    const href = input.href ?? null;
-    if (!canAnchorHighlight(bookmark.contentHtml, { ...input, href })) {
-      throw new AppError(ErrorCode.VALIDATION_ERROR, "That passage is not in the article.");
-    }
-    const existing = await this.prisma.bookmarkHighlight.findFirst({
-      where: {
-        bookmarkId,
-        exact: input.exact,
-        prefix: input.prefix,
-        suffix: input.suffix,
-        href,
-      },
-    });
-    if (existing) return toHighlightDto(existing);
-    const count = await this.prisma.bookmarkHighlight.count({ where: { bookmarkId } });
-    if (count >= HIGHLIGHTS_PER_BOOKMARK_MAX) {
-      throw new AppError(
-        ErrorCode.CONFLICT,
-        `A bookmark can have at most ${HIGHLIGHTS_PER_BOOKMARK_MAX} highlights.`,
-      );
-    }
-    const created = await this.prisma.bookmarkHighlight.create({
-      data: {
-        bookmarkId,
-        exact: input.exact,
-        prefix: input.prefix,
-        suffix: input.suffix,
-        href,
-      },
-    });
-    return toHighlightDto(created);
+    return this.persistMerged(bookmarkId, bookmark.contentHtml, rows, input, highlightId);
   }
 
   async remove(
@@ -74,6 +68,85 @@ export class HighlightsService {
     if (deleted.count === 0) {
       throw new AppError(ErrorCode.HIGHLIGHT_NOT_FOUND, "This highlight no longer exists.");
     }
+  }
+
+  private async persistMerged(
+    bookmarkId: string,
+    html: string | null,
+    rows: HighlightRow[],
+    input: CreateHighlightInput,
+    keepId?: string,
+  ): Promise<HighlightDto> {
+    if (!html) {
+      throw new AppError(ErrorCode.VALIDATION_ERROR, "This article has no text to highlight yet.");
+    }
+    const incoming = {
+      exact: input.exact,
+      prefix: input.prefix,
+      suffix: input.suffix,
+      href: input.href ?? null,
+    };
+    const others = rows
+      .filter((row) => row.id !== keepId)
+      .map((row) => ({
+        id: row.id,
+        exact: row.exact,
+        prefix: row.prefix,
+        suffix: row.suffix,
+        href: row.href,
+      }));
+    const union = unionWithHighlights(html, others, incoming);
+    if (!union) {
+      throw new AppError(ErrorCode.VALIDATION_ERROR, "That passage is not in the article.");
+    }
+    const absorbIds = union.absorbIds;
+    const href = union.quote.href ?? null;
+    const duplicate = rows.find(
+      (row) =>
+        row.id !== keepId &&
+        row.exact === union.quote.exact &&
+        row.prefix === (union.quote.prefix ?? "") &&
+        row.suffix === (union.quote.suffix ?? "") &&
+        (row.href ?? null) === href,
+    );
+    const survivingId = keepId ?? absorbIds[0] ?? duplicate?.id;
+    const deleteIds = absorbIds.filter((id) => id !== survivingId);
+    if (!survivingId && rows.length - deleteIds.length >= HIGHLIGHTS_PER_BOOKMARK_MAX) {
+      throw new AppError(
+        ErrorCode.CONFLICT,
+        `A bookmark can have at most ${HIGHLIGHTS_PER_BOOKMARK_MAX} highlights.`,
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      if (deleteIds.length > 0) {
+        await tx.bookmarkHighlight.deleteMany({
+          where: { bookmarkId, id: { in: deleteIds } },
+        });
+      }
+      if (survivingId) {
+        const updated = await tx.bookmarkHighlight.update({
+          where: { id: survivingId },
+          data: {
+            exact: union.quote.exact,
+            prefix: union.quote.prefix ?? "",
+            suffix: union.quote.suffix ?? "",
+            href,
+          },
+        });
+        return toHighlightDto(updated);
+      }
+      const created = await tx.bookmarkHighlight.create({
+        data: {
+          bookmarkId,
+          exact: union.quote.exact,
+          prefix: union.quote.prefix ?? "",
+          suffix: union.quote.suffix ?? "",
+          href,
+        },
+      });
+      return toHighlightDto(created);
+    });
   }
 
   private async requireBookmark(userId: string, bookmarkId: string, tokens: readonly string[]) {

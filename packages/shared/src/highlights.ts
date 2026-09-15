@@ -82,6 +82,11 @@ export function highlightIdFromMark(domId: string | null | undefined): string | 
   return id || null;
 }
 
+/** Collapse stored quotes so list rows and the reader match what was selected. */
+export function formatHighlightQuote(exact: string): string {
+  return exact.replace(/\s+/g, " ").trim();
+}
+
 /** Trim ends of a range and copy nearby context, W3C Text Quote style. */
 export function quoteFromRange(
   text: string,
@@ -95,10 +100,12 @@ export function quoteFromRange(
   while (from < to && /\s/.test(text[from] ?? "")) from += 1;
   while (to > from && /\s/.test(text[to - 1] ?? "")) to -= 1;
   if (from >= to) return null;
+  const exact = collapseWs(text.slice(from, to));
+  if (!exact) return null;
   return {
-    exact: text.slice(from, to),
-    prefix: text.slice(Math.max(0, from - context), from),
-    suffix: text.slice(to, to + context),
+    exact,
+    prefix: collapseWs(text.slice(Math.max(0, from - context), from), { keepEdges: true }),
+    suffix: collapseWs(text.slice(to, to + context), { keepEdges: true }),
   };
 }
 
@@ -123,11 +130,7 @@ export function quoteFromBlock(
   if (!articlePlain) return local;
   const range = findQuoteInPlain(articlePlain, local);
   if (!range) return local;
-  return {
-    exact: local.exact,
-    prefix: articlePlain.slice(Math.max(0, range.start - context), range.start),
-    suffix: articlePlain.slice(range.end, range.end + context),
-  };
+  return quoteFromRange(articlePlain, range.start, range.end, context) ?? local;
 }
 
 const QUOTE_MAX = 2000;
@@ -201,6 +204,77 @@ export function findHighlightRange(html: string, anchor: HighlightAnchor): Highl
 
 type HighlightQuote = Pick<HighlightDto, "id" | "exact" | "prefix" | "suffix" | "href">;
 
+export type CarveHighlightResult =
+  | { kind: "miss" }
+  | { kind: "clear" }
+  | { kind: "remain"; quotes: HighlightAnchor[] };
+
+/**
+ * Drop only the selected span of a highlight. Leftover text stays marked
+ * (one remainder, or two if the cut was in the middle).
+ */
+export function carveHighlight(
+  html: string,
+  highlight: HighlightQuote,
+  selection: HighlightAnchor,
+): CarveHighlightResult {
+  const from = findHighlightRange(html, highlight);
+  const cut = findHighlightRange(html, selection);
+  if (!from || !cut) return { kind: "miss" };
+  const a = Math.max(from.start, cut.start);
+  const b = Math.min(from.end, cut.end);
+  if (a >= b) return { kind: "miss" };
+  const plain = htmlToPlainText(html);
+  const leftover: HighlightAnchor[] = [];
+  const left = quoteFromRange(plain, from.start, a);
+  const right = quoteFromRange(plain, b, from.end);
+  if (left) leftover.push({ ...left, href: hrefForRemainder(html, left, highlight.href) });
+  if (right) leftover.push({ ...right, href: hrefForRemainder(html, right, highlight.href) });
+  if (leftover.length === 0) return { kind: "clear" };
+  return { kind: "remain", quotes: leftover };
+}
+
+/**
+ * Expand an incoming quote over any overlapping or abutting highlights.
+ * `absorbIds` are the existing rows that should be replaced by `quote`.
+ */
+export function unionWithHighlights(
+  html: string,
+  highlights: readonly HighlightQuote[],
+  incoming: HighlightAnchor,
+): { absorbIds: string[]; quote: HighlightAnchor } | null {
+  const incomingRange = findHighlightRange(html, incoming);
+  if (!incomingRange) return null;
+  const plain = htmlToPlainText(html);
+  let start = incomingRange.start;
+  let end = incomingRange.end;
+  const absorbIds: string[] = [];
+  const resolved = highlights.map((highlight) => ({
+    highlight,
+    range: findHighlightRange(html, highlight),
+  }));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const row of resolved) {
+      if (!row.range || absorbIds.includes(row.highlight.id)) continue;
+      if (!rangesTouch({ start, end }, row.range)) continue;
+      start = Math.min(start, row.range.start);
+      end = Math.max(end, row.range.end);
+      absorbIds.push(row.highlight.id);
+      changed = true;
+    }
+  }
+  const quote = quoteFromRange(plain, start, end);
+  if (!quote) return null;
+  const hrefs = new Set<string | null>([incoming.href ?? null]);
+  for (const id of absorbIds) {
+    hrefs.add(highlights.find((row) => row.id === id)?.href ?? null);
+  }
+  quote.href = hrefs.size === 1 ? [...hrefs][0] : null;
+  return { absorbIds, quote };
+}
+
 /**
  * Highlight whose wrapped range fully contains the current selection.
  * Used to offer "Remove highlight" when the user selects already-highlighted text.
@@ -257,6 +331,28 @@ export function applyHighlightsToHtml(
 
 function overlaps(a: HighlightRange, b: HighlightRange): boolean {
   return a.start < b.end && b.start < a.end;
+}
+
+function rangesTouch(a: HighlightRange, b: HighlightRange): boolean {
+  return a.start <= b.end && b.start <= a.end;
+}
+
+function hrefForRemainder(html: string, quote: HighlightAnchor, href: string | null | undefined): string | null {
+  if (!href) return null;
+  const range = findHighlightRange(html, quote);
+  if (!range) return null;
+  const { pieces } = buildPlain(tokenize(html));
+  let offset = 0;
+  for (const piece of pieces) {
+    if (piece.kind === "tag") continue;
+    const from = offset;
+    const to = offset + piece.text.decoded.length;
+    offset = to;
+    if (piece.text.synthetic) continue;
+    if (to <= range.start || from >= range.end) continue;
+    if (piece.text.href !== href) return null;
+  }
+  return href;
 }
 
 function findQuoteInPlain(plain: string, anchor: HighlightAnchor): HighlightRange | null {

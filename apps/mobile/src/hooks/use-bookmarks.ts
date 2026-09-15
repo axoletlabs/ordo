@@ -35,6 +35,7 @@ import {
   type BookmarkDetailDto,
   type BookmarkDto,
   type FolderDto,
+  type HighlightDto,
 } from "@ordo/shared";
 import { PERSISTED_QUERY_GC_TIME_MS } from "../lib/query-persist";
 
@@ -424,6 +425,29 @@ export function useBatchBookmarks() {
   });
 }
 
+function replaceHighlights(
+  current: BookmarkDetailDto | undefined,
+  highlight: HighlightDto,
+  absorbIds: string[] = [],
+): BookmarkDetailDto | undefined {
+  if (!current) return current;
+  const absorbed = new Set(absorbIds);
+  const next: HighlightDto[] = [];
+  let inserted = false;
+  for (const row of current.highlights ?? []) {
+    if (row.id === highlight.id || absorbed.has(row.id)) {
+      if (!inserted) {
+        next.push(highlight);
+        inserted = true;
+      }
+      continue;
+    }
+    next.push(row);
+  }
+  if (!inserted) next.push(highlight);
+  return { ...current, highlights: next };
+}
+
 export function useCreateHighlight() {
   const qc = useQueryClient();
   return useMutation({
@@ -441,14 +465,42 @@ export function useCreateHighlight() {
       prefix?: string;
       suffix?: string;
       href?: string | null;
+      absorbIds?: string[];
     }) => bookmarksApi.createHighlight(id, { exact, prefix, suffix, href }, { folderId }),
-    onSuccess: (highlight, { id }) => {
-      qc.setQueryData<BookmarkDetailDto>(qk.bookmark(id), (current) => {
-        if (!current) return current;
-        const highlights = current.highlights ?? [];
-        if (highlights.some((row) => row.id === highlight.id)) return current;
-        return { ...current, highlights: [...highlights, highlight] };
-      });
+    onSuccess: (highlight, { id, absorbIds = [] }) => {
+      qc.setQueryData<BookmarkDetailDto>(qk.bookmark(id), (current) =>
+        replaceHighlights(current, highlight, absorbIds),
+      );
+    },
+  });
+}
+
+export function useUpdateHighlight() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      highlightId,
+      folderId,
+      exact,
+      prefix,
+      suffix,
+      href,
+    }: {
+      id: string;
+      highlightId: string;
+      folderId: string | null;
+      exact: string;
+      prefix?: string;
+      suffix?: string;
+      href?: string | null;
+      absorbIds?: string[];
+    }) =>
+      bookmarksApi.updateHighlight(id, highlightId, { exact, prefix, suffix, href }, { folderId }),
+    onSuccess: (highlight, { id, absorbIds = [] }) => {
+      qc.setQueryData<BookmarkDetailDto>(qk.bookmark(id), (current) =>
+        replaceHighlights(current, highlight, absorbIds),
+      );
     },
   });
 }

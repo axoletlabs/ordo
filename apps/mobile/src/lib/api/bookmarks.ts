@@ -146,6 +146,18 @@ export const bookmarksApi = {
       opts,
     ),
 
+  updateHighlight: (
+    id: string,
+    highlightId: string,
+    body: { exact: string; prefix?: string; suffix?: string; href?: string | null },
+    opts?: { folderId?: string | null },
+  ) =>
+    api.patch<typeof BookmarkRoutes.updateHighlight.response>(
+      buildPath(BookmarkRoutes.updateHighlight.path, { id, highlightId }),
+      body,
+      opts,
+    ),
+
   removeHighlight: (id: string, highlightId: string, opts?: { folderId?: string | null }) =>
     api.delete<typeof BookmarkRoutes.removeHighlight.response>(
       buildPath(BookmarkRoutes.removeHighlight.path, { id, highlightId }),

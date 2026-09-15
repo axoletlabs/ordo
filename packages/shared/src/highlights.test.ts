@@ -3,8 +3,10 @@ import { test } from "node:test";
 import {
   applyHighlightsToHtml,
   canAnchorHighlight,
+  carveHighlight,
   findHighlightForSelection,
   findHighlightRange,
+  formatHighlightQuote,
   highlightIdFromMark,
   highlightMarkId,
   htmlToPlainText,
@@ -12,15 +14,21 @@ import {
   quoteFromCaret,
   quoteFromRange,
   sentenceRange,
+  unionWithHighlights,
 } from "./highlights.ts";
 
 test("quoteFromRange trims ends and copies nearby context", () => {
   const quote = quoteFromRange("ab  hello world  cd", 4, 15);
   assert.deepEqual(quote, {
     exact: "hello world",
-    prefix: "ab  ",
-    suffix: "  cd",
+    prefix: "ab ",
+    suffix: " cd",
   });
+});
+
+test("quoteFromRange collapses newlines and indent in the stored quote", () => {
+  const quote = quoteFromRange("graphical\n                interface", 0, 35);
+  assert.equal(quote?.exact, "graphical interface");
 });
 
 test("sentenceRange expands a caret to the surrounding sentence", () => {
@@ -168,4 +176,65 @@ test("falls back to wrapping a link when the quote moved", () => {
   );
   assert.equal(canAnchorHighlight(html, { exact: "nope", href: "https://example.com/x" }), true);
   assert.equal(canAnchorHighlight(html, { exact: "nope" }), false);
+});
+
+test("carveHighlight drops only the selected span of a highlight", () => {
+  const html = "<p>the cat ran away</p>";
+  const highlight = { id: "h1", exact: "the cat ran away", prefix: "", suffix: "", href: null };
+  const end = carveHighlight(html, highlight, { exact: "ran away", prefix: "cat ", suffix: "" });
+  assert.equal(end.kind, "remain");
+  if (end.kind !== "remain") return;
+  assert.equal(end.quotes.length, 1);
+  assert.equal(end.quotes[0]?.exact, "the cat");
+
+  const middle = carveHighlight(html, highlight, { exact: "cat ran", prefix: "the ", suffix: " away" });
+  assert.equal(middle.kind, "remain");
+  if (middle.kind !== "remain") return;
+  assert.deepEqual(
+    middle.quotes.map((quote) => quote.exact),
+    ["the", "away"],
+  );
+
+  const all = carveHighlight(html, highlight, { exact: "the cat ran away", prefix: "", suffix: "" });
+  assert.equal(all.kind, "clear");
+});
+
+test("unionWithHighlights merges overlapping and abutting marks", () => {
+  const html = "<p>the cat ran away</p>";
+  const existing = [{ id: "h1", exact: "the cat ran", prefix: "", suffix: " away", href: null }];
+  const overlap = unionWithHighlights(html, existing, { exact: "ran away", prefix: "cat ", suffix: "" });
+  assert.deepEqual(overlap?.absorbIds, ["h1"]);
+  assert.equal(overlap?.quote.exact, "the cat ran away");
+
+  const apart = unionWithHighlights(
+    html,
+    [{ id: "h1", exact: "the cat", prefix: "", suffix: " ran", href: null }],
+    { exact: "away", prefix: "ran ", suffix: "" },
+  );
+  assert.deepEqual(apart?.absorbIds, []);
+  assert.equal(apart?.quote.exact, "away");
+});
+
+test("carveHighlight keeps href on leftovers that stay inside the link", () => {
+  const html = '<p>See <a href="https://example.com/x">the docs here</a> now.</p>';
+  const highlight = {
+    id: "h1",
+    exact: "the docs here",
+    prefix: "See ",
+    suffix: " now.",
+    href: "https://example.com/x",
+  };
+  const carved = carveHighlight(html, highlight, { exact: "docs", prefix: "the ", suffix: " here" });
+  assert.equal(carved.kind, "remain");
+  if (carved.kind !== "remain") return;
+  assert.deepEqual(
+    carved.quotes.map((quote) => quote.exact),
+    ["the", "here"],
+  );
+  assert.equal(carved.quotes[0]?.href, "https://example.com/x");
+  assert.equal(carved.quotes[1]?.href, "https://example.com/x");
+});
+
+test("formatHighlightQuote collapses copied list text", () => {
+  assert.equal(formatHighlightQuote("graphical\n                interface"), "graphical interface");
 });

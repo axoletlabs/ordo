@@ -5,10 +5,10 @@
  * RN Text is a UILabel on iOS, so it can only copy a whole block. Each
  * selectable phrase is therefore a real OS text view: UITextView on iOS
  * (magnifier, handles, system menu) and a non-keyboard TextInput on Android.
- * Nested HTML spans are rebuilt as UITextView/Text children so bold, links,
- * and marks stay in the attributed string the OS is selecting.
+ * Nested HTML spans stay in that same native view: UITextView children on iOS
+ * (attributed-string runs) and Text children on Android (inside the TextInput).
  */
-import React, { createContext, useCallback, useContext, useMemo } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import {
   Linking,
   Platform,
@@ -101,7 +101,30 @@ function pressPropsFor(node: TNode, ui: HighlightUiHandlers | null) {
   return undefined;
 }
 
-/** Rebuild a TNode as UITextView/Text spans so iOS can select inside the OS text view. */
+function InlineSpan({
+  style,
+  children,
+  onPress,
+}: {
+  style: TextStyle;
+  children: React.ReactNode;
+  onPress?: (event?: GestureResponderEvent) => void;
+}) {
+  if (Platform.OS === "ios") {
+    return (
+      <UITextView style={style} onPress={onPress}>
+        {children}
+      </UITextView>
+    );
+  }
+  return (
+    <Text selectable={false} style={style} onPress={onPress}>
+      {children}
+    </Text>
+  );
+}
+
+/** Rebuild a TNode as inline spans so the OS can select inside one text view. */
 function selectableInline(node: TNode, ui: HighlightUiHandlers | null): React.ReactNode {
   if (node.type === "text") {
     if (!node.data) return null;
@@ -109,9 +132,9 @@ function selectableInline(node: TNode, ui: HighlightUiHandlers | null): React.Re
     const press = pressPropsFor(node, ui);
     if (!press && Object.keys(style).length === 0) return node.data;
     return (
-      <UITextView style={style} {...press}>
+      <InlineSpan style={style} onPress={press?.onPress}>
         {node.data}
-      </UITextView>
+      </InlineSpan>
     );
   }
   if (node.tagName === "br") return "\n";
@@ -124,11 +147,11 @@ function selectableInline(node: TNode, ui: HighlightUiHandlers | null): React.Re
   const style = pickTextStyle(node.getNativeStyles() as Record<string, unknown>);
   const press = pressPropsFor(node, ui);
   return (
-    <UITextView style={style} {...press}>
+    <InlineSpan style={style} onPress={press?.onPress}>
       {node.children.map((child, index) => (
         <React.Fragment key={index}>{selectableInline(child, ui)}</React.Fragment>
       ))}
-    </UITextView>
+    </InlineSpan>
   );
 }
 
@@ -191,29 +214,58 @@ export function SelectablePhrase({
     ));
   }, [tnode, ui]);
 
+  const selectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasDraft = useRef(false);
+
   const emitRange = useCallback(
     (start: number, end: number) => {
       if (!ui) return;
+      const publish = () => {
+        if (end <= start) {
+          hasDraft.current = false;
+          ui.onTextSelect(null);
+          return;
+        }
+        const quote =
+          quoteFromBlock(ui.articlePlain, text, start, end) ?? quoteFromRange(text, start, end);
+        if (!quote) {
+          hasDraft.current = false;
+          ui.onTextSelect(null);
+          return;
+        }
+        const htmlNode = asHtmlNode(tnode);
+        const href = hrefCoveringRange(htmlNode, start, end);
+        const highlightId = highlightIdCoveringRange(htmlNode, start, end) ?? undefined;
+        hasDraft.current = true;
+        ui.onTextSelect({
+          ...quote,
+          ...(href ? { href } : {}),
+          ...(highlightId ? { highlightId } : {}),
+        });
+      };
+      if (selectTimer.current) {
+        clearTimeout(selectTimer.current);
+        selectTimer.current = null;
+      }
       if (end <= start) {
+        hasDraft.current = false;
         ui.onTextSelect(null);
         return;
       }
-      const quote =
-        quoteFromBlock(ui.articlePlain, text, start, end) ?? quoteFromRange(text, start, end);
-      if (!quote) {
-        ui.onTextSelect(null);
+      if (!hasDraft.current) {
+        publish();
         return;
       }
-      const htmlNode = asHtmlNode(tnode);
-      const href = hrefCoveringRange(htmlNode, start, end);
-      const highlightId = highlightIdCoveringRange(htmlNode, start, end) ?? undefined;
-      ui.onTextSelect({
-        ...quote,
-        ...(href ? { href } : {}),
-        ...(highlightId ? { highlightId } : {}),
-      });
+      selectTimer.current = setTimeout(publish, 64);
     },
     [text, tnode, ui],
+  );
+
+  useEffect(
+    () => () => {
+      if (selectTimer.current) clearTimeout(selectTimer.current);
+    },
+    [],
   );
 
   const onIosSelectionChange = useCallback(
@@ -281,6 +333,7 @@ export function SelectablePhrase({
       multiline
       scrollEnabled={false}
       showSoftInputOnFocus={false}
+      caretHidden
       inputMode="none"
       contextMenuHidden={false}
       disableFullscreenUI

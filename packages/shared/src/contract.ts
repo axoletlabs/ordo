@@ -36,6 +36,7 @@ import type {
   UpdateBookmarkTagsInput,
   SetBookmarkContentKindInput,
   CreateHighlightInput,
+  UpdateHighlightInput,
   UpdateFolderInput,
   UpdateReaderPreferencesInput,
   UpdateTagInput,
@@ -522,6 +523,14 @@ export const BookmarkRoutes = {
     body: {} as CreateHighlightInput,
     query: {} as Empty,
     params: {} as { id: string },
+    response: {} as HighlightDto,
+  },
+  updateHighlight: {
+    path: `${API_PREFIX}/bookmarks/:id/highlights/:highlightId`,
+    method: "PATCH",
+    body: {} as UpdateHighlightInput,
+    query: {} as Empty,
+    params: {} as { id: string; highlightId: string },
     response: {} as HighlightDto,
   },
   removeHighlight: {

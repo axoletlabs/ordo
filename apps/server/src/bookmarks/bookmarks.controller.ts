@@ -22,6 +22,7 @@ import {
   UpdateBookmarkTagsSchema,
   SetBookmarkContentKindSchema,
   CreateHighlightSchema,
+  UpdateHighlightSchema,
   parseBookmarkListSort,
   type BatchBookmarksInput,
   type BookmarkDetailDto,
@@ -30,6 +31,7 @@ import {
   type CursorPage,
   type ExtractionProgressDto,
   type HighlightDto,
+  type UpdateHighlightInput,
 } from "@ordo/shared";
 import { AuthGuard } from "../auth/auth.guard.js";
 import {
@@ -149,6 +151,17 @@ export class BookmarksController {
     @Req() req: Request,
   ): Promise<HighlightDto> {
     return this.highlights.create(user.userId, id, body, getPresentedFolderTokens(req));
+  }
+
+  @Patch(":id/highlights/:highlightId")
+  async updateHighlight(
+    @CurrentUser() user: AuthContext,
+    @Param("id") id: string,
+    @Param("highlightId") highlightId: string,
+    @Body({ schema: UpdateHighlightSchema }) body: UpdateHighlightInput,
+    @Req() req: Request,
+  ): Promise<HighlightDto> {
+    return this.highlights.update(user.userId, id, highlightId, body, getPresentedFolderTokens(req));
   }
 
   @Delete(":id/highlights/:highlightId")

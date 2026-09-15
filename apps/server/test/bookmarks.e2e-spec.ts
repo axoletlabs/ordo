@@ -705,6 +705,57 @@ describe("Bookmarks & Folders (e2e)", () => {
       expect(gone.body.error.code).toBe(ErrorCode.HIGHLIGHT_NOT_FOUND);
     });
 
+    it("merges overlapping highlights and can shrink a quote", async () => {
+      const { agent } = await setup();
+      const created = await agent
+        .post("/api/bookmarks")
+        .send({ url: "https://example.com/article" })
+        .expect(201);
+      await waitUntilExtracted(created.body.id);
+
+      const first = await agent
+        .post(`/api/bookmarks/${created.body.id}/highlights`)
+        .send({ exact: "Hello", prefix: "", suffix: " world." })
+        .expect(201);
+      const merged = await agent
+        .post(`/api/bookmarks/${created.body.id}/highlights`)
+        .send({ exact: "Hello world", prefix: "", suffix: "." })
+        .expect(201);
+      expect(merged.body.id).toBe(first.body.id);
+      expect(merged.body.exact).toBe("Hello world");
+
+      const apart = await agent
+        .post(`/api/bookmarks/${created.body.id}/highlights`)
+        .send({ exact: "world", prefix: "Hello ", suffix: "." })
+        .expect(201);
+      expect(apart.body.id).toBe(first.body.id);
+      expect(apart.body.exact).toBe("Hello world");
+
+      const shrunk = await agent
+        .patch(`/api/bookmarks/${created.body.id}/highlights/${first.body.id}`)
+        .send({ exact: "Hello", prefix: "", suffix: " world." })
+        .expect(200);
+      expect(shrunk.body.id).toBe(first.body.id);
+      expect(shrunk.body.exact).toBe("Hello");
+
+      const detail = await agent.get(`/api/bookmarks/${created.body.id}`).expect(200);
+      expect(detail.body.highlights).toHaveLength(1);
+      expect(detail.body.highlights[0]).toMatchObject({ id: first.body.id, exact: "Hello" });
+
+      const collapsed = await agent
+        .post(`/api/bookmarks/${created.body.id}/highlights`)
+        .send({ exact: "Hello\n world", prefix: "", suffix: "." })
+        .expect(201);
+      expect(collapsed.body.id).toBe(first.body.id);
+      expect(collapsed.body.exact).toBe("Hello world");
+
+      const missing = await agent
+        .patch(`/api/bookmarks/${created.body.id}/highlights/missing`)
+        .send({ exact: "Hello", prefix: "", suffix: " world." })
+        .expect(404);
+      expect(missing.body.error.code).toBe(ErrorCode.HIGHLIGHT_NOT_FOUND);
+    });
+
     it("toggles read state and deletes an unfiled bookmark without a folder token", async () => {
       const { agent } = await setup();
       const created = await agent
