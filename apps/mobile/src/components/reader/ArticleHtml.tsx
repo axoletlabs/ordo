@@ -1,6 +1,6 @@
 /**
  * Sanitized semantic article HTML rendered with native views via
- * react-native-render-html — no WebView, no JavaScript.
+ * @native-html/render — no WebView, no JavaScript.
  *
  * The server pipeline (Readability → sanitize-html) emits an allowlisted
  * semantic subset (p/headings/lists/blockquote/pre/code/figure/table/links,
@@ -26,7 +26,7 @@ import RenderHTML, {
   type RenderersProps,
   type TNode,
   type TDocument,
-} from "react-native-render-html";
+} from "@native-html/render";
 import { useTheme } from "../../theme/ThemeProvider";
 import type { Palette } from "../../theme/theme";
 import { radius, resolveFont, spacing, type FontFamily } from "../../theme/tokens";
@@ -249,7 +249,7 @@ interface TableRendererProps {
 
 /**
  * GitHub-style markdown tables (and other wide grids) are Yoga-flex cells
- * in render-html's default UA stylesheet. A dozen of those on first paint
+ * in the HTML engine's default UA stylesheet. A dozen of those on first paint
  * stalls navigation for a second or more. Stack each row as labeled fields
  * instead so the article chrome can show immediately.
  */
