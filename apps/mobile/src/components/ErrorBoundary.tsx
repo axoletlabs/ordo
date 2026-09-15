@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import * as Updates from "expo-updates";
 import * as SplashScreen from "expo-splash-screen";
+import { reloadRuntime } from "../store/update-restart";
 
 const RELEASES_URL = "https://github.com/axoletlabs/ordo/releases";
 
@@ -50,7 +51,7 @@ function Fallback({ error, onReset }: { error: Error; onReset: () => void }) {
       onReset();
       return;
     }
-    void Updates.reloadAsync().catch(onReset);
+    void reloadRuntime().catch(onReset);
   };
 
   return (
@@ -79,7 +80,7 @@ function Fallback({ error, onReset }: { error: Error; onReset: () => void }) {
             <Pressable
               accessibilityRole="button"
               style={[styles.button, { borderColor: secondary }]}
-              onPress={() => void Updates.reloadAsync().catch(onReset)}
+              onPress={() => void reloadRuntime().catch(onReset)}
             >
               <Text style={[styles.buttonLabel, { color: foreground }]}>Apply update</Text>
             </Pressable>

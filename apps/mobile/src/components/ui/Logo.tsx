@@ -7,10 +7,10 @@ import React from "react";
 import { Image, StyleSheet, View } from "react-native";
 import { APP_NAME } from "@ordo/shared";
 import LOGO_MARK from "../../../assets/logo-mark.png";
+import { SPLASH_LOGO_ASPECT, SPLASH_LOGO_WIDTH } from "../../lib/runtime-restart";
 
-const ASPECT = 468 / 509;
 export const AUTH_LOGO_WIDTH = 40;
-export const SPLASH_LOGO_WIDTH = 120;
+export { SPLASH_LOGO_WIDTH };
 
 export interface LogoProps {
   /** Rendered width in dp; height follows the mark's aspect ratio. */
@@ -19,7 +19,7 @@ export interface LogoProps {
 
 export function Logo({ width = AUTH_LOGO_WIDTH }: LogoProps) {
   return (
-    <View style={[styles.frame, { width, height: width / ASPECT }]}>
+    <View style={[styles.frame, { width, height: width / SPLASH_LOGO_ASPECT }]}>
       <Image
         source={LOGO_MARK}
         style={styles.logo}

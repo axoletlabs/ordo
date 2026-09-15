@@ -1,39 +1,32 @@
-import React, { useEffect, useRef } from "react";
-import { Animated, Easing, StyleSheet, View } from "react-native";
+import React, { useEffect } from "react";
+import { StyleSheet, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { Logo, SPLASH_LOGO_WIDTH } from "./ui/Logo";
+import { peekRestartCover } from "../store/update-restart";
 import { useTheme } from "../theme/ThemeProvider";
 
 interface LaunchSplashProps {
-  transitionIn?: boolean;
   onPresented?: () => void;
 }
 
 /** React fallback matching the native splash for JS reloads and handoff gaps. */
-export function LaunchSplash({ transitionIn = false, onPresented }: LaunchSplashProps) {
+export function LaunchSplash({ onPresented }: LaunchSplashProps) {
   const { palette } = useTheme();
-  const backgroundColor = palette.background;
-  const progress = useRef(new Animated.Value(transitionIn ? 0 : 1)).current;
+  const cover = peekRestartCover();
+  const backgroundColor = cover?.background ?? palette.background;
+  const mode = cover?.mode ?? palette.mode;
 
   useEffect(() => {
     if (!onPresented) return;
-    if (!transitionIn) {
-      const frame = requestAnimationFrame(onPresented);
-      return () => cancelAnimationFrame(frame);
-    }
-
-    progress.setValue(0);
-    const animation = Animated.timing(progress, {
-      toValue: 1,
-      duration: 240,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(onPresented);
     });
-    animation.start(({ finished }) => {
-      if (finished) onPresented();
-    });
-    return () => animation.stop();
-  }, [onPresented, progress, transitionIn]);
+    return () => {
+      cancelAnimationFrame(outer);
+      cancelAnimationFrame(inner);
+    };
+  }, [onPresented]);
 
   return (
     <View
@@ -43,22 +36,8 @@ export function LaunchSplash({ transitionIn = false, onPresented }: LaunchSplash
       collapsable={false}
       style={[styles.root, { backgroundColor }]}
     >
-      <StatusBar style={palette.mode === "dark" ? "light" : "dark"} />
-      <Animated.View
-        style={{
-          opacity: progress,
-          transform: [
-            {
-              scale: progress.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0.97, 1],
-              }),
-            },
-          ],
-        }}
-      >
-        <Logo width={SPLASH_LOGO_WIDTH} />
-      </Animated.View>
+      <StatusBar style={mode === "dark" ? "light" : "dark"} />
+      <Logo width={SPLASH_LOGO_WIDTH} />
     </View>
   );
 }

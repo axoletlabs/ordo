@@ -11,6 +11,7 @@ import React, { useEffect } from "react";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import * as Font from "expo-font";
+import * as Updates from "expo-updates";
 import { ShareIntentProvider } from "expo-share-intent";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -37,7 +38,9 @@ import { AddBookmarkSheet } from "../src/components/bookmarks/AddBookmarkSheet";
 import { returnToShareSender } from "../src/lib/share-target";
 import { useIncomingShareStore } from "../src/store/incoming-share";
 import {
+  clearRestartCover,
   markRestartSplashPresented,
+  peekRestartCover,
   useUpdateRestartStore,
 } from "../src/store/update-restart";
 import { enableFreeze } from "react-native-screens";
@@ -48,7 +51,13 @@ initAppLifecycle();
 // Hold the native splash as early as possible so it covers JS load + hydration
 // (otherwise its auto-hide leaves a white frame before React paints).
 SplashScreen.preventAutoHideAsync().catch(() => {});
-SplashScreen.setOptions({ duration: 200, fade: true });
+// A runtime reload already showed a matching cover; fading the native splash
+// on top of it would shrink/dim the mark. Cold launch still fades.
+SplashScreen.setOptions(
+  peekRestartCover()
+    ? { duration: 0, fade: false }
+    : { duration: 200, fade: true },
+);
 
 // Brand beat: keep the native splash up for at least this long once mounted.
 const MIN_SPLASH_MS = 600;
@@ -63,15 +72,22 @@ function RootShell() {
   const serverUrl = useSettingsStore((s) => s.serverUrl);
   const online = useOnline();
   const restarting = useUpdateRestartStore((s) => s.restarting);
+  const { restartCount } = Updates.useUpdates();
+  const runtimeRestart = restarting || restartCount > 0 || peekRestartCover() != null;
   const sharedUrl = useIncomingShareStore((s) => s.pendingUrl);
   const clearSharedUrl = useIncomingShareStore((s) => s.clear);
-  const [minElapsed, setMinElapsed] = React.useState(false);
+  const [minElapsed, setMinElapsed] = React.useState(runtimeRestart);
 
-  // Minimum brand display so the launch reads as intentional, not a flicker.
+  // Minimum brand display so a cold launch reads as intentional, not a flicker.
+  // Runtime reloads already spent that time under the matching cover.
   useEffect(() => {
+    if (runtimeRestart) {
+      setMinElapsed(true);
+      return;
+    }
     const t = setTimeout(() => setMinElapsed(true), MIN_SPLASH_MS);
     return () => clearTimeout(t);
-  }, []);
+  }, [runtimeRestart]);
 
   // Gate navigation once status is resolved.
   useEffect(() => {
@@ -110,8 +126,10 @@ function RootShell() {
   const showSplash = !routeMatchesAuth || !minElapsed;
 
   useEffect(() => {
-    if (!showSplash) SplashScreen.hideAsync().catch(() => {});
-  }, [showSplash]);
+    if (showSplash || restarting) return;
+    SplashScreen.hideAsync().catch(() => {});
+    clearRestartCover();
+  }, [restarting, showSplash]);
 
   return (
     <>
@@ -148,7 +166,6 @@ function RootShell() {
       <OfflineGate />
       {(showSplash || restarting) && (
         <LaunchSplash
-          transitionIn={restarting}
           onPresented={restarting ? markRestartSplashPresented : undefined}
         />
       )}
@@ -158,6 +175,7 @@ function RootShell() {
 
 export default function RootLayout() {
   const [booted, setBooted] = React.useState(false);
+  const restartCover = peekRestartCover();
 
   useEffect(() => {
     (async () => {
@@ -202,7 +220,9 @@ export default function RootLayout() {
     <ShareIntentProvider
       options={{ scheme: "com.axolet.ordo", resetOnBackground: false }}
     >
-      <GestureHandlerRootView style={{ flex: 1 }}>
+      <GestureHandlerRootView
+        style={{ flex: 1, backgroundColor: restartCover?.background }}
+      >
         <SafeAreaProvider>
           <QueryClientProvider client={queryClient}>
             <ThemeProvider>
