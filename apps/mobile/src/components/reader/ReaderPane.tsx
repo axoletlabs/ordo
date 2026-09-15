@@ -117,9 +117,11 @@ function normalizeTitle(raw: string | null | undefined): string {
 }
 
 function pointAnchor(event: GestureResponderEvent): MenuAnchorRect {
+  const pageX = event.nativeEvent.pageX;
+  const pageY = event.nativeEvent.pageY;
   return {
-    x: event.nativeEvent.pageX,
-    y: event.nativeEvent.pageY,
+    x: Number.isFinite(pageX) ? pageX : 0,
+    y: Number.isFinite(pageY) ? pageY : 0,
     width: 1,
     height: 1,
   };
@@ -877,6 +879,7 @@ function ReaderPaneInner({
             key={bookmark.id}
             ref={scrollRef}
             style={styles.scrollViewport}
+            keyboardShouldPersistTaps="handled"
             onLayout={onScrollViewLayout}
             onContentSizeChange={onContentSizeChange}
             onScroll={onScroll}
@@ -1156,7 +1159,7 @@ function ReaderPaneInner({
           title="Highlights"
           subtitle={
             highlights.length === 0
-              ? "Long-press a sentence or a link, then tap Highlight. They stay in sync across your devices."
+              ? "Select text the way you do on your phone, then tap Highlight. They stay in sync across your devices."
               : undefined
           }
         />

@@ -455,11 +455,12 @@ export const ArticleHtml = React.memo(function ArticleHtml({
   const highlightUi = useMemo(
     () =>
       highlightHandlersFromHtml(html, palette.mustard, {
+        textStyle: baseStyle,
         onTextSelect: onTextSelect ?? ignoreTextSelect,
         onHighlightPress: onHighlightPress ?? ignoreHighlightPress,
         onLinkLongPress: onLinkLongPress ?? ignoreLinkLongPress,
       }),
-    [html, onHighlightPress, onLinkLongPress, onTextSelect, palette.mustard],
+    [baseStyle, html, onHighlightPress, onLinkLongPress, onTextSelect, palette.mustard],
   );
 
   // List markers should match the article's font (and accent color).

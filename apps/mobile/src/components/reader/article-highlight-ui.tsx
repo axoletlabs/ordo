@@ -1,16 +1,26 @@
 /**
- * Native long-press hooks for article highlights.
+ * Native selection for article highlights.
  * Wrapping itself lives in @ordo/shared (TextQuoteSelector → <mark>).
  *
- * RN Text can copy, but it never reports a selection range to JS. A long-press
- * on a sentence (via onTextLayout) is the reliable native stand-in; links use
- * the same gesture on the anchor renderer.
+ * RN Text is a UILabel on iOS, so it can only copy a whole block. Each
+ * selectable phrase is therefore a real OS text view: UITextView on iOS
+ * (magnifier, handles, system menu) and a non-keyboard TextInput on Android.
+ * Nested HTML spans are rebuilt as UITextView/Text children so bold, links,
+ * and marks stay in the attributed string the OS is selecting.
  */
-import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
+import React, { createContext, useCallback, useContext, useMemo } from "react";
 import {
+  Linking,
+  Platform,
+  StyleSheet,
   Text,
+  TextInput,
   type GestureResponderEvent,
+  type StyleProp,
+  type TextInputSelectionChangeEvent,
+  type TextStyle,
 } from "react-native";
+import { UITextView } from "@bsky.app/react-native-uitextview";
 import {
   getNativePropsForTNode,
   useRendererProps,
@@ -22,19 +32,112 @@ import {
   htmlToPlainText,
   highlightIdFromMark,
   quoteFromBlock,
-  quoteFromCaret,
   quoteFromRange,
   type HighlightAnchor,
 } from "@ordo/shared";
-import { nodeTextContent, offsetFromLayout, type HtmlTableNode, type TextLayoutLine } from "./article-html-table";
+import { hrefCoveringRange, nodeTextContent, type HtmlTableNode } from "./article-html-table";
 
 function isExternalHref(href: string): boolean {
   return /^https?:/i.test(href) || /^mailto:/i.test(href);
 }
 
+const TEXT_STYLE_KEYS = [
+  "backgroundColor",
+  "color",
+  "fontFamily",
+  "fontSize",
+  "fontStyle",
+  "fontVariant",
+  "fontWeight",
+  "includeFontPadding",
+  "letterSpacing",
+  "lineHeight",
+  "textAlign",
+  "textDecorationColor",
+  "textDecorationLine",
+  "textDecorationStyle",
+  "textTransform",
+  "writingDirection",
+] as const;
+
+function pickTextStyle(native: Record<string, unknown>): TextStyle {
+  const style: TextStyle = {};
+  for (const key of TEXT_STYLE_KEYS) {
+    const value = native[key];
+    if (value != null) (style as Record<string, unknown>)[key] = value;
+  }
+  return style;
+}
+
+function dummyPressEvent(): GestureResponderEvent {
+  return { nativeEvent: { pageX: 0, pageY: 0 } } as GestureResponderEvent;
+}
+
+function pressPropsFor(node: TNode, ui: HighlightUiHandlers | null) {
+  if (node.tagName === "a") {
+    const href = node.attributes.href ?? "";
+    if (!isExternalHref(href)) return undefined;
+    return {
+      onPress: () => {
+        Linking.openURL(href).catch(() => {});
+      },
+    };
+  }
+  const id = highlightIdFromMark(node.id);
+  if (id && ui) {
+    return {
+      onPress: (event?: GestureResponderEvent) =>
+        ui.onHighlightPress(
+          id,
+          event && Number.isFinite(event.nativeEvent?.pageX) ? event : dummyPressEvent(),
+        ),
+    };
+  }
+  return undefined;
+}
+
+/** Rebuild a TNode as UITextView/Text spans so iOS can select inside the OS text view. */
+function selectableInline(node: TNode, ui: HighlightUiHandlers | null): React.ReactNode {
+  if (node.type === "text") {
+    if (!node.data) return null;
+    const style = pickTextStyle(node.getNativeStyles() as Record<string, unknown>);
+    const press = pressPropsFor(node, ui);
+    if (!press && Object.keys(style).length === 0) return node.data;
+    return (
+      <UITextView style={style} {...press}>
+        {node.data}
+      </UITextView>
+    );
+  }
+  if (node.tagName === "br") return "\n";
+  if (node.type === "empty" || node.tagName === "img") return null;
+  if (node.tagName == null) {
+    return node.children.map((child, index) => (
+      <React.Fragment key={index}>{selectableInline(child, ui)}</React.Fragment>
+    ));
+  }
+  const style = pickTextStyle(node.getNativeStyles() as Record<string, unknown>);
+  const press = pressPropsFor(node, ui);
+  return (
+    <UITextView style={style} {...press}>
+      {node.children.map((child, index) => (
+        <React.Fragment key={index}>{selectableInline(child, ui)}</React.Fragment>
+      ))}
+    </UITextView>
+  );
+}
+
+function webSelectedText(): string {
+  const selection = (
+    globalThis as { getSelection?: () => { toString: () => string } | null }
+  ).getSelection?.();
+  return selection?.toString() ?? "";
+}
+
 export interface HighlightUiHandlers {
   articlePlain: string;
   selectionColor: string;
+  textStyle?: StyleProp<TextStyle>;
   onTextSelect: (draft: HighlightAnchor | null) => void;
   onHighlightPress: (id: string, event: GestureResponderEvent) => void;
   onLinkLongPress: (draft: HighlightAnchor & { href: string }, event: GestureResponderEvent) => void;
@@ -67,31 +170,121 @@ function asHtmlNode(node: TNode): HtmlTableNode {
 
 export function SelectablePhrase({
   tnode,
-  TNodeChildrenRenderer,
 }: {
   tnode: TNode;
   TNodeChildrenRenderer: React.ComponentType<{ tnode: TNode }>;
 }) {
   const ui = useContext(HighlightUiContext);
   const text = useMemo(() => nodeTextContent(asHtmlNode(tnode)), [tnode]);
-  const [lines, setLines] = useState<TextLayoutLine[]>([]);
-  const onTextLayout = useCallback((event: { nativeEvent: { lines: TextLayoutLine[] } }) => {
-    setLines(event.nativeEvent.lines);
-  }, []);
-  const onLongPress = useCallback(
-    (event: GestureResponderEvent) => {
+  const spans = useMemo(() => {
+    if (tnode.type === "text") return selectableInline(tnode, ui);
+    return tnode.children.map((child, index) => (
+      <React.Fragment key={index}>{selectableInline(child, ui)}</React.Fragment>
+    ));
+  }, [tnode, ui]);
+
+  const emitRange = useCallback(
+    (start: number, end: number) => {
       if (!ui) return;
-      const { locationX, locationY } = event.nativeEvent;
-      const index = offsetFromLayout(lines, locationX, locationY);
-      ui.onTextSelect(quoteFromCaret(ui.articlePlain, text, index) ?? quoteFromRange(text, 0, text.length));
+      if (end <= start) {
+        ui.onTextSelect(null);
+        return;
+      }
+      const quote =
+        quoteFromBlock(ui.articlePlain, text, start, end) ?? quoteFromRange(text, start, end);
+      if (!quote) {
+        ui.onTextSelect(null);
+        return;
+      }
+      const href = hrefCoveringRange(asHtmlNode(tnode), start, end);
+      ui.onTextSelect(href ? { ...quote, href } : quote);
     },
-    [lines, text, ui],
+    [text, tnode, ui],
   );
 
+  const onIosSelectionChange = useCallback(
+    (event: { nativeEvent: { start: number; end: number } }) => {
+      emitRange(event.nativeEvent.start, event.nativeEvent.end);
+    },
+    [emitRange],
+  );
+
+  const onAndroidSelectionChange = useCallback(
+    (event: TextInputSelectionChangeEvent) => {
+      const { start, end } = event.nativeEvent.selection;
+      emitRange(start, end);
+    },
+    [emitRange],
+  );
+
+  const onWebSelect = useCallback(() => {
+    const selected = webSelectedText();
+    if (!selected) {
+      ui?.onTextSelect(null);
+      return;
+    }
+    const start = text.indexOf(selected);
+    if (start < 0) {
+      ui?.onTextSelect(quoteFromRange(selected, 0, selected.length));
+      return;
+    }
+    emitRange(start, start + selected.length);
+  }, [emitRange, text, ui]);
+
+  const phraseStyle = [styles.phrase, ui?.textStyle];
+
+  if (Platform.OS === "ios") {
+    return (
+      <UITextView
+        selectable
+        uiTextView
+        accessibilityRole="text"
+        selectionColor={ui?.selectionColor}
+        style={phraseStyle}
+        onSelectionChange={onIosSelectionChange}
+      >
+        {spans}
+      </UITextView>
+    );
+  }
+
+  if (Platform.OS === "web") {
+    return (
+      <Text
+        selectable
+        accessibilityRole="text"
+        selectionColor={ui?.selectionColor}
+        style={phraseStyle}
+        {...({ onMouseUp: onWebSelect, onKeyUp: onWebSelect } as object)}
+      >
+        {spans}
+      </Text>
+    );
+  }
+
   return (
-    <Text onTextLayout={onTextLayout} onLongPress={onLongPress}>
-      <TNodeChildrenRenderer tnode={tnode} />
-    </Text>
+    <TextInput
+      multiline
+      scrollEnabled={false}
+      showSoftInputOnFocus={false}
+      inputMode="none"
+      contextMenuHidden={false}
+      disableFullscreenUI
+      importantForAutofill="noExcludeDescendants"
+      autoCorrect={false}
+      autoCapitalize="none"
+      autoComplete="off"
+      spellCheck={false}
+      underlineColorAndroid="transparent"
+      accessibilityRole="text"
+      selectionColor={ui?.selectionColor}
+      selectionHandleColor={ui?.selectionColor}
+      cursorColor={ui?.selectionColor}
+      onSelectionChange={onAndroidSelectionChange}
+      style={phraseStyle}
+    >
+      {spans}
+    </TextInput>
   );
 }
 
@@ -115,33 +308,25 @@ export const markRenderer: CustomTextualRenderer = (props) => {
 };
 
 export const anchorRenderer: CustomTextualRenderer = (props) => {
-  const ui = useContext(HighlightUiContext);
   const { onPress } = useRendererProps("a");
   const href = props.tnode.attributes.href ?? "";
-  const text = nodeTextContent(asHtmlNode(props.tnode));
-  const onLongPress = (event: GestureResponderEvent) => {
-    if (!ui || !href) return;
-    const parent = props.tnode.parent ? nodeTextContent(asHtmlNode(props.tnode.parent)) : text;
-    const start = Math.max(0, parent.indexOf(text));
-    const quote =
-      quoteFromBlock(ui.articlePlain, parent, start, start + text.length) ??
-      quoteFromRange(text, 0, text.length);
-    if (!quote) return;
-    ui.onLinkLongPress({ ...quote, href }, event);
-  };
   return (
     <props.TDefaultRenderer
       {...props}
       onPress={(event) => {
         if (isExternalHref(href)) onPress?.(event, href, props.tnode.attributes, "_self");
       }}
-      nativeProps={
-        {
-          ...props.nativeProps,
-          onLongPress,
-          delayLongPress: 350,
-        } as typeof props.nativeProps
-      }
     />
   );
 };
+
+const styles = StyleSheet.create({
+  phrase: {
+    padding: 0,
+    margin: 0,
+    ...Platform.select({
+      android: { textAlignVertical: "top" as const, includeFontPadding: false },
+      default: {},
+    }),
+  },
+});
