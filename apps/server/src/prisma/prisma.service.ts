@@ -2,8 +2,7 @@ import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nest
 import { APP_CONFIG } from "../config/config.module.js";
 import { PrismaClient } from "./client.js";
 import { createPrismaAdapter } from "./create-adapter.js";
-import { ensureBookmarkSearchIndex } from "./bookmark-fts.js";
-import { ensurePrismaSchema } from "./schema-migrate.js";
+import { applyDatabaseUpgrades } from "./schema-boot.js";
 
 /**
  * Wraps PrismaClient with lifecycle hooks. Resolves the database URL from
@@ -21,23 +20,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   }
 
   async onModuleInit() {
-    await this.$connect();
-    if (this.cfg.databaseUrl.startsWith("file:")) {
-      await this.$executeRawUnsafe("PRAGMA foreign_keys = ON");
-      await this.$queryRawUnsafe("PRAGMA journal_mode = WAL");
-      await this.$queryRawUnsafe("PRAGMA synchronous = NORMAL");
-      await this.$queryRawUnsafe("PRAGMA busy_timeout = 5000");
-    }
-    const result = await ensurePrismaSchema(this, {
-      databaseUrl: this.cfg.databaseUrl,
-      log: (message) => this.logger.log(message),
-    });
-    if (result === "repaired-and-baselined") {
-      this.logger.log("Legacy database adopted onto Prisma migrate");
-    }
-    if (this.cfg.databaseUrl.startsWith("file:")) {
-      await ensureBookmarkSearchIndex(this);
-    }
+    await applyDatabaseUpgrades(this, this.cfg.databaseUrl, (message) => this.logger.log(message));
     this.logger.log(`Connected to database (${this.mask(this.cfg.databaseUrl)})`);
   }
 

@@ -13,6 +13,9 @@ const {
   renderEnv,
   inspectDatabase,
   migratePlan,
+  looksInstalled,
+  inferCommand,
+  backupSqlite,
   decideWriteEnv,
   compareNodeVersion,
   deploy,
@@ -35,6 +38,7 @@ function tempRepo() {
 
 test("parseArgs reads long flags, equals form, and booleans", () => {
   const args = parseArgs([
+    "update",
     "--yes",
     "--port=8080",
     "--registration",
@@ -44,14 +48,17 @@ test("parseArgs reads long flags, equals form, and booleans", () => {
     "--smtp-url",
     "smtp://mail.example:587",
     "--no-start",
+    "--no-pull",
     "--dry-run",
   ]);
+  assert.equal(args.command, "update");
   assert.equal(args.yes, true);
   assert.equal(args.port, 8080);
   assert.equal(args.registration, false);
   assert.equal(args.trustProxy, 1);
   assert.equal(args.smtpUrl, "smtp://mail.example:587");
   assert.equal(args.start, false);
+  assert.equal(args.pull, false);
   assert.equal(args.dryRun, true);
 });
 
@@ -59,6 +66,20 @@ test("parseArgs rejects unknown flags and bad values", () => {
   assert.throws(() => parseArgs(["--nope"]), /Unknown option/);
   assert.throws(() => parseArgs(["--port", "nope"]), /--port/);
   assert.throws(() => parseArgs(["--registration", "maybe"]), /boolean/);
+  assert.throws(() => parseArgs(["install", "update"]), /only one/);
+});
+
+test("inferCommand treats an existing install as update", () => {
+  assert.equal(inferCommand("install", true), "install");
+  assert.equal(inferCommand("update", false), "update");
+  assert.equal(inferCommand(null, true), "update");
+  assert.equal(inferCommand(null, false), "install");
+  const root = tempRepo();
+  const envPath = join(root, "apps", "server", ".env");
+  const dbPath = join(root, "apps", "server", "prisma", "ordo.db");
+  assert.equal(looksInstalled(envPath, dbPath), false);
+  writeFileSync(envPath, "PORT=3000\n");
+  assert.equal(looksInstalled(envPath, dbPath), true);
 });
 
 test("isInteractive is off for --yes, CI, and non-TTY", () => {
@@ -126,7 +147,8 @@ test("inspectDatabase and migratePlan cover missing, migrated, and legacy files"
   legacyDb.close();
   assert.equal(inspectDatabase(legacy).kind, "legacy");
   assert.equal(migratePlan("legacy", false).action, "adopt");
-  assert.match(migratePlan("legacy", false).reason, /adopt/);
+  assert.match(migratePlan("legacy", false).reason, /adopting it/);
+  assert.doesNotMatch(migratePlan("legacy", false).reason, /first server start/);
   assert.equal(migratePlan("legacy", true).action, "skip");
 });
 
@@ -146,6 +168,27 @@ test("compareNodeVersion accepts the documented floor", () => {
   assert.equal(compareNodeVersion("22.12.0", "22.13") < 0, true);
 });
 
+test("backupSqlite snapshots a live SQLite file next to it", () => {
+  const { DatabaseSync } = require("node:sqlite");
+  const { existsSync } = require("node:fs");
+  const root = tempRepo();
+  const dbPath = join(root, "apps", "server", "prisma", "ordo.db");
+  mkdirSync(join(root, "apps", "server", "prisma"), { recursive: true });
+  const db = new DatabaseSync(dbPath);
+  db.exec(`CREATE TABLE "User" (id TEXT);`);
+  db.close();
+  const now = new Date("2026-09-15T06:55:00.000Z");
+  const lines = [];
+  const backupPath = backupSqlite(dbPath, { log: (line) => lines.push(String(line)), now });
+  assert.equal(backupPath, `${dbPath}.bak-2026-09-15T06-55-00-000Z`);
+  assert.equal(existsSync(backupPath), true);
+  assert.match(lines.join("\n"), /Backing up SQLite/);
+  const copy = new DatabaseSync(backupPath, { readOnly: true });
+  const tables = copy.prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`).all();
+  copy.close();
+  assert.equal(tables.some((row) => row.name === "User"), true);
+});
+
 test("deploy --yes --dry-run writes a plan and skips migrate deploy on a legacy db", async () => {
   const { DatabaseSync } = require("node:sqlite");
   const root = tempRepo();
@@ -163,13 +206,51 @@ test("deploy --yes --dry-run writes a plan and skips migrate deploy on a legacy 
     env: { ...process.env, CI: "1" },
     log: (line) => lines.push(String(line)),
   });
+  const log = lines.join("\n");
   assert.equal(result.ok, true);
+  assert.equal(result.command, "update");
   assert.equal(result.interactive, false);
   assert.equal(result.settings.port, 8080);
   assert.equal(result.migrate.action, "adopt");
   assert.equal(result.envDecision.write, true);
-  assert.match(lines.join("\n"), /adopt this file/i);
-  assert.doesNotMatch(lines.join("\n"), /\$ pnpm exec prisma migrate deploy/);
+  assert.equal(result.backup, true);
+  assert.equal(result.pull, false);
+  assert.match(log, /adopting it/i);
+  assert.match(log, /\$ node dist\/prisma\/upgrade-cli\.js/);
+  assert.match(log, /Backing up SQLite/);
+  assert.doesNotMatch(log, /\$ pnpm exec prisma migrate deploy/);
+});
+
+test("update --yes --dry-run keeps .env, pulls, and runs the upgrade CLI", async () => {
+  const { DatabaseSync } = require("node:sqlite");
+  const root = tempRepo();
+  mkdirSync(join(root, ".git"));
+  writeFileSync(join(root, "apps", "server", ".env"), "PORT=3000\nREGISTRATION_ENABLED=true\n");
+  const prismaDir = join(root, "apps", "server", "prisma");
+  mkdirSync(prismaDir, { recursive: true });
+  const db = new DatabaseSync(join(prismaDir, "ordo.db"));
+  db.exec(`CREATE TABLE _prisma_migrations (id TEXT); CREATE TABLE "User" (id TEXT);`);
+  db.close();
+
+  const lines = [];
+  const result = await deploy({
+    argv: ["update", "--yes", "--dry-run", "--skip-install", "--skip-build"],
+    repoRoot: root,
+    env: { ...process.env, CI: "1" },
+    log: (line) => lines.push(String(line)),
+  });
+  const log = lines.join("\n");
+  assert.equal(result.command, "update");
+  assert.equal(result.envDecision.write, false);
+  assert.equal(result.migrate.action, "deploy");
+  assert.equal(result.pull, true);
+  assert.equal(result.backup, true);
+  assert.match(log, /Updating the existing backend/);
+  assert.match(log, /Leaving existing apps\/server\/\.env/);
+  assert.match(log, /\$ git pull --ff-only/);
+  assert.match(log, /\$ node dist\/prisma\/upgrade-cli\.js/);
+  assert.doesNotMatch(log, /\$ pnpm exec prisma migrate deploy/);
+  assert.doesNotMatch(log, /Wrote /);
 });
 
 test("interactive dry-run uses prompt answers", async () => {
@@ -177,18 +258,20 @@ test("interactive dry-run uses prompt answers", async () => {
   const answers = ["8080", "n", "n", "", "y", "1", "n"];
   let i = 0;
   const result = await deploy({
-    argv: ["--dry-run", "--skip-install", "--skip-build", "--skip-migrate"],
+    argv: ["install", "--dry-run", "--skip-install", "--skip-build", "--skip-migrate"],
     repoRoot: root,
     env: { ...process.env, CI: "" },
     interactive: true,
     ask: async () => answers[i++] ?? "",
     log: () => {},
   });
+  assert.equal(result.command, "install");
   assert.equal(result.interactive, true);
   assert.equal(result.settings.port, 8080);
   assert.equal(result.settings.registration, false);
   assert.equal(result.settings.trustProxy, 1);
   assert.equal(result.start, false);
+  assert.equal(result.pull, false);
   assert.equal(i, answers.length);
 });
 
@@ -199,5 +282,7 @@ test("--help prints usage and exits cleanly", () => {
   assert.equal(result.status, 0);
   assert.match(result.stdout, /Non-interactive/);
   assert.match(result.stdout, /--trust-proxy/);
+  assert.match(result.stdout, /update/);
   assert.equal(HELP.includes("migrate deploy"), true);
+  assert.equal(HELP.includes("upgrade"), true);
 });

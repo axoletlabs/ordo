@@ -32,13 +32,31 @@ cd ordo
 ```
 
 On a terminal the script asks a few questions (port, sign-ups, mail, reverse
-proxy), then installs, builds, and sets up SQLite. Check it:
+proxy), then installs, builds, and migrates SQLite. Check it:
 
 ```bash
 curl http://localhost:3000/api/server/info
 ```
 
 You should see JSON with `name`, `version`, and `registrationEnabled`.
+
+### Update
+
+On a machine that already has Ordo, pull, rebuild, and migrate without
+touching `apps/server/.env`:
+
+```bash
+./scripts/deploy-server update
+./scripts/deploy-server update --yes
+```
+
+If you omit the command and `.env` or a database is already there, **update**
+is assumed. `update` runs `git pull --ff-only` (skip with `--no-pull`), snapshots
+SQLite next to the live file, then applies pending Prisma migrations — including
+adopting an older `db push` database. Do not run `prisma migrate deploy` yourself
+on a file that has no `_prisma_migrations` table.
+
+`pnpm deploy:server:update` is the same as `./scripts/deploy-server update`.
 
 ### Non-interactive
 
@@ -52,17 +70,13 @@ Same steps, no prompts. Flags override defaults. Use this in scripts and CI.
 `./scripts/deploy-server --help` lists every flag. `--dry-run` prints the plan
 without changing anything. `pnpm deploy:server` is the same command.
 
-The first run writes `apps/server/.env`. Later runs leave that file alone
+The first install writes `apps/server/.env`. Updates leave that file alone
 unless you pass `--force-env`. The server reads `.env` on boot; values already
 in the environment still win.
 
-If you already have a database from an older Ordo that used `prisma db push`,
-the script generates the Prisma client and **skips** `migrate deploy`. The
-first server start adopts that file and keeps your data. Do not run
-`prisma migrate deploy` until then.
-
-Back up `apps/server/prisma/ordo.db` and `apps/server/.ordo-secret`. The secret
-file is created on first start if you don't set `JWT_SECRET`.
+Back up `apps/server/prisma/ordo.db` and `apps/server/.ordo-secret`. The deploy
+script snapshots the database before schema changes; the secret file is created
+on first start if you don't set `JWT_SECRET`.
 
 For day-to-day hacking without a production build:
 

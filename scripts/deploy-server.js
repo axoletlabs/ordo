@@ -6,6 +6,7 @@
  * Non-interactive with --yes, CI=true, or a non-TTY stdin.
  *
  *   ./scripts/deploy-server
+ *   ./scripts/deploy-server update
  *   ./scripts/deploy-server --yes --trust-proxy 1 --registration false
  *   ./scripts/deploy-server --help
  */
@@ -14,6 +15,7 @@
 const { spawnSync } = require("node:child_process");
 const {
   closeSync,
+  copyFileSync,
   existsSync,
   mkdirSync,
   openSync,
@@ -26,12 +28,20 @@ const { dirname, join, resolve } = require("node:path");
 const readline = require("node:readline/promises");
 const { stdin, stdout } = require("node:process");
 
-const HELP = `Usage: deploy-server [options]
+const HELP = `Usage: deploy-server [install|update] [options]
 
-Deploy the Ordo backend: install dependencies, build, set up SQLite, optionally start.
+Install, update, and migrate the Ordo backend.
+
+Commands
+  install   First-time setup: prompts (on a TTY), writes .env, install, migrate, build
+  update    Keep .env, pull git, backup SQLite, rebuild, apply all pending migrations
+
+If you omit the command and this already looks like an install (.env or a
+database), update is assumed. Otherwise install is assumed.
 
 Modes
-  Interactive (default on a terminal): asks port, sign-ups, mail, and reverse proxy.
+  Interactive (default on a terminal): install asks port, sign-ups, mail, proxy.
+  update only asks about git pull and whether to start.
   Non-interactive: --yes, CI=true, or piped stdin. Uses flags and defaults.
 
 Options
@@ -49,24 +59,32 @@ Options
   --write-env                    Write apps/server/.env in non-interactive mode
   --force-env                    Overwrite an existing .env
   --no-write-env                 Never write .env
+  --pull                         git pull --ff-only before install (update default)
+  --no-pull                      Do not pull
+  --backup                       Snapshot SQLite before migrating (default)
+  --no-backup                    Do not snapshot SQLite
   --start                        Start the server in the foreground when done
   --no-start                     Do not start (non-interactive default)
   --skip-install                 Skip pnpm install
   --skip-build                   Skip compile
-  --skip-migrate                 Skip prisma generate / migrate
+  --skip-migrate                 Skip prisma generate / schema upgrade
   --dry-run                      Print the plan without changing anything
   -h, --help                     Show this help
 
 Database
-  Missing or empty SQLite file  → prisma generate + migrate deploy
-  Already on Prisma migrate     → prisma generate + migrate deploy
+  Missing or empty SQLite file  → generate client, apply all migrations
+  Already on Prisma migrate     → generate client, apply pending migrations
   Old db-push file (has tables, no _prisma_migrations)
-                                → prisma generate only; first start adopts it.
-                                  Do not run migrate deploy until then.
+                                → generate client, then the same boot-time adopt
+                                  used by the server (repair, baseline, later SQL, FTS).
+                                  Do not run prisma migrate deploy yourself on that
+                                  file; this command handles it.
 
 Examples
   ./scripts/deploy-server
   ./scripts/deploy-server --yes
+  ./scripts/deploy-server update
+  ./scripts/deploy-server update --yes
   ./scripts/deploy-server --yes --port 8080 --trust-proxy 1 --registration false --start
 `;
 
@@ -123,11 +141,14 @@ function splitFlag(arg) {
 /** Parse CLI args. Throws on unknown flags or bad values. */
 function parseArgs(argv) {
   const args = {
+    command: null,
     help: false,
     yes: false,
     writeEnv: null,
     forceEnv: false,
     start: null,
+    pull: null,
+    backup: null,
     skipInstall: false,
     skipBuild: false,
     skipMigrate: false,
@@ -178,6 +199,18 @@ function parseArgs(argv) {
       case "--no-start":
         args.start = false;
         break;
+      case "--pull":
+        args.pull = true;
+        break;
+      case "--no-pull":
+        args.pull = false;
+        break;
+      case "--backup":
+        args.backup = true;
+        break;
+      case "--no-backup":
+        args.backup = false;
+        break;
       case "--skip-install":
         args.skipInstall = true;
         break;
@@ -221,6 +254,11 @@ function parseArgs(argv) {
         args.jwtSecret = consume();
         break;
       default:
+        if (!flag.startsWith("-") && (flag === "install" || flag === "update")) {
+          if (args.command) throw new Error("Specify only one of install or update.");
+          args.command = flag;
+          break;
+        }
         throw new Error(`Unknown option ${flag}. See --help.`);
     }
   }
@@ -418,7 +456,7 @@ function migratePlan(kind, skipMigrate) {
     return {
       action: "adopt",
       reason:
-        "Existing database has no Prisma migration history. Generating the client only; the first server start will adopt this file. Do not run prisma migrate deploy until then.",
+        "Existing database has no Prisma migration history. Generating the client, then adopting it (repair, baseline, later SQL, FTS). Do not run prisma migrate deploy on this file.",
     };
   }
   if (kind === "migrated") {
@@ -431,6 +469,65 @@ function migratePlan(kind, skipMigrate) {
     action: "setup",
     reason: "No application schema yet. Generating the client and applying migrations.",
   };
+}
+
+function looksInstalled(envPath, dbPath, secretPath) {
+  if (existsSync(envPath)) return true;
+  if (secretPath && existsSync(secretPath)) return true;
+  if (existsSync(dbPath) && statSync(dbPath).size > 0) return true;
+  return false;
+}
+
+function inferCommand(explicit, installed) {
+  if (explicit === "install" || explicit === "update") return explicit;
+  return installed ? "update" : "install";
+}
+
+function sqlQuote(value) {
+  return `'${String(value).replaceAll("'", "''")}'`;
+}
+
+function backupStamp(now = new Date()) {
+  return now.toISOString().replace(/[:.]/g, "-");
+}
+
+/** Snapshot SQLite next to the live file. Prefers VACUUM INTO; copies if that fails. */
+function backupSqlite(filePath, { log, dryRun, now } = {}) {
+  if (!existsSync(filePath) || statSync(filePath).size === 0) return null;
+  const backupPath = `${filePath}.bak-${backupStamp(now)}`;
+  log?.(`Backing up SQLite to ${backupPath}`);
+  if (dryRun) return backupPath;
+  ignoreSqliteExperimentalWarning();
+  const { DatabaseSync } = require("node:sqlite");
+  const db = new DatabaseSync(filePath);
+  try {
+    db.exec(`VACUUM INTO ${sqlQuote(backupPath)}`);
+  } catch {
+    copyFileSync(filePath, backupPath);
+  } finally {
+    db.close();
+  }
+  return backupPath;
+}
+
+function gitPull(repoRoot, { log, dryRun } = {}) {
+  const gitDir = join(repoRoot, ".git");
+  if (!existsSync(gitDir)) {
+    log?.("Skipping git pull (no .git directory).");
+    return { pulled: false, reason: "no-git" };
+  }
+  log?.("$ git pull --ff-only");
+  if (dryRun) return { pulled: true, reason: "dry-run" };
+  const result = spawnSync("git", ["pull", "--ff-only"], {
+    cwd: repoRoot,
+    stdio: "inherit",
+  });
+  if (result.status !== 0) {
+    throw new Error(
+      "git pull --ff-only failed. Fix the working tree and try again, or pass --no-pull.",
+    );
+  }
+  return { pulled: true, reason: "ok" };
 }
 
 function decideWriteEnv(args, envExists) {
@@ -553,16 +650,21 @@ async function deploy(options = {}) {
   const repoRoot = options.repoRoot ?? findRepoRoot(options.cwd ?? __dirname);
   const serverDir = join(repoRoot, "apps", "server");
   const envPath = join(serverDir, ".env");
+  const secretPath = join(serverDir, ".ordo-secret");
   const interactive = options.interactive ?? isInteractive(args, env, options.stdin ?? stdin);
   const existingEnv = loadExistingEnv(envPath);
   let settings = settingsFromSources(args, existingEnv);
+  const command = inferCommand(
+    args.command,
+    looksInstalled(envPath, sqlitePathFromUrl(settings.databaseUrl, serverDir), secretPath),
+  );
+  const ask = () => options.ask ?? createAsk(options.stdin ?? stdin, options.stdout ?? stdout);
 
-  if (interactive && options.ask) {
-    log("Ordo backend deploy\n");
-    settings = await promptSettings(options.ask, settings);
-  } else if (interactive) {
-    log("Ordo backend deploy\n");
-    settings = await promptSettings(createAsk(options.stdin ?? stdin, options.stdout ?? stdout), settings);
+  if (interactive && command === "install") {
+    log("Ordo backend install\n");
+    settings = await promptSettings(ask(), settings);
+  } else if (command === "update") {
+    log("Ordo backend update\n");
   }
 
   const dbPath = sqlitePathFromUrl(settings.databaseUrl, serverDir);
@@ -572,29 +674,43 @@ async function deploy(options = {}) {
 
   const envExists = existsSync(envPath);
   let envDecision = decideWriteEnv(args, envExists);
-  if (interactive && envExists && !args.forceEnv && args.writeEnv !== false) {
-    const ask = options.ask ?? createAsk(options.stdin ?? stdin, options.stdout ?? stdout);
-    const raw = (await ask("apps/server/.env already exists. Overwrite it? [y/N] ")).trim().toLowerCase();
+  if (interactive && command === "install" && envExists && !args.forceEnv && args.writeEnv !== false) {
+    const raw = (await ask()("apps/server/.env already exists. Overwrite it? [y/N] ")).trim().toLowerCase();
     envDecision = ["y", "yes"].includes(raw)
       ? { write: true, reason: "Overwriting apps/server/.env." }
       : { write: false, reason: "Leaving existing apps/server/.env in place." };
   }
 
+  const gitPresent = existsSync(join(repoRoot, ".git"));
+  let pull = args.pull ?? (command === "update" && gitPresent);
+  if (interactive && command === "update" && args.pull == null && gitPresent) {
+    const raw = (await ask()("Pull the latest commits with git pull --ff-only? [Y/n] ")).trim().toLowerCase();
+    pull = !["n", "no"].includes(raw);
+  }
+
+  const backup =
+    args.backup !== false && migrate.action !== "skip" && existsSync(dbPath) && statSync(dbPath).size > 0;
+
   let start = args.start;
   if (start == null && interactive) {
-    const ask = options.ask ?? createAsk(options.stdin ?? stdin, options.stdout ?? stdout);
     start = ["y", "yes"].includes(
-      (await ask("Start the server in the foreground when done? [y/N] ")).trim().toLowerCase(),
+      (await ask()("Start the server in the foreground when done? [y/N] ")).trim().toLowerCase(),
     );
   }
   if (start == null) start = false;
 
   log("");
+  log(command === "update" ? "Updating the existing backend." : "Installing the backend.");
   log(envDecision.reason);
   log(migrate.reason);
+  if (pull) log("Will run git pull --ff-only.");
+  else log("Skipping git pull.");
+  if (backup) log("Will snapshot SQLite before applying schema changes.");
+  else if (args.backup === false) log("Skipping SQLite backup (--no-backup).");
   if (args.dryRun) log("Dry run: no files or commands will change.");
   log("");
 
+  if (pull) gitPull(repoRoot, { log, dryRun: args.dryRun });
   if (!args.dryRun) checkToolchain(repoRoot);
 
   const childEnv = {
@@ -628,6 +744,8 @@ async function deploy(options = {}) {
     });
   }
 
+  const upgradeCli = join(serverDir, "dist", "prisma", "upgrade-cli.js");
+
   if (migrate.action !== "skip") {
     run("pnpm", ["exec", "prisma", "generate"], {
       cwd: serverDir,
@@ -635,17 +753,28 @@ async function deploy(options = {}) {
       dryRun: args.dryRun,
       log,
     });
-    if (migrate.action === "setup" || migrate.action === "deploy") {
-      run("pnpm", ["exec", "prisma", "migrate", "deploy"], {
-        cwd: serverDir,
+    if (backup) {
+      backupSqlite(dbPath, { log, dryRun: args.dryRun });
+    }
+    if (!args.skipBuild) {
+      run("pnpm", ["--filter", "@ordo/server", "build"], {
+        cwd: repoRoot,
         env: childEnv,
         dryRun: args.dryRun,
         log,
       });
+    } else if (!args.dryRun && !existsSync(upgradeCli)) {
+      throw new Error(
+        "Server build is missing (dist/prisma/upgrade-cli.js). Drop --skip-build or build @ordo/server first.",
+      );
     }
-  }
-
-  if (!args.skipBuild) {
+    run("node", ["dist/prisma/upgrade-cli.js"], {
+      cwd: serverDir,
+      env: childEnv,
+      dryRun: args.dryRun,
+      log,
+    });
+  } else if (!args.skipBuild) {
     run("pnpm", ["--filter", "@ordo/server", "build"], {
       cwd: repoRoot,
       env: childEnv,
@@ -677,9 +806,12 @@ async function deploy(options = {}) {
 
   return {
     ok: true,
+    command,
     settings,
     migrate,
     envDecision,
+    pull,
+    backup,
     start,
     db,
     interactive,
@@ -697,6 +829,10 @@ module.exports = {
   renderEnv,
   inspectDatabase,
   migratePlan,
+  looksInstalled,
+  inferCommand,
+  backupSqlite,
+  gitPull,
   decideWriteEnv,
   compareNodeVersion,
   deploy,

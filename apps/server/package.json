@@ -17,6 +17,7 @@
     "db:generate": "DATABASE_URL=\"file:./ordo.db\" prisma generate",
     "db:migrate": "DATABASE_URL=\"file:./ordo.db\" prisma migrate deploy",
     "db:setup": "DATABASE_URL=\"file:./ordo.db\" prisma generate && DATABASE_URL=\"file:./ordo.db\" prisma migrate deploy",
+    "db:upgrade": "node dist/prisma/upgrade-cli.js",
     "studio": "prisma studio",
     "clean": "rimraf dist .turbo coverage prisma/*.db src/generated"
   },
