@@ -41,7 +41,39 @@ export type PageParam = { cursor: string | null };
 /** Invalidate every cached tag catalogue regardless of access revision. */
 export const tagsAnyAccess = ["tags"] as const;
 
-/** Flatten an infinite list of pages into a single items array. */
+function itemId(item: unknown): string | undefined {
+  if (item == null || typeof item !== "object" || !("id" in item)) return undefined;
+  const id = (item as { id: unknown }).id;
+  return typeof id === "string" ? id : undefined;
+}
+
+/**
+ * Flatten cursor pages, keeping the first copy of each id.
+ *
+ * A retried first page (null cursor treated as a next page) concatenates the
+ * same items twice. Sorting that array groups copies as A,A,B,B — FlashList
+ * recycled by key so those copies were empty 200px slots; FlatList paints them.
+ */
 export function flattenPages<T>(pages: CursorPage<T>[]): T[] {
-  return pages.flatMap((p) => p.items);
+  const seen = new Set<string>();
+  const items: T[] = [];
+  for (const page of pages) {
+    for (const item of page.items) {
+      const id = itemId(item);
+      if (id != null) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+      }
+      items.push(item);
+    }
+  }
+  return items;
+}
+
+/** `undefined` means stop — a null cursor would refetch page one and duplicate rows. */
+export function nextPageCursor(page: {
+  hasMore: boolean;
+  nextCursor: string | null | undefined;
+}): string | undefined {
+  return page.hasMore && page.nextCursor ? page.nextCursor : undefined;
 }

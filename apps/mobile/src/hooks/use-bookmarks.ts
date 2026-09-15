@@ -14,7 +14,7 @@ import { bookmarksApi } from "../lib/api/bookmarks";
 import { queryClient } from "../lib/query-client";
 import { useFolderTokenStore } from "../store/folder-tokens";
 import { useListSortStore } from "../store/list-sort";
-import { qk } from "../lib/api/query-keys";
+import { nextPageCursor, qk } from "../lib/api/query-keys";
 import {
   bumpFolderCount,
   insertCreatedBookmark,
@@ -64,6 +64,7 @@ export function prefetchFolderBookmarks(folderId: string) {
     queryFn: ({ pageParam }) =>
       bookmarksApi.list({ folderId, cursor: pageParam ?? undefined, limit: DEFAULT_PAGE_SIZE, sort }),
     initialPageParam: null as string | null,
+    getNextPageParam: nextPageCursor,
     gcTime: PERSISTED_QUERY_GC_TIME_MS,
   });
 }
@@ -89,7 +90,7 @@ export function useInfiniteBookmarks(folderId: string | null, enabled = true) {
     queryFn: ({ pageParam }) =>
       bookmarksApi.list({ folderId, cursor: pageParam ?? undefined, limit: DEFAULT_PAGE_SIZE, sort }),
     initialPageParam: null as string | null,
-    getNextPageParam: (last) => (last.hasMore ? last.nextCursor : undefined),
+    getNextPageParam: nextPageCursor,
     placeholderData: keepPreviousData,
     gcTime: PERSISTED_QUERY_GC_TIME_MS,
     enabled,
@@ -119,7 +120,7 @@ export function useInfiniteSearch(
     queryFn: ({ pageParam }) =>
       bookmarksApi.search(term, pageParam ?? undefined, DEFAULT_PAGE_SIZE, [...tagIds], unread, [...folderIds], unfiled, fuzzy),
     initialPageParam: null as string | null,
-    getNextPageParam: (last) => (last.hasMore && last.nextCursor ? last.nextCursor : undefined),
+    getNextPageParam: nextPageCursor,
     enabled,
   });
 }

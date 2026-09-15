@@ -129,8 +129,10 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
  * Bookmark lists used FlashList v2 after the Expo 57 upgrade. v2 caches
  * per-index heights (default estimate 200px) and on delete only truncates
  * that cache from the end — remaining rows keep oversized slots, which is
- * the stretched PERSONAL list after "Bookmark deleted". FlatList sizes
- * each row from its content, so a removal cannot leave those gaps.
+ * the stretched PERSONAL list after "Bookmark deleted". Duplicate ids in
+ * the page cache made that worse: FlashList recycled by key so the extra
+ * copy was an empty slot; FlatList painted it. Lists now size from content
+ * and flattenPages keeps the first copy of each id.
  */
 export function ThemedFlashList<T>(props: ThemedFlashListProps<T>) {
   const chromeInsets = useScrollBarInsets();

@@ -12,7 +12,7 @@ import {
 import { DEFAULT_PAGE_SIZE, type TagColor, type TagDto } from "@ordo/shared";
 import { tagsApi } from "../lib/api/tags";
 import { queryClient } from "../lib/query-client";
-import { qk, tagsAnyAccess } from "../lib/api/query-keys";
+import { nextPageCursor, qk, tagsAnyAccess } from "../lib/api/query-keys";
 import { bookmarksApi } from "../lib/api/bookmarks";
 import { useFolderTokenStore } from "../store/folder-tokens";
 import { mapCachedBookmarks, updateBookmarkEverywhere } from "../lib/cache-helpers";
@@ -102,6 +102,7 @@ export function prefetchTaggedBookmarks(tagId: string) {
     queryFn: ({ pageParam }) =>
       bookmarksApi.listTagged([tagId], pageParam ?? undefined, DEFAULT_PAGE_SIZE),
     initialPageParam: null as string | null,
+    getNextPageParam: nextPageCursor,
   });
 }
 
@@ -112,7 +113,7 @@ export function useTaggedBookmarks(tagIds: readonly string[], enabled = true) {
     queryFn: ({ pageParam }) =>
       bookmarksApi.listTagged([...tagIds], pageParam ?? undefined, DEFAULT_PAGE_SIZE),
     initialPageParam: null as string | null,
-    getNextPageParam: (last) => (last.hasMore ? last.nextCursor : undefined),
+    getNextPageParam: nextPageCursor,
     enabled,
   });
 }
