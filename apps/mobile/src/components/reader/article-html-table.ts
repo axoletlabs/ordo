@@ -8,6 +8,7 @@ export interface HtmlTableNode {
   tagName?: string | null;
   data?: string;
   children?: readonly HtmlTableNode[];
+  attributes?: Record<string, string>;
 }
 
 export function collectTableRows(node: HtmlTableNode): HtmlTableNode[][] {
@@ -45,6 +46,37 @@ export function plainTextFromNode(node: HtmlTableNode): string {
     return (current.children ?? []).map(walk).join("");
   };
   return walk(node).replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").trim();
+}
+
+/**
+ * Href of a link that fully contains `[start, end)` in `nodeTextContent` space.
+ * Mixed selections (link + surrounding text, or two links) return null.
+ */
+export function hrefCoveringRange(node: HtmlTableNode, start: number, end: number): string | null {
+  if (end <= start) return null;
+  const hrefs = new Set<string>();
+  let offset = 0;
+  const walk = (current: HtmlTableNode, href: string | null) => {
+    if (current.type === "text") {
+      const from = offset;
+      offset += (current.data ?? "").length;
+      if (offset > start && from < end) hrefs.add(href ?? "");
+      return;
+    }
+    if (current.tagName === "br") {
+      const from = offset;
+      offset += 1;
+      if (offset > start && from < end) hrefs.add(href ?? "");
+      return;
+    }
+    const nested =
+      current.tagName === "a" && current.attributes?.href ? current.attributes.href : href;
+    (current.children ?? []).forEach((child) => walk(child, nested ?? null));
+  };
+  walk(node, null);
+  if (hrefs.size !== 1) return null;
+  const only = [...hrefs][0]!;
+  return only || null;
 }
 
 /** Concatenate descendant text without trimming — matches native Text layout. */

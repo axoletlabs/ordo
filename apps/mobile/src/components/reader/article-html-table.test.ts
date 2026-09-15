@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   collectTableRows,
+  hrefCoveringRange,
   nodeTextContent,
   offsetFromLayout,
   plainTextFromNode,
@@ -13,8 +14,12 @@ function text(data: string): HtmlTableNode {
   return { type: "text", data };
 }
 
-function el(tagName: string, children: HtmlTableNode[] = []): HtmlTableNode {
-  return { type: "block", tagName, children };
+function el(
+  tagName: string,
+  children: HtmlTableNode[] = [],
+  attributes?: Record<string, string>,
+): HtmlTableNode {
+  return { type: "block", tagName, children, attributes };
 }
 
 test("collects header and body rows through thead/tbody wrappers", () => {
@@ -56,6 +61,18 @@ test("plain text joins br-separated code cells", () => {
 test("nodeTextContent keeps inner spaces for native selection offsets", () => {
   const paragraph = el("p", [text("Hello "), el("em", [text("world")])]);
   assert.equal(nodeTextContent(paragraph), "Hello world");
+});
+
+test("hrefCoveringRange is set only when the selection sits inside one link", () => {
+  const paragraph = el("p", [
+    text("See "),
+    el("a", [text("docs")], { href: "https://example.com/docs" }),
+    text(" here"),
+  ]);
+  assert.equal(hrefCoveringRange(paragraph, 4, 8), "https://example.com/docs");
+  assert.equal(hrefCoveringRange(paragraph, 0, 8), null);
+  assert.equal(hrefCoveringRange(paragraph, 0, 3), null);
+  assert.equal(hrefCoveringRange(paragraph, 9, 13), null);
 });
 
 test("offsetFromLayout maps a press onto a character index", () => {
