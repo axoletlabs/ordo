@@ -74,8 +74,19 @@ function pickTextStyle(native: Record<string, unknown>): TextStyle {
   return style;
 }
 
+function asHtmlNode(node: TNode): HtmlTableNode {
+  return node as unknown as HtmlTableNode;
+}
+
+/** Wait until the OS selection handles pause before updating React. */
+const SELECTION_SETTLE_MS = Platform.OS === "web" ? 0 : 180;
+
 function dummyPressEvent(): GestureResponderEvent {
   return { nativeEvent: { pageX: 0, pageY: 0 } } as GestureResponderEvent;
+}
+
+function gestureEvent(event?: GestureResponderEvent): GestureResponderEvent {
+  return event && Number.isFinite(event.nativeEvent?.pageX) ? event : dummyPressEvent();
 }
 
 function pressPropsFor(node: TNode, ui: HighlightUiHandlers | null) {
@@ -86,16 +97,20 @@ function pressPropsFor(node: TNode, ui: HighlightUiHandlers | null) {
       onPress: () => {
         Linking.openURL(href).catch(() => {});
       },
+      onLongPress: (event?: GestureResponderEvent) => {
+        if (!ui) return;
+        const text = nodeTextContent(asHtmlNode(node));
+        const quote =
+          quoteFromBlock(ui.articlePlain, text, 0, text.length) ?? quoteFromRange(text, 0, text.length);
+        if (!quote) return;
+        ui.onLinkLongPress({ ...quote, href }, gestureEvent(event));
+      },
     };
   }
   const id = highlightIdFromMark(node.id);
   if (id && ui) {
     return {
-      onPress: (event?: GestureResponderEvent) =>
-        ui.onHighlightPress(
-          id,
-          event && Number.isFinite(event.nativeEvent?.pageX) ? event : dummyPressEvent(),
-        ),
+      onLongPress: (event?: GestureResponderEvent) => ui.onHighlightPress(id, gestureEvent(event)),
     };
   }
   return undefined;
@@ -105,20 +120,22 @@ function InlineSpan({
   style,
   children,
   onPress,
+  onLongPress,
 }: {
   style: TextStyle;
   children: React.ReactNode;
   onPress?: (event?: GestureResponderEvent) => void;
+  onLongPress?: (event?: GestureResponderEvent) => void;
 }) {
   if (Platform.OS === "ios") {
     return (
-      <UITextView style={style} onPress={onPress}>
+      <UITextView style={style} onPress={onPress} onLongPress={onLongPress}>
         {children}
       </UITextView>
     );
   }
   return (
-    <Text selectable={false} style={style} onPress={onPress}>
+    <Text selectable={false} style={style} onPress={onPress} onLongPress={onLongPress}>
       {children}
     </Text>
   );
@@ -132,7 +149,7 @@ function selectableInline(node: TNode, ui: HighlightUiHandlers | null): React.Re
     const press = pressPropsFor(node, ui);
     if (!press && Object.keys(style).length === 0) return node.data;
     return (
-      <InlineSpan style={style} onPress={press?.onPress}>
+      <InlineSpan style={style} onPress={press?.onPress} onLongPress={press?.onLongPress}>
         {node.data}
       </InlineSpan>
     );
@@ -147,7 +164,7 @@ function selectableInline(node: TNode, ui: HighlightUiHandlers | null): React.Re
   const style = pickTextStyle(node.getNativeStyles() as Record<string, unknown>);
   const press = pressPropsFor(node, ui);
   return (
-    <InlineSpan style={style} onPress={press?.onPress}>
+    <InlineSpan style={style} onPress={press?.onPress} onLongPress={press?.onLongPress}>
       {node.children.map((child, index) => (
         <React.Fragment key={index}>{selectableInline(child, ui)}</React.Fragment>
       ))}
@@ -195,10 +212,6 @@ export function highlightHandlersFromHtml(
   };
 }
 
-function asHtmlNode(node: TNode): HtmlTableNode {
-  return node as unknown as HtmlTableNode;
-}
-
 export function SelectablePhrase({
   tnode,
 }: {
@@ -206,57 +219,52 @@ export function SelectablePhrase({
   TNodeChildrenRenderer: React.ComponentType<{ tnode: TNode }>;
 }) {
   const ui = useContext(HighlightUiContext);
+  const uiRef = useRef(ui);
+  uiRef.current = ui;
   const text = useMemo(() => nodeTextContent(asHtmlNode(tnode)), [tnode]);
   const spans = useMemo(() => {
-    if (tnode.type === "text") return selectableInline(tnode, ui);
+    const handlers = uiRef.current;
+    if (tnode.type === "text") return selectableInline(tnode, handlers);
     return tnode.children.map((child, index) => (
-      <React.Fragment key={index}>{selectableInline(child, ui)}</React.Fragment>
+      <React.Fragment key={index}>{selectableInline(child, handlers)}</React.Fragment>
     ));
-  }, [tnode, ui]);
+  }, [tnode]);
 
   const selectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hasDraft = useRef(false);
 
   const emitRange = useCallback(
     (start: number, end: number) => {
       if (!ui) return;
+      if (selectTimer.current) {
+        clearTimeout(selectTimer.current);
+        selectTimer.current = null;
+      }
+      if (end <= start) {
+        ui.onTextSelect(null);
+        return;
+      }
       const publish = () => {
-        if (end <= start) {
-          hasDraft.current = false;
-          ui.onTextSelect(null);
-          return;
-        }
+        selectTimer.current = null;
         const quote =
           quoteFromBlock(ui.articlePlain, text, start, end) ?? quoteFromRange(text, start, end);
         if (!quote) {
-          hasDraft.current = false;
           ui.onTextSelect(null);
           return;
         }
         const htmlNode = asHtmlNode(tnode);
         const href = hrefCoveringRange(htmlNode, start, end);
         const highlightId = highlightIdCoveringRange(htmlNode, start, end) ?? undefined;
-        hasDraft.current = true;
         ui.onTextSelect({
           ...quote,
           ...(href ? { href } : {}),
           ...(highlightId ? { highlightId } : {}),
         });
       };
-      if (selectTimer.current) {
-        clearTimeout(selectTimer.current);
-        selectTimer.current = null;
-      }
-      if (end <= start) {
-        hasDraft.current = false;
-        ui.onTextSelect(null);
-        return;
-      }
-      if (!hasDraft.current) {
+      if (SELECTION_SETTLE_MS === 0) {
         publish();
         return;
       }
-      selectTimer.current = setTimeout(publish, 64);
+      selectTimer.current = setTimeout(publish, SELECTION_SETTLE_MS);
     },
     [text, tnode, ui],
   );
@@ -335,7 +343,7 @@ export function SelectablePhrase({
       showSoftInputOnFocus={false}
       caretHidden
       inputMode="none"
-      contextMenuHidden={false}
+      contextMenuHidden
       disableFullscreenUI
       importantForAutofill="noExcludeDescendants"
       autoCorrect={false}

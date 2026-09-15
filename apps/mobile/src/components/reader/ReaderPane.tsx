@@ -137,6 +137,12 @@ function pointAnchor(event: GestureResponderEvent): MenuAnchorRect {
   };
 }
 
+const EMPTY_HIGHLIGHTS: HighlightDto[] = [];
+
+function selectionKey(draft: HighlightAnchor): string {
+  return `${draft.exact}\0${draft.prefix ?? ""}\0${draft.suffix ?? ""}`;
+}
+
 /**
  * ReaderPane resolves the account-synced reader preferences + palette and
  * themes the entire reader surface (header, article, controls sheet) with
@@ -294,7 +300,10 @@ function ReaderPaneInner({
   const readerFont = resolveReaderFont(preferences.fontFamily);
   const readerBoldFont = resolveReaderFont(preferences.fontFamily, "700");
   const articleHeadings = headingState.bookmarkId === bookmark?.id ? headingState.headings : [];
-  const highlights = detail.data?.highlights ?? [];
+  const highlights = detail.data?.highlights ?? EMPTY_HIGHLIGHTS;
+  const highlightsRef = useRef(highlights);
+  highlightsRef.current = highlights;
+  const dismissedDraftKey = useRef<string | null>(null);
 
   const handleHeadingsChange = useCallback(
     (headings: readonly ArticleHeading[]) => {
@@ -344,13 +353,42 @@ function ReaderPaneInner({
   };
 
   const handleTextSelect = useCallback((draft: HighlightSelectDraft | null) => {
-    setTextDraft(draft);
-    if (draft) {
-      setActionPanel(null);
-      setHighlightMenu(null);
-      setLinkMenu(null);
+    if (!draft) {
+      dismissedDraftKey.current = null;
+      setTextDraft(null);
+      return;
     }
+    if (dismissedDraftKey.current === selectionKey(draft)) return;
+    dismissedDraftKey.current = null;
+    setTextDraft(draft);
+    setActionPanel(null);
+    setHighlightMenu(null);
+    setLinkMenu(null);
   }, []);
+
+  const dismissDraft = useCallback(() => {
+    setTextDraft((current) => {
+      if (current) dismissedDraftKey.current = selectionKey(current);
+      return null;
+    });
+  }, []);
+
+  const handleHighlightPress = useCallback((id: string, event: GestureResponderEvent) => {
+    const highlight = highlightsRef.current.find((row) => row.id === id);
+    if (!highlight) return;
+    dismissedDraftKey.current = null;
+    setTextDraft(null);
+    setHighlightMenu({ highlight, anchor: pointAnchor(event) });
+  }, []);
+
+  const handleLinkLongPress = useCallback(
+    (quote: HighlightAnchor & { href: string }, event: GestureResponderEvent) => {
+      dismissedDraftKey.current = null;
+      setTextDraft(null);
+      setLinkMenu({ quote, anchor: pointAnchor(event) });
+    },
+    [],
+  );
 
   const saveHighlight = useCallback(
     (draft: HighlightAnchor & { href?: string | null }) => {
@@ -388,7 +426,7 @@ function ReaderPaneInner({
         },
         {
           onSuccess: () => {
-            setTextDraft(null);
+            dismissDraft();
             setLinkMenu(null);
             toast.success(absorbIds.length > 0 ? "Highlight updated" : "Highlighted");
           },
@@ -396,14 +434,14 @@ function ReaderPaneInner({
         },
       );
     },
-    [bookmark, createHighlight, detail.data?.contentHtml, highlights],
+    [bookmark, createHighlight, detail.data?.contentHtml, dismissDraft, highlights],
   );
 
   const dropHighlight = useCallback(
     (highlightId: string) => {
       if (!bookmark) return;
       haptics.light();
-      setTextDraft(null);
+      dismissDraft();
       setHighlightMenu(null);
       removeHighlight.mutate(
         { id: bookmark.id, highlightId, folderId: bookmark.folderId },
@@ -413,7 +451,7 @@ function ReaderPaneInner({
         },
       );
     },
-    [bookmark, removeHighlight],
+    [bookmark, dismissDraft, removeHighlight],
   );
 
   const selectedHighlightId = useMemo(() => {
@@ -462,7 +500,7 @@ function ReaderPaneInner({
               href: extra.href ?? null,
             });
           }
-          setTextDraft(null);
+          dismissDraft();
           toast.success("Highlight updated");
         } catch (err) {
           toast.error(errorMessage(err, "Couldn't update the highlight."));
@@ -475,6 +513,7 @@ function ReaderPaneInner({
     bookmark,
     createHighlight,
     detail.data?.contentHtml,
+    dismissDraft,
     dropHighlight,
     highlights,
     selectedHighlightId,
@@ -707,6 +746,7 @@ function ReaderPaneInner({
     }
     contentsShortcutVisibleRef.current = false;
     setContentsShortcutVisible(false);
+    dismissedDraftKey.current = null;
     setTextDraft(null);
     setLinkMenu(null);
     setHighlightMenu(null);
@@ -1003,16 +1043,8 @@ function ReaderPaneInner({
                     contentWidth={articleWidth || fallbackArticleWidth}
                     highlights={highlights}
                     onTextSelect={handleTextSelect}
-                    onHighlightPress={(id, event) => {
-                      const highlight = highlights.find((row) => row.id === id);
-                      if (!highlight) return;
-                      setTextDraft(null);
-                      setHighlightMenu({ highlight, anchor: pointAnchor(event) });
-                    }}
-                    onLinkLongPress={(quote, event) => {
-                      setTextDraft(null);
-                      setLinkMenu({ quote, anchor: pointAnchor(event) });
-                    }}
+                    onHighlightPress={handleHighlightPress}
+                    onLinkLongPress={handleLinkLongPress}
                     onHeadingsChange={handleHeadingsChange}
                     onHeadingRef={handleHeadingRef}
                     onReady={handleArticleReady}
@@ -1374,19 +1406,25 @@ function ReaderPaneInner({
                 },
               ]}
             >
-              <Text variant="footnote" color="secondary" numberOfLines={2}>
-                {formatHighlightQuote(textDraft.exact)}
-              </Text>
+              <PressableScale
+                onPress={() => void copyText(formatHighlightQuote(textDraft.exact))}
+                accessibilityRole="button"
+                accessibilityLabel="Copy selected text"
+              >
+                <Text variant="footnote" color="secondary" numberOfLines={1}>
+                  {formatHighlightQuote(textDraft.exact)}
+                </Text>
+              </PressableScale>
               <View style={styles.draftActions}>
                 <Button
                   label="Cancel"
                   variant="ghost"
-                  onPress={() => setTextDraft(null)}
+                  onPress={dismissDraft}
                   style={styles.draftButton}
                 />
                 {selectedHighlightId ? (
                   <Button
-                    label="Remove highlight"
+                    label="Remove"
                     variant="danger"
                     onPress={() => void unhighlightSelection()}
                     loading={

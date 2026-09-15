@@ -377,6 +377,8 @@ function headingsFromTree(tree: TDocument): ArticleHeading[] {
   return headings;
 }
 
+const EMPTY_HIGHLIGHTS: HighlightDto[] = [];
+
 export const ArticleHtml = React.memo(function ArticleHtml({
   html,
   preferences,
@@ -393,7 +395,7 @@ export const ArticleHtml = React.memo(function ArticleHtml({
   const family = resolveReaderFontFamily(preferences.fontFamily);
   const base = READER_BODY_SIZE[preferences.fontSize];
   const highlightedHtml = useMemo(
-    () => applyHighlightsToHtml(html, highlights ?? []),
+    () => applyHighlightsToHtml(html, highlights ?? EMPTY_HIGHLIGHTS),
     [html, highlights],
   );
   const paintedSourceRef = useRef<string | null>(null);
@@ -452,15 +454,23 @@ export const ArticleHtml = React.memo(function ArticleHtml({
     }),
     [palette.mustard, palette.textSecondary],
   );
+  const onTextSelectRef = useRef(onTextSelect);
+  const onHighlightPressRef = useRef(onHighlightPress);
+  const onLinkLongPressRef = useRef(onLinkLongPress);
+  onTextSelectRef.current = onTextSelect;
+  onHighlightPressRef.current = onHighlightPress;
+  onLinkLongPressRef.current = onLinkLongPress;
   const highlightUi = useMemo(
     () =>
       highlightHandlersFromHtml(html, palette.mustard, {
         textStyle: baseStyle,
-        onTextSelect: onTextSelect ?? ignoreTextSelect,
-        onHighlightPress: onHighlightPress ?? ignoreHighlightPress,
-        onLinkLongPress: onLinkLongPress ?? ignoreLinkLongPress,
+        onTextSelect: (draft) => (onTextSelectRef.current ?? ignoreTextSelect)(draft),
+        onHighlightPress: (id, event) =>
+          (onHighlightPressRef.current ?? ignoreHighlightPress)(id, event),
+        onLinkLongPress: (draft, event) =>
+          (onLinkLongPressRef.current ?? ignoreLinkLongPress)(draft, event),
       }),
-    [baseStyle, html, onHighlightPress, onLinkLongPress, onTextSelect, palette.mustard],
+    [baseStyle, html, palette.mustard],
   );
 
   // List markers should match the article's font (and accent color).
