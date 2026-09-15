@@ -1,6 +1,6 @@
 /**
  * Connectivity awareness. A tiny store updated by an expo-network subscription
- * drives the offline banner and gates React Query retries.
+ * drives the full-screen offline gate and pauses React Query retries.
  */
 import { create } from "zustand";
 import { onlineManager } from "@tanstack/react-query";

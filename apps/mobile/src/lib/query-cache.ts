@@ -1,6 +1,8 @@
 /**
  * Persist folders + public bookmark lists to MMKV across process death.
- * Restore during splash so the library paints from disk, then refetch.
+ * Restore during splash so an online launch can paint from disk, then refetch.
+ * Do not hydrate while the device is offline — cached lists must not stand in
+ * for a network until a real offline mode exists.
  */
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import {
@@ -11,6 +13,7 @@ import {
 } from "@tanstack/react-query-persist-client";
 import { createMMKV, type MMKV } from "react-native-mmkv";
 import { queryClient } from "./query-client";
+import { useOnlineStore } from "./online";
 import { qk } from "./api/query-keys";
 import {
   PERSISTED_QUERY_GC_TIME_MS,
@@ -110,6 +113,11 @@ export function discardQueryCache() {
 
 /** Restore the last snapshot for this account, then keep writing it. */
 export async function restoreQueryPersistence(userId: string, serverUrl: string): Promise<void> {
+  if (!useOnlineStore.getState().online) {
+    stopQueryPersistence();
+    return;
+  }
+
   const storageKey = queryCacheStorageKey(userId, serverUrl);
   if (activeStorageKey === storageKey && unsubscribe) return;
 

@@ -2,8 +2,10 @@
  * What belongs on disk for a cold start, and what must never leave RAM.
  *
  * Persist folders + the first pages of unfiled / unprotected bookmark lists so
- * the library paints before the network. Skip reader HTML, search, tagged
- * lists (they can include locked-folder rows), and protected-folder lists.
+ * an online cold start can paint before the refetch. This is not an offline
+ * mode — hydration is skipped when the device has no network. Skip reader HTML,
+ * search, tagged lists (they can include locked-folder rows), and protected-
+ * folder lists.
  */
 import { isBookmarkListSort, type FolderDto } from "@ordo/shared";
 
