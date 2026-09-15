@@ -1,6 +1,6 @@
 /**
- * Bookmark/folder row height math. FlashList v2 sizes rows itself; these
- * remain for tests, item-type pools, and any layout that still needs an estimate.
+ * Bookmark/folder row height math. Kept for tests and any layout that still
+ * needs an estimate; lists size rows from content.
  */
 import type { BookmarkDto } from "@ordo/shared";
 

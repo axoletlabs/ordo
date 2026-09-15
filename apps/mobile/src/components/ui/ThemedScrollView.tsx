@@ -13,11 +13,8 @@ import {
   View,
   type FlatListProps,
   type ScrollViewProps,
-  type StyleProp,
-  type ViewStyle,
 } from "react-native";
-import { FlashList, type FlashListProps, type FlashListRef } from "@shopify/flash-list";
-import { omitFlashListCellMinHeight, shouldClearFlashListLayout, type FlashListCellLayoutStyle } from "../../lib/flash-list-layout";
+import { type FlashListProps } from "@shopify/flash-list";
 import {
   chainHandlers,
   splitScrollLayoutStyle,
@@ -64,32 +61,6 @@ const nativeScrollBarProps = {
   showsVerticalScrollIndicator: Platform.OS === "web",
   persistentScrollbar: false,
 } as const;
-
-/**
- * FlashList v2 applies a cached minHeight on recycled cells. After a delete
- * that value is often the old 200px estimate, so every remaining row sits in
- * a tall slot. Forward the cell ref so measurements still work.
- */
-const FlashListCell = React.forwardRef<
-  View,
-  { style?: StyleProp<ViewStyle>; index?: number; children?: React.ReactNode }
->(function FlashListCell({ style, index: _index, children, ...rest }, ref) {
-  const flat = StyleSheet.flatten(style);
-  return (
-    <View
-      ref={ref}
-      collapsable={false}
-      {...rest}
-      style={
-        flat && typeof flat === "object"
-          ? (omitFlashListCellMinHeight(flat as FlashListCellLayoutStyle) as ViewStyle)
-          : undefined
-      }
-    >
-      {children}
-    </View>
-  );
-});
 
 export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewProps>(
   function ThemedScrollView(
@@ -154,59 +125,44 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
   },
 );
 
+/**
+ * Bookmark lists used FlashList v2 after the Expo 57 upgrade. v2 caches
+ * per-index heights (default estimate 200px) and on delete only truncates
+ * that cache from the end — remaining rows keep oversized slots, which is
+ * the stretched PERSONAL list after "Bookmark deleted". FlatList sizes
+ * each row from its content, so a removal cannot leave those gaps.
+ */
 export function ThemedFlashList<T>(props: ThemedFlashListProps<T>) {
-  const {
-    style,
-    data,
-    onScroll,
-    onLayout,
-    onContentSizeChange,
-    scrollEventThrottle,
-    showsVerticalScrollIndicator,
-    indicatorStyle: _indicatorStyle,
-    drawDistance = 800,
-    refreshing,
-    onRefresh,
-    refreshControl,
-    scrollBarInsets,
-    maintainVisibleContentPosition,
-    CellRendererComponent,
-    ...rest
-  } = props;
-  const listRef = React.useRef<FlashListRef<T>>(null);
-  const prevLengthRef = React.useRef<number | null>(null);
-  const dataLength = data?.length ?? 0;
-  if (shouldClearFlashListLayout(prevLengthRef.current, dataLength)) {
-    listRef.current?.clearLayoutCacheOnUpdate();
-  }
-  prevLengthRef.current = dataLength;
   const chromeInsets = useScrollBarInsets();
-  const bar = useVerticalScrollBar(scrollBarInsets ?? chromeInsets);
-  const { wrapper, inner } = splitScrollLayoutStyle(style);
-  const themedRefresh = useThemedRefreshControl(refreshing, onRefresh, refreshControl);
+  const {
+    getItemType: _getItemType,
+    drawDistance: _drawDistance,
+    maintainVisibleContentPosition: _maintainVisibleContentPosition,
+    overrideItemLayout: _overrideItemLayout,
+    onCommitLayoutEffect: _onCommitLayoutEffect,
+    onLoad: _onLoad,
+    masonry: _masonry,
+    optimizeItemArrangement: _optimizeItemArrangement,
+    overrideProps: _overrideProps,
+    stickyHeaderConfig: _stickyHeaderConfig,
+    onChangeStickyIndex: _onChangeStickyIndex,
+    maxItemsInRecyclePool: _maxItemsInRecyclePool,
+    onStartReached: _onStartReached,
+    onStartReachedThreshold: _onStartReachedThreshold,
+    initialScrollIndexParams: _initialScrollIndexParams,
+    scrollBarInsets,
+    ...flatListProps
+  } = props;
 
   return (
-    <View style={[styles.host, styles.fill, wrapper]} onLayout={chainHandlers(bar.onLayout, onLayout)}>
-      <FlashList
-        ref={listRef}
-        data={data}
-        drawDistance={drawDistance}
-        maintainVisibleContentPosition={maintainVisibleContentPosition ?? { disabled: true }}
-        CellRendererComponent={CellRendererComponent ?? FlashListCell}
-        {...rest}
-        {...nativeScrollBarProps}
-        showsVerticalScrollIndicator={
-          Platform.OS === "web" ? (showsVerticalScrollIndicator ?? true) : false
-        }
-        indicatorStyle={bar.indicatorStyle}
-        refreshControl={themedRefresh}
-        style={[styles.fill, inner]}
-        onScroll={chainHandlers(bar.onScroll, onScroll)}
-        onContentSizeChange={chainHandlers(bar.onContentSizeChange, onContentSizeChange)}
-        scrollEventThrottle={scrollEventThrottle ?? 16}
-      />
-      {bar.overlay}
-    </View>
+    <ThemedFlatList
+      initialNumToRender={14}
+      maxToRenderPerBatch={10}
+      windowSize={9}
+      updateCellsBatchingPeriod={50}
+      {...(flatListProps as ThemedFlatListProps<T>)}
+      scrollBarInsets={scrollBarInsets ?? chromeInsets}
+    />
   );
 }
 
