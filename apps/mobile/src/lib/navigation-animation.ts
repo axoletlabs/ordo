@@ -4,8 +4,11 @@
  * Changing the native animation type while a slide/shift is on screen leaves
  * translateX on frozen views. Hold the in-flight type until tabs are focused
  * again, and keep a 0px translateX on fade so the native driver can clear it.
+ *
+ * Scene interpolators come from expo-router, not `@react-navigation/*` — SDK 56
+ * fails the OTA Metro bundle on those imports.
  */
-import { SceneStyleInterpolators } from "@react-navigation/bottom-tabs";
+import { SceneStyleInterpolators } from "expo-router/tabs";
 import { Easing, Platform } from "react-native";
 import type { NavigationAnimation } from "../store/settings";
 
