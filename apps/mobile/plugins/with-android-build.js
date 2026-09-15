@@ -398,8 +398,27 @@ function shareSessionPackageLine(isJava) {
     : '            packages.add(OrdoShareSessionPackage())';
 }
 
+/** Expo 57+ Kotlin template mutates PackageList in `.apply { }`, not `return packages`. */
+const EXPO57_PACKAGES_APPLY = /PackageList\(this\)\.packages\.apply\s*\{/;
+
+function shareSessionApplyLine(isJava) {
+  return isJava
+    ? '          add(new OrdoShareSessionPackage());'
+    : '          add(OrdoShareSessionPackage())';
+}
+
 function patchMainApplicationForShareSession(contents, language) {
   const isJava = language === 'java';
+  if (EXPO57_PACKAGES_APPLY.test(contents)) {
+    return mergeContents({
+      src: contents,
+      tag: 'ordo-share-session-package',
+      comment: '          //',
+      offset: 1,
+      anchor: EXPO57_PACKAGES_APPLY,
+      newSrc: shareSessionApplyLine(isJava),
+    }).contents;
+  }
   return mergeContents({
     src: contents,
     tag: 'ordo-share-session-package',

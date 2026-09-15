@@ -303,9 +303,30 @@ const JAVA_APPLICATION = `public class MainApplication extends Application imple
 }
 `;
 
+const EXPO57_APPLICATION = `class MainApplication : Application(), ReactApplication {
+  override val reactHost: ReactHost by lazy {
+    ExpoReactHostFactory.getDefaultReactHost(
+      context = applicationContext,
+      packageList =
+        PackageList(this).packages.apply {
+          // Packages that cannot be autolinked yet can be added manually here, for example:
+          // add(MyReactNativePackage())
+        }
+    )
+  }
+}
+`;
+
 test("MainApplication registers the EncryptedSharedPreferences session module", () => {
   const patched = patchMainApplicationForShareSession(KOTLIN_APPLICATION, 'kt');
   assert.match(patched, /packages\.add\(OrdoShareSessionPackage\(\)\)/);
+  assert.equal(patchMainApplicationForShareSession(patched, 'kt'), patched);
+});
+
+test("patches Expo 57 MainApplication packageList.apply for the session module", () => {
+  const patched = patchMainApplicationForShareSession(EXPO57_APPLICATION, 'kt');
+  assert.match(patched, /add\(OrdoShareSessionPackage\(\)\)/);
+  assert.doesNotMatch(patched, /packages\.add\(OrdoShareSessionPackage\(\)\)/);
   assert.equal(patchMainApplicationForShareSession(patched, 'kt'), patched);
 });
 
