@@ -187,6 +187,18 @@ export interface BookmarkDto {
 /** Full bookmark including HTML — only returned by GET /bookmarks/:id (reader). */
 export interface BookmarkDetailDto extends BookmarkDto {
   contentHtml: string | null;
+  highlights: HighlightDto[];
+}
+
+/** A passage the user marked in an article. Anchored by quote, not HTML offsets. */
+export interface HighlightDto {
+  id: string;
+  exact: string;
+  prefix: string;
+  suffix: string;
+  /** Set when the highlight was created from a link. */
+  href: string | null;
+  createdAt: string;
 }
 
 export interface CursorPage<T> {

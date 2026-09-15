@@ -11,6 +11,7 @@ import { FolderAccessService } from "./folder-access.service.js";
 import { TagsController } from "./tags.controller.js";
 import { TagsService } from "./tags.service.js";
 import { TagSuggestionService } from "./tag-suggestion.service.js";
+import { HighlightsService } from "./highlights.service.js";
 
 @Module({
   imports: [AuthModule],
@@ -24,6 +25,7 @@ import { TagSuggestionService } from "./tag-suggestion.service.js";
     FolderAccessService,
     TagsService,
     TagSuggestionService,
+    HighlightsService,
   ],
   exports: [ExtractionService],
 })

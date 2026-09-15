@@ -6,9 +6,9 @@
  * semantic subset (p/headings/lists/blockquote/pre/code/figure/table/links,
  * http(s)/mailto schemes only, no scripts/iframes), so this component's job
  * is purely presentation: token-driven typography scaled by the reader
- * preferences, responsive images, select-to-share text, and external links.
+ * preferences, responsive images, select-to-highlight text, and external links.
  */
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   InteractionManager,
   Linking,
@@ -30,13 +30,26 @@ import RenderHTML, {
 import { useTheme } from "../../theme/ThemeProvider";
 import type { Palette } from "../../theme/theme";
 import { radius, resolveFont, spacing, type FontFamily } from "../../theme/tokens";
-import type { ReaderPreferences } from "@ordo/shared";
+import type { HighlightDto, ReaderPreferences } from "@ordo/shared";
+import { applyHighlightsToHtml } from "@ordo/shared";
 import { READER_BODY_SIZE, resolveReaderFontFamily } from "./reader-typography";
 import {
   collectTableRows,
   plainTextFromNode,
   splitTableHeader,
 } from "./article-html-table";
+import {
+  HighlightUiContext,
+  SelectablePhrase,
+  anchorRenderer,
+  highlightHandlersFromHtml,
+  ignoreHighlightPress,
+  ignoreLinkLongPress,
+  ignoreTextSelect,
+  markRenderer,
+  selectableBlockRenderer,
+  type HighlightUiHandlers,
+} from "./article-highlight-ui";
 
 /** Custom fonts loaded via useFonts must be registered to avoid warnings. */
 const SYSTEM_FONTS = [
@@ -200,7 +213,10 @@ function buildTagsStyles(
       borderBottomColor: palette.border,
       marginVertical: spacing[20],
     },
-    mark: { backgroundColor: palette.accentSoft, color: palette.text },
+    mark: {
+      backgroundColor: palette.mode === "dark" ? "rgba(217,168,58,0.32)" : "rgba(217,168,58,0.48)",
+      color: palette.text,
+    },
     small: { fontSize: Math.max(11, base - 3) },
   };
 }
@@ -210,6 +226,10 @@ export interface ArticleHtmlProps {
   preferences: ReaderPreferences;
   /** Measured width available to the article; drives responsive images. */
   contentWidth: number;
+  highlights?: readonly HighlightDto[];
+  onTextSelect?: HighlightUiHandlers["onTextSelect"];
+  onHighlightPress?: HighlightUiHandlers["onHighlightPress"];
+  onLinkLongPress?: HighlightUiHandlers["onLinkLongPress"];
   onHeadingsChange?: (headings: readonly ArticleHeading[]) => void;
   onHeadingRef?: (id: string, view: ViewType | null) => void;
   /** Fires once the native HTML tree is actually mounted (after first paint). */
@@ -226,7 +246,12 @@ interface HeadingRendererProps {
   onHeadingRef?: ArticleHtmlProps["onHeadingRef"];
 }
 
-const headingRenderer: CustomBlockRenderer = ({ tnode, TDefaultRenderer, ...props }) => {
+const headingRenderer: CustomBlockRenderer = ({
+  tnode,
+  TDefaultRenderer,
+  TNodeChildrenRenderer,
+  ...props
+}) => {
   const { onHeadingRef } = useRendererProps(tnode.tagName as "h1") as HeadingRendererProps;
   const setRef = useCallback(
     (view: ViewType | null) => {
@@ -237,7 +262,9 @@ const headingRenderer: CustomBlockRenderer = ({ tnode, TDefaultRenderer, ...prop
 
   return (
     <View ref={setRef} collapsable={false}>
-      <TDefaultRenderer tnode={tnode} {...props} />
+      <TDefaultRenderer tnode={tnode} TNodeChildrenRenderer={TNodeChildrenRenderer} {...props}>
+        <SelectablePhrase tnode={tnode} TNodeChildrenRenderer={TNodeChildrenRenderer} />
+      </TDefaultRenderer>
     </View>
   );
 };
@@ -249,7 +276,7 @@ interface TableRendererProps {
 
 /**
  * GitHub-style markdown tables (and other wide grids) are Yoga-flex cells
- * in the HTML engine's default UA stylesheet. A dozen of those on first paint
+ * in render-html's default UA stylesheet. A dozen of those on first paint
  * stalls navigation for a second or more. Stack each row as labeled fields
  * instead so the article chrome can show immediately.
  */
@@ -300,7 +327,7 @@ const tableRenderer: CustomBlockRenderer = ({ tnode, TNodeChildrenRenderer }) =>
                   {labels[cellIndex]}
                 </Text>
               ) : null}
-              <TNodeChildrenRenderer tnode={cell as TNode} />
+              <SelectablePhrase tnode={cell as TNode} TNodeChildrenRenderer={TNodeChildrenRenderer} />
             </View>
           ))}
         </View>
@@ -313,7 +340,17 @@ const ARTICLE_RENDERERS = {
   h1: headingRenderer,
   h2: headingRenderer,
   h3: headingRenderer,
+  h4: selectableBlockRenderer,
+  h5: selectableBlockRenderer,
+  h6: selectableBlockRenderer,
+  p: selectableBlockRenderer,
+  li: selectableBlockRenderer,
+  blockquote: selectableBlockRenderer,
+  figcaption: selectableBlockRenderer,
+  pre: selectableBlockRenderer,
   table: tableRenderer,
+  a: anchorRenderer,
+  mark: markRenderer,
 };
 
 function textFromNode(node: TNode): string {
@@ -344,6 +381,10 @@ export const ArticleHtml = React.memo(function ArticleHtml({
   html,
   preferences,
   contentWidth,
+  highlights,
+  onTextSelect,
+  onHighlightPress,
+  onLinkLongPress,
   onHeadingsChange,
   onHeadingRef,
   onReady,
@@ -351,15 +392,28 @@ export const ArticleHtml = React.memo(function ArticleHtml({
   const { palette } = useTheme();
   const family = resolveReaderFontFamily(preferences.fontFamily);
   const base = READER_BODY_SIZE[preferences.fontSize];
-  const [readyHtml, setReadyHtml] = useState<string | null>(null);
+  const highlightedHtml = useMemo(
+    () => applyHighlightsToHtml(html, highlights ?? []),
+    [html, highlights],
+  );
+  const paintedSourceRef = useRef<string | null>(null);
+  const [ready, setReady] = useState(false);
 
   // Let the reader chrome commit (and the push animation run) before building
   // a native view tree. Large tables otherwise freeze the JS thread on open.
+  // Highlight updates keep the same source HTML, so skip the skeleton flash.
   useEffect(() => {
+    if (paintedSourceRef.current === html) {
+      setReady(true);
+      return;
+    }
+    setReady(false);
     let cancelled = false;
     const handle = InteractionManager.runAfterInteractions(() => {
       requestAnimationFrame(() => {
-        if (!cancelled) setReadyHtml(html);
+        if (cancelled) return;
+        paintedSourceRef.current = html;
+        setReady(true);
       });
     });
     return () => {
@@ -367,7 +421,6 @@ export const ArticleHtml = React.memo(function ArticleHtml({
       handle.cancel();
     };
   }, [html]);
-  const ready = readyHtml === html;
 
   useEffect(() => {
     if (!ready) return;
@@ -392,8 +445,21 @@ export const ArticleHtml = React.memo(function ArticleHtml({
     [palette.textSecondary, family, base],
   );
   const defaultTextProps = useMemo(
-    () => ({ selectable: true as const, style: { color: palette.textSecondary } }),
-    [palette.textSecondary],
+    () => ({
+      selectable: false as const,
+      selectionColor: palette.mustard,
+      style: { color: palette.textSecondary },
+    }),
+    [palette.mustard, palette.textSecondary],
+  );
+  const highlightUi = useMemo(
+    () =>
+      highlightHandlersFromHtml(html, palette.mustard, {
+        onTextSelect: onTextSelect ?? ignoreTextSelect,
+        onHighlightPress: onHighlightPress ?? ignoreHighlightPress,
+        onLinkLongPress: onLinkLongPress ?? ignoreLinkLongPress,
+      }),
+    [html, onHighlightPress, onLinkLongPress, onTextSelect, palette.mustard],
   );
 
   // List markers should match the article's font (and accent color).
@@ -465,8 +531,9 @@ export const ArticleHtml = React.memo(function ArticleHtml({
   }
 
   return (
+    <HighlightUiContext.Provider value={highlightUi}>
     <RenderHTML
-      source={{ html }}
+      source={{ html: highlightedHtml }}
       contentWidth={contentWidth}
       baseStyle={baseStyle}
       tagsStyles={tagsStyles}
@@ -477,6 +544,7 @@ export const ArticleHtml = React.memo(function ArticleHtml({
       systemFonts={SYSTEM_FONTS}
       defaultTextProps={defaultTextProps}
     />
+    </HighlightUiContext.Provider>
   );
 });
 

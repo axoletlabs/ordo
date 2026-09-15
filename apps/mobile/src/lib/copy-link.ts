@@ -16,3 +16,14 @@ export async function copyLinks(urls: string[]): Promise<void> {
     toast.error(urls.length === 1 ? "Couldn't copy the link." : "Couldn't copy the links.");
   }
 }
+
+export async function copyText(value: string, success = "Copied"): Promise<void> {
+  if (!value) return;
+  haptics.light();
+  try {
+    await Clipboard.setStringAsync(value);
+    toast.success(success);
+  } catch {
+    toast.error("Couldn't copy that.");
+  }
+}

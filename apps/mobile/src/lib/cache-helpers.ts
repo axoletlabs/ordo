@@ -196,11 +196,15 @@ function preserveBodies<T extends BookmarkDto>(old: T, patch: T): T {
     patch.fetchStatus === "unsupported" ||
     patch.fetchStatus === "failed" ||
     patch.contentKindOverride === "web";
-  if (clearing) return patch;
-  if ("contentHtml" in old && !("contentHtml" in patch)) {
-    return { ...patch, contentHtml: (old as BookmarkDetailDto).contentHtml } as T;
+  let next = patch;
+  const previous = old as T & { contentHtml?: string | null; highlights?: BookmarkDetailDto["highlights"] };
+  if (!clearing && "contentHtml" in old && !("contentHtml" in patch)) {
+    next = { ...next, contentHtml: previous.contentHtml } as T;
   }
-  return patch;
+  if ("highlights" in old && !("highlights" in patch)) {
+    next = { ...next, highlights: previous.highlights } as T;
+  }
+  return next;
 }
 
 /** Apply the same list/detail patch to many bookmarks in one cache walk. */
@@ -237,7 +241,7 @@ export function updateBookmarksEverywhere(
 
 /** Copy extraction fields from a detail fetch onto list rows without shipping HTML. */
 export function patchListsFromDetail(qc: QueryClient, detail: BookmarkDetailDto) {
-  const { contentHtml: _html, ...list } = detail;
+  const { contentHtml: _html, highlights: _highlights, ...list } = detail;
   updateBookmarkEverywhere(qc, detail.id, (old) => {
     if ("contentHtml" in old) {
       return { ...old, ...detail };

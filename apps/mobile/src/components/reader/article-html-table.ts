@@ -46,3 +46,46 @@ export function plainTextFromNode(node: HtmlTableNode): string {
   };
   return walk(node).replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").trim();
 }
+
+/** Concatenate descendant text without trimming — matches native Text layout. */
+export function nodeTextContent(node: HtmlTableNode): string {
+  const walk = (current: HtmlTableNode): string => {
+    if (current.type === "text") return current.data ?? "";
+    if (current.tagName === "br") return "\n";
+    return (current.children ?? []).map(walk).join("");
+  };
+  return walk(node);
+}
+
+export interface TextLayoutLine {
+  text: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Map a press inside a laid-out Text block onto a character index. */
+export function offsetFromLayout(lines: readonly TextLayoutLine[], x: number, y: number): number {
+  if (lines.length === 0) return 0;
+  let offset = 0;
+  let chosen = lines[0]!;
+  let chosenOffset = 0;
+  for (const line of lines) {
+    const lineStart = offset;
+    if (y >= line.y && y <= line.y + line.height) {
+      chosen = line;
+      chosenOffset = lineStart;
+      break;
+    }
+    if (y > line.y) {
+      chosen = line;
+      chosenOffset = lineStart;
+    }
+    offset += line.text.length;
+  }
+  if (chosen.width <= 0) return chosenOffset;
+  const ratio = Math.min(1, Math.max(0, (x - chosen.x) / chosen.width));
+  const col = Math.min(chosen.text.length, Math.round(ratio * chosen.text.length));
+  return chosenOffset + col;
+}

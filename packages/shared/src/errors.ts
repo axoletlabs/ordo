@@ -32,6 +32,7 @@ export const ErrorCode = {
   // bookmarks
   BOOKMARK_NOT_FOUND: "bookmark_not_found",
   FETCH_FAILED: "fetch_failed",
+  HIGHLIGHT_NOT_FOUND: "highlight_not_found",
 
   // tags
   TAG_NOT_FOUND: "tag_not_found",

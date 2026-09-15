@@ -4,6 +4,7 @@ export {
 } from "../generated/prisma/client.js";
 export type {
   Bookmark,
+  BookmarkHighlight,
   Folder,
   Session,
   Tag,

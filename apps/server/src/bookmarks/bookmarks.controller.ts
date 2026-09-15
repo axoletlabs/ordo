@@ -21,11 +21,15 @@ import {
   UpdateBookmarkSchema,
   UpdateBookmarkTagsSchema,
   SetBookmarkContentKindSchema,
+  CreateHighlightSchema,
   parseBookmarkListSort,
   type BatchBookmarksInput,
+  type BookmarkDetailDto,
   type BookmarkDto,
+  type CreateHighlightInput,
   type CursorPage,
   type ExtractionProgressDto,
+  type HighlightDto,
 } from "@ordo/shared";
 import { AuthGuard } from "../auth/auth.guard.js";
 import {
@@ -36,6 +40,7 @@ import { getPresentedFolderTokens } from "../common/utils/folder-tokens.js";
 import { BookmarksService } from "./bookmarks.service.js";
 import { ExtractionService } from "./extraction.service.js";
 import { FolderAccessService } from "./folder-access.service.js";
+import { HighlightsService } from "./highlights.service.js";
 import { RateLimit } from "../common/rate-limit/rate-limit.decorator.js";
 
 @UseGuards(AuthGuard)
@@ -45,6 +50,7 @@ export class BookmarksController {
     private readonly bookmarks: BookmarksService,
     private readonly extraction: ExtractionService,
     private readonly access: FolderAccessService,
+    private readonly highlights: HighlightsService,
   ) {}
 
   @Post()
@@ -131,8 +137,30 @@ export class BookmarksController {
     @CurrentUser() user: AuthContext,
     @Param("id") id: string,
     @Req() req: Request,
-  ): Promise<BookmarkDto & { contentHtml: string | null }> {
+  ): Promise<BookmarkDetailDto> {
     return this.bookmarks.detail(user.userId, id, getPresentedFolderTokens(req));
+  }
+
+  @Post(":id/highlights")
+  async createHighlight(
+    @CurrentUser() user: AuthContext,
+    @Param("id") id: string,
+    @Body({ schema: CreateHighlightSchema }) body: CreateHighlightInput,
+    @Req() req: Request,
+  ): Promise<HighlightDto> {
+    return this.highlights.create(user.userId, id, body, getPresentedFolderTokens(req));
+  }
+
+  @Delete(":id/highlights/:highlightId")
+  @HttpCode(200)
+  async removeHighlight(
+    @CurrentUser() user: AuthContext,
+    @Param("id") id: string,
+    @Param("highlightId") highlightId: string,
+    @Req() req: Request,
+  ): Promise<{ success: true }> {
+    await this.highlights.remove(user.userId, id, highlightId, getPresentedFolderTokens(req));
+    return { success: true };
   }
 
   @Patch(":id")

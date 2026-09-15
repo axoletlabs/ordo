@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   collectTableRows,
+  nodeTextContent,
+  offsetFromLayout,
   plainTextFromNode,
   splitTableHeader,
   type HtmlTableNode,
@@ -49,4 +51,18 @@ test("plain text joins br-separated code cells", () => {
     el("code", [text("duration = 20")]),
   ]);
   assert.equal(plainTextFromNode(cell), "callback\nduration = 20");
+});
+
+test("nodeTextContent keeps inner spaces for native selection offsets", () => {
+  const paragraph = el("p", [text("Hello "), el("em", [text("world")])]);
+  assert.equal(nodeTextContent(paragraph), "Hello world");
+});
+
+test("offsetFromLayout maps a press onto a character index", () => {
+  const lines = [
+    { text: "Hello ", x: 0, y: 0, width: 60, height: 20 },
+    { text: "world", x: 0, y: 20, width: 50, height: 20 },
+  ];
+  assert.equal(offsetFromLayout(lines, 0, 5), 0);
+  assert.equal(offsetFromLayout(lines, 25, 25), 6 + Math.round(0.5 * 5));
 });
