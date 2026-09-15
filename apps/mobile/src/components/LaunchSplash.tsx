@@ -43,10 +43,7 @@ export function LaunchSplash({ transitionIn = false, onPresented }: LaunchSplash
       collapsable={false}
       style={[styles.root, { backgroundColor }]}
     >
-      <StatusBar
-        style={palette.mode === "dark" ? "light" : "dark"}
-        backgroundColor={backgroundColor}
-      />
+      <StatusBar style={palette.mode === "dark" ? "light" : "dark"} />
       <Animated.View
         style={{
           opacity: progress,
@@ -68,7 +65,7 @@ export function LaunchSplash({ transitionIn = false, onPresented }: LaunchSplash
 
 const styles = StyleSheet.create({
   root: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 1000,

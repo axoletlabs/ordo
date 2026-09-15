@@ -5,7 +5,7 @@
  * the share sheet so "Save to Files" can pick a location. Web triggers a download.
  */
 import { Platform, Share } from "react-native";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import * as IntentLauncher from "expo-intent-launcher";
 import { EXPORT_MIME, type ExportFormat } from "@ordo/shared";
 

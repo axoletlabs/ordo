@@ -17,7 +17,6 @@ const FAKE_EXTRACTED = {
   domain: "example.com",
   readingTimeMinutes: 4,
   contentHtml: "<p>Hello world.</p>",
-  contentMarkdown: "Hello world.",
   contentText: "Hello world.",
 };
 
@@ -244,7 +243,6 @@ describe("Bookmarks & Folders (e2e)", () => {
       expect(res.body.folderId).toBeNull();
       expect(res.body.title).toBe("example.com");
       expect(res.body.domain).toBe("example.com");
-      expect(res.body.contentMarkdown).toBeNull();
       expect(res.body.fetchStatus).toBe("pending");
       expect(res.body.contentKind).toBeNull();
       expect(res.body.isRead).toBe(false);
@@ -256,7 +254,6 @@ describe("Bookmarks & Folders (e2e)", () => {
       }
       expect(stored).toMatchObject({
         title: "Sample Article",
-        contentMarkdown: "Hello world.",
         fetchStatus: "ok",
         extractionVersion: EXTRACTION_VERSION,
         extractionReason: null,
@@ -266,12 +263,10 @@ describe("Bookmarks & Folders (e2e)", () => {
       });
       const ready = await agent.get(`/api/bookmarks/${res.body.id}`).expect(200);
       expect(ready.body.contentKind).toBe("article");
-      expect(ready.body.contentMarkdown).toBe("Hello world.");
-      expect(ready.body.contentText).toBe("Hello world.");
+      expect(ready.body.contentHtml).toBe("<p>Hello world.</p>");
       const listed = await agent.get("/api/bookmarks").expect(200);
       const row = listed.body.items.find((item: { id: string }) => item.id === res.body.id);
-      expect(row.contentMarkdown).toBeNull();
-      expect(row.contentText).toBeNull();
+      expect(row.contentHtml).toBeUndefined();
     });
 
     it("stores typed unsupported rejections instead of junk content", async () => {
@@ -292,8 +287,6 @@ describe("Bookmarks & Folders (e2e)", () => {
         extractionReason: "js_required",
         extractionVersion: EXTRACTION_VERSION,
         contentHtml: null,
-        contentMarkdown: null,
-        contentText: null,
       });
       const rejected = await agent.get(`/api/bookmarks/${res.body.id}`).expect(200);
       expect(rejected.body.contentKind).toBe("web");
@@ -399,8 +392,6 @@ describe("Bookmarks & Folders (e2e)", () => {
         extractionReason: "not_an_article",
         title: originalTitle,
         contentHtml: null,
-        contentMarkdown: null,
-        contentText: null,
         readingTimeMinutes: null,
         contentKindOverride: null,
         articleUndoSnapshot: null,
@@ -494,7 +485,6 @@ describe("Bookmarks & Folders (e2e)", () => {
           url: `https://example.com/p${i}`,
           title: `Post ${i}`,
           domain: "example.com",
-          contentText: `body ${i}`,
           createdAt: new Date(base + i * 1000),
         })),
       });
@@ -1347,7 +1337,7 @@ describe("Bookmarks & Folders (e2e)", () => {
             url: "https://example.com/needle-unfiled",
             title: "Needle unfiled",
             domain: "example.com",
-            contentText: "body",
+            contentHtml: "<p>body</p>",
           },
           {
             userId,
@@ -1355,7 +1345,7 @@ describe("Bookmarks & Folders (e2e)", () => {
             url: "https://example.com/needle-filed",
             title: "Needle filed",
             domain: "example.com",
-            contentText: "body",
+            contentHtml: "<p>body</p>",
           },
           {
             userId,
@@ -1363,7 +1353,7 @@ describe("Bookmarks & Folders (e2e)", () => {
             url: "https://example.com/haystack",
             title: "Haystack",
             domain: "example.com",
-            contentText: "body",
+            contentHtml: "<p>body</p>",
           },
         ],
       });
@@ -1394,7 +1384,7 @@ describe("Bookmarks & Folders (e2e)", () => {
           url: "https://example.com/body",
           title: "Diary",
           domain: "example.com",
-          contentText: "needle in the article body",
+          contentHtml: "<p>needle in the article body</p>",
         },
       });
 
@@ -1418,7 +1408,7 @@ describe("Bookmarks & Folders (e2e)", () => {
           url: "https://ente.com/home",
           title: "Home",
           domain: "ente.com",
-          contentText: "Every vault and every device.",
+          contentHtml: "<p>Every vault and every device.</p>",
         },
       });
       await ctx.prisma.bookmark.create({
@@ -1444,7 +1434,7 @@ describe("Bookmarks & Folders (e2e)", () => {
           url: "https://ente.com/home",
           title: "Home",
           domain: "ente.com",
-          contentText: "Welcome to the vaults",
+          contentHtml: "<p>Welcome to the vaults</p>",
         },
       });
 
@@ -1491,7 +1481,7 @@ describe("Bookmarks & Folders (e2e)", () => {
           url: "https://ente.com/home",
           title: "Home",
           domain: "ente.com",
-          contentText: "Need help with vaults and hello from the team.",
+          contentHtml: "<p>Need help with vaults and hello from the team.</p>",
         },
       });
       await ctx.prisma.bookmark.create({
@@ -1624,6 +1614,32 @@ describe("Bookmarks & Folders (e2e)", () => {
 
       const fuzzy = await agent.get("/api/bookmarks/search?q=helo&fuzzy=1").expect(200);
       expect(fuzzy.body.items.map((b: { title: string }) => b.title)).toEqual(["Hello world"]);
+    });
+
+    it("paginates ranked search hits", async () => {
+      const { agent, userId } = await setup();
+      await ctx.prisma.bookmark.createMany({
+        data: Array.from({ length: 25 }, (_, i) => ({
+          userId,
+          folderId: null,
+          url: `https://example.com/needle-${i}`,
+          title: `Needle ${String(i).padStart(2, "0")}`,
+          domain: "example.com",
+        })),
+      });
+
+      const page1 = await agent.get("/api/bookmarks/search?q=needle&limit=20").expect(200);
+      expect(page1.body.items).toHaveLength(20);
+      expect(page1.body.hasMore).toBe(true);
+      expect(page1.body.nextCursor).toBeTruthy();
+
+      const page2 = await agent
+        .get(`/api/bookmarks/search?q=needle&limit=20&cursor=${page1.body.nextCursor}`)
+        .expect(200);
+      expect(page2.body.items).toHaveLength(5);
+      expect(page2.body.hasMore).toBe(false);
+      const ids = [...page1.body.items, ...page2.body.items].map((item: { id: string }) => item.id);
+      expect(new Set(ids).size).toBe(25);
     });
   });
 

@@ -1,4 +1,4 @@
-import type { Bookmark, Folder, Session, Tag, User } from "@prisma/client";
+import type { Bookmark, Folder, Session, Tag, User } from "../prisma/client.js";
 import {
   isFolderPinLength,
   normalizeFolderIcon,
@@ -133,8 +133,6 @@ export type BookmarkDtoFields = Pick<
   | "createdAt"
   | "updatedAt"
 > & {
-  contentText?: string | null;
-  contentMarkdown?: string | null;
   tags?: Array<{ tag: Pick<Tag, "id" | "name" | "color"> }>;
   suggestions?: Array<{ tag: Pick<Tag, "id" | "name" | "color"> }>;
 };
@@ -155,10 +153,7 @@ export function toTagDto(
   };
 }
 
-export function toBookmarkDto(
-  b: BookmarkDtoFields,
-  opts: { includeBodies?: boolean } = {},
-): BookmarkDto {
+export function toBookmarkDto(b: BookmarkDtoFields): BookmarkDto {
   const fetchStatus = FETCH_STATUSES.includes(b.fetchStatus as FetchStatus)
     ? (b.fetchStatus as FetchStatus)
     : "failed";
@@ -175,8 +170,6 @@ export function toBookmarkDto(
     title: b.title,
     description: b.description,
     domain: b.domain,
-    contentText: opts.includeBodies ? (b.contentText ?? null) : null,
-    contentMarkdown: opts.includeBodies ? (b.contentMarkdown ?? null) : null,
     fetchStatus,
     extractionReason,
     contentKind: bookmarkContentKind(fetchStatus, extractionReason, contentKindOverride),
@@ -200,5 +193,5 @@ export function toBookmarkDto(
 }
 
 export function toBookmarkDetailDto(b: BookmarkDtoFields & Pick<Bookmark, "contentHtml">): BookmarkDto & { contentHtml: string | null } {
-  return { ...toBookmarkDto(b, { includeBodies: true }), contentHtml: b.contentHtml };
+  return { ...toBookmarkDto(b), contentHtml: b.contentHtml };
 }

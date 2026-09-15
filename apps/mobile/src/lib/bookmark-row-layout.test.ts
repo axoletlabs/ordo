@@ -9,8 +9,6 @@ function bookmark(partial: Partial<BookmarkDto> & Pick<BookmarkDto, "id" | "titl
     url: `https://example.com/${partial.id}`,
     description: null,
     domain: "example.com",
-    contentText: null,
-    contentMarkdown: null,
     fetchStatus: "unsupported",
     extractionReason: null,
     contentKind: "web",

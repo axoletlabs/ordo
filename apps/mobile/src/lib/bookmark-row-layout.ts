@@ -1,6 +1,6 @@
 /**
- * FlashList size hints. An overestimate leaves blank gaps between rows;
- * these match BookmarkRow / FolderRow padding.
+ * Bookmark/folder row height math. FlashList v2 sizes rows itself; these
+ * remain for tests and any layout that still needs an estimate.
  */
 import type { BookmarkDto } from "@ordo/shared";
 

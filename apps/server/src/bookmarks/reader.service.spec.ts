@@ -104,7 +104,6 @@ describe("ReaderService", () => {
       expect(result.contentHtml).toContain('alt="A cat"');
       expect(result.contentHtml.toLowerCase()).toContain("<h2");
       expect(result.contentText).toMatch(/Paragraph 5/);
-      expect(result.contentMarkdown).toBe("");
       // scripts, iframes and data: urls never survive
       expect(result.contentHtml).not.toContain("<script");
       expect(result.contentHtml).not.toContain("evil()");

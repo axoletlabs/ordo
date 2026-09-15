@@ -100,7 +100,7 @@ export function FloatingPanel({
 }
 
 const styles = StyleSheet.create({
-  root: { ...StyleSheet.absoluteFillObject },
+  root: { ...StyleSheet.absoluteFill },
   frame: {
     flex: 1,
     alignItems: "center",

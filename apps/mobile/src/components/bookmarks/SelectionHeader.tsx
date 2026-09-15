@@ -101,7 +101,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   titleSlot: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     left: TITLE_SLOT_INSET,
     right: TITLE_SLOT_INSET,
     alignItems: "center",

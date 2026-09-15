@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger } from "@nestjs/common";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "node:crypto";
-import type { Session, User } from "@prisma/client";
+import type { Session, User } from "../prisma/client.js";
 import {
   EMAIL_OTP,
   EMAIL_OTP_PURPOSE,

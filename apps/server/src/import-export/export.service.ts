@@ -11,7 +11,7 @@
  */
 import { Injectable } from "@nestjs/common";
 import { Readable } from "node:stream";
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "../prisma/client.js";
 import {
   ErrorCode,
   EXPORT_MIME,

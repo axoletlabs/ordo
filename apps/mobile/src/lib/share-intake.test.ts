@@ -5,6 +5,7 @@ import {
   QUICK_SHARE_ENABLED_FILE,
   QUICK_SHARE_FLAG_FILE,
   QUICK_SHARE_SESSION_FILE,
+  QUICK_SHARE_SESSION_PREFS,
   parseQuickShareSession,
   shareIntakeIsQuickDefault,
   shareIntakeMode,
@@ -59,6 +60,7 @@ test("sidecar file names stay short and stable for the Android activities", () =
   assert.equal(QUICK_SHARE_FLAG_FILE, "ordo-quick-share");
   assert.equal(QUICK_SHARE_BOOKMARK_FILE, "ordo-quick-share-bookmark");
   assert.equal(QUICK_SHARE_SESSION_FILE, "ordo-quick-share-session");
+  assert.equal(QUICK_SHARE_SESSION_PREFS, "ordo_quick_share_session");
 });
 
 test("native session JSON requires tokens, a server, and a newer updatedAt to adopt", () => {

@@ -35,7 +35,7 @@ import {
   type ImportResultDto,
   normalizeImportPreview,
 } from "@ordo/shared";
-import type { Prisma } from "@prisma/client";
+import type { Prisma } from "../prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { TokenService } from "../auth/token.service.js";
 import { AppError } from "../common/errors/app-error.js";

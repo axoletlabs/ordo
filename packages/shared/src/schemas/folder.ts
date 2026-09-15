@@ -37,16 +37,16 @@ export const SetFolderPasswordSchema = z
   })
   .superRefine(({ password, lockType }, context) => {
     if (lockType === "pin" && !/^\d{4}$|^\d{6}$/.test(password)) {
-      context.addIssue({ code: z.ZodIssueCode.custom, path: ["password"], message: "Use a 4 or 6 digit PIN." });
+      context.addIssue({ code: "custom", path: ["password"], message: "Use a 4 or 6 digit PIN." });
     } else if (lockType === "pattern") {
       const nodes = password.split("-");
       if (nodes.length < 4 || new Set(nodes).size !== nodes.length || nodes.some((node) => !/^[0-8]$/.test(node))) {
-        context.addIssue({ code: z.ZodIssueCode.custom, path: ["password"], message: "Connect at least 4 different dots." });
+        context.addIssue({ code: "custom", path: ["password"], message: "Connect at least 4 different dots." });
       }
     } else if (lockType === "password" && password.length < 4) {
-      context.addIssue({ code: z.ZodIssueCode.custom, path: ["password"], message: "Use at least 4 characters." });
+      context.addIssue({ code: "custom", path: ["password"], message: "Use at least 4 characters." });
     } else if (lockType === "device" && password.length < 32) {
-      context.addIssue({ code: z.ZodIssueCode.custom, path: ["password"], message: "The device credential is invalid." });
+      context.addIssue({ code: "custom", path: ["password"], message: "The device credential is invalid." });
     }
   });
 export type SetFolderPasswordInput = z.infer<typeof SetFolderPasswordSchema>;

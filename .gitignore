@@ -22,6 +22,8 @@ out/
 *.db-shm
 *.db-wal
 apps/server/prisma/data/
+apps/server/src/generated/
+
 
 # auto-generated secret
 .ordo-secret

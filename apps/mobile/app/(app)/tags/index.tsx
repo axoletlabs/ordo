@@ -13,7 +13,7 @@ import { EmptyState } from "../../../src/components/ui/EmptyState";
 import { Skeleton } from "../../../src/components/ui/Skeleton";
 import { Button } from "../../../src/components/ui/Button";
 import { CreateTagPanel } from "../../../src/components/tags/CreateTagPanel";
-import { TagRow, TAG_ROW_SIZE } from "../../../src/components/tags/TagRow";
+import { TagRow } from "../../../src/components/tags/TagRow";
 import { TagActionsSheet } from "../../../src/components/tags/TagActionsSheet";
 import { useTags } from "../../../src/hooks/use-tags";
 import { errorMessage } from "../../../src/lib/error-message";
@@ -103,10 +103,6 @@ export default function TagsScreen() {
             extraData={actionsTag?.id ?? ""}
             keyExtractor={(tag: TagDto) => tag.id}
             renderItem={renderTag}
-            estimatedItemSize={TAG_ROW_SIZE}
-            overrideItemLayout={(layout) => {
-              layout.size = TAG_ROW_SIZE;
-            }}
             contentContainerStyle={listContentStyle}
             refreshing={isFetching && !isLoading}
             onRefresh={() => refetch()}

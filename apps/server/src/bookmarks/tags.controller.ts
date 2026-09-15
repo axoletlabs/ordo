@@ -9,7 +9,6 @@ import {
 } from "@ordo/shared";
 import { AuthGuard } from "../auth/auth.guard.js";
 import { CurrentUser, type AuthContext } from "../common/decorators/current-user.decorator.js";
-import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe.js";
 import { getPresentedFolderTokens } from "../common/utils/folder-tokens.js";
 import { TagsService } from "./tags.service.js";
 
@@ -29,7 +28,7 @@ export class TagsController {
   @Post()
   create(
     @CurrentUser() user: AuthContext,
-    @Body(new ZodValidationPipe(CreateTagSchema)) body: CreateTagInput,
+    @Body({ schema: CreateTagSchema }) body: CreateTagInput,
   ): Promise<TagDto> {
     return this.tags.create(user.userId, body);
   }
@@ -38,7 +37,7 @@ export class TagsController {
   update(
     @CurrentUser() user: AuthContext,
     @Param("id") id: string,
-    @Body(new ZodValidationPipe(UpdateTagSchema)) body: UpdateTagInput,
+    @Body({ schema: UpdateTagSchema }) body: UpdateTagInput,
   ): Promise<TagDto> {
     return this.tags.update(user.userId, id, body);
   }

@@ -121,11 +121,19 @@ const amoledOverrides: Partial<Palette> = {
   overlay: "rgba(0,0,0,0.6)",
 };
 
+/** OS scheme, including RN 0.86's `unspecified` (not yet known / follow system). */
+export type SystemColorScheme = "light" | "dark" | "unspecified" | null | undefined;
+
+/** App-level Appearance override. `unspecified` restores follow-system. */
+export function appearanceOverride(mode: ThemeMode): "light" | "dark" | "unspecified" {
+  return mode === "system" ? "unspecified" : mode;
+}
+
 /** Resolve the effective palette from a mode (+ system hint) and amoled flag. */
 export function resolvePalette(
   mode: ThemeMode,
   amoled: boolean,
-  systemColorScheme: "light" | "dark" | null | undefined,
+  systemColorScheme: SystemColorScheme,
 ): Palette {
   const resolvedMode: "light" | "dark" =
     mode === "system" ? (systemColorScheme === "dark" ? "dark" : "light") : mode;

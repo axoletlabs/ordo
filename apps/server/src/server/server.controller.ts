@@ -5,7 +5,6 @@ import {
   type ServerInfoDto,
 } from "@ordo/shared";
 import { AuthGuard } from "../auth/auth.guard.js";
-import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe.js";
 import { ServerService } from "./server.service.js";
 
 @Controller("api/server")
@@ -20,7 +19,7 @@ export class ServerController {
   @Patch("name")
   @UseGuards(AuthGuard)
   async rename(
-    @Body(new ZodValidationPipe(ChangeServerNameSchema)) body: ChangeServerNameInput,
+    @Body({ schema: ChangeServerNameSchema }) body: ChangeServerNameInput,
   ): Promise<ServerInfoDto> {
     await this.server.setDisplayName(body.name);
     return this.server.info();

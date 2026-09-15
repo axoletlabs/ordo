@@ -7,6 +7,7 @@ const {
   withAndroidColors,
   withAndroidColorsNight,
   withMainActivity,
+  withMainApplication,
   AndroidConfig,
 } = require('expo/config-plugins');
 const { mergeContents } = require('@expo/config-plugins/build/utils/generateCode');
@@ -16,6 +17,14 @@ const path = require('node:path');
 const { assignStylesValue, getAppThemeGroup } = AndroidConfig.Styles;
 const { assignColorValue } = AndroidConfig.Colors;
 const quickShareSaveKotlin = require('./quick-share-save-kotlin');
+const {
+  QUICK_SHARE_SESSION_FILE,
+  QUICK_SHARE_SESSION_PREFS,
+  QUICK_SHARE_SESSION_KEY,
+  SECURITY_CRYPTO,
+  shareSessionStoreKotlin,
+  ordoShareSessionModuleKotlin,
+} = require('./share-session-kotlin');
 
 const SCROLLBAR_THUMB_XML = `<?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
@@ -54,7 +63,6 @@ const SHARE_RECEIVER_ALIASES = [SHARE_RECEIVER_DEFAULT_ALIAS, SHARE_RECEIVER_SAV
 const QUICK_SHARE_ENABLED_FILE = 'ordo-quick-share-enabled';
 const QUICK_SHARE_FLAG_FILE = 'ordo-quick-share';
 const QUICK_SHARE_BOOKMARK_FILE = 'ordo-quick-share-bookmark';
-const QUICK_SHARE_SESSION_FILE = 'ordo-quick-share-session';
 const SAVE_SHARE_LABEL = 'Save';
 const QUICK_SHARE_LABEL = 'Quick Save';
 const QUICK_SHARE_SHORTCUT_ID = 'ordo_quick_bookmark';
@@ -74,6 +82,32 @@ function shortcutsXml(packageName) {
 </shortcuts>
 `;
 }
+
+const BACKUP_RULES_FILE = 'ordo_backup_rules';
+const DATA_EXTRACTION_RULES_FILE = 'ordo_data_extraction_rules';
+
+const BACKUP_RULES_XML = `<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <exclude domain="sharedpref" path="SecureStore"/>
+    <exclude domain="sharedpref" path="${QUICK_SHARE_SESSION_PREFS}"/>
+    <exclude domain="file" path="${QUICK_SHARE_SESSION_FILE}"/>
+</full-backup-content>
+`;
+
+const DATA_EXTRACTION_RULES_XML = `<?xml version="1.0" encoding="utf-8"?>
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="SecureStore"/>
+        <exclude domain="sharedpref" path="${QUICK_SHARE_SESSION_PREFS}"/>
+        <exclude domain="file" path="${QUICK_SHARE_SESSION_FILE}"/>
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="SecureStore"/>
+        <exclude domain="sharedpref" path="${QUICK_SHARE_SESSION_PREFS}"/>
+        <exclude domain="file" path="${QUICK_SHARE_SESSION_FILE}"/>
+    </device-transfer>
+</data-extraction-rules>
+`;
 
 function sendIntentFilter(includeDefault = true) {
   const filter = {
@@ -137,7 +171,6 @@ internal object ShareIntake {
   const val ENABLED_FILE = "${QUICK_SHARE_ENABLED_FILE}"
   const val FLAG_FILE = "${QUICK_SHARE_FLAG_FILE}"
   const val BOOKMARK_FILE = "${QUICK_SHARE_BOOKMARK_FILE}"
-  const val SESSION_FILE = "${QUICK_SHARE_SESSION_FILE}"
   const val SHORTCUT_ID = "${QUICK_SHARE_SHORTCUT_ID}"
   const val CATEGORY = "${category}"
   const val LABEL = "${QUICK_SHARE_LABEL}"
@@ -169,21 +202,6 @@ internal object ShareIntake {
   @JvmStatic
   fun sidecarExists(context: Context, name: String): Boolean {
     return File(context.filesDir, name).exists() || File(context.cacheDir, name).exists()
-  }
-
-  @JvmStatic
-  fun readSidecar(context: Context, name: String): String? {
-    val files = File(context.filesDir, name)
-    if (files.exists()) return files.readText()
-    val cache = File(context.cacheDir, name)
-    if (cache.exists()) return cache.readText()
-    return null
-  }
-
-  @JvmStatic
-  fun writeSidecar(context: Context, name: String, text: String) {
-    File(context.filesDir, name).writeText(text)
-    File(context.cacheDir, name).writeText(text)
   }
 
   @JvmStatic
@@ -374,6 +392,50 @@ function patchMainActivityForShareTargets(contents, language) {
   return next;
 }
 
+function shareSessionPackageLine(isJava) {
+  return isJava
+    ? '            packages.add(new OrdoShareSessionPackage());'
+    : '            packages.add(OrdoShareSessionPackage())';
+}
+
+/** Expo 57+ Kotlin template mutates PackageList in `.apply { }`, not `return packages`. */
+const EXPO57_PACKAGES_APPLY = /PackageList\(this\)\.packages\.apply\s*\{/;
+
+function shareSessionApplyLine(isJava) {
+  return isJava
+    ? '          add(new OrdoShareSessionPackage());'
+    : '          add(OrdoShareSessionPackage())';
+}
+
+function patchMainApplicationForShareSession(contents, language) {
+  const isJava = language === 'java';
+  if (EXPO57_PACKAGES_APPLY.test(contents)) {
+    return mergeContents({
+      src: contents,
+      tag: 'ordo-share-session-package',
+      comment: '          //',
+      offset: 1,
+      anchor: EXPO57_PACKAGES_APPLY,
+      newSrc: shareSessionApplyLine(isJava),
+    }).contents;
+  }
+  return mergeContents({
+    src: contents,
+    tag: 'ordo-share-session-package',
+    comment: '            //',
+    offset: 0,
+    anchor: /return packages/,
+    newSrc: shareSessionPackageLine(isJava),
+  }).contents;
+}
+
+const SECURITY_CRYPTO_LINE = `    implementation("${SECURITY_CRYPTO}")`;
+
+function applySecurityCrypto(code) {
+  if (code.includes('androidx.security:security-crypto')) return code;
+  return code.replace(/^dependencies \{/m, `dependencies {\n${SECURITY_CRYPTO_LINE}`);
+}
+
 // Keep the default -O / source-map flags; only suppress the two hermesc
 // categories that RN's own bundle cannot satisfy at compile time.
 const HERMES_FLAGS_LINE =
@@ -560,6 +622,8 @@ const withAndroidBuild = (config) => {
       app.$['android:usesCleartextTraffic'] = 'true';
       // Own light/dark/AMOLED/sepia palettes — night-mode force-dark inverts parchment.
       app.$['android:forceDarkAllowed'] = 'false';
+      app.$['android:fullBackupContent'] = `@xml/${BACKUP_RULES_FILE}`;
+      app.$['android:dataExtractionRules'] = `@xml/${DATA_EXTRACTION_RULES_FILE}`;
 
       const mainActivity = AndroidConfig.Manifest.getMainActivityOrThrow(c.modResults);
       mainActivity.$['android:launchMode'] = 'singleTask';
@@ -659,6 +723,11 @@ const withAndroidBuild = (config) => {
       await fs.writeFile(path.join(valuesNightDir, 'bools.xml'), DARK_SYSTEM_BARS_BOOL_XML);
 
       await fs.writeFile(path.join(sourceDir, 'ShareIntake.kt'), shareIntakeKotlin(packageName));
+      await fs.writeFile(path.join(sourceDir, 'ShareSessionStore.kt'), shareSessionStoreKotlin(packageName));
+      await fs.writeFile(
+        path.join(sourceDir, 'OrdoShareSessionModule.kt'),
+        ordoShareSessionModuleKotlin(packageName)
+      );
       await fs.writeFile(path.join(sourceDir, 'QuickShareSave.kt'), quickShareSaveKotlin(packageName));
       await fs.writeFile(
         path.join(sourceDir, 'ShareReceiverActivity.kt'),
@@ -678,12 +747,25 @@ const withAndroidBuild = (config) => {
       );
       await fs.mkdir(xmlDir, { recursive: true });
       await fs.writeFile(path.join(xmlDir, 'shortcuts.xml'), shortcutsXml(packageName));
+      await fs.writeFile(path.join(xmlDir, `${BACKUP_RULES_FILE}.xml`), BACKUP_RULES_XML);
+      await fs.writeFile(
+        path.join(xmlDir, `${DATA_EXTRACTION_RULES_FILE}.xml`),
+        DATA_EXTRACTION_RULES_XML
+      );
       return c;
     },
   ]);
 
   config = withMainActivity(config, (c) => {
     c.modResults.contents = patchMainActivityForShareTargets(
+      c.modResults.contents,
+      c.modResults.language
+    );
+    return c;
+  });
+
+  config = withMainApplication(config, (c) => {
+    c.modResults.contents = patchMainApplicationForShareSession(
       c.modResults.contents,
       c.modResults.language
     );
@@ -812,6 +894,7 @@ const withAndroidBuild = (config) => {
 
     code = applyHermesFlags(code);
     code = applyCmakePath(code);
+    code = applySecurityCrypto(code);
 
     c.modResults.contents = code;
     return c;
@@ -836,17 +919,28 @@ module.exports.QUICK_SHARE_ENABLED_FILE = QUICK_SHARE_ENABLED_FILE;
 module.exports.QUICK_SHARE_FLAG_FILE = QUICK_SHARE_FLAG_FILE;
 module.exports.QUICK_SHARE_BOOKMARK_FILE = QUICK_SHARE_BOOKMARK_FILE;
 module.exports.QUICK_SHARE_SESSION_FILE = QUICK_SHARE_SESSION_FILE;
+module.exports.QUICK_SHARE_SESSION_PREFS = QUICK_SHARE_SESSION_PREFS;
+module.exports.QUICK_SHARE_SESSION_KEY = QUICK_SHARE_SESSION_KEY;
+module.exports.SECURITY_CRYPTO = SECURITY_CRYPTO;
 module.exports.SAVE_SHARE_LABEL = SAVE_SHARE_LABEL;
 module.exports.QUICK_SHARE_LABEL = QUICK_SHARE_LABEL;
 module.exports.QUICK_SHARE_SHORTCUT_ID = QUICK_SHARE_SHORTCUT_ID;
 module.exports.SHARE_RECEIVER_DEFAULT_ALIAS = SHARE_RECEIVER_DEFAULT_ALIAS;
 module.exports.SHARE_RECEIVER_SAVE_ALIAS = SHARE_RECEIVER_SAVE_ALIAS;
+module.exports.BACKUP_RULES_FILE = BACKUP_RULES_FILE;
+module.exports.DATA_EXTRACTION_RULES_FILE = DATA_EXTRACTION_RULES_FILE;
+module.exports.BACKUP_RULES_XML = BACKUP_RULES_XML;
+module.exports.DATA_EXTRACTION_RULES_XML = DATA_EXTRACTION_RULES_XML;
 module.exports.quickShareCategory = quickShareCategory;
 module.exports.shortcutsXml = shortcutsXml;
 module.exports.shareIntakeKotlin = shareIntakeKotlin;
+module.exports.shareSessionStoreKotlin = shareSessionStoreKotlin;
+module.exports.ordoShareSessionModuleKotlin = ordoShareSessionModuleKotlin;
 module.exports.quickShareSaveKotlin = quickShareSaveKotlin;
 module.exports.shareReceiverKotlin = shareReceiverKotlin;
 module.exports.quickShareReceiverKotlin = quickShareReceiverKotlin;
 module.exports.shareReceiverActivity = shareReceiverActivity;
 module.exports.shareReceiverAlias = shareReceiverAlias;
 module.exports.patchMainActivityForShareTargets = patchMainActivityForShareTargets;
+module.exports.patchMainApplicationForShareSession = patchMainApplicationForShareSession;
+module.exports.applySecurityCrypto = applySecurityCrypto;

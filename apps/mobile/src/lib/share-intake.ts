@@ -6,14 +6,16 @@
  * "Show alongside Save" publishes a sharing shortcut because Android 11+
  * stacks same-app SEND activities into one share-sheet tile.
  *
- * Quick Save reads `ordo-quick-share-session` from the translucent receiver
- * so it can POST without launching React. Native refresh writes that file
- * back; JS adopts it on hydrate / foreground so rotating tokens stay in sync.
+ * Quick Save reads the EncryptedSharedPreferences session sidecar from the
+ * translucent receiver so it can POST without launching React. Native refresh
+ * writes that copy back; JS adopts it on hydrate / foreground so rotating
+ * tokens stay in sync.
  */
 export const QUICK_SHARE_ENABLED_FILE = "ordo-quick-share-enabled";
 export const QUICK_SHARE_FLAG_FILE = "ordo-quick-share";
 export const QUICK_SHARE_BOOKMARK_FILE = "ordo-quick-share-bookmark";
 export const QUICK_SHARE_SESSION_FILE = "ordo-quick-share-session";
+export const QUICK_SHARE_SESSION_PREFS = "ordo_quick_share_session";
 
 export type ShareIntakeMode = "sheet" | "quick";
 

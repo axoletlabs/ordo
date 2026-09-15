@@ -18,7 +18,6 @@ describe("ExtractionService", () => {
       bookmark: {
         findUnique: jest.fn().mockResolvedValue({
           contentHtml: contentText ? `<p>${contentText}</p>` : null,
-          contentText,
         }),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         count: jest.fn().mockResolvedValue(0),
@@ -83,8 +82,6 @@ describe("ExtractionService", () => {
         author: null,
         publishedAt: null,
         contentHtml: null,
-        contentMarkdown: null,
-        contentText: null,
         readingTimeMinutes: null,
       },
     });
@@ -103,7 +100,6 @@ describe("ExtractionService", () => {
         fetchStatus: "unsupported",
         extractionReason: "consent_wall",
         contentHtml: null,
-        contentText: null,
       }),
     });
   });
@@ -148,7 +144,6 @@ describe("ExtractionService", () => {
         domain: "grugbrain.dev",
         readingTimeMinutes: 1,
         contentHtml: "<p>Forced essay.</p>",
-        contentMarkdown: "Forced essay.",
         contentText: "Forced essay.",
       });
     const prisma = {
@@ -156,7 +151,7 @@ describe("ExtractionService", () => {
         findUnique: jest
           .fn()
           .mockResolvedValueOnce({ contentKindOverride: null })
-          .mockResolvedValueOnce({ contentHtml: null, contentText: null })
+          .mockResolvedValueOnce({ contentHtml: null })
           .mockResolvedValueOnce({ contentKindOverride: "article", contentHtml: null })
           .mockResolvedValueOnce({ contentKindOverride: "article" }),
         updateMany: jest.fn().mockResolvedValue({ count: 1 }),
@@ -193,7 +188,6 @@ describe("ExtractionService", () => {
       domain: "grugbrain.dev",
       readingTimeMinutes: 1,
       contentHtml: "<p>Forced essay.</p>",
-      contentMarkdown: "Forced essay.",
       contentText: "Forced essay.",
     });
     const refreshSafely = jest.fn();
@@ -236,7 +230,6 @@ describe("ExtractionService", () => {
         domain: "example.com",
         readingTimeMinutes: 1,
         contentHtml: "<p>Body with plenty of words for the reader.</p>",
-        contentMarkdown: "",
         contentText: "Body with plenty of words for the reader.",
       };
     });
@@ -307,7 +300,6 @@ describe("ExtractionService", () => {
       domain: "example.com",
       readingTimeMinutes: 1,
       contentHtml: "<p>Gone.</p>",
-      contentMarkdown: "",
       contentText: "Gone.",
     });
     await pending;

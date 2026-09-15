@@ -1,5 +1,5 @@
 import { Platform, Share } from "react-native";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import { APP_NAME } from "@ordo/shared";
 
 const FILENAME = "ordo-backup-codes.txt";

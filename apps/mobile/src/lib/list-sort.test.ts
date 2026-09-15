@@ -44,8 +44,6 @@ function bookmark(partial: Pick<BookmarkDto, "id" | "title" | "createdAt">): Boo
     url: "https://example.com",
     description: null,
     domain: "example.com",
-    contentText: null,
-    contentMarkdown: null,
     fetchStatus: "ok",
     extractionReason: null,
     contentKind: "web",

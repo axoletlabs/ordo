@@ -1,6 +1,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { scoreTagSuggestions } from "./tag-suggestions.js";
+import { htmlToSearchText } from "./html-text.js";
 
 /**
  * Maintains deterministic pending tag suggestions for a bookmark. Suggestions
@@ -24,7 +25,7 @@ export class TagSuggestionService {
         title: true,
         description: true,
         domain: true,
-        contentText: true,
+        contentHtml: true,
         tags: { select: { tagId: true } },
         suggestions: { select: { tagId: true, status: true } },
       },
@@ -49,7 +50,7 @@ export class TagSuggestionService {
         title: bookmark.title,
         description: bookmark.description,
         domain: bookmark.domain,
-        body: bookmark.contentText,
+        body: htmlToSearchText(bookmark.contentHtml),
       },
     ).map(({ id }) => id);
 

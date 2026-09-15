@@ -72,7 +72,7 @@ function OverlayLayers({ dispatchRef }: { dispatchRef: React.MutableRefObject<Ov
 export function OverlayPortal({ children }: { children: React.ReactNode }) {
   const ctx = useContext(OverlayContext);
   const { palette } = useTheme();
-  const idRef = useRef<string>();
+  const idRef = useRef<string | undefined>(undefined);
   if (!idRef.current) {
     nextId += 1;
     idRef.current = `overlay-${nextId}`;
@@ -97,7 +97,7 @@ export function OverlayPortal({ children }: { children: React.ReactNode }) {
 
 const styles = StyleSheet.create({
   host: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 80,
     elevation: 80,
   },

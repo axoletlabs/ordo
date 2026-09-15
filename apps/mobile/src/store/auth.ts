@@ -6,9 +6,9 @@
  * stamp `accessExpiresAt` when a pair arrives and the API client refreshes from
  * that (with `token_expired` / `unauthorized` as the fallback).
  *
- * Android Quick Save also snapshots the pair to an app-private sidecar so the
- * translucent share activity can POST without launching React. Native refresh
- * writes that file back; we adopt it on hydrate and foreground.
+ * Android Quick Save also snapshots the pair to EncryptedSharedPreferences so
+ * the translucent share activity can POST without launching React. Native
+ * refresh writes that copy back; we adopt it on hydrate and foreground.
  */
 import { create } from "zustand";
 import { normalizeReaderPreferences, type AuthTokens, type UserDto } from "@ordo/shared";
@@ -50,7 +50,7 @@ export interface PersistedAuth {
   tokens: AuthTokens;
   /** Epoch ms when the access token expires. Client-stamped; not on the wire. */
   accessExpiresAt?: number;
-  /** Epoch ms of the last token write; compared to the Quick Save sidecar. */
+  /** Epoch ms of the last token write; compared to the Quick Save session. */
   sessionUpdatedAt?: number;
 }
 

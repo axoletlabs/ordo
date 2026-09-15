@@ -32,7 +32,6 @@ import {
   type ExportRequestInput,
   type ImportJobDto,
 } from "@ordo/shared";
-import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe.js";
 import { AuthGuard } from "../auth/auth.guard.js";
 import { CurrentUser, type AuthContext } from "../common/decorators/current-user.decorator.js";
 import { getPresentedFolderTokens } from "../common/utils/folder-tokens.js";
@@ -86,7 +85,7 @@ export class ImportExportController {
   async commit(
     @CurrentUser() user: AuthContext,
     @Param("id") id: string,
-    @Body(new ZodValidationPipe(CommitImportSchema)) body: CommitImportInput,
+    @Body({ schema: CommitImportSchema }) body: CommitImportInput,
     @Req() req: Request,
   ): Promise<ImportJobDto> {
     return this.imports.commit(user.userId, id, body, getPresentedFolderTokens(req));
@@ -106,7 +105,7 @@ export class ImportExportController {
   @RateLimit("export")
   async export(
     @CurrentUser() user: AuthContext,
-    @Body(new ZodValidationPipe(ExportRequestSchema)) body: ExportRequestInput,
+    @Body({ schema: ExportRequestSchema }) body: ExportRequestInput,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<StreamableFile> {

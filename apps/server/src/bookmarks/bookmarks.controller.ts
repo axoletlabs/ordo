@@ -27,7 +27,6 @@ import {
   type CursorPage,
   type ExtractionProgressDto,
 } from "@ordo/shared";
-import { ZodValidationPipe } from "../common/pipes/zod-validation.pipe.js";
 import { AuthGuard } from "../auth/auth.guard.js";
 import {
   CurrentUser,
@@ -52,7 +51,7 @@ export class BookmarksController {
   @RateLimit("bookmark-create")
   async create(
     @CurrentUser() user: AuthContext,
-    @Body(new ZodValidationPipe(CreateBookmarkSchema)) body: { url: string; folderId?: string | null; tagIds?: string[] },
+    @Body({ schema: CreateBookmarkSchema }) body: { url: string; folderId?: string | null; tagIds?: string[] },
     @Req() req: Request,
   ): Promise<BookmarkDto> {
     // A missing/null folderId stores the bookmark as unfiled.
@@ -122,7 +121,7 @@ export class BookmarksController {
   @HttpCode(204)
   @RateLimit("bookmark-prefetch")
   async prefetch(
-    @Body(new ZodValidationPipe(PrefetchBookmarkSchema)) body: { url: string },
+    @Body({ schema: PrefetchBookmarkSchema }) body: { url: string },
   ): Promise<void> {
     this.extraction.prefetch(body.url);
   }
@@ -140,7 +139,7 @@ export class BookmarksController {
   async update(
     @CurrentUser() user: AuthContext,
     @Param("id") id: string,
-    @Body(new ZodValidationPipe(UpdateBookmarkSchema)) body: {
+    @Body({ schema: UpdateBookmarkSchema }) body: {
       folderId?: string | null;
       isRead?: boolean;
       readProgress?: number;
@@ -155,7 +154,7 @@ export class BookmarksController {
   async setContentKind(
     @CurrentUser() user: AuthContext,
     @Param("id") id: string,
-    @Body(new ZodValidationPipe(SetBookmarkContentKindSchema)) body: {
+    @Body({ schema: SetBookmarkContentKindSchema }) body: {
       contentKindOverride: "article" | "web";
     },
     @Req() req: Request,
@@ -178,7 +177,7 @@ export class BookmarksController {
   async updateTags(
     @CurrentUser() user: AuthContext,
     @Param("id") id: string,
-    @Body(new ZodValidationPipe(UpdateBookmarkTagsSchema)) body: {
+    @Body({ schema: UpdateBookmarkTagsSchema }) body: {
       tagIds: string[];
       dismissedSuggestionIds: string[];
     },
@@ -197,7 +196,7 @@ export class BookmarksController {
   @HttpCode(200)
   async markAllRead(
     @CurrentUser() user: AuthContext,
-    @Body(new ZodValidationPipe(MarkAllReadSchema)) body: { folderId?: string | null },
+    @Body({ schema: MarkAllReadSchema }) body: { folderId?: string | null },
     @Req() req: Request,
   ): Promise<{ updated: number }> {
     // Without a folderId (or with null) only unfiled bookmarks are targeted.
@@ -212,7 +211,7 @@ export class BookmarksController {
   @HttpCode(200)
   async batch(
     @CurrentUser() user: AuthContext,
-    @Body(new ZodValidationPipe(BatchBookmarksSchema)) body: BatchBookmarksInput,
+    @Body({ schema: BatchBookmarksSchema }) body: BatchBookmarksInput,
     @Req() req: Request,
   ): Promise<{ updated: number }> {
     return this.bookmarks.batch(user.userId, body, getPresentedFolderTokens(req));

@@ -64,7 +64,6 @@ export function useOtaUpdate(): UseOtaUpdate {
     downloadedUpdate,
     checkError,
     downloadError,
-    initializationError,
     lastCheckForUpdateTimeSinceRestart,
   } = Updates.useUpdates();
 
@@ -106,13 +105,13 @@ export function useOtaUpdate(): UseOtaUpdate {
     if (isUpdatePending) return "ready";
     if (isChecking) return "checking";
     if (isUpdateAvailable) return "available";
-    if (checkError || downloadError || initializationError) return "error";
+    if (checkError || downloadError) return "error";
     if (lastCheckForUpdateTimeSinceRestart) return "up-to-date";
     return "idle";
   })();
 
   const message =
-    checkError?.message ?? downloadError?.message ?? initializationError?.message ?? null;
+    checkError?.message ?? downloadError?.message ?? null;
 
   const check = useCallback(async () => {
     if (!enabled) return;

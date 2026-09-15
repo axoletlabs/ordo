@@ -248,7 +248,9 @@ export function OtpInput({
           accessibilityValue={{ text: chars }}
           style={[
             styles.hiddenInput,
-            Platform.OS === "web" ? ({ outlineWidth: 0, outlineStyle: "none" } as TextStyle) : null,
+            Platform.OS === "web"
+              ? ({ outlineWidth: 0, outlineStyle: "none" } as unknown as TextStyle)
+              : null,
           ]}
         />
       </Pressable>
@@ -484,7 +486,7 @@ const styles = StyleSheet.create({
     borderRadius: 1,
   },
   hiddenInput: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     zIndex: 2,
     opacity: 0.02,
     color: "transparent",

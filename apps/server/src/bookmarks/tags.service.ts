@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { Prisma, type Tag } from "@prisma/client";
+import { Prisma, type Tag } from "../prisma/client.js";
 import {
   DEFAULT_TAG_COLOR,
   ErrorCode,

@@ -19,8 +19,6 @@ function bookmark(partial: Partial<BookmarkDto> & Pick<BookmarkDto, "id" | "titl
     url: `https://example.com/${partial.id}`,
     description: null,
     domain: "example.com",
-    contentText: null,
-    contentMarkdown: null,
     fetchStatus: "ok",
     extractionReason: null,
     contentKind: "article",
@@ -303,7 +301,6 @@ test("hel does not match Home even when the article says help", () => {
     domain: "ente.com",
     url: "https://ente.com",
     description: "Introduction to Ente: Products, Community and Support",
-    contentText: "Need help with vaults.",
     contentKind: "article",
     fetchStatus: "ok",
   });
