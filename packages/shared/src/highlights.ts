@@ -105,6 +105,11 @@ export function quoteFromRange(
 /**
  * Lift a selection inside a block onto the article's plain text so prefix
  * and suffix are document-global (needed when the block is not the first).
+ *
+ * Selection offsets come from the native text view, which collapses HTML
+ * indent/newlines. Adding those offsets onto article plain (which still has
+ * the raw whitespace) cuts the quote short — e.g. "graphical\\n                interface"
+ * vs "graphical interface". Match the visual quote instead.
  */
 export function quoteFromBlock(
   articlePlain: string,
@@ -116,9 +121,13 @@ export function quoteFromBlock(
   const local = quoteFromRange(blockText, start, end, context);
   if (!local) return null;
   if (!articlePlain) return local;
-  const blockAt = indexOfNormalized(articlePlain, blockText);
-  if (blockAt < 0) return local;
-  return quoteFromRange(articlePlain, blockAt + start, blockAt + end, context) ?? local;
+  const range = findQuoteInPlain(articlePlain, local);
+  if (!range) return local;
+  return {
+    exact: local.exact,
+    prefix: articlePlain.slice(Math.max(0, range.start - context), range.start),
+    suffix: articlePlain.slice(range.end, range.end + context),
+  };
 }
 
 const QUOTE_MAX = 2000;
@@ -453,14 +462,6 @@ function collapseMap(input: string): { text: string; toOrig: number[] } {
     i += 1;
   }
   return { text, toOrig };
-}
-
-function indexOfNormalized(haystack: string, needle: string): number {
-  if (!needle) return -1;
-  const direct = haystack.indexOf(needle);
-  if (direct >= 0) return direct;
-  const found = findQuoteInPlain(haystack, { exact: needle, prefix: "", suffix: "" });
-  return found?.start ?? -1;
 }
 
 function decodeHtml(value: string): string {

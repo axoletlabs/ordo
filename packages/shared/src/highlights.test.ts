@@ -51,6 +51,25 @@ test("quoteFromBlock lifts a mid-article selection onto document context", () =>
   assert.ok(quote?.suffix?.startsWith(" here"));
 });
 
+test("quoteFromBlock does not treat HTML indent as part of the selection", () => {
+  const html =
+    "<p>Create, browse and maintain every PostgreSQL object through a graphical\n                interface that keeps the generated SQL in plain sight.</p>";
+  const article = htmlToPlainText(html);
+  const block =
+    "Create, browse and maintain every PostgreSQL object through a graphical interface that keeps the generated SQL in plain sight.";
+  const exact =
+    "browse and maintain every PostgreSQL object through a graphical interface that keeps the";
+  const start = block.indexOf("browse");
+  const quote = quoteFromBlock(article, block, start, start + exact.length);
+  assert.equal(quote?.exact, exact);
+  assert.ok(canAnchorHighlight(html, quote!));
+  const wrapped = applyHighlightsToHtml(html, [{ id: "h1", ...quote!, href: null }]);
+  const marked = wrapped.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  assert.ok(marked.includes(exact));
+  assert.match(wrapped, /<mark id="ordo-hl-h1">/);
+  assert.ok(wrapped.includes("interface"));
+});
+
 test("htmlToPlainText joins blocks with a space and decodes entities", () => {
   assert.equal(
     htmlToPlainText("<p>Hello&nbsp;world.</p><p>Next &amp; last</p>"),
