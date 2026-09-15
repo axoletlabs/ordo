@@ -1249,9 +1249,7 @@ function ReaderPaneInner({
         <PanelHeader
           title="Highlights"
           subtitle={
-            highlights.length === 0
-              ? "Select text the way you do on your phone, then tap Highlight. They stay in sync across your devices."
-              : undefined
+            highlights.length === 0 ? "Select a passage in the article to save it." : undefined
           }
         />
         {highlights.length > 0 ? (
