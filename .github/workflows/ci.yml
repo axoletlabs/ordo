@@ -441,7 +441,6 @@ jobs:
     permissions:
       contents: write
     env:
-      ORDO_UPLOAD_STORE_FILE: ${{ runner.temp }}/ordo-upload.p12
       ORDO_UPLOAD_STORE_TYPE: PKCS12
       ORDO_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ORDO_UPLOAD_KEY_ALIAS: ordo
@@ -507,11 +506,13 @@ jobs:
             echo "::error::Set ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD repository secrets so release APKs share one upload key."
             exit 1
           fi
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$ORDO_UPLOAD_STORE_FILE"
-          if [ ! -s "$ORDO_UPLOAD_STORE_FILE" ]; then
+          KEYSTORE="$RUNNER_TEMP/ordo-upload.p12"
+          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$KEYSTORE"
+          if [ ! -s "$KEYSTORE" ]; then
             echo "::error::Decoded ANDROID_KEYSTORE_BASE64 is empty."
             exit 1
           fi
+          echo "ORDO_UPLOAD_STORE_FILE=$KEYSTORE" >> "$GITHUB_ENV"
 
       - name: Build APK (dev, arm64 only)
         if: needs.detect.outputs.is_release != 'true'
