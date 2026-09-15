@@ -11,11 +11,11 @@ export const LIST_PAGE_SIZE = MAX_PAGE_SIZE;
 export const LIST_END_REACHED_THRESHOLD = 0.2;
 
 /**
- * Space under the last row so it sits just above the 48px FAB (20px off the
- * screen bottom). `spacing[96]` was a tab+FAB pad and left a blank band on
- * folder screens that only have the button.
+ * Space under the last row when a 48px FAB sits in the corner (20px off the
+ * screen bottom). Do not pad the full button height — that left a blank band.
+ * The last row tucks beside the FAB; title and trailing actions stay above it.
  */
-export const FAB_LIST_CLEARANCE = 20 + 48 + 12;
+export const FAB_LIST_CLEARANCE = 20 + 16;
 
 export function shouldFetchNextPage(opts: {
   hasNextPage: boolean;
