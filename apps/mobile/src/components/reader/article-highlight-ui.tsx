@@ -300,7 +300,6 @@ export function SelectablePhrase({
     <Text
       ref={textRef}
       selectable
-      collapsable={false}
       accessibilityRole="text"
       selectionColor={ui?.selectionColor}
       style={phraseStyle}

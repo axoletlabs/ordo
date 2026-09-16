@@ -417,7 +417,7 @@ function shareTargetNewIntentMethod(isJava) {
     ].join('\n');
   }
   return [
-    '  override fun onNewIntent(intent: android.content.Intent?) {',
+    '  override fun onNewIntent(intent: android.content.Intent) {',
     '    super.onNewIntent(intent)',
     '    ShareIntake.consumeShareIntent(this)',
     '  }',

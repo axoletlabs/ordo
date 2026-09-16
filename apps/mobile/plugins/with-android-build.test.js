@@ -322,7 +322,8 @@ test("MainActivity syncs the disabled Quick Bookmark target on create and pause"
   assert.match(patched, /ShareIntake\.watchAndSync\(this\)/);
   assert.match(patched, /ShareIntake\.consumeShareIntent\(this\)/);
   assert.match(patched, /override fun onPause\(\)/);
-  assert.match(patched, /override fun onNewIntent/);
+  assert.match(patched, /override fun onNewIntent\(intent: android\.content\.Intent\) \{/);
+  assert.doesNotMatch(patched, /onNewIntent\(intent: android\.content\.Intent\?\)/);
   assert.equal(patched.split('ShareIntake.watchAndSync(this)').length - 1, 2);
   assert.equal(patched.split('ShareIntake.consumeShareIntent(this)').length - 1, 2);
   assert.equal(patchMainActivityForShareTargets(patched, 'kt'), patched);
