@@ -21,6 +21,7 @@ import {
   type TextStyle,
 } from "react-native";
 import { UITextView } from "@bsky.app/react-native-uitextview";
+import { NativeViewGestureHandler } from "react-native-gesture-handler";
 import {
   getNativePropsForTNode,
   useRendererProps,
@@ -78,8 +79,14 @@ function asHtmlNode(node: TNode): HtmlTableNode {
   return node as unknown as HtmlTableNode;
 }
 
-/** Wait until the OS selection handles pause before updating React. */
+/** Wait until the OS selection handles pause before updating the action bar. */
 const SELECTION_SETTLE_MS = Platform.OS === "web" ? 0 : 180;
+/** Finger-up and outside-tap often emit a caret (start === end) right after a real range. */
+const SELECTION_COLLAPSE_HOLD_MS = 480;
+
+function isCaretRange(start: number, end: number): boolean {
+  return Math.max(start, end) <= Math.min(start, end);
+}
 
 function dummyPressEvent(): GestureResponderEvent {
   return { nativeEvent: { pageX: 0, pageY: 0 } } as GestureResponderEvent;
@@ -187,6 +194,8 @@ export interface HighlightUiHandlers {
   selectionColor: string;
   textStyle?: StyleProp<TextStyle>;
   onTextSelect: (draft: HighlightSelectDraft | null) => void;
+  /** Lock article scrolling while a native selection is in progress. */
+  onSelectingChange?: (active: boolean) => void;
   onHighlightPress: (id: string, event: GestureResponderEvent) => void;
   onLinkLongPress: (draft: HighlightAnchor & { href: string }, event: GestureResponderEvent) => void;
 }
@@ -231,34 +240,73 @@ export function SelectablePhrase({
   }, [tnode]);
 
   const selectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastNonEmptyAt = useRef(0);
+  const lastRange = useRef<{ start: number; end: number } | null>(null);
+  const restoringSelection = useRef(false);
+  const nativeRef = useRef<TextInput>(null);
 
   const emitRange = useCallback(
     (start: number, end: number) => {
       if (!ui) return;
+      if (restoringSelection.current) return;
+      const from = Math.min(start, end);
+      const to = Math.max(start, end);
+
+      if (isCaretRange(from, to)) {
+        const last = lastRange.current;
+        // Finger-up / tap often drops a caret. Keep the pending quote publish
+        // and push the native range back so the OS doesn't sit in cursor mode.
+        if (last && Date.now() - lastNonEmptyAt.current < SELECTION_COLLAPSE_HOLD_MS) {
+          if (Platform.OS === "android") {
+            restoringSelection.current = true;
+            nativeRef.current?.setNativeProps({ selection: last });
+            requestAnimationFrame(() => {
+              restoringSelection.current = false;
+            });
+          }
+          return;
+        }
+        if (selectTimer.current) {
+          clearTimeout(selectTimer.current);
+          selectTimer.current = null;
+        }
+        if (lastNonEmptyAt.current === 0) return;
+        selectTimer.current = setTimeout(() => {
+          selectTimer.current = null;
+          lastRange.current = null;
+          lastNonEmptyAt.current = 0;
+          ui.onSelectingChange?.(false);
+          ui.onTextSelect(null);
+        }, SELECTION_SETTLE_MS);
+        return;
+      }
+
+      lastRange.current = { start: from, end: to };
+      lastNonEmptyAt.current = Date.now();
+      ui.onSelectingChange?.(true);
       if (selectTimer.current) {
         clearTimeout(selectTimer.current);
         selectTimer.current = null;
       }
-      if (end <= start) {
-        ui.onTextSelect(null);
-        return;
-      }
       const publish = () => {
         selectTimer.current = null;
         const quote =
-          quoteFromBlock(ui.articlePlain, text, start, end) ?? quoteFromRange(text, start, end);
+          quoteFromBlock(ui.articlePlain, text, from, to) ?? quoteFromRange(text, from, to);
         if (!quote) {
+          ui.onSelectingChange?.(false);
           ui.onTextSelect(null);
           return;
         }
         const htmlNode = asHtmlNode(tnode);
-        const href = hrefCoveringRange(htmlNode, start, end);
-        const highlightId = highlightIdCoveringRange(htmlNode, start, end) ?? undefined;
+        const href = hrefCoveringRange(htmlNode, from, to);
+        const highlightId = highlightIdCoveringRange(htmlNode, from, to) ?? undefined;
         ui.onTextSelect({
           ...quote,
           ...(href ? { href } : {}),
           ...(highlightId ? { highlightId } : {}),
         });
+        // Handles have paused: let the article scroll again while the bar stays up.
+        ui.onSelectingChange?.(false);
       };
       if (SELECTION_SETTLE_MS === 0) {
         publish();
@@ -313,7 +361,6 @@ export function SelectablePhrase({
         selectable
         uiTextView
         accessibilityRole="text"
-        selectionColor={ui?.selectionColor}
         style={phraseStyle}
         onSelectionChange={onIosSelectionChange}
       >
@@ -337,29 +384,32 @@ export function SelectablePhrase({
   }
 
   return (
-    <TextInput
-      multiline
-      scrollEnabled={false}
-      showSoftInputOnFocus={false}
-      caretHidden
-      inputMode="none"
-      contextMenuHidden
-      disableFullscreenUI
-      importantForAutofill="noExcludeDescendants"
-      autoCorrect={false}
-      autoCapitalize="none"
-      autoComplete="off"
-      spellCheck={false}
-      underlineColorAndroid="transparent"
-      accessibilityRole="text"
-      selectionColor={ui?.selectionColor}
-      selectionHandleColor={ui?.selectionColor}
-      cursorColor={ui?.selectionColor}
-      onSelectionChange={onAndroidSelectionChange}
-      style={phraseStyle}
-    >
-      {spans}
-    </TextInput>
+    <NativeViewGestureHandler disallowInterruption>
+      <TextInput
+        ref={nativeRef}
+        multiline
+        scrollEnabled={false}
+        showSoftInputOnFocus={false}
+        caretHidden
+        cursorColor="transparent"
+        inputMode="none"
+        contextMenuHidden
+        disableFullscreenUI
+        importantForAutofill="noExcludeDescendants"
+        autoCorrect={false}
+        autoCapitalize="none"
+        autoComplete="off"
+        spellCheck={false}
+        underlineColorAndroid="transparent"
+        accessibilityRole="text"
+        selectionColor={ui?.selectionColor}
+        selectionHandleColor={ui?.selectionColor}
+        onSelectionChange={onAndroidSelectionChange}
+        style={phraseStyle}
+      >
+        {spans}
+      </TextInput>
+    </NativeViewGestureHandler>
   );
 }
 

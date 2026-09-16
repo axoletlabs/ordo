@@ -260,6 +260,7 @@ function ReaderPaneInner({
   const removeHighlight = useRemoveHighlight();
   const markedRef = useRef<string | null>(null);
   const browserRef = useRef<BookmarkBrowserHandle>(null);
+  const scrollRef = useRef<ScrollView>(null);
   const websiteViewRef = useRef(false);
   const [keptBrowserId, setKeptBrowserId] = useState<string | null>(null);
   const [pageHost, setPageHost] = useState<string | null>(null);
@@ -356,6 +357,7 @@ function ReaderPaneInner({
     if (!draft) {
       dismissedDraftKey.current = null;
       setTextDraft(null);
+      scrollRef.current?.setNativeProps({ scrollEnabled: true });
       return;
     }
     if (dismissedDraftKey.current === selectionKey(draft)) return;
@@ -367,10 +369,15 @@ function ReaderPaneInner({
   }, []);
 
   const dismissDraft = useCallback(() => {
+    scrollRef.current?.setNativeProps({ scrollEnabled: true });
     setTextDraft((current) => {
       if (current) dismissedDraftKey.current = selectionKey(current);
       return null;
     });
+  }, []);
+
+  const handleSelectingChange = useCallback((active: boolean) => {
+    scrollRef.current?.setNativeProps({ scrollEnabled: !active });
   }, []);
 
   const handleHighlightPress = useCallback((id: string, event: GestureResponderEvent) => {
@@ -584,7 +591,6 @@ function ReaderPaneInner({
 
   /* ------------------------------ reading progress ----------------------------- */
 
-  const scrollRef = useRef<ScrollView>(null);
   const trackProgressRef = useRef(false);
   const currentArticleRef = useRef<{ id: string; folderId: string | null } | null>(null);
   const initialProgressRef = useRef(0);
@@ -1011,6 +1017,7 @@ function ReaderPaneInner({
             ref={scrollRef}
             style={styles.scrollViewport}
             keyboardShouldPersistTaps="handled"
+            canCancelContentTouches={false}
             onLayout={onScrollViewLayout}
             onContentSizeChange={onContentSizeChange}
             onScroll={onScroll}
@@ -1043,6 +1050,7 @@ function ReaderPaneInner({
                     contentWidth={articleWidth || fallbackArticleWidth}
                     highlights={highlights}
                     onTextSelect={handleTextSelect}
+                    onSelectingChange={handleSelectingChange}
                     onHighlightPress={handleHighlightPress}
                     onLinkLongPress={handleLinkLongPress}
                     onHeadingsChange={handleHeadingsChange}

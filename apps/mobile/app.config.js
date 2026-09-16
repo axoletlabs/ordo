@@ -96,6 +96,7 @@ module.exports = {
     "./plugins/with-updates-channel.js",
     "./plugins/with-android-build.js",
     "./plugins/with-high-refresh-rate.js",
+    "./plugins/with-uitextview-selection.js",
   ],
   extra: {
     eas: {

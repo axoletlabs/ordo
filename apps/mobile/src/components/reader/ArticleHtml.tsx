@@ -228,6 +228,7 @@ export interface ArticleHtmlProps {
   contentWidth: number;
   highlights?: readonly HighlightDto[];
   onTextSelect?: HighlightUiHandlers["onTextSelect"];
+  onSelectingChange?: HighlightUiHandlers["onSelectingChange"];
   onHighlightPress?: HighlightUiHandlers["onHighlightPress"];
   onLinkLongPress?: HighlightUiHandlers["onLinkLongPress"];
   onHeadingsChange?: (headings: readonly ArticleHeading[]) => void;
@@ -385,6 +386,7 @@ export const ArticleHtml = React.memo(function ArticleHtml({
   contentWidth,
   highlights,
   onTextSelect,
+  onSelectingChange,
   onHighlightPress,
   onLinkLongPress,
   onHeadingsChange,
@@ -455,9 +457,11 @@ export const ArticleHtml = React.memo(function ArticleHtml({
     [palette.mustard, palette.textSecondary],
   );
   const onTextSelectRef = useRef(onTextSelect);
+  const onSelectingChangeRef = useRef(onSelectingChange);
   const onHighlightPressRef = useRef(onHighlightPress);
   const onLinkLongPressRef = useRef(onLinkLongPress);
   onTextSelectRef.current = onTextSelect;
+  onSelectingChangeRef.current = onSelectingChange;
   onHighlightPressRef.current = onHighlightPress;
   onLinkLongPressRef.current = onLinkLongPress;
   const highlightUi = useMemo(
@@ -465,6 +469,7 @@ export const ArticleHtml = React.memo(function ArticleHtml({
       highlightHandlersFromHtml(html, palette.mustard, {
         textStyle: baseStyle,
         onTextSelect: (draft) => (onTextSelectRef.current ?? ignoreTextSelect)(draft),
+        onSelectingChange: (active) => onSelectingChangeRef.current?.(active),
         onHighlightPress: (id, event) =>
           (onHighlightPressRef.current ?? ignoreHighlightPress)(id, event),
         onLinkLongPress: (draft, event) =>
