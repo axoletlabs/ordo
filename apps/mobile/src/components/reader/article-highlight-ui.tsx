@@ -10,6 +10,7 @@ import React, { createContext, useCallback, useContext, useMemo, useRef } from "
 import {
   Linking,
   Dimensions,
+  PixelRatio,
   Platform,
   StyleSheet,
   Text,
@@ -239,13 +240,10 @@ export function SelectablePhrase({
           end: range.end,
           textLength: text.length,
           viewport: { width, height },
+          density: PixelRatio.get(),
         });
         ui.onTextSelect(isMenuAnchorRect(anchor) ? { ...draft, anchor } : draft);
       };
-      if (isMenuAnchorRect(nativeRect)) {
-        finish();
-        return;
-      }
       const host = hostRef.current;
       if (host && typeof host.measureInWindow === "function") {
         host.measureInWindow((x, y, width, height) => {

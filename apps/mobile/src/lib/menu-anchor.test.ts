@@ -162,3 +162,18 @@ test("resolveSelectionAnchor prefers a native rect over the paragraph host", () 
   });
   assert.deepEqual(placed, { x: 40, y: 120, width: 80, height: 24 });
 });
+
+test("pixel-sized native rects from a lower paragraph are scaled into the window", () => {
+  const placed = resolveSelectionAnchor({
+    nativeRect: { x: 120, y: 1800, width: 240, height: 96 },
+    host: { x: 16, y: 400, width: 360, height: 120 },
+    start: 10,
+    end: 40,
+    textLength: 80,
+    viewport: { width: 390, height: 844 },
+    density: 3,
+  });
+  assert.equal(placed?.x, 40);
+  assert.equal(placed?.y, 600);
+  assert.equal(placed?.width, 80);
+});

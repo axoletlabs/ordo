@@ -26,7 +26,7 @@ export function useAndroidPhraseSelection(
   onRangeRef.current = onRange;
   const tagRef = useRef<number | null>(null);
 
-  const onLayout = useCallback(() => {
+  const attach = useCallback(() => {
     if (!MODULE) return;
     const tag = findNodeHandle(textRef.current);
     if (tag == null || tag === tagRef.current) return;
@@ -34,6 +34,10 @@ export function useAndroidPhraseSelection(
     tagRef.current = tag;
     MODULE.attach(tag);
   }, []);
+
+  useEffect(() => {
+    attach();
+  }, [attach]);
 
   useEffect(() => {
     if (!emitter) return;
@@ -62,5 +66,5 @@ export function useAndroidPhraseSelection(
     };
   }, []);
 
-  return { textRef, onLayout };
+  return { textRef, onLayout: attach };
 }

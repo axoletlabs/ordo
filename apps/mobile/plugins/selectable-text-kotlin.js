@@ -8,6 +8,7 @@ import android.view.Menu
 import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.widget.TextView
 import com.facebook.react.ReactPackage
@@ -55,54 +56,8 @@ class OrdoSelectableTextModule(reactContext: ReactApplicationContext) :
   fun attach(tag: Double) {
     val viewTag = tag.toInt()
     UiThreadUtil.runOnUiThread {
-      val text = resolveTextView(viewTag) ?: return@runOnUiThread
-      reactTags[text] = viewTag
-      if (!hooked.add(text)) return@runOnUiThread
-      text.isCursorVisible = false
-      text.setTextIsSelectable(true)
-      text.customInsertionActionModeCallback = hiddenActionMode
-      text.customSelectionActionModeCallback = object : ActionMode.Callback {
-        override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
-          menu.clear()
-          emit(text)
-          hideSelectionMenu(mode)
-          return true
-        }
-
-        override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
-          menu.clear()
-          emit(text)
-          hideSelectionMenu(mode)
-          return false
-        }
-
-        override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean = false
-
-        override fun onDestroyActionMode(mode: ActionMode) {}
-      }
-      text.setOnTouchListener { view, event ->
-        val phrase = view as TextView
-        when (event.actionMasked) {
-          MotionEvent.ACTION_MOVE -> {
-            if (phrase.selectionStart != phrase.selectionEnd) {
-              phrase.parent?.requestDisallowInterceptTouchEvent(true)
-            }
-          }
-          MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-            phrase.parent?.requestDisallowInterceptTouchEvent(false)
-          }
-        }
-        false
-      }
-      val drawListener = ViewTreeObserver.OnPreDrawListener {
-        try {
-          emit(text)
-        } catch (_: Exception) {
-        }
-        true
-      }
-      drawListeners[text] = drawListener
-      text.viewTreeObserver.addOnPreDrawListener(drawListener)
+      val root = resolveView(viewTag) ?: return@runOnUiThread
+      hookView(root, viewTag)
     }
   }
 
@@ -110,24 +65,88 @@ class OrdoSelectableTextModule(reactContext: ReactApplicationContext) :
   fun detach(tag: Double) {
     val viewTag = tag.toInt()
     UiThreadUtil.runOnUiThread {
-      val text = resolveTextView(viewTag) ?: return@runOnUiThread
-      hooked.remove(text)
-      lastRange.remove(text)
-      reactTags.remove(text)
-      drawListeners.remove(text)?.let { listener ->
-        text.viewTreeObserver.removeOnPreDrawListener(listener)
-      }
-      text.setOnTouchListener(null)
-      text.customInsertionActionModeCallback = null
-      text.customSelectionActionModeCallback = null
+      val root = resolveView(viewTag) ?: return@runOnUiThread
+      unhookView(root)
     }
   }
 
-  private fun hideSelectionMenu(mode: ActionMode) {
-    if (android.os.Build.VERSION.SDK_INT >= 23) {
+  private fun hookView(view: View, tag: Int) {
+    if (view is TextView) hookText(view, tag)
+    if (view is ViewGroup) {
+      for (i in 0 until view.childCount) hookView(view.getChildAt(i), tag)
+    }
+  }
+
+  private fun unhookView(view: View) {
+    if (view is TextView) unhookText(view)
+    if (view is ViewGroup) {
+      for (i in 0 until view.childCount) unhookView(view.getChildAt(i))
+    }
+  }
+
+  private fun hookText(text: TextView, tag: Int) {
+    reactTags[text] = tag
+    if (!hooked.add(text)) return
+    text.isCursorVisible = false
+    text.setTextIsSelectable(true)
+    text.customInsertionActionModeCallback = hiddenActionMode
+    text.customSelectionActionModeCallback = suppressedSelectionMode(text)
+    text.setOnTouchListener { view, event ->
+      val phrase = view as TextView
+      when (event.actionMasked) {
+        MotionEvent.ACTION_MOVE -> {
+          if (phrase.selectionStart != phrase.selectionEnd) {
+            phrase.parent?.requestDisallowInterceptTouchEvent(true)
+          }
+        }
+        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+          phrase.parent?.requestDisallowInterceptTouchEvent(false)
+        }
+      }
+      false
+    }
+    val drawListener = ViewTreeObserver.OnPreDrawListener {
       try {
-        mode.hide(java.lang.Long.MAX_VALUE)
+        emit(text)
       } catch (_: Exception) {
+      }
+      true
+    }
+    drawListeners[text] = drawListener
+    text.viewTreeObserver.addOnPreDrawListener(drawListener)
+  }
+
+  private fun unhookText(text: TextView) {
+    hooked.remove(text)
+    lastRange.remove(text)
+    reactTags.remove(text)
+    drawListeners.remove(text)?.let { listener ->
+      text.viewTreeObserver.removeOnPreDrawListener(listener)
+    }
+    text.setOnTouchListener(null)
+    text.customInsertionActionModeCallback = null
+    text.customSelectionActionModeCallback = null
+  }
+
+  private fun suppressedSelectionMode(text: TextView): ActionMode.Callback {
+    return object : ActionMode.Callback2() {
+      override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
+        menu.clear()
+        emit(text)
+        return false
+      }
+
+      override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
+        menu.clear()
+        return false
+      }
+
+      override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean = false
+
+      override fun onDestroyActionMode(mode: ActionMode) {}
+
+      override fun onGetContentRect(mode: ActionMode, view: View, outRect: android.graphics.Rect) {
+        outRect.setEmpty()
       }
     }
   }
@@ -180,14 +199,13 @@ class OrdoSelectableTextModule(reactContext: ReactApplicationContext) :
     payload.putDouble("height", dip(max(1, bottom - top)))
   }
 
-  private fun resolveTextView(tag: Int): TextView? {
+  private fun resolveView(tag: Int): View? {
     val uiManager = UIManagerHelper.getUIManagerForReactTag(reactApplicationContext, tag) ?: return null
-    val view = try {
+    return try {
       uiManager.resolveView(tag)
     } catch (_: Exception) {
       null
     }
-    return view as? TextView
   }
 
   companion object {
