@@ -1,9 +1,9 @@
 /**
- * Compact header shown while multi-select is active: Cancel, count, Select all.
+ * Compact header shown while multi-select is active: Cancel, count, Select All.
  * Uses the same title slot as `Header` so entering selection does not jump the label.
  */
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, View, type TextStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PressableScale } from "../ui/PressableScale";
 import { Text } from "../ui/Text";
@@ -16,8 +16,13 @@ import {
 import { useTheme } from "../../theme/ThemeProvider";
 import { layout, spacing } from "../../theme/tokens";
 
-/** Clears "Select all" / "Deselect" while keeping the title on the same center as `Header`. */
-const TITLE_SLOT_INSET = 80;
+/** Clears "SELECT ALL" / "DESELECT" while keeping the title on the same center as `Header`. */
+const TITLE_SLOT_INSET = 112;
+
+const headerActionTextStyle: TextStyle = {
+  includeFontPadding: false,
+  textAlignVertical: "center",
+};
 
 export function SelectionHeader({
   count,
@@ -59,7 +64,7 @@ export function SelectionHeader({
             hitSlop={8}
             style={styles.sideHit}
           >
-            <Text variant="bodyStrong" color="accent">
+            <Text variant="header" color="accent" style={headerActionTextStyle}>
               Cancel
             </Text>
           </PressableScale>
@@ -78,8 +83,8 @@ export function SelectionHeader({
               hitSlop={8}
               style={styles.sideHit}
             >
-              <Text variant="bodyStrong" color="accent" numberOfLines={1}>
-                {allSelected ? "Deselect" : "Select all"}
+              <Text variant="header" color="accent" numberOfLines={1} style={headerActionTextStyle}>
+                {allSelected ? "Deselect" : "Select All"}
               </Text>
             </PressableScale>
           </View>
@@ -108,6 +113,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   left: { left: 0 },
-  right: { right: 0, alignItems: "flex-end" },
+  right: { right: 0, justifyContent: "flex-end" },
   sideHit: { height: HEADER_CONTROL_SIZE, justifyContent: "center" },
 });
