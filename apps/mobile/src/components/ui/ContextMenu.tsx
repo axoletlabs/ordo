@@ -42,6 +42,8 @@ export function ContextMenu({
   children,
   width = CONTEXT_MENU_WIDTH,
   backdrop = true,
+  preferredPlacement,
+  estimatedHeight = 240,
 }: {
   visible: boolean;
   onDismiss: () => void;
@@ -50,6 +52,8 @@ export function ContextMenu({
   width?: number;
   /** When false, taps pass through so OS text selection stays alive. */
   backdrop?: boolean;
+  preferredPlacement?: MenuPlacement["placement"];
+  estimatedHeight?: number;
 }) {
   const { palette, shadows } = useTheme();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -100,11 +104,11 @@ export function ContextMenu({
       lastPlacement.current = placeMenu({
         anchor,
         menuWidth,
-        menuHeight: measuredHeight || 240,
+        menuHeight: measuredHeight || estimatedHeight,
         windowWidth,
         windowHeight,
         insets,
-        preferredPlacement: sessionSide.current ?? undefined,
+        preferredPlacement: sessionSide.current ?? preferredPlacement,
       });
       if (measuredHeight > 0) {
         placementLock.current = lastPlacement.current;

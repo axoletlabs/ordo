@@ -183,7 +183,7 @@ function ReaderPaneInner({
   const settingsAmoled = useSettingsStore((s) => s.amoled);
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { width: windowWidth } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
 
   const cached = bookmarkId ? findBookmarkInCache(queryClient, bookmarkId) : undefined;
   const skipWebsiteDetail =
@@ -349,12 +349,9 @@ function ReaderPaneInner({
       return;
     }
     const open = () => {
-      const anchor = isMenuAnchorRect(draft.anchor)
-        ? draft.anchor
-        : (selectionMenuRef.current?.anchor ?? null);
-      if (!isMenuAnchorRect(anchor)) return;
+      if (!isMenuAnchorRect(draft.anchor)) return;
       menuScrollY.current = offsetRef.current;
-      setSelectionMenu({ draft, anchor });
+      setSelectionMenu({ draft, anchor: draft.anchor });
       setActionPanel(null);
     };
     if (selectionMenuRef.current) {
@@ -785,8 +782,18 @@ function ReaderPaneInner({
       offsetRef.current = contentOffset.y;
       viewHeightRef.current = layoutMeasurement.height;
       contentHeightRef.current = contentSize.height;
-      if (selectionMenuRef.current && Math.abs(contentOffset.y - menuScrollY.current) > 12) {
-        setSelectionMenu(null);
+      const menu = selectionMenuRef.current;
+      if (menu) {
+        const dy = contentOffset.y - menuScrollY.current;
+        if (Math.abs(dy) >= 0.5) {
+          menuScrollY.current = contentOffset.y;
+          const nextY = menu.anchor.y - dy;
+          if (nextY + menu.anchor.height < 0 || nextY > windowHeight) {
+            setSelectionMenu(null);
+          } else {
+            setSelectionMenu({ ...menu, anchor: { ...menu.anchor, y: nextY } });
+          }
+        }
       }
       syncContentsShortcut(contentOffset.y, articleHeaderHeightRef.current, true);
       if (contentSize.height <= 0 || layoutMeasurement.height <= 0) return;
@@ -795,7 +802,7 @@ function ReaderPaneInner({
         scrollReadingProgress(contentOffset.y, layoutMeasurement.height, contentSize.height),
       );
     },
-    [handleFraction, hasHtml, syncContentsShortcut],
+    [handleFraction, hasHtml, syncContentsShortcut, windowHeight],
   );
 
   // Recompute when content settles/grows (images loading, HTML rendering).
@@ -1321,6 +1328,8 @@ function ReaderPaneInner({
         onDismiss={dismissSelectionMenu}
         anchor={selectionMenu?.anchor ?? null}
         backdrop={false}
+        preferredPlacement="above"
+        estimatedHeight={168}
       >
         {highlightChoice.canHighlight ? (
           <ContextMenuItem

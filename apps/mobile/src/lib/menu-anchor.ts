@@ -43,7 +43,15 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 export function isMenuAnchorRect(value: MenuAnchorRect | null | undefined): value is MenuAnchorRect {
-  return !!value && Number.isFinite(value.x) && Number.isFinite(value.width) && value.width >= 1 && value.height >= 1;
+  return (
+    !!value &&
+    Number.isFinite(value.x) &&
+    Number.isFinite(value.y) &&
+    Number.isFinite(value.width) &&
+    Number.isFinite(value.height) &&
+    value.width > 0 &&
+    value.height > 0
+  );
 }
 
 type MeasureNode = {
@@ -123,8 +131,8 @@ export function placeMenu({
   const topMax = windowHeight - insets.bottom - padding - height;
   const belowTop = anchor.y + anchor.height + gap;
   const aboveTop = anchor.y - gap - height;
-  const fitsBelow = belowTop <= topMax + 0.5;
-  const fitsAbove = aboveTop >= topMin - 0.5;
+  const fitsBelow = belowTop >= topMin - 0.5 && belowTop <= topMax + 0.5;
+  const fitsAbove = aboveTop >= topMin - 0.5 && aboveTop <= topMax + 0.5;
 
   // Default prefers below. A shorter follow-up (delete confirm) would otherwise
   // jump under a lower row after the tall menu had already flipped above.
@@ -148,4 +156,73 @@ export function placeMenu({
     return { left, top: clamp(belowTop, topMin, Math.max(topMin, topMax)), placement: "below", maxHeight };
   }
   return { left, top: clamp(aboveTop, topMin, Math.max(topMin, topMax)), placement: "above", maxHeight };
+}
+
+/** One-line strip used to sit the highlight menu on the selected text. */
+export const SELECTION_MENU_STRIP = 32;
+
+export type SelectionViewport = {
+  width: number;
+  height: number;
+  top?: number;
+  bottom?: number;
+};
+
+/** Map UTF-16 offsets onto the host paragraph so iOS can place without a native rect. */
+export function estimateSelectionAnchor(
+  host: MenuAnchorRect,
+  start: number,
+  end: number,
+  textLength: number,
+): MenuAnchorRect {
+  const len = Math.max(1, textLength);
+  const from = Math.min(Math.max(0, start), len) / len;
+  return {
+    x: host.x,
+    y: host.y + host.height * from,
+    width: Math.max(1, host.width),
+    height: SELECTION_MENU_STRIP,
+  };
+}
+
+/** Keep a tall native selection from pushing the menu under the fold. */
+export function thinSelectionAnchor(anchor: MenuAnchorRect): MenuAnchorRect {
+  if (anchor.height <= SELECTION_MENU_STRIP * 2) return anchor;
+  return { ...anchor, height: SELECTION_MENU_STRIP };
+}
+
+export function clipSelectionAnchor(
+  anchor: MenuAnchorRect,
+  viewport: SelectionViewport,
+): MenuAnchorRect | null {
+  const topInset = viewport.top ?? 0;
+  const bottomInset = viewport.bottom ?? 0;
+  const visTop = Math.max(anchor.y, topInset);
+  const visBottom = Math.min(anchor.y + anchor.height, viewport.height - bottomInset);
+  const visLeft = Math.max(anchor.x, 0);
+  const visRight = Math.min(anchor.x + anchor.width, viewport.width);
+  if (visBottom - visTop < 1 || visRight - visLeft < 1) return null;
+  return {
+    x: visLeft,
+    y: visTop,
+    width: visRight - visLeft,
+    height: Math.min(SELECTION_MENU_STRIP, visBottom - visTop),
+  };
+}
+
+export function resolveSelectionAnchor(opts: {
+  nativeRect?: MenuAnchorRect;
+  host?: MenuAnchorRect;
+  start: number;
+  end: number;
+  textLength: number;
+  viewport: SelectionViewport;
+}): MenuAnchorRect | null {
+  const raw = isMenuAnchorRect(opts.nativeRect)
+    ? thinSelectionAnchor(opts.nativeRect)
+    : opts.host && isMenuAnchorRect(opts.host)
+      ? estimateSelectionAnchor(opts.host, opts.start, opts.end, opts.textLength)
+      : null;
+  if (!raw) return null;
+  return clipSelectionAnchor(raw, opts.viewport) ?? raw;
 }
