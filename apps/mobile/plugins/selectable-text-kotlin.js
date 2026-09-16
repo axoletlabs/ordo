@@ -18,6 +18,7 @@ import com.facebook.react.bridge.ReactContextBaseJavaModule
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.UiThreadUtil
 import com.facebook.react.modules.core.DeviceEventManagerModule
+import com.facebook.react.uimanager.PixelUtil
 import com.facebook.react.uimanager.UIManagerHelper
 import com.facebook.react.uimanager.ViewManager
 import java.util.Collections
@@ -148,6 +149,8 @@ class OrdoSelectableTextModule(reactContext: ReactApplicationContext) :
       .emit(EVENT, payload)
   }
 
+  private fun dip(px: Number): Double = PixelUtil.toDIPFromPixel(px.toFloat()).toDouble()
+
   private fun putSelectionRect(
     payload: com.facebook.react.bridge.WritableMap,
     text: TextView,
@@ -155,29 +158,26 @@ class OrdoSelectableTextModule(reactContext: ReactApplicationContext) :
     end: Int,
   ) {
     val loc = IntArray(2)
-    text.getLocationOnScreen(loc)
+    text.getLocationInWindow(loc)
     val layout = text.layout
     if (layout == null || start < 0 || end <= start || end > text.length()) {
-      payload.putInt("x", loc[0])
-      payload.putInt("y", loc[1])
-      payload.putInt("width", max(1, text.width))
-      payload.putInt("height", max(1, text.lineHeight))
+      payload.putDouble("x", dip(loc[0]))
+      payload.putDouble("y", dip(loc[1]))
+      payload.putDouble("width", dip(max(1, text.width)))
+      payload.putDouble("height", dip(max(1, text.lineHeight)))
       return
     }
     val startLine = layout.getLineForOffset(start)
-    val lastIndex = end - 1
-    val endLine = layout.getLineForOffset(lastIndex)
     val startX = layout.getPrimaryHorizontal(start)
-    val endX =
-      if (startLine == endLine) layout.getPrimaryHorizontal(end)
-      else layout.getLineRight(startLine)
+    val endOnLine = min(end, layout.getLineEnd(startLine))
+    val endX = if (endOnLine > start) layout.getPrimaryHorizontal(endOnLine) else layout.getLineRight(startLine)
     val top = layout.getLineTop(startLine)
-    val bottom = layout.getLineBottom(endLine)
+    val bottom = layout.getLineBottom(startLine)
     val left = min(startX, endX)
-    payload.putInt("x", loc[0] + text.totalPaddingLeft + left.toInt())
-    payload.putInt("y", loc[1] + text.totalPaddingTop + top)
-    payload.putInt("width", max(1, kotlin.math.abs(endX - startX).toInt()))
-    payload.putInt("height", max(1, bottom - top))
+    payload.putDouble("x", dip(loc[0] + text.totalPaddingLeft + left.toInt()))
+    payload.putDouble("y", dip(loc[1] + text.totalPaddingTop + top))
+    payload.putDouble("width", dip(max(1, kotlin.math.abs(endX - startX).toInt())))
+    payload.putDouble("height", dip(max(1, bottom - top)))
   }
 
   private fun resolveTextView(tag: Int): TextView? {

@@ -9,11 +9,11 @@
 import React, { createContext, useCallback, useContext, useMemo, useRef } from "react";
 import {
   Linking,
+  Dimensions,
   Platform,
   StyleSheet,
   Text,
   View,
-  type GestureResponderEvent,
   type StyleProp,
   type TextStyle,
 } from "react-native";
@@ -25,7 +25,7 @@ import {
   type TNode,
 } from "@native-html/render";
 import { htmlToPlainText, quoteFromBlock, quoteFromRange, type HighlightAnchor } from "@ordo/shared";
-import { isMenuAnchorRect, type MenuAnchorRect } from "../../lib/menu-anchor";
+import { isMenuAnchorRect, resolveSelectionAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { useAndroidPhraseSelection } from "./android-phrase-selection";
 import {
   highlightIdCoveringRange,
@@ -69,21 +69,6 @@ function pickTextStyle(native: Record<string, unknown>): TextStyle {
 
 function asHtmlNode(node: TNode): HtmlTableNode {
   return node as unknown as HtmlTableNode;
-}
-
-function touchAnchor(event: GestureResponderEvent): MenuAnchorRect {
-  return {
-    x: event.nativeEvent.pageX - 16,
-    y: event.nativeEvent.pageY - 20,
-    width: 32,
-    height: 28,
-  };
-}
-
-function stripAnchor(x: number, y: number, width: number, height: number): MenuAnchorRect {
-  const stripH = 28;
-  const stripY = y + Math.min(Math.max(0, height / 2 - stripH / 2), Math.max(0, height - stripH));
-  return { x, y: stripY, width: Math.max(1, width), height: stripH };
 }
 
 function webSelectionAnchor(): MenuAnchorRect | undefined {
@@ -214,7 +199,6 @@ export function SelectablePhrase({
 }) {
   const ui = useContext(HighlightUiContext);
   const hostRef = useRef<View>(null);
-  const lastTouch = useRef<MenuAnchorRect | null>(null);
   const text = useMemo(() => nodeTextContent(asHtmlNode(tnode)), [tnode]);
   const spans = useMemo(() => {
     if (tnode.type === "text") return selectableInline(tnode);
@@ -222,10 +206,6 @@ export function SelectablePhrase({
       <React.Fragment key={index}>{selectableInline(child)}</React.Fragment>
     ));
   }, [tnode]);
-
-  const recordTouch = useCallback((event: GestureResponderEvent) => {
-    lastTouch.current = touchAnchor(event);
-  }, []);
 
   const publishRange = useCallback(
     (start: number, end: number, nativeRect?: MenuAnchorRect) => {
@@ -250,21 +230,26 @@ export function SelectablePhrase({
         ...(href ? { href } : {}),
         ...(highlightId ? { highlightId } : {}),
       };
-      const finish = (anchor?: MenuAnchorRect) => {
+      const finish = (host?: MenuAnchorRect) => {
+        const { width, height } = Dimensions.get("window");
+        const anchor = resolveSelectionAnchor({
+          nativeRect,
+          host,
+          start: range.start,
+          end: range.end,
+          textLength: text.length,
+          viewport: { width, height },
+        });
         ui.onTextSelect(isMenuAnchorRect(anchor) ? { ...draft, anchor } : draft);
       };
       if (isMenuAnchorRect(nativeRect)) {
-        finish(nativeRect);
-        return;
-      }
-      if (lastTouch.current) {
-        finish(lastTouch.current);
+        finish();
         return;
       }
       const host = hostRef.current;
       if (host && typeof host.measureInWindow === "function") {
         host.measureInWindow((x, y, width, height) => {
-          finish(stripAnchor(x, y, width, height));
+          finish({ x, y, width, height });
         });
         return;
       }
@@ -337,14 +322,7 @@ export function SelectablePhrase({
     );
 
   return (
-    <View
-      ref={hostRef}
-      collapsable={false}
-      pointerEvents="box-none"
-      onTouchStart={recordTouch}
-      onTouchMove={recordTouch}
-      onTouchEnd={recordTouch}
-    >
+    <View ref={hostRef} collapsable={false} pointerEvents="box-none">
       {phrase}
     </View>
   );

@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { placeMenu, type MenuAnchorRect } from "./menu-anchor.ts";
+import {
+  clipSelectionAnchor,
+  estimateSelectionAnchor,
+  placeMenu,
+  resolveSelectionAnchor,
+  SELECTION_MENU_STRIP,
+  thinSelectionAnchor,
+  type MenuAnchorRect,
+} from "./menu-anchor.ts";
 
 const insets = { top: 0, right: 0, bottom: 0, left: 0 };
 
@@ -100,4 +108,57 @@ test("abandons a preferred side that no longer fits", () => {
   });
   assert.equal(placed.placement, "above");
   assert.equal(placed.top, 820 - 6 - 280);
+});
+
+test("clamps onto the window when the trigger is reported below it", () => {
+  const placed = placeMenu({
+    anchor: anchor(40, 2400),
+    menuWidth: 252,
+    menuHeight: 160,
+    windowWidth: 390,
+    windowHeight: 844,
+    insets,
+  });
+  assert.ok(placed.top >= 12);
+  assert.ok(placed.top + 160 <= 844 - 12 + 0.5);
+});
+
+test("estimateSelectionAnchor sits on the selected line of a tall paragraph", () => {
+  const host = { x: 20, y: 80, width: 300, height: 800 };
+  const placed = estimateSelectionAnchor(host, 25, 40, 100);
+  assert.equal(placed.y, 80 + 800 * 0.25);
+  assert.equal(placed.height, SELECTION_MENU_STRIP);
+  assert.notEqual(placed.y, 80 + 400);
+});
+
+test("thinSelectionAnchor keeps a one-line native rect and trims a block", () => {
+  const line = { x: 10, y: 200, width: 120, height: 22 };
+  assert.equal(thinSelectionAnchor(line), line);
+  const block = { x: 10, y: 200, width: 120, height: 400 };
+  assert.deepEqual(thinSelectionAnchor(block), { ...block, height: SELECTION_MENU_STRIP });
+});
+
+test("clipSelectionAnchor pulls an off-screen strip back into the window", () => {
+  const clipped = clipSelectionAnchor(
+    { x: 16, y: 2000, width: 200, height: 32 },
+    { width: 390, height: 844 },
+  );
+  assert.equal(clipped, null);
+  const top = clipSelectionAnchor(
+    { x: 16, y: -10, width: 200, height: 50 },
+    { width: 390, height: 844 },
+  );
+  assert.deepEqual(top, { x: 16, y: 0, width: 200, height: SELECTION_MENU_STRIP });
+});
+
+test("resolveSelectionAnchor prefers a native rect over the paragraph host", () => {
+  const placed = resolveSelectionAnchor({
+    nativeRect: { x: 40, y: 120, width: 80, height: 24 },
+    host: { x: 16, y: 0, width: 360, height: 2000 },
+    start: 0,
+    end: 4,
+    textLength: 400,
+    viewport: { width: 390, height: 844 },
+  });
+  assert.deepEqual(placed, { x: 40, y: 120, width: 80, height: 24 });
 });
