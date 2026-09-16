@@ -64,9 +64,16 @@ export function removeServerHistoryEntry(
 export function visibleServerHistory(
   history: ServerHistoryEntry[],
   currentUrl: string,
+  exclude: readonly string[] = [],
 ): ServerHistoryEntry[] {
+  const hidden = new Set<string>();
   const current = normalizeServerUrl(currentUrl);
+  if (current) hidden.add(current);
+  for (const url of exclude) {
+    const origin = normalizeServerUrl(url);
+    if (origin) hidden.add(origin);
+  }
   return history
-    .filter((entry) => entry.url !== current)
+    .filter((entry) => !hidden.has(entry.url))
     .slice(0, SERVER_HISTORY_LIMIT);
 }

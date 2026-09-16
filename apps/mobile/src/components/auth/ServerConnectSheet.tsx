@@ -29,15 +29,11 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
 import { haptics } from "../../lib/haptics";
 import { useSettingsStore } from "../../store/settings";
-import {
-  describeProbeField,
-  hostOf,
-  normalizeServerUrl,
-  probeServer,
-} from "../../lib/server-probe";
+import { useServerProbe } from "../../hooks/use-server-probe";
+import { hostOf, normalizeServerUrl, probeServer } from "../../lib/server-probe";
+import { CLOUD_SERVER_URL } from "../../lib/hosting";
 import { visibleServerHistory } from "../../lib/server-history";
 import { timeAgo } from "../../lib/format";
-import type { ServerInfoDto } from "@ordo/shared";
 
 /**
  * Change button that sits greyed-out (neutral fill + muted label) until the
@@ -140,74 +136,26 @@ export function ServerConnectSheet({
   const currentUrl = useSettingsStore((s) => s.serverUrl);
   const setServerUrl = useSettingsStore((s) => s.setServerUrl);
   const serverHistory = useSettingsStore((s) => s.serverHistory);
-  const recents = visibleServerHistory(serverHistory, currentUrl);
+  const recents = visibleServerHistory(serverHistory, currentUrl, [CLOUD_SERVER_URL]);
   const inputRef = useRef<TextInput>(null);
 
   const [url, setUrl] = useState(initialUrl ?? currentUrl);
-  const [probing, setProbing] = useState(false);
-  const [up, setUp] = useState(false);
-  const [probeDetail, setProbeDetail] = useState<string | null>(null);
-  const [probeInfo, setProbeInfo] = useState<Pick<ServerInfoDto, "name" | "version"> | null>(null);
   const [confirming, setConfirming] = useState(false);
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const probe = useServerProbe(url, currentUrl, visible);
 
   // Reset only when the sheet opens (NOT on currentUrl changes).
   useEffect(() => {
     if (visible) {
       setUrl(initialUrl ?? currentUrl);
-      setProbing(false);
-      setUp(false);
-      setProbeDetail(null);
-      setProbeInfo(null);
       setConfirming(false);
     }
   }, [visible]);
 
-  useEffect(() => {
-    if (!visible) return;
-    let cancelled = false;
-    const normalized = normalizeServerUrl(url);
-    if (!normalized || normalized === normalizeServerUrl(currentUrl)) {
-      setUp(false);
-      setProbeDetail(null);
-      setProbeInfo(null);
-      setProbing(false);
-      return;
-    }
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      if (cancelled) return;
-      setProbing(true);
-      setUp(false);
-      setProbeDetail(null);
-      setProbeInfo(null);
-      void probeServer(url).then((r) => {
-        if (cancelled) return;
-        setProbing(false);
-        setUp(r.status === "up");
-        setProbeDetail(r.detail ?? null);
-        setProbeInfo(r.info ?? null);
-      });
-    }, 900);
-    return () => {
-      cancelled = true;
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-    };
-  }, [url, visible, currentUrl]);
-
-  const normalized = normalizeServerUrl(url);
-  const isUnchanged = !normalized || normalized === normalizeServerUrl(currentUrl);
-  const canChange = !!normalized && !isUnchanged && up && !probing && !confirming;
-  const probeCopy = describeProbeField({
-    idle: isUnchanged,
-    probing,
-    reachable: up,
-    detail: probeDetail,
-    info: probeInfo,
-  });
+  const { normalized, canChange, probeCopy, probing, up } = probe;
+  const submitEnabled = canChange && !confirming;
 
   const onChange = async () => {
-    if (!normalized || !canChange) return;
+    if (!normalized || !submitEnabled) return;
     setConfirming(true);
     const recheck = await probeServer(normalized);
     setConfirming(false);
@@ -220,9 +168,9 @@ export function ServerConnectSheet({
       }
       onDismiss();
     } else {
-      setUp(false);
-      setProbeDetail(recheck.detail ?? null);
-      setProbeInfo(null);
+      probe.setUp(false);
+      probe.setProbeDetail(recheck.detail ?? null);
+      probe.setProbeInfo(null);
     }
   };
 
@@ -236,10 +184,11 @@ export function ServerConnectSheet({
     >
       <ThemedScrollView keyboardShouldPersistTaps="handled">
       <PanelHeader
-        icon="cloud-outline"
-        iconColor={palette.blue}
-        title="Server URL"
-        subtitle="Address of your self-hosted Ordo server."
+        icon="server-outline"
+        iconColor={palette.accent}
+        iconBackground={palette.accentSoft}
+        title="Server address"
+        subtitle="Address of the ordo server you run."
       />
 
       <Input
@@ -314,7 +263,7 @@ export function ServerConnectSheet({
             <AnimatedChangeButton
               ready={up && !probing}
               loading={confirming}
-              disabled={!canChange}
+              disabled={!submitEnabled}
               onPress={onChange}
             />
           </View>
@@ -323,7 +272,7 @@ export function ServerConnectSheet({
             label={confirming ? "" : "Change"}
             variant="primary"
             onPress={onChange}
-            disabled={!canChange}
+            disabled={!submitEnabled}
             loading={confirming}
             style={styles.action}
           />

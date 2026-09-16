@@ -1,8 +1,7 @@
-/** Current self-hosted server, recents, and a verified switch. */
+/** Hosting: ordo Cloud by default, or a verified self-hosted server. */
 import React, { useEffect, useRef, useState } from "react";
 import { StyleSheet, View, type TextInput } from "react-native";
 import { useMutation } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { APP_NAME, ChangeServerNameSchema, type ServerInfoDto } from "@ordo/shared";
 import {
@@ -11,6 +10,7 @@ import {
   SettingsScrollView,
 } from "../../../src/components/settings/SettingsPage";
 import { ServerHistoryPanel } from "../../../src/components/settings/ServerHistoryPanel";
+import { SelfHostFlow } from "../../../src/components/settings/SelfHostFlow";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
 import { Badge } from "../../../src/components/ui/Badge";
 import { ConfirmDialog } from "../../../src/components/ui/ConfirmDialog";
@@ -24,12 +24,16 @@ import { Text } from "../../../src/components/ui/Text";
 import { Spinner } from "../../../src/components/ui/Spinner";
 import { toast } from "../../../src/components/ui/toast-store";
 import { useServerInfo } from "../../../src/hooks/queries";
-import { cancelProactiveRefresh } from "../../../src/lib/api/client";
+import { useCommitServerSwitch } from "../../../src/hooks/use-commit-server-switch";
 import { serverApi } from "../../../src/lib/api/server";
 import { qk } from "../../../src/lib/api/query-keys";
 import { queryClient } from "../../../src/lib/query-client";
-import { discardQueryCache } from "../../../src/lib/query-cache";
 import { visibleServerHistory } from "../../../src/lib/server-history";
+import {
+  CLOUD_DISPLAY_NAME,
+  CLOUD_SERVER_URL,
+  isCloudServerUrl,
+} from "../../../src/lib/hosting";
 import { hostOf, instanceNameOf } from "../../../src/lib/instance-name";
 import {
   describeProbeField,
@@ -37,29 +41,24 @@ import {
   probeServer,
 } from "../../../src/lib/server-probe";
 import { errorMessage } from "../../../src/lib/error-message";
-import { useAuthStore } from "../../../src/store/auth";
-import { useFolderTokenStore } from "../../../src/store/folder-tokens";
 import { useSettingsStore } from "../../../src/store/settings";
-import { restartRuntime } from "../../../src/store/update-restart";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { haptics } from "../../../src/lib/haptics";
 import { radius, spacing } from "../../../src/theme/tokens";
 
 export default function ServerScreen() {
   const { palette } = useTheme();
-  const router = useRouter();
   const currentUrl = useSettingsStore((s) => s.serverUrl);
-  const setServerUrl = useSettingsStore((s) => s.setServerUrl);
   const serverHistory = useSettingsStore((s) => s.serverHistory);
   const removeServerHistory = useSettingsStore((s) => s.removeServerHistory);
-  const clearAuth = useAuthStore((s) => s.clear);
-  const clearFolderTokens = useFolderTokenStore((s) => s.clearAll);
   const serverInfo = useServerInfo();
+  const { commit, busy } = useCommitServerSwitch();
   const [editorUrl, setEditorUrl] = useState<string | null>(null);
   const [confirmedUrl, setConfirmedUrl] = useState<string | null>(null);
-  const [switching, setSwitching] = useState(false);
+  const [selfHostOpen, setSelfHostOpen] = useState(false);
 
-  const recents = visibleServerHistory(serverHistory, currentUrl);
+  const cloud = isCloudServerUrl(currentUrl);
+  const recents = visibleServerHistory(serverHistory, currentUrl, [CLOUD_SERVER_URL]);
   const connected = Boolean(serverInfo.data && !serverInfo.error);
   const statusLabel = serverInfo.error
     ? "Unavailable"
@@ -67,8 +66,9 @@ export default function ServerScreen() {
       ? "Connected"
       : "Checking…";
   const statusTone = serverInfo.error ? "danger" : serverInfo.data ? "green" : "neutral";
-  const displayName = instanceNameOf(serverInfo.data, currentUrl);
+  const displayName = cloud ? CLOUD_DISPLAY_NAME : instanceNameOf(serverInfo.data, currentUrl);
   const hostname = serverInfo.data?.hostname?.trim() || "";
+  const toCloud = Boolean(confirmedUrl && isCloudServerUrl(confirmedUrl));
 
   const openEditor = (url: string) => {
     haptics.light();
@@ -76,41 +76,29 @@ export default function ServerScreen() {
   };
 
   const confirmSwitch = async () => {
-    if (!confirmedUrl || switching) return;
-    setSwitching(true);
-    let switchCommitted = false;
-
-    try {
-      await restartRuntime(async () => {
-        cancelProactiveRefresh();
-        discardQueryCache();
-        await Promise.all([
-          clearAuth(),
-          clearFolderTokens(),
-          setServerUrl(confirmedUrl),
-        ]);
-        switchCommitted = true;
-      });
-    } catch {
-      if (!switchCommitted) {
-        setSwitching(false);
-        toast.error("Couldn't change server.");
-        return;
-      }
-    }
-
-    if (switchCommitted) {
-      setSwitching(false);
-      setConfirmedUrl(null);
-      toast.success("Server changed");
-      router.replace("/(auth)/login");
-    }
+    if (!confirmedUrl || busy) return;
+    const ok = await commit(confirmedUrl);
+    if (ok) setConfirmedUrl(null);
   };
 
+  const statusIcon = serverInfo.isLoading
+    ? "cloud-outline"
+    : connected
+      ? "checkmark-circle-outline"
+      : "cloud-offline-outline";
+
   return (
-    <SettingsPage title="Server">
+    <SettingsPage title="Hosting">
       <SettingsScrollView>
-        <SettingsGroup label="This server" compact>
+        <SettingsGroup
+          label={cloud ? "ordo Cloud" : "Your server"}
+          compact
+          footer={
+            cloud
+              ? "Your library lives on ordo Cloud."
+              : "You run this server. Axolet Labs isn't responsible for it."
+          }
+        >
           <View
             style={[
               styles.current,
@@ -118,42 +106,54 @@ export default function ServerScreen() {
               !serverInfo.data && styles.noDivider,
             ]}
           >
-            <PressableScale
-              accessibilityRole="button"
-              accessibilityLabel={`Edit server ${displayName}, ${currentUrl}. ${statusLabel}`}
-              dim
-              onPress={() => openEditor(currentUrl)}
-              style={styles.currentMain}
-            >
-              <View style={[styles.iconWrap, { backgroundColor: palette.surfaceSecondary }]}>
-                <Ionicons
-                  name={
-                    serverInfo.isLoading
-                      ? "cloud-outline"
-                      : connected
-                        ? "checkmark-circle-outline"
-                        : "cloud-offline-outline"
-                  }
-                  size={16}
-                  color={palette.accent}
-                />
+            {cloud ? (
+              <View
+                accessible
+                accessibilityLabel={`${displayName}, ${hostOf(currentUrl)}. ${statusLabel}`}
+                style={styles.currentMain}
+              >
+                <View style={[styles.iconWrap, { backgroundColor: palette.surfaceSecondary }]}>
+                  <Ionicons name={statusIcon} size={16} color={palette.accent} />
+                </View>
+                <View style={styles.currentBody}>
+                  <Text variant="bodyStrong" numberOfLines={1}>
+                    {displayName}
+                  </Text>
+                  <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.currentUrl}>
+                    {hostOf(currentUrl)}
+                  </Text>
+                </View>
+                <View style={styles.status}>
+                  <Badge tone={statusTone}>{statusLabel}</Badge>
+                  {serverInfo.isFetching ? <Spinner size="sm" color={palette.accent} /> : null}
+                </View>
               </View>
-              <View style={styles.currentBody}>
-                <Text variant="bodyStrong" numberOfLines={1}>
-                  {displayName}
-                </Text>
-                <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.currentUrl}>
-                  {currentUrl}
-                </Text>
-              </View>
-              <View style={styles.status}>
-                <Badge tone={statusTone}>{statusLabel}</Badge>
-                {serverInfo.isFetching ? (
-                  <Spinner size="sm" color={palette.accent} />
-                ) : null}
-              </View>
-              <Ionicons name="chevron-forward" size={16} color={palette.textFaint} />
-            </PressableScale>
+            ) : (
+              <PressableScale
+                accessibilityRole="button"
+                accessibilityLabel={`Edit server ${displayName}, ${currentUrl}. ${statusLabel}`}
+                dim
+                onPress={() => openEditor(currentUrl)}
+                style={styles.currentMain}
+              >
+                <View style={[styles.iconWrap, { backgroundColor: palette.surfaceSecondary }]}>
+                  <Ionicons name={statusIcon} size={16} color={palette.accent} />
+                </View>
+                <View style={styles.currentBody}>
+                  <Text variant="bodyStrong" numberOfLines={1}>
+                    {displayName}
+                  </Text>
+                  <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.currentUrl}>
+                    {currentUrl}
+                  </Text>
+                </View>
+                <View style={styles.status}>
+                  <Badge tone={statusTone}>{statusLabel}</Badge>
+                  {serverInfo.isFetching ? <Spinner size="sm" color={palette.accent} /> : null}
+                </View>
+                <Ionicons name="chevron-forward" size={16} color={palette.textFaint} />
+              </PressableScale>
+            )}
           </View>
           {serverInfo.data ? (
             <SettingRow
@@ -165,16 +165,49 @@ export default function ServerScreen() {
           ) : null}
         </SettingsGroup>
 
-        <ServerHistoryPanel
-          entries={recents}
-          busy={switching}
-          onSelect={openEditor}
-          onRemove={(target) => {
-            haptics.light();
-            removeServerHistory(target);
-          }}
-        />
+        {cloud ? (
+          <SettingsGroup style={{ marginTop: spacing[16] }}>
+            <SettingRow
+              icon="server-outline"
+              label="Use your own server"
+              description="You run the API. We don't operate or support it."
+              onPress={() => {
+                haptics.light();
+                setSelfHostOpen(true);
+              }}
+              showChevron
+              divider={false}
+            />
+          </SettingsGroup>
+        ) : (
+          <>
+            <ServerHistoryPanel
+              entries={recents}
+              busy={busy}
+              onSelect={openEditor}
+              onRemove={(target) => {
+                haptics.light();
+                removeServerHistory(target);
+              }}
+            />
+            <SettingsGroup style={{ marginTop: spacing[16] }}>
+              <SettingRow
+                icon="cloud-outline"
+                label="Use ordo Cloud"
+                description="Leave this server. Your library here isn't copied."
+                onPress={() => {
+                  haptics.light();
+                  setConfirmedUrl(CLOUD_SERVER_URL);
+                }}
+                showChevron
+                divider={false}
+              />
+            </SettingsGroup>
+          </>
+        )}
       </SettingsScrollView>
+
+      <SelfHostFlow visible={selfHostOpen} onDismiss={() => setSelfHostOpen(false)} />
 
       {editorUrl != null ? (
         <ServerEditPanel
@@ -197,13 +230,20 @@ export default function ServerScreen() {
 
       <ConfirmDialog
         visible={!!confirmedUrl}
-        onDismiss={() => setConfirmedUrl(null)}
-        icon="swap-horizontal-outline"
-        title="Switch server?"
-        message={`You'll be signed out, and ${APP_NAME} will restart.`}
-        confirmLabel="Switch"
-        loading={switching}
-        dismissible={!switching}
+        onDismiss={() => {
+          if (!busy) setConfirmedUrl(null);
+        }}
+        icon={toCloud ? "cloud-outline" : "swap-horizontal-outline"}
+        tone={toCloud ? "accent" : "danger"}
+        title={toCloud ? "Use ordo Cloud?" : "Switch server?"}
+        message={
+          toCloud
+            ? `You'll be signed out, and ${APP_NAME} will restart. This server's library isn't copied to ordo Cloud.`
+            : `You'll be signed out, and ${APP_NAME} will restart.`
+        }
+        confirmLabel={toCloud ? "Use ordo Cloud" : "Switch"}
+        loading={busy}
+        dismissible={!busy}
         onConfirm={() => void confirmSwitch()}
       >
         <View style={styles.hostChange}>
@@ -214,7 +254,7 @@ export default function ServerScreen() {
             to
           </Text>
           <Text variant="bodyStrong" numberOfLines={1} align="center">
-            {confirmedUrl ? hostOf(confirmedUrl) : ""}
+            {toCloud ? CLOUD_DISPLAY_NAME : confirmedUrl ? hostOf(confirmedUrl) : ""}
           </Text>
         </View>
       </ConfirmDialog>

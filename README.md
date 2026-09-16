@@ -7,8 +7,8 @@
 <p align="center"><strong>The app that keeps your life in order.</strong></p>
 
 <p align="center">
-  A self-hostable bookmark manager. Save links, read them in a clean reader,
-  and keep the data on a server you run.
+  A bookmark manager. Save links, read them in a clean reader,
+  and keep them on ordo Cloud — or on a server you run.
 </p>
 
 ## What you get
@@ -17,9 +17,10 @@
 - **Folders and tags** so things stay easy to find
 - **Import and export** as JSON, HTML, or CSV
 - **Accounts** with MFA and profile pictures if you want them
-- **Your own backend**, running on SQLite. Nothing else to install.
+- **ordo Cloud** by default, or **your own backend** on SQLite
 
-There isn't a hosted Ordo cloud. You run the API, then point the app at it.
+The app talks to [ordo Cloud](https://api.ordo.axolet.com) unless you opt into
+a server you host. Existing installs keep the server URL they already saved.
 
 ## Run the backend
 
@@ -86,7 +87,8 @@ pnpm --filter @ordo/server dev
 
 ### Create an account
 
-Open the app, connect to your server, and sign up. Registration is on by default.
+Open the app and sign in to ordo Cloud, or complete **Use your own server**
+and register there. Registration on a self-hosted server is on by default.
 
 If you don't want anyone else creating an account, pass
 `--registration false` to the deploy script, or set
@@ -97,16 +99,21 @@ If you skip SMTP, one-time email codes are printed in the server console.
 ## Point the app at your server
 
 1. Install the Android APK from [Releases](https://github.com/axoletlabs/ordo/releases).
-2. On the login screen, tap the server URL and enter yours.
-3. Register or sign in.
+2. On the sign-in screen, choose **Use your own server**.
+3. Read the warnings, type **I understand**, then enter your server URL.
+4. Register or sign in.
 
-You can change the URL later under Settings.
+You can switch later under Settings → Hosting. Switching signs you out; libraries
+are not copied between ordo Cloud and a server you run.
 
 To run the app from source instead of the APK:
 
 ```bash
 pnpm --filter @ordo/mobile start
 ```
+
+New installs use `https://api.ordo.axolet.com`. A URL already saved on the
+device is left alone.
 
 ## Configuration
 

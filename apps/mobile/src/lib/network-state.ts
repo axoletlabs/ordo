@@ -1,5 +1,5 @@
 /**
- * Device-link connectivity for a self-hosted app.
+ * Device-link connectivity.
  *
  * `isInternetReachable` is a public-internet probe (often a ping to Google).
  * It is false on LAN/VPN-only networks and `null` while unknown — neither

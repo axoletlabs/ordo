@@ -13,10 +13,11 @@ import {
   type ServerHistoryEntry,
 } from "../lib/server-history";
 import { patchQuickShareSessionServerUrl, syncQuickShareFlags } from "../lib/share-targets";
+import { DEFAULT_SERVER_URL, resolvePersistedServerUrl } from "../lib/hosting";
 import { prefsGet, prefsSet, StorageKeys } from "../lib/storage";
 import type { ThemeMode } from "../theme/theme";
 
-export const DEFAULT_SERVER_URL = "http://localhost:3000";
+export { DEFAULT_SERVER_URL } from "../lib/hosting";
 export type NavigationStyle = "docked" | "floating" | "compactFloating";
 /** How pages enter and leave, including tab switches. */
 export type NavigationAnimation = "slide" | "fade" | "instant";
@@ -99,7 +100,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   hydrate: async () => {
     const saved = await prefsGet<Partial<SettingsState>>(StorageKeys.SETTINGS);
     set({
-      serverUrl: saved?.serverUrl?.trim() || DEFAULT_SERVER_URL,
+      serverUrl: resolvePersistedServerUrl(saved?.serverUrl),
       themeMode: saved?.themeMode ?? "system",
       amoled: saved?.amoled ?? false,
       navigationStyle:

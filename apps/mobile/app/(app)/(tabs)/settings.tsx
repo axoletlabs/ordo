@@ -9,6 +9,8 @@ import { ConfirmDialog } from "../../../src/components/ui/ConfirmDialog";
 import { SettingsGroup, SettingsScrollView } from "../../../src/components/settings/SettingsPage";
 import { useLogout } from "../../../src/hooks/use-auth-actions";
 import { useFloatingDockMetrics } from "../../../src/hooks/use-floating-dock-metrics";
+import { hostingDisplayName, hostingModeOf } from "../../../src/lib/hosting";
+import { useSettingsStore } from "../../../src/store/settings";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { layout, spacing } from "../../../src/theme/tokens";
 
@@ -19,6 +21,7 @@ export default function SettingsScreen() {
     useFloatingDockMetrics();
   const logout = useLogout();
   const [confirmingLogout, setConfirmingLogout] = useState(false);
+  const serverUrl = useSettingsStore((s) => s.serverUrl);
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.background }}>
@@ -54,8 +57,9 @@ export default function SettingsScreen() {
             showChevron
           />
           <SettingRow
-            icon="server-outline"
-            label="Server"
+            icon={hostingModeOf(serverUrl) === "cloud" ? "cloud-outline" : "server-outline"}
+            label="Hosting"
+            value={hostingDisplayName(serverUrl)}
             onPress={() => router.push("/settings/server")}
             showChevron
           />

@@ -1,6 +1,6 @@
 /**
  * Blocks the app when there is no device network, or when the configured
- * server cannot be reached. Settings → Server stays usable so the host can
+ * server cannot be reached. Settings → Hosting stays usable so the host can
  * be changed.
  */
 import React, { useEffect, useRef } from "react";
@@ -16,6 +16,7 @@ import { useServerInfo } from "../hooks/queries";
 import { useTheme } from "../theme/ThemeProvider";
 import { Button } from "./ui/Button";
 import { EmptyState } from "./ui/EmptyState";
+import { isCloudServerUrl } from "../lib/hosting";
 import { spacing } from "../theme/tokens";
 
 export function OfflineGate() {
@@ -70,18 +71,24 @@ export function OfflineGate() {
 
   if (!serverDown) return null;
 
+  const cloud = isCloudServerUrl(serverUrl);
+  const title = cloud ? "Can't reach ordo Cloud" : "Can't reach your server";
+  const message = cloud
+    ? "ordo needs ordo Cloud to be online. Try again in a moment."
+    : "ordo needs your server to be online. Try again, or open Hosting to pick another.";
+
   return (
     <View
       accessibilityViewIsModal
       accessibilityRole="alert"
-      accessibilityLabel="Can't reach the server."
+      accessibilityLabel={title}
       pointerEvents="auto"
       style={[styles.root, { backgroundColor: palette.background }]}
     >
       <EmptyState
         icon="cloud-offline-outline"
-        title="Can't reach the server"
-        message="ordo needs your server to be online. Try again, or pick a different server."
+        title={title}
+        message={message}
         action={
           <View style={styles.actions}>
             <Button
@@ -96,7 +103,7 @@ export function OfflineGate() {
             />
             <Button
               block
-              label="Change server"
+              label="Hosting"
               variant="ghost"
               onPress={() => router.push("/settings/server")}
             />
