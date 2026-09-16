@@ -16,24 +16,19 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
-import { Ionicons } from "@expo/vector-icons";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { Spinner } from "../ui/Spinner";
 import { ThemedScrollView } from "../ui/ThemedScrollView";
-import { PanelHeader } from "../ui/PanelHeader";
+import { PANEL_ICON_COLUMN, PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
-import { Text } from "../ui/Text";
 import { PressableScale } from "../ui/PressableScale";
 import { useTheme } from "../../theme/ThemeProvider";
 import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
 import { haptics } from "../../lib/haptics";
 import { useSettingsStore } from "../../store/settings";
 import { useServerProbe } from "../../hooks/use-server-probe";
-import { hostOf, normalizeServerUrl, probeServer } from "../../lib/server-probe";
-import { CLOUD_SERVER_URL } from "../../lib/hosting";
-import { visibleServerHistory } from "../../lib/server-history";
-import { timeAgo } from "../../lib/format";
+import { probeServer } from "../../lib/server-probe";
 
 /**
  * Change button that sits greyed-out (neutral fill + muted label) until the
@@ -63,6 +58,10 @@ function AnimatedChangeButton({
       palette.surfaceSecondary,
       palette.accent,
     ]),
+    borderColor: interpolateColor(progress.value, [0, 1], [
+      palette.surfaceSecondary,
+      palette.accent,
+    ]),
   }));
 
   const fg = useAnimatedStyle(() => ({
@@ -79,10 +78,10 @@ function AnimatedChangeButton({
         haptics.light();
         onPress();
       }}
-      style={[styles.changeBtn, { height: 42, borderRadius: radius.sm, overflow: "hidden" }]}
+      style={styles.changeBtn}
     >
       <Animated.View
-        style={[StyleSheet.absoluteFill, { borderRadius: radius.sm }, bg]}
+        style={[StyleSheet.absoluteFill, { borderRadius: radius.sm, borderWidth: 1 }, bg]}
         pointerEvents="none"
       />
       <View style={styles.changeContent}>
@@ -135,8 +134,6 @@ export function ServerConnectSheet({
   const { palette } = useTheme();
   const currentUrl = useSettingsStore((s) => s.serverUrl);
   const setServerUrl = useSettingsStore((s) => s.setServerUrl);
-  const serverHistory = useSettingsStore((s) => s.serverHistory);
-  const recents = visibleServerHistory(serverHistory, currentUrl, [CLOUD_SERVER_URL]);
   const inputRef = useRef<TextInput>(null);
 
   const [url, setUrl] = useState(initialUrl ?? currentUrl);
@@ -183,128 +180,84 @@ export function ServerConnectSheet({
       }}
     >
       <ThemedScrollView keyboardShouldPersistTaps="handled">
-      <PanelHeader
-        icon="server-outline"
-        iconColor={palette.accent}
-        iconBackground={palette.accentSoft}
-        title="Server address"
-        subtitle="Address of the ordo server you run."
-      />
-
-      <Input
-        ref={inputRef}
-        value={url}
-        onChangeText={setUrl}
-        placeholder="https://ordo.example.com"
-        keyboardType="url"
-        autoCapitalize="none"
-        autoCorrect={false}
-        autoComplete="off"
-        textContentType="URL"
-        importantForAutofill="no"
-        spellCheck={false}
-        editable={!confirming}
-        error={probeCopy.error}
-        helper={probeCopy.helper}
-      />
-
-      {recents.length > 0 ? (
-        <View style={styles.recents}>
-          <Text variant="label" color="tertiary">Recent</Text>
-          {recents.map((entry) => {
-            const selected = normalizeServerUrl(url) === entry.url;
-            return (
-              <PressableScale
-                key={entry.url}
-                accessibilityRole="button"
-                accessibilityLabel={`Use recent server ${hostOf(entry.url)}`}
-                disabled={confirming}
-                onPress={() => {
-                  haptics.selection();
-                  setUrl(entry.url);
-                }}
-                style={[
-                  styles.recentRow,
-                  {
-                    backgroundColor: palette.surfaceSecondary,
-                    borderColor: selected ? palette.accent : "transparent",
-                  },
-                ]}
-              >
-                <Ionicons
-                  name={selected ? "checkmark" : "time-outline"}
-                  size={14}
-                  color={selected ? palette.accent : palette.textTertiary}
-                />
-                <View style={styles.recentCopy}>
-                  <Text variant="subhead" numberOfLines={1} color={selected ? "accent" : "primary"}>
-                    {hostOf(entry.url)}
-                  </Text>
-                  <Text variant="footnote" color="tertiary" numberOfLines={1}>
-                    {timeAgo(new Date(entry.lastConnectedAt).toISOString())}
-                  </Text>
-                </View>
-              </PressableScale>
-            );
-          })}
-        </View>
-      ) : null}
-
-      <View style={styles.actions}>
-        <Button
-          label="Cancel"
-          variant="secondary"
-          onPress={onDismiss}
-          disabled={confirming}
-          style={styles.action}
+        <PanelHeader
+          icon="server-outline"
+          iconColor={palette.accent}
+          iconBackground={palette.accentSoft}
+          title="Server address"
         />
-        {animateReadyColor ? (
-          <View style={styles.action}>
-            <AnimatedChangeButton
-              ready={up && !probing}
-              loading={confirming}
-              disabled={!submitEnabled}
-              onPress={onChange}
-            />
-          </View>
-        ) : (
+
+        <View style={styles.body}>
+          <Input
+            ref={inputRef}
+            value={url}
+            onChangeText={setUrl}
+            placeholder="https://ordo.example.com"
+            keyboardType="url"
+            autoCapitalize="none"
+            autoCorrect={false}
+            autoComplete="off"
+            textContentType="URL"
+            importantForAutofill="no"
+            spellCheck={false}
+            editable={!confirming}
+            error={probeCopy.error}
+            helper={probeCopy.helper}
+          />
+        </View>
+
+        <View style={styles.actions}>
           <Button
-            label={confirming ? "" : "Change"}
-            variant="primary"
-            onPress={onChange}
-            disabled={!submitEnabled}
-            loading={confirming}
+            label="Cancel"
+            variant="secondary"
+            onPress={onDismiss}
+            disabled={confirming}
             style={styles.action}
           />
-        )}
-      </View>
+          {animateReadyColor ? (
+            <View style={styles.action}>
+              <AnimatedChangeButton
+                ready={up && !probing}
+                loading={confirming}
+                disabled={!submitEnabled}
+                onPress={onChange}
+              />
+            </View>
+          ) : (
+            <Button
+              label={confirming ? "" : "Change"}
+              variant="primary"
+              onPress={onChange}
+              disabled={!submitEnabled}
+              loading={confirming}
+              style={styles.action}
+            />
+          )}
+        </View>
       </ThemedScrollView>
     </FloatingPanel>
   );
 }
 
 const styles = StyleSheet.create({
-  recents: { marginTop: spacing[12], gap: spacing[6] },
-  recentRow: {
-    minHeight: 44,
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing[12],
-    paddingVertical: spacing[8],
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[10],
+  body: {
+    paddingLeft: spacing[4] + PANEL_ICON_COLUMN,
+    paddingRight: spacing[4],
   },
-  recentCopy: { flex: 1, minWidth: 0 },
   actions: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "stretch",
     gap: spacing[8],
     marginTop: spacing[16],
+    paddingLeft: spacing[4] + PANEL_ICON_COLUMN,
+    paddingRight: spacing[4],
   },
-  action: { flex: 1 },
+  action: { flex: 1, minWidth: 0 },
   changeBtn: {
-    paddingHorizontal: spacing[20],
+    height: 42,
+    borderRadius: radius.sm,
+    overflow: "hidden",
+    paddingHorizontal: spacing[16],
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",

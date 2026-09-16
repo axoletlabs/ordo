@@ -2,7 +2,7 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { type ButtonVariant } from "./Button";
-import { PanelHeader } from "./PanelHeader";
+import { PANEL_ICON_COLUMN, PanelHeader } from "./PanelHeader";
 import { FloatingPanel } from "./FloatingPanel";
 import { PanelActions } from "./SheetActionRow";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -69,5 +69,8 @@ export function ConfirmDialog({
 }
 
 const styles = StyleSheet.create({
-  extra: { marginBottom: spacing[12] },
+  extra: {
+    paddingLeft: spacing[4] + PANEL_ICON_COLUMN,
+    paddingRight: spacing[4],
+  },
 });

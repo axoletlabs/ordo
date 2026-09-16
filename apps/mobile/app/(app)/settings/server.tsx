@@ -9,10 +9,10 @@ import {
   SettingsPage,
   SettingsScrollView,
 } from "../../../src/components/settings/SettingsPage";
-import { ServerHistoryPanel } from "../../../src/components/settings/ServerHistoryPanel";
 import { SelfHostFlow } from "../../../src/components/settings/SelfHostFlow";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
 import { Badge } from "../../../src/components/ui/Badge";
+import { Button } from "../../../src/components/ui/Button";
 import { ConfirmDialog } from "../../../src/components/ui/ConfirmDialog";
 import { FloatingPanel } from "../../../src/components/ui/FloatingPanel";
 import { ThemedScrollView } from "../../../src/components/ui/ThemedScrollView";
@@ -28,7 +28,6 @@ import { useCommitServerSwitch } from "../../../src/hooks/use-commit-server-swit
 import { serverApi } from "../../../src/lib/api/server";
 import { qk } from "../../../src/lib/api/query-keys";
 import { queryClient } from "../../../src/lib/query-client";
-import { visibleServerHistory } from "../../../src/lib/server-history";
 import {
   CLOUD_DISPLAY_NAME,
   CLOUD_SERVER_URL,
@@ -49,8 +48,6 @@ import { radius, spacing } from "../../../src/theme/tokens";
 export default function ServerScreen() {
   const { palette } = useTheme();
   const currentUrl = useSettingsStore((s) => s.serverUrl);
-  const serverHistory = useSettingsStore((s) => s.serverHistory);
-  const removeServerHistory = useSettingsStore((s) => s.removeServerHistory);
   const serverInfo = useServerInfo();
   const { commit, busy } = useCommitServerSwitch();
   const [editorUrl, setEditorUrl] = useState<string | null>(null);
@@ -58,7 +55,6 @@ export default function ServerScreen() {
   const [selfHostOpen, setSelfHostOpen] = useState(false);
 
   const cloud = isCloudServerUrl(currentUrl);
-  const recents = visibleServerHistory(serverHistory, currentUrl, [CLOUD_SERVER_URL]);
   const connected = Boolean(serverInfo.data && !serverInfo.error);
   const statusLabel = serverInfo.error
     ? "Unavailable"
@@ -90,15 +86,7 @@ export default function ServerScreen() {
   return (
     <SettingsPage title="Hosting">
       <SettingsScrollView>
-        <SettingsGroup
-          label={cloud ? "ordo Cloud" : "Your server"}
-          compact
-          footer={
-            cloud
-              ? "Your library lives on ordo Cloud."
-              : "You run this server. Axolet Labs isn't responsible for it."
-          }
-        >
+        <SettingsGroup compact>
           <View
             style={[
               styles.current,
@@ -165,46 +153,17 @@ export default function ServerScreen() {
           ) : null}
         </SettingsGroup>
 
-        {cloud ? (
-          <SettingsGroup style={{ marginTop: spacing[16] }}>
-            <SettingRow
-              icon="server-outline"
-              label="Use your own server"
-              description="You run the API. We don't operate or support it."
-              onPress={() => {
-                haptics.light();
-                setSelfHostOpen(true);
-              }}
-              showChevron
-              divider={false}
-            />
-          </SettingsGroup>
-        ) : (
-          <>
-            <ServerHistoryPanel
-              entries={recents}
-              busy={busy}
-              onSelect={openEditor}
-              onRemove={(target) => {
-                haptics.light();
-                removeServerHistory(target);
-              }}
-            />
-            <SettingsGroup style={{ marginTop: spacing[16] }}>
-              <SettingRow
-                icon="cloud-outline"
-                label="Use ordo Cloud"
-                description="Leave this server. Your library here isn't copied."
-                onPress={() => {
-                  haptics.light();
-                  setConfirmedUrl(CLOUD_SERVER_URL);
-                }}
-                showChevron
-                divider={false}
-              />
-            </SettingsGroup>
-          </>
-        )}
+        <Button
+          label={cloud ? "Use your own server" : "Use ordo Cloud"}
+          variant="secondary"
+          block
+          size="lg"
+          onPress={() => {
+            if (cloud) setSelfHostOpen(true);
+            else setConfirmedUrl(CLOUD_SERVER_URL);
+          }}
+          style={styles.switchHost}
+        />
       </SettingsScrollView>
 
       <SelfHostFlow visible={selfHostOpen} onDismiss={() => setSelfHostOpen(false)} />
@@ -247,13 +206,13 @@ export default function ServerScreen() {
         onConfirm={() => void confirmSwitch()}
       >
         <View style={styles.hostChange}>
-          <Text variant="footnote" color="tertiary" numberOfLines={1} align="center">
+          <Text variant="footnote" color="tertiary" numberOfLines={1}>
             {displayName}
           </Text>
-          <Text variant="caption" color="faint" align="center">
+          <Text variant="caption" color="faint">
             to
           </Text>
-          <Text variant="bodyStrong" numberOfLines={1} align="center">
+          <Text variant="bodyStrong" numberOfLines={1}>
             {toCloud ? CLOUD_DISPLAY_NAME : confirmedUrl ? hostOf(confirmedUrl) : ""}
           </Text>
         </View>
@@ -492,6 +451,7 @@ const styles = StyleSheet.create({
     gap: spacing[8],
     flexShrink: 0,
   },
-  fields: { gap: spacing[16] },
-  hostChange: { gap: spacing[6], paddingHorizontal: spacing[8] },
+  fields: { gap: spacing[16], paddingHorizontal: spacing[4] },
+  hostChange: { gap: spacing[6] },
+  switchHost: { marginTop: spacing[16] },
 });

@@ -226,6 +226,7 @@ export function AddBookmarkSheet({
         ) : (
           <>
             <PanelHeader title="Save bookmark" />
+            <View style={styles.body}>
             {allowFolderSelection ? (
               <View style={styles.destinationRow}>
                 <Text variant="label" color="tertiary">Destination</Text>
@@ -340,6 +341,7 @@ export function AddBookmarkSheet({
               <Button label="Cancel" variant="secondary" onPress={close} style={styles.action} />
               <Button label="Save" onPress={submit} loading={create.isPending} style={styles.action} />
             </View>
+            </View>
           </>
         )}
       </FloatingPanel>
@@ -359,6 +361,7 @@ export function AddBookmarkSheet({
 }
 
 const styles = StyleSheet.create({
+  body: { paddingHorizontal: spacing[4] },
   destinationRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -393,8 +396,9 @@ const styles = StyleSheet.create({
   },
   actions: {
     flexDirection: "row",
+    alignItems: "stretch",
     gap: spacing[8],
-    marginTop: spacing[12],
+    marginTop: spacing[16],
   },
-  action: { flex: 1 },
+  action: { flex: 1, minWidth: 0 },
 });

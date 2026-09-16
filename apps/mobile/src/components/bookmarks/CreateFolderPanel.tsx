@@ -3,7 +3,7 @@
  * Shared by the library home header action and the save-bookmark sheet.
  */
 import React, { useState } from "react";
-import { StyleSheet, type TextInput } from "react-native";
+import { StyleSheet, View, type TextInput } from "react-native";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { PanelHeader } from "../ui/PanelHeader";
@@ -64,18 +64,20 @@ export function CreateFolderPanel({
     >
       <ThemedScrollView keyboardShouldPersistTaps="handled">
         <PanelHeader title="New folder" />
-        <Input
-          ref={nameRef}
-          label="Name"
-          value={name}
-          onChangeText={setName}
-          placeholder="e.g. Recipes"
-          autoFocus
-          error={error || undefined}
-          onSubmitEditing={submit}
-        />
-        <Text variant="label" color="tertiary" style={styles.iconLabel}>Icon</Text>
-        <FolderIconPicker value={icon} onChange={setIcon} />
+        <View style={styles.body}>
+          <Input
+            ref={nameRef}
+            label="Name"
+            value={name}
+            onChangeText={setName}
+            placeholder="e.g. Recipes"
+            autoFocus
+            error={error || undefined}
+            onSubmitEditing={submit}
+          />
+          <Text variant="label" color="tertiary" style={styles.iconLabel}>Icon</Text>
+          <FolderIconPicker value={icon} onChange={setIcon} />
+        </View>
         <PanelActions
           confirmLabel="Create folder"
           onConfirm={() => void submit()}
@@ -88,5 +90,6 @@ export function CreateFolderPanel({
 }
 
 const styles = StyleSheet.create({
+  body: { paddingHorizontal: spacing[4] },
   iconLabel: { marginTop: spacing[10], marginBottom: spacing[6] },
 });

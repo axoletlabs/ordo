@@ -4,6 +4,7 @@
  */
 import React, { useEffect, useState } from "react";
 import { type ButtonVariant } from "../ui/Button";
+import { View } from "react-native";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { type OtpStatus } from "../ui/OtpInput";
@@ -11,6 +12,7 @@ import { PanelActions } from "../ui/SheetActionRow";
 import { errorMessage, isMfaInvalidError, isMfaRequiredError } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
 import { MfaCodeField } from "./MfaSetupPanel";
+import { spacing } from "../../theme/tokens";
 
 export function MfaStepUpPanel({
   visible,
@@ -86,19 +88,21 @@ export function MfaStepUpPanel({
   return (
     <FloatingPanel visible={visible} onDismiss={close}>
       <PanelHeader title={title} subtitle={description} />
-      <MfaCodeField
-        key={visible ? "open" : "closed"}
-        value={code}
-        onChange={(next) => {
-          setCode(next);
-          if (error) setError("");
-          if (status === "error") setStatus("idle");
-        }}
-        error={error || undefined}
-        status={status}
-        autoFocus
-        onComplete={(next) => void submit(next)}
-      />
+      <View style={{ paddingHorizontal: spacing[4] }}>
+        <MfaCodeField
+          key={visible ? "open" : "closed"}
+          value={code}
+          onChange={(next) => {
+            setCode(next);
+            if (error) setError("");
+            if (status === "error") setStatus("idle");
+          }}
+          error={error || undefined}
+          status={status}
+          autoFocus
+          onComplete={(next) => void submit(next)}
+        />
+      </View>
       <PanelActions
         confirmLabel={confirmLabel}
         confirmVariant={confirmVariant}

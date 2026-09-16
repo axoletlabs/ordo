@@ -2,7 +2,7 @@
  * Create a new reusable tag inline (name + curated color).
  */
 import React, { useEffect, useState } from "react";
-import { StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { DEFAULT_TAG_COLOR, type TagColor, type TagDto } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
@@ -55,18 +55,20 @@ export function CreateTagPanel({ visible, onDismiss, onCreated }: CreateTagPanel
   return (
     <FloatingPanel visible={visible} onDismiss={onDismiss}>
       <PanelHeader title="New tag" />
-      <Input
-        value={name}
-        onChangeText={setName}
-        placeholder="Tag name"
-        autoFocus
-        autoCapitalize="words"
-        error={error || undefined}
-        returnKeyType="done"
-        onSubmitEditing={() => void submit()}
-      />
-      <Text variant="label" color="tertiary" style={styles.label}>Color</Text>
-      <TagColorPicker value={color} onChange={setColor} />
+      <View style={styles.body}>
+        <Input
+          value={name}
+          onChangeText={setName}
+          placeholder="Tag name"
+          autoFocus
+          autoCapitalize="words"
+          error={error || undefined}
+          returnKeyType="done"
+          onSubmitEditing={() => void submit()}
+        />
+        <Text variant="label" color="tertiary" style={styles.label}>Color</Text>
+        <TagColorPicker value={color} onChange={setColor} />
+      </View>
       <PanelActions
         confirmLabel="Create"
         onConfirm={() => void submit()}
@@ -78,5 +80,6 @@ export function CreateTagPanel({ visible, onDismiss, onCreated }: CreateTagPanel
 }
 
 const styles = StyleSheet.create({
+  body: { paddingHorizontal: spacing[4] },
   label: { marginTop: spacing[10], marginBottom: spacing[6] },
 });

@@ -9,14 +9,14 @@ export const sheetMenuStyles = StyleSheet.create({
   stack: { gap: spacing[8], marginTop: spacing[8] },
   row: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[10],
+    alignItems: "stretch",
+    gap: spacing[8],
     marginTop: spacing[16],
+    paddingHorizontal: spacing[4],
   },
   action: {
     flex: 1,
     minWidth: 0,
-    paddingHorizontal: spacing[12],
   },
   cancel: { marginTop: spacing[4] },
 });

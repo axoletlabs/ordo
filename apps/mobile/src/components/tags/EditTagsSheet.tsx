@@ -99,7 +99,7 @@ export function EditTagsSheet({ visible, onDismiss, bookmark }: EditTagsSheetPro
     <>
       <FloatingPanel visible={visible} onDismiss={onDismiss}>
         <PanelHeader title="Edit tags" />
-
+        <View style={styles.body}>
       {assigned.length > 0 ? (
         <ScrollView
           horizontal
@@ -165,6 +165,7 @@ export function EditTagsSheet({ visible, onDismiss, bookmark }: EditTagsSheetPro
           {error}
         </Text>
       ) : null}
+        </View>
 
       <PanelActions
         confirmLabel="Save"
@@ -208,6 +209,7 @@ function PressableIconButton({
 }
 
 const styles = StyleSheet.create({
+  body: { paddingHorizontal: spacing[4] },
   hint: { marginBottom: spacing[6] },
   chipRow: { flexDirection: "row", gap: spacing[8], paddingVertical: spacing[6], flexWrap: "wrap" },
   chipWrap: { flexDirection: "row", gap: spacing[8], flexWrap: "wrap", marginTop: spacing[6] },

@@ -2,7 +2,7 @@
  * Add tags to every selected bookmark. Existing tags are kept; new ones are unioned.
  */
 import React, { useEffect, useState } from "react";
-import { StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Text } from "../ui/Text";
@@ -72,16 +72,18 @@ export function AddTagsSheet({
     <>
       <FloatingPanel visible={visible} onDismiss={onDismiss}>
         <PanelHeader title="Add tags" />
-        <TagSelectList
-          selectedIds={selectedIds}
-          onToggle={toggle}
-          onRequestCreateTag={() => setCreateTagOpen(true)}
-        />
-        {error ? (
-          <Text variant="footnote" color="danger" style={styles.error}>
-            {error}
-          </Text>
-        ) : null}
+        <View style={styles.body}>
+          <TagSelectList
+            selectedIds={selectedIds}
+            onToggle={toggle}
+            onRequestCreateTag={() => setCreateTagOpen(true)}
+          />
+          {error ? (
+            <Text variant="footnote" color="danger" style={styles.error}>
+              {error}
+            </Text>
+          ) : null}
+        </View>
         <PanelActions
           confirmLabel="Add tags"
           onConfirm={() => void save()}
@@ -100,5 +102,6 @@ export function AddTagsSheet({
 }
 
 const styles = StyleSheet.create({
+  body: { paddingHorizontal: spacing[4] },
   error: { marginTop: spacing[8] },
 });

@@ -82,6 +82,7 @@ export function ReaderControlsSheet({
     <FloatingPanel visible={visible} onDismiss={onDismiss} maxWidth={420}>
       <PanelHeader title="Reader" />
 
+      <View style={styles.body}>
       <ControlGroup label="Text size" accessibilityHint="Changes the article text size.">
         <Segmented
           options={sizeOptions}
@@ -119,11 +120,13 @@ export function ReaderControlsSheet({
           disabled={!effectiveDark}
         />
       </View>
+      </View>
     </FloatingPanel>
   );
 }
 
 const styles = StyleSheet.create({
+  body: { paddingHorizontal: spacing[4] },
   group: { marginBottom: spacing[10] },
   groupControl: { marginTop: spacing[4] },
   amoledRow: {

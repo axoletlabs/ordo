@@ -2,7 +2,7 @@
  * Rename and/or recolor an existing tag.
  */
 import React, { useEffect, useState } from "react";
-import { StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
 import type { TagColor, TagDto } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
@@ -68,17 +68,19 @@ export function EditTagPanel({ visible, tag, onDismiss }: EditTagPanelProps) {
   return (
     <FloatingPanel visible={visible && !!tag} onDismiss={onDismiss}>
       <PanelHeader title="Edit tag" />
-      <Input
-        value={name}
-        onChangeText={setName}
-        placeholder="Tag name"
-        autoCapitalize="words"
-        error={error || undefined}
-        returnKeyType="done"
-        onSubmitEditing={() => void save()}
-      />
-      <Text variant="label" color="tertiary" style={styles.label}>Color</Text>
-      <TagColorPicker value={color} onChange={setColor} />
+      <View style={styles.body}>
+        <Input
+          value={name}
+          onChangeText={setName}
+          placeholder="Tag name"
+          autoCapitalize="words"
+          error={error || undefined}
+          returnKeyType="done"
+          onSubmitEditing={() => void save()}
+        />
+        <Text variant="label" color="tertiary" style={styles.label}>Color</Text>
+        <TagColorPicker value={color} onChange={setColor} />
+      </View>
       <PanelActions
         confirmLabel="Save"
         onConfirm={() => void save()}
@@ -90,5 +92,6 @@ export function EditTagPanel({ visible, tag, onDismiss }: EditTagPanelProps) {
 }
 
 const styles = StyleSheet.create({
+  body: { paddingHorizontal: spacing[4] },
   label: { marginTop: spacing[10], marginBottom: spacing[6] },
 });

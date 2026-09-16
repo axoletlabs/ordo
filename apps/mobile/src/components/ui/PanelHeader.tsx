@@ -10,6 +10,8 @@ import { Text, type TextVariant } from "./Text";
 import { radius, spacing } from "../../theme/tokens";
 
 const ICON_SIZE = 28;
+/** Extra left inset so body copy lines up with the title when an icon is present. */
+export const PANEL_ICON_COLUMN = ICON_SIZE + spacing[12];
 
 export function PanelHeader({
   title,
@@ -71,7 +73,7 @@ const styles = StyleSheet.create({
   },
   wrapWithIcon: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: spacing[12],
   },
   icon: {

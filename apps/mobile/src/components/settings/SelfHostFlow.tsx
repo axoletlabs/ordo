@@ -10,7 +10,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { APP_NAME } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { ThemedScrollView } from "../ui/ThemedScrollView";
-import { PanelHeader } from "../ui/PanelHeader";
+import { PANEL_ICON_COLUMN, PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 import { Text } from "../ui/Text";
@@ -23,10 +23,8 @@ import { useSettingsStore } from "../../store/settings";
 import { useAuthStore } from "../../store/auth";
 import { useServerProbe } from "../../hooks/use-server-probe";
 import { useCommitServerSwitch } from "../../hooks/use-commit-server-switch";
-import { CLOUD_SERVER_URL, isCloudServerUrl } from "../../lib/hosting";
-import { probeServer, hostOf, normalizeServerUrl } from "../../lib/server-probe";
-import { visibleServerHistory } from "../../lib/server-history";
-import { timeAgo } from "../../lib/format";
+import { isCloudServerUrl } from "../../lib/hosting";
+import { probeServer } from "../../lib/server-probe";
 
 type Step = "intro" | "acknowledge" | "address";
 
@@ -52,7 +50,6 @@ export function SelfHostFlow({
 }) {
   const { palette } = useTheme();
   const currentUrl = useSettingsStore((s) => s.serverUrl);
-  const serverHistory = useSettingsStore((s) => s.serverHistory);
   const signedIn = useAuthStore((s) => s.status === "authenticated");
   const { commit, busy } = useCommitServerSwitch();
   const inputRef = useRef<TextInput>(null);
@@ -63,7 +60,6 @@ export function SelfHostFlow({
   const [confirming, setConfirming] = useState(false);
   const [pendingUrl, setPendingUrl] = useState<string | null>(null);
 
-  const recents = visibleServerHistory(serverHistory, currentUrl, [CLOUD_SERVER_URL]);
   const probe = useServerProbe(url, currentUrl, visible && step === "address");
   const cloudTyped = Boolean(probe.normalized && isCloudServerUrl(probe.normalized));
   const probeCopy = cloudTyped
@@ -216,51 +212,6 @@ export function SelfHostFlow({
                 helper={probeCopy.helper}
                 onSubmitEditing={() => void connect()}
               />
-              {recents.length > 0 ? (
-                <View style={styles.recents}>
-                  <Text variant="label" color="tertiary">Recent</Text>
-                  {recents.map((entry) => {
-                    const selected = normalizeServerUrl(url) === entry.url;
-                    return (
-                      <PressableScale
-                        key={entry.url}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Use recent server ${hostOf(entry.url)}`}
-                        disabled={switching}
-                        onPress={() => {
-                          haptics.selection();
-                          setUrl(entry.url);
-                        }}
-                        style={[
-                          styles.recentRow,
-                          {
-                            backgroundColor: palette.surfaceSecondary,
-                            borderColor: selected ? palette.accent : "transparent",
-                          },
-                        ]}
-                      >
-                        <Ionicons
-                          name={selected ? "checkmark" : "time-outline"}
-                          size={14}
-                          color={selected ? palette.accent : palette.textTertiary}
-                        />
-                        <View style={styles.recentCopy}>
-                          <Text
-                            variant="subhead"
-                            numberOfLines={1}
-                            color={selected ? "accent" : "primary"}
-                          >
-                            {hostOf(entry.url)}
-                          </Text>
-                          <Text variant="footnote" color="tertiary" numberOfLines={1}>
-                            {timeAgo(new Date(entry.lastConnectedAt).toISOString())}
-                          </Text>
-                        </View>
-                      </PressableScale>
-                    );
-                  })}
-                </View>
-              ) : null}
             </View>
           ) : null}
 
@@ -346,11 +297,17 @@ function ContinueButton({
       accessibilityLabel="Continue"
       accessibilityState={{ disabled: !ready }}
       disabled={!ready}
-      onPress={onPress}
+      onPress={() => {
+        haptics.light();
+        onPress();
+      }}
       style={[
         styles.action,
         styles.continue,
-        { backgroundColor: ready ? palette.accent : palette.surfaceSecondary },
+        {
+          backgroundColor: ready ? palette.accent : palette.surfaceSecondary,
+          borderColor: ready ? palette.accent : palette.surfaceSecondary,
+        },
       ]}
     >
       <Text
@@ -401,13 +358,17 @@ function CheckRow({
 }
 
 const styles = StyleSheet.create({
-  stack: { gap: spacing[12] },
+  stack: {
+    gap: spacing[12],
+    paddingLeft: spacing[4] + PANEL_ICON_COLUMN,
+    paddingRight: spacing[4],
+  },
   list: { gap: spacing[6] },
   listRow: { flexDirection: "row", gap: spacing[8], alignItems: "flex-start" },
   listCopy: { flex: 1 },
   check: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: spacing[10],
     borderWidth: 1,
     borderRadius: radius.sm,
@@ -415,30 +376,21 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[10],
   },
   checkLabel: { flex: 1 },
-  recents: { gap: spacing[6] },
-  recentRow: {
-    minHeight: 44,
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing[12],
-    paddingVertical: spacing[8],
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[10],
-  },
-  recentCopy: { flex: 1, minWidth: 0 },
   actions: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "stretch",
     gap: spacing[8],
     marginTop: spacing[16],
+    paddingLeft: spacing[4] + PANEL_ICON_COLUMN,
+    paddingRight: spacing[4],
   },
-  action: { flex: 1 },
+  action: { flex: 1, minWidth: 0 },
   continue: {
     height: 42,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radius.sm,
+    borderWidth: 1,
     paddingHorizontal: spacing[16],
   },
 });

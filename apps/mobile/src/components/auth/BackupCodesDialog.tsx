@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { PanelHeader } from "../ui/PanelHeader";
+import { PANEL_ICON_COLUMN, PanelHeader } from "../ui/PanelHeader";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { Text } from "../ui/Text";
 import { PanelActions } from "../ui/SheetActionRow";
@@ -81,6 +81,8 @@ const styles = StyleSheet.create({
   header: { marginBottom: 0 },
   grid: {
     marginTop: spacing[12],
+    marginLeft: spacing[4] + PANEL_ICON_COLUMN,
+    marginRight: spacing[4],
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.lg,
     paddingVertical: spacing[12],

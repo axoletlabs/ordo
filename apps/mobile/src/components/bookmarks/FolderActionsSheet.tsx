@@ -428,7 +428,15 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
       {folder && mode === "rename" ? (
         <>
           <PanelHeader title="Rename folder" />
-          <Input label="Name" value={name} onChangeText={setName} autoFocus error={error || undefined} onSubmitEditing={doRename} />
+          <Input
+            label="Name"
+            value={name}
+            onChangeText={setName}
+            autoFocus
+            error={error || undefined}
+            onSubmitEditing={doRename}
+            containerStyle={styles.body}
+          />
           <PanelActions
             confirmLabel="Save"
             onConfirm={doRename}
@@ -513,6 +521,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
                 error={error || undefined}
                 autoCapitalize="none"
                 autoCorrect={false}
+                containerStyle={styles.body}
                 rightAccessory={<EyeToggle visible={showPassword} onPress={() => setShowPassword((value) => !value)} />}
               />
               <Input
@@ -611,6 +620,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
               autoCorrect={false}
               error={error || undefined}
               onSubmitEditing={() => void removeWithFolderPassword()}
+              containerStyle={styles.body}
               rightAccessory={<EyeToggle visible={showPassword} onPress={() => setShowPassword((value) => !value)} />}
             />
           )}
@@ -662,6 +672,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             onSubmitEditing={submitAccountBypass}
             textContentType="password"
             autoComplete="password"
+            containerStyle={styles.body}
             rightAccessory={<EyeToggle visible={showAccountPassword} onPress={() => setShowAccountPassword((value) => !value)} />}
           />
           <PressableScale
@@ -695,8 +706,10 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
       {folder && mode === "icon" ? (
         <>
           <PanelHeader title="Choose an icon" />
-          <FolderIconPicker value={icon} onChange={setIcon} />
-          {error ? <Text variant="footnote" color="danger" style={styles.error}>{error}</Text> : null}
+          <View style={styles.body}>
+            <FolderIconPicker value={icon} onChange={setIcon} />
+            {error ? <Text variant="footnote" color="danger" style={styles.error}>{error}</Text> : null}
+          </View>
           <PanelActions
             confirmLabel="Save icon"
             onConfirm={doUpdateIcon}
@@ -712,9 +725,10 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
 }
 
 const styles = StyleSheet.create({
+  body: { paddingHorizontal: spacing[4] },
   error: { marginTop: spacing[8] },
   menuNote: { marginHorizontal: spacing[12], marginVertical: spacing[6] },
   forgot: { alignSelf: "center", marginTop: spacing[8] },
-  confirmInput: { marginTop: spacing[12] },
+  confirmInput: { marginTop: spacing[12], paddingHorizontal: spacing[4] },
   pinBoxes: { marginTop: spacing[12] },
 });

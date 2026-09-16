@@ -183,6 +183,7 @@ export function UnlockForm({
   return (
     <View style={styles.form}>
       <PanelHeader title={title} subtitle={unlockSubtitle(lockType, digits)} />
+      <View style={styles.body}>
       {lockType === "device" ? (
         <Button
           label="Use device lock"
@@ -257,6 +258,7 @@ export function UnlockForm({
           {error}
         </Text>
       ) : null}
+      </View>
       {isPassword && onCancel ? (
         <PanelActions
           confirmLabel="Unlock"
@@ -321,6 +323,7 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     alignSelf: "center",
   },
+  body: { paddingHorizontal: spacing[4] },
   error: {
     marginTop: spacing[8],
   },

@@ -1,17 +1,10 @@
 /**
- * Client/UI settings store: server URL, recent server history, theme mode,
- * AMOLED, navigation, haptics, website-browser, in-app force-dark, and
- * share-sheet preferences. Persisted to AsyncStorage (non-secret). Hydrated
- * explicitly on app start.
+ * Client/UI settings store: server URL, theme mode, AMOLED, navigation,
+ * haptics, website-browser, in-app force-dark, and share-sheet preferences.
+ * Persisted to AsyncStorage (non-secret). Hydrated explicitly on app start.
  */
 import { create } from "zustand";
 import { setHapticsEnabled as applyHapticsEnabled } from "../lib/haptics";
-import {
-  parseServerHistory,
-  recordServerSwitch,
-  removeServerHistoryEntry,
-  type ServerHistoryEntry,
-} from "../lib/server-history";
 import { patchQuickShareSessionServerUrl, syncQuickShareFlags } from "../lib/share-targets";
 import { DEFAULT_SERVER_URL, resolvePersistedServerUrl } from "../lib/hosting";
 import { prefsGet, prefsSet, StorageKeys } from "../lib/storage";
@@ -57,13 +50,10 @@ export interface SettingsState {
   hapticsEnabled: boolean;
   /** One-time tip: OTP is printed to the server console when SMTP is unset. */
   consoleOtpTipDismissed: boolean;
-  /** Last three servers left behind when switching. URLs only — no credentials. */
-  serverHistory: ServerHistoryEntry[];
   hydrated: boolean;
 
   hydrate: () => Promise<void>;
   setServerUrl: (url: string) => Promise<void>;
-  removeServerHistory: (url: string) => void;
   setThemeMode: (mode: ThemeMode) => void;
   setAmoled: (on: boolean) => void;
   setNavigationStyle: (style: NavigationStyle) => void;
@@ -94,7 +84,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   shareShowQuickAction: false,
   hapticsEnabled: true,
   consoleOtpTipDismissed: false,
-  serverHistory: [],
   hydrated: false,
 
   hydrate: async () => {
@@ -125,7 +114,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         saved?.shareQuickBookmark === true && saved?.shareShowQuickAction === true,
       hapticsEnabled: saved?.hapticsEnabled !== false,
       consoleOtpTipDismissed: saved?.consoleOtpTipDismissed === true,
-      serverHistory: parseServerHistory(saved?.serverHistory),
       hydrated: true,
     });
     applyHapticsEnabled(get().hapticsEnabled);
@@ -136,16 +124,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setServerUrl: async (url) => {
-    const previous = get().serverUrl;
-    const serverHistory = recordServerSwitch(get().serverHistory, previous, url);
-    set({ serverUrl: url, serverHistory });
-    await prefsSet(StorageKeys.SETTINGS, { ...get(), serverUrl: url, serverHistory });
+    set({ serverUrl: url });
+    await prefsSet(StorageKeys.SETTINGS, { ...get(), serverUrl: url });
     void patchQuickShareSessionServerUrl(url);
-  },
-  removeServerHistory: (url) => {
-    const serverHistory = removeServerHistoryEntry(get().serverHistory, url);
-    set({ serverHistory });
-    void prefsSet(StorageKeys.SETTINGS, { ...get(), serverHistory });
   },
   setThemeMode: (mode) => {
     set({ themeMode: mode });

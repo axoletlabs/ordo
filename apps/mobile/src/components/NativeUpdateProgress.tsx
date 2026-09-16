@@ -2,7 +2,7 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import { APP_NAME } from "@ordo/shared";
 import { FloatingPanel } from "./ui/FloatingPanel";
-import { PanelHeader } from "./ui/PanelHeader";
+import { PANEL_ICON_COLUMN, PanelHeader } from "./ui/PanelHeader";
 import { Text } from "./ui/Text";
 import { Button } from "./ui/Button";
 import { PanelActions } from "./ui/SheetActionRow";
@@ -125,7 +125,11 @@ export function NativeUpdateProgress() {
 }
 
 const styles = StyleSheet.create({
-  progressSection: { marginTop: spacing[4] },
+  progressSection: {
+    marginTop: spacing[4],
+    paddingLeft: spacing[4] + PANEL_ICON_COLUMN,
+    paddingRight: spacing[4],
+  },
   progressTrack: { height: 8, borderRadius: radius.full, overflow: "hidden" },
   progressFill: { height: "100%", borderRadius: radius.full },
   progressMeta: {
@@ -133,7 +137,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  actions: { marginTop: spacing[12], gap: spacing[4] },
+  actions: { gap: spacing[4] },
   error: { marginBottom: spacing[12] },
   permissionButton: { width: "100%", marginBottom: spacing[8] },
 });
