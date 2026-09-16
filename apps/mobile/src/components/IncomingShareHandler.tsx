@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { useShareIntentContext } from "expo-share-intent";
 import { APP_NAME } from "@ordo/shared";
 import { returnToShareSender, saveUnfiledBookmark } from "../lib/share-target";
-import { shareIntakeMode } from "../lib/share-intake";
+import { shareIntakeMode, shareSavedToast } from "../lib/share-intake";
 import { consumeQuickShareFlag } from "../lib/share-targets";
 import { extractSharedUrl } from "../lib/shared-url";
 import { prefetchExtraction } from "../lib/prefetch-extraction";
@@ -27,12 +27,18 @@ export function IncomingShareHandler() {
     resetShareIntent();
 
     if (!url) {
+      useIncomingShareStore.getState().clear();
       returnToShareSender("The shared text doesn't contain a valid link.");
       return;
     }
 
+    const generation = useIncomingShareStore.getState().generation;
+    const stillThisIntake = () => useIncomingShareStore.getState().generation === generation;
+
     void (async () => {
       const fromQuickTarget = await consumeQuickShareFlag();
+      if (!stillThisIntake()) return;
+
       const { shareQuickBookmark, shareShowQuickAction } = useSettingsStore.getState();
       const mode = shareIntakeMode({
         quickBookmark: shareQuickBookmark,
@@ -40,22 +46,26 @@ export function IncomingShareHandler() {
         fromQuickTarget,
       });
 
-      if (mode === "sheet") {
-        prefetchExtraction(url);
-        setPendingUrl(url);
+      if (useAuthStore.getState().status !== "authenticated") {
+        useIncomingShareStore.getState().clear();
+        returnToShareSender("Sign in to save bookmarks.");
         return;
       }
 
-      if (useAuthStore.getState().status !== "authenticated") {
-        returnToShareSender("Sign in to save bookmarks.");
+      if (mode === "sheet") {
+        prefetchExtraction(url);
+        if (!stillThisIntake()) return;
+        setPendingUrl(url);
         return;
       }
 
       try {
         await saveUnfiledBookmark(url);
+        if (!stillThisIntake()) return;
         haptics.success();
-        returnToShareSender("Saved to Bookmarks");
+        returnToShareSender(shareSavedToast());
       } catch (err) {
+        if (!stillThisIntake()) return;
         toast.error(errorMessage(err));
         prefetchExtraction(url);
         setPendingUrl(url);
@@ -66,6 +76,7 @@ export function IncomingShareHandler() {
   useEffect(() => {
     if (!error) return;
     resetShareIntent();
+    useIncomingShareStore.getState().clear();
     returnToShareSender(`${APP_NAME} couldn't read the shared link.`);
   }, [error, resetShareIntent]);
 

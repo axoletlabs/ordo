@@ -9,6 +9,8 @@ import {
   parseQuickShareSession,
   shareIntakeIsQuickDefault,
   shareIntakeMode,
+  shareSavedToast,
+  shouldAbandonShareIntake,
   shouldAdoptQuickShareSession,
 } from "./share-intake.ts";
 
@@ -53,6 +55,21 @@ test("quick bookmark without a second target is the native default-save path", (
     shareIntakeIsQuickDefault({ quickBookmark: true, showAlongside: true }),
     false,
   );
+});
+
+test("leaving the app abandons an in-progress save sheet", () => {
+  assert.equal(shouldAbandonShareIntake(true, "background"), true);
+  assert.equal(shouldAbandonShareIntake(true, "inactive"), true);
+  assert.equal(shouldAbandonShareIntake(true, "active"), false);
+  assert.equal(shouldAbandonShareIntake(false, "background"), false);
+  assert.equal(shouldAbandonShareIntake(false, "active"), false);
+});
+
+test("share-target save toasts name the destination", () => {
+  assert.equal(shareSavedToast("Bookmarks"), "Saved to Bookmarks");
+  assert.equal(shareSavedToast("Recipes"), "Saved to Recipes");
+  assert.equal(shareSavedToast("  "), "Saved to Bookmarks");
+  assert.equal(shareSavedToast(null), "Saved to Bookmarks");
 });
 
 test("sidecar file names stay short and stable for the Android activities", () => {

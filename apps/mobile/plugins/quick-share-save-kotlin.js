@@ -24,9 +24,9 @@ internal object QuickShareSave {
   private const val CONNECT_MS = 8000
   private const val READ_MS = 12000
   private const val REFRESH_LEAD_MS = 60_000L
-  private const val SAVED = "Saved to Bookmarks"
-  private const val SIGN_IN = "Sign in to save bookmarks."
-  private const val INVALID = "The shared text doesn't contain a valid link."
+  const val SAVED = "Saved to Bookmarks"
+  const val SIGN_IN = "Sign in to save bookmarks."
+  const val INVALID = "The shared text doesn't contain a valid link."
   private val main = Handler(Looper.getMainLooper())
   private val urlPattern = Regex("https?://\\\\S+", RegexOption.IGNORE_CASE)
 
@@ -72,7 +72,7 @@ internal object QuickShareSave {
   }
 
   private fun saveUrl(context: Context, url: String): Outcome {
-    val session = readSession(context) ?: return Outcome.FALLBACK
+    val session = readSession(context) ?: return Outcome.AUTH
     var usedRefresh = false
     try {
       if (needsRefresh(session)) {
@@ -186,6 +186,9 @@ internal object QuickShareSave {
     else json.put("accessExpiresAt", JSONObject.NULL)
     ShareSessionStore.write(context, json.toString())
   }
+
+  @JvmStatic
+  fun urlFromIntent(intent: Intent): String? = extractFromIntent(intent)
 
   private fun extractFromIntent(intent: Intent): String? {
     val extras = arrayOf(

@@ -165,6 +165,7 @@ import android.os.Build
 import android.os.FileObserver
 import android.os.Handler
 import android.os.Looper
+import android.widget.Toast
 import java.io.File
 
 internal object ShareIntake {
@@ -188,10 +189,38 @@ internal object ShareIntake {
   @JvmStatic
   fun handleIncoming(activity: Activity, quick: Boolean) {
     if (!quick && !isQuickDefault(activity)) {
+      if (!canForwardToMain(activity)) return
       forwardToMain(activity, false)
       return
     }
     QuickShareSave.save(activity, quick)
+  }
+
+  @JvmStatic
+  fun canForwardToMain(activity: Activity): Boolean {
+    if (QuickShareSave.urlFromIntent(activity.intent) == null) {
+      Toast.makeText(activity, QuickShareSave.INVALID, Toast.LENGTH_SHORT).show()
+      activity.finish()
+      return false
+    }
+    if (ShareSessionStore.read(activity).isNullOrEmpty()) {
+      Toast.makeText(activity, QuickShareSave.SIGN_IN, Toast.LENGTH_SHORT).show()
+      activity.finish()
+      return false
+    }
+    return true
+  }
+
+  /** Drop ACTION_SEND so a warm recreate from recents does not reopen the save sheet. */
+  @JvmStatic
+  fun consumeShareIntent(activity: Activity) {
+    val current = activity.intent ?: return
+    val action = current.action
+    if (action != Intent.ACTION_SEND && action != Intent.ACTION_SEND_MULTIPLE) return
+    activity.intent = Intent(activity, MainActivity::class.java).apply {
+      this.action = Intent.ACTION_MAIN
+      addCategory(Intent.CATEGORY_LAUNCHER)
+    }
   }
 
   @JvmStatic
@@ -353,6 +382,12 @@ function shareTargetSyncCall(isJava) {
   return isJava ? 'ShareIntake.watchAndSync(this);' : 'ShareIntake.watchAndSync(this)';
 }
 
+function shareTargetConsumeCall(isJava) {
+  return isJava
+    ? 'ShareIntake.consumeShareIntent(this);'
+    : 'ShareIntake.consumeShareIntent(this)';
+}
+
 function shareTargetPauseMethod(isJava) {
   if (isJava) {
     return [
@@ -371,6 +406,24 @@ function shareTargetPauseMethod(isJava) {
   ].join('\n');
 }
 
+function shareTargetNewIntentMethod(isJava) {
+  if (isJava) {
+    return [
+      '  @Override',
+      '  public void onNewIntent(android.content.Intent intent) {',
+      '    super.onNewIntent(intent);',
+      '    ShareIntake.consumeShareIntent(this);',
+      '  }',
+    ].join('\n');
+  }
+  return [
+    '  override fun onNewIntent(intent: android.content.Intent?) {',
+    '    super.onNewIntent(intent)',
+    '    ShareIntake.consumeShareIntent(this)',
+    '  }',
+  ].join('\n');
+}
+
 function patchMainActivityForShareTargets(contents, language) {
   const isJava = language === 'java';
   let next = mergeContents({
@@ -383,11 +436,27 @@ function patchMainActivityForShareTargets(contents, language) {
   }).contents;
   next = mergeContents({
     src: next,
+    tag: 'ordo-share-targets-consume-create',
+    comment: '    //',
+    offset: 1,
+    anchor: /ShareIntake\.watchAndSync\(this\);?/,
+    newSrc: `    ${shareTargetConsumeCall(isJava)}`,
+  }).contents;
+  next = mergeContents({
+    src: next,
     tag: 'ordo-share-targets-pause',
     comment: '  //',
     offset: 1,
     anchor: /class MainActivity/,
     newSrc: shareTargetPauseMethod(isJava),
+  }).contents;
+  next = mergeContents({
+    src: next,
+    tag: 'ordo-share-targets-new-intent',
+    comment: '  //',
+    offset: 1,
+    anchor: /class MainActivity/,
+    newSrc: shareTargetNewIntentMethod(isJava),
   }).contents;
   return next;
 }

@@ -146,6 +146,11 @@ test("share intake uses sidecar files that match the JS constants", () => {
   assert.match(source, new RegExp(`BOOKMARK_FILE = "${QUICK_SHARE_BOOKMARK_FILE}"`));
   assert.doesNotMatch(source, /SESSION_FILE/);
   assert.match(source, /handleIncoming/);
+  assert.match(source, /canForwardToMain/);
+  assert.match(source, /consumeShareIntent/);
+  assert.match(source, /QuickShareSave\.SIGN_IN/);
+  assert.match(source, /QuickShareSave\.INVALID/);
+  assert.match(source, /ACTION_MAIN/);
   assert.match(source, /isQuickDefault/);
   assert.match(source, /QuickShareSave\.save/);
   assert.match(source, /COMPONENT_ENABLED_STATE_DISABLED/);
@@ -225,6 +230,8 @@ test("Quick Save posts from the translucent activity using EncryptedSharedPrefer
   assert.match(source, /Sign in to save bookmarks/);
   assert.match(source, /ShareSessionStore\.read/);
   assert.match(source, /ShareSessionStore\.write/);
+  assert.match(source, /urlFromIntent/);
+  assert.match(source, /readSession\(context\) \?: return Outcome\.AUTH/);
   assert.doesNotMatch(source, /writeSidecar/);
   assert.match(source, /Theme\.Translucent|forwardToMain/);
   assert.match(source, /https\?:\/\//);
@@ -246,6 +253,7 @@ test("Quick Save session lives in EncryptedSharedPreferences, not files/cache", 
   assert.match(bridge, /ShareSessionStore\.read/);
   assert.match(bridge, /ShareSessionStore\.write/);
   assert.match(bridge, /ShareSessionStore\.clear/);
+  assert.match(bridge, /moveTaskToBack/);
 });
 
 const EXPO_APP_GRADLE = `
@@ -312,15 +320,20 @@ test("backup rules keep SecureStore and the Quick Save session off Auto Backup",
 test("MainActivity syncs the disabled Quick Bookmark target on create and pause", () => {
   const patched = patchMainActivityForShareTargets(KOTLIN_ACTIVITY, 'kt');
   assert.match(patched, /ShareIntake\.watchAndSync\(this\)/);
+  assert.match(patched, /ShareIntake\.consumeShareIntent\(this\)/);
   assert.match(patched, /override fun onPause\(\)/);
+  assert.match(patched, /override fun onNewIntent/);
   assert.equal(patched.split('ShareIntake.watchAndSync(this)').length - 1, 2);
+  assert.equal(patched.split('ShareIntake.consumeShareIntent(this)').length - 1, 2);
   assert.equal(patchMainActivityForShareTargets(patched, 'kt'), patched);
 });
 
 test("patches Java MainActivity for the Quick Bookmark target", () => {
   const patched = patchMainActivityForShareTargets(JAVA_ACTIVITY, 'java');
   assert.match(patched, /ShareIntake\.watchAndSync\(this\);/);
+  assert.match(patched, /ShareIntake\.consumeShareIntent\(this\);/);
   assert.match(patched, /public void onPause\(\)/);
+  assert.match(patched, /public void onNewIntent/);
 });
 
 const KOTLIN_APPLICATION = `class MainApplication : Application(), ReactApplication {

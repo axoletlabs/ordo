@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
-import { Keyboard, Platform } from "react-native";
+import { AppState, Keyboard, Platform } from "react-native";
 
-function readKeyboardVisible() {
+export function keyboardIsOpen() {
   try {
+    if (typeof Keyboard.isVisible === "function" && Keyboard.isVisible()) return true;
     const metrics = typeof Keyboard.metrics === "function" ? Keyboard.metrics() : null;
     return !!metrics && metrics.height > 0;
   } catch {
@@ -15,7 +16,7 @@ function readKeyboardVisible() {
  * tab bar can hide in lockstep with `tabBarHideOnKeyboard`.
  */
 export function useKeyboardVisible() {
-  const [visible, setVisible] = useState(readKeyboardVisible);
+  const [visible, setVisible] = useState(() => keyboardIsOpen());
 
   useEffect(() => {
     const showEvent = Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
@@ -24,9 +25,13 @@ export function useKeyboardVisible() {
       setVisible((event.endCoordinates?.height ?? 0) > 0);
     });
     const hide = Keyboard.addListener(hideEvent, () => setVisible(false));
+    const app = AppState.addEventListener("change", (state) => {
+      if (state === "active") setVisible(keyboardIsOpen());
+    });
     return () => {
       show.remove();
       hide.remove();
+      app.remove();
     };
   }, []);
 

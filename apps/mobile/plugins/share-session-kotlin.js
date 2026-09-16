@@ -156,6 +156,17 @@ class OrdoShareSessionModule(reactContext: ReactApplicationContext) :
       promise.reject("ERR_SHARE_SESSION", e)
     }
   }
+
+  @ReactMethod
+  fun moveTaskToBack(promise: Promise) {
+    try {
+      val activity = reactApplicationContext.currentActivity
+      activity?.moveTaskToBack(true)
+      promise.resolve(null)
+    } catch (e: Exception) {
+      promise.reject("ERR_SHARE_SESSION", e)
+    }
+  }
 }
 `;
 }

@@ -36,6 +36,7 @@ import { fontAssets } from "../src/theme/tokens";
 import { IncomingShareHandler } from "../src/components/IncomingShareHandler";
 import { AddBookmarkSheet } from "../src/components/bookmarks/AddBookmarkSheet";
 import { returnToShareSender } from "../src/lib/share-target";
+import { shareSavedToast } from "../src/lib/share-intake";
 import { useIncomingShareStore } from "../src/store/incoming-share";
 import {
   clearRestartCover,
@@ -152,6 +153,10 @@ function RootShell() {
             onDismiss={() => {
               clearSharedUrl();
               returnToShareSender();
+            }}
+            onSaved={(destination) => {
+              clearSharedUrl();
+              returnToShareSender(shareSavedToast(destination));
             }}
             folderId={null}
             allowFolderSelection

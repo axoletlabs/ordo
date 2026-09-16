@@ -25,3 +25,10 @@ test("rejects non-http(s) candidates", () => {
   assert.equal(extractSharedUrl("ftp://example.com/a", null), null);
   assert.equal(extractSharedUrl(null, "no link here"), null);
 });
+
+test("falls back to share text when the parsed web URL is not http(s)", () => {
+  assert.equal(
+    extractSharedUrl("ftp://example.com/a", "See https://example.com/b"),
+    "https://example.com/b",
+  );
+});

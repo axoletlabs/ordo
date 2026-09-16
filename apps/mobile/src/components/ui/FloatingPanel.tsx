@@ -62,7 +62,11 @@ export function FloatingPanel({
 
   return (
     <OverlayPortal>
-      <View accessibilityViewIsModal style={styles.root}>
+      <View
+        accessibilityViewIsModal={visible}
+        pointerEvents={visible ? "auto" : "none"}
+        style={styles.root}
+      >
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, scrimStyle]}>
           <View style={[StyleSheet.absoluteFill, { backgroundColor: palette.overlay }]} />
         </Animated.View>

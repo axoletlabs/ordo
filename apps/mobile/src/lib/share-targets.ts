@@ -23,6 +23,7 @@ interface ShareSessionNative {
   get(): Promise<string | null>;
   set(json: string): Promise<void>;
   clear(): Promise<void>;
+  moveTaskToBack?: () => Promise<void>;
 }
 
 function androidFile(directory: string | null, name: string): string | null {
@@ -114,6 +115,14 @@ export async function patchQuickShareSessionServerUrl(serverUrl: string): Promis
     ...current,
     serverUrl: serverUrl.replace(/\/+$/, ""),
   });
+}
+
+/** Send Ordo behind the sender without synthesizing a back press the overlay can eat. */
+export function moveAppToBackground(): boolean {
+  const native = shareSessionNative();
+  if (!native || typeof native.moveTaskToBack !== "function") return false;
+  void native.moveTaskToBack();
+  return true;
 }
 
 export async function consumeQuickShareFlag(): Promise<boolean> {

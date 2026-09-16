@@ -47,6 +47,8 @@ export interface AddBookmarkSheetProps {
    * show the link as a confirmed preview until the user edits it.
    */
   shareIntake?: boolean;
+  /** Share intake only: called instead of `onDismiss` after a successful save. */
+  onSaved?: (destinationLabel: string | null) => void;
 }
 
 const ROOT_DESTINATION = "__bookmarks__";
@@ -69,6 +71,7 @@ export function AddBookmarkSheet({
   initialUrl,
   initialTagIds = NO_TAGS,
   shareIntake = false,
+  onSaved,
 }: AddBookmarkSheetProps) {
   const { palette } = useTheme();
   const create = useCreateBookmark();
@@ -108,7 +111,14 @@ export function AddBookmarkSheet({
   };
 
   React.useEffect(() => {
-    if (!visible) return;
+    if (!visible) {
+      setCreateFolderOpen(false);
+      setCreateTagOpen(false);
+      setLockedFolderId(null);
+      setShowTagPicker(false);
+      setUrlEditing(false);
+      return;
+    }
     setSelectedDestination(folderId ?? ROOT_DESTINATION);
     setUrl(initialUrl ?? "");
     setError("");
@@ -167,6 +177,12 @@ export function AddBookmarkSheet({
     try {
       await create.mutateAsync({ url: normalized, folderId: selectedFolderId, tagIds: selectedTagIds });
       haptics.success();
+      if (shareIntake) {
+        reset();
+        onSaved?.(destination);
+        if (!onSaved) onDismiss();
+        return;
+      }
       toast.success(destination ? `Saved to ${destination}` : "Saved");
       close();
     } catch (e) {

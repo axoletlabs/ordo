@@ -4,8 +4,12 @@
  * Menus snap open so choosing a control is not waiting on a spring.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { BackHandler, Keyboard } from "react-native";
+import { AppState, BackHandler, Keyboard } from "react-native";
 import { cancelAnimation, runOnJS, useSharedValue, withTiming } from "react-native-reanimated";
+import { keyboardIsOpen } from "./use-keyboard-visible";
+
+const CLOSE_MS = 90;
+const CLOSE_FALLBACK_MS = CLOSE_MS + 70;
 
 export function useOverlayPresence(visible: boolean, onDismiss: () => void) {
   const progress = useSharedValue(visible ? 1 : 0);
@@ -28,19 +32,34 @@ export function useOverlayPresence(visible: boolean, onDismiss: () => void) {
     }
     if (!rendered) return;
     const token = generation.current;
-    progress.value = withTiming(0, { duration: 90 }, (finished) => {
+    progress.value = withTiming(0, { duration: CLOSE_MS }, (finished) => {
       if (finished) runOnJS(hide)(token);
     });
+    const fallback = setTimeout(() => hide(token), CLOSE_FALLBACK_MS);
+    return () => clearTimeout(fallback);
   }, [hide, progress, rendered, visible]);
 
   useEffect(() => {
-    if (!rendered) return;
+    if (visible || !rendered) return;
+    const token = generation.current;
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state === "active") hide(token);
+    });
+    return () => sub.remove();
+  }, [hide, rendered, visible]);
+
+  useEffect(() => {
+    if (!rendered || !visible) return;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (keyboardIsOpen()) {
+        Keyboard.dismiss();
+        return true;
+      }
       onDismiss();
       return true;
     });
     return () => sub.remove();
-  }, [onDismiss, rendered]);
+  }, [onDismiss, rendered, visible]);
 
   return { rendered, progress };
 }

@@ -45,6 +45,17 @@ export function shareIntakeIsQuickDefault(opts: {
   return opts.quickBookmark && !opts.showAlongside;
 }
 
+/** Drop an in-progress save sheet when the user leaves Ordo without Save/Cancel. */
+export function shouldAbandonShareIntake(wasActive: boolean, nextState: string): boolean {
+  return wasActive && nextState !== "active";
+}
+
+/** System toast after a share-target save; visible over the sender app. */
+export function shareSavedToast(destination?: string | null): string {
+  const name = destination?.trim();
+  return name ? `Saved to ${name}` : "Saved to Bookmarks";
+}
+
 export function parseQuickShareSession(raw: unknown): QuickShareSession | null {
   let value = raw;
   if (typeof value === "string") {

@@ -120,7 +120,11 @@ export function ContextMenu({
 
   return (
     <OverlayPortal>
-      <View accessibilityViewIsModal style={styles.modalRoot}>
+      <View
+        accessibilityViewIsModal={visible}
+        pointerEvents={visible ? "auto" : "none"}
+        style={styles.modalRoot}
+      >
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Dismiss menu"
