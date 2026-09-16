@@ -12,6 +12,11 @@
 export const REQUEST_TIMEOUT_MS = 10_000;
 /** Hard-cut past AbortController — see module doc. */
 export const REQUEST_HARD_TIMEOUT_MS = REQUEST_TIMEOUT_MS + 2_000;
+/**
+ * Bookmark detail includes sanitized article HTML. On a phone over 4G/VPN
+ * that payload often needs longer than a JSON list call.
+ */
+export const BOOKMARK_DETAIL_TIMEOUT_MS = 45_000;
 
 const DEADLINE_SENTINEL = "__deadline__";
 

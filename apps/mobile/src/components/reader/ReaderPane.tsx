@@ -1047,6 +1047,7 @@ function ReaderPaneInner({
                   compact
                   icon="cloud-offline-outline"
                   title="Couldn't load the article"
+                  message={detail.error ? errorMessage(detail.error) : undefined}
                   action={
                     <Button
                       label="Retry"

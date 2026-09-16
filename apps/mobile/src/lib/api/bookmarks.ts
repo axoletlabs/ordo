@@ -8,6 +8,7 @@ import {
   type BookmarkListSort,
 } from "@ordo/shared";
 import { api } from "./client";
+import { BOOKMARK_DETAIL_TIMEOUT_MS } from "../fetch-timeout";
 
 /** `folderId` is null for the unfiled root list ("Bookmarks"). */
 export interface ListBookmarksParams {
@@ -71,7 +72,7 @@ export const bookmarksApi = {
   detail: (id: string, folderId?: string | null) =>
     api.get<typeof BookmarkRoutes.detail.response>(
       buildPath(BookmarkRoutes.detail.path, { id }),
-      { folderId },
+      { folderId, timeoutMs: BOOKMARK_DETAIL_TIMEOUT_MS },
     ),
 
   update: (
