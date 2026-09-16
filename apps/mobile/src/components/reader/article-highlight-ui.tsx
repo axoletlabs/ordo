@@ -4,33 +4,19 @@
  *
  * Phrases are OS text, never an editor: UITextView on iOS and selectable
  * Text (TextView) on Android. A caret is ignored; only a real range becomes
- * a highlight draft. Cancel on the action bar dismisses it.
+ * a highlight draft. Long-press selects; the draft bar is the action
+ * surface (copy, highlight, remove). Tap still opens links.
  */
-import React, { createContext, useCallback, useContext, useMemo, useRef } from "react";
-import {
-  Linking,
-  Platform,
-  StyleSheet,
-  Text,
-  type GestureResponderEvent,
-  type StyleProp,
-  type TextStyle,
-} from "react-native";
+import React, { createContext, useCallback, useContext, useMemo } from "react";
+import { Linking, Platform, StyleSheet, Text, type StyleProp, type TextStyle } from "react-native";
 import { UITextView } from "@bsky.app/react-native-uitextview";
 import {
-  getNativePropsForTNode,
   useRendererProps,
   type CustomBlockRenderer,
   type CustomTextualRenderer,
   type TNode,
 } from "@native-html/render";
-import {
-  htmlToPlainText,
-  highlightIdFromMark,
-  quoteFromBlock,
-  quoteFromRange,
-  type HighlightAnchor,
-} from "@ordo/shared";
+import { htmlToPlainText, quoteFromBlock, quoteFromRange, type HighlightAnchor } from "@ordo/shared";
 import { useAndroidPhraseSelection } from "./android-phrase-selection";
 import {
   highlightIdCoveringRange,
@@ -76,15 +62,7 @@ function asHtmlNode(node: TNode): HtmlTableNode {
   return node as unknown as HtmlTableNode;
 }
 
-function dummyPressEvent(): GestureResponderEvent {
-  return { nativeEvent: { pageX: 0, pageY: 0 } } as GestureResponderEvent;
-}
-
-function gestureEvent(event?: GestureResponderEvent): GestureResponderEvent {
-  return event && Number.isFinite(event.nativeEvent?.pageX) ? event : dummyPressEvent();
-}
-
-function pressPropsFor(node: TNode, ui: HighlightUiHandlers | null) {
+function pressPropsFor(node: TNode) {
   if (node.tagName === "a") {
     const href = node.attributes.href ?? "";
     if (!isExternalHref(href)) return undefined;
@@ -92,20 +70,6 @@ function pressPropsFor(node: TNode, ui: HighlightUiHandlers | null) {
       onPress: () => {
         Linking.openURL(href).catch(() => {});
       },
-      onLongPress: (event?: GestureResponderEvent) => {
-        if (!ui) return;
-        const text = nodeTextContent(asHtmlNode(node));
-        const quote =
-          quoteFromBlock(ui.articlePlain, text, 0, text.length) ?? quoteFromRange(text, 0, text.length);
-        if (!quote) return;
-        ui.onLinkLongPress({ ...quote, href }, gestureEvent(event));
-      },
-    };
-  }
-  const id = highlightIdFromMark(node.id);
-  if (id && ui) {
-    return {
-      onLongPress: (event?: GestureResponderEvent) => ui.onHighlightPress(id, gestureEvent(event)),
     };
   }
   return undefined;
@@ -115,36 +79,34 @@ function InlineSpan({
   style,
   children,
   onPress,
-  onLongPress,
 }: {
   style: TextStyle;
   children: React.ReactNode;
-  onPress?: (event?: GestureResponderEvent) => void;
-  onLongPress?: (event?: GestureResponderEvent) => void;
+  onPress?: () => void;
 }) {
   if (Platform.OS === "ios") {
     return (
-      <UITextView style={style} onPress={onPress} onLongPress={onLongPress}>
+      <UITextView style={style} onPress={onPress}>
         {children}
       </UITextView>
     );
   }
   return (
-    <Text selectable={false} style={style} onPress={onPress} onLongPress={onLongPress}>
+    <Text selectable={false} style={style} onPress={onPress}>
       {children}
     </Text>
   );
 }
 
 /** Rebuild a TNode as inline spans so the OS can select inside one text view. */
-function selectableInline(node: TNode, ui: HighlightUiHandlers | null): React.ReactNode {
+function selectableInline(node: TNode): React.ReactNode {
   if (node.type === "text") {
     if (!node.data) return null;
     const style = pickTextStyle(node.getNativeStyles() as Record<string, unknown>);
-    const press = pressPropsFor(node, ui);
+    const press = pressPropsFor(node);
     if (!press && Object.keys(style).length === 0) return node.data;
     return (
-      <InlineSpan style={style} onPress={press?.onPress} onLongPress={press?.onLongPress}>
+      <InlineSpan style={style} onPress={press?.onPress}>
         {node.data}
       </InlineSpan>
     );
@@ -153,15 +115,15 @@ function selectableInline(node: TNode, ui: HighlightUiHandlers | null): React.Re
   if (node.type === "empty" || node.tagName === "img") return null;
   if (node.tagName == null) {
     return node.children.map((child, index) => (
-      <React.Fragment key={index}>{selectableInline(child, ui)}</React.Fragment>
+      <React.Fragment key={index}>{selectableInline(child)}</React.Fragment>
     ));
   }
   const style = pickTextStyle(node.getNativeStyles() as Record<string, unknown>);
-  const press = pressPropsFor(node, ui);
+  const press = pressPropsFor(node);
   return (
-    <InlineSpan style={style} onPress={press?.onPress} onLongPress={press?.onLongPress}>
+    <InlineSpan style={style} onPress={press?.onPress}>
       {node.children.map((child, index) => (
-        <React.Fragment key={index}>{selectableInline(child, ui)}</React.Fragment>
+        <React.Fragment key={index}>{selectableInline(child)}</React.Fragment>
       ))}
     </InlineSpan>
   );
@@ -182,18 +144,11 @@ export interface HighlightUiHandlers {
   selectionColor: string;
   textStyle?: StyleProp<TextStyle>;
   onTextSelect: (draft: HighlightSelectDraft | null) => void;
-  onHighlightPress: (id: string, event: GestureResponderEvent) => void;
-  onLinkLongPress: (draft: HighlightAnchor & { href: string }, event: GestureResponderEvent) => void;
 }
 
 export const HighlightUiContext = createContext<HighlightUiHandlers | null>(null);
 
 export function ignoreTextSelect(_draft: HighlightSelectDraft | null) {}
-export function ignoreHighlightPress(_id: string, _event: GestureResponderEvent) {}
-export function ignoreLinkLongPress(
-  _draft: HighlightAnchor & { href: string },
-  _event: GestureResponderEvent,
-) {}
 
 export function highlightHandlersFromHtml(
   html: string,
@@ -214,14 +169,11 @@ export function SelectablePhrase({
   TNodeChildrenRenderer: React.ComponentType<{ tnode: TNode }>;
 }) {
   const ui = useContext(HighlightUiContext);
-  const uiRef = useRef(ui);
-  uiRef.current = ui;
   const text = useMemo(() => nodeTextContent(asHtmlNode(tnode)), [tnode]);
   const spans = useMemo(() => {
-    const handlers = uiRef.current;
-    if (tnode.type === "text") return selectableInline(tnode, handlers);
+    if (tnode.type === "text") return selectableInline(tnode);
     return tnode.children.map((child, index) => (
-      <React.Fragment key={index}>{selectableInline(child, handlers)}</React.Fragment>
+      <React.Fragment key={index}>{selectableInline(child)}</React.Fragment>
     ));
   }, [tnode]);
 
@@ -321,13 +273,7 @@ export const selectableBlockRenderer: CustomBlockRenderer = ({
   </TDefaultRenderer>
 );
 
-export const markRenderer: CustomTextualRenderer = (props) => {
-  const ui = useContext(HighlightUiContext);
-  const id = highlightIdFromMark(props.tnode.id);
-  if (!id || !ui) return <props.TDefaultRenderer {...props} />;
-  const native = getNativePropsForTNode(props);
-  return <Text {...native} onPress={(event) => ui.onHighlightPress(id, event)} />;
-};
+export const markRenderer: CustomTextualRenderer = (props) => <props.TDefaultRenderer {...props} />;
 
 export const anchorRenderer: CustomTextualRenderer = (props) => {
   const { onPress } = useRendererProps("a");

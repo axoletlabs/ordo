@@ -30,6 +30,7 @@ test("selectable text native module is a TextView, not an EditText", () => {
   assert.match(src, /isCursorVisible = false/);
   assert.match(src, /setTextIsSelectable\(true\)/);
   assert.match(src, /customInsertionActionModeCallback/);
+  assert.match(src, /hideSelectionMenu/);
   assert.doesNotMatch(src, /EditText/);
   assert.doesNotMatch(src, /ReactEditText/);
 });

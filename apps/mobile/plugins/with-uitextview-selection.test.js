@@ -30,12 +30,48 @@ const SAMPLE = `
 }
 `;
 
-test("hides the insertion caret and does not attach a window tap clearer", () => {
+test("hides the insertion caret, system edit menu, and window tap clearer", () => {
   const patched = patchUiTextViewSource(SAMPLE);
   assert.match(patched, /RNUITextViewNoCaret/);
   assert.match(patched, /caretRectForPosition/);
+  assert.match(patched, /canPerformAction/);
   assert.match(patched, /\[\[RNUITextViewNoCaret alloc\] init\]/);
   assert.doesNotMatch(patched, /\[\[UITextView alloc\] init\]/);
   assert.doesNotMatch(patched, /addGestureRecognizer:_outsideTapRecognizer/);
+  assert.equal(patchUiTextViewSource(patched), patched);
+});
+
+test("adds canPerformAction to an existing caret subclass", () => {
+  const already = `
+@interface RNUITextViewNoCaret : UITextView
+@end
+
+@implementation RNUITextViewNoCaret
+- (CGRect)caretRectForPosition:(UITextPosition *)position
+{
+  (void)position;
+  return CGRectZero;
+}
+@end
+
+@implementation RNUITextView{
+  UITextView * _textView;
+}
+
+- (instancetype)initWithFrame:(CGRect)frame
+{
+  if (self = [super initWithFrame:frame]) {
+    _textView = [[RNUITextViewNoCaret alloc] init];
+  }
+  return self;
+}
+
+- (void)didMoveToWindow
+{
+  [super didMoveToWindow];
+}
+`;
+  const patched = patchUiTextViewSource(already);
+  assert.match(patched, /canPerformAction/);
   assert.equal(patchUiTextViewSource(patched), patched);
 });

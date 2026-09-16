@@ -64,12 +64,14 @@ class OrdoSelectableTextModule(reactContext: ReactApplicationContext) :
         override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
           menu.clear()
           emit(text)
+          hideSelectionMenu(mode)
           return true
         }
 
         override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
           menu.clear()
           emit(text)
+          hideSelectionMenu(mode)
           return false
         }
 
@@ -117,6 +119,15 @@ class OrdoSelectableTextModule(reactContext: ReactApplicationContext) :
       text.setOnTouchListener(null)
       text.customInsertionActionModeCallback = null
       text.customSelectionActionModeCallback = null
+    }
+  }
+
+  private fun hideSelectionMenu(mode: ActionMode) {
+    if (android.os.Build.VERSION.SDK_INT >= 23) {
+      try {
+        mode.hide(java.lang.Long.MAX_VALUE)
+      } catch (_: Exception) {
+      }
     }
   }
 

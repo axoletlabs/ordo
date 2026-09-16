@@ -43,8 +43,6 @@ import {
   SelectablePhrase,
   anchorRenderer,
   highlightHandlersFromHtml,
-  ignoreHighlightPress,
-  ignoreLinkLongPress,
   ignoreTextSelect,
   markRenderer,
   selectableBlockRenderer,
@@ -228,8 +226,6 @@ export interface ArticleHtmlProps {
   contentWidth: number;
   highlights?: readonly HighlightDto[];
   onTextSelect?: HighlightUiHandlers["onTextSelect"];
-  onHighlightPress?: HighlightUiHandlers["onHighlightPress"];
-  onLinkLongPress?: HighlightUiHandlers["onLinkLongPress"];
   onHeadingsChange?: (headings: readonly ArticleHeading[]) => void;
   onHeadingRef?: (id: string, view: ViewType | null) => void;
   /** Fires once the native HTML tree is actually mounted (after first paint). */
@@ -385,8 +381,6 @@ export const ArticleHtml = React.memo(function ArticleHtml({
   contentWidth,
   highlights,
   onTextSelect,
-  onHighlightPress,
-  onLinkLongPress,
   onHeadingsChange,
   onHeadingRef,
   onReady,
@@ -455,20 +449,12 @@ export const ArticleHtml = React.memo(function ArticleHtml({
     [palette.mustard, palette.textSecondary],
   );
   const onTextSelectRef = useRef(onTextSelect);
-  const onHighlightPressRef = useRef(onHighlightPress);
-  const onLinkLongPressRef = useRef(onLinkLongPress);
   onTextSelectRef.current = onTextSelect;
-  onHighlightPressRef.current = onHighlightPress;
-  onLinkLongPressRef.current = onLinkLongPress;
   const highlightUi = useMemo(
     () =>
       highlightHandlersFromHtml(html, palette.mustard, {
         textStyle: baseStyle,
         onTextSelect: (draft) => (onTextSelectRef.current ?? ignoreTextSelect)(draft),
-        onHighlightPress: (id, event) =>
-          (onHighlightPressRef.current ?? ignoreHighlightPress)(id, event),
-        onLinkLongPress: (draft, event) =>
-          (onLinkLongPressRef.current ?? ignoreLinkLongPress)(draft, event),
       }),
     [baseStyle, html, palette.mustard],
   );

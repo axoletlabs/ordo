@@ -11,6 +11,9 @@ const path = require("node:path");
  *    "outside" tap and the range vanishes.
  * 2. Taps spawn an insertion caret (tint). Article phrases are not editable;
  *    hide that caret so the view cannot enter cursor mode.
+ * 3. The system edit menu (Copy/Look Up/…) appears on the same long-press
+ *    that starts a range. Disable canPerformAction so the draft bar is the
+ *    only action surface.
  */
 
 const SOURCE = path.join("ios", "RNUITextView.mm");
@@ -23,6 +26,12 @@ const CARET_CLASS = `interface RNUITextViewNoCaret : UITextView
 {
   (void)position;
   return CGRectZero;
+}
+- (BOOL)canPerformAction:(SEL)action withSender:(id)sender
+{
+  (void)action;
+  (void)sender;
+  return NO;
 }
 @end
 
@@ -64,6 +73,12 @@ function patchUiTextViewSource(src) {
     );
   }
   next = next.replace("[[UITextView alloc] init]", "[[RNUITextViewNoCaret alloc] init]");
+  if (!next.includes("canPerformAction")) {
+    next = next.replace(
+      "return CGRectZero;\n}\n@end",
+      "return CGRectZero;\n}\n- (BOOL)canPerformAction:(SEL)action withSender:(id)sender\n{\n  (void)action;\n  (void)sender;\n  return NO;\n}\n@end",
+    );
+  }
   if (next.includes(DID_MOVE_TO_WINDOW)) {
     next = next.replace(DID_MOVE_TO_WINDOW, DID_MOVE_TO_WINDOW_PATCHED);
   } else if (!next.includes(DID_MOVE_TO_WINDOW_PATCHED)) {

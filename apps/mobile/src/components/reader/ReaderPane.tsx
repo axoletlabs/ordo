@@ -15,7 +15,6 @@ import {
   Share,
   StyleSheet,
   View,
-  type GestureResponderEvent,
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
@@ -126,17 +125,6 @@ function normalizeTitle(raw: string | null | undefined): string {
   return (raw ?? "").replace(/\s+/g, " ").trim();
 }
 
-function pointAnchor(event: GestureResponderEvent): MenuAnchorRect {
-  const pageX = event.nativeEvent.pageX;
-  const pageY = event.nativeEvent.pageY;
-  return {
-    x: Number.isFinite(pageX) ? pageX : 0,
-    y: Number.isFinite(pageY) ? pageY : 0,
-    width: 1,
-    height: 1,
-  };
-}
-
 const EMPTY_HIGHLIGHTS: HighlightDto[] = [];
 
 function selectionKey(draft: HighlightAnchor): string {
@@ -244,14 +232,6 @@ function ReaderPaneInner({
     initialSurface === "browser" ? "browser" : "auto",
   );
   const [textDraft, setTextDraft] = useState<HighlightSelectDraft | null>(null);
-  const [linkMenu, setLinkMenu] = useState<{
-    quote: HighlightAnchor & { href: string };
-    anchor: MenuAnchorRect;
-  } | null>(null);
-  const [highlightMenu, setHighlightMenu] = useState<{
-    highlight: HighlightDto;
-    anchor: MenuAnchorRect;
-  } | null>(null);
 
   const toggleRead = useToggleRead(bookmark?.folderId ?? null);
   const setContentKind = useSetContentKind();
@@ -302,8 +282,6 @@ function ReaderPaneInner({
   const readerBoldFont = resolveReaderFont(preferences.fontFamily, "700");
   const articleHeadings = headingState.bookmarkId === bookmark?.id ? headingState.headings : [];
   const highlights = detail.data?.highlights ?? EMPTY_HIGHLIGHTS;
-  const highlightsRef = useRef(highlights);
-  highlightsRef.current = highlights;
   const dismissedDraftKey = useRef<string | null>(null);
 
   const handleHeadingsChange = useCallback(
@@ -363,8 +341,6 @@ function ReaderPaneInner({
     dismissedDraftKey.current = null;
     setTextDraft(draft);
     setActionPanel(null);
-    setHighlightMenu(null);
-    setLinkMenu(null);
   }, []);
 
   const dismissDraft = useCallback(() => {
@@ -373,23 +349,6 @@ function ReaderPaneInner({
       return null;
     });
   }, []);
-
-  const handleHighlightPress = useCallback((id: string, event: GestureResponderEvent) => {
-    const highlight = highlightsRef.current.find((row) => row.id === id);
-    if (!highlight) return;
-    dismissedDraftKey.current = null;
-    setTextDraft(null);
-    setHighlightMenu({ highlight, anchor: pointAnchor(event) });
-  }, []);
-
-  const handleLinkLongPress = useCallback(
-    (quote: HighlightAnchor & { href: string }, event: GestureResponderEvent) => {
-      dismissedDraftKey.current = null;
-      setTextDraft(null);
-      setLinkMenu({ quote, anchor: pointAnchor(event) });
-    },
-    [],
-  );
 
   const saveHighlight = useCallback(
     (draft: HighlightAnchor & { href?: string | null }) => {
@@ -428,7 +387,6 @@ function ReaderPaneInner({
         {
           onSuccess: () => {
             dismissDraft();
-            setLinkMenu(null);
             toast.success(absorbIds.length > 0 ? "Highlight updated" : "Highlighted");
           },
           onError: (err) => toast.error(errorMessage(err, "Couldn't save the highlight.")),
@@ -443,7 +401,6 @@ function ReaderPaneInner({
       if (!bookmark) return;
       haptics.light();
       dismissDraft();
-      setHighlightMenu(null);
       removeHighlight.mutate(
         { id: bookmark.id, highlightId, folderId: bookmark.folderId },
         {
@@ -748,8 +705,6 @@ function ReaderPaneInner({
     setContentsShortcutVisible(false);
     dismissedDraftKey.current = null;
     setTextDraft(null);
-    setLinkMenu(null);
-    setHighlightMenu(null);
     return () => {
       flushProgress();
     };
@@ -1044,8 +999,6 @@ function ReaderPaneInner({
                     contentWidth={articleWidth || fallbackArticleWidth}
                     highlights={highlights}
                     onTextSelect={handleTextSelect}
-                    onHighlightPress={handleHighlightPress}
-                    onLinkLongPress={handleLinkLongPress}
                     onHeadingsChange={handleHeadingsChange}
                     onHeadingRef={handleHeadingRef}
                     onReady={handleArticleReady}
@@ -1324,76 +1277,6 @@ function ReaderPaneInner({
           style={sheetMenuStyles.cancel}
         />
       </FloatingPanel>
-      <ContextMenu
-        visible={linkMenu !== null}
-        onDismiss={() => setLinkMenu(null)}
-        anchor={linkMenu?.anchor ?? null}
-      >
-        <ContextMenuItem
-          icon="color-fill-outline"
-          label="Highlight"
-          busy={createHighlight.isPending}
-          onPress={() => {
-            if (!linkMenu) return;
-            saveHighlight(linkMenu.quote);
-          }}
-        />
-        <ContextMenuItem
-          icon="document-text-outline"
-          label="Copy text"
-          onPress={() => {
-            if (!linkMenu) return;
-            setLinkMenu(null);
-            void copyText(formatHighlightQuote(linkMenu.quote.exact));
-          }}
-        />
-        <ContextMenuItem
-          icon="link-outline"
-          label="Copy link"
-          onPress={() => {
-            if (!linkMenu) return;
-            setLinkMenu(null);
-            void copyLink(linkMenu.quote.href);
-          }}
-        />
-      </ContextMenu>
-      <ContextMenu
-        visible={highlightMenu !== null}
-        onDismiss={() => setHighlightMenu(null)}
-        anchor={highlightMenu?.anchor ?? null}
-      >
-        <ContextMenuItem
-          icon="copy-outline"
-          label="Copy"
-          onPress={() => {
-            if (!highlightMenu) return;
-            setHighlightMenu(null);
-            void copyText(formatHighlightQuote(highlightMenu.highlight.exact), "Highlight copied");
-          }}
-        />
-        {highlightMenu?.highlight.href ? (
-          <ContextMenuItem
-            icon="link-outline"
-            label="Copy link"
-            onPress={() => {
-              const href = highlightMenu.highlight.href;
-              setHighlightMenu(null);
-              if (href) void copyLink(href);
-            }}
-          />
-        ) : null}
-        <ContextMenuItem
-          icon="trash-outline"
-          label="Remove"
-          tone="danger"
-          onPress={() => {
-            if (!highlightMenu) return;
-            const id = highlightMenu.highlight.id;
-            setHighlightMenu(null);
-            dropHighlight(id);
-          }}
-        />
-      </ContextMenu>
       {textDraft && !showWebsiteView ? (
         <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
           <View pointerEvents="box-none" style={[styles.draftLayer, { maxWidth: layout.maxLibraryWidth }]}>
@@ -1407,15 +1290,28 @@ function ReaderPaneInner({
                 },
               ]}
             >
-              <PressableScale
-                onPress={() => void copyText(formatHighlightQuote(textDraft.exact))}
-                accessibilityRole="button"
-                accessibilityLabel="Copy selected text"
-              >
-                <Text variant="footnote" color="secondary" numberOfLines={1}>
-                  {formatHighlightQuote(textDraft.exact)}
-                </Text>
-              </PressableScale>
+              <View style={styles.draftQuoteRow}>
+                <PressableScale
+                  onPress={() => void copyText(formatHighlightQuote(textDraft.exact))}
+                  accessibilityRole="button"
+                  accessibilityLabel="Copy selected text"
+                  style={styles.draftQuote}
+                >
+                  <Text variant="footnote" color="secondary" numberOfLines={1}>
+                    {formatHighlightQuote(textDraft.exact)}
+                  </Text>
+                </PressableScale>
+                {textDraft.href ? (
+                  <PressableScale
+                    onPress={() => void copyLink(textDraft.href!)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Copy link"
+                    style={styles.draftLinkHit}
+                  >
+                    <Ionicons name="link-outline" size={18} color={palette.accent} />
+                  </PressableScale>
+                ) : null}
+              </View>
               <View style={styles.draftActions}>
                 <Button
                   label="Cancel"
@@ -1510,6 +1406,18 @@ const styles = StyleSheet.create({
     borderRadius: radius["3xl"],
     padding: spacing[12],
     gap: spacing[10],
+  },
+  draftQuoteRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[8],
+  },
+  draftQuote: { flex: 1, minWidth: 0 },
+  draftLinkHit: {
+    width: 44,
+    height: 44,
+    alignItems: "center",
+    justifyContent: "center",
   },
   draftActions: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
   draftButton: { flex: 1 },
