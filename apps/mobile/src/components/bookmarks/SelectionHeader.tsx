@@ -14,7 +14,7 @@ import {
   headerTitleTextStyle,
 } from "../ui/Header";
 import { useTheme } from "../../theme/ThemeProvider";
-import { layout, spacing } from "../../theme/tokens";
+import { fontSize, layout, lineHeight, spacing } from "../../theme/tokens";
 
 /** Clears "SELECT ALL" / "DESELECT" while keeping the title on the same center as `Header`. */
 const TITLE_SLOT_INSET = 112;
@@ -22,6 +22,8 @@ const TITLE_SLOT_INSET = 112;
 const headerActionTextStyle: TextStyle = {
   includeFontPadding: false,
   textAlignVertical: "center",
+  fontSize: fontSize.md,
+  lineHeight: Math.round(fontSize.md * lineHeight.normal),
 };
 
 export function SelectionHeader({
