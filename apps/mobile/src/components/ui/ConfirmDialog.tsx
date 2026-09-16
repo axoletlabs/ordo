@@ -2,11 +2,11 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { type ButtonVariant } from "./Button";
-import { PANEL_ICON_COLUMN, PanelHeader } from "./PanelHeader";
+import { PanelHeader } from "./PanelHeader";
 import { FloatingPanel } from "./FloatingPanel";
 import { PanelActions } from "./SheetActionRow";
 import { useTheme } from "../../theme/ThemeProvider";
-import { spacing } from "../../theme/tokens";
+import { layout, spacing } from "../../theme/tokens";
 
 export function ConfirmDialog({
   visible,
@@ -46,6 +46,7 @@ export function ConfirmDialog({
       visible={visible}
       onDismiss={onDismiss}
       dismissible={canDismiss}
+      maxWidth={layout.overlayConfirmWidth}
     >
       <PanelHeader
         title={title}
@@ -70,7 +71,9 @@ export function ConfirmDialog({
 
 const styles = StyleSheet.create({
   extra: {
-    paddingLeft: spacing[4] + PANEL_ICON_COLUMN,
-    paddingRight: spacing[4],
+    width: "100%",
+    alignItems: "center",
+    gap: spacing[6],
+    marginBottom: spacing[4],
   },
 });

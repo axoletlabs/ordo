@@ -209,7 +209,7 @@ function PressableIconButton({
 }
 
 const styles = StyleSheet.create({
-  body: { paddingHorizontal: spacing[4] },
+  body: {},
   hint: { marginBottom: spacing[6] },
   chipRow: { flexDirection: "row", gap: spacing[8], paddingVertical: spacing[6], flexWrap: "wrap" },
   chipWrap: { flexDirection: "row", gap: spacing[8], flexWrap: "wrap", marginTop: spacing[6] },

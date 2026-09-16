@@ -90,6 +90,6 @@ export function CreateFolderPanel({
 }
 
 const styles = StyleSheet.create({
-  body: { paddingHorizontal: spacing[4] },
+  body: {},
   iconLabel: { marginTop: spacing[10], marginBottom: spacing[6] },
 });

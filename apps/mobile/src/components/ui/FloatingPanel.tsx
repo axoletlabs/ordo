@@ -14,7 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { OverlayPortal } from "./overlay-host";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
-import { radius, spacing } from "../../theme/tokens";
+import { layout, radius, spacing } from "../../theme/tokens";
 
 export interface FloatingPanelProps {
   visible: boolean;
@@ -34,7 +34,7 @@ export function FloatingPanel({
   onDismiss,
   children,
   style,
-  maxWidth = 420,
+  maxWidth = layout.overlayMaxWidth,
   onShow,
   fitContent = false,
   dismissible = true,
@@ -85,6 +85,7 @@ export function FloatingPanel({
               {
                 width: fitContent ? undefined : Math.min(maxWidth, width - spacing[32]),
                 maxWidth: Math.min(maxWidth, width - spacing[32]),
+                padding: layout.overlayPadding,
                 minWidth: fitContent ? 220 : undefined,
                 maxHeight: height - insets.top - insets.bottom - spacing[48],
                 backgroundColor: palette.mode === "dark" ? palette.surfaceSecondary : palette.surfaceElevated,
@@ -115,6 +116,5 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius["3xl"],
-    padding: spacing[8],
   },
 });

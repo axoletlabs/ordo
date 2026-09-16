@@ -1271,7 +1271,7 @@ function ReaderPaneInner({
         </ThemedScrollView>
         <Button
           label="Article actions"
-          variant="ghost"
+          variant="secondary"
           block
           onPress={() => setActionPanel("actions")}
           style={sheetMenuStyles.cancel}
@@ -1317,7 +1317,7 @@ function ReaderPaneInner({
         ) : null}
         <Button
           label="Article actions"
-          variant="ghost"
+          variant="secondary"
           block
           onPress={() => setActionPanel("actions")}
           style={sheetMenuStyles.cancel}

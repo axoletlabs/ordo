@@ -177,6 +177,12 @@ export const layout = {
   settingsControlWidth: 148,
   maxLibraryWidth: 1200,
   sheetWidth: 560,
+  /** Inner padding for centered floating panels / dialogs. */
+  overlayPadding: 16,
+  /** Inner padding for anchored context menus. */
+  overlayMenuPadding: 8,
+  overlayMaxWidth: 420,
+  overlayConfirmWidth: 380,
   navigationRailWidth: 96,
   compactNavigationRailWidth: 80,
   compactNavigationRailHeight: 240,

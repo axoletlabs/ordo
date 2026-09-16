@@ -494,6 +494,7 @@ const styles = StyleSheet.create({
   metrics: {
     flexDirection: "row",
     gap: spacing[8],
+    marginTop: spacing[4],
     marginBottom: spacing[8],
   },
   metric: {

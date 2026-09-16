@@ -80,6 +80,6 @@ export function CreateTagPanel({ visible, onDismiss, onCreated }: CreateTagPanel
 }
 
 const styles = StyleSheet.create({
-  body: { paddingHorizontal: spacing[4] },
+  body: {},
   label: { marginTop: spacing[10], marginBottom: spacing[6] },
 });

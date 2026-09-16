@@ -1,6 +1,7 @@
 import React, { useEffect } from "react";
 import { useRouter } from "expo-router";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { copyLink } from "../../lib/copy-link";
 import { openLivePage } from "../../lib/open-website";
 import { useSettingsStore } from "../../store/settings";
@@ -64,120 +65,117 @@ export function BookmarkActionsSheet({
   if (!displayBookmark) return null;
 
   return (
-    <ContextMenu visible={visible} onDismiss={onDismiss} anchor={anchor}>
-      {mode === "delete" ? (
-        <>
+    <>
+      <ContextMenu visible={visible && mode === "menu"} onDismiss={onDismiss} anchor={anchor}>
+        <ContextMenuItem
+          icon={displayBookmark.isRead ? "radio-button-off" : "checkmark-circle"}
+          label={displayBookmark.isRead ? "Mark as unread" : "Mark as read"}
+          onPress={() => {
+            onToggleRead(displayBookmark);
+            onDismiss();
+          }}
+        />
+        <ContextMenuItem
+          icon="folder-open-outline"
+          label="Move to folder"
+          onPress={() => {
+            onMove(displayBookmark);
+            onDismiss();
+          }}
+        />
+        {onEditTags ? (
           <ContextMenuItem
-            icon="trash-outline"
-            label="Confirm deletion"
-            tone="danger"
+            icon="pricetags-outline"
+            label="Edit tags"
             onPress={() => {
-              onDelete(displayBookmark);
+              onEditTags(displayBookmark);
               onDismiss();
             }}
           />
-          <ContextMenuItem icon="close-outline" label="Cancel" onPress={() => setMode("menu")} />
-        </>
-      ) : (
-        <>
-          <ContextMenuItem
-            icon={displayBookmark.isRead ? "radio-button-off" : "checkmark-circle"}
-            label={displayBookmark.isRead ? "Mark as unread" : "Mark as read"}
-            onPress={() => {
-              onToggleRead(displayBookmark);
-              onDismiss();
-            }}
-          />
-          <ContextMenuItem
-            icon="folder-open-outline"
-            label="Move to folder"
-            onPress={() => {
-              onMove(displayBookmark);
-              onDismiss();
-            }}
-          />
-          {onEditTags ? (
-            <ContextMenuItem
-              icon="pricetags-outline"
-              label="Edit tags"
-              onPress={() => {
-                onEditTags(displayBookmark);
-                onDismiss();
-              }}
-            />
-          ) : null}
+        ) : null}
+        <ContextMenuItem
+          icon="globe-outline"
+          label="Open original"
+          onPress={() => {
+            const browser = useSettingsStore.getState().websiteBrowser;
+            if (browser === "ordo") {
+              router.push({
+                pathname: "/reader/[id]",
+                params: { id: displayBookmark.id, view: "browser" },
+              });
+            } else {
+              void openLivePage(displayBookmark.url, browser);
+            }
+            if (!displayBookmark.isRead) onToggleRead(displayBookmark);
+            onDismiss();
+          }}
+        />
+        {typeof bookmarkHooks.useSetContentKind === "function" && bookmarkIsArticle(displayBookmark) ? (
           <ContextMenuItem
             icon="globe-outline"
-            label="Open original"
+            label="Mark as website"
             onPress={() => {
-              const browser = useSettingsStore.getState().websiteBrowser;
-              if (browser === "ordo") {
-                router.push({
-                  pathname: "/reader/[id]",
-                  params: { id: displayBookmark.id, view: "browser" },
-                });
-              } else {
-                void openLivePage(displayBookmark.url, browser);
-              }
-              if (!displayBookmark.isRead) onToggleRead(displayBookmark);
+              setContentKind.mutate(
+                {
+                  id: displayBookmark.id,
+                  folderId: displayBookmark.folderId,
+                  contentKindOverride: "web",
+                },
+                {
+                  onSuccess: () => toast.success("Saved as a website"),
+                  onError: (err) => toast.error(errorMessage(err, "Couldn't update this bookmark.")),
+                },
+              );
               onDismiss();
             }}
           />
-          {typeof bookmarkHooks.useSetContentKind === "function" && bookmarkIsArticle(displayBookmark) ? (
-            <ContextMenuItem
-              icon="globe-outline"
-              label="Mark as website"
-              onPress={() => {
-                setContentKind.mutate(
-                  {
-                    id: displayBookmark.id,
-                    folderId: displayBookmark.folderId,
-                    contentKindOverride: "web",
-                  },
-                  {
-                    onSuccess: () => toast.success("Saved as a website"),
-                    onError: (err) => toast.error(errorMessage(err, "Couldn't update this bookmark.")),
-                  },
-                );
-                onDismiss();
-              }}
-            />
-          ) : typeof bookmarkHooks.useSetContentKind === "function" && bookmarkCanBeArticle(displayBookmark) ? (
-            <ContextMenuItem
-              icon="reader-outline"
-              label="Mark as article"
-              onPress={() => {
-                setContentKind.mutate(
-                  {
-                    id: displayBookmark.id,
-                    folderId: displayBookmark.folderId,
-                    contentKindOverride: "article",
-                  },
-                  {
-                    onSuccess: () => toast.success("Saved as an article"),
-                    onError: (err) => toast.error(errorMessage(err, "Couldn't update this bookmark.")),
-                  },
-                );
-                onDismiss();
-              }}
-            />
-          ) : null}
+        ) : typeof bookmarkHooks.useSetContentKind === "function" && bookmarkCanBeArticle(displayBookmark) ? (
           <ContextMenuItem
-            icon="link-outline"
-            label="Copy link"
+            icon="reader-outline"
+            label="Mark as article"
             onPress={() => {
-              void copyLink(displayBookmark.url);
+              setContentKind.mutate(
+                {
+                  id: displayBookmark.id,
+                  folderId: displayBookmark.folderId,
+                  contentKindOverride: "article",
+                },
+                {
+                  onSuccess: () => toast.success("Saved as an article"),
+                  onError: (err) => toast.error(errorMessage(err, "Couldn't update this bookmark.")),
+                },
+              );
               onDismiss();
             }}
           />
-          <ContextMenuItem
-            icon="trash-outline"
-            label="Delete bookmark"
-            tone="danger"
-            onPress={() => setMode("delete")}
-          />
-        </>
-      )}
-    </ContextMenu>
+        ) : null}
+        <ContextMenuItem
+          icon="link-outline"
+          label="Copy link"
+          onPress={() => {
+            void copyLink(displayBookmark.url);
+            onDismiss();
+          }}
+        />
+        <ContextMenuItem
+          icon="trash-outline"
+          label="Delete bookmark"
+          tone="danger"
+          onPress={() => setMode("delete")}
+        />
+      </ContextMenu>
+      <ConfirmDialog
+        visible={visible && mode === "delete"}
+        icon="trash-outline"
+        title="Delete this bookmark?"
+        message="You can undo this."
+        confirmLabel="Delete"
+        onDismiss={() => setMode("menu")}
+        onConfirm={() => {
+          onDelete(displayBookmark);
+          onDismiss();
+        }}
+      />
+    </>
   );
 }

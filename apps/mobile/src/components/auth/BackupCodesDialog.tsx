@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { PANEL_ICON_COLUMN, PanelHeader } from "../ui/PanelHeader";
+import { PanelHeader } from "../ui/PanelHeader";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { Text } from "../ui/Text";
 import { PanelActions } from "../ui/SheetActionRow";
@@ -9,7 +9,7 @@ import { downloadBackupCodes } from "../../lib/backup-codes-file";
 import { errorMessage } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
-import { radius, spacing } from "../../theme/tokens";
+import { layout, radius, spacing } from "../../theme/tokens";
 
 /**
  * One-time backup-code sheet. Closing discards the plaintext codes; the server
@@ -41,7 +41,7 @@ export function BackupCodesDialog({
   };
 
   return (
-    <FloatingPanel visible={visible} onDismiss={onClose} maxWidth={360} dismissible={false}>
+    <FloatingPanel visible={visible} onDismiss={onClose} maxWidth={layout.overlayConfirmWidth} dismissible={false}>
       <PanelHeader
         icon="key-outline"
         iconColor={palette.accent}
@@ -78,11 +78,9 @@ export function BackupCodesDialog({
 }
 
 const styles = StyleSheet.create({
-  header: { marginBottom: 0 },
+  header: { marginBottom: spacing[8] },
   grid: {
-    marginTop: spacing[12],
-    marginLeft: spacing[4] + PANEL_ICON_COLUMN,
-    marginRight: spacing[4],
+    marginTop: spacing[4],
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.lg,
     paddingVertical: spacing[12],

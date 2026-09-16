@@ -12,7 +12,6 @@ import { PanelActions } from "../ui/SheetActionRow";
 import { errorMessage, isMfaInvalidError, isMfaRequiredError } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
 import { MfaCodeField } from "./MfaSetupPanel";
-import { spacing } from "../../theme/tokens";
 
 export function MfaStepUpPanel({
   visible,
@@ -88,7 +87,7 @@ export function MfaStepUpPanel({
   return (
     <FloatingPanel visible={visible} onDismiss={close}>
       <PanelHeader title={title} subtitle={description} />
-      <View style={{ paddingHorizontal: spacing[4] }}>
+      <View>
         <MfaCodeField
           key={visible ? "open" : "closed"}
           value={code}

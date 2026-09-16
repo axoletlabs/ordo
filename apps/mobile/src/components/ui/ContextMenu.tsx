@@ -31,7 +31,7 @@ import {
   type MenuAnchorRect,
   type MenuPlacement,
 } from "../../lib/menu-anchor";
-import { radius, spacing } from "../../theme/tokens";
+import { layout, radius, spacing } from "../../theme/tokens";
 
 export type { MenuAnchorRect };
 
@@ -184,6 +184,21 @@ export function ContextMenu({
   );
 }
 
+/** Helper copy inside a context menu, aligned to the item column. */
+export function ContextMenuNote({
+  children,
+  tone = "secondary",
+}: {
+  children: React.ReactNode;
+  tone?: "secondary" | "tertiary" | "danger";
+}) {
+  return (
+    <Text variant="footnote" color={tone} align="center" style={styles.note}>
+      {children}
+    </Text>
+  );
+}
+
 export function ContextMenuItem({
   icon,
   label,
@@ -249,9 +264,13 @@ const styles = StyleSheet.create({
   menu: {
     position: "absolute",
     overflow: "hidden",
-    padding: spacing[8],
+    padding: layout.overlayMenuPadding,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius["3xl"],
+  },
+  note: {
+    paddingHorizontal: spacing[12],
+    paddingVertical: spacing[8],
   },
   item: {
     minHeight: 48,

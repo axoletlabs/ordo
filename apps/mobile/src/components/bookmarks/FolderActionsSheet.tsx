@@ -7,7 +7,8 @@ import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 import { Text } from "../ui/Text";
-import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
+import { ContextMenu, ContextMenuItem, ContextMenuNote } from "../ui/ContextMenu";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PanelActions, sheetMenuStyles } from "../ui/SheetActionRow";
 import { EyeToggle } from "../ui/EyeToggle";
 import { PressableScale } from "../ui/PressableScale";
@@ -368,7 +369,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
     });
   };
 
-  const menuOpen = visible && !!displayFolder && (mode === "menu" || mode === "lockChoice" || mode === "delete");
+  const menuOpen = visible && !!displayFolder && (mode === "menu" || mode === "lockChoice");
   const dialogOpen = visible && !!displayFolder && mode !== "menu" && mode !== "lockChoice" && mode !== "delete";
 
   return (
@@ -376,7 +377,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
       <ContextMenu visible={menuOpen} onDismiss={onDismiss} anchor={anchor ?? null}>
         {displayFolder && mode === "menu" ? (
           <>
-            {error ? <Text variant="footnote" color="danger" style={styles.menuNote}>{error}</Text> : null}
+            {error ? <ContextMenuNote tone="danger">{error}</ContextMenuNote> : null}
             <ContextMenuItem icon={displayFolder.pinned ? "pin" : "pin-outline"} label={displayFolder.pinned ? "Unpin folder" : "Pin folder"} onPress={doTogglePinned} />
             <ContextMenuItem icon="happy-outline" label="Change icon" onPress={() => showMode("icon")} />
             <ContextMenuItem icon="create-outline" label="Rename" onPress={() => showMode("rename")} />
@@ -391,11 +392,11 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
         {displayFolder && mode === "lockChoice" ? (
           <>
             <ContextMenuItem icon="chevron-back" label="Back" onPress={() => showMode("menu")} disabled={removing} />
-            {error ? <Text variant="footnote" color="danger" style={styles.menuNote}>{error}</Text> : null}
+            {error ? <ContextMenuNote tone="danger">{error}</ContextMenuNote> : null}
             {serverInfo.data && !lockTypesSupported ? (
-              <Text variant="footnote" color="tertiary" style={styles.menuNote}>
+              <ContextMenuNote tone="tertiary">
                 Update your {APP_NAME} server to use pattern, PIN, and device locks.
-              </Text>
+              </ContextMenuNote>
             ) : null}
             {lockTypesSupported ? (
               <>
@@ -405,21 +406,6 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
               </>
             ) : null}
             <ContextMenuItem icon="text-outline" label="Text password" onPress={() => { setLockType("password"); showMode("lockCredential"); }} />
-          </>
-        ) : null}
-        {displayFolder && mode === "delete" ? (
-          <>
-            {error ? <Text variant="footnote" color="danger" style={styles.menuNote}>{error}</Text> : null}
-            <Text variant="footnote" color="secondary" style={styles.menuNote}>
-              This can’t be undone.
-            </Text>
-            <ContextMenuItem
-              icon="trash-outline"
-              label="Confirm deletion"
-              tone="danger"
-              onPress={doDelete}
-            />
-            <ContextMenuItem icon="close-outline" label="Cancel" onPress={() => showMode("menu")} />
           </>
         ) : null}
       </ContextMenu>
@@ -435,7 +421,6 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             autoFocus
             error={error || undefined}
             onSubmitEditing={doRename}
-            containerStyle={styles.body}
           />
           <PanelActions
             confirmLabel="Save"
@@ -521,7 +506,6 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
                 error={error || undefined}
                 autoCapitalize="none"
                 autoCorrect={false}
-                containerStyle={styles.body}
                 rightAccessory={<EyeToggle visible={showPassword} onPress={() => setShowPassword((value) => !value)} />}
               />
               <Input
@@ -538,7 +522,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
           )}
           <View style={sheetMenuStyles.stack}>
             {lockType === "pattern" || lockType === "pin" ? (
-              <Button label="Back" variant="ghost" onPress={() => showMode("lockChoice")} />
+              <Button label="Back" variant="secondary" onPress={() => showMode("lockChoice")} />
             ) : (
               <PanelActions
                 confirmLabel="Lock folder"
@@ -620,7 +604,6 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
               autoCorrect={false}
               error={error || undefined}
               onSubmitEditing={() => void removeWithFolderPassword()}
-              containerStyle={styles.body}
               rightAccessory={<EyeToggle visible={showPassword} onPress={() => setShowPassword((value) => !value)} />}
             />
           )}
@@ -635,7 +618,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
           </PressableScale>
           <View style={sheetMenuStyles.stack}>
             {(folder.lockType ?? "password") === "pattern" || (folder.lockType ?? "password") === "pin" ? (
-              <Button label="Cancel" variant="ghost" disabled={removing} onPress={() => showMode("menu")} />
+              <Button label="Cancel" variant="secondary" disabled={removing} onPress={() => showMode("menu")} />
             ) : (
               <PanelActions
                 confirmLabel={(folder.lockType ?? "password") === "device" ? "Use device lock" : "Remove lock"}
@@ -672,7 +655,6 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             onSubmitEditing={submitAccountBypass}
             textContentType="password"
             autoComplete="password"
-            containerStyle={styles.body}
             rightAccessory={<EyeToggle visible={showAccountPassword} onPress={() => setShowAccountPassword((value) => !value)} />}
           />
           <PressableScale
@@ -706,7 +688,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
       {folder && mode === "icon" ? (
         <>
           <PanelHeader title="Choose an icon" />
-          <View style={styles.body}>
+          <View>
             <FolderIconPicker value={icon} onChange={setIcon} />
             {error ? <Text variant="footnote" color="danger" style={styles.error}>{error}</Text> : null}
           </View>
@@ -720,15 +702,27 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
         </>
       ) : null}
       </FloatingPanel>
+
+      <ConfirmDialog
+        visible={visible && !!displayFolder && mode === "delete"}
+        icon="trash-outline"
+        title={displayFolder ? `Delete ${displayFolder.name}?` : "Delete folder?"}
+        message={
+          displayFolder && displayFolder.bookmarkCount > 0
+            ? "This folder and every bookmark inside it will be deleted. You can undo this."
+            : "You can undo this."
+        }
+        confirmLabel="Delete"
+        onDismiss={() => showMode("menu")}
+        onConfirm={doDelete}
+      />
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  body: { paddingHorizontal: spacing[4] },
   error: { marginTop: spacing[8] },
-  menuNote: { marginHorizontal: spacing[12], marginVertical: spacing[6] },
   forgot: { alignSelf: "center", marginTop: spacing[8] },
-  confirmInput: { marginTop: spacing[12], paddingHorizontal: spacing[4] },
+  confirmInput: { marginTop: spacing[12] },
   pinBoxes: { marginTop: spacing[12] },
 });

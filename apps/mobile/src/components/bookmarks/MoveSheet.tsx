@@ -132,12 +132,12 @@ export function MoveSheet({
         <>
           <PanelHeader title="Move to folder" />
           {error ? (
-            <Text variant="footnote" color="danger" style={{ marginBottom: spacing[8] }}>
+            <Text variant="footnote" color="danger" align="center" style={{ marginBottom: spacing[8] }}>
               {error}
             </Text>
           ) : null}
           {destinations.length === 0 ? (
-            <Text variant="body" color="secondary">No other folders available.</Text>
+            <Text variant="body" color="secondary" align="center">No other folders available.</Text>
           ) : (
             <ThemedFlatList
               data={destinations}

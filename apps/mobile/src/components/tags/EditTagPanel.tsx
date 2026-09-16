@@ -92,6 +92,6 @@ export function EditTagPanel({ visible, tag, onDismiss }: EditTagPanelProps) {
 }
 
 const styles = StyleSheet.create({
-  body: { paddingHorizontal: spacing[4] },
+  body: {},
   label: { marginTop: spacing[10], marginBottom: spacing[6] },
 });

@@ -270,7 +270,7 @@ export function UnlockForm({
       ) : isPassword ? (
         <Button label="Unlock" block onPress={() => void submitPassword()} loading={unlock.isPending} />
       ) : onCancel ? (
-        <Button label={cancelLabel} variant="ghost" onPress={onCancel} style={sheetMenuStyles.cancel} />
+        <Button label={cancelLabel} variant="secondary" onPress={onCancel} style={sheetMenuStyles.cancel} />
       ) : null}
       <Text variant="caption" color="tertiary" align="center" style={styles.footnote}>
         Unlocked for {UNLOCK_MINUTES} minutes on this device.
@@ -323,7 +323,7 @@ const styles = StyleSheet.create({
     maxWidth: 420,
     alignSelf: "center",
   },
-  body: { paddingHorizontal: spacing[4] },
+  body: {},
   error: {
     marginTop: spacing[8],
   },

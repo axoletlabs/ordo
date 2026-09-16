@@ -321,7 +321,7 @@ function CheckRow({
 }
 
 const styles = StyleSheet.create({
-  stack: { gap: spacing[12], paddingHorizontal: spacing[4] },
+  stack: { gap: spacing[12] },
   list: { gap: spacing[6] },
   listRow: { flexDirection: "row", gap: spacing[8], alignItems: "flex-start" },
   listCopy: { flex: 1 },
@@ -336,8 +336,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "stretch",
     gap: spacing[8],
-    marginTop: spacing[16],
-    paddingHorizontal: spacing[4],
+    marginTop: spacing[12],
   },
   action: { flex: 1, minWidth: 0 },
   continue: {

@@ -102,6 +102,6 @@ export function AddTagsSheet({
 }
 
 const styles = StyleSheet.create({
-  body: { paddingHorizontal: spacing[4] },
+  body: {},
   error: { marginTop: spacing[8] },
 });

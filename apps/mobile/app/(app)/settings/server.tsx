@@ -206,13 +206,13 @@ export default function ServerScreen() {
         onConfirm={() => void confirmSwitch()}
       >
         <View style={styles.hostChange}>
-          <Text variant="footnote" color="tertiary" numberOfLines={1}>
+          <Text variant="footnote" color="tertiary" align="center" numberOfLines={1} style={{ width: "100%" }}>
             {displayName}
           </Text>
-          <Text variant="caption" color="faint">
+          <Text variant="caption" color="faint" align="center">
             to
           </Text>
-          <Text variant="bodyStrong" numberOfLines={1}>
+          <Text variant="bodyStrong" align="center" numberOfLines={1} style={{ width: "100%" }}>
             {toCloud ? CLOUD_DISPLAY_NAME : confirmedUrl ? hostOf(confirmedUrl) : ""}
           </Text>
         </View>
@@ -451,7 +451,7 @@ const styles = StyleSheet.create({
     gap: spacing[8],
     flexShrink: 0,
   },
-  fields: { gap: spacing[16], paddingHorizontal: spacing[4] },
-  hostChange: { gap: spacing[6] },
+  fields: { gap: spacing[16] },
+  hostChange: { width: "100%", gap: spacing[6], alignItems: "center" },
   switchHost: { marginTop: spacing[16] },
 });

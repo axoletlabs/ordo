@@ -11,14 +11,13 @@ export const sheetMenuStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "stretch",
     gap: spacing[8],
-    marginTop: spacing[16],
-    paddingHorizontal: spacing[4],
+    marginTop: spacing[12],
   },
   action: {
     flex: 1,
     minWidth: 0,
   },
-  cancel: { marginTop: spacing[4] },
+  cancel: { marginTop: spacing[8] },
 });
 
 /** Compact Cancel + confirm pair for form panels. */
@@ -45,7 +44,7 @@ export function PanelActions({
     <View style={sheetMenuStyles.row}>
       <Button
         label={cancelLabel}
-        variant="ghost"
+        variant="secondary"
         onPress={onCancel}
         disabled={cancelDisabled}
         style={sheetMenuStyles.action}

@@ -1,7 +1,7 @@
 /**
- * Title block for floating panels and dialogs. Left-aligned to match
- * the context-menu card, not a centered alert. An icon sits in a chip
- * beside the copy so title and subtitle share one edge, like SettingRow.
+ * Title block for floating panels and dialogs. Centered, using the same
+ * uppercase Inter Tight as screen headers so overlays sit in the same type
+ * system as the rest of the app. An optional icon stacks above the title.
  */
 import React from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
@@ -9,9 +9,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { Text, type TextVariant } from "./Text";
 import { radius, spacing } from "../../theme/tokens";
 
-const ICON_SIZE = 28;
-/** Extra left inset so body copy lines up with the title when an icon is present. */
-export const PANEL_ICON_COLUMN = ICON_SIZE + spacing[12];
+const ICON_SIZE = 36;
 
 export function PanelHeader({
   title,
@@ -19,9 +17,9 @@ export function PanelHeader({
   icon,
   iconColor,
   iconBackground,
-  titleVariant = "title2",
+  titleVariant = "header",
   subtitleVariant = "footnote",
-  numberOfLines,
+  numberOfLines = 3,
   accessory,
   style,
 }: {
@@ -37,7 +35,7 @@ export function PanelHeader({
   style?: StyleProp<ViewStyle>;
 }) {
   return (
-    <View style={[styles.wrap, icon ? styles.wrapWithIcon : null, style]}>
+    <View style={[styles.wrap, style]}>
       {icon ? (
         <View
           style={[
@@ -45,18 +43,27 @@ export function PanelHeader({
             iconBackground ? { backgroundColor: iconBackground } : null,
           ]}
         >
-          <Ionicons name={icon} size={16} color={iconColor} accessible={false} />
+          <Ionicons name={icon} size={18} color={iconColor} accessible={false} />
         </View>
       ) : null}
-      <View style={icon ? styles.copy : null}>
-        <View style={styles.titleRow}>
-          <Text variant={titleVariant} numberOfLines={numberOfLines} style={styles.title}>
-            {title}
-          </Text>
-          {accessory}
-        </View>
+      <View style={styles.copy}>
+        <Text
+          variant={titleVariant}
+          align="center"
+          numberOfLines={numberOfLines}
+          style={styles.title}
+        >
+          {title}
+        </Text>
+        {accessory ? <View style={styles.accessory}>{accessory}</View> : null}
         {subtitle ? (
-          <Text variant={subtitleVariant} color="secondary" numberOfLines={3} style={styles.subtitle}>
+          <Text
+            variant={subtitleVariant}
+            color="secondary"
+            align="center"
+            numberOfLines={4}
+            style={styles.subtitle}
+          >
             {subtitle}
           </Text>
         ) : null}
@@ -67,29 +74,34 @@ export function PanelHeader({
 
 const styles = StyleSheet.create({
   wrap: {
-    alignItems: "stretch",
-    paddingHorizontal: spacing[4],
-    marginBottom: spacing[8],
-  },
-  wrapWithIcon: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing[12],
+    alignItems: "center",
+    marginBottom: spacing[12],
   },
   icon: {
     width: ICON_SIZE,
     height: ICON_SIZE,
-    borderRadius: radius.sm,
+    borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+    marginBottom: spacing[12],
   },
-  copy: { flex: 1, minWidth: 0 },
-  titleRow: {
-    flexDirection: "row",
+  copy: {
+    width: "100%",
     alignItems: "center",
-    gap: spacing[8],
   },
-  title: { flex: 1, minWidth: 0 },
-  subtitle: { marginTop: spacing[4] },
+  title: {
+    width: "100%",
+    includeFontPadding: false,
+    textAlignVertical: "center",
+  },
+  accessory: {
+    marginTop: spacing[4],
+    alignItems: "center",
+  },
+  subtitle: {
+    marginTop: spacing[6],
+    width: "100%",
+    includeFontPadding: false,
+  },
 });

@@ -234,13 +234,12 @@ export function ServerConnectSheet({
 }
 
 const styles = StyleSheet.create({
-  body: { paddingHorizontal: spacing[4] },
+  body: {},
   actions: {
     flexDirection: "row",
     alignItems: "stretch",
     gap: spacing[8],
-    marginTop: spacing[16],
-    paddingHorizontal: spacing[4],
+    marginTop: spacing[12],
   },
   action: { flex: 1, minWidth: 0 },
   changeBtn: {

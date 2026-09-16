@@ -166,7 +166,6 @@ const styles = StyleSheet.create({
   footer: { marginTop: spacing[24] },
   fingerprintBox: {
     marginTop: spacing[4],
-    marginHorizontal: spacing[4],
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.lg,
     padding: spacing[12],

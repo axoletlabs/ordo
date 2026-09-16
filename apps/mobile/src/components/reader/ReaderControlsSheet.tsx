@@ -79,7 +79,7 @@ export function ReaderControlsSheet({
   effectiveDark,
 }: ReaderControlsSheetProps) {
   return (
-    <FloatingPanel visible={visible} onDismiss={onDismiss} maxWidth={420}>
+    <FloatingPanel visible={visible} onDismiss={onDismiss}>
       <PanelHeader title="Reader" />
 
       <View style={styles.body}>
@@ -126,7 +126,7 @@ export function ReaderControlsSheet({
 }
 
 const styles = StyleSheet.create({
-  body: { paddingHorizontal: spacing[4] },
+  body: {},
   group: { marginBottom: spacing[10] },
   groupControl: { marginTop: spacing[4] },
   amoledRow: {

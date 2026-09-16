@@ -424,7 +424,7 @@ function TagFilterRow({
 const styles = StyleSheet.create({
   trailing: { flexDirection: "row", alignItems: "center", gap: spacing[4], flexShrink: 0, maxWidth: 120 },
   trailingLabel: { flexShrink: 1 },
-  tagSearch: { paddingHorizontal: spacing[4], paddingBottom: spacing[6] },
+  tagSearch: { paddingHorizontal: spacing[12], paddingBottom: spacing[6] },
   empty: { paddingHorizontal: spacing[12], paddingVertical: spacing[12] },
   tagRow: {
     minHeight: 44,

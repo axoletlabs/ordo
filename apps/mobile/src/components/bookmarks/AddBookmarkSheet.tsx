@@ -7,9 +7,9 @@ import { Ionicons } from "@expo/vector-icons";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
-import { Button } from "../ui/Button";
 import { Text } from "../ui/Text";
 import { PressableScale } from "../ui/PressableScale";
+import { PanelActions } from "../ui/SheetActionRow";
 import { UnlockForm } from "./LockPrompt";
 import { CreateFolderPanel } from "./CreateFolderPanel";
 import {
@@ -336,12 +336,13 @@ export function AddBookmarkSheet({
                 onRequestCreateTag={() => setCreateTagOpen(true)}
               />
             ) : null}
-
-            <View style={styles.actions}>
-              <Button label="Cancel" variant="secondary" onPress={close} style={styles.action} />
-              <Button label="Save" onPress={submit} loading={create.isPending} style={styles.action} />
             </View>
-            </View>
+            <PanelActions
+              confirmLabel="Save"
+              onConfirm={() => void submit()}
+              onCancel={close}
+              loading={create.isPending}
+            />
           </>
         )}
       </FloatingPanel>
@@ -361,7 +362,7 @@ export function AddBookmarkSheet({
 }
 
 const styles = StyleSheet.create({
-  body: { paddingHorizontal: spacing[4] },
+  body: {},
   destinationRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -394,11 +395,4 @@ const styles = StyleSheet.create({
     gap: spacing[6],
     marginBottom: spacing[6],
   },
-  actions: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    gap: spacing[8],
-    marginTop: spacing[16],
-  },
-  action: { flex: 1, minWidth: 0 },
 });
