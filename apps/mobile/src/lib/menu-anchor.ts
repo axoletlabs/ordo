@@ -210,6 +210,38 @@ export function clipSelectionAnchor(
   };
 }
 
+function rectHitsViewport(rect: MenuAnchorRect, viewport: SelectionViewport): boolean {
+  const topInset = viewport.top ?? 0;
+  const bottomInset = viewport.bottom ?? 0;
+  return (
+    rect.y + rect.height > topInset &&
+    rect.y < viewport.height - bottomInset &&
+    rect.x + rect.width > 0 &&
+    rect.x < viewport.width
+  );
+}
+
+/**
+ * Native selection rects are sometimes still in raw pixels. Top-of-screen
+ * ranges accidentally look like window points; lower ones sit past the
+ * viewport until we divide by density.
+ */
+export function windowSpaceSelectionRect(
+  rect: MenuAnchorRect,
+  viewport: SelectionViewport,
+  density: number,
+): MenuAnchorRect {
+  if (rectHitsViewport(rect, viewport)) return rect;
+  if (!(density > 1)) return rect;
+  const scaled: MenuAnchorRect = {
+    x: rect.x / density,
+    y: rect.y / density,
+    width: rect.width / density,
+    height: rect.height / density,
+  };
+  return rectHitsViewport(scaled, viewport) ? scaled : rect;
+}
+
 export function resolveSelectionAnchor(opts: {
   nativeRect?: MenuAnchorRect;
   host?: MenuAnchorRect;
@@ -217,12 +249,16 @@ export function resolveSelectionAnchor(opts: {
   end: number;
   textLength: number;
   viewport: SelectionViewport;
+  density?: number;
 }): MenuAnchorRect | null {
-  const raw = isMenuAnchorRect(opts.nativeRect)
-    ? thinSelectionAnchor(opts.nativeRect)
-    : opts.host && isMenuAnchorRect(opts.host)
-      ? estimateSelectionAnchor(opts.host, opts.start, opts.end, opts.textLength)
-      : null;
-  if (!raw) return null;
-  return clipSelectionAnchor(raw, opts.viewport) ?? raw;
+  const native = isMenuAnchorRect(opts.nativeRect)
+    ? windowSpaceSelectionRect(opts.nativeRect, opts.viewport, opts.density ?? 1)
+    : undefined;
+  const fromNative = native ? clipSelectionAnchor(thinSelectionAnchor(native), opts.viewport) : null;
+  if (fromNative) return fromNative;
+  if (opts.host && isMenuAnchorRect(opts.host)) {
+    const estimated = estimateSelectionAnchor(opts.host, opts.start, opts.end, opts.textLength);
+    return clipSelectionAnchor(estimated, opts.viewport) ?? estimated;
+  }
+  return null;
 }
