@@ -18,11 +18,11 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider, useTheme } from "../src/theme/ThemeProvider";
 import { queryClient } from "../src/lib/query-client";
-import { restoreQueryPersistence, stopQueryPersistence } from "../src/lib/query-cache";
+import { wipeLeftoverQuerySnapshots } from "../src/lib/query-cache";
 import { useAuthStore } from "../src/store/auth";
 import { useSettingsStore } from "../src/store/settings";
 import { useFolderTokenStore } from "../src/store/folder-tokens";
-import { useOnlineStore, useOnline } from "../src/lib/online";
+import { useOnlineStore } from "../src/lib/online";
 import { cancelProactiveRefresh, ensureFreshAccessToken } from "../src/lib/api/client";
 import { initAppLifecycle } from "../src/lib/app-lifecycle";
 import { ToastHost } from "../src/components/ui/ToastHost";
@@ -69,9 +69,6 @@ function RootShell() {
   const segments = useSegments();
   const status = useAuthStore((s) => s.status);
   const tokens = useAuthStore((s) => s.tokens);
-  const userId = useAuthStore((s) => s.user?.id);
-  const serverUrl = useSettingsStore((s) => s.serverUrl);
-  const online = useOnline();
   const restarting = useUpdateRestartStore((s) => s.restarting);
   const { restartCount } = Updates.useUpdates();
   const runtimeRestart = restarting || restartCount > 0 || peekRestartCover() != null;
@@ -109,14 +106,6 @@ function RootShell() {
     }
     void ensureFreshAccessToken();
   }, [status, tokens?.accessToken]);
-
-  useEffect(() => {
-    if (status === "authenticated" && userId && online) {
-      void restoreQueryPersistence(userId, serverUrl);
-      return;
-    }
-    stopQueryPersistence();
-  }, [status, userId, serverUrl, online]);
 
   // Keep the native splash visible while the redirect reconciles with auth so
   // the wrong group (e.g. login for an authenticated user) is never shown.
@@ -209,12 +198,9 @@ export default function RootLayout() {
       }
 
       try {
-        const auth = useAuthStore.getState();
-        if (auth.status === "authenticated" && auth.user) {
-          await restoreQueryPersistence(auth.user.id, useSettingsStore.getState().serverUrl);
-        }
+        wipeLeftoverQuerySnapshots();
       } catch (error) {
-        console.warn("Query cache restore failed", error);
+        console.warn("Query cache reset failed", error);
       } finally {
         setBooted(true);
       }

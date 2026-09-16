@@ -45,6 +45,7 @@ import {
   mergeAbortSignals,
   raceDeadline,
 } from "../fetch-timeout";
+import { reportServerUnreachable } from "../server-availability";
 
 /** Client-side error codes not present on the wire. */
 export const LOCAL_ERROR = {
@@ -126,6 +127,11 @@ async function parseError(res: Response): Promise<ApiClientError> {
   return new ApiClientError(res.status, body);
 }
 
+function noteUnreachable(url: string) {
+  if (url.includes("/server/info")) return;
+  reportServerUnreachable();
+}
+
 /** Lowest-level fetch: no interceptors, just normalised errors. */
 async function rawFetch(url: string, init: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS): Promise<Response> {
   const timeout = createTimeoutSignal(timeoutMs);
@@ -140,11 +146,13 @@ async function rawFetch(url: string, init: RequestInit, timeoutMs = REQUEST_TIME
     const userAborted = Boolean(userSignal?.aborted);
     const timedOut = !userAborted && (timeout.timedOut() || isDeadlineError(e) || isAbortError(e));
     if (timedOut) {
+      noteUnreachable(url);
       throw new ApiClientError(0, {
         code: LOCAL_ERROR.TIMEOUT,
         message: "The server took too long to respond.",
       });
     }
+    if (!(userAborted || isAbortError(e))) noteUnreachable(url);
     throw new ApiClientError(
       0,
       null,
@@ -321,15 +329,18 @@ async function request<T>(
     if (res.status === 204) return undefined as T;
     return await raceDeadline(res.json() as Promise<T>, timeoutMs + 2_000);
   } catch (e) {
-    const err =
-      e instanceof ApiClientError
-        ? e
-        : isDeadlineError(e)
-          ? new ApiClientError(0, {
-              code: LOCAL_ERROR.TIMEOUT,
-              message: "The server took too long to respond.",
-            })
-          : new ApiClientError(0, null, "Unexpected error");
+    let err: ApiClientError;
+    if (e instanceof ApiClientError) {
+      err = e;
+    } else if (isDeadlineError(e)) {
+      noteUnreachable(url);
+      err = new ApiClientError(0, {
+        code: LOCAL_ERROR.TIMEOUT,
+        message: "The server took too long to respond.",
+      });
+    } else {
+      err = new ApiClientError(0, null, "Unexpected error");
+    }
     const sentAccessToken = tokens?.accessToken;
     // Transparent refresh + single replay. `unauthorized` is included because
     // rotating refresh invalidates the previous access token (hash miss), so
@@ -340,6 +351,7 @@ async function request<T>(
       if (refresh === "rejected") {
         throw new ApiClientError(401, { code: "session_revoked", message: "Your session has ended. Please sign in again." });
       }
+      noteUnreachable(url);
       throw new ApiClientError(0, {
         code: LOCAL_ERROR.NETWORK,
         message: "Couldn't reach the server. Check your connection.",

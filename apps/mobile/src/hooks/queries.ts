@@ -8,13 +8,12 @@ import { authApi } from "../lib/api/auth";
 import { serverApi } from "../lib/api/server";
 import { foldersApi } from "../lib/api/folders";
 import { qk } from "../lib/api/query-keys";
-import { PERSISTED_QUERY_GC_TIME_MS } from "../lib/query-persist";
 import { useAuthStore } from "../store/auth";
 import { useSettingsStore } from "../store/settings";
 
 /** Server info — unauthenticated; keyed by URL so switching servers refetches.
- *  Must not gate the app navigator: an unreachable server has to leave Tabs
- *  mounted so Settings → Account / Server stay reachable. */
+ *  OfflineGate covers an unreachable host; Settings → Server stays mounted
+ *  so the address can still be changed. */
 export function useServerInfo() {
   const serverUrl = useSettingsStore((s) => s.serverUrl);
   return useQuery({
@@ -77,6 +76,5 @@ export function useFolders() {
       }));
     },
     staleTime: 30_000,
-    gcTime: PERSISTED_QUERY_GC_TIME_MS,
   });
 }

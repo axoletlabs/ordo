@@ -2,9 +2,6 @@
  * React Query client with sensible defaults:
  *  - staleTime so cached screens don't flicker; refetch on app foreground
  *    once that window has elapsed (wired via AppState → focusManager).
- *  - Folders + public bookmark lists also live on disk (MMKV) so an online
- *    cold start can paint the last library immediately; see query-cache.ts.
- *    That snapshot is not used as an offline mode.
  *  - retry skips client errors (except token_expired, which the interceptor already retried).
  *  - retry pauses when the device has no link (not when the Ordo server is down).
  *  - networkMode `always` so a false "offline" flag cannot leave queries pending forever.
