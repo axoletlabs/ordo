@@ -1,11 +1,11 @@
 /**
  * Opt-in flow to leave ordo Cloud for a server the user runs.
  *
- * Two steps: a short warning with one responsibility checkbox, then a
+ * Two steps: what self-hosting means with one responsibility checkbox, then a
  * verified address. The URL store is only written after the last step.
  */
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { StyleSheet, View, type TextInput } from "react-native";
+import { Keyboard, Pressable, StyleSheet, View, type TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { APP_NAME } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
@@ -74,6 +74,10 @@ export function SelfHostFlow({
     }
   }, [pendingUrl, step, visible]);
 
+  useEffect(() => {
+    if (step !== "address") Keyboard.dismiss();
+  }, [step]);
+
   const close = () => {
     if (switching) return;
     onDismiss();
@@ -81,8 +85,13 @@ export function SelfHostFlow({
 
   const goBack = () => {
     if (switching) return;
-    if (step === "address") setStep("intro");
-    else close();
+    if (step === "address") {
+      Keyboard.dismiss();
+      inputRef.current?.blur();
+      setStep("intro");
+      return;
+    }
+    close();
   };
 
   const goNext = () => {
@@ -135,9 +144,22 @@ export function SelfHostFlow({
           {step === "intro" ? (
             <View style={styles.stack}>
               <Text variant="footnote" color="secondary">
-                ordo Cloud is the default. If you use your own, you run it — uptime,
-                backups, TLS, and email.
+                ordo Cloud is the default. Your own server is optional, and you run it.
               </Text>
+              <Text variant="footnote" color="secondary">
+                Axolet does not operate, monitor, or back up a server you host, and is
+                not responsible for downtime, data loss, or anything that happens on it.
+              </Text>
+              <Text variant="label" color="tertiary">
+                You look after
+              </Text>
+              <CopyList
+                items={[
+                  "Keep the server online, updated, and backed up.",
+                  "TLS and who can reach it.",
+                  "SMTP if you want verification and password-reset email.",
+                ]}
+              />
               <CheckRow
                 label="I understand Axolet is not responsible for my server or my data."
                 checked={acceptedResponsibility}
@@ -212,6 +234,23 @@ export function SelfHostFlow({
   );
 }
 
+function CopyList({ items }: { items: readonly string[] }) {
+  return (
+    <View style={styles.list}>
+      {items.map((item) => (
+        <View key={item} style={styles.listRow}>
+          <Text variant="footnote" color="secondary">
+            ·
+          </Text>
+          <Text variant="footnote" color="secondary" style={styles.listCopy}>
+            {item}
+          </Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 function ContinueButton({
   ready,
   onPress,
@@ -261,18 +300,13 @@ function CheckRow({
 }) {
   const { palette } = useTheme();
   return (
-    <PressableScale
+    <Pressable
       accessibilityRole="checkbox"
       accessibilityState={{ checked }}
       accessibilityLabel={label}
       onPress={onToggle}
-      style={[
-        styles.check,
-        {
-          backgroundColor: palette.surfaceSecondary,
-          borderColor: checked ? palette.accent : "transparent",
-        },
-      ]}
+      hitSlop={8}
+      style={styles.check}
     >
       <Ionicons
         name={checked ? "checkbox" : "square-outline"}
@@ -282,20 +316,20 @@ function CheckRow({
       <Text variant="footnote" style={styles.checkLabel}>
         {label}
       </Text>
-    </PressableScale>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   stack: { gap: spacing[12], paddingHorizontal: spacing[4] },
+  list: { gap: spacing[6] },
+  listRow: { flexDirection: "row", gap: spacing[8], alignItems: "flex-start" },
+  listCopy: { flex: 1 },
   check: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[10],
-    borderWidth: 1,
-    borderRadius: radius.sm,
-    paddingHorizontal: spacing[12],
-    paddingVertical: spacing[10],
+    alignItems: "flex-start",
+    gap: spacing[8],
+    alignSelf: "stretch",
   },
   checkLabel: { flex: 1 },
   actions: {
