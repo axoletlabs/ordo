@@ -100,7 +100,7 @@ If you skip SMTP, one-time email codes are printed in the server console.
 
 1. Install the Android APK from [Releases](https://github.com/axoletlabs/ordo/releases).
 2. On the sign-in screen, choose **Use your own server**.
-3. Read the warnings, type **I understand**, then enter your server URL.
+3. Read the warnings, agree that you run the server, then enter your URL.
 4. Register or sign in.
 
 You can switch later under Settings → Hosting. Switching signs you out; libraries

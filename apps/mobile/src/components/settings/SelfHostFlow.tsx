@@ -1,8 +1,8 @@
 /**
  * Opt-in flow to leave ordo Cloud for a server the user runs.
  *
- * Intentionally several steps: what self-hosting means, a typed disclaimer,
- * then a verified address. The URL store is only written after the last step.
+ * Three steps: what self-hosting means, one responsibility checkbox, then a
+ * verified address. The URL store is only written after the last step.
  */
 import React, { useEffect, useRef, useState } from "react";
 import { StyleSheet, View, type TextInput } from "react-native";
@@ -23,12 +23,7 @@ import { useSettingsStore } from "../../store/settings";
 import { useAuthStore } from "../../store/auth";
 import { useServerProbe } from "../../hooks/use-server-probe";
 import { useCommitServerSwitch } from "../../hooks/use-commit-server-switch";
-import {
-  CLOUD_SERVER_URL,
-  SELF_HOST_CONFIRMATION,
-  canAcknowledgeSelfHost,
-  isCloudServerUrl,
-} from "../../lib/hosting";
+import { CLOUD_SERVER_URL, isCloudServerUrl } from "../../lib/hosting";
 import { probeServer, hostOf, normalizeServerUrl } from "../../lib/server-probe";
 import { visibleServerHistory } from "../../lib/server-history";
 import { timeAgo } from "../../lib/format";
@@ -43,10 +38,9 @@ const SETUP_ITEMS = [
   "SMTP if you want verification and password-reset email.",
 ] as const;
 
-const LIMITATION_ITEMS = [
-  "Email codes print in the server console until SMTP is set.",
-  "Registration, required MFA, and other flags follow your config.",
-  "Features we add for ordo Cloud may not exist on your server.",
+const CLOUD_ITEMS = [
+  "Hosted email for verification and password reset.",
+  "Backups and uptime we look after.",
 ] as const;
 
 export function SelfHostFlow({
@@ -65,8 +59,6 @@ export function SelfHostFlow({
 
   const [step, setStep] = useState<Step>("intro");
   const [acceptedResponsibility, setAcceptedResponsibility] = useState(false);
-  const [acceptedLimitations, setAcceptedLimitations] = useState(false);
-  const [confirmation, setConfirmation] = useState("");
   const [url, setUrl] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [pendingUrl, setPendingUrl] = useState<string | null>(null);
@@ -79,11 +71,6 @@ export function SelfHostFlow({
     : probe.probeCopy;
   const canConnect =
     probe.canChange && !cloudTyped && !confirming && !busy && !pendingUrl;
-  const acknowledged = canAcknowledgeSelfHost({
-    acceptedResponsibility,
-    acceptedLimitations,
-    confirmation,
-  });
   const stepIndex = STEPS.indexOf(step) + 1;
   const switching = confirming || busy || Boolean(pendingUrl);
 
@@ -91,8 +78,6 @@ export function SelfHostFlow({
     if (!visible) {
       setStep("intro");
       setAcceptedResponsibility(false);
-      setAcceptedLimitations(false);
-      setConfirmation("");
       setUrl("");
       setConfirming(false);
       setPendingUrl(null);
@@ -121,7 +106,7 @@ export function SelfHostFlow({
   const goNext = () => {
     haptics.light();
     if (step === "intro") setStep("acknowledge");
-    else if (step === "acknowledge" && acknowledged) setStep("address");
+    else if (step === "acknowledge" && acceptedResponsibility) setStep("address");
   };
 
   const connect = async () => {
@@ -188,17 +173,17 @@ export function SelfHostFlow({
               </Text>
               <CopyList items={SETUP_ITEMS} />
               <Text variant="label" color="tertiary">
-                Until you configure it
+                On ordo Cloud
               </Text>
-              <CopyList items={LIMITATION_ITEMS} />
+              <CopyList items={CLOUD_ITEMS} />
             </View>
           ) : null}
 
           {step === "acknowledge" ? (
             <View style={styles.stack}>
               <Text variant="footnote" color="secondary">
-                This is unsupported. If the server goes down, loses data, or is
-                misconfigured, that is on you.
+                You're leaving ordo Cloud for a server you run. Keep it online, back
+                it up, and look after who can reach it.
               </Text>
               <CheckRow
                 label="I understand Axolet Labs is not responsible for my server or my data."
@@ -208,32 +193,11 @@ export function SelfHostFlow({
                   setAcceptedResponsibility((value) => !value);
                 }}
               />
-              <CheckRow
-                label="I understand some features need extra setup or may be unavailable."
-                checked={acceptedLimitations}
-                onToggle={() => {
-                  haptics.selection();
-                  setAcceptedLimitations((value) => !value);
-                }}
-              />
-              <Input
-                label="Type to confirm"
-                value={confirmation}
-                onChangeText={setConfirmation}
-                placeholder={SELF_HOST_CONFIRMATION}
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoComplete="off"
-                helper={`Type ${SELF_HOST_CONFIRMATION} exactly.`}
-              />
             </View>
           ) : null}
 
           {step === "address" ? (
             <View style={styles.stack}>
-              <Text variant="footnote" color="secondary">
-                We'll check that this is an ordo server before connecting.
-              </Text>
               <Input
                 ref={inputRef}
                 value={url}
@@ -317,12 +281,16 @@ export function SelfHostFlow({
                 loading={confirming || busy}
                 style={styles.action}
               />
+            ) : step === "acknowledge" ? (
+              <ContinueButton
+                ready={acceptedResponsibility}
+                onPress={goNext}
+              />
             ) : (
               <Button
                 label="Continue"
                 variant="primary"
                 onPress={goNext}
-                disabled={step === "acknowledge" && !acknowledged}
                 style={styles.action}
               />
             )}
@@ -361,6 +329,38 @@ function CopyList({ items }: { items: readonly string[] }) {
         </View>
       ))}
     </View>
+  );
+}
+
+function ContinueButton({
+  ready,
+  onPress,
+}: {
+  ready: boolean;
+  onPress: () => void;
+}) {
+  const { palette } = useTheme();
+  return (
+    <PressableScale
+      accessibilityRole="button"
+      accessibilityLabel="Continue"
+      accessibilityState={{ disabled: !ready }}
+      disabled={!ready}
+      onPress={onPress}
+      style={[
+        styles.action,
+        styles.continue,
+        { backgroundColor: ready ? palette.accent : palette.surfaceSecondary },
+      ]}
+    >
+      <Text
+        variant="header"
+        numberOfLines={1}
+        style={{ color: ready ? palette.onAccent : palette.textTertiary }}
+      >
+        Continue
+      </Text>
+    </PressableScale>
   );
 }
 
@@ -434,4 +434,11 @@ const styles = StyleSheet.create({
     marginTop: spacing[16],
   },
   action: { flex: 1 },
+  continue: {
+    height: 42,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing[16],
+  },
 });

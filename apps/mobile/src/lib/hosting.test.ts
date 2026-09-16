@@ -3,8 +3,6 @@ import { test } from "node:test";
 import {
   CLOUD_SERVER_URL,
   DEFAULT_SERVER_URL,
-  SELF_HOST_CONFIRMATION,
-  canAcknowledgeSelfHost,
   hostingDisplayName,
   hostingModeOf,
   isCloudServerUrl,
@@ -44,20 +42,6 @@ test("saved server URLs are left alone", () => {
   assert.equal(resolvePersistedServerUrl("   "), CLOUD_SERVER_URL);
   assert.equal(resolvePersistedServerUrl(undefined), CLOUD_SERVER_URL);
   assert.equal(resolvePersistedServerUrl(null), CLOUD_SERVER_URL);
-});
-
-test("self-host acknowledgement needs both checks and the exact phrase", () => {
-  const valid = {
-    acceptedResponsibility: true,
-    acceptedLimitations: true,
-    confirmation: SELF_HOST_CONFIRMATION,
-  };
-  assert.equal(canAcknowledgeSelfHost(valid), true);
-  assert.equal(canAcknowledgeSelfHost({ ...valid, confirmation: " I understand " }), true);
-  assert.equal(canAcknowledgeSelfHost({ ...valid, confirmation: "i understand" }), false);
-  assert.equal(canAcknowledgeSelfHost({ ...valid, acceptedResponsibility: false }), false);
-  assert.equal(canAcknowledgeSelfHost({ ...valid, acceptedLimitations: false }), false);
-  assert.equal(canAcknowledgeSelfHost({ ...valid, confirmation: "self-host" }), false);
 });
 
 test("cloud is not a self-host destination", () => {

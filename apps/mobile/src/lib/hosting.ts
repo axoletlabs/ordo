@@ -11,9 +11,6 @@ export const CLOUD_DISPLAY_NAME = "ordo Cloud";
 /** Product default for new installs (no saved server URL). */
 export const DEFAULT_SERVER_URL = CLOUD_SERVER_URL;
 
-/** Typed exactly on the self-host acknowledgement step. */
-export const SELF_HOST_CONFIRMATION = "I understand";
-
 export type HostingMode = "cloud" | "selfHosted";
 
 function originOf(raw: string): string | null {
@@ -51,18 +48,6 @@ export function resolvePersistedServerUrl(
 ): string {
   const trimmed = saved?.trim();
   return trimmed ? trimmed : fallback;
-}
-
-export function canAcknowledgeSelfHost(input: {
-  acceptedResponsibility: boolean;
-  acceptedLimitations: boolean;
-  confirmation: string;
-}): boolean {
-  return (
-    input.acceptedResponsibility &&
-    input.acceptedLimitations &&
-    input.confirmation.trim() === SELF_HOST_CONFIRMATION
-  );
 }
 
 /** Cloud is not a self-host destination — send people back to the hosted path. */
