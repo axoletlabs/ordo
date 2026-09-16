@@ -8,6 +8,7 @@ import { BackHandler } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { create } from "zustand";
 import { haptics } from "../lib/haptics";
+import { createSelectionHoldGuard } from "../lib/selection-hold-guard";
 
 export type SelectionKey = `bookmark:${string}` | `folder:${string}`;
 
@@ -21,6 +22,11 @@ export function folderKey(id: string): SelectionKey {
 
 export const SELECTION_LONG_PRESS_MS = 400;
 export const SELECTION_BAR_HEIGHT = 64;
+
+/** Survives the favicon/folder-icon host view swapping to a checkbox mid-hold. */
+export function useSelectionHoldGuard() {
+  return useRef(createSelectionHoldGuard()).current;
+}
 
 /** Layout chrome reads this so the tab bar can hide while a screen is selecting. */
 export const useSelectionUiStore = create<{ active: boolean }>(() => ({ active: false }));

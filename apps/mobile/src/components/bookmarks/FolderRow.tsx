@@ -14,7 +14,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
 import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { radius, spacing } from "../../theme/tokens";
-import { folderKey, SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
+import { folderKey, SELECTION_LONG_PRESS_MS, useSelectionHoldGuard } from "../../hooks/use-selection";
 import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
 import { prefetchFolderBookmarks } from "../../hooks/use-bookmarks";
 import { useFolderUnlocked } from "../../hooks/use-folders";
@@ -36,6 +36,15 @@ export interface FolderRowProps {
 export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore, onEnterSelection, selected, selectionMode, highlighted: highlightedProp }: FolderRowProps) {
   const { palette } = useTheme();
   const rowRef = React.useRef<View>(null);
+  const selectionModeRef = React.useRef(!!selectionMode);
+  selectionModeRef.current = !!selectionMode;
+  const hold = useSelectionHoldGuard();
+  const holdItemId = folder.id;
+  const holdItemIdRef = React.useRef(holdItemId);
+  if (holdItemIdRef.current !== holdItemId) {
+    holdItemIdRef.current = holdItemId;
+    hold.reset();
+  }
   const [hovered, setHovered] = React.useState(false);
   const menuKey = folderKey(folder.id);
   const highlightedFromMenu = useMenuHighlightStore((s) => s.key === menuKey);
@@ -45,6 +54,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
   const countLabel = `${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}`;
   const lockLabel = folder.protected ? (sessionUnlocked ? ", unlocked" : ", locked") : "";
   const openFolder = () => {
+    if (hold.consumePress()) return;
     if (selectionMode) {
       onPress(folder);
       return;
@@ -52,6 +62,14 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
     haptics.light();
     onPress(folder);
   };
+
+  const handleLeadingLongPress = onEnterSelection
+    ? () => {
+        if (selectionModeRef.current) return;
+        hold.markEnter();
+        onEnterSelection(folder);
+      }
+    : undefined;
   const warmFolder = () => {
     if (selectionMode || (folder.protected && !sessionUnlocked)) return;
     void prefetchFolderBookmarks(folder.id);
@@ -98,11 +116,13 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
         accessible={!selectionMode}
         importantForAccessibility={selectionMode ? "no" : "yes"}
         style={styles.leading}
-        onPressIn={warmFolder}
+        onPressIn={() => {
+          hold.pressIn();
+          warmFolder();
+        }}
+        onPressOut={() => hold.pressOut()}
         onPress={openFolder}
-        onLongPress={
-          selectionMode || !onEnterSelection ? undefined : () => onEnterSelection(folder)
-        }
+        onLongPress={handleLeadingLongPress}
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         {selectionMode ? (
@@ -143,7 +163,11 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
             : undefined
         }
         style={styles.body}
-        onPressIn={warmFolder}
+        onPressIn={() => {
+          hold.pressIn();
+          warmFolder();
+        }}
+        onPressOut={() => hold.pressOut()}
         onPress={openFolder}
         onLongPress={selectionMode ? undefined : onMore ? (event) => openMore(event) : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}

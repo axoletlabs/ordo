@@ -23,7 +23,7 @@ import { prefetchBookmarkDetail } from "../../hooks/use-bookmarks";
 import { prefetchTaggedBookmarks } from "../../hooks/use-tags";
 import { firstSearchHighlight } from "../../lib/search-bookmarks";
 import { radius, spacing } from "../../theme/tokens";
-import { bookmarkKey, SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
+import { bookmarkKey, SELECTION_LONG_PRESS_MS, useSelectionHoldGuard } from "../../hooks/use-selection";
 import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
 import type { BookmarkDto } from "@ordo/shared";
 
@@ -79,6 +79,15 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   const { palette } = useTheme();
   const router = useRouter();
   const rowRef = React.useRef<View>(null);
+  const selectionModeRef = React.useRef(!!selectionMode);
+  selectionModeRef.current = !!selectionMode;
+  const hold = useSelectionHoldGuard();
+  const holdItemId = bookmark.id;
+  const holdItemIdRef = React.useRef(holdItemId);
+  if (holdItemIdRef.current !== holdItemId) {
+    holdItemIdRef.current = holdItemId;
+    hold.reset();
+  }
   const [hovered, setHovered] = React.useState(false);
   const menuKey = bookmarkKey(bookmark.id);
   const highlightedFromMenu = useMenuHighlightStore((s) => s.key === menuKey);
@@ -129,6 +138,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   };
 
   const openBookmark = () => {
+    if (hold.consumePress()) return;
     if (selectionMode) {
       onPress(bookmark);
       return;
@@ -136,6 +146,16 @@ export const BookmarkRow = React.memo(function BookmarkRow({
     haptics.light();
     onPress(bookmark);
   };
+
+  const handleLeadingLongPress = onEnterSelection
+    ? () => {
+        // Keep this handler attached after enter so RN does not reclassify
+        // the still-down finger as a tap once the favicon becomes a checkbox.
+        if (selectionModeRef.current) return;
+        hold.markEnter();
+        onEnterSelection(bookmark);
+      }
+    : undefined;
 
   const warmBookmark = () => {
     if (selectionMode) return;
@@ -192,11 +212,13 @@ export const BookmarkRow = React.memo(function BookmarkRow({
         accessible={!selectionMode}
         importantForAccessibility={selectionMode ? "no" : "yes"}
         style={styles.leading}
-        onPressIn={warmBookmark}
+        onPressIn={() => {
+          hold.pressIn();
+          warmBookmark();
+        }}
+        onPressOut={() => hold.pressOut()}
         onPress={openBookmark}
-        onLongPress={
-          selectionMode || !onEnterSelection ? undefined : () => onEnterSelection(bookmark)
-        }
+        onLongPress={handleLeadingLongPress}
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         {selectionMode ? (
@@ -257,7 +279,11 @@ export const BookmarkRow = React.memo(function BookmarkRow({
             : undefined
         }
         style={styles.body}
-        onPressIn={warmBookmark}
+        onPressIn={() => {
+          hold.pressIn();
+          warmBookmark();
+        }}
+        onPressOut={() => hold.pressOut()}
         onPress={openBookmark}
         onLongPress={selectionMode ? undefined : onMore ? (event) => openMore(event) : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}
