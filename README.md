@@ -8,7 +8,7 @@
 
 <p align="center">
   A bookmark manager. Save links, read them in a clean reader,
-  and keep them on ordo Cloud — or on a server you run.
+  and keep them on ordo Cloud.
 </p>
 
 ## What you get
@@ -17,14 +17,28 @@
 - **Folders and tags** so things stay easy to find
 - **Import and export** as JSON, HTML, or CSV
 - **Accounts** with MFA and profile pictures if you want them
-- **ordo Cloud** by default, or **your own backend** on SQLite
+- **ordo Cloud** by default — [api.ordo.axolet.com](https://api.ordo.axolet.com)
+- Optional **your own backend** on SQLite, if you want to run a server
 
-The app talks to [ordo Cloud](https://api.ordo.axolet.com) unless you opt into
-a server you host. Existing installs keep the server URL they already saved.
+The app talks to ordo Cloud unless you opt into a server you host. Existing
+installs keep the server URL they already saved.
 
-## Run the backend
+## Use ordo Cloud
 
-You need **Node.js 22.13+** and **[pnpm](https://pnpm.io)** (this repo uses pnpm 11).
+1. Install the Android APK from [Releases](https://github.com/axoletlabs/ordo/releases).
+2. Sign in. New installs use ordo Cloud — there is nothing to configure.
+
+To run the app from source instead of the APK, you need **Node.js 22.13+**
+and **[pnpm](https://pnpm.io)** (this repo uses pnpm 11):
+
+```bash
+pnpm --filter @ordo/mobile start
+```
+
+## Run your own server
+
+Optional. You run it: keep it online, updated, and backed up. Axolet does not
+operate, monitor, or back up a server you host. Same Node.js and pnpm as above.
 
 ```bash
 git clone https://github.com/axoletlabs/ordo.git
@@ -43,7 +57,7 @@ You should see JSON with `name`, `version`, and `registrationEnabled`.
 
 ### Update
 
-On a machine that already has Ordo, pull, rebuild, and migrate without
+On a machine that already has ordo, pull, rebuild, and migrate without
 touching `apps/server/.env`:
 
 ```bash
@@ -87,8 +101,9 @@ pnpm --filter @ordo/server dev
 
 ### Create an account
 
-Open the app and sign in to ordo Cloud, or complete **Use your own server**
-and register there. Registration on a self-hosted server is on by default.
+On ordo Cloud, open the app and sign in. On a server you run, complete
+**Use your own server** and register there. Registration on a self-hosted
+server is on by default.
 
 If you don't want anyone else creating an account, pass
 `--registration false` to the deploy script, or set
@@ -105,15 +120,6 @@ If you skip SMTP, one-time email codes are printed in the server console.
 
 You can switch later under Settings → Hosting. Switching signs you out; libraries
 are not copied between ordo Cloud and a server you run.
-
-To run the app from source instead of the APK:
-
-```bash
-pnpm --filter @ordo/mobile start
-```
-
-New installs use `https://api.ordo.axolet.com`. A URL already saved on the
-device is left alone.
 
 ## Configuration
 
