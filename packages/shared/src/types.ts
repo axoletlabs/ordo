@@ -224,6 +224,11 @@ export interface ServerInfoDto {
   folderLockTypes: boolean;
 }
 
+/** Liveness/readiness probe. Unauthenticated. */
+export interface HealthDto {
+  status: "ok";
+}
+
 export interface ApiError {
   code: string;
   message: string;

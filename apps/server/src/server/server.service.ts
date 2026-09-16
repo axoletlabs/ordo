@@ -2,7 +2,8 @@ import { hostname as osHostname } from "node:os";
 import { isIP } from "node:net";
 import { Injectable, Inject } from "@nestjs/common";
 import { APP_CONFIG, type AppConfig } from "../config/config.module.js";
-import type { ServerInfoDto } from "@ordo/shared";
+import { ErrorCode, type HealthDto, type ServerInfoDto } from "@ordo/shared";
+import { AppError } from "../common/errors/app-error.js";
 import { MailService } from "../auth/mail.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 
@@ -45,6 +46,15 @@ export class ServerService {
       update: { name: trimmed },
     });
     return trimmed;
+  }
+
+  async health(): Promise<HealthDto> {
+    try {
+      await this.prisma.$queryRawUnsafe("SELECT 1");
+    } catch {
+      throw new AppError(ErrorCode.INTERNAL_ERROR, "Database is unavailable.");
+    }
+    return { status: "ok" };
   }
 
   async info(): Promise<ServerInfoDto> {

@@ -14,6 +14,7 @@ import type {
   FolderDto,
   LoginResponse,
   MfaStatusDto,
+  HealthDto,
   ServerInfoDto,
   SessionDto,
   TagDto,
@@ -545,6 +546,14 @@ export const BookmarkRoutes = {
 
 // ---------- Server ----------
 export const ServerRoutes = {
+  health: {
+    path: `${API_PREFIX}/health`,
+    method: "GET",
+    body: {} as Empty,
+    query: {} as Empty,
+    params: {} as Empty,
+    response: {} as HealthDto,
+  },
   info: {
     path: `${API_PREFIX}/server/info`,
     method: "GET",

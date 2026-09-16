@@ -134,6 +134,13 @@ describe("Auth (e2e)", () => {
     });
   });
 
+  describe("health", () => {
+    it("returns ok without auth when the database is reachable", async () => {
+      const res = await request(ctx.app.getHttpServer()).get("/api/health").expect(200);
+      expect(res.body).toEqual({ status: "ok" });
+    });
+  });
+
   describe("server info", () => {
     it("reports smtpConfigured false when SMTP_URL is unset", async () => {
       const host = machineHostname();
