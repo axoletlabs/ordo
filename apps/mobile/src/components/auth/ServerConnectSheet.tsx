@@ -19,7 +19,7 @@ import Animated, {
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { Spinner } from "../ui/Spinner";
 import { ThemedScrollView } from "../ui/ThemedScrollView";
-import { PANEL_ICON_COLUMN, PanelHeader } from "../ui/PanelHeader";
+import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 import { PressableScale } from "../ui/PressableScale";
@@ -131,7 +131,6 @@ export function ServerConnectSheet({
   onCommit,
   animateReadyColor = false,
 }: ServerConnectSheetProps) {
-  const { palette } = useTheme();
   const currentUrl = useSettingsStore((s) => s.serverUrl);
   const setServerUrl = useSettingsStore((s) => s.setServerUrl);
   const inputRef = useRef<TextInput>(null);
@@ -180,12 +179,7 @@ export function ServerConnectSheet({
       }}
     >
       <ThemedScrollView keyboardShouldPersistTaps="handled">
-        <PanelHeader
-          icon="server-outline"
-          iconColor={palette.accent}
-          iconBackground={palette.accentSoft}
-          title="Server address"
-        />
+        <PanelHeader title="Server address" />
 
         <View style={styles.body}>
           <Input
@@ -240,17 +234,13 @@ export function ServerConnectSheet({
 }
 
 const styles = StyleSheet.create({
-  body: {
-    paddingLeft: spacing[4] + PANEL_ICON_COLUMN,
-    paddingRight: spacing[4],
-  },
+  body: { paddingHorizontal: spacing[4] },
   actions: {
     flexDirection: "row",
     alignItems: "stretch",
     gap: spacing[8],
     marginTop: spacing[16],
-    paddingLeft: spacing[4] + PANEL_ICON_COLUMN,
-    paddingRight: spacing[4],
+    paddingHorizontal: spacing[4],
   },
   action: { flex: 1, minWidth: 0 },
   changeBtn: {

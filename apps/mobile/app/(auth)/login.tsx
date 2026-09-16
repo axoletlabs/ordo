@@ -146,7 +146,7 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
                   setShowServer(true);
                 }}
               >
-                <Text variant="footnote" color="accent">Change server</Text>
+                <Text variant="header" color="accent">Change server</Text>
               </PressableScale>
               <Text variant="footnote" color="faint"> · </Text>
               <PressableScale
@@ -157,7 +157,7 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
                   setConfirmCloud(true);
                 }}
               >
-                <Text variant="footnote" color="accent">Use ordo Cloud</Text>
+                <Text variant="header" color="accent">Use ordo Cloud</Text>
               </PressableScale>
             </View>
           </View>

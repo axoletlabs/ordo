@@ -1,16 +1,16 @@
 /**
  * Opt-in flow to leave ordo Cloud for a server the user runs.
  *
- * Three steps: what self-hosting means, one responsibility checkbox, then a
+ * Two steps: a short warning with one responsibility checkbox, then a
  * verified address. The URL store is only written after the last step.
  */
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { StyleSheet, View, type TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { APP_NAME } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { ThemedScrollView } from "../ui/ThemedScrollView";
-import { PANEL_ICON_COLUMN, PanelHeader } from "../ui/PanelHeader";
+import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
 import { Text } from "../ui/Text";
@@ -26,20 +26,9 @@ import { useCommitServerSwitch } from "../../hooks/use-commit-server-switch";
 import { isCloudServerUrl } from "../../lib/hosting";
 import { probeServer } from "../../lib/server-probe";
 
-type Step = "intro" | "acknowledge" | "address";
+type Step = "intro" | "address";
 
-const STEPS: Step[] = ["intro", "acknowledge", "address"];
-
-const SETUP_ITEMS = [
-  "Keep the server online, updated, and backed up.",
-  "TLS and who can reach it.",
-  "SMTP if you want verification and password-reset email.",
-] as const;
-
-const CLOUD_ITEMS = [
-  "Hosted email for verification and password reset.",
-  "Backups and uptime we look after.",
-] as const;
+const STEPS: Step[] = ["intro", "address"];
 
 export function SelfHostFlow({
   visible,
@@ -48,7 +37,6 @@ export function SelfHostFlow({
   visible: boolean;
   onDismiss: () => void;
 }) {
-  const { palette } = useTheme();
   const currentUrl = useSettingsStore((s) => s.serverUrl);
   const signedIn = useAuthStore((s) => s.status === "authenticated");
   const { commit, busy } = useCommitServerSwitch();
@@ -70,22 +58,21 @@ export function SelfHostFlow({
   const stepIndex = STEPS.indexOf(step) + 1;
   const switching = confirming || busy || Boolean(pendingUrl);
 
-  useEffect(() => {
-    if (!visible) {
-      setStep("intro");
-      setAcceptedResponsibility(false);
-      setUrl("");
-      setConfirming(false);
-      setPendingUrl(null);
-    }
+  useLayoutEffect(() => {
+    if (!visible) return;
+    setStep("intro");
+    setAcceptedResponsibility(false);
+    setUrl("");
+    setConfirming(false);
+    setPendingUrl(null);
   }, [visible]);
 
   useEffect(() => {
-    if (visible && step === "address") {
+    if (visible && !pendingUrl && step === "address") {
       const timer = setTimeout(() => inputRef.current?.focus(), 100);
       return () => clearTimeout(timer);
     }
-  }, [step, visible]);
+  }, [pendingUrl, step, visible]);
 
   const close = () => {
     if (switching) return;
@@ -94,15 +81,13 @@ export function SelfHostFlow({
 
   const goBack = () => {
     if (switching) return;
-    if (step === "acknowledge") setStep("intro");
-    else if (step === "address") setStep("acknowledge");
+    if (step === "address") setStep("intro");
     else close();
   };
 
   const goNext = () => {
-    haptics.light();
-    if (step === "intro") setStep("acknowledge");
-    else if (step === "acknowledge" && acceptedResponsibility) setStep("address");
+    if (!acceptedResponsibility) return;
+    setStep("address");
   };
 
   const connect = async () => {
@@ -128,26 +113,18 @@ export function SelfHostFlow({
     if (!pendingUrl) return;
     const ok = await commit(pendingUrl);
     if (ok) {
-      setPendingUrl(null);
       onDismiss();
+      setPendingUrl(null);
     }
   };
 
   return (
     <>
+      {!pendingUrl ? (
       <FloatingPanel visible={visible} onDismiss={close} dismissible={!switching}>
         <ThemedScrollView keyboardShouldPersistTaps="handled">
           <PanelHeader
-            icon={step === "address" ? "link-outline" : "server-outline"}
-            iconColor={palette.accent}
-            iconBackground={palette.accentSoft}
-            title={
-              step === "intro"
-                ? "Use your own server"
-                : step === "acknowledge"
-                  ? "Before you continue"
-                  : "Server address"
-            }
+            title={step === "intro" ? "Use your own server" : "Server address"}
             accessory={
               <Text variant="caption" color="tertiary">
                 {stepIndex} / {STEPS.length}
@@ -158,31 +135,11 @@ export function SelfHostFlow({
           {step === "intro" ? (
             <View style={styles.stack}>
               <Text variant="footnote" color="secondary">
-                ordo Cloud is the default. Your own server is optional, and you run it.
-              </Text>
-              <Text variant="footnote" color="secondary">
-                Axolet Labs does not operate, monitor, or back up a server you host, and is
-                not responsible for downtime, data loss, or anything that happens on it.
-              </Text>
-              <Text variant="label" color="tertiary">
-                You look after
-              </Text>
-              <CopyList items={SETUP_ITEMS} />
-              <Text variant="label" color="tertiary">
-                On ordo Cloud
-              </Text>
-              <CopyList items={CLOUD_ITEMS} />
-            </View>
-          ) : null}
-
-          {step === "acknowledge" ? (
-            <View style={styles.stack}>
-              <Text variant="footnote" color="secondary">
-                You're leaving ordo Cloud for a server you run. Keep it online, back
-                it up, and look after who can reach it.
+                ordo Cloud is the default. If you use your own, you run it — uptime,
+                backups, TLS, and email.
               </Text>
               <CheckRow
-                label="I understand Axolet Labs is not responsible for my server or my data."
+                label="I understand Axolet is not responsible for my server or my data."
                 checked={acceptedResponsibility}
                 onToggle={() => {
                   haptics.selection();
@@ -190,9 +147,7 @@ export function SelfHostFlow({
                 }}
               />
             </View>
-          ) : null}
-
-          {step === "address" ? (
+          ) : (
             <View style={styles.stack}>
               <Input
                 ref={inputRef}
@@ -213,7 +168,7 @@ export function SelfHostFlow({
                 onSubmitEditing={() => void connect()}
               />
             </View>
-          ) : null}
+          )}
 
           <View style={styles.actions}>
             <Button
@@ -232,22 +187,13 @@ export function SelfHostFlow({
                 loading={confirming || busy}
                 style={styles.action}
               />
-            ) : step === "acknowledge" ? (
-              <ContinueButton
-                ready={acceptedResponsibility}
-                onPress={goNext}
-              />
             ) : (
-              <Button
-                label="Continue"
-                variant="primary"
-                onPress={goNext}
-                style={styles.action}
-              />
+              <ContinueButton ready={acceptedResponsibility} onPress={goNext} />
             )}
           </View>
         </ThemedScrollView>
       </FloatingPanel>
+      ) : null}
 
       <ConfirmDialog
         visible={Boolean(pendingUrl)}
@@ -263,23 +209,6 @@ export function SelfHostFlow({
         onConfirm={() => void confirmSignedInSwitch()}
       />
     </>
-  );
-}
-
-function CopyList({ items }: { items: readonly string[] }) {
-  return (
-    <View style={styles.list}>
-      {items.map((item) => (
-        <View key={item} style={styles.listRow}>
-          <Text variant="footnote" color="secondary">
-            ·
-          </Text>
-          <Text variant="footnote" color="secondary" style={styles.listCopy}>
-            {item}
-          </Text>
-        </View>
-      ))}
-    </View>
   );
 }
 
@@ -358,14 +287,7 @@ function CheckRow({
 }
 
 const styles = StyleSheet.create({
-  stack: {
-    gap: spacing[12],
-    paddingLeft: spacing[4] + PANEL_ICON_COLUMN,
-    paddingRight: spacing[4],
-  },
-  list: { gap: spacing[6] },
-  listRow: { flexDirection: "row", gap: spacing[8], alignItems: "flex-start" },
-  listCopy: { flex: 1 },
+  stack: { gap: spacing[12], paddingHorizontal: spacing[4] },
   check: {
     flexDirection: "row",
     alignItems: "center",
@@ -381,8 +303,7 @@ const styles = StyleSheet.create({
     alignItems: "stretch",
     gap: spacing[8],
     marginTop: spacing[16],
-    paddingLeft: spacing[4] + PANEL_ICON_COLUMN,
-    paddingRight: spacing[4],
+    paddingHorizontal: spacing[4],
   },
   action: { flex: 1, minWidth: 0 },
   continue: {
