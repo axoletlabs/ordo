@@ -41,17 +41,22 @@ export function ContextMenu({
   anchor,
   children,
   width = CONTEXT_MENU_WIDTH,
+  backdrop = true,
 }: {
   visible: boolean;
   onDismiss: () => void;
   anchor: MenuAnchorRect | null;
   children: React.ReactNode;
   width?: number;
+  /** When false, taps pass through so OS text selection stays alive. */
+  backdrop?: boolean;
 }) {
   const { palette, shadows } = useTheme();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const { rendered, progress } = useOverlayPresence(visible, onDismiss);
+  const { rendered, progress } = useOverlayPresence(visible, onDismiss, {
+    dismissKeyboard: backdrop,
+  });
   const [contentHeight, setContentHeight] = React.useState(0);
   const contentHeightRef = React.useRef(0);
   const lastPlacement = React.useRef<MenuPlacement | null>(null);
@@ -121,19 +126,22 @@ export function ContextMenu({
   return (
     <OverlayPortal>
       <View
-        accessibilityViewIsModal={visible}
-        pointerEvents={visible ? "auto" : "none"}
+        accessibilityViewIsModal={visible && backdrop}
+        pointerEvents={visible ? (backdrop ? "auto" : "box-none") : "none"}
         style={styles.modalRoot}
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Dismiss menu"
-          style={StyleSheet.absoluteFill}
-          pointerEvents={visible ? "auto" : "none"}
-          onPress={onDismiss}
-        />
+        {backdrop ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss menu"
+            style={StyleSheet.absoluteFill}
+            pointerEvents={visible ? "auto" : "none"}
+            onPress={onDismiss}
+          />
+        ) : null}
         <Animated.View
           accessibilityRole="menu"
+          pointerEvents="auto"
           style={[
             styles.menu,
             {

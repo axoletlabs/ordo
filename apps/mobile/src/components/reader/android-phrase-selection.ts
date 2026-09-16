@@ -10,12 +10,13 @@ import {
   findNodeHandle,
   type Text,
 } from "react-native";
+import { isMenuAnchorRect, type MenuAnchorRect } from "../../lib/menu-anchor";
 
 const MODULE = Platform.OS === "android" ? NativeModules.OrdoSelectableText : null;
 const emitter = MODULE ? new NativeEventEmitter(MODULE) : null;
 
 export function useAndroidPhraseSelection(
-  onRange: (start: number, end: number) => void,
+  onRange: (start: number, end: number, rect?: MenuAnchorRect) => void,
 ): {
   textRef: RefObject<Text | null>;
   onLayout: () => void;
@@ -38,9 +39,18 @@ export function useAndroidPhraseSelection(
     if (!emitter) return;
     const sub = emitter.addListener(
       "ordoSelectableText",
-      (event: { target: number; start: number; end: number }) => {
+      (event: {
+        target: number;
+        start: number;
+        end: number;
+        x?: number;
+        y?: number;
+        width?: number;
+        height?: number;
+      }) => {
         if (event.target !== tagRef.current) return;
-        onRangeRef.current(event.start, event.end);
+        const rect = { x: event.x ?? 0, y: event.y ?? 0, width: event.width ?? 0, height: event.height ?? 0 };
+        onRangeRef.current(event.start, event.end, isMenuAnchorRect(rect) ? rect : undefined);
       },
     );
     return () => {

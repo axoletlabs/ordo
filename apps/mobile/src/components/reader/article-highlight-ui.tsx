@@ -3,12 +3,20 @@
  * Wrapping itself lives in @ordo/shared (TextQuoteSelector → <mark>).
  *
  * Phrases are OS text, never an editor: UITextView on iOS and selectable
- * Text (TextView) on Android. A caret is ignored; only a real range becomes
- * a highlight draft. Long-press selects; the draft bar is the action
- * surface (copy, highlight, remove). Tap still opens links.
+ * Text (TextView) on Android. A caret is ignored; only a real range opens
+ * the selection menu. Tap still opens links.
  */
-import React, { createContext, useCallback, useContext, useMemo } from "react";
-import { Linking, Platform, StyleSheet, Text, type StyleProp, type TextStyle } from "react-native";
+import React, { createContext, useCallback, useContext, useMemo, useRef } from "react";
+import {
+  Linking,
+  Platform,
+  StyleSheet,
+  Text,
+  View,
+  type GestureResponderEvent,
+  type StyleProp,
+  type TextStyle,
+} from "react-native";
 import { UITextView } from "@bsky.app/react-native-uitextview";
 import {
   useRendererProps,
@@ -17,6 +25,7 @@ import {
   type TNode,
 } from "@native-html/render";
 import { htmlToPlainText, quoteFromBlock, quoteFromRange, type HighlightAnchor } from "@ordo/shared";
+import { isMenuAnchorRect, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { useAndroidPhraseSelection } from "./android-phrase-selection";
 import {
   highlightIdCoveringRange,
@@ -60,6 +69,38 @@ function pickTextStyle(native: Record<string, unknown>): TextStyle {
 
 function asHtmlNode(node: TNode): HtmlTableNode {
   return node as unknown as HtmlTableNode;
+}
+
+function touchAnchor(event: GestureResponderEvent): MenuAnchorRect {
+  return {
+    x: event.nativeEvent.pageX - 16,
+    y: event.nativeEvent.pageY - 20,
+    width: 32,
+    height: 28,
+  };
+}
+
+function stripAnchor(x: number, y: number, width: number, height: number): MenuAnchorRect {
+  const stripH = 28;
+  const stripY = y + Math.min(Math.max(0, height / 2 - stripH / 2), Math.max(0, height - stripH));
+  return { x, y: stripY, width: Math.max(1, width), height: stripH };
+}
+
+function webSelectionAnchor(): MenuAnchorRect | undefined {
+  const selection = (
+    globalThis as {
+      getSelection?: () => {
+        rangeCount: number;
+        getRangeAt: (i: number) => {
+          getBoundingClientRect: () => { left: number; top: number; width: number; height: number };
+        };
+      } | null;
+    }
+  ).getSelection?.();
+  if (!selection || selection.rangeCount === 0) return undefined;
+  const rect = selection.getRangeAt(0).getBoundingClientRect();
+  const anchor = { x: rect.left, y: rect.top, width: rect.width, height: rect.height };
+  return isMenuAnchorRect(anchor) ? anchor : undefined;
 }
 
 function pressPropsFor(node: TNode) {
@@ -137,7 +178,10 @@ function webSelectedText(): string {
 }
 
 /** Selection draft; `highlightId` is set when the range sits inside a mark. */
-export type HighlightSelectDraft = HighlightAnchor & { highlightId?: string };
+export type HighlightSelectDraft = HighlightAnchor & {
+  highlightId?: string;
+  anchor?: MenuAnchorRect;
+};
 
 export interface HighlightUiHandlers {
   articlePlain: string;
@@ -169,6 +213,8 @@ export function SelectablePhrase({
   TNodeChildrenRenderer: React.ComponentType<{ tnode: TNode }>;
 }) {
   const ui = useContext(HighlightUiContext);
+  const hostRef = useRef<View>(null);
+  const lastTouch = useRef<MenuAnchorRect | null>(null);
   const text = useMemo(() => nodeTextContent(asHtmlNode(tnode)), [tnode]);
   const spans = useMemo(() => {
     if (tnode.type === "text") return selectableInline(tnode);
@@ -177,23 +223,52 @@ export function SelectablePhrase({
     ));
   }, [tnode]);
 
+  const recordTouch = useCallback((event: GestureResponderEvent) => {
+    lastTouch.current = touchAnchor(event);
+  }, []);
+
   const publishRange = useCallback(
-    (start: number, end: number) => {
+    (start: number, end: number, nativeRect?: MenuAnchorRect) => {
       if (!ui) return;
       const range = selectedRange(start, end);
-      if (!range) return;
+      if (!range) {
+        ui.onTextSelect(null);
+        return;
+      }
       const quote =
         quoteFromBlock(ui.articlePlain, text, range.start, range.end) ??
         quoteFromRange(text, range.start, range.end);
-      if (!quote) return;
+      if (!quote) {
+        ui.onTextSelect(null);
+        return;
+      }
       const htmlNode = asHtmlNode(tnode);
       const href = hrefCoveringRange(htmlNode, range.start, range.end);
       const highlightId = highlightIdCoveringRange(htmlNode, range.start, range.end) ?? undefined;
-      ui.onTextSelect({
+      const draft: HighlightSelectDraft = {
         ...quote,
         ...(href ? { href } : {}),
         ...(highlightId ? { highlightId } : {}),
-      });
+      };
+      const finish = (anchor?: MenuAnchorRect) => {
+        ui.onTextSelect(isMenuAnchorRect(anchor) ? { ...draft, anchor } : draft);
+      };
+      if (isMenuAnchorRect(nativeRect)) {
+        finish(nativeRect);
+        return;
+      }
+      if (lastTouch.current) {
+        finish(lastTouch.current);
+        return;
+      }
+      const host = hostRef.current;
+      if (host && typeof host.measureInWindow === "function") {
+        host.measureInWindow((x, y, width, height) => {
+          finish(stripAnchor(x, y, width, height));
+        });
+        return;
+      }
+      finish();
     },
     [text, tnode, ui],
   );
@@ -209,19 +284,26 @@ export function SelectablePhrase({
 
   const onWebSelect = useCallback(() => {
     const selected = webSelectedText();
-    if (!selected) return;
-    const start = text.indexOf(selected);
-    if (start < 0) {
-      ui?.onTextSelect(quoteFromRange(selected, 0, selected.length));
+    if (!selected) {
+      ui?.onTextSelect(null);
       return;
     }
-    publishRange(start, start + selected.length);
+    const start = text.indexOf(selected);
+    if (start < 0) {
+      const quote = quoteFromRange(selected, 0, selected.length);
+      if (!quote) {
+        ui?.onTextSelect(null);
+        return;
+      }
+      ui?.onTextSelect({ ...quote, anchor: webSelectionAnchor() });
+      return;
+    }
+    publishRange(start, start + selected.length, webSelectionAnchor());
   }, [publishRange, text, ui]);
 
   const phraseStyle = [styles.phrase, ui?.textStyle];
-
-  if (Platform.OS === "ios") {
-    return (
+  const phrase =
+    Platform.OS === "ios" ? (
       <UITextView
         selectable
         uiTextView
@@ -231,11 +313,7 @@ export function SelectablePhrase({
       >
         {spans}
       </UITextView>
-    );
-  }
-
-  if (Platform.OS === "web") {
-    return (
+    ) : Platform.OS === "web" ? (
       <Text
         selectable
         accessibilityRole="text"
@@ -245,20 +323,30 @@ export function SelectablePhrase({
       >
         {spans}
       </Text>
+    ) : (
+      <Text
+        ref={textRef}
+        selectable
+        accessibilityRole="text"
+        selectionColor={ui?.selectionColor}
+        style={phraseStyle}
+        onLayout={onLayout}
+      >
+        {spans}
+      </Text>
     );
-  }
 
   return (
-    <Text
-      ref={textRef}
-      selectable
-      accessibilityRole="text"
-      selectionColor={ui?.selectionColor}
-      style={phraseStyle}
-      onLayout={onLayout}
+    <View
+      ref={hostRef}
+      collapsable={false}
+      pointerEvents="box-none"
+      onTouchStart={recordTouch}
+      onTouchMove={recordTouch}
+      onTouchEnd={recordTouch}
     >
-      {spans}
-    </Text>
+      {phrase}
+    </View>
   );
 }
 

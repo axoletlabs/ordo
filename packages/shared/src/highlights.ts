@@ -275,6 +275,107 @@ export function unionWithHighlights(
   return { absorbIds, quote };
 }
 
+export interface SelectionHighlightState {
+  overlappingIds: string[];
+  /** New mark, extend an existing one, or merge several. */
+  canHighlight: boolean;
+  /** Selection overlaps at least one mark (carve just that overlap). */
+  canRemove: boolean;
+}
+
+/**
+ * What the selection menu should offer. Fully inside one mark → remove only.
+ * Highlighted plus extra text → both (extend vs carve). Several marks with
+ * no gap → highlight merges them. Plain text → highlight only.
+ */
+export function selectionHighlightState(
+  html: string,
+  highlights: readonly HighlightQuote[],
+  selection: HighlightAnchor,
+): SelectionHighlightState {
+  const empty: SelectionHighlightState = { overlappingIds: [], canHighlight: true, canRemove: false };
+  if (!html || highlights.length === 0) return empty;
+  const selected = findHighlightRange(html, selection);
+  if (!selected) return empty;
+  const overlapping = highlights.filter((highlight) => {
+    const range = findHighlightRange(html, highlight);
+    return range != null && overlaps(range, selected);
+  });
+  const overlappingIds = overlapping.map((highlight) => highlight.id);
+  if (overlappingIds.length === 0) return empty;
+  const covered = coveredLength(
+    selected,
+    overlapping.map((highlight) => findHighlightRange(html, highlight)!),
+  );
+  const fullyCovered = covered >= selected.end - selected.start;
+  return {
+    overlappingIds,
+    canHighlight: !fullyCovered || overlappingIds.length > 1,
+    canRemove: true,
+  };
+}
+
+export type UnhighlightPlan =
+  | { kind: "none" }
+  | {
+      kind: "apply";
+      deleteIds: string[];
+      updates: Array<{ id: string; quote: HighlightAnchor }>;
+      creates: HighlightAnchor[];
+    };
+
+/** Carve every mark the selection overlaps, independently of the others. */
+export function planUnhighlight(
+  html: string,
+  highlights: readonly HighlightQuote[],
+  selection: HighlightAnchor,
+): UnhighlightPlan {
+  const { overlappingIds } = selectionHighlightState(html, highlights, selection);
+  if (overlappingIds.length === 0) return { kind: "none" };
+  const deleteIds: string[] = [];
+  const updates: Array<{ id: string; quote: HighlightAnchor }> = [];
+  const creates: HighlightAnchor[] = [];
+  for (const id of overlappingIds) {
+    const current = highlights.find((row) => row.id === id);
+    if (!current) continue;
+    const carved = carveHighlight(html, current, selection);
+    if (carved.kind === "miss") continue;
+    if (carved.kind === "clear") {
+      deleteIds.push(id);
+      continue;
+    }
+    const [first, ...extras] = carved.quotes;
+    if (!first) {
+      deleteIds.push(id);
+      continue;
+    }
+    updates.push({ id, quote: first });
+    creates.push(...extras);
+  }
+  if (deleteIds.length === 0 && updates.length === 0) return { kind: "none" };
+  return { kind: "apply", deleteIds, updates, creates };
+}
+
+function coveredLength(selected: HighlightRange, ranges: readonly HighlightRange[]): number {
+  const clips = ranges
+    .map((range) => ({
+      start: Math.max(selected.start, range.start),
+      end: Math.min(selected.end, range.end),
+    }))
+    .filter((range) => range.end > range.start)
+    .sort((a, b) => a.start - b.start);
+  let total = 0;
+  let cursor = selected.start;
+  for (const clip of clips) {
+    const from = Math.max(clip.start, cursor);
+    if (clip.end > from) {
+      total += clip.end - from;
+      cursor = clip.end;
+    }
+  }
+  return total;
+}
+
 /**
  * Highlight whose wrapped range fully contains the current selection.
  * Used to offer "Remove highlight" when the user selects already-highlighted text.

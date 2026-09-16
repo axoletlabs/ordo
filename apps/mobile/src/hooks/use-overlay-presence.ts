@@ -11,10 +11,15 @@ import { keyboardIsOpen } from "./use-keyboard-visible";
 const CLOSE_MS = 90;
 const CLOSE_FALLBACK_MS = CLOSE_MS + 70;
 
-export function useOverlayPresence(visible: boolean, onDismiss: () => void) {
+export function useOverlayPresence(
+  visible: boolean,
+  onDismiss: () => void,
+  options?: { dismissKeyboard?: boolean },
+) {
   const progress = useSharedValue(visible ? 1 : 0);
   const [rendered, setRendered] = useState(visible);
   const generation = useRef(0);
+  const dismissKeyboard = options?.dismissKeyboard !== false;
 
   const hide = useCallback((token: number) => {
     if (generation.current !== token) return;
@@ -24,7 +29,7 @@ export function useOverlayPresence(visible: boolean, onDismiss: () => void) {
   useLayoutEffect(() => {
     if (visible) {
       generation.current += 1;
-      Keyboard.dismiss();
+      if (dismissKeyboard) Keyboard.dismiss();
       setRendered(true);
       cancelAnimation(progress);
       progress.value = 1;
@@ -37,7 +42,7 @@ export function useOverlayPresence(visible: boolean, onDismiss: () => void) {
     });
     const fallback = setTimeout(() => hide(token), CLOSE_FALLBACK_MS);
     return () => clearTimeout(fallback);
-  }, [hide, progress, rendered, visible]);
+  }, [dismissKeyboard, hide, progress, rendered, visible]);
 
   useEffect(() => {
     if (visible || !rendered) return;

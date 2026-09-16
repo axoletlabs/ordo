@@ -142,9 +142,42 @@ class OrdoSelectableTextModule(reactContext: ReactApplicationContext) :
     payload.putInt("target", reactTags[text] ?: text.id)
     payload.putInt("start", start)
     payload.putInt("end", end)
+    putSelectionRect(payload, text, start, end)
     reactApplicationContext
       .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
       .emit(EVENT, payload)
+  }
+
+  private fun putSelectionRect(
+    payload: com.facebook.react.bridge.WritableMap,
+    text: TextView,
+    start: Int,
+    end: Int,
+  ) {
+    val loc = IntArray(2)
+    text.getLocationOnScreen(loc)
+    val layout = text.layout
+    if (layout == null || start < 0 || end <= start || end > text.length()) {
+      payload.putInt("x", loc[0])
+      payload.putInt("y", loc[1])
+      payload.putInt("width", max(1, text.width))
+      payload.putInt("height", max(1, text.lineHeight))
+      return
+    }
+    val startLine = layout.getLineForOffset(start)
+    val lastIndex = end - 1
+    val endLine = layout.getLineForOffset(lastIndex)
+    val startX = layout.getPrimaryHorizontal(start)
+    val endX =
+      if (startLine == endLine) layout.getPrimaryHorizontal(end)
+      else layout.getLineRight(startLine)
+    val top = layout.getLineTop(startLine)
+    val bottom = layout.getLineBottom(endLine)
+    val left = min(startX, endX)
+    payload.putInt("x", loc[0] + text.totalPaddingLeft + left.toInt())
+    payload.putInt("y", loc[1] + text.totalPaddingTop + top)
+    payload.putInt("width", max(1, kotlin.math.abs(endX - startX).toInt()))
+    payload.putInt("height", max(1, bottom - top))
   }
 
   private fun resolveTextView(tag: Int): TextView? {

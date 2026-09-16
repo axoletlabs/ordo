@@ -30,9 +30,9 @@ import {
   HIGHLIGHT_QUOTE_MAX_LENGTH,
   HIGHLIGHTS_PER_BOOKMARK_MAX,
   READ_COMPLETION_THRESHOLD,
-  carveHighlight,
-  findHighlightForSelection,
   formatHighlightQuote,
+  planUnhighlight,
+  selectionHighlightState,
   unionWithHighlights,
 } from "@ordo/shared";
 import type {
@@ -82,9 +82,9 @@ import { useSettingsStore } from "../../store/settings";
 import { domainFromUrl, formatDate } from "../../lib/format";
 import { errorMessage, folderProtectedId, isFolderProtected } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
-import { layout, radius, spacing } from "../../theme/tokens";
+import { layout, spacing } from "../../theme/tokens";
 import { toast } from "../ui/toast-store";
-import type { MenuAnchorRect } from "../../lib/menu-anchor";
+import { isMenuAnchorRect, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { BookmarkBrowser, type BookmarkBrowserHandle } from "../browser/BookmarkBrowser";
 import {
   bookmarkCanBeArticle,
@@ -119,6 +119,8 @@ const PROGRESS_DELTA = 0.08;
 /** Trailing idle window before a progress write is flushed. */
 const PROGRESS_DEBOUNCE_MS = 1_500;
 const CONTENTS_IDLE_DELAY_MS = 450;
+const SELECT_OPEN_MS = 280;
+const SELECT_CLOSE_MS = 140;
 
 /** Collapse whitespace/newlines so stored titles render as one line-ish. */
 function normalizeTitle(raw: string | null | undefined): string {
@@ -126,10 +128,6 @@ function normalizeTitle(raw: string | null | undefined): string {
 }
 
 const EMPTY_HIGHLIGHTS: HighlightDto[] = [];
-
-function selectionKey(draft: HighlightAnchor): string {
-  return `${draft.exact}\0${draft.prefix ?? ""}\0${draft.suffix ?? ""}`;
-}
 
 /**
  * ReaderPane resolves the account-synced reader preferences + palette and
@@ -231,7 +229,14 @@ function ReaderPaneInner({
   const [surface, setSurface] = useState<"auto" | "reader" | "browser">(
     initialSurface === "browser" ? "browser" : "auto",
   );
-  const [textDraft, setTextDraft] = useState<HighlightSelectDraft | null>(null);
+  const [selectionMenu, setSelectionMenu] = useState<{
+    draft: HighlightSelectDraft;
+    anchor: MenuAnchorRect;
+  } | null>(null);
+  const selectionMenuRef = useRef(selectionMenu);
+  selectionMenuRef.current = selectionMenu;
+  const selectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const menuScrollY = useRef(0);
 
   const toggleRead = useToggleRead(bookmark?.folderId ?? null);
   const setContentKind = useSetContentKind();
@@ -241,6 +246,7 @@ function ReaderPaneInner({
   const markedRef = useRef<string | null>(null);
   const browserRef = useRef<BookmarkBrowserHandle>(null);
   const scrollRef = useRef<ScrollView>(null);
+  const offsetRef = useRef(0);
   const websiteViewRef = useRef(false);
   const [keptBrowserId, setKeptBrowserId] = useState<string | null>(null);
   const [pageHost, setPageHost] = useState<string | null>(null);
@@ -282,7 +288,6 @@ function ReaderPaneInner({
   const readerBoldFont = resolveReaderFont(preferences.fontFamily, "700");
   const articleHeadings = headingState.bookmarkId === bookmark?.id ? headingState.headings : [];
   const highlights = detail.data?.highlights ?? EMPTY_HIGHLIGHTS;
-  const dismissedDraftKey = useRef<string | null>(null);
 
   const handleHeadingsChange = useCallback(
     (headings: readonly ArticleHeading[]) => {
@@ -332,22 +337,42 @@ function ReaderPaneInner({
   };
 
   const handleTextSelect = useCallback((draft: HighlightSelectDraft | null) => {
+    if (selectTimer.current) {
+      clearTimeout(selectTimer.current);
+      selectTimer.current = null;
+    }
     if (!draft) {
-      dismissedDraftKey.current = null;
-      setTextDraft(null);
+      selectTimer.current = setTimeout(() => {
+        selectTimer.current = null;
+        setSelectionMenu(null);
+      }, SELECT_CLOSE_MS);
       return;
     }
-    if (dismissedDraftKey.current === selectionKey(draft)) return;
-    dismissedDraftKey.current = null;
-    setTextDraft(draft);
-    setActionPanel(null);
+    const open = () => {
+      const anchor = isMenuAnchorRect(draft.anchor)
+        ? draft.anchor
+        : (selectionMenuRef.current?.anchor ?? null);
+      if (!isMenuAnchorRect(anchor)) return;
+      menuScrollY.current = offsetRef.current;
+      setSelectionMenu({ draft, anchor });
+      setActionPanel(null);
+    };
+    if (selectionMenuRef.current) {
+      open();
+      return;
+    }
+    selectTimer.current = setTimeout(() => {
+      selectTimer.current = null;
+      open();
+    }, SELECT_OPEN_MS);
   }, []);
 
-  const dismissDraft = useCallback(() => {
-    setTextDraft((current) => {
-      if (current) dismissedDraftKey.current = selectionKey(current);
-      return null;
-    });
+  const dismissSelectionMenu = useCallback(() => {
+    if (selectTimer.current) {
+      clearTimeout(selectTimer.current);
+      selectTimer.current = null;
+    }
+    setSelectionMenu(null);
   }, []);
 
   const saveHighlight = useCallback(
@@ -373,7 +398,6 @@ function ReaderPaneInner({
         toast.error(`A bookmark can have at most ${HIGHLIGHTS_PER_BOOKMARK_MAX} highlights.`);
         return;
       }
-      haptics.light();
       createHighlight.mutate(
         {
           id: bookmark.id,
@@ -386,21 +410,21 @@ function ReaderPaneInner({
         },
         {
           onSuccess: () => {
-            dismissDraft();
+            dismissSelectionMenu();
             toast.success(absorbIds.length > 0 ? "Highlight updated" : "Highlighted");
           },
           onError: (err) => toast.error(errorMessage(err, "Couldn't save the highlight.")),
         },
       );
     },
-    [bookmark, createHighlight, detail.data?.contentHtml, dismissDraft, highlights],
+    [bookmark, createHighlight, detail.data?.contentHtml, dismissSelectionMenu, highlights],
   );
 
   const dropHighlight = useCallback(
     (highlightId: string) => {
       if (!bookmark) return;
       haptics.light();
-      dismissDraft();
+      dismissSelectionMenu();
       removeHighlight.mutate(
         { id: bookmark.id, highlightId, folderId: bookmark.folderId },
         {
@@ -409,75 +433,84 @@ function ReaderPaneInner({
         },
       );
     },
-    [bookmark, dismissDraft, removeHighlight],
+    [bookmark, dismissSelectionMenu, removeHighlight],
   );
 
-  const selectedHighlightId = useMemo(() => {
-    if (!textDraft) return null;
-    if (textDraft.highlightId) return textDraft.highlightId;
+  const highlightChoice = useMemo(() => {
+    if (!selectionMenu) return { overlappingIds: [] as string[], canHighlight: false, canRemove: false };
     const html = detail.data?.contentHtml;
-    if (!html) return null;
-    return findHighlightForSelection(html, highlights, textDraft);
-  }, [detail.data?.contentHtml, highlights, textDraft]);
+    if (!html) return { overlappingIds: [], canHighlight: true, canRemove: false };
+    return selectionHighlightState(html, highlights, selectionMenu.draft);
+  }, [detail.data?.contentHtml, highlights, selectionMenu]);
 
   const unhighlightSelection = useCallback(async () => {
-    if (!bookmark || !textDraft || !selectedHighlightId) return;
+    if (!bookmark || !selectionMenu) return;
     const html = detail.data?.contentHtml;
-    const current = highlights.find((row) => row.id === selectedHighlightId);
-    if (html && current) {
-      const carved = carveHighlight(html, current, textDraft);
-      if (carved.kind === "remain") {
-        if (highlights.length + carved.quotes.length - 1 > HIGHLIGHTS_PER_BOOKMARK_MAX) {
-          toast.error(`A bookmark can have at most ${HIGHLIGHTS_PER_BOOKMARK_MAX} highlights.`);
-          return;
-        }
-        const [first, ...extras] = carved.quotes;
-        if (!first) return;
-        const others = highlights.filter((row) => row.id !== selectedHighlightId);
-        const union = unionWithHighlights(html, others, first);
-        const quote = union?.quote ?? first;
-        haptics.light();
-        try {
-          await updateHighlight.mutateAsync({
-            id: bookmark.id,
-            highlightId: selectedHighlightId,
-            folderId: bookmark.folderId,
-            exact: quote.exact,
-            prefix: quote.prefix ?? "",
-            suffix: quote.suffix ?? "",
-            href: quote.href ?? null,
-            absorbIds: union?.absorbIds ?? [],
-          });
-          for (const extra of extras) {
-            await createHighlight.mutateAsync({
-              id: bookmark.id,
-              folderId: bookmark.folderId,
-              exact: extra.exact,
-              prefix: extra.prefix ?? "",
-              suffix: extra.suffix ?? "",
-              href: extra.href ?? null,
-            });
-          }
-          dismissDraft();
-          toast.success("Highlight updated");
-        } catch (err) {
-          toast.error(errorMessage(err, "Couldn't update the highlight."));
-        }
-        return;
-      }
+    if (!html) return;
+    const plan = planUnhighlight(html, highlights, selectionMenu.draft);
+    if (plan.kind === "none") {
+      toast.error("Couldn't update the highlight.");
+      return;
     }
-    dropHighlight(selectedHighlightId);
+    if (highlights.length - plan.deleteIds.length + plan.creates.length > HIGHLIGHTS_PER_BOOKMARK_MAX) {
+      toast.error(`A bookmark can have at most ${HIGHLIGHTS_PER_BOOKMARK_MAX} highlights.`);
+      return;
+    }
+    try {
+      for (const row of plan.updates) {
+        await updateHighlight.mutateAsync({
+          id: bookmark.id,
+          highlightId: row.id,
+          folderId: bookmark.folderId,
+          exact: row.quote.exact,
+          prefix: row.quote.prefix ?? "",
+          suffix: row.quote.suffix ?? "",
+          href: row.quote.href ?? null,
+        });
+      }
+      for (const extra of plan.creates) {
+        await createHighlight.mutateAsync({
+          id: bookmark.id,
+          folderId: bookmark.folderId,
+          exact: extra.exact,
+          prefix: extra.prefix ?? "",
+          suffix: extra.suffix ?? "",
+          href: extra.href ?? null,
+        });
+      }
+      for (const highlightId of plan.deleteIds) {
+        await removeHighlight.mutateAsync({
+          id: bookmark.id,
+          highlightId,
+          folderId: bookmark.folderId,
+        });
+      }
+      dismissSelectionMenu();
+      const removedOnly = plan.deleteIds.length > 0 && plan.updates.length === 0 && plan.creates.length === 0;
+      toast.success(removedOnly ? "Highlight removed" : "Highlight updated");
+    } catch (err) {
+      toast.error(errorMessage(err, "Couldn't update the highlight."));
+    }
   }, [
     bookmark,
     createHighlight,
     detail.data?.contentHtml,
-    dismissDraft,
-    dropHighlight,
+    dismissSelectionMenu,
     highlights,
-    selectedHighlightId,
-    textDraft,
+    removeHighlight,
+    selectionMenu,
     updateHighlight,
   ]);
+
+  useEffect(() => {
+    if (actionPanel || controlsOpen || editTagsOpen) dismissSelectionMenu();
+  }, [actionPanel, controlsOpen, dismissSelectionMenu, editTagsOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (selectTimer.current) clearTimeout(selectTimer.current);
+    };
+  }, []);
 
   const handleClassify = (asArticle: boolean) => {
     if (!bookmark) return;
@@ -549,7 +582,6 @@ function ReaderPaneInner({
   const persistedProgressRef = useRef<number | null>(null);
   const restoredRef = useRef(false);
   const htmlReadyRef = useRef(false);
-  const offsetRef = useRef(0);
   const viewHeightRef = useRef(0);
   const contentHeightRef = useRef(0);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -703,8 +735,11 @@ function ReaderPaneInner({
     }
     contentsShortcutVisibleRef.current = false;
     setContentsShortcutVisible(false);
-    dismissedDraftKey.current = null;
-    setTextDraft(null);
+    if (selectTimer.current) {
+      clearTimeout(selectTimer.current);
+      selectTimer.current = null;
+    }
+    setSelectionMenu(null);
     return () => {
       flushProgress();
     };
@@ -750,6 +785,9 @@ function ReaderPaneInner({
       offsetRef.current = contentOffset.y;
       viewHeightRef.current = layoutMeasurement.height;
       contentHeightRef.current = contentSize.height;
+      if (selectionMenuRef.current && Math.abs(contentOffset.y - menuScrollY.current) > 12) {
+        setSelectionMenu(null);
+      }
       syncContentsShortcut(contentOffset.y, articleHeaderHeightRef.current, true);
       if (contentSize.height <= 0 || layoutMeasurement.height <= 0) return;
       if (hasHtml && !htmlReadyRef.current) return;
@@ -1067,7 +1105,7 @@ function ReaderPaneInner({
         </>
       )}
 
-      {contentsShortcutVisible && actionPanel === null && !controlsOpen && !showWebsiteView && !textDraft ? (
+      {contentsShortcutVisible && actionPanel === null && !controlsOpen && !showWebsiteView && !selectionMenu ? (
         <FABLayer maxWidth={layout.maxLibraryWidth}>
           <FAB
             icon="list-outline"
@@ -1277,79 +1315,61 @@ function ReaderPaneInner({
           style={sheetMenuStyles.cancel}
         />
       </FloatingPanel>
-      {textDraft && !showWebsiteView ? (
-        <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-          <View pointerEvents="box-none" style={[styles.draftLayer, { maxWidth: layout.maxLibraryWidth }]}>
-            <View
-              style={[
-                styles.draftBar,
-                {
-                  backgroundColor: palette.surfaceElevated,
-                  borderColor: palette.borderStrong,
-                  marginBottom: spacing[20] + (safeBottom ? insets.bottom : 0),
-                },
-              ]}
-            >
-              <View style={styles.draftQuoteRow}>
-                <PressableScale
-                  onPress={() => void copyText(formatHighlightQuote(textDraft.exact))}
-                  accessibilityRole="button"
-                  accessibilityLabel="Copy selected text"
-                  style={styles.draftQuote}
-                >
-                  <Text variant="footnote" color="secondary" numberOfLines={1}>
-                    {formatHighlightQuote(textDraft.exact)}
-                  </Text>
-                </PressableScale>
-                {textDraft.href ? (
-                  <PressableScale
-                    onPress={() => void copyLink(textDraft.href!)}
-                    accessibilityRole="button"
-                    accessibilityLabel="Copy link"
-                    style={styles.draftLinkHit}
-                  >
-                    <Ionicons name="link-outline" size={18} color={palette.accent} />
-                  </PressableScale>
-                ) : null}
-              </View>
-              <View style={styles.draftActions}>
-                <Button
-                  label="Cancel"
-                  variant="ghost"
-                  onPress={dismissDraft}
-                  style={styles.draftButton}
-                />
-                {selectedHighlightId ? (
-                  <Button
-                    label="Remove"
-                    variant="danger"
-                    onPress={() => void unhighlightSelection()}
-                    loading={
-                      removeHighlight.isPending ||
-                      updateHighlight.isPending ||
-                      createHighlight.isPending
-                    }
-                    disabled={
-                      removeHighlight.isPending ||
-                      updateHighlight.isPending ||
-                      createHighlight.isPending
-                    }
-                    style={styles.draftButton}
-                  />
-                ) : (
-                  <Button
-                    label="Highlight"
-                    onPress={() => saveHighlight(textDraft)}
-                    loading={createHighlight.isPending}
-                    disabled={createHighlight.isPending}
-                    style={styles.draftButton}
-                  />
-                )}
-              </View>
-            </View>
-          </View>
-        </View>
-      ) : null}
+      <ContextMenu
+        visible={selectionMenu !== null && !showWebsiteView}
+        onDismiss={dismissSelectionMenu}
+        anchor={selectionMenu?.anchor ?? null}
+        backdrop={false}
+      >
+        {highlightChoice.canHighlight ? (
+          <ContextMenuItem
+            icon="color-fill-outline"
+            label="Highlight"
+            busy={createHighlight.isPending}
+            disabled={
+              createHighlight.isPending || updateHighlight.isPending || removeHighlight.isPending
+            }
+            onPress={() => {
+              if (!selectionMenu) return;
+              saveHighlight(selectionMenu.draft);
+            }}
+          />
+        ) : null}
+        {highlightChoice.canRemove ? (
+          <ContextMenuItem
+            icon="trash-outline"
+            label="Remove highlight"
+            tone="danger"
+            busy={
+              removeHighlight.isPending || updateHighlight.isPending || createHighlight.isPending
+            }
+            disabled={
+              removeHighlight.isPending || updateHighlight.isPending || createHighlight.isPending
+            }
+            onPress={() => void unhighlightSelection()}
+          />
+        ) : null}
+        <ContextMenuItem
+          icon="copy-outline"
+          label="Copy"
+          onPress={() => {
+            if (!selectionMenu) return;
+            dismissSelectionMenu();
+            void copyText(formatHighlightQuote(selectionMenu.draft.exact));
+          }}
+        />
+        {selectionMenu?.draft.href ? (
+          <ContextMenuItem
+            icon="link-outline"
+            label="Copy link"
+            onPress={() => {
+              const href = selectionMenu.draft.href;
+              dismissSelectionMenu();
+              if (href) void copyLink(href);
+            }}
+          />
+        ) : null}
+      </ContextMenu>
     </View>
     </ThemeOverrideProvider>
   );
@@ -1394,33 +1414,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  draftLayer: {
-    flex: 1,
-    width: "100%",
-    alignSelf: "center",
-    justifyContent: "flex-end",
-  },
-  draftBar: {
-    marginHorizontal: spacing[16],
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius["3xl"],
-    padding: spacing[12],
-    gap: spacing[10],
-  },
-  draftQuoteRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[8],
-  },
-  draftQuote: { flex: 1, minWidth: 0 },
-  draftLinkHit: {
-    width: 44,
-    height: 44,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  draftActions: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
-  draftButton: { flex: 1 },
   progressTrack: { height: 2, width: "100%", overflow: "hidden" },
   progressFill: { height: 2, alignSelf: "flex-start" },
   stateBody: {

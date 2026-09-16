@@ -12,8 +12,8 @@ const path = require("node:path");
  * 2. Taps spawn an insertion caret (tint). Article phrases are not editable;
  *    hide that caret so the view cannot enter cursor mode.
  * 3. The system edit menu (Copy/Look Up/…) appears on the same long-press
- *    that starts a range. Disable canPerformAction so the draft bar is the
- *    only action surface.
+ *    that starts a range. Disable canPerformAction so the selection context
+ *    menu is the only action surface.
  */
 
 const SOURCE = path.join("ios", "RNUITextView.mm");

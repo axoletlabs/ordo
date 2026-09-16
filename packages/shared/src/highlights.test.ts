@@ -10,9 +10,11 @@ import {
   highlightIdFromMark,
   highlightMarkId,
   htmlToPlainText,
+  planUnhighlight,
   quoteFromBlock,
   quoteFromCaret,
   quoteFromRange,
+  selectionHighlightState,
   sentenceRange,
   unionWithHighlights,
 } from "./highlights.ts";
@@ -197,6 +199,108 @@ test("carveHighlight drops only the selected span of a highlight", () => {
 
   const all = carveHighlight(html, highlight, { exact: "the cat ran away", prefix: "", suffix: "" });
   assert.equal(all.kind, "clear");
+});
+
+test("selectionHighlightState distinguishes inside, extend, merge, and plain", () => {
+  const html = "<p>the cat ran away today</p>";
+  const plain = htmlToPlainText(html);
+  const quote = (exact: string) => {
+    const start = plain.indexOf(exact);
+    assert.ok(start >= 0, exact);
+    return quoteFromRange(plain, start, start + exact.length)!;
+  };
+  const one = [{ id: "h1", exact: "cat ran", prefix: "the ", suffix: " away", href: null }];
+
+  const inside = selectionHighlightState(html, one, quote("ran"));
+  assert.equal(inside.canHighlight, false);
+  assert.equal(inside.canRemove, true);
+  assert.deepEqual(inside.overlappingIds, ["h1"]);
+
+  const whole = selectionHighlightState(html, one, quote("cat ran"));
+  assert.equal(whole.canHighlight, false);
+  assert.equal(whole.canRemove, true);
+
+  const extend = selectionHighlightState(html, one, quote("ran away"));
+  assert.equal(extend.canHighlight, true);
+  assert.equal(extend.canRemove, true);
+
+  const plainSel = selectionHighlightState(html, one, quote("today"));
+  assert.equal(plainSel.canHighlight, true);
+  assert.equal(plainSel.canRemove, false);
+  assert.deepEqual(plainSel.overlappingIds, []);
+
+  const two = [
+    { id: "h1", exact: "the cat", prefix: "", suffix: " ran", href: null },
+    { id: "h2", exact: "away", prefix: "ran ", suffix: " today", href: null },
+  ];
+  const acrossGap = selectionHighlightState(html, two, quote("cat ran away"));
+  assert.equal(acrossGap.canHighlight, true);
+  assert.equal(acrossGap.canRemove, true);
+  assert.deepEqual(acrossGap.overlappingIds, ["h1", "h2"]);
+
+  const abutting = [quote("the cat"), quote("ran away")].map((row, index) => ({
+    id: `h${index + 1}`,
+    exact: row.exact,
+    prefix: row.prefix,
+    suffix: row.suffix,
+    href: null,
+  }));
+  const merge = selectionHighlightState(html, abutting, quote("the cat ran away"));
+  assert.equal(merge.canHighlight, true);
+  assert.equal(merge.canRemove, true);
+  assert.equal(merge.overlappingIds.length, 2);
+});
+
+test("planUnhighlight carves every overlapping mark", () => {
+  const html = "<p>the cat ran away today</p>";
+  const plain = htmlToPlainText(html);
+  const quote = (exact: string) => {
+    const start = plain.indexOf(exact);
+    return quoteFromRange(plain, start, start + exact.length)!;
+  };
+
+  const inside = planUnhighlight(
+    html,
+    [{ id: "h1", exact: "the cat ran away", prefix: "", suffix: " today", href: null }],
+    quote("ran away"),
+  );
+  assert.equal(inside.kind, "apply");
+  if (inside.kind !== "apply") return;
+  assert.deepEqual(inside.deleteIds, []);
+  assert.equal(inside.updates[0]?.quote.exact, "the cat");
+  assert.deepEqual(
+    inside.creates.map((row) => row.exact),
+    [],
+  );
+
+  const split = planUnhighlight(
+    html,
+    [{ id: "h1", exact: "the cat ran away", prefix: "", suffix: " today", href: null }],
+    quote("cat ran"),
+  );
+  assert.equal(split.kind, "apply");
+  if (split.kind !== "apply") return;
+  assert.equal(split.updates[0]?.quote.exact, "the");
+  assert.deepEqual(
+    split.creates.map((row) => row.exact),
+    ["away"],
+  );
+
+  const two = planUnhighlight(
+    html,
+    [
+      { id: "a", exact: "the cat", prefix: "", suffix: " ran", href: null },
+      { id: "b", exact: "away today", prefix: "ran ", suffix: "", href: null },
+    ],
+    quote("cat ran away"),
+  );
+  assert.equal(two.kind, "apply");
+  if (two.kind !== "apply") return;
+  assert.deepEqual(two.deleteIds, []);
+  assert.deepEqual(
+    two.updates.map((row) => row.quote.exact).sort(),
+    ["the", "today"],
+  );
 });
 
 test("unionWithHighlights merges overlapping and abutting marks", () => {
