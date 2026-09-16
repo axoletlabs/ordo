@@ -357,7 +357,6 @@ function ReaderPaneInner({
     if (!draft) {
       dismissedDraftKey.current = null;
       setTextDraft(null);
-      scrollRef.current?.setNativeProps({ scrollEnabled: true });
       return;
     }
     if (dismissedDraftKey.current === selectionKey(draft)) return;
@@ -369,15 +368,10 @@ function ReaderPaneInner({
   }, []);
 
   const dismissDraft = useCallback(() => {
-    scrollRef.current?.setNativeProps({ scrollEnabled: true });
     setTextDraft((current) => {
       if (current) dismissedDraftKey.current = selectionKey(current);
       return null;
     });
-  }, []);
-
-  const handleSelectingChange = useCallback((active: boolean) => {
-    scrollRef.current?.setNativeProps({ scrollEnabled: !active });
   }, []);
 
   const handleHighlightPress = useCallback((id: string, event: GestureResponderEvent) => {
@@ -1050,7 +1044,6 @@ function ReaderPaneInner({
                     contentWidth={articleWidth || fallbackArticleWidth}
                     highlights={highlights}
                     onTextSelect={handleTextSelect}
-                    onSelectingChange={handleSelectingChange}
                     onHighlightPress={handleHighlightPress}
                     onLinkLongPress={handleLinkLongPress}
                     onHeadingsChange={handleHeadingsChange}

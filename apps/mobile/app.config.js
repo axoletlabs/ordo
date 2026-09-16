@@ -97,6 +97,7 @@ module.exports = {
     "./plugins/with-android-build.js",
     "./plugins/with-high-refresh-rate.js",
     "./plugins/with-uitextview-selection.js",
+    "./plugins/with-selectable-text.js",
   ],
   extra: {
     eas: {

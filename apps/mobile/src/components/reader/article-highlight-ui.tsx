@@ -2,26 +2,21 @@
  * Native selection for article highlights.
  * Wrapping itself lives in @ordo/shared (TextQuoteSelector → <mark>).
  *
- * RN Text is a UILabel on iOS, so it can only copy a whole block. Each
- * selectable phrase is therefore a real OS text view: UITextView on iOS
- * (magnifier, handles, system menu) and a non-keyboard TextInput on Android.
- * Nested HTML spans stay in that same native view: UITextView children on iOS
- * (attributed-string runs) and Text children on Android (inside the TextInput).
+ * Phrases are OS text, never an editor: UITextView on iOS and selectable
+ * Text (TextView) on Android. A caret is ignored; only a real range becomes
+ * a highlight draft. Cancel on the action bar dismisses it.
  */
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef } from "react";
+import React, { createContext, useCallback, useContext, useMemo, useRef } from "react";
 import {
   Linking,
   Platform,
   StyleSheet,
   Text,
-  TextInput,
   type GestureResponderEvent,
   type StyleProp,
-  type TextInputSelectionChangeEvent,
   type TextStyle,
 } from "react-native";
 import { UITextView } from "@bsky.app/react-native-uitextview";
-import { NativeViewGestureHandler } from "react-native-gesture-handler";
 import {
   getNativePropsForTNode,
   useRendererProps,
@@ -36,12 +31,14 @@ import {
   quoteFromRange,
   type HighlightAnchor,
 } from "@ordo/shared";
+import { useAndroidPhraseSelection } from "./android-phrase-selection";
 import {
   highlightIdCoveringRange,
   hrefCoveringRange,
   nodeTextContent,
   type HtmlTableNode,
 } from "./article-html-table";
+import { selectedRange } from "./phrase-selection";
 
 function isExternalHref(href: string): boolean {
   return /^https?:/i.test(href) || /^mailto:/i.test(href);
@@ -77,15 +74,6 @@ function pickTextStyle(native: Record<string, unknown>): TextStyle {
 
 function asHtmlNode(node: TNode): HtmlTableNode {
   return node as unknown as HtmlTableNode;
-}
-
-/** Wait until the OS selection handles pause before updating the action bar. */
-const SELECTION_SETTLE_MS = Platform.OS === "web" ? 0 : 180;
-/** Finger-up and outside-tap often emit a caret (start === end) right after a real range. */
-const SELECTION_COLLAPSE_HOLD_MS = 480;
-
-function isCaretRange(start: number, end: number): boolean {
-  return Math.max(start, end) <= Math.min(start, end);
 }
 
 function dummyPressEvent(): GestureResponderEvent {
@@ -194,8 +182,6 @@ export interface HighlightUiHandlers {
   selectionColor: string;
   textStyle?: StyleProp<TextStyle>;
   onTextSelect: (draft: HighlightSelectDraft | null) => void;
-  /** Lock article scrolling while a native selection is in progress. */
-  onSelectingChange?: (active: boolean) => void;
   onHighlightPress: (id: string, event: GestureResponderEvent) => void;
   onLinkLongPress: (draft: HighlightAnchor & { href: string }, event: GestureResponderEvent) => void;
 }
@@ -239,119 +225,46 @@ export function SelectablePhrase({
     ));
   }, [tnode]);
 
-  const selectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastNonEmptyAt = useRef(0);
-  const lastRange = useRef<{ start: number; end: number } | null>(null);
-  const restoringSelection = useRef(false);
-  const nativeRef = useRef<TextInput>(null);
-
-  const emitRange = useCallback(
+  const publishRange = useCallback(
     (start: number, end: number) => {
       if (!ui) return;
-      if (restoringSelection.current) return;
-      const from = Math.min(start, end);
-      const to = Math.max(start, end);
-
-      if (isCaretRange(from, to)) {
-        const last = lastRange.current;
-        // Finger-up / tap often drops a caret. Keep the pending quote publish
-        // and push the native range back so the OS doesn't sit in cursor mode.
-        if (last && Date.now() - lastNonEmptyAt.current < SELECTION_COLLAPSE_HOLD_MS) {
-          if (Platform.OS === "android") {
-            restoringSelection.current = true;
-            nativeRef.current?.setNativeProps({ selection: last });
-            requestAnimationFrame(() => {
-              restoringSelection.current = false;
-            });
-          }
-          return;
-        }
-        if (selectTimer.current) {
-          clearTimeout(selectTimer.current);
-          selectTimer.current = null;
-        }
-        if (lastNonEmptyAt.current === 0) return;
-        selectTimer.current = setTimeout(() => {
-          selectTimer.current = null;
-          lastRange.current = null;
-          lastNonEmptyAt.current = 0;
-          ui.onSelectingChange?.(false);
-          ui.onTextSelect(null);
-        }, SELECTION_SETTLE_MS);
-        return;
-      }
-
-      lastRange.current = { start: from, end: to };
-      lastNonEmptyAt.current = Date.now();
-      ui.onSelectingChange?.(true);
-      if (selectTimer.current) {
-        clearTimeout(selectTimer.current);
-        selectTimer.current = null;
-      }
-      const publish = () => {
-        selectTimer.current = null;
-        const quote =
-          quoteFromBlock(ui.articlePlain, text, from, to) ?? quoteFromRange(text, from, to);
-        if (!quote) {
-          ui.onSelectingChange?.(false);
-          ui.onTextSelect(null);
-          return;
-        }
-        const htmlNode = asHtmlNode(tnode);
-        const href = hrefCoveringRange(htmlNode, from, to);
-        const highlightId = highlightIdCoveringRange(htmlNode, from, to) ?? undefined;
-        ui.onTextSelect({
-          ...quote,
-          ...(href ? { href } : {}),
-          ...(highlightId ? { highlightId } : {}),
-        });
-        // Handles have paused: let the article scroll again while the bar stays up.
-        ui.onSelectingChange?.(false);
-      };
-      if (SELECTION_SETTLE_MS === 0) {
-        publish();
-        return;
-      }
-      selectTimer.current = setTimeout(publish, SELECTION_SETTLE_MS);
+      const range = selectedRange(start, end);
+      if (!range) return;
+      const quote =
+        quoteFromBlock(ui.articlePlain, text, range.start, range.end) ??
+        quoteFromRange(text, range.start, range.end);
+      if (!quote) return;
+      const htmlNode = asHtmlNode(tnode);
+      const href = hrefCoveringRange(htmlNode, range.start, range.end);
+      const highlightId = highlightIdCoveringRange(htmlNode, range.start, range.end) ?? undefined;
+      ui.onTextSelect({
+        ...quote,
+        ...(href ? { href } : {}),
+        ...(highlightId ? { highlightId } : {}),
+      });
     },
     [text, tnode, ui],
   );
 
-  useEffect(
-    () => () => {
-      if (selectTimer.current) clearTimeout(selectTimer.current);
-    },
-    [],
-  );
+  const { textRef, onLayout } = useAndroidPhraseSelection(publishRange);
 
   const onIosSelectionChange = useCallback(
     (event: { nativeEvent: { start: number; end: number } }) => {
-      emitRange(event.nativeEvent.start, event.nativeEvent.end);
+      publishRange(event.nativeEvent.start, event.nativeEvent.end);
     },
-    [emitRange],
-  );
-
-  const onAndroidSelectionChange = useCallback(
-    (event: TextInputSelectionChangeEvent) => {
-      const { start, end } = event.nativeEvent.selection;
-      emitRange(start, end);
-    },
-    [emitRange],
+    [publishRange],
   );
 
   const onWebSelect = useCallback(() => {
     const selected = webSelectedText();
-    if (!selected) {
-      ui?.onTextSelect(null);
-      return;
-    }
+    if (!selected) return;
     const start = text.indexOf(selected);
     if (start < 0) {
       ui?.onTextSelect(quoteFromRange(selected, 0, selected.length));
       return;
     }
-    emitRange(start, start + selected.length);
-  }, [emitRange, text, ui]);
+    publishRange(start, start + selected.length);
+  }, [publishRange, text, ui]);
 
   const phraseStyle = [styles.phrase, ui?.textStyle];
 
@@ -384,32 +297,17 @@ export function SelectablePhrase({
   }
 
   return (
-    <NativeViewGestureHandler disallowInterruption>
-      <TextInput
-        ref={nativeRef}
-        multiline
-        scrollEnabled={false}
-        showSoftInputOnFocus={false}
-        caretHidden
-        cursorColor="transparent"
-        inputMode="none"
-        contextMenuHidden
-        disableFullscreenUI
-        importantForAutofill="noExcludeDescendants"
-        autoCorrect={false}
-        autoCapitalize="none"
-        autoComplete="off"
-        spellCheck={false}
-        underlineColorAndroid="transparent"
-        accessibilityRole="text"
-        selectionColor={ui?.selectionColor}
-        selectionHandleColor={ui?.selectionColor}
-        onSelectionChange={onAndroidSelectionChange}
-        style={phraseStyle}
-      >
-        {spans}
-      </TextInput>
-    </NativeViewGestureHandler>
+    <Text
+      ref={textRef}
+      selectable
+      collapsable={false}
+      accessibilityRole="text"
+      selectionColor={ui?.selectionColor}
+      style={phraseStyle}
+      onLayout={onLayout}
+    >
+      {spans}
+    </Text>
   );
 }
 
