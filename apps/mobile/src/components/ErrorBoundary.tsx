@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import * as Updates from "expo-updates";
 import * as SplashScreen from "expo-splash-screen";
+import { fontSize, lineHeight as lineHeightRatio, resolveFont } from "../theme/tokens";
 import { reloadRuntime } from "../store/update-restart";
 
 const RELEASES_URL = "https://github.com/axoletlabs/ordo/releases";
@@ -135,9 +136,31 @@ export class ErrorBoundary extends Component<Props, State> {
 const styles = StyleSheet.create({
   root: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   card: { width: "100%", maxWidth: 360, alignItems: "stretch" },
-  title: { fontSize: 24, lineHeight: 30, fontWeight: "700", textAlign: "center" },
-  message: { marginTop: 8, fontSize: 16, lineHeight: 23, textAlign: "center" },
-  details: { marginTop: 12, color: "#D95D4F", fontSize: 12, lineHeight: 17, textAlign: "center" },
+  title: {
+    fontFamily: resolveFont("display", "700"),
+    fontSize: fontSize["2xl"],
+    lineHeight: Math.round(fontSize["2xl"] * lineHeightRatio.snug),
+    fontWeight: "700",
+    letterSpacing: -0.3,
+    textAlign: "center",
+  },
+  message: {
+    marginTop: 8,
+    fontFamily: resolveFont("sans", "500"),
+    fontSize: fontSize.md,
+    lineHeight: Math.round(fontSize.md * lineHeightRatio.normal),
+    fontWeight: "500",
+    textAlign: "center",
+  },
+  details: {
+    marginTop: 12,
+    color: "#D95D4F",
+    fontFamily: resolveFont("mono", "400"),
+    fontSize: fontSize.xs,
+    lineHeight: Math.round(fontSize.xs * lineHeightRatio.normal),
+    fontWeight: "400",
+    textAlign: "center",
+  },
   actions: { flexDirection: "row", gap: 10, marginTop: 24 },
   button: {
     flex: 1,
@@ -149,8 +172,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   primaryButton: { backgroundColor: "#EF705F", borderColor: "#EF705F" },
-  buttonLabel: { fontSize: 14, fontWeight: "700", letterSpacing: 1.1, textTransform: "uppercase" },
+  buttonLabel: {
+    fontFamily: resolveFont("display", "600"),
+    fontSize: fontSize.lg,
+    fontWeight: "600",
+    letterSpacing: 1.4,
+    textTransform: "uppercase",
+  },
   primaryButtonLabel: { color: "#FFFFFF" },
   link: { marginTop: 16, minHeight: 44, alignItems: "center", justifyContent: "center" },
-  linkLabel: { fontSize: 13, lineHeight: 18, textAlign: "center" },
+  linkLabel: {
+    fontFamily: resolveFont("sans", "500"),
+    fontSize: fontSize.sm,
+    lineHeight: Math.round(fontSize.sm * lineHeightRatio.normal),
+    fontWeight: "500",
+    textAlign: "center",
+  },
 });

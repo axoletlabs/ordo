@@ -45,7 +45,7 @@ export function OtpDeliveryHint({
       </View>
       <View style={styles.body}>
         <View style={styles.header}>
-          <Text variant="subhead" style={{ flex: 1 }}>
+          <Text variant="bodyStrong" style={{ flex: 1 }}>
             Check the server console
           </Text>
           <PressableScale

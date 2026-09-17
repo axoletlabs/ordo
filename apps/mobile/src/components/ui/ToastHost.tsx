@@ -107,7 +107,7 @@ function ToastItem({ toast }: { toast: Toast }) {
               animateOut();
             }}
           >
-            <Text variant="footnote" style={{ color: palette.accent, fontWeight: "700" }}>
+            <Text variant="label" color="accent">
               {toast.action.label}
             </Text>
           </PressableScale>

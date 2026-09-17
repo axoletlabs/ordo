@@ -64,7 +64,7 @@ export function SettingsSelect<T extends string>({
           {selected?.icon ? (
             <Ionicons name={selected.icon} size={16} color={palette.textTertiary} style={styles.triggerIcon} />
           ) : null}
-          <Text variant="subhead" numberOfLines={1} ellipsizeMode="tail" style={styles.triggerLabel}>
+          <Text variant="footnote" numberOfLines={1} ellipsizeMode="tail" style={styles.triggerLabel}>
             {selected?.shortLabel ?? selected?.label ?? value}
           </Text>
           <Ionicons name="chevron-down" size={14} color={palette.textTertiary} style={styles.triggerChevron} />

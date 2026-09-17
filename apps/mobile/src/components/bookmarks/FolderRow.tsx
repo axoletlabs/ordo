@@ -191,7 +191,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
             ) : null}
           </View>
           <View style={styles.metaRow}>
-            <Text variant="caption" color="tertiary" numberOfLines={1} style={styles.count}>
+            <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.count}>
               {countLabel}
             </Text>
           </View>

@@ -12,6 +12,7 @@ import { useFloatingDockMetrics } from "../../hooks/use-floating-dock-metrics";
 import { useSettingsStore } from "../../store/settings";
 import { layout, radius, spacing } from "../../theme/tokens";
 import { requestSearchFieldFocus } from "../../lib/search-field-focus";
+import { NAV_CHROME_TEXT } from "../ui/Text";
 
 type Section = "bookmarks" | "search" | "settings";
 
@@ -125,9 +126,7 @@ export function NavigationRail() {
                 ellipsizeMode="tail"
                 style={{
                   color,
-                  fontFamily: "InterTight_500Medium",
-                  fontSize: compact ? 10 : 11,
-                  lineHeight: compact ? 14 : 15,
+                  ...NAV_CHROME_TEXT,
                 }}
               >
                 {item.label}

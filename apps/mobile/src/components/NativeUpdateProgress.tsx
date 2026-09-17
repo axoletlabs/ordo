@@ -69,7 +69,7 @@ export function NativeUpdateProgress() {
             />
           </View>
           <View style={styles.progressMeta}>
-            <Text variant="monoSmall" color="secondary">Downloading</Text>
+            <Text variant="footnote" color="secondary">Downloading</Text>
             <Text variant="monoSmall" color="accent">{percent}%</Text>
           </View>
         </View>

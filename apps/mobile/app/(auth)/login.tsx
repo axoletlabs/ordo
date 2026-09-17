@@ -134,8 +134,8 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
 
         {selfHosted ? (
           <View style={styles.hosting}>
-            <Text variant="caption" color="tertiary" align="center">
-              Using {hostOf(serverUrl)}
+            <Text variant="footnote" color="tertiary" align="center">
+              Using <Text variant="monoSmall" color="tertiary">{hostOf(serverUrl)}</Text>
             </Text>
             <View style={styles.hostingActions}>
               <PressableScale

@@ -20,6 +20,7 @@ import {
 } from "../../../src/lib/navigation-animation";
 import { requestSearchFieldFocus } from "../../../src/lib/search-field-focus";
 import { useSettingsStore } from "../../../src/store/settings";
+import { NAV_CHROME_TEXT } from "../../../src/components/ui/Text";
 import { StyleSheet, Text as NativeText, View, type ColorValue, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -201,9 +202,7 @@ export default function TabsLayout() {
       ellipsizeMode="tail"
       style={{
         color,
-        fontFamily: "InterTight_500Medium",
-        fontSize: compact ? 10 : floating ? 11 : 10,
-        lineHeight: compact ? 14 : floating ? 15 : 14,
+        ...NAV_CHROME_TEXT,
       }}
     >
       {label}

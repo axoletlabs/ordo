@@ -272,7 +272,7 @@ export function UnlockForm({
       ) : onCancel ? (
         <Button label={cancelLabel} variant="secondary" onPress={onCancel} style={sheetMenuStyles.cancel} />
       ) : null}
-      <Text variant="caption" color="tertiary" align="center" style={styles.footnote}>
+      <Text variant="footnote" color="tertiary" align="center" style={styles.footnote}>
         Unlocked for {UNLOCK_MINUTES} minutes on this device.
       </Text>
     </View>

@@ -133,7 +133,7 @@ export default function SessionsScreen() {
                       {deviceDescription(item)}
                     </Text>
                   ) : null}
-                  <Text variant="footnote" color="tertiary" numberOfLines={1}>
+                  <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
                     Active {timeAgo(item.lastSeenAt)}
                     {item.ip ? ` · ${item.ip}` : ""}
                   </Text>
@@ -149,7 +149,7 @@ export default function SessionsScreen() {
                   {revoke.isPending && revoke.variables === item.id ? (
                     <Spinner size="sm" color={palette.danger} />
                   ) : (
-                    <Text variant="subhead" style={{ color: palette.danger }}>Revoke</Text>
+                    <Text variant="label" color="danger">Revoke</Text>
                   )}
                 </PressableScale>
               )}

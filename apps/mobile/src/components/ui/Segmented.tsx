@@ -12,8 +12,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
-import { radius, springs, spacing } from "../../theme/tokens";
-import { resolveFont } from "../../theme/tokens";
+import { fontSize, radius, resolveFont, springs, spacing } from "../../theme/tokens";
 
 export interface SegmentedProps<T extends string> {
   options: readonly { value: T; label: string }[];
@@ -87,5 +86,11 @@ const styles = StyleSheet.create({
   track: { flexDirection: "row", padding: spacing[4] },
   option: { flex: 1, paddingVertical: spacing[8], alignItems: "center", justifyContent: "center" },
   pill: { position: "absolute", top: spacing[4], bottom: spacing[4], left: spacing[4], right: spacing[4] },
-  label: { fontFamily: resolveFont("display", "600"), fontSize: 12 },
+  label: {
+    fontFamily: resolveFont("display", "600"),
+    fontSize: fontSize.xs,
+    fontWeight: "600",
+    letterSpacing: 1.2,
+    textTransform: "uppercase",
+  },
 });

@@ -60,7 +60,7 @@ export function SelectionActionBar({
                 style={[styles.action, muted && styles.disabled]}
               >
                 <AppIcon name={action.icon} size={22} color={color} />
-                <Text variant="caption" style={{ color }} numberOfLines={1}>
+                <Text variant="label" style={{ color }} numberOfLines={1}>
                   {action.label}
                 </Text>
               </PressableScale>

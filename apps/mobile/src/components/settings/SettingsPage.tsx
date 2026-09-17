@@ -142,7 +142,7 @@ export function SettingsGroup({
         {children}
       </Card>
       {footer ? (
-        <Text variant="caption" color="tertiary" style={styles.groupFooter}>
+        <Text variant="footnote" color="tertiary" style={styles.groupFooter}>
           {footer}
         </Text>
       ) : null}

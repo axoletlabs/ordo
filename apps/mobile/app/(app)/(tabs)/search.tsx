@@ -511,7 +511,7 @@ export default function SearchScreen() {
                   ]}
                 >
                   {resultMeta ? (
-                    <Text variant="caption" color="tertiary" numberOfLines={1} style={styles.resultLabel}>
+                    <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.resultLabel}>
                       {resultMeta}
                     </Text>
                   ) : (

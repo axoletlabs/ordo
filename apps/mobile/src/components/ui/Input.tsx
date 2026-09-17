@@ -15,8 +15,7 @@ import {
 } from "react-native";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
-import { radius, spacing } from "../../theme/tokens";
-import { resolveFont } from "../../theme/tokens";
+import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
 
 export interface InputProps extends Omit<TextInputProps, "style"> {
   label?: string;
@@ -170,7 +169,7 @@ const styles = StyleSheet.create({
     minHeight: 46,
   },
   icon: { marginRight: spacing[8] },
-  input: { flex: 1, paddingVertical: spacing[10], fontSize: 13 },
+  input: { flex: 1, paddingVertical: spacing[10], fontSize: fontSize.md },
   right: { marginLeft: spacing[8] },
   rightOverlay: {
     position: "absolute",

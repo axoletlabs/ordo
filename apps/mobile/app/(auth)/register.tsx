@@ -84,7 +84,7 @@ export default function RegisterScreen() {
             { backgroundColor: palette.surfaceSecondary, borderColor: palette.border },
           ]}
         >
-          <Text variant="callout">This server isn't accepting new sign-ups.</Text>
+          <Text variant="body">This server isn't accepting new sign-ups.</Text>
           <Text variant="footnote" color="secondary" style={{ marginTop: spacing[4] }}>
             Contact the server administrator for an account.
           </Text>

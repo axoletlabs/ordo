@@ -258,7 +258,7 @@ export function AddBookmarkSheet({
               >
                 <Ionicons name="link-outline" size={18} color={palette.textTertiary} />
                 <View style={styles.urlPreviewText}>
-                  <Text variant="subhead" numberOfLines={1}>
+                  <Text variant="bodyStrong" numberOfLines={1}>
                     {domainFromUrl(url) || url}
                   </Text>
                   <Text variant="monoSmall" color="tertiary" numberOfLines={1}>

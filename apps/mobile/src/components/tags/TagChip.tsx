@@ -55,7 +55,7 @@ export const TagChip = React.memo(function TagChip({
       </Text>
       {typeof count === "number" ? (
         <Text
-          variant="caption"
+          variant="monoSmall"
           color="primary"
           style={{ color: selected ? "rgba(255,255,255,0.8)" : fg, opacity: 0.8 }}
         >

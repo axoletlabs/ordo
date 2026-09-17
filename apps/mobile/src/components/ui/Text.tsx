@@ -1,9 +1,21 @@
 /**
  * Themed Text with typographic presets faithful to ordo-archive:
- *  - Inter Tight for display/titles/labels (tight negative tracking)
- *  - Inter for body/subhead
- *  - JetBrains Mono for URLs/counts/timestamps
+ *  - Inter Tight (`display`) for chrome, list names, and compact labels
+ *  - Inter (`sans`) for body, hints, and supporting copy
+ *  - JetBrains Mono for URLs, counts, timestamps, and codes
  *  - Playfair Display for the wordmark
+ *
+ * Roles:
+ *  wordmark          App name
+ *  display / title*  Page and empty-state titles (sentence case)
+ *  headline          Bookmark, folder, and tag names in lists
+ *  header            Screen titles, buttons, overlay titles (uppercase)
+ *  body / bodyStrong Prose and setting-row names
+ *  callout / subhead Rare emphasis; prefer body / bodyStrong
+ *  footnote          Supporting copy, errors, descriptions
+ *  caption           Compact Tight chrome that is not uppercase
+ *  label             Field labels, section labels, compact actions (uppercase)
+ *  mono / monoSmall  URLs, hosts, counts, timestamps, codes
  */
 import React from "react";
 import {
@@ -59,6 +71,15 @@ const PRESETS: Record<TextVariant, Preset> = {
   label: { family: "display", size: fontSize.xs, weight: "600", lineHeight: lineHeight.normal, letterSpacing: 1.2, uppercase: true },
   mono: { family: "mono", size: fontSize.sm, weight: "400", lineHeight: lineHeight.normal },
   monoSmall: { family: "mono", size: fontSize.xs, weight: "400", lineHeight: lineHeight.normal },
+};
+
+/** Icon+label nav chrome. Same face as `caption`, tighter line for tab stacks. */
+export const NAV_CHROME_TEXT = {
+  fontFamily: resolveFont("display", "500"),
+  fontSize: fontSize.xs,
+  fontWeight: "500" as const,
+  lineHeight: 14,
+  letterSpacing: 0.2,
 };
 
 export type TextColor =

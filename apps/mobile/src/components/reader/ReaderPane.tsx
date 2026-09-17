@@ -1298,7 +1298,7 @@ function ReaderPaneInner({
                     {formatHighlightQuote(row.exact)}
                   </Text>
                   {row.href ? (
-                    <Text variant="footnote" color="secondary" numberOfLines={1} style={styles.highlightMeta}>
+                    <Text variant="monoSmall" color="secondary" numberOfLines={1} style={styles.highlightMeta}>
                       {domainFromUrl(row.href)}
                     </Text>
                   ) : null}

@@ -313,7 +313,7 @@ function SuccessState({
       {failures.length > 0 ? (
         <View style={styles.samples}>
           {failures.slice(0, 4).map((failure, i) => (
-            <Text key={i} variant="caption" color="tertiary" numberOfLines={2}>
+            <Text key={i} variant="monoSmall" color="tertiary" numberOfLines={2}>
               {failure.url ? `${failure.url} — ` : ""}
               {failure.reason}
             </Text>
@@ -402,7 +402,7 @@ function PreviewState({
       {preview.invalidSamples.length > 0 ? (
         <View style={styles.samples}>
           {preview.invalidSamples.slice(0, 3).map((sample, i) => (
-            <Text key={i} variant="caption" color="tertiary" numberOfLines={2}>
+            <Text key={i} variant="monoSmall" color="tertiary" numberOfLines={2}>
               {sample.url ? `${sample.url} — ` : ""}
               {sample.reason}
             </Text>
@@ -482,7 +482,7 @@ function Metric({ label, value }: { label: string; value: number }) {
   return (
     <View style={[styles.metric, { backgroundColor: palette.surfaceSecondary }]}>
       <Text variant="title2">{value}</Text>
-      <Text variant="caption" color="tertiary">
+      <Text variant="label" color="tertiary">
         {label}
       </Text>
     </View>

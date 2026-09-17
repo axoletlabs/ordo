@@ -135,7 +135,7 @@ export function SelfHostFlow({
           <PanelHeader
             title={step === "intro" ? "Use your own server" : "Server address"}
             accessory={
-              <Text variant="caption" color="tertiary">
+              <Text variant="monoSmall" color="tertiary">
                 {stepIndex} / {STEPS.length}
               </Text>
             }

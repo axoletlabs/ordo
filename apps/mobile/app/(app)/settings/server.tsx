@@ -209,7 +209,7 @@ export default function ServerScreen() {
           <Text variant="footnote" color="tertiary" align="center" numberOfLines={1} style={{ width: "100%" }}>
             {displayName}
           </Text>
-          <Text variant="caption" color="faint" align="center">
+          <Text variant="footnote" color="faint" align="center">
             to
           </Text>
           <Text variant="bodyStrong" align="center" numberOfLines={1} style={{ width: "100%" }}>

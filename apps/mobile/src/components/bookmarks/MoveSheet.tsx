@@ -151,7 +151,7 @@ export function MoveSheet({
                       <>
                         {item.pinned ? <PinIcon size={14} color={palette.textTertiary} filled={false} /> : null}
                         {item.protected ? <FolderLockIcon unlocked={destinationUnlocked(item.id)} size={14} /> : null}
-                        <Text variant="footnote" color="tertiary">{item.bookmarkCount}</Text>
+                        <Text variant="monoSmall" color="tertiary">{item.bookmarkCount}</Text>
                       </>
                     )
                   }

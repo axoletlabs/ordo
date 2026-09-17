@@ -132,7 +132,7 @@ export default function AboutScreen() {
           />
         </SettingsGroup>
 
-        <Text variant="caption" color="tertiary" align="center" style={styles.footer}>
+        <Text variant="footnote" color="tertiary" align="center" style={styles.footer}>
           © {PUBLISHED_YEAR} Axolet Labs
         </Text>
       </SettingsScrollView>

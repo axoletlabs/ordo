@@ -359,7 +359,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
                 />
               ))}
               {overflowCount > 0 ? (
-                <Text variant="caption" color="tertiary" style={styles.overflow}>
+                <Text variant="monoSmall" color="tertiary" style={styles.overflow}>
                   +{overflowCount}
                 </Text>
               ) : null}
@@ -368,24 +368,24 @@ export const BookmarkRow = React.memo(function BookmarkRow({
           {hasSuggestions ? (
             <View style={styles.suggestionRow}>
               <Ionicons name="sparkles-outline" size={12} color={palette.accent} />
-              <Text variant="caption" color="accent">
+              <Text variant="footnote" color="accent">
                 {suggestedTags.length} tag{" "}
                 {suggestedTags.length === 1 ? "suggestion" : "suggestions"}
               </Text>
             </View>
           ) : null}
           <View style={styles.metaRow}>
-            <Text variant="caption" color="tertiary" numberOfLines={1} style={styles.domain}>
+            <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.domain}>
               {domain}
             </Text>
             <View style={[styles.separator, { backgroundColor: palette.textFaint }]} />
-            <Text variant="caption" color="tertiary" numberOfLines={1}>
+            <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
               {createdLabel}
             </Text>
             {showReadingTime ? (
               <>
                 <View style={[styles.separator, { backgroundColor: palette.textFaint }]} />
-                <Text variant="caption" color="tertiary" numberOfLines={1}>
+                <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
                   {bookmark.readingTimeMinutes} min read
                 </Text>
               </>

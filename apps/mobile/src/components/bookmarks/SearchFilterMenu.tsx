@@ -325,7 +325,7 @@ function Trailing({ label }: { label: string }) {
   const { palette } = useTheme();
   return (
     <View style={styles.trailing}>
-      <Text variant="caption" color="tertiary" numberOfLines={1} style={styles.trailingLabel}>
+      <Text variant="footnote" color="tertiary" numberOfLines={1} style={styles.trailingLabel}>
         {label}
       </Text>
       <Ionicons name="chevron-forward" size={16} color={palette.textFaint} />
