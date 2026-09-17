@@ -20,14 +20,12 @@ Rule: after you tag a stable release, `main` belongs to the NEXT version. Do not
 
 ## The one habit that makes it all work
 
-At the moment you publish stable vX.Y.Z, cut the maintenance branch from the tag:
+Nothing. Publishing a GitHub Release automatically creates `release/x.y` at the tag (see "What is automated for you" below). The manual equivalent, if you ever want it:
 
 ```bash
 git checkout -b release/0.1 v0.1.0
 git push origin release/0.1
 ```
-
-That is the whole ceremony. Everything else is the normal push-and-CI flow.
 
 ## Scenario 1: routine stable release (mostly JS changes)
 
@@ -71,9 +69,17 @@ Fix on `release/x.y`, push. OTA to production users within minutes. Tag only whe
 
 ## Escapes (rare, all non-destructive)
 
-- **Bad JS shipped via OTA:** re-run the workflow with `republish_ota_group` set to the previous good group id (Actions → CI → Run workflow). Rewinds every device to the old bundle at next launch. No force-push involved.
+- **Bad JS shipped via OTA:** roll back with one command from your machine: `eas update:republish --group <old-good-group-id>` (find group ids in the EAS dashboard under the update's channel, or `eas update:list`). It re-publishes the previous bundle with a fresh timestamp and every device rewinds at next launch. No force-push involved.
 - **Bad APK release:** delete the bad tag/release, fix on `release/x.y`, tag `vX.Y.(Z+1)`. Version codes only move forward, never rewrite.
 - **Bad source either way:** `git revert` on the right branch. History stays intact, which is what keeps the fingerprint baselines and embedded commitTime checks in CI working.
+
+## What is automated for you (release.yml)
+
+When you publish a GitHub Release, a second workflow runs alongside the APK build:
+
+1. `release/x.y` does not exist yet? It is created at the tag commit automatically. You never run the branch-cut command by hand.
+2. Hotfix tag `vX.Y.(Z+1)` published later? The branch is fast-forwarded to the new tag.
+3. The branch is merged back into `main` (no-ff) so the next version inherits every hotfix. If that merge conflicts, it opens a PR for you to resolve instead of failing silently.
 
 ## What you never have to think about
 
@@ -87,18 +93,18 @@ Fix on `release/x.y`, push. OTA to production users within minutes. Tag only whe
 ```bash
 # release
 bump version in apps/mobile/app.config.js -> vX.Y.Z tag as latest, pre-release unchecked
-git checkout -b release/x.y vX.Y.Z && git push origin release/x.y
+# (release.yml auto-creates release/x.y at the tag and merges it back to main)
 
 # early access
 version X.Y.Z-alpha.N / -beta.N / -rc.N -> tag as pre-release (checked)
 
 # JS hotfix
 git checkout release/x.y; cherry-pick fix; git push   # OTA goes out on its own
-git checkout main; git merge release/x.y; git push    # carry the fix forward
+# merge-back to main happens automatically when you tag the next vX.Y.* release
 
 # native hotfix (rare)
 same, but expect an APK build on the release branch; tag vX.Y.(Z+1) and publish
 
-# OTA rollback
-Actions -> CI -> Run workflow -> republish_ota_group = <old group id>, on release/x.y
+# OTA rollback (from your machine)
+eas update:republish --group <old-good-group-id>
 ```
