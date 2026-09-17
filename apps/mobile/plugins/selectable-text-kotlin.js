@@ -133,11 +133,15 @@ class OrdoSelectableTextModule(reactContext: ReactApplicationContext) :
       override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
         menu.clear()
         emit(text)
-        return false
+        hideSelectionMenu(mode)
+        // Returning false aborts the mode and TextView drops the range on
+        // finger-up. Keep the mode, but empty and hidden.
+        return true
       }
 
       override fun onPrepareActionMode(mode: ActionMode, menu: Menu): Boolean {
         menu.clear()
+        hideSelectionMenu(mode)
         return false
       }
 
@@ -146,7 +150,31 @@ class OrdoSelectableTextModule(reactContext: ReactApplicationContext) :
       override fun onDestroyActionMode(mode: ActionMode) {}
 
       override fun onGetContentRect(mode: ActionMode, view: View, outRect: android.graphics.Rect) {
-        outRect.setEmpty()
+        val start = min(text.selectionStart, text.selectionEnd)
+        val end = max(text.selectionStart, text.selectionEnd)
+        val layout = text.layout
+        if (layout == null || start < 0 || end <= start) {
+          outRect.set(0, 0, text.width, text.lineHeight)
+          return
+        }
+        val line = layout.getLineForOffset(start)
+        val left = layout.getPrimaryHorizontal(start).toInt()
+        val right = min(end, layout.getLineEnd(line)).let { layout.getPrimaryHorizontal(it).toInt() }
+        outRect.set(
+          text.totalPaddingLeft + min(left, right),
+          text.totalPaddingTop + layout.getLineTop(line),
+          text.totalPaddingLeft + max(left, right).coerceAtLeast(min(left, right) + 1),
+          text.totalPaddingTop + layout.getLineBottom(line),
+        )
+      }
+    }
+  }
+
+  private fun hideSelectionMenu(mode: ActionMode) {
+    if (android.os.Build.VERSION.SDK_INT >= 23) {
+      try {
+        mode.hide(java.lang.Long.MAX_VALUE)
+      } catch (_: Exception) {
       }
     }
   }
