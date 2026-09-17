@@ -1,5 +1,5 @@
 ---
-description: After visual UI changes, attach portrait and landscape screenshots
+description: After visual UI changes, attach dark-mode portrait and landscape screenshots
 alwaysApply: true
 ---
 
@@ -12,8 +12,8 @@ When a change can be seen on screen (layout, chrome, overlay, type, color, spaci
 - **Vertical** (portrait): `390×844` — bottom tabs
 - **Horizontal** (landscape / wide): `1280×800` — side rail
 
-Open the same state in both (same screen, same overlay, same hover if that was the point). Wait until the UI has settled (menus fade in from opacity 0). Then screenshot.
+Shoot **dark mode** (`themeMode: "dark"`, not system). Switch Appearance → Theme → Dark if the session is on light or system. Open the same state in both layouts (same screen, same overlay, same hover if that was the point). Wait until the UI has settled (menus fade in from opacity 0). Then screenshot.
 
 Prefer the preview/browser tools (`preview_snapshot` with `save: true`, then resize). If those are unavailable, use headless Chrome against the Expo web app. If you cannot capture, say so and what you used instead.
 
-A single portrait frame is not enough. Theme-token work: shoot the theme the user was in; add the other theme only when the change is the light/dark chrome itself.
+A single portrait frame is not enough. Add a light-mode shot only when the change is specifically light-theme chrome.
