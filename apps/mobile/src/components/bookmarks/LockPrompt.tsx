@@ -13,6 +13,7 @@ import { Segmented } from "../ui/Segmented";
 import { OtpInput } from "../ui/OtpInput";
 import { PanelActions, sheetMenuStyles } from "../ui/SheetActionRow";
 import { PatternInput } from "./PatternInput";
+import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
 import { useUnlockFolder } from "../../hooks/use-folders";
 import { getDeviceLockCredential } from "../../lib/device-folder-lock";
 import { errorMessage } from "../../lib/error-message";
@@ -270,7 +271,15 @@ export function UnlockForm({
       ) : isPassword ? (
         <Button label="Unlock" block onPress={() => void submitPassword()} loading={unlock.isPending} />
       ) : onCancel ? (
-        <Button label={cancelLabel} variant="secondary" onPress={onCancel} style={sheetMenuStyles.cancel} />
+        <Button
+          label={cancelLabel}
+          variant="secondary"
+          onPress={() => {
+            dismissKeyboard();
+            onCancel();
+          }}
+          style={sheetMenuStyles.cancel}
+        />
       ) : null}
       <Text variant="footnote" color="tertiary" align="center" style={styles.footnote}>
         Unlocked for {UNLOCK_MINUTES} minutes on this device.
@@ -302,7 +311,7 @@ export function LockPrompt({
 
   return (
     <FloatingPanel visible={active} onDismiss={close}>
-      {active ? (
+      {folderId ? (
         <UnlockForm
           folderId={folderId}
           folderName={folderName}

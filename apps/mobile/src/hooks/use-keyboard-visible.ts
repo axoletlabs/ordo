@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AppState, Keyboard, Platform } from "react-native";
+import { AppState, Keyboard, Platform, TextInput } from "react-native";
 
 export function keyboardIsOpen() {
   try {
@@ -8,6 +8,25 @@ export function keyboardIsOpen() {
     return !!metrics && metrics.height > 0;
   } catch {
     return false;
+  }
+}
+
+/**
+ * Blur the focused field and hide IME. Android keeps the keyboard up if a
+ * TextInput unmounts while focused (overlay scrim tap, session-mode reset),
+ * because Keyboard.dismiss() is a no-op once currentlyFocusedInput() is gone.
+ */
+export function dismissKeyboard() {
+  try {
+    Keyboard.dismiss();
+  } catch {
+    // Keyboard APIs can throw when the native module is missing (web shims).
+  }
+  try {
+    const focused = TextInput.State.currentlyFocusedInput?.();
+    if (focused) TextInput.State.blurTextInput(focused);
+  } catch {
+    // TextInput.State is not implemented on every platform shim.
   }
 }
 

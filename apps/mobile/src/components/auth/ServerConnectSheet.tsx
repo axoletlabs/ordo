@@ -29,6 +29,7 @@ import { haptics } from "../../lib/haptics";
 import { useSettingsStore } from "../../store/settings";
 import { useServerProbe } from "../../hooks/use-server-probe";
 import { probeServer } from "../../lib/server-probe";
+import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
 
 /**
  * Change button that sits greyed-out (neutral fill + muted label) until the
@@ -204,7 +205,10 @@ export function ServerConnectSheet({
           <Button
             label="Cancel"
             variant="secondary"
-            onPress={onDismiss}
+            onPress={() => {
+              dismissKeyboard();
+              onDismiss();
+            }}
             disabled={confirming}
             style={styles.action}
           />

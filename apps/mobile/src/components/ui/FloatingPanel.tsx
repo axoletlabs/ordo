@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { OverlayPortal } from "./overlay-host";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
+import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
 import { layout, radius, spacing } from "../../theme/tokens";
 
 export interface FloatingPanelProps {
@@ -42,7 +43,11 @@ export function FloatingPanel({
   const { palette, shadows } = useTheme();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const { rendered, progress } = useOverlayPresence(visible, onDismiss);
+  const hideAndDismiss = React.useCallback(() => {
+    dismissKeyboard();
+    onDismiss();
+  }, [onDismiss]);
+  const { rendered, progress } = useOverlayPresence(visible, hideAndDismiss);
 
   React.useEffect(() => {
     if (visible) onShow?.();
@@ -71,8 +76,11 @@ export function FloatingPanel({
           <View style={[StyleSheet.absoluteFill, { backgroundColor: palette.overlay }]} />
         </Animated.View>
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss"
           style={StyleSheet.absoluteFill}
-          onPress={dismissible ? onDismiss : undefined}
+          onPressIn={dismissible ? dismissKeyboard : undefined}
+          onPress={dismissible ? hideAndDismiss : undefined}
         />
         <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : undefined}

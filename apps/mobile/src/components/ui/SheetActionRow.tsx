@@ -3,6 +3,7 @@ import { StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Button, type ButtonVariant } from "./Button";
 import { ContextMenuItem } from "./ContextMenu";
+import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
 import { spacing } from "../../theme/tokens";
 
 export const sheetMenuStyles = StyleSheet.create({
@@ -45,14 +46,20 @@ export function PanelActions({
       <Button
         label={cancelLabel}
         variant="secondary"
-        onPress={onCancel}
+        onPress={() => {
+          dismissKeyboard();
+          onCancel();
+        }}
         disabled={cancelDisabled}
         style={sheetMenuStyles.action}
       />
       <Button
         label={confirmLabel}
         variant={confirmVariant}
-        onPress={onConfirm}
+        onPress={() => {
+          dismissKeyboard();
+          onConfirm();
+        }}
         loading={loading}
         disabled={confirmDisabled}
         style={sheetMenuStyles.action}

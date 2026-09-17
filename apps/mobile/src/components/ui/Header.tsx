@@ -16,6 +16,7 @@ import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
+import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
 import { layout, spacing } from "../../theme/tokens";
 import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
 
@@ -91,6 +92,7 @@ export function Header({
   const showLarge = large && (!isLandscape || isTablet);
 
   const handleBack = () => {
+    dismissKeyboard();
     haptics.light();
     if (onBack) onBack();
     else if (router.canGoBack()) router.back();

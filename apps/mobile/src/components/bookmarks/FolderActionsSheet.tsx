@@ -21,6 +21,7 @@ import { spacing } from "../../theme/tokens";
 import { haptics } from "../../lib/haptics";
 import { toast } from "../ui/toast-store";
 import { errorMessage } from "../../lib/error-message";
+import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
 import type { MenuAnchorRect } from "../../lib/menu-anchor";
 import { foldersApi } from "../../lib/api/folders";
 import {
@@ -113,6 +114,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
   }, [visible, folder?.id]);
 
   const showMode = (nextMode: Mode) => {
+    dismissKeyboard();
     setError("");
     if (nextMode !== "lockCredential" && nextMode !== "removePassword") {
       setPassword("");

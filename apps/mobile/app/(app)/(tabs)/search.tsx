@@ -58,6 +58,7 @@ import { FAB_LIST_CLEARANCE } from "../../../src/lib/list-pagination";
 import type { BookmarkDto, FolderDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 import { registerSearchFieldFocus } from "../../../src/lib/search-field-focus";
+import { dismissKeyboard } from "../../../src/hooks/use-keyboard-visible";
 
 const SERVER_DEBOUNCE_MS = 250;
 const URL_SYNC_MS = 1000;
@@ -458,6 +459,7 @@ export default function SearchScreen() {
       keyExtractor={(b: BookmarkDto) => b.id}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
+      onTouchStart={dismissKeyboard}
       renderItem={renderBookmark}
       ListEmptyComponent={empty ? <View style={styles.emptyList}>{empty}</View> : null}
       ListFooterComponent={loadingMore ? <ListLoadingFooter /> : null}

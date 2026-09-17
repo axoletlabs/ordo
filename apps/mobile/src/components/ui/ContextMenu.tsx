@@ -22,6 +22,7 @@ import { OverlayPortal } from "./overlay-host";
 import { ThemedScrollView } from "./ThemedScrollView";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
+import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
 import { haptics } from "../../lib/haptics";
 import {
   CONTEXT_MENU_WIDTH,
@@ -58,7 +59,11 @@ export function ContextMenu({
   const { palette, shadows } = useTheme();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const { rendered, progress } = useOverlayPresence(visible, onDismiss, {
+  const hideAndDismiss = React.useCallback(() => {
+    if (backdrop) dismissKeyboard();
+    onDismiss();
+  }, [backdrop, onDismiss]);
+  const { rendered, progress } = useOverlayPresence(visible, hideAndDismiss, {
     dismissKeyboard: backdrop,
   });
   const [contentHeight, setContentHeight] = React.useState(0);
@@ -140,7 +145,8 @@ export function ContextMenu({
             accessibilityLabel="Dismiss menu"
             style={StyleSheet.absoluteFill}
             pointerEvents={visible ? "auto" : "none"}
-            onPress={onDismiss}
+            onPressIn={dismissKeyboard}
+            onPress={hideAndDismiss}
           />
         ) : null}
         <Animated.View

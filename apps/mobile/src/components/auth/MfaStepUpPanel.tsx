@@ -89,7 +89,6 @@ export function MfaStepUpPanel({
       <PanelHeader title={title} subtitle={description} />
       <View>
         <MfaCodeField
-          key={visible ? "open" : "closed"}
           value={code}
           onChange={(next) => {
             setCode(next);
