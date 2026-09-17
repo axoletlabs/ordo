@@ -1,0 +1,19 @@
+---
+description: After visual UI changes, attach portrait and landscape screenshots
+alwaysApply: true
+---
+
+# UI screenshots
+
+When a change can be seen on screen (layout, chrome, overlay, type, color, spacing, hover), do not finish with prose only. Capture the changed UI and **embed both shots in the reply** with markdown image syntax and absolute paths (`![portrait](/tmp/....png)`).
+
+**Layouts** — ordo switches chrome at these sizes (`useResponsiveLayout`: side rail when landscape or web width ≥ 768):
+
+- **Vertical** (portrait): `390×844` — bottom tabs
+- **Horizontal** (landscape / wide): `1280×800` — side rail
+
+Open the same state in both (same screen, same overlay, same hover if that was the point). Wait until the UI has settled (menus fade in from opacity 0). Then screenshot.
+
+Prefer the preview/browser tools (`preview_snapshot` with `save: true`, then resize). If those are unavailable, use headless Chrome against the Expo web app. If you cannot capture, say so and what you used instead.
+
+A single portrait frame is not enough. Theme-token work: shoot the theme the user was in; add the other theme only when the change is the light/dark chrome itself.
