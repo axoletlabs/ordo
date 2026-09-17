@@ -23,6 +23,8 @@ import {
   insertBookmarkIfAbsent,
   mapCachedBookmarks,
   removeBookmarksEverywhere,
+  removeRemindersFromCache,
+  syncReminderInCache,
 } from "./cache-helpers";
 import { deletedBookmarksToast, deletedFoldersToast, deletedTagsToast } from "./copy";
 import { errorMessage } from "./error-message";
@@ -37,6 +39,10 @@ const pendingBookmarkIds = new Set<string>();
 const pendingFolderIds = new Set<string>();
 const pendingTagIds = new Set<string>();
 let stripperStarted = false;
+
+export function isBookmarkDeletePending(id: string): boolean {
+  return pendingBookmarkIds.has(id);
+}
 
 function isPagedBookmarks(
   data: unknown,
@@ -164,7 +170,7 @@ function stripPendingTags(bookmark: BookmarkDto): BookmarkDto {
 function listKeyAllowsRestore(queryKey: readonly unknown[], folderId: string | null): boolean {
   if (queryKey[0] !== "bookmarks") return false;
   const scope = queryKey[1];
-  if (scope === "detail" || scope === "extraction-progress") return false;
+  if (scope === "detail" || scope === "extraction-progress" || scope === "reminders") return false;
   if (scope === "search" || scope === "tagged") return true;
   return scope === folderId && (queryKey.length === 2 || queryKey.length === 3);
 }
@@ -194,8 +200,14 @@ function hideBookmarks(bookmarks: BookmarkDto[], bumpCounts: boolean) {
     pendingBookmarkIds.add(bookmark.id);
     const detail = queryClient.getQueryData<BookmarkDetailDto | BookmarkDto>(qk.bookmark(bookmark.id));
     if (detail) details.set(bookmark.id, detail);
+    if (bookmark.remindAt != null) {
+      void import("./reminder-notifications").then(({ cancelBookmarkReminder }) =>
+        cancelBookmarkReminder(bookmark.id),
+      );
+    }
   }
   removeBookmarksEverywhere(queryClient, new Set(bookmarks.map((bookmark) => bookmark.id)));
+  removeRemindersFromCache(queryClient, new Set(bookmarks.map((bookmark) => bookmark.id)));
   for (const bookmark of bookmarks) {
     queryClient.removeQueries({ queryKey: qk.bookmark(bookmark.id) });
     if (bumpCounts) bumpFolderCount(queryClient, bookmark.folderId, -1, bookmark.isRead ? 0 : -1);
@@ -218,6 +230,12 @@ function restoreBookmarks(
     if (bumpCounts) bumpFolderCount(queryClient, bookmark.folderId, +1, bookmark.isRead ? 0 : +1);
     const detail = details.get(bookmark.id);
     if (detail) queryClient.setQueryData(qk.bookmark(bookmark.id), detail);
+    if (bookmark.remindAt != null) {
+      syncReminderInCache(queryClient, bookmark);
+      void import("./reminder-notifications").then(({ syncBookmarkReminder }) =>
+        syncBookmarkReminder(bookmark),
+      );
+    }
   }
 }
 
@@ -316,6 +334,7 @@ async function commitBookmarkDeletes(bookmarks: BookmarkDto[], scopeFolderId?: s
   void queryClient.invalidateQueries({ queryKey: ["tags"] });
   void queryClient.invalidateQueries({ queryKey: ["bookmarks", "tagged"] });
   void queryClient.invalidateQueries({ queryKey: ["bookmarks", "search"] });
+  void queryClient.invalidateQueries({ queryKey: qk.reminders });
 }
 
 async function commitFolderDeletes(folders: FolderDto[], contained: BookmarkDto[]) {

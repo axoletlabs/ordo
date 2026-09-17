@@ -26,8 +26,21 @@ export const qk = {
     folderIds: readonly string[] = [],
     unfiled = false,
     fuzzy = false,
+    reminder: "all" | "due" | "upcoming" = "all",
   ) =>
-    ["bookmarks", "search", q, [...tagIds].sort(), unread ?? "all", [...folderIds].sort(), unfiled, fuzzy] as const,
+    [
+      "bookmarks",
+      "search",
+      q,
+      [...tagIds].sort(),
+      unread ?? "all",
+      [...folderIds].sort(),
+      unfiled,
+      fuzzy,
+      reminder,
+    ] as const,
+
+  reminders: ["bookmarks", "reminders"] as const,
 
   /** Whole-library lists filtered by tags (sorted for key stability). */
   tagged: (tagIds: readonly string[]) => ["bookmarks", "tagged", [...tagIds].sort()] as const,

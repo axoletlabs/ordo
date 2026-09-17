@@ -30,6 +30,7 @@ function bookmark(partial: Partial<BookmarkDto> & Pick<BookmarkDto, "id" | "titl
     readProgress: 0,
     completedAt: null,
     isRead: false,
+    remindAt: null,
     tags: [],
     suggestedTags: [],
     createdAt: "2026-01-01T00:00:00.000Z",
@@ -179,6 +180,7 @@ test("searchFiltersActive ignores the empty default", () => {
   assert.equal(searchFiltersActive({ ...none, folderIds: ["f1"] }), true);
   assert.equal(searchFiltersActive({ ...none, unfiled: true }), true);
   assert.equal(searchFiltersActive({ ...none, fuzzy: true }), true);
+  assert.equal(searchFiltersActive({ ...none, reminder: "due" }), true);
   assert.equal(searchScopeActive({ ...none, fuzzy: true }), false);
   assert.equal(searchScopeActive({ ...none, folderIds: ["f1"] }), true);
 });
@@ -188,6 +190,25 @@ test("searchFiltersEqual ignores object identity", () => {
   assert.equal(searchFiltersEqual(none, { ...none, fuzzy: true }), false);
   assert.equal(searchFiltersEqual({ ...none, tagIds: ["a"] }, { ...none, tagIds: ["a"] }), true);
   assert.equal(searchFiltersEqual({ ...none, tagIds: ["a"] }, { ...none, tagIds: ["b"] }), false);
+  assert.equal(searchFiltersEqual(none, { ...none, reminder: "due" }), false);
+});
+
+test("reminder filter keeps due bookmarks and drops the rest", () => {
+  const now = Math.floor(Date.now() / 1000);
+  const due = bookmark({ id: "d", title: "Due", remindAt: now - 30 });
+  const later = bookmark({ id: "l", title: "Later", remindAt: now + 3600 });
+  const noneSet = bookmark({ id: "n", title: "None", remindAt: null });
+  const hits = compileSearchResults({
+    query: "",
+    filters: { ...none, reminder: "due" },
+    serverItems: [due, later, noneSet],
+    cachedItems: [],
+    serverMatchesQuery: true,
+  });
+  assert.deepEqual(
+    hits.map((item) => item.id),
+    ["d"],
+  );
 });
 
 test("matching is a word prefix, not a mid-word substring", () => {

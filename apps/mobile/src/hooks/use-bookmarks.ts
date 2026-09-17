@@ -22,6 +22,7 @@ import {
   prependBookmarkToPages,
   removeBookmarkFromPages,
   removeBookmarksEverywhere,
+  syncReminderInCache,
   updateBookmarkEverywhere,
   updateBookmarkInPages,
   updateBookmarksEverywhere,
@@ -103,6 +104,7 @@ export function useInfiniteSearch(
     unfiled?: boolean;
     unread?: "all" | "unread" | "read";
     fuzzy?: boolean;
+    reminder?: "all" | "due" | "upcoming";
     enabled?: boolean;
   } = {},
 ) {
@@ -112,11 +114,22 @@ export function useInfiniteSearch(
   const unfiled = opts.unfiled ?? false;
   const unread = opts.unread ?? "all";
   const fuzzy = opts.fuzzy ?? false;
+  const reminder = opts.reminder ?? "all";
   const enabled = opts.enabled ?? true;
   return useInfiniteQuery({
-    queryKey: qk.search(term, tagIds, unread, folderIds, unfiled, fuzzy),
+    queryKey: qk.search(term, tagIds, unread, folderIds, unfiled, fuzzy, reminder),
     queryFn: ({ pageParam }) =>
-      bookmarksApi.search(term, pageParam ?? undefined, LIST_PAGE_SIZE, [...tagIds], unread, [...folderIds], unfiled, fuzzy),
+      bookmarksApi.search(
+        term,
+        pageParam ?? undefined,
+        LIST_PAGE_SIZE,
+        [...tagIds],
+        unread,
+        [...folderIds],
+        unfiled,
+        fuzzy,
+        reminder,
+      ),
     initialPageParam: null as string | null,
     getNextPageParam: nextPageCursor,
     enabled,
@@ -258,6 +271,37 @@ export function useSetContentKind() {
         ...("contentHtml" in bookmark && updated.fetchStatus !== "ok" ? { contentHtml: null } : {}),
       }));
       void qc.invalidateQueries({ queryKey: qk.bookmark(updated.id) });
+    },
+  });
+}
+
+export function useSetBookmarkReminder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      id,
+      folderId,
+      remindAt,
+    }: {
+      id: string;
+      folderId: string | null;
+      title: string;
+      remindAt: number | null;
+    }) => bookmarksApi.update(id, { remindAt }, { folderId }),
+    onMutate: ({ id, folderId, title, remindAt }) => {
+      updateBookmarkEverywhere(qc, id, (bookmark) => ({ ...bookmark, remindAt }));
+      syncReminderInCache(qc, { id, folderId, title, remindAt });
+    },
+    onError: () => {
+      void qc.invalidateQueries({ queryKey: ["bookmarks"] });
+    },
+    onSuccess: (updated) => {
+      updateBookmarkEverywhere(qc, updated.id, (bookmark) => ({ ...bookmark, ...updated }));
+      syncReminderInCache(qc, updated);
+      void import("../lib/reminder-notifications").then(({ syncBookmarkReminder }) =>
+        syncBookmarkReminder(updated),
+      );
+      void qc.invalidateQueries({ queryKey: qk.reminders });
     },
   });
 }

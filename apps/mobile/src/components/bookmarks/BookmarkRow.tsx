@@ -15,6 +15,7 @@ import { SelectionMark } from "./SelectionMark";
 import { RowStatusSlot, ROW_STATUS_ICON_SIZE } from "./RowStatusIcon";
 import { useTheme } from "../../theme/ThemeProvider";
 import { domainFromUrl, relativeTime } from "../../lib/format";
+import { bookmarkReminderStatus, formatReminderWhen } from "../../lib/bookmark-reminders";
 import { bookmarkIsArticle, bookmarkOpensAsWebsite } from "../../lib/bookmark-reader";
 import { openBookmarkInExternalBrowser } from "../../lib/open-website";
 import { haptics } from "../../lib/haptics";
@@ -96,6 +97,8 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   const domain = bookmark.domain || domainFromUrl(bookmark.url);
   const title = bookmark.title || domain;
   const createdLabel = relativeTime(bookmark.createdAt);
+  const reminderLabel = bookmark.remindAt != null ? formatReminderWhen(bookmark.remindAt) : null;
+  const reminderDue = bookmarkReminderStatus(bookmark.remindAt) === "due";
   const faviconUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
   const [failedFavicon, setFailedFavicon] = React.useState<string | null>(null);
   if (failedFavicon != null && failedFavicon !== faviconUrl) setFailedFavicon(null);
@@ -116,6 +119,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
     title,
     domain,
     createdLabel,
+    reminderLabel,
     ...tags.map((t) => `Tag ${t.name}`),
     hasSuggestions ? `${suggestedTags.length} tag suggestions` : undefined,
     !bookmark.isRead ? "Unread" : undefined,
@@ -382,6 +386,18 @@ export const BookmarkRow = React.memo(function BookmarkRow({
             <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
               {createdLabel}
             </Text>
+            {reminderLabel ? (
+              <>
+                <View style={[styles.separator, { backgroundColor: palette.textFaint }]} />
+                <Text
+                  variant="monoSmall"
+                  color={reminderDue ? "accent" : "tertiary"}
+                  numberOfLines={1}
+                >
+                  {reminderLabel}
+                </Text>
+              </>
+            ) : null}
             {showReadingTime ? (
               <>
                 <View style={[styles.separator, { backgroundColor: palette.textFaint }]} />

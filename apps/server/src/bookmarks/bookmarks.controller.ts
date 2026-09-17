@@ -24,9 +24,11 @@ import {
   CreateHighlightSchema,
   UpdateHighlightSchema,
   parseBookmarkListSort,
+  parseReminderFilter,
   type BatchBookmarksInput,
   type BookmarkDetailDto,
   type BookmarkDto,
+  type BookmarkReminderDto,
   type CreateHighlightInput,
   type CursorPage,
   type ExtractionProgressDto,
@@ -106,6 +108,7 @@ export class BookmarksController {
     @Query("unfiled") unfiled: string | undefined,
     @Query("fuzzy") fuzzy: string | undefined,
     @Query("unread") unread: string | undefined,
+    @Query("reminder") reminder: string | undefined,
     @Req() req: Request,
   ): Promise<CursorPage<BookmarkDto>> {
     return this.bookmarks.search(user.userId, q ?? "", {
@@ -116,6 +119,7 @@ export class BookmarksController {
       unfiled: unfiled === "1" || unfiled === "true",
       fuzzy: fuzzy === "1" || fuzzy === "true",
       unread: unread === "1" || unread === "true" ? true : unread === "0" || unread === "false" ? false : undefined,
+      reminder: parseReminderFilter(reminder),
       folderTokens: getPresentedFolderTokens(req),
     });
   }
@@ -132,6 +136,11 @@ export class BookmarksController {
     @Body({ schema: PrefetchBookmarkSchema }) body: { url: string },
   ): Promise<void> {
     this.extraction.prefetch(body.url);
+  }
+
+  @Get("reminders")
+  async reminders(@CurrentUser() user: AuthContext): Promise<BookmarkReminderDto[]> {
+    return this.bookmarks.listReminders(user.userId);
   }
 
   @Get(":id")
@@ -185,6 +194,7 @@ export class BookmarksController {
       isRead?: boolean;
       readProgress?: number;
       contentKindOverride?: "article" | "web" | null;
+      remindAt?: number | null;
     },
     @Req() req: Request,
   ): Promise<BookmarkDto> {

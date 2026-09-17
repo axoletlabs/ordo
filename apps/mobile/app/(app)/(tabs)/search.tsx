@@ -238,6 +238,7 @@ export default function SearchScreen() {
     unfiled: listFilters.unfiled,
     unread: listFilters.status,
     fuzzy: listFilters.fuzzy,
+    reminder: listFilters.reminder,
     enabled: searchEnabled,
   });
   const { onEndReached, loadingMore } = useLoadMore({
@@ -455,7 +456,7 @@ export default function SearchScreen() {
   const listPane = (
     <ThemedFlashList
       data={items}
-      extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}:${trimmed}:${listFilters.tagIds.join(",")}:${listFilters.folderIds.join(",")}:${listFilters.unfiled}:${listFilters.status}:${listFilters.kind}:${listFilters.fuzzy}`}
+      extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}:${trimmed}:${listFilters.tagIds.join(",")}:${listFilters.folderIds.join(",")}:${listFilters.unfiled}:${listFilters.status}:${listFilters.kind}:${listFilters.reminder}:${listFilters.fuzzy}`}
       keyExtractor={(b: BookmarkDto) => b.id}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
@@ -606,6 +607,16 @@ export default function SearchScreen() {
                   compact
                   onPress={() => setFilters((prev) => ({ ...prev, kind: "all" }))}
                   accessibilityLabel="Clear type filter"
+                />
+              ) : null}
+              {filters.reminder !== "all" ? (
+                <TagChip
+                  name={filters.reminder === "due" ? "Due" : "Upcoming"}
+                  color="slate"
+                  selected
+                  compact
+                  onPress={() => setFilters((prev) => ({ ...prev, reminder: "all" }))}
+                  accessibilityLabel="Clear reminder filter"
                 />
               ) : null}
               {filters.fuzzy ? (

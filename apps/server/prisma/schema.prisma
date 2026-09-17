@@ -165,6 +165,8 @@ model Bookmark {
   readProgress    Float    @default(0)
   completedAt     DateTime?
   isRead          Boolean  @default(false)
+  /** Unix seconds. Null means no reminder; a past value stays due until cleared. */
+  remindAt        Int?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -178,6 +180,7 @@ model Bookmark {
   @@index([userId, fetchStatus])
   @@index([folderId])
   @@index([createdAt])
+  @@index([userId, remindAt])
 }
 
 model Tag {

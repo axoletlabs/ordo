@@ -15,6 +15,7 @@ import { useAppliedNavigationAnimation } from "../../src/hooks/use-navigation-an
 import { screenAnimationDuration, stackScreenAnimation } from "../../src/lib/navigation-animation";
 import { MfaEnrollmentScreen } from "../../src/components/auth/MfaEnrollmentScreen";
 import { NavigationRail, useRailSceneOffset } from "../../src/components/navigation/NavigationRail";
+import { ReminderNotificationHost } from "../../src/components/bookmarks/ReminderNotificationHost";
 
 enableFreeze(true);
 
@@ -76,6 +77,7 @@ export default function AppLayout() {
       {sideNavigation && !floating ? <NavigationRail /> : null}
       <View style={{ flex: 1 }}>{stack}</View>
       {sideNavigation && floating ? <NavigationRail /> : null}
+      <ReminderNotificationHost />
       {needsMfaEnrollment ? (
         <View
           accessibilityViewIsModal

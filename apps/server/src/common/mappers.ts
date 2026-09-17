@@ -132,6 +132,7 @@ export type BookmarkDtoFields = Pick<
   | "readProgress"
   | "completedAt"
   | "isRead"
+  | "remindAt"
   | "createdAt"
   | "updatedAt"
 > & {
@@ -191,6 +192,7 @@ export function toBookmarkDto(b: BookmarkDtoFields): BookmarkDto {
     readProgress: b.readProgress,
     completedAt: b.completedAt?.toISOString() ?? null,
     isRead: b.isRead,
+    remindAt: b.remindAt,
     tags: (b.tags ?? [])
       .map(({ tag }) => toTagSummaryDto(tag))
       .sort((a, c) => a.name.localeCompare(c.name)),

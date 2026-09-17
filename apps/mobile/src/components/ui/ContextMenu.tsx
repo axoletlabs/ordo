@@ -208,6 +208,7 @@ export function ContextMenuNote({
 export function ContextMenuItem({
   icon,
   label,
+  detail,
   tone,
   trailing,
   selected,
@@ -217,6 +218,8 @@ export function ContextMenuItem({
 }: {
   icon?: keyof typeof Ionicons.glyphMap;
   label: string;
+  /** Second line, typically a local time. */
+  detail?: string;
   tone?: "danger";
   trailing?: React.ReactNode;
   selected?: boolean;
@@ -233,7 +236,7 @@ export function ContextMenuItem({
   return (
     <Pressable
       accessibilityRole="menuitem"
-      accessibilityLabel={label}
+      accessibilityLabel={detail ? `${label}, ${detail}` : label}
       accessibilityState={{ disabled: !!inactive, selected: !!selected, busy: !!busy }}
       disabled={inactive}
       onHoverIn={() => setHovered(true)}
@@ -245,21 +248,29 @@ export function ContextMenuItem({
       }}
       style={({ pressed }) => [
         styles.item,
+        detail ? styles.itemStacked : null,
         Platform.OS === "web" ? styles.itemWeb : null,
         inactive && styles.itemDisabled,
         (pressed || hovered) && !inactive ? { backgroundColor: highlight } : null,
       ]}
     >
       {icon ? <AppIcon name={icon} size={16} color={color} /> : <View style={styles.iconSlot} />}
-      <Text variant="body" style={[styles.itemLabel, { color }]} numberOfLines={1}>
-        {label}
-      </Text>
+      <View style={styles.itemCopy}>
+        <Text variant="body" style={[styles.itemLabel, { color }]} numberOfLines={1}>
+          {label}
+        </Text>
+        {detail ? (
+          <Text variant="monoSmall" color="secondary" numberOfLines={1}>
+            {detail}
+          </Text>
+        ) : null}
+      </View>
       {busy ? (
-        <Spinner size="sm" color={color} />
+        <Spinner size="sm" color={color} style={styles.itemSide} />
       ) : selected ? (
-        <Ionicons name="checkmark" size={16} color={palette.accent} />
+        <Ionicons name="checkmark" size={16} color={palette.accent} style={styles.itemSide} />
       ) : trailing ? (
-        <View style={styles.trailing}>{trailing}</View>
+        <View style={[styles.trailing, styles.itemSide]}>{trailing}</View>
       ) : null}
     </Pressable>
   );
@@ -286,6 +297,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[12],
     paddingVertical: spacing[8],
   },
+  itemStacked: {
+    minHeight: 52,
+    alignItems: "flex-start",
+    paddingVertical: spacing[10],
+  },
+  itemCopy: { flex: 1, minWidth: 0, gap: spacing[2] },
+  itemSide: { alignSelf: "center" },
   itemWeb: {
     cursor: "pointer",
     transitionProperty: "background-color",
@@ -293,7 +311,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   itemDisabled: { opacity: 0.45 },
   iconSlot: { width: 16, height: 16 },
-  itemLabel: { flex: 1, minWidth: 0 },
+  itemLabel: { minWidth: 0 },
   trailing: {
     flexDirection: "row",
     alignItems: "center",

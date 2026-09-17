@@ -800,6 +800,67 @@ describe("Bookmarks & Folders (e2e)", () => {
     });
   });
 
+  describe("reminders", () => {
+    it("stores a unix-second reminder, keeps it due after the time passes, and lists it", async () => {
+      const { agent } = await setup();
+      const created = await agent
+        .post("/api/bookmarks")
+        .send({ url: "https://example.com/remind" })
+        .expect(201);
+      expect(created.body.remindAt).toBeNull();
+
+      const upcoming = Math.floor(Date.now() / 1000) + 3600;
+      const set = await agent
+        .patch(`/api/bookmarks/${created.body.id}`)
+        .send({ remindAt: upcoming })
+        .expect(200);
+      expect(set.body.remindAt).toBe(upcoming);
+
+      const listed = await agent.get("/api/bookmarks/reminders").expect(200);
+      expect(listed.body).toEqual([
+        {
+          id: created.body.id,
+          folderId: null,
+          title: set.body.title,
+          remindAt: upcoming,
+        },
+      ]);
+
+      const dueAt = Math.floor(Date.now() / 1000) - 60;
+      const due = await agent
+        .patch(`/api/bookmarks/${created.body.id}`)
+        .send({ remindAt: dueAt })
+        .expect(200);
+      expect(due.body.remindAt).toBe(dueAt);
+
+      const dueSearch = await agent.get("/api/bookmarks/search").query({ q: "", reminder: "due" }).expect(200);
+      expect(dueSearch.body.items.map((row: { id: string }) => row.id)).toEqual([created.body.id]);
+      const upcomingSearch = await agent
+        .get("/api/bookmarks/search")
+        .query({ q: "", reminder: "upcoming" })
+        .expect(200);
+      expect(upcomingSearch.body.items).toHaveLength(0);
+
+      const cleared = await agent
+        .patch(`/api/bookmarks/${created.body.id}`)
+        .send({ remindAt: null })
+        .expect(200);
+      expect(cleared.body.remindAt).toBeNull();
+      const empty = await agent.get("/api/bookmarks/reminders").expect(200);
+      expect(empty.body).toEqual([]);
+    });
+
+    it("rejects a non-integer remindAt", async () => {
+      const { agent } = await setup();
+      const created = await agent
+        .post("/api/bookmarks")
+        .send({ url: "https://example.com/remind-bad" })
+        .expect(201);
+      await agent.patch(`/api/bookmarks/${created.body.id}`).send({ remindAt: 1.5 }).expect(400);
+      await agent.patch(`/api/bookmarks/${created.body.id}`).send({ remindAt: -1 }).expect(400);
+    });
+  });
+
   describe("moving bookmarks between folders and unfiled", () => {
     it("moves an unfiled bookmark into a folder", async () => {
       const { agent } = await setup();

@@ -178,6 +178,11 @@ export interface BookmarkDto {
   readProgress: number;
   completedAt: string | null;
   isRead: boolean;
+  /**
+   * Unix seconds when this bookmark should ping. Null means none. Stays set
+   * after the time passes so the row can stay due until the user clears it.
+   */
+  remindAt: number | null;
   tags: TagSummaryDto[];
   suggestedTags: TagSummaryDto[];
   createdAt: string;
@@ -222,6 +227,17 @@ export interface ServerInfoDto {
   mfaRequired: boolean;
   /** True when the server persists folder lock types (pattern/PIN/device). */
   folderLockTypes: boolean;
+  /** True when bookmark reminders (`remindAt`) are stored. */
+  reminders: boolean;
+}
+
+/** Lightweight row used to schedule local notifications. */
+export interface BookmarkReminderDto {
+  id: string;
+  folderId: string | null;
+  title: string;
+  /** Unix seconds. */
+  remindAt: number;
 }
 
 /** Liveness/readiness probe. Unauthenticated. */

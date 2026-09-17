@@ -59,6 +59,8 @@ import type { HighlightSelectDraft } from "./article-highlight-ui";
 import { ReaderControlsSheet } from "./ReaderControlsSheet";
 import { EditTagsSheet } from "../tags/EditTagsSheet";
 import { LockPrompt } from "../bookmarks/LockPrompt";
+import { ReminderFlow } from "../bookmarks/ReminderFlow";
+import { formatReminderWhen } from "../../lib/bookmark-reminders";
 import { READER_BODY_SIZE, resolveReaderFont } from "./reader-typography";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 import { resolveReaderPalette } from "../../theme/reader-theme";
@@ -76,7 +78,7 @@ import {
   useUpdateHighlight,
 } from "../../hooks/use-bookmarks";
 import * as bookmarkHooks from "../../hooks/use-bookmarks";
-import { useFolders } from "../../hooks/queries";
+import { useFolders, useServerInfo } from "../../hooks/queries";
 import { useReaderPreferences } from "../../hooks/use-reader-preferences";
 import { useSettingsStore } from "../../store/settings";
 import { domainFromUrl, formatDate } from "../../lib/format";
@@ -207,6 +209,8 @@ function ReaderPaneInner({
     cached?.folderId,
   );
   const { data: folders } = useFolders();
+  const { data: serverInfo } = useServerInfo();
+  const remindersSupported = serverInfo?.reminders === true;
   const protectedDetail = isFolderProtected(detail.error);
   const lockedFolderId = folderProtectedId(detail.error) ?? cached?.folderId ?? null;
   const lockedFolder = folders?.find((folder) => folder.id === lockedFolderId);
@@ -227,7 +231,7 @@ function ReaderPaneInner({
 
   const [controlsOpen, setControlsOpen] = useState(false);
   const [unlockOpen, setUnlockOpen] = useState(false);
-  const [actionPanel, setActionPanel] = useState<"actions" | "contents" | "highlights" | null>(null);
+  const [actionPanel, setActionPanel] = useState<"actions" | "contents" | "highlights" | "remind" | null>(null);
   const [actionsAnchor, setActionsAnchor] = useState<MenuAnchorRect | null>(null);
   const [editTagsOpen, setEditTagsOpen] = useState(false);
   const [headingState, setHeadingState] = useState<{
@@ -1208,6 +1212,20 @@ function ReaderPaneInner({
             setEditTagsOpen(true);
           }}
         />
+        {remindersSupported && bookmark ? (
+          <ContextMenuItem
+            icon="alarm-outline"
+            label={bookmark.remindAt != null ? "Edit reminder" : "Remind"}
+            trailing={
+              bookmark.remindAt != null ? (
+                <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
+                  {formatReminderWhen(bookmark.remindAt)}
+                </Text>
+              ) : undefined
+            }
+            onPress={() => setActionPanel("remind")}
+          />
+        ) : null}
         {showWebsiteView && showReadInOrdo ? (
           <ContextMenuItem
             icon="reader-outline"
@@ -1248,6 +1266,14 @@ function ReaderPaneInner({
           />
         ) : null}
       </ContextMenu>
+      <ReminderFlow
+        visible={actionPanel === "remind"}
+        bookmark={bookmark ?? null}
+        anchor={actionsAnchor}
+        showBack
+        onBack={() => setActionPanel("actions")}
+        onDismiss={() => setActionPanel(null)}
+      />
       <LockPrompt
         visible={unlockOpen && Boolean(lockedFolderId)}
         folderId={lockedFolderId ?? ""}

@@ -1,6 +1,6 @@
 /**
  * Nested floating filter menu for global search: folders, tags, read status,
- * article/website, and optional fuzzy matching.
+ * article/website, reminders, and optional fuzzy matching.
  */
 import React, { useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, StyleSheet, View, type ViewStyle } from "react-native";
@@ -16,6 +16,7 @@ import { haptics } from "../../lib/haptics";
 import { menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { spacing } from "../../theme/tokens";
 import { useFolderUnlocked } from "../../hooks/use-folders";
+import { useServerInfo } from "../../hooks/queries";
 import { useFolderTokenStore } from "../../store/folder-tokens";
 import { FolderLockIcon } from "./FolderLockIcon";
 import {
@@ -23,10 +24,11 @@ import {
   searchFiltersActive,
   type SearchFilters,
   type SearchKindFilter,
+  type SearchReminderFilter,
   type SearchStatusFilter,
 } from "../../lib/search-bookmarks";
 
-type FilterPage = "root" | "folders" | "tags" | "status" | "kind";
+type FilterPage = "root" | "folders" | "tags" | "status" | "kind" | "reminder";
 
 const STATUS_LABEL: Record<SearchStatusFilter, string> = {
   all: "Any",
@@ -38,6 +40,12 @@ const KIND_LABEL: Record<SearchKindFilter, string> = {
   all: "Any",
   article: "Articles",
   web: "Websites",
+};
+
+const REMINDER_LABEL: Record<SearchReminderFilter, string> = {
+  all: "Any",
+  due: "Due",
+  upcoming: "Upcoming",
 };
 
 export function SearchFilterMenu({
@@ -60,6 +68,7 @@ export function SearchFilterMenu({
   onUnlockFolder?: (folder: FolderDto) => void;
 }) {
   const { palette } = useTheme();
+  const remindersSupported = useServerInfo().data?.reminders === true;
   const [page, setPage] = useState<FilterPage>("root");
   const [tagQuery, setTagQuery] = useState("");
   const [folderQuery, setFolderQuery] = useState("");
@@ -108,6 +117,11 @@ export function SearchFilterMenu({
 
   const setKind = (kind: SearchKindFilter) => {
     onChange((prev) => ({ ...prev, kind }));
+    setPage("root");
+  };
+
+  const setReminder = (reminder: SearchReminderFilter) => {
+    onChange((prev) => ({ ...prev, reminder }));
     setPage("root");
   };
 
@@ -197,6 +211,14 @@ export function SearchFilterMenu({
             trailing={<Trailing label={KIND_LABEL[filters.kind]} />}
             onPress={() => go("kind")}
           />
+          {remindersSupported ? (
+            <ContextMenuItem
+              icon="alarm-outline"
+              label="Reminders"
+              trailing={<Trailing label={REMINDER_LABEL[filters.reminder]} />}
+              onPress={() => go("reminder")}
+            />
+          ) : null}
           <ContextMenuItem
             icon="sparkles-outline"
             label="Fuzzy match"
@@ -313,6 +335,27 @@ export function SearchFilterMenu({
               label={KIND_LABEL[kind]}
               selected={filters.kind === kind}
               onPress={() => setKind(kind)}
+            />
+          ))}
+        </>
+      ) : null}
+
+      {remindersSupported && page === "reminder" ? (
+        <>
+          <ContextMenuItem icon="chevron-back" label="Back" onPress={() => go("root")} />
+          {(["all", "due", "upcoming"] as const).map((reminder) => (
+            <ContextMenuItem
+              key={reminder}
+              icon={
+                reminder === "due"
+                  ? "alert-circle-outline"
+                  : reminder === "upcoming"
+                    ? "time-outline"
+                    : "alarm-outline"
+              }
+              label={REMINDER_LABEL[reminder]}
+              selected={filters.reminder === reminder}
+              onPress={() => setReminder(reminder)}
             />
           ))}
         </>

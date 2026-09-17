@@ -1,5 +1,13 @@
 import { z } from "zod";
 import { BATCH_ITEM_LIMIT, MAX_TAGS_PER_BOOKMARK } from "../constants.js";
+import { UNIX_SECONDS_MAX, UNIX_SECONDS_MIN } from "../reminders.js";
+
+/** Unix seconds. Null clears the reminder; a past value is immediately due. */
+export const UnixSecondsSchema = z
+  .number()
+  .int()
+  .min(UNIX_SECONDS_MIN, { message: "Pick a valid time." })
+  .max(UNIX_SECONDS_MAX, { message: "Pick a valid time." });
 
 const url = z
   .string()
@@ -37,13 +45,16 @@ export const UpdateBookmarkSchema = z
       .optional(),
     /** `article` / `web` forces presentation; `null` clears the override. */
     contentKindOverride: z.enum(["article", "web"]).nullable().optional(),
+    /** Unix seconds. `null` clears. A past value stays due until cleared. */
+    remindAt: UnixSecondsSchema.nullable().optional(),
   })
   .refine(
     (v) =>
       v.folderId !== undefined ||
       v.isRead !== undefined ||
       v.readProgress !== undefined ||
-      v.contentKindOverride !== undefined,
+      v.contentKindOverride !== undefined ||
+      v.remindAt !== undefined,
     {
       message: "Provide at least one field to update.",
     },

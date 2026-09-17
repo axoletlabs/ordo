@@ -67,6 +67,14 @@ module.exports = {
       },
     ],
     [
+      "expo-notifications",
+      {
+        icon: "./assets/logo-mark.png",
+        color: "#1A1A16",
+        defaultChannel: "reminders",
+      },
+    ],
+    [
       "expo-image-picker",
       {
         photosPermission: "Allow ordo to access your photos to set a profile picture.",
@@ -112,7 +120,11 @@ module.exports = {
   owner: "imlucki",
   android: {
     package: "com.axolet.ordo",
-    permissions: ["android.permission.REQUEST_INSTALL_PACKAGES"],
+    permissions: [
+      "android.permission.REQUEST_INSTALL_PACKAGES",
+      "android.permission.POST_NOTIFICATIONS",
+      "android.permission.SCHEDULE_EXACT_ALARM",
+    ],
     usesCleartextTraffic: true,
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon-foreground.png",

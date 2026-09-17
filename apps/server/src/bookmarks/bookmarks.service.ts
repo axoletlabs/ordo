@@ -14,10 +14,12 @@ import {
   searchTokenPrefixPatterns,
   tokenizeSearchQuery,
   tokensAllowArticleText,
+  unixSeconds,
   type BatchBookmarksInput,
   type BookmarkDetailDto,
   type BookmarkDto,
   type BookmarkListSort,
+  type BookmarkReminderDto,
   type CursorPage,
 } from "@ordo/shared";
 import { PrismaService } from "../prisma/prisma.service.js";
@@ -56,6 +58,7 @@ const LIST_SELECT = {
   readProgress: true,
   completedAt: true,
   isRead: true,
+  remindAt: true,
   createdAt: true,
   updatedAt: true,
   tags: {
@@ -68,6 +71,13 @@ const LIST_SELECT = {
 } satisfies Prisma.BookmarkSelect;
 
 type ListItem = Prisma.BookmarkGetPayload<{ select: typeof LIST_SELECT }>;
+
+function reminderWhere(filter: "due" | "upcoming" | undefined): Prisma.BookmarkWhereInput[] {
+  if (!filter) return [];
+  const now = unixSeconds();
+  if (filter === "due") return [{ remindAt: { lte: now } }];
+  return [{ remindAt: { gt: now } }];
+}
 
 function listOrderBy(sort: BookmarkListSort): Prisma.BookmarkOrderByWithRelationInput[] {
   if (sort === "oldest") return [{ createdAt: "asc" }, { id: "asc" }];
@@ -217,6 +227,7 @@ export class BookmarksService implements OnApplicationBootstrap {
       unfiled?: boolean;
       fuzzy?: boolean;
       unread?: boolean;
+      reminder?: "due" | "upcoming";
       folderTokens?: string[];
     },
   ): Promise<CursorPage<BookmarkDto>> {
@@ -237,6 +248,7 @@ export class BookmarksService implements OnApplicationBootstrap {
         ...this.folderScope(folderIds, unfiled),
         ...tagIds.map((tagId) => ({ tags: { some: { tagId } } })),
         ...(opts.unread === undefined ? [] : [{ isRead: !opts.unread }]),
+        ...reminderWhere(opts.reminder),
       ],
     };
 
@@ -337,6 +349,7 @@ export class BookmarksService implements OnApplicationBootstrap {
       isRead?: boolean;
       readProgress?: number;
       contentKindOverride?: "article" | "web" | null;
+      remindAt?: number | null;
     },
     tokens: readonly string[],
   ): Promise<BookmarkDto> {
@@ -366,6 +379,7 @@ export class BookmarksService implements OnApplicationBootstrap {
       readingTimeMinutes?: number | null;
       contentHtml?: string | null;
       extractionVersion?: number | null;
+      remindAt?: number | null;
     } = {};
     if (changes.isRead !== undefined) {
       data.isRead = changes.isRead;
@@ -414,6 +428,9 @@ export class BookmarksService implements OnApplicationBootstrap {
         }
       }
     }
+    if (changes.remindAt !== undefined) {
+      data.remindAt = changes.remindAt;
+    }
 
     const updated = await this.prisma.bookmark.update({
       where: { id: bookmarkId },
@@ -433,6 +450,19 @@ export class BookmarksService implements OnApplicationBootstrap {
       ]);
     }
     return toBookmarkDto(updated);
+  }
+
+  async listReminders(userId: string): Promise<BookmarkReminderDto[]> {
+    const rows = await this.prisma.bookmark.findMany({
+      where: { userId, remindAt: { not: null } },
+      select: { id: true, folderId: true, title: true, remindAt: true },
+      orderBy: [{ remindAt: "asc" }, { id: "asc" }],
+    });
+    return rows.flatMap((row) =>
+      row.remindAt == null
+        ? []
+        : [{ id: row.id, folderId: row.folderId, title: row.title, remindAt: row.remindAt }],
+    );
   }
 
   async remove(

@@ -69,6 +69,7 @@ export class ServerService {
       avatarAllowAnimated: this.cfg.avatarAllowAnimated,
       mfaRequired: this.cfg.mfaRequired,
       folderLockTypes: true,
+      reminders: true,
     };
   }
 }

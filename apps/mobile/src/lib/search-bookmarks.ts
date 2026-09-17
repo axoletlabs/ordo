@@ -8,15 +8,18 @@ import {
   compareBookmarkSearchRanks,
   firstSearchHighlight as highlightSearchText,
   isPrimarySearchField,
+  reminderStatus,
   SEARCH_MATCH_QUALITY,
   tokenizeSearchQuery,
   tokensAllowArticleText,
   type BookmarkDto,
   type BookmarkSearchRank,
+  type ReminderFilter,
 } from "@ordo/shared";
 
 export type SearchStatusFilter = "all" | "unread" | "read";
 export type SearchKindFilter = "all" | "article" | "web";
+export type SearchReminderFilter = ReminderFilter;
 
 export interface SearchFilters {
   tagIds: string[];
@@ -25,6 +28,7 @@ export interface SearchFilters {
   unfiled: boolean;
   status: SearchStatusFilter;
   kind: SearchKindFilter;
+  reminder: SearchReminderFilter;
   fuzzy: boolean;
 }
 
@@ -34,6 +38,7 @@ export const EMPTY_SEARCH_FILTERS: SearchFilters = {
   unfiled: false,
   status: "all",
   kind: "all",
+  reminder: "all",
   fuzzy: false,
 };
 
@@ -56,7 +61,8 @@ export function searchScopeActive(filters: SearchFilters): boolean {
     filters.folderIds.length > 0 ||
     filters.unfiled ||
     filters.status !== "all" ||
-    filters.kind !== "all"
+    filters.kind !== "all" ||
+    filters.reminder !== "all"
   );
 }
 
@@ -64,6 +70,7 @@ export function searchFiltersEqual(a: SearchFilters, b: SearchFilters): boolean 
   return (
     a.status === b.status &&
     a.kind === b.kind &&
+    a.reminder === b.reminder &&
     a.unfiled === b.unfiled &&
     a.fuzzy === b.fuzzy &&
     a.tagIds.length === b.tagIds.length &&
@@ -127,6 +134,7 @@ export function bookmarkPassesSearchFilters(bookmark: BookmarkDto, filters: Sear
   if (filters.status === "read" && !bookmark.isRead) return false;
   if (filters.kind === "article" && !isArticleBookmark(bookmark)) return false;
   if (filters.kind === "web" && isArticleBookmark(bookmark)) return false;
+  if (filters.reminder !== "all" && reminderStatus(bookmark.remindAt) !== filters.reminder) return false;
   return true;
 }
 

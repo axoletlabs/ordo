@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { useRouter } from "expo-router";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { Text } from "../ui/Text";
 import { copyLink } from "../../lib/copy-link";
 import { openLivePage } from "../../lib/open-website";
 import { useSettingsStore } from "../../store/settings";
@@ -12,8 +13,11 @@ import { errorMessage } from "../../lib/error-message";
 import { bookmarkKey } from "../../hooks/use-selection";
 import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
 import { useOverlaySessionMode } from "../../lib/overlay-session-mode";
+import { useServerInfo } from "../../hooks/queries";
+import { formatReminderWhen } from "../../lib/bookmark-reminders";
 import type { MenuAnchorRect } from "../../lib/menu-anchor";
 import type { BookmarkDto } from "@ordo/shared";
+import { ReminderFlow } from "./ReminderFlow";
 
 function useSetContentKindMissing() {
   return { mutate: () => undefined, isPending: false };
@@ -47,7 +51,9 @@ export function BookmarkActionsSheet({
 }: BookmarkActionsSheetProps) {
   const router = useRouter();
   const setContentKind = useSetContentKind();
-  const [mode, setMode] = useOverlaySessionMode<"menu" | "delete">(visible, "menu");
+  const [mode, setMode] = useOverlaySessionMode<"menu" | "remind" | "delete">(visible, "menu");
+  const serverInfo = useServerInfo();
+  const remindersSupported = serverInfo.data?.reminders === true;
   const bookmarkRef = React.useRef(bookmark);
   if (bookmark) bookmarkRef.current = bookmark;
   const displayBookmark = bookmark ?? bookmarkRef.current;
@@ -91,6 +97,20 @@ export function BookmarkActionsSheet({
               onEditTags(displayBookmark);
               onDismiss();
             }}
+          />
+        ) : null}
+        {remindersSupported ? (
+          <ContextMenuItem
+            icon="alarm-outline"
+            label={displayBookmark.remindAt != null ? "Edit reminder" : "Remind"}
+            trailing={
+              displayBookmark.remindAt != null ? (
+                <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
+                  {formatReminderWhen(displayBookmark.remindAt)}
+                </Text>
+              ) : undefined
+            }
+            onPress={() => setMode("remind")}
           />
         ) : null}
         <ContextMenuItem
@@ -164,6 +184,14 @@ export function BookmarkActionsSheet({
           onPress={() => setMode("delete")}
         />
       </ContextMenu>
+      <ReminderFlow
+        visible={visible && mode === "remind"}
+        bookmark={displayBookmark}
+        anchor={anchor}
+        showBack
+        onBack={() => setMode("menu")}
+        onDismiss={onDismiss}
+      />
       <ConfirmDialog
         visible={visible && mode === "delete"}
         icon="trash-outline"

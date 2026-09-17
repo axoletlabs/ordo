@@ -20,6 +20,7 @@ function bookmark(partial: Partial<BookmarkDto> & Pick<BookmarkDto, "id" | "titl
     readProgress: 0,
     completedAt: null,
     isRead: false,
+    remindAt: null,
     tags: [],
     suggestedTags: [],
     createdAt: "2026-01-01T00:00:00.000Z",

@@ -54,6 +54,7 @@ function bookmark(partial: Pick<BookmarkDto, "id" | "title" | "createdAt">): Boo
     readProgress: 0,
     completedAt: null,
     isRead: true,
+    remindAt: null,
     tags: [],
     suggestedTags: [],
     updatedAt: partial.createdAt,

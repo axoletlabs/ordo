@@ -53,6 +53,7 @@ export const bookmarksApi = {
     folderIds: string[] = [],
     unfiled = false,
     fuzzy = false,
+    reminder: "all" | "due" | "upcoming" = "all",
   ) =>
     api.get<typeof BookmarkRoutes.search.response>(BookmarkRoutes.search.path, {
       query: {
@@ -64,6 +65,7 @@ export const bookmarksApi = {
         unfiled: unfiled ? "1" : undefined,
         fuzzy: fuzzy ? "1" : undefined,
         unread: unread === "unread" ? "1" : unread === "read" ? "0" : undefined,
+        reminder: reminder === "all" ? undefined : reminder,
       },
       auth: true,
       folderTokens: true,
@@ -77,7 +79,7 @@ export const bookmarksApi = {
 
   update: (
     id: string,
-    body: { folderId?: string | null; isRead?: boolean; readProgress?: number; contentKindOverride?: "article" | "web" | null },
+    body: { folderId?: string | null; isRead?: boolean; readProgress?: number; contentKindOverride?: "article" | "web" | null; remindAt?: number | null },
     opts?: { folderId?: string | null },
   ) =>
     api.patch<typeof BookmarkRoutes.update.response>(
@@ -132,6 +134,9 @@ export const bookmarksApi = {
     api.get<typeof BookmarkRoutes.extractionProgress.response>(
       BookmarkRoutes.extractionProgress.path,
     ),
+
+  reminders: () =>
+    api.get<typeof BookmarkRoutes.reminders.response>(BookmarkRoutes.reminders.path),
 
   prefetch: (url: string) =>
     api.post<typeof BookmarkRoutes.prefetch.response>(BookmarkRoutes.prefetch.path, { url }),

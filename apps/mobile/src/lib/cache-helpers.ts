@@ -7,6 +7,7 @@ import {
   DEFAULT_BOOKMARK_LIST_SORT,
   type BookmarkDetailDto,
   type BookmarkDto,
+  type BookmarkReminderDto,
   type CursorPage,
   type FolderDto,
 } from "@ordo/shared";
@@ -215,7 +216,7 @@ export function updateBookmarksEverywhere(
 ) {
   if (ids.size === 0) return;
   qc.setQueriesData<unknown>({ queryKey: ["bookmarks"] }, (data: unknown) => {
-    if (!data || typeof data !== "object") return data;
+    if (!data || typeof data !== "object" || Array.isArray(data)) return data;
     if (Array.isArray((data as { pages?: unknown }).pages)) {
       const paged = data as InfiniteData<CursorPage<BookmarkDto>>;
       let changed = false;
@@ -239,6 +240,39 @@ export function updateBookmarksEverywhere(
   });
 }
 
+/** Keep GET /bookmarks/reminders in lockstep with list/detail patches. */
+export function syncReminderInCache(
+  qc: QueryClient,
+  bookmark: Pick<BookmarkDto, "id" | "folderId" | "title" | "remindAt">,
+) {
+  qc.setQueryData<BookmarkReminderDto[]>(qk.reminders, (old) => {
+    const rows = Array.isArray(old) ? old : [];
+    if (bookmark.remindAt == null) {
+      const next = rows.filter((row) => row.id !== bookmark.id);
+      return next.length === rows.length ? old : next;
+    }
+    const item: BookmarkReminderDto = {
+      id: bookmark.id,
+      folderId: bookmark.folderId,
+      title: bookmark.title,
+      remindAt: bookmark.remindAt,
+    };
+    const index = rows.findIndex((row) => row.id === bookmark.id);
+    const next = index === -1 ? [...rows, item] : rows.map((row, i) => (i === index ? item : row));
+    next.sort((a, b) => a.remindAt - b.remindAt || a.id.localeCompare(b.id));
+    return next;
+  });
+}
+
+export function removeRemindersFromCache(qc: QueryClient, ids: ReadonlySet<string>) {
+  if (ids.size === 0) return;
+  qc.setQueryData<BookmarkReminderDto[]>(qk.reminders, (old) => {
+    if (!Array.isArray(old)) return old;
+    const next = old.filter((row) => !ids.has(row.id));
+    return next.length === old.length ? old : next;
+  });
+}
+
 /** Copy extraction fields from a detail fetch onto list rows without shipping HTML. */
 export function patchListsFromDetail(qc: QueryClient, detail: BookmarkDetailDto) {
   const { contentHtml: _html, highlights: _highlights, ...list } = detail;
@@ -257,7 +291,7 @@ export function patchListsFromDetail(qc: QueryClient, detail: BookmarkDetailDto)
 export function removeBookmarksEverywhere(qc: QueryClient, ids: ReadonlySet<string>) {
   if (ids.size === 0) return;
   qc.setQueriesData<unknown>({ queryKey: ["bookmarks"] }, (data: unknown) => {
-    if (!data || typeof data !== "object") return data;
+    if (!data || typeof data !== "object" || Array.isArray(data)) return data;
     if (!Array.isArray((data as { pages?: unknown }).pages)) return data;
     const paged = data as InfiniteData<CursorPage<BookmarkDto>>;
     let changed = false;

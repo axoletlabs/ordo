@@ -9,6 +9,7 @@ import type {
   BackupCodesDto,
   BookmarkDetailDto,
   BookmarkDto,
+  BookmarkReminderDto,
   CursorPage,
   HighlightDto,
   FolderDto,
@@ -435,6 +436,7 @@ export const BookmarkRoutes = {
       unfiled?: "0" | "1";
       fuzzy?: "0" | "1";
       unread?: "0" | "1";
+      reminder?: "due" | "upcoming";
       cursor?: string;
       limit?: number;
     },
@@ -457,6 +459,14 @@ export const BookmarkRoutes = {
     params: {} as Empty,
     response: {} as Empty,
   },
+  reminders: {
+    path: `${API_PREFIX}/bookmarks/reminders`,
+    method: "GET",
+    body: {} as Empty,
+    query: {} as Empty,
+    params: {} as Empty,
+    response: {} as BookmarkReminderDto[],
+  },
   detail: {
     path: `${API_PREFIX}/bookmarks/:id`,
     method: "GET",
@@ -473,6 +483,7 @@ export const BookmarkRoutes = {
       isRead?: boolean;
       readProgress?: number;
       contentKindOverride?: "article" | "web" | null;
+      remindAt?: number | null;
     },
     query: {} as Empty,
     params: {} as { id: string },
