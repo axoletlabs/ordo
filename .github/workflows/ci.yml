@@ -31,10 +31,14 @@ on:
 #   assembleRelease instead of minting a new debug key each run.
 # EAS Update channels (baked into the APK, not switched in-app):
 #   production  — GitHub Latest / `main` while apps/mobile version is stable X.Y.Z
+#             (release/x.y hotfix branches cut from that tag also publish here)
 #   development — GitHub pre-release / `main` while version is alpha|beta|rc
 #   preview     — `preview` git branch dogfood APKs only (not feature branches)
-# JS-only updates on main or preview go to that stream's channel when the
-# Android fingerprint matches the last (or in-flight) APK on the same branch.
+# JS-only updates on main, preview, or release/x.y go to that stream's channel
+# when the Android fingerprint matches the last (or in-flight) APK on the same
+# branch. Release branches exist so a post-release hotfix cannot be blocked by
+# newer native work on main: cut release/x.y at the tag commit, cherry-pick JS
+# fixes onto it, tag hotfixes vX.Y.Z from it, merge back to main after each fix.
 # Detect ignores packageJson:scripts and extra.ordo so a test-file list edit
 # does not mint a new APK. When those sources still change the raw hash, the
 # OTA job publishes to the last compatible APK runtime instead of --auto
@@ -96,11 +100,11 @@ jobs:
           fi
 
       - name: Setup pnpm for OTA eligibility check
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preview')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preview' || startsWith(github.ref, 'refs/heads/release/'))
         uses: pnpm/action-setup@v5
 
       - name: Setup Node.js for OTA eligibility check
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preview')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preview' || startsWith(github.ref, 'refs/heads/release/'))
         uses: actions/setup-node@v5
         with:
           node-version: '22'
@@ -108,7 +112,7 @@ jobs:
 
       - name: Check Android native fingerprint
         id: eligibility
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preview')
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preview' || startsWith(github.ref, 'refs/heads/release/'))
         continue-on-error: true
         # Last-resort cap if createFingerprintAsync never resolves.
         timeout-minutes: 8
@@ -291,16 +295,16 @@ jobs:
             echo "should_build=true" >> "$GITHUB_OUTPUT"
           elif [[ "$MSG" == *-apk ]]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.event_name }}" = "push" && ( "${{ github.ref }}" = "refs/heads/main" || "${{ github.ref }}" = "refs/heads/preview" ) && "$NATIVE_CHANGED" = "true" ]]; then
+          elif [[ "x${GITHUB_REF_NAME}" = x"${GITHUB_REF_NAME%release/*}" && "${{ github.event_name }}" = "push" && ( "${{ github.ref }}" = "refs/heads/main" || "${{ github.ref }}" = "refs/heads/preview" ) && "$NATIVE_CHANGED" = "true" ]]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
           else
             echo "should_build=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Guard OTA publish
-        if: github.event_name == 'workflow_dispatch' && inputs.publish_ota == true && github.ref != 'refs/heads/main' && github.ref != 'refs/heads/preview'
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_ota == true && github.ref != 'refs/heads/main' && github.ref != 'refs/heads/preview' && !startsWith(github.ref, 'refs/heads/release/')
         run: |
-          echo "::error::OTA publish is only allowed from main or preview (not ${GITHUB_REF_NAME})."
+          echo "::error::OTA publish is only allowed from main, preview, or release/x.y (not ${GITHUB_REF_NAME})."
           exit 1
 
       - name: Validate release tag
@@ -350,17 +354,22 @@ jobs:
   ota:
     needs: detect
     # Publishes a JS-only update to this stream's channel:
-    #   main    → production (stable version) or development (alpha/beta/rc)
-    #   preview → preview
+    #   main       → production (stable version) or development (alpha/beta/rc)
+    #   preview    → preview
+    #   release/*  → production (hotfix line for the shipped stable)
     # Native fingerprint changes and commits marked -apk build an APK.
     # Feature branches never OTA (last-write-wins would clobber the stream).
-    if: >
+    if: >-
       (github.event_name == 'push' &&
-        (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preview') &&
+        (github.ref == 'refs/heads/main' ||
+         github.ref == 'refs/heads/preview' ||
+         startsWith(github.ref, 'refs/heads/release/')) &&
         needs.detect.outputs.should_build != 'true') ||
       (github.event_name == 'workflow_dispatch' &&
         (inputs.publish_ota == true || inputs.republish_ota_group != '') &&
-        (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preview'))
+        (github.ref == 'refs/heads/main' ||
+         github.ref == 'refs/heads/preview' ||
+         startsWith(github.ref, 'refs/heads/release/')))
     concurrency:
       # Republish must not share a group with a JS-only push OTA — the push
       # would cancel the republish before createdAt is rewritten.
