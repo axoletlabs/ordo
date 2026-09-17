@@ -4,9 +4,11 @@ import { test } from "node:test";
 import {
   collectTableRows,
   highlightIdCoveringRange,
+  isBreakTNode,
   nodeTextContent,
   plainTextFromNode,
   splitTableHeader,
+  tnodeContainsMedia,
   type HtmlTableNode,
 } from "./article-html-table.ts";
 
@@ -66,4 +68,35 @@ test("TRE keeps mark ids so a highlight selection can be removed", () => {
   assert.ok(start >= 0);
   assert.equal(highlightIdCoveringRange(p, start, start + "world".length), "h1");
   assert.equal(highlightIdCoveringRange(p, 0, start + "world".length), null);
+});
+
+test("linked lead images count as media so the reader does not drop them", () => {
+  const engine = new TRenderEngine();
+  const tree = engine.buildTTree(
+    '<p><a href="https://example.com/x"><img alt="grug" src="https://grugbrain.dev/grug.png" /></a></p>',
+  );
+  const p = findByTag(tree, "p");
+  assert.ok(p);
+  assert.equal(tnodeContainsMedia(p), true);
+});
+
+test("plain headings are not treated as media", () => {
+  const engine = new TRenderEngine();
+  const tree = engine.buildTTree("<h2>Introduction</h2>");
+  const h2 = findByTag(tree, "h2");
+  assert.ok(h2);
+  assert.equal(tnodeContainsMedia(h2), false);
+});
+
+test("TRE flattens br to an empty text node that must still count as a break", () => {
+  const engine = new TRenderEngine();
+  const tree = engine.buildTTree(
+    "<h2>The Grug Brained Developer<br /><small>A layman's guide</small></h2>",
+  );
+  const h2 = findByTag(tree, "h2");
+  const br = findByTag(h2!, "br");
+  assert.ok(br);
+  assert.equal(isBreakTNode(br), true);
+  assert.equal(br.type, "text");
+  assert.equal(br.data ?? "", "");
 });

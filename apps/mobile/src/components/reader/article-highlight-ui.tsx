@@ -31,7 +31,9 @@ import { useAndroidPhraseSelection } from "./android-phrase-selection";
 import {
   highlightIdCoveringRange,
   hrefCoveringRange,
+  isBreakTNode,
   nodeTextContent,
+  tnodeContainsMedia,
   type HtmlTableNode,
 } from "./article-html-table";
 import { selectedRange } from "./phrase-selection";
@@ -68,7 +70,7 @@ function pickTextStyle(native: Record<string, unknown>): TextStyle {
   return style;
 }
 
-function asHtmlNode(node: TNode): HtmlTableNode {
+export function asHtmlNode(node: TNode): HtmlTableNode {
   return node as unknown as HtmlTableNode;
 }
 
@@ -127,6 +129,7 @@ function InlineSpan({
 
 /** Rebuild a TNode as inline spans so the OS can select inside one text view. */
 function selectableInline(node: TNode): React.ReactNode {
+  if (isBreakTNode(asHtmlNode(node))) return "\n";
   if (node.type === "text") {
     if (!node.data) return null;
     const style = pickTextStyle(node.getNativeStyles() as Record<string, unknown>);
@@ -138,7 +141,6 @@ function selectableInline(node: TNode): React.ReactNode {
       </InlineSpan>
     );
   }
-  if (node.tagName === "br") return "\n";
   if (node.type === "empty" || node.tagName === "img") return null;
   if (node.tagName == null) {
     return node.children.map((child, index) => (
@@ -331,11 +333,18 @@ export const selectableBlockRenderer: CustomBlockRenderer = ({
   TDefaultRenderer,
   TNodeChildrenRenderer,
   ...props
-}) => (
-  <TDefaultRenderer tnode={tnode} TNodeChildrenRenderer={TNodeChildrenRenderer} {...props}>
-    <SelectablePhrase tnode={tnode} TNodeChildrenRenderer={TNodeChildrenRenderer} />
-  </TDefaultRenderer>
-);
+}) => {
+  // Images cannot live inside the selectable Text tree; keep the default
+  // renderer so <p><a><img></a></p> lead media actually paints.
+  if (tnodeContainsMedia(asHtmlNode(tnode))) {
+    return <TDefaultRenderer tnode={tnode} TNodeChildrenRenderer={TNodeChildrenRenderer} {...props} />;
+  }
+  return (
+    <TDefaultRenderer tnode={tnode} TNodeChildrenRenderer={TNodeChildrenRenderer} {...props}>
+      <SelectablePhrase tnode={tnode} TNodeChildrenRenderer={TNodeChildrenRenderer} />
+    </TDefaultRenderer>
+  );
+};
 
 export const markRenderer: CustomTextualRenderer = (props) => <props.TDefaultRenderer {...props} />;
 

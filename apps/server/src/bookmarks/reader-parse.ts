@@ -442,11 +442,19 @@ export function extractFromHtml(html: string, url: string, options: ExtractOptio
     }
 
     const title = parsed?.title?.trim() || meta.title;
-    const description = meta.description || (parsed?.excerpt ? normalizeSpace(parsed.excerpt) : null);
+    const imageHints = snapshotImageDimensions(document, url);
 
     convertEmbedsToLinks(contentRoot, url);
-    removeDuplicateLeadingHeading(contentRoot, title);
+    promoteLeadMedia(contentRoot);
+    const originalHeading = findTitleHeading(document, title);
+    const headingSubtitle =
+      removeDuplicateLeadingHeading(contentRoot, title) ??
+      (originalHeading ? splitHeadingParts(originalHeading).subtitle : null);
+    const description = pickDescription(meta.description, headingSubtitle, parsed?.excerpt, contentRoot);
     removeDuplicateLeadingParagraph(contentRoot, description);
+    salvageTitleAdjacentLinks(document, contentRoot, title);
+    absolutizeContentUrls(contentRoot, url);
+    applyImageDimensions(contentRoot, imageHints, url);
 
     const contentHtml = sanitizeHtml(contentRoot.innerHTML, SANITIZE_OPTIONS).trim();
     if (!contentHtml) {
@@ -557,12 +565,77 @@ function convertEmbedsToLinks(root: Element, baseUrl: string): void {
   }
 }
 
-function removeDuplicateLeadingHeading(root: Element, title: string): void {
+function pickDescription(
+  metaDescription: string | null,
+  headingSubtitle: string | null,
+  excerpt: string | null | undefined,
+  contentRoot: Element,
+): string | null {
+  if (metaDescription) return metaDescription;
+  if (headingSubtitle) return headingSubtitle;
+  const standfirst = excerpt ? normalizeSpace(excerpt) : "";
+  if (!standfirst) return null;
+  const leading = firstLeadingContentElement(contentRoot);
+  if (leading && leading.tagName.toLowerCase() === "p" && hasSameText(standfirst, leading.textContent ?? "")) {
+    return standfirst;
+  }
+  return null;
+}
+
+const SHARE_HREF =
+  /twitter\.com\/intent|x\.com\/intent|facebook\.com\/sharer|linkedin\.com\/share|reddit\.com\/submit|pinterest\.com\/pin|wa\.me\/|whatsapp\.|threads\.net\/intent/i;
+const SHARE_TEXT = /^(share|tweet|share on|pin it|email|reddit)$/i;
+
+function removeDuplicateLeadingHeading(root: Element, title: string): string | null {
   const first = firstLeadingContentElement(root);
-  if (!first) return;
+  if (!first) return null;
   const tag = first.tagName.toLowerCase();
-  if (tag !== "h1" && tag !== "h2") return;
-  if (duplicatesTitle(title, first.textContent ?? "")) first.remove();
+  if (tag !== "h1" && tag !== "h2") return null;
+  const { titleLine, subtitle } = splitHeadingParts(first);
+  const headingText = first.textContent ?? "";
+  const duplicate =
+    hasSameText(title, headingText) ||
+    hasSameText(title, titleLine) ||
+    duplicatesTitle(title, titleLine) ||
+    duplicatesTitle(title, headingText);
+  if (!duplicate) return null;
+  first.remove();
+  return subtitle;
+}
+
+function splitHeadingParts(heading: Element): { titleLine: string; subtitle: string | null } {
+  const smallText = Array.from(heading.querySelectorAll("small"))
+    .map((el) => normalizeSpace(el.textContent ?? ""))
+    .filter(Boolean)
+    .join(" ");
+  const clone = heading.cloneNode(true) as Element;
+  clone.querySelectorAll("small").forEach((el) => el.remove());
+  const lines: string[] = [];
+  let buf = "";
+  const flush = () => {
+    const text = normalizeSpace(buf);
+    if (text) lines.push(text);
+    buf = "";
+  };
+  const walk = (node: Node) => {
+    if (node.nodeType === 1 && (node as Element).tagName.toLowerCase() === "br") {
+      flush();
+      return;
+    }
+    if (node.nodeType === 3) {
+      buf += node.textContent ?? "";
+      return;
+    }
+    if (node.nodeType === 1) {
+      for (const child of Array.from(node.childNodes)) walk(child);
+    }
+  };
+  for (const child of Array.from(clone.childNodes)) walk(child);
+  flush();
+  return {
+    titleLine: lines[0] ?? "",
+    subtitle: smallText || lines.slice(1).join(" ") || null,
+  };
 }
 
 function removeDuplicateLeadingParagraph(root: Element, description: string | null): void {
@@ -570,6 +643,17 @@ function removeDuplicateLeadingParagraph(root: Element, description: string | nu
   const first = firstLeadingContentElement(root);
   if (!first || first.tagName.toLowerCase() !== "p") return;
   if (hasSameText(description, first.textContent ?? "")) first.remove();
+}
+
+function isMediaOnly(element: Element): boolean {
+  const tag = element.tagName.toLowerCase();
+  if (["figure", "picture", "img"].includes(tag)) return true;
+  if (normalizeSpace(element.textContent ?? "")) return false;
+  return Boolean(element.querySelector("img, picture, figure"));
+}
+
+function isEmptyShell(element: Element): boolean {
+  return !normalizeSpace(element.textContent ?? "") && !element.querySelector("img, picture, figure");
 }
 
 function firstLeadingContentElement(root: Element): Element | null {
@@ -583,14 +667,7 @@ function firstLeadingContentElement(root: Element): Element | null {
 
     const element = node as Element;
     const tag = element.tagName.toLowerCase();
-    if (["figure", "picture", "img"].includes(tag)) continue;
-    if (
-      tag === "a" &&
-      !normalizeSpace(element.textContent ?? "") &&
-      element.querySelector("img, picture")
-    ) {
-      continue;
-    }
+    if (isMediaOnly(element) || isEmptyShell(element)) continue;
     if (["article", "div", "header", "section"].includes(tag)) {
       const nested = firstLeadingContentElement(element);
       if (nested) return nested;
@@ -599,6 +676,203 @@ function firstLeadingContentElement(root: Element): Element | null {
     return element;
   }
   return null;
+}
+
+function promoteLeadMedia(root: Element): void {
+  const doc = root.ownerDocument;
+  if (!doc) return;
+  for (const node of Array.from(root.childNodes)) {
+    if (node.nodeType === 3 && !(node.textContent ?? "").trim()) continue;
+    if (node.nodeType === 8) continue;
+    if (node.nodeType !== 1) return;
+    const element = node as Element;
+    if (isEmptyShell(element)) continue;
+    if (element.tagName.toLowerCase() === "figure" || !isMediaOnly(element)) return;
+    const figure = doc.createElement("figure");
+    if (element.tagName.toLowerCase() === "img" || element.tagName.toLowerCase() === "picture") {
+      element.replaceWith(figure);
+      figure.appendChild(element);
+      return;
+    }
+    while (element.firstChild) figure.appendChild(element.firstChild);
+    element.replaceWith(figure);
+    return;
+  }
+}
+
+function snapshotImageDimensions(
+  document: Document,
+  baseUrl: string,
+): Map<string, { width?: number; height?: number }> {
+  const hints = new Map<string, { width?: number; height?: number }>();
+  for (const img of Array.from(document.querySelectorAll("img"))) {
+    const abs = absolutizeUrl(img.getAttribute("src"), baseUrl);
+    if (!abs) continue;
+    const style = img.getAttribute("style") ?? undefined;
+    const width =
+      readNumericDimension(img.getAttribute("width")) ??
+      readNumericDimension(pixelSizeFromStyle(style, "width"));
+    const height =
+      readNumericDimension(img.getAttribute("height")) ??
+      readNumericDimension(pixelSizeFromStyle(style, "height"));
+    if (width || height) {
+      hints.set(abs, { ...(width ? { width } : {}), ...(height ? { height } : {}) });
+    }
+  }
+  return hints;
+}
+
+function applyImageDimensions(
+  root: Element,
+  hints: Map<string, { width?: number; height?: number }>,
+  baseUrl: string,
+): void {
+  for (const img of Array.from(root.querySelectorAll("img"))) {
+    const abs = absolutizeUrl(img.getAttribute("src"), baseUrl);
+    if (!abs) continue;
+    const hint = hints.get(abs);
+    if (!hint) continue;
+    if (!img.getAttribute("width") && hint.width) img.setAttribute("width", String(hint.width));
+    if (!img.getAttribute("height") && hint.height) img.setAttribute("height", String(hint.height));
+  }
+}
+
+function readNumericDimension(value: string | null | undefined): number | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (!/^\d{1,5}$/.test(trimmed)) return null;
+  const numeric = Number(trimmed);
+  if (numeric < 1 || numeric > MAX_IMAGE_DIMENSION) return null;
+  return numeric;
+}
+
+function absolutizeUrl(value: string | null | undefined, baseUrl: string): string | null {
+  if (!value) return null;
+  try {
+    const resolved = new URL(value, baseUrl);
+    if (resolved.protocol !== "http:" && resolved.protocol !== "https:") return null;
+    return resolved.href;
+  } catch {
+    return null;
+  }
+}
+
+function absolutizeContentUrls(root: Element, baseUrl: string): void {
+  for (const img of Array.from(root.querySelectorAll("img"))) {
+    const abs = absolutizeUrl(img.getAttribute("src"), baseUrl);
+    if (abs) img.setAttribute("src", abs);
+    else img.removeAttribute("src");
+  }
+  for (const source of Array.from(root.querySelectorAll("source"))) {
+    const abs = absolutizeUrl(source.getAttribute("src"), baseUrl);
+    if (abs) source.setAttribute("src", abs);
+    else source.removeAttribute("src");
+  }
+  for (const anchor of Array.from(root.querySelectorAll("a[href]"))) {
+    const href = anchor.getAttribute("href") ?? "";
+    if (!href || href.startsWith("#") || href.startsWith("mailto:")) continue;
+    const abs = absolutizeUrl(href, baseUrl);
+    if (abs) anchor.setAttribute("href", abs);
+  }
+}
+
+function salvageTitleAdjacentLinks(document: Document, contentRoot: Element, title: string): void {
+  const heading = findTitleHeading(document, title);
+  if (!heading) return;
+  let cluster: Element = heading;
+  while (
+    cluster.parentElement &&
+    cluster.parentElement !== document.body &&
+    !["article", "main"].includes(cluster.parentElement.tagName.toLowerCase())
+  ) {
+    cluster = cluster.parentElement;
+  }
+  let sibling = cluster.nextElementSibling;
+  while (sibling) {
+    if (isShareChrome(sibling) || isMediaOnly(sibling) || isEmptyShell(sibling)) {
+      sibling = sibling.nextElementSibling;
+      continue;
+    }
+    if (isKickerLinks(sibling)) {
+      insertKicker(contentRoot, sibling);
+      return;
+    }
+    return;
+  }
+}
+
+function findTitleHeading(document: Document, title: string): Element | null {
+  for (const heading of Array.from(document.querySelectorAll("h1, h2"))) {
+    const { titleLine } = splitHeadingParts(heading);
+    const headingText = heading.textContent ?? "";
+    if (
+      hasSameText(title, headingText) ||
+      hasSameText(title, titleLine) ||
+      duplicatesTitle(title, titleLine)
+    ) {
+      return heading;
+    }
+  }
+  return null;
+}
+
+function isShareChrome(element: Element): boolean {
+  if (element.closest("nav, header, footer")) return true;
+  const links = Array.from(element.querySelectorAll("a[href]"));
+  if (links.length === 0) return false;
+  if (normalizeSpace(element.textContent ?? "").length > 80) return false;
+  return links.every((anchor) => {
+    const href = anchor.getAttribute("href") ?? "";
+    const text = normalizeSpace(anchor.textContent ?? "");
+    return SHARE_HREF.test(href) || SHARE_TEXT.test(text);
+  });
+}
+
+function isKickerLinks(element: Element): boolean {
+  if (element.closest("nav, header, footer")) return false;
+  const links = Array.from(element.querySelectorAll("a[href]"));
+  if (links.length < 1 || links.length > 4) return false;
+  const text = normalizeSpace(element.textContent ?? "");
+  if (text.length < 2 || text.length > 80) return false;
+  const linkText = normalizeSpace(links.map((anchor) => anchor.textContent ?? "").join(" "));
+  if (!text || linkText.length / text.length < 0.5) return false;
+  if (links.some((anchor) => !normalizeSpace(anchor.textContent ?? ""))) return false;
+  if (
+    links.some((anchor) => {
+      const href = anchor.getAttribute("href") ?? "";
+      const label = normalizeSpace(anchor.textContent ?? "");
+      return SHARE_HREF.test(href) || SHARE_TEXT.test(label);
+    })
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function insertKicker(contentRoot: Element, source: Element): void {
+  const doc = contentRoot.ownerDocument;
+  if (!doc) return;
+  const existing = new Set(
+    Array.from(contentRoot.querySelectorAll("a[href]")).map((anchor) => anchor.getAttribute("href")),
+  );
+  const hrefs = Array.from(source.querySelectorAll("a[href]")).map((anchor) => anchor.getAttribute("href"));
+  if (hrefs.some((href) => href && existing.has(href))) return;
+  const imported = doc.importNode(source.cloneNode(true), true) as Element;
+  const paragraph = doc.createElement("p");
+  while (imported.firstChild) paragraph.appendChild(imported.firstChild);
+  if (!normalizeSpace(paragraph.textContent ?? "")) return;
+  let insertBefore: ChildNode | null = contentRoot.firstChild;
+  for (const node of Array.from(contentRoot.childNodes)) {
+    if (node.nodeType === 3 && !(node.textContent ?? "").trim()) continue;
+    if (node.nodeType === 8) continue;
+    if (node.nodeType === 1 && (isMediaOnly(node as Element) || isEmptyShell(node as Element))) {
+      insertBefore = node.nextSibling;
+      continue;
+    }
+    insertBefore = node;
+    break;
+  }
+  contentRoot.insertBefore(paragraph, insertBefore);
 }
 
 function toPlainText(html: string): string {

@@ -202,6 +202,19 @@ describe("ReaderService", () => {
       expect(result.contentHtml).toContain("Intro line about reading very carefully");
     });
 
+    it("resolves relative images on the narrow fallback path", async () => {
+      const html = SHORT_ARTICLE_HTML.replace(
+        "<h1>Fallback Piece</h1>",
+        '<img src="art.png" alt="Lead"><h1>Fallback Piece</h1>',
+      );
+      mockFetch(html);
+
+      const result = await reader.extract("https://example.com/media-relative");
+
+      expect(result.contentHtml).toContain('src="https://example.com/art.png"');
+      expect(result.contentHtml).toContain('alt="Lead"');
+    });
+
     it("keeps the opening body when the source has no heading", async () => {
       mockFetch(
         SHORT_ARTICLE_HTML.replace(
@@ -352,8 +365,48 @@ describe("ReaderService", () => {
         ${P(9)}${P(10)}
       </body></html>`);
       const result = await reader.extract("https://grugbrain.dev/");
-      expect(result.title).toMatch(/Grug/i);
+      expect(result.title).toBe("The Grug Brained Developer");
+      expect(result.description).toBe("A layman's guide");
+      expect(result.contentHtml).not.toContain("The Grug Brained Developer");
       expect(result.contentText).toMatch(/Paragraph 2/);
+    });
+
+    it("keeps the lead image, subtitle, and title-adjacent links from a root essay", async () => {
+      mockFetch(`<!DOCTYPE html><html><head>
+        <title>The Grug Brained Developer</title>
+      </head><body>
+        <div>
+          <a href="https://www.redbubble.com/i/sticker/Programmer-Grug">
+            <img alt="grug" src="grug.png" style="float: left; height: 120px; margin-right: 20px"/>
+          </a>
+          <h1>
+            The Grug Brained Developer<br/>
+            <small>A layman's guide to thinking like the self-aware smol brained</small>
+          </h1>
+        </div>
+        <div id="stuff">
+          <a href="https://www.lulu.com/shop/grug-book">Book</a> |
+          <a href="https://swag.htmx.org/collections/grug">Swag</a>
+        </div>
+        <div class="share">
+          <a href="https://twitter.com/intent/tweet?url=https://grugbrain.dev/">Tweet</a>
+        </div>
+        <h1>Introduction</h1>
+        ${P(1)}${P(2)}${P(3)}${P(4)}${P(5)}${P(6)}${P(7)}${P(8)}
+        <h2><a href="#complexity">The Eternal Enemy: Complexity</a></h2>
+        ${P(9)}${P(10)}
+      </body></html>`);
+      const result = await reader.extract("https://grugbrain.dev/");
+      expect(result.title).toBe("The Grug Brained Developer");
+      expect(result.description).toBe("A layman's guide to thinking like the self-aware smol brained");
+      expect(result.contentHtml).toContain('src="https://grugbrain.dev/grug.png"');
+      expect(result.contentHtml).toContain('alt="grug"');
+      expect(result.contentHtml).toContain('height="120"');
+      expect(result.contentHtml).toContain("https://www.lulu.com/shop/grug-book");
+      expect(result.contentHtml).toContain("https://swag.htmx.org/collections/grug");
+      expect(result.contentHtml).not.toContain("twitter.com/intent");
+      expect(result.contentHtml).not.toContain("The Grug Brained Developer");
+      expect(result.contentHtml).toMatch(/<h[12][^>]*>\s*(<a[^>]*>)?Introduction/i);
     });
 
     it("extracts a forced article even when Readability's heuristic and <article> are absent", async () => {

@@ -127,6 +127,17 @@ function normalizeTitle(raw: string | null | undefined): string {
   return (raw ?? "").replace(/\s+/g, " ").trim();
 }
 
+/** True when the dek is the title again, or the title jammed into the next sentence. */
+function isRedundantReaderDescription(title: string, description: string): boolean {
+  if (!title || !description) return false;
+  if (description === title) return true;
+  return (
+    description.startsWith(title) &&
+    description.length > title.length &&
+    !/\s/.test(description[title.length]!)
+  );
+}
+
 const EMPTY_HIGHLIGHTS: HighlightDto[] = [];
 
 /**
@@ -269,7 +280,11 @@ function ReaderPaneInner({
   const displayTitle = bookmark
     ? normalizeTitle(bookmark.title) || domainFromUrl(bookmark.url)
     : "";
-  const description = bookmark ? normalizeTitle(bookmark.description) : "";
+  const descriptionRaw = bookmark ? normalizeTitle(bookmark.description) : "";
+  const description =
+    descriptionRaw && !isRedundantReaderDescription(displayTitle, descriptionRaw)
+      ? descriptionRaw
+      : "";
   const byline = bookmark
     ? [
         bookmark.author?.trim() || null,

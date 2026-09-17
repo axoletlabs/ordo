@@ -37,10 +37,12 @@ import {
   collectTableRows,
   plainTextFromNode,
   splitTableHeader,
+  tnodeContainsMedia,
 } from "./article-html-table";
 import {
   HighlightUiContext,
   SelectablePhrase,
+  asHtmlNode,
   anchorRenderer,
   highlightHandlersFromHtml,
   ignoreTextSelect,
@@ -255,6 +257,14 @@ const headingRenderer: CustomBlockRenderer = ({
     },
     [onHeadingRef, tnode.id],
   );
+
+  if (tnodeContainsMedia(asHtmlNode(tnode))) {
+    return (
+      <View ref={setRef} collapsable={false}>
+        <TDefaultRenderer tnode={tnode} TNodeChildrenRenderer={TNodeChildrenRenderer} {...props} />
+      </View>
+    );
+  }
 
   return (
     <View ref={setRef} collapsable={false}>

@@ -116,6 +116,23 @@ export function highlightIdCoveringRange(
   return only || null;
 }
 
+export function isBreakTNode(node: HtmlTableNode): boolean {
+  return node.tagName === "br";
+}
+
+export function tnodeContainsMedia(node: HtmlTableNode): boolean {
+  if (
+    node.tagName === "img" ||
+    node.tagName === "picture" ||
+    node.tagName === "figure" ||
+    node.tagName === "video" ||
+    node.tagName === "audio"
+  ) {
+    return true;
+  }
+  return (node.children ?? []).some(tnodeContainsMedia);
+}
+
 /** Concatenate descendant text without trimming — matches native Text layout. */
 export function nodeTextContent(node: HtmlTableNode): string {
   const walk = (current: HtmlTableNode): string => {
