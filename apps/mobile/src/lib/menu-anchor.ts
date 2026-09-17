@@ -28,7 +28,7 @@ export interface MenuPlacement {
   maxHeight: number;
 }
 
-export const CONTEXT_MENU_WIDTH = 252;
+export const CONTEXT_MENU_WIDTH = 240;
 export const CONTEXT_MENU_GAP = 6;
 export const CONTEXT_MENU_EDGE = 12;
 

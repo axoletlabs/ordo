@@ -14,7 +14,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { tagColorValue } from "../../lib/tag-colors";
 import { haptics } from "../../lib/haptics";
 import { menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
-import { radius, spacing } from "../../theme/tokens";
+import { spacing } from "../../theme/tokens";
 import { useFolderUnlocked } from "../../hooks/use-folders";
 import { useFolderTokenStore } from "../../store/folder-tokens";
 import { FolderLockIcon } from "./FolderLockIcon";
@@ -370,12 +370,12 @@ function FolderFilterRow({
         (pressed || hovered) ? { backgroundColor: highlight } : null,
       ]}
     >
-      <Ionicons name={icon as keyof typeof Ionicons.glyphMap} size={18} color={palette.text} />
+      <Ionicons name={icon as keyof typeof Ionicons.glyphMap} size={16} color={palette.text} />
       <Text variant="body" numberOfLines={1} style={styles.tagName}>
         {name}
       </Text>
       {locked ? <FolderLockIcon unlocked={unlocked} size={14} outline /> : null}
-      {selected ? <Ionicons name="checkmark" size={18} color={palette.accent} /> : null}
+      {selected ? <Ionicons name="checkmark" size={16} color={palette.accent} /> : null}
     </Pressable>
   );
 }
@@ -416,7 +416,7 @@ function TagFilterRow({
       <Text variant="body" numberOfLines={1} style={styles.tagName}>
         {name}
       </Text>
-      {selected ? <Ionicons name="checkmark" size={18} color={palette.accent} /> : null}
+      {selected ? <Ionicons name="checkmark" size={16} color={palette.accent} /> : null}
     </Pressable>
   );
 }
@@ -424,15 +424,15 @@ function TagFilterRow({
 const styles = StyleSheet.create({
   trailing: { flexDirection: "row", alignItems: "center", gap: spacing[4], flexShrink: 0, maxWidth: 120 },
   trailingLabel: { flexShrink: 1 },
-  tagSearch: { paddingHorizontal: spacing[12], paddingBottom: spacing[6] },
+  tagSearch: { paddingHorizontal: spacing[12], paddingTop: spacing[4], paddingBottom: spacing[6] },
   empty: { paddingHorizontal: spacing[12], paddingVertical: spacing[12] },
   tagRow: {
-    minHeight: 44,
+    minHeight: 40,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing[12],
+    gap: spacing[10],
     paddingHorizontal: spacing[12],
-    borderRadius: radius.lg,
+    paddingVertical: spacing[8],
   },
   tagRowWeb: {
     cursor: "pointer",

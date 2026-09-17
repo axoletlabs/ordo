@@ -1,7 +1,7 @@
 /**
  * Anchored floating context menu: sits beside its trigger instead of a
- * centered, dimmed dialog. Items use a rounded hover fill rather than a
- * press-scale, matching a lightweight desktop/web menu.
+ * centered, dimmed dialog. Rows fill the panel (no inset, no inter-row gap)
+ * so hover is full-bleed; comfort comes from each row's inner padding.
  */
 import React from "react";
 import {
@@ -44,7 +44,7 @@ export function ContextMenu({
   width = CONTEXT_MENU_WIDTH,
   backdrop = true,
   preferredPlacement,
-  estimatedHeight = 240,
+  estimatedHeight = 200,
 }: {
   visible: boolean;
   onDismiss: () => void;
@@ -250,14 +250,14 @@ export function ContextMenuItem({
         (pressed || hovered) && !inactive ? { backgroundColor: highlight } : null,
       ]}
     >
-      {icon ? <AppIcon name={icon} size={18} color={color} /> : <View style={styles.iconSlot} />}
+      {icon ? <AppIcon name={icon} size={16} color={color} /> : <View style={styles.iconSlot} />}
       <Text variant="body" style={[styles.itemLabel, { color }]} numberOfLines={1}>
         {label}
       </Text>
       {busy ? (
         <Spinner size="sm" color={color} />
       ) : selected ? (
-        <Ionicons name="checkmark" size={18} color={palette.accent} />
+        <Ionicons name="checkmark" size={16} color={palette.accent} />
       ) : trailing ? (
         <View style={styles.trailing}>{trailing}</View>
       ) : null}
@@ -279,13 +279,12 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[8],
   },
   item: {
-    minHeight: 48,
+    minHeight: 40,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing[12],
+    gap: spacing[10],
     paddingHorizontal: spacing[12],
-    paddingVertical: spacing[10],
-    borderRadius: radius.lg,
+    paddingVertical: spacing[8],
   },
   itemWeb: {
     cursor: "pointer",
@@ -293,7 +292,7 @@ const styles = StyleSheet.create({
     transitionDuration: "120ms",
   } as ViewStyle,
   itemDisabled: { opacity: 0.45 },
-  iconSlot: { width: 18, height: 18 },
+  iconSlot: { width: 16, height: 16 },
   itemLabel: { flex: 1, minWidth: 0 },
   trailing: {
     flexDirection: "row",

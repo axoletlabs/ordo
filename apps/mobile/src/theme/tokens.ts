@@ -179,8 +179,12 @@ export const layout = {
   sheetWidth: 560,
   /** Inner padding for centered floating panels / dialogs. */
   overlayPadding: 16,
-  /** Inner padding for anchored context menus. */
-  overlayMenuPadding: 8,
+  /**
+   * Inner padding for anchored context menus. 0 so hover fills the panel:
+   * first row meets the top, last meets the bottom, left and right meet the
+   * edge. Comfort is the row's inner padding, not chrome around the stack.
+   */
+  overlayMenuPadding: 0,
   overlayMaxWidth: 420,
   overlayConfirmWidth: 380,
   navigationRailWidth: 96,
