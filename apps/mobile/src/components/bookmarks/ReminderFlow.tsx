@@ -1,13 +1,12 @@
 import React, { useMemo } from "react";
 import type { BookmarkDto } from "@ordo/shared";
-import { ContextMenu, ContextMenuItem, ContextMenuNote, type MenuAnchorRect } from "../ui/ContextMenu";
+import { ContextMenu, ContextMenuItem, type MenuAnchorRect } from "../ui/ContextMenu";
 import { useSetBookmarkReminder } from "../../hooks/use-bookmarks";
 import { useOverlaySessionMode } from "../../lib/overlay-session-mode";
 import { errorMessage } from "../../lib/error-message";
 import { toast } from "../ui/toast-store";
 import {
   REMINDER_PRESETS,
-  formatReminderWhen,
   reminderClearedToast,
   reminderPresetAt,
   reminderPresetDetail,
@@ -36,7 +35,6 @@ export function ReminderFlow({
   if (bookmark) bookmarkRef.current = bookmark;
   const target = bookmark ?? bookmarkRef.current;
   const now = useMemo(() => new Date(), [visible, target?.remindAt, target?.id]);
-  const note = target?.remindAt != null ? formatReminderWhen(target.remindAt, now) : null;
 
   const save = (remindAt: number | null) => {
     if (!target) return;
@@ -62,12 +60,11 @@ export function ReminderFlow({
         onDismiss={onDismiss}
         anchor={anchor}
         width={280}
-        estimatedHeight={320}
+        estimatedHeight={248}
       >
         {showBack ? (
           <ContextMenuItem icon="chevron-back" label="Back" onPress={() => onBack?.()} />
         ) : null}
-        {note ? <ContextMenuNote>{note}</ContextMenuNote> : null}
         {REMINDER_PRESETS.map((preset) => {
           const at = reminderPresetAt(preset.id, now);
           return (

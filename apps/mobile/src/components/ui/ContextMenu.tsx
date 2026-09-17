@@ -218,7 +218,7 @@ export function ContextMenuItem({
 }: {
   icon?: keyof typeof Ionicons.glyphMap;
   label: string;
-  /** Second line, typically a local time. */
+  /** Trailing local time or similar meta, same row as the label. */
   detail?: string;
   tone?: "danger";
   trailing?: React.ReactNode;
@@ -248,29 +248,25 @@ export function ContextMenuItem({
       }}
       style={({ pressed }) => [
         styles.item,
-        detail ? styles.itemStacked : null,
         Platform.OS === "web" ? styles.itemWeb : null,
         inactive && styles.itemDisabled,
         (pressed || hovered) && !inactive ? { backgroundColor: highlight } : null,
       ]}
     >
       {icon ? <AppIcon name={icon} size={16} color={color} /> : <View style={styles.iconSlot} />}
-      <View style={styles.itemCopy}>
-        <Text variant="body" style={[styles.itemLabel, { color }]} numberOfLines={1}>
-          {label}
-        </Text>
-        {detail ? (
-          <Text variant="monoSmall" color="secondary" numberOfLines={1}>
-            {detail}
-          </Text>
-        ) : null}
-      </View>
+      <Text variant="body" style={[styles.itemLabel, { color }]} numberOfLines={1}>
+        {label}
+      </Text>
       {busy ? (
         <Spinner size="sm" color={color} style={styles.itemSide} />
       ) : selected ? (
         <Ionicons name="checkmark" size={16} color={palette.accent} style={styles.itemSide} />
       ) : trailing ? (
         <View style={[styles.trailing, styles.itemSide]}>{trailing}</View>
+      ) : detail ? (
+        <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.itemSide}>
+          {detail}
+        </Text>
       ) : null}
     </Pressable>
   );
@@ -297,13 +293,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[12],
     paddingVertical: spacing[8],
   },
-  itemStacked: {
-    minHeight: 52,
-    alignItems: "flex-start",
-    paddingVertical: spacing[10],
-  },
-  itemCopy: { flex: 1, minWidth: 0, gap: spacing[2] },
-  itemSide: { alignSelf: "center" },
+  itemSide: { alignSelf: "center", flexShrink: 0 },
   itemWeb: {
     cursor: "pointer",
     transitionProperty: "background-color",
@@ -311,7 +301,7 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   itemDisabled: { opacity: 0.45 },
   iconSlot: { width: 16, height: 16 },
-  itemLabel: { minWidth: 0 },
+  itemLabel: { flex: 1, minWidth: 0 },
   trailing: {
     flexDirection: "row",
     alignItems: "center",

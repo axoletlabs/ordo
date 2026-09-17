@@ -98,24 +98,141 @@ export function bookmarkReminderStatus(
   return reminderStatus(remindAt, unixSeconds(now));
 }
 
-/** Next 5-minute local step at or after `now`, used when Custom has no existing time. */
+/** Next quarter-hour local step at or after `now`, used when Custom has no existing time. */
 export function defaultCustomReminderAt(now = new Date()): number {
-  const rounded = new Date(now);
-  rounded.setSeconds(0, 0);
-  const leftover = rounded.getMinutes() % 5;
-  if (leftover !== 0) rounded.setMinutes(rounded.getMinutes() + (5 - leftover));
-  else rounded.setMinutes(rounded.getMinutes() + 5);
-  return unixSeconds(rounded);
+  return snapLocalMinutes(unixSeconds(now), 15);
 }
 
-export function shiftLocalDays(unix: number, delta: number): number {
+export const QUARTER_HOUR_MINUTES = [0, 15, 30, 45] as const;
+
+/** Advance `unix` to the next `step`-minute local boundary (always in the future when leftover is 0). */
+export function snapLocalMinutes(unix: number, step: number): number {
   const date = new Date(unix * 1000);
-  date.setDate(date.getDate() + delta);
+  date.setSeconds(0, 0);
+  const leftover = date.getMinutes() % step;
+  if (leftover !== 0) date.setMinutes(date.getMinutes() + (step - leftover));
+  else date.setMinutes(date.getMinutes() + step);
   return unixSeconds(date);
 }
 
-export function shiftLocalMinutes(unix: number, delta: number): number {
-  return unixSeconds(unix * 1000 + delta * 60 * 1000);
+export function applyLocalDate(unix: number, year: number, month: number, day: number): number {
+  const date = new Date(unix * 1000);
+  date.setFullYear(year, month, day);
+  return unixSeconds(date);
+}
+
+export function applyLocalTime(unix: number, hour: number, minute: number): number {
+  const date = new Date(unix * 1000);
+  date.setHours(hour, minute, 0, 0);
+  return unixSeconds(date);
+}
+
+export type DayPeriod = "am" | "pm";
+
+export function localTimeParts(unix: number): {
+  year: number;
+  month: number;
+  day: number;
+  hour: number;
+  minute: number;
+  hour12: number;
+  period: DayPeriod;
+} {
+  const date = new Date(unix * 1000);
+  const hour = date.getHours();
+  return {
+    year: date.getFullYear(),
+    month: date.getMonth(),
+    day: date.getDate(),
+    hour,
+    minute: date.getMinutes(),
+    hour12: hour % 12 === 0 ? 12 : hour % 12,
+    period: hour >= 12 ? "pm" : "am",
+  };
+}
+
+export function hour12To24(hour12: number, period: DayPeriod): number {
+  if (period === "am") return hour12 === 12 ? 0 : hour12;
+  return hour12 === 12 ? 12 : hour12 + 12;
+}
+
+export function formatMonthTitle(year: number, month: number): string {
+  return new Date(year, month, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" });
+}
+
+/** Sunday-first narrow weekday labels in the device locale. */
+export function weekdayNarrowLabels(): string[] {
+  const sunday = new Date(2026, 8, 13);
+  return Array.from({ length: 7 }, (_, i) => {
+    const date = new Date(sunday);
+    date.setDate(sunday.getDate() + i);
+    return date.toLocaleDateString(undefined, { weekday: "narrow" });
+  });
+}
+
+export interface ReminderCalendarCell {
+  key: string;
+  day: number | null;
+  year: number;
+  month: number;
+  inMonth: boolean;
+  isToday: boolean;
+  isPast: boolean;
+  selected: boolean;
+}
+
+/** Sunday-first month grid sized to whole weeks. */
+export function reminderMonthGrid(
+  year: number,
+  month: number,
+  selectedUnix: number,
+  now = new Date(),
+): ReminderCalendarCell[] {
+  const selected = new Date(selectedUnix * 1000);
+  const todayStart = startOfLocalDay(now).getTime();
+  const startPad = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells: ReminderCalendarCell[] = [];
+  const total = startPad + daysInMonth;
+  const weeks = Math.ceil(total / 7) * 7;
+  for (let i = 0; i < weeks; i++) {
+    const day = i - startPad + 1;
+    if (day < 1 || day > daysInMonth) {
+      cells.push({
+        key: `e${i}`,
+        day: null,
+        year,
+        month,
+        inMonth: false,
+        isToday: false,
+        isPast: true,
+        selected: false,
+      });
+      continue;
+    }
+    const start = startOfLocalDay(new Date(year, month, day)).getTime();
+    cells.push({
+      key: `${year}-${month}-${day}`,
+      day,
+      year,
+      month,
+      inMonth: true,
+      isToday: start === todayStart,
+      isPast: start < todayStart,
+      selected:
+        selected.getFullYear() === year && selected.getMonth() === month && selected.getDate() === day,
+    });
+  }
+  return cells;
+}
+
+export function shiftCalendarMonth(
+  year: number,
+  month: number,
+  delta: number,
+): { year: number; month: number } {
+  const date = new Date(year, month + delta, 1);
+  return { year: date.getFullYear(), month: date.getMonth() };
 }
 
 export function formatCustomDate(unix: number): string {

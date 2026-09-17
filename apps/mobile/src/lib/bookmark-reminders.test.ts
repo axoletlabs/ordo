@@ -2,13 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { unixSeconds } from "@ordo/shared";
 import {
+  applyLocalDate,
+  applyLocalTime,
   bookmarkReminderStatus,
   defaultCustomReminderAt,
   formatReminderWhen,
+  hour12To24,
+  reminderMonthGrid,
   reminderPresetAt,
   reminderPresetDetail,
-  shiftLocalDays,
-  shiftLocalMinutes,
+  shiftCalendarMonth,
 } from "./bookmark-reminders.ts";
 
 const now = new Date(2026, 8, 17, 21, 33, 0); // Thu Sep 17 2026, 9:33 PM local
@@ -50,12 +53,32 @@ test("due labels keep a local date when the ping was on another day", () => {
   assert.ok(label.includes(weekday));
 });
 
-test("custom steppers move local calendar time", () => {
+test("custom date and time apply in local wall-clock fields", () => {
   const at = unixSeconds(new Date(2026, 8, 17, 9, 0, 0));
-  assert.equal(shiftLocalDays(at, 1), unixSeconds(new Date(2026, 8, 18, 9, 0, 0)));
-  assert.equal(shiftLocalMinutes(at, 15), unixSeconds(new Date(2026, 8, 17, 9, 15, 0)));
+  assert.equal(applyLocalDate(at, 2026, 8, 18), unixSeconds(new Date(2026, 8, 18, 9, 0, 0)));
+  assert.equal(applyLocalTime(at, 21, 15), unixSeconds(new Date(2026, 8, 17, 21, 15, 0)));
 });
 
-test("default custom time rounds forward to a 5-minute step", () => {
-  assert.equal(defaultCustomReminderAt(now), unixSeconds(new Date(2026, 8, 17, 21, 35, 0)));
+test("default custom time rounds forward to a quarter hour", () => {
+  assert.equal(defaultCustomReminderAt(now), unixSeconds(new Date(2026, 8, 17, 21, 45, 0)));
+});
+
+test("12-hour clock maps noon and midnight", () => {
+  assert.equal(hour12To24(12, "am"), 0);
+  assert.equal(hour12To24(12, "pm"), 12);
+  assert.equal(hour12To24(1, "pm"), 13);
+});
+
+test("month grid is Sunday-first and marks today", () => {
+  const at = unixSeconds(new Date(2026, 8, 18, 9, 0, 0));
+  const cells = reminderMonthGrid(2026, 8, at, now);
+  assert.equal(cells.length % 7, 0);
+  assert.equal(cells[2]?.day, 1);
+  assert.equal(cells.find((cell) => cell.selected)?.day, 18);
+  assert.equal(cells.find((cell) => cell.isToday)?.day, 17);
+  assert.equal(cells.find((cell) => cell.day === 16)?.isPast, true);
+});
+
+test("shiftCalendarMonth wraps the year", () => {
+  assert.deepEqual(shiftCalendarMonth(2026, 11, 1), { year: 2027, month: 0 });
 });
