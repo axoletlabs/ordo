@@ -160,7 +160,7 @@ export function ContextMenu({
               width: menuWidth,
               maxHeight: placed.maxHeight,
               backgroundColor: palette.mode === "dark" ? palette.surfaceSecondary : palette.surfaceElevated,
-              borderColor: palette.borderStrong,
+              borderColor: palette.outline,
               ...shadows.level3,
             },
             menuStyle,
@@ -271,7 +271,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     overflow: "hidden",
     padding: layout.overlayMenuPadding,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     borderRadius: radius["3xl"],
   },
   note: {

@@ -30,6 +30,8 @@ export interface Palette {
   border: string;
   /** Stronger separator (lineThick). */
   borderStrong: string;
+  /** Crisp 1px edge around floating menus. Stronger than a separator, still quiet. */
+  outline: string;
 
   /** Coral — primary accent. */
   accent: string;
@@ -64,6 +66,7 @@ const light: Palette = {
   textFaint: "#8B8676",
   border: "rgba(21,20,15,0.10)",
   borderStrong: "rgba(21,20,15,0.18)",
+  outline: "rgba(21,20,15,0.22)",
   accent: "#ED6F5C",
   onAccent: "#FFFFFF",
   accentSoft: "rgba(237,111,92,0.12)",
@@ -91,6 +94,7 @@ const dark: Palette = {
   textFaint: "#6C6457",
   border: "rgba(235,221,178,0.08)",
   borderStrong: "rgba(235,221,178,0.14)",
+  outline: "rgba(235,221,178,0.32)",
   accent: "#ED6F5C",
   onAccent: "#FFFFFF",
   accentSoft: "rgba(237,111,92,0.16)",
@@ -118,6 +122,7 @@ const amoledOverrides: Partial<Palette> = {
   textFaint: "#454545",
   border: "rgba(224,224,224,0.08)",
   borderStrong: "rgba(224,224,224,0.14)",
+  outline: "rgba(224,224,224,0.32)",
   overlay: "rgba(0,0,0,0.6)",
 };
 

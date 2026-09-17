@@ -23,6 +23,7 @@ const sepia: Palette = {
   textFaint: "#A69474",
   border: "rgba(67,53,31,0.12)",
   borderStrong: "rgba(67,53,31,0.20)",
+  outline: "rgba(67,53,31,0.28)",
   accent: "#C0653F",
   onAccent: "#FFFFFF",
   accentSoft: "rgba(192,101,63,0.14)",
