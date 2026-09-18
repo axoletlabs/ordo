@@ -13,18 +13,14 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
 import { layout, radius, spacing } from "../../theme/tokens";
 import {
-  MINUTE_ONES,
-  MINUTE_TENS,
+  MINUTE_STEPS,
   applyLocalDate,
   applyLocalTime,
-  composeMinute,
   defaultCustomReminderAt,
   formatMonthTitle,
   formatReminderFull,
   hour12To24,
   localTimeParts,
-  minuteOnes,
-  minuteTens,
   reminderMonthGrid,
   shiftCalendarMonth,
   weekdayNarrowLabels,
@@ -174,44 +170,23 @@ export function ReminderCustomPanel({
                 label={String(hour)}
                 accessibilityLabel={`${hour} o'clock`}
                 selected={selected}
-                width="25%"
                 onPress={() => setTime(hour, parts.period, parts.minute)}
               />
             );
           })}
         </View>
         <View style={styles.minutes}>
-          {MINUTE_TENS.map((tens) => {
-            const selected = tens === minuteTens(parts.minute);
-            const minute = tens * 10;
+          {MINUTE_STEPS.map((minute) => {
+            const selected = minute === parts.minute;
             const label = `:${String(minute).padStart(2, "0")}`;
             return (
               <PadCell
-                key={tens}
+                key={minute}
                 label={label}
-                accessibilityLabel={`${composeMinute(tens, minuteOnes(parts.minute))} minutes`}
+                accessibilityLabel={`${minute} minutes`}
                 selected={selected}
-                width="16.6667%"
                 mono
-                onPress={() =>
-                  setTime(parts.hour12, parts.period, composeMinute(tens, minuteOnes(parts.minute)))
-                }
-              />
-            );
-          })}
-        </View>
-        <View style={styles.minuteOnes}>
-          {MINUTE_ONES.map((ones) => {
-            const selected = ones === minuteOnes(parts.minute);
-            return (
-              <PadCell
-                key={ones}
-                label={String(ones)}
-                accessibilityLabel={`${composeMinute(minuteTens(parts.minute), ones)} minutes`}
-                selected={selected}
-                width="20%"
-                mono
-                onPress={() => setTime(parts.hour12, parts.period, composeMinute(minuteTens(parts.minute), ones))}
+                onPress={() => setTime(parts.hour12, parts.period, minute)}
               />
             );
           })}
@@ -237,14 +212,12 @@ function PadCell({
   label,
   accessibilityLabel,
   selected,
-  width,
   mono,
   onPress,
 }: {
   label: string;
   accessibilityLabel: string;
   selected: boolean;
-  width: `${number}%`;
   mono?: boolean;
   onPress: () => void;
 }) {
@@ -261,7 +234,6 @@ function PadCell({
       style={({ pressed }) => [
         styles.padCell,
         {
-          width,
           backgroundColor: selected ? palette.accentSoft : "transparent",
           opacity: pressed ? 0.7 : 1,
         },
@@ -353,12 +325,8 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     marginTop: spacing[4],
   },
-  minuteOnes: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    marginTop: spacing[2],
-  },
   padCell: {
+    width: "25%",
     height: 36,
     borderRadius: radius.sm,
     alignItems: "center",

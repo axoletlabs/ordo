@@ -179,25 +179,7 @@ export function defaultCustomReminderAt(now = new Date()): number {
   return snapLocalMinutes(unixSeconds(now), 5);
 }
 
-export const MINUTE_TENS = [0, 1, 2, 3, 4, 5] as const;
-export const MINUTE_ONES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
-
-export function minuteTens(minute: number): number {
-  return Math.floor(clampMinute(minute) / 10);
-}
-
-export function minuteOnes(minute: number): number {
-  return clampMinute(minute) % 10;
-}
-
-export function composeMinute(tens: number, ones: number): number {
-  return minuteTens(tens * 10) * 10 + minuteOnes(ones);
-}
-
-function clampMinute(minute: number): number {
-  if (!Number.isFinite(minute)) return 0;
-  return Math.min(59, Math.max(0, Math.trunc(minute)));
-}
+export const MINUTE_STEPS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55] as const;
 
 /** Advance `unix` to the next `step`-minute local boundary (always in the future when leftover is 0). */
 export function snapLocalMinutes(unix: number, step: number): number {
