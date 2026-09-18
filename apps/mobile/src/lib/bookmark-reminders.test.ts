@@ -15,11 +15,13 @@ import {
   reminderNotificationCopy,
   parseUnixSeconds,
   reminderPingAction,
+  reminderPingFromNotification,
   reminderPingPayload,
   reminderPingPlan,
   reminderPresetAt,
   reminderPresetDetail,
   REMINDER_PING_CATCHUP_SECONDS,
+  REMINDER_PING_CATEGORY,
   REMINDER_PING_IMMINENT_SECONDS,
   REMINDER_PING_STUCK_SECONDS,
   scheduledTriggerUnix,
@@ -136,6 +138,8 @@ test("notification actions map Complete, Reschedule, Open, and a default tap", (
   assert.equal(reminderPingAction("open"), "open");
   assert.equal(reminderPingAction("expo.modules.notifications.actions.DEFAULT"), "open");
   assert.equal(reminderPingAction("dismiss"), null);
+  assert.equal(REMINDER_PING_CATEGORY.includes("-"), false);
+  assert.equal(REMINDER_PING_CATEGORY.includes(":"), false);
 });
 
 test("notification payload reads folderId nulls and remindAt from JSON-ish data", () => {
@@ -166,6 +170,23 @@ test("notification payload reads folderId nulls and remindAt from JSON-ish data"
     "b2",
   );
   assert.equal(reminderPingPayload({ bookmarkId: "b1" })?.remindAt, null);
+});
+
+test("notification payload falls back to dataString and the request identifier", () => {
+  assert.deepEqual(
+    reminderPingFromNotification({
+      dataString: JSON.stringify({ bookmarkId: "b3", folderId: null, title: "A", domain: "x.com", remindAt: 10 }),
+    }),
+    { bookmarkId: "b3", folderId: null, title: "A", domain: "x.com", remindAt: 10 },
+  );
+  assert.deepEqual(reminderPingFromNotification({ identifier: "ordo-reminder:b4" }), {
+    bookmarkId: "b4",
+    folderId: null,
+    title: "",
+    domain: "",
+    remindAt: null,
+  });
+  assert.equal(reminderPingFromNotification({ identifier: "other:b4" }), null);
 });
 
 test("parseUnixSeconds accepts seconds, milliseconds, and numeric strings", () => {

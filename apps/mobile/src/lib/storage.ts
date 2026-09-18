@@ -75,4 +75,5 @@ export const StorageKeys = {
   NATIVE_UPDATE: "ordo.nativeUpdate",
   IMPORT_JOB: "ordo.importJob",
   REMINDER_FIRED: "ordo.reminderFired",
+  REMINDER_ACTIONS_REV: "ordo.reminderActionsRev",
 } as const;

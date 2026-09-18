@@ -125,7 +125,11 @@ export function reminderNotificationCopy(row: {
   return { title, subtitle: REMINDER_PING_SUBTITLE, body: host };
 }
 
-export const REMINDER_PING_CATEGORY = "ordo-reminder";
+/** expo-notifications: `:` / `-` in a category id can break action buttons. */
+export const REMINDER_PING_CATEGORY = "ordoReminder";
+/** Trays scheduled before the category id dropped its hyphen. */
+export const REMINDER_PING_CATEGORY_LEGACY = "ordo-reminder";
+export const REMINDER_PING_ID_PREFIX = "ordo-reminder:";
 export const REMINDER_PING_OPEN = "open";
 export const REMINDER_PING_COMPLETE = "complete";
 /** @deprecated Old trays still send this; treated as Complete. */
@@ -133,6 +137,16 @@ export const REMINDER_PING_LATER = "later";
 export const REMINDER_PING_RESCHEDULE = "reschedule";
 /** Matches expo-notifications `DEFAULT_ACTION_IDENTIFIER`. */
 export const REMINDER_PING_DEFAULT = "expo.modules.notifications.actions.DEFAULT";
+
+export function reminderNotificationIdentifier(bookmarkId: string): string {
+  return `${REMINDER_PING_ID_PREFIX}${bookmarkId}`;
+}
+
+export function bookmarkIdFromReminderIdentifier(identifier: string): string | null {
+  if (!identifier.startsWith(REMINDER_PING_ID_PREFIX)) return null;
+  const id = identifier.slice(REMINDER_PING_ID_PREFIX.length);
+  return id || null;
+}
 
 export type ReminderPingKind = "open" | "complete" | "reschedule";
 
@@ -245,6 +259,19 @@ export function reminderPingPayload(data: unknown): ReminderPingPayload | null {
     domain: typeof record.domain === "string" ? record.domain : "",
     remindAt: parseUnixSeconds(record.remindAt),
   };
+}
+
+/** Android sometimes delivers `dataString` instead of `data`; the request id is a last resort. */
+export function reminderPingFromNotification(input: {
+  identifier?: string;
+  data?: unknown;
+  dataString?: unknown;
+}): ReminderPingPayload | null {
+  const fromData = reminderPingPayload(input.data) ?? reminderPingPayload(input.dataString);
+  if (fromData) return fromData;
+  const bookmarkId = input.identifier ? bookmarkIdFromReminderIdentifier(input.identifier) : null;
+  if (!bookmarkId) return null;
+  return { bookmarkId, folderId: null, title: "", domain: "", remindAt: null };
 }
 
 export function bookmarkReminderStatus(

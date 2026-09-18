@@ -18,6 +18,7 @@ import {
   reminderNotificationsReady,
   reconcileReminderNotifications,
   subscribeReminderNotificationTaps,
+  completeDueReminder,
 } from "../../lib/reminder-notifications";
 import { isBookmarkDeletePending } from "../../lib/undoable-delete";
 import { reminderCompletedToast, type ReminderPingPayload } from "../../lib/bookmark-reminders";
@@ -42,24 +43,34 @@ export function ReminderNotificationHost() {
     if (status !== "authenticated") return;
     return subscribeReminderNotificationTaps({
       onOpen: (payload) => router.push(`/reader/${payload.bookmarkId}`),
-      onComplete: (payload) => {
+      onComplete: (payload, cleared) => {
+        if (cleared) {
+          if (AppState.currentState === "active") toast.success(reminderCompletedToast());
+          return;
+        }
         const rows = queryClient.getQueryData<BookmarkReminderDto[]>(qk.reminders);
         const row = rows?.find((item) => item.id === payload.bookmarkId);
-        setReminder.mutate(
-          {
-            id: payload.bookmarkId,
-            folderId: payload.folderId ?? row?.folderId ?? null,
-            title: payload.title || row?.title || "",
-            domain: payload.domain || row?.domain || "",
-            remindAt: null,
-          },
-          {
-            onSuccess: () => {
-              if (AppState.currentState === "active") toast.success(reminderCompletedToast());
+        void completeDueReminder(payload).then((ok) => {
+          if (ok) {
+            if (AppState.currentState === "active") toast.success(reminderCompletedToast());
+            return;
+          }
+          setReminder.mutate(
+            {
+              id: payload.bookmarkId,
+              folderId: payload.folderId ?? row?.folderId ?? null,
+              title: payload.title || row?.title || "",
+              domain: payload.domain || row?.domain || "",
+              remindAt: null,
             },
-            onError: (err) => toast.error(errorMessage(err, "Couldn't complete this reminder.")),
-          },
-        );
+            {
+              onSuccess: () => {
+                if (AppState.currentState === "active") toast.success(reminderCompletedToast());
+              },
+              onError: (err) => toast.error(errorMessage(err, "Couldn't complete this reminder.")),
+            },
+          );
+        });
       },
       onReschedule: (payload) => setEdit(payload),
     });
