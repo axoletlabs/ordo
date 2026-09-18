@@ -131,12 +131,12 @@ test("notification copy is the title plus a Reminder chip and host", () => {
   });
 });
 
-test("notification actions map Complete, Reschedule, Open, and a default tap", () => {
-  assert.equal(reminderPingAction("complete"), "complete");
-  assert.equal(reminderPingAction("later"), "complete");
+test("notification actions map Reschedule, Open, and a default tap", () => {
   assert.equal(reminderPingAction("reschedule"), "reschedule");
   assert.equal(reminderPingAction("open"), "open");
   assert.equal(reminderPingAction("expo.modules.notifications.actions.DEFAULT"), "open");
+  assert.equal(reminderPingAction("complete"), null);
+  assert.equal(reminderPingAction("later"), null);
   assert.equal(reminderPingAction("dismiss"), null);
   assert.equal(REMINDER_PING_CATEGORY.includes("-"), false);
   assert.equal(REMINDER_PING_CATEGORY.includes(":"), false);

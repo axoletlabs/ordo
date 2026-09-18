@@ -99,10 +99,6 @@ export function reminderClearedToast(): string {
   return "Reminder cleared";
 }
 
-export function reminderCompletedToast(): string {
-  return "Reminder completed";
-}
-
 /** One hour out — the in-app "In 1 hour" preset. */
 export function reminderLaterAt(now = new Date()): number {
   return reminderPresetAt("1h", now);
@@ -131,9 +127,6 @@ export const REMINDER_PING_CATEGORY = "ordoReminder";
 export const REMINDER_PING_CATEGORY_LEGACY = "ordo-reminder";
 export const REMINDER_PING_ID_PREFIX = "ordo-reminder:";
 export const REMINDER_PING_OPEN = "open";
-export const REMINDER_PING_COMPLETE = "complete";
-/** @deprecated Old trays still send this; treated as Complete. */
-export const REMINDER_PING_LATER = "later";
 export const REMINDER_PING_RESCHEDULE = "reschedule";
 /** Matches expo-notifications `DEFAULT_ACTION_IDENTIFIER`. */
 export const REMINDER_PING_DEFAULT = "expo.modules.notifications.actions.DEFAULT";
@@ -148,7 +141,7 @@ export function bookmarkIdFromReminderIdentifier(identifier: string): string | n
   return id || null;
 }
 
-export type ReminderPingKind = "open" | "complete" | "reschedule";
+export type ReminderPingKind = "open" | "reschedule";
 
 export type ReminderPingPayload = {
   bookmarkId: string;
@@ -159,9 +152,6 @@ export type ReminderPingPayload = {
 };
 
 export function reminderPingAction(actionIdentifier: string): ReminderPingKind | null {
-  if (actionIdentifier === REMINDER_PING_COMPLETE || actionIdentifier === REMINDER_PING_LATER) {
-    return "complete";
-  }
   if (actionIdentifier === REMINDER_PING_RESCHEDULE) return "reschedule";
   if (actionIdentifier === REMINDER_PING_OPEN || actionIdentifier === REMINDER_PING_DEFAULT) {
     return "open";

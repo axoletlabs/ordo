@@ -8,7 +8,6 @@ import { unixSeconds } from "@ordo/shared";
 import {
   REMINDER_PING_CATEGORY,
   REMINDER_PING_CATEGORY_LEGACY,
-  REMINDER_PING_COMPLETE,
   REMINDER_PING_ID_PREFIX,
   REMINDER_PING_OPEN,
   REMINDER_PING_RESCHEDULE,
@@ -26,7 +25,7 @@ import { prefsGet, prefsSet, StorageKeys } from "./storage";
 const CHANNEL_ID = "reminders";
 const FIRED_KEY = StorageKeys.REMINDER_FIRED;
 /** Bump when shade actions change so already-presented pings get new PendingIntents. */
-const ACTIONS_REV = 3;
+const ACTIONS_REV = 4;
 const CATEGORY_OPTIONS = {
   previewPlaceholder: "Reminder",
   showTitle: true,
@@ -37,7 +36,6 @@ type NotificationsModule = typeof import("expo-notifications");
 type ReminderPingRow = Pick<BookmarkReminderDto, "id" | "folderId" | "title" | "domain" | "remindAt">;
 type TapHandlers = {
   onOpen: (payload: ReminderPingPayload) => void;
-  onComplete: (payload: ReminderPingPayload, cleared: boolean) => void;
   onReschedule: (payload: ReminderPingPayload) => void;
 };
 
@@ -47,8 +45,7 @@ let receivedBound = false;
 let consumedLaunchResponse = false;
 let bootPromise: Promise<void> | null = null;
 let tapHandlers: TapHandlers | null = null;
-let queuedTap: { kind: ReminderPingKind; payload: ReminderPingPayload; cleared?: boolean } | null =
-  null;
+let queuedTap: { kind: ReminderPingKind; payload: ReminderPingPayload } | null = null;
 const seenResponseKeys = new Set<string>();
 let fired: Record<string, number> = {};
 let firedLoaded = false;
@@ -74,14 +71,6 @@ function identifier(bookmarkId: string): string {
 
 function reminderActions() {
   return [
-    {
-      identifier: REMINDER_PING_COMPLETE,
-      buttonTitle: "Complete",
-      // Action taps do not auto-cancel on Android, and a background Complete
-      // never reaches JS if the process is dead. Opening the app is required
-      // so we can dismiss the shade and PATCH remindAt null.
-      options: { opensAppToForeground: true },
-    },
     {
       identifier: REMINDER_PING_OPEN,
       buttonTitle: "Open",
@@ -437,52 +426,6 @@ export async function markReminderPingHandled(
   await cancelId(mod, payload.bookmarkId);
 }
 
-export async function completeDueReminder(
-  payload: ReminderPingPayload,
-  requestIdentifier?: string,
-): Promise<boolean> {
-  await markReminderPingHandled(payload, requestIdentifier);
-  try {
-    const { useAuthStore } = await import("../store/auth");
-    if (useAuthStore.getState().status !== "authenticated") return false;
-    const { bookmarksApi } = await import("./api/bookmarks");
-    const { queryClient } = await import("./query-client");
-    const { syncReminderInCache, updateBookmarkEverywhere } = await import("./cache-helpers");
-    const { qk } = await import("./api/query-keys");
-    updateBookmarkEverywhere(queryClient, payload.bookmarkId, (bookmark) => ({
-      ...bookmark,
-      remindAt: null,
-    }));
-    syncReminderInCache(queryClient, {
-      id: payload.bookmarkId,
-      folderId: payload.folderId,
-      title: payload.title,
-      domain: payload.domain,
-      remindAt: null,
-    });
-    const updated = await bookmarksApi.update(
-      payload.bookmarkId,
-      { remindAt: null },
-      { folderId: payload.folderId },
-    );
-    updateBookmarkEverywhere(queryClient, updated.id, (bookmark) => ({ ...bookmark, ...updated }));
-    syncReminderInCache(queryClient, updated);
-    await syncBookmarkReminder(updated);
-    void queryClient.invalidateQueries({ queryKey: qk.reminders });
-    return true;
-  } catch {
-    try {
-      const { queryClient } = await import("./query-client");
-      const { qk } = await import("./api/query-keys");
-      void queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
-      void queryClient.invalidateQueries({ queryKey: qk.reminders });
-    } catch {
-      /* cache unavailable */
-    }
-    return false;
-  }
-}
-
 function responseKey(actionIdentifier: string, notification: { date?: unknown; request: { identifier: string } }) {
   return `${actionIdentifier}:${notification.request.identifier}:${String(notification.date ?? "")}`;
 }
@@ -497,13 +440,12 @@ function rememberResponseKey(key: string): boolean {
   return true;
 }
 
-function emitTap(kind: ReminderPingKind, payload: ReminderPingPayload, cleared?: boolean) {
+function emitTap(kind: ReminderPingKind, payload: ReminderPingPayload) {
   if (!tapHandlers) {
-    queuedTap = { kind, payload, cleared };
+    queuedTap = { kind, payload };
     return;
   }
-  if (kind === "complete") tapHandlers.onComplete(payload, cleared === true);
-  else if (kind === "open") tapHandlers.onOpen(payload);
+  if (kind === "open") tapHandlers.onOpen(payload);
   else tapHandlers.onReschedule(payload);
 }
 
@@ -527,11 +469,6 @@ async function handleResponse(
   if (!kind) return;
   const key = responseKey(actionIdentifier, notification);
   if (!rememberResponseKey(key)) return;
-  if (kind === "complete") {
-    const cleared = await completeDueReminder(payload, notification.request.identifier);
-    emitTap(kind, payload, cleared);
-    return;
-  }
   await markReminderPingHandled(payload, notification.request.identifier);
   emitTap(kind, payload);
 }
@@ -586,7 +523,7 @@ export function subscribeReminderNotificationTaps(handlers: TapHandlers): () => 
   if (queuedTap) {
     const queued = queuedTap;
     queuedTap = null;
-    emitTap(queued.kind, queued.payload, queued.cleared);
+    emitTap(queued.kind, queued.payload);
   }
   void reminderNotificationsReady();
   return () => {
