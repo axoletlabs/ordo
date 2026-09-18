@@ -74,7 +74,6 @@ import {
   useBookmarkDetail,
   useCreateHighlight,
   useRemoveHighlight,
-  useToggleRead,
   useUpdateHighlight,
 } from "../../hooks/use-bookmarks";
 import * as bookmarkHooks from "../../hooks/use-bookmarks";
@@ -95,7 +94,8 @@ import {
   canReadInOrdo,
 } from "../../lib/bookmark-reader";
 import { copyLink, copyText } from "../../lib/copy-link";
-import { openExternalBrowser, openLivePage } from "../../lib/open-website";
+import { ackBookmarkOpened, openExternalBrowser, openLivePage } from "../../lib/open-website";
+import { reminderClearsOnOpen } from "../../lib/bookmark-reminders";
 import { scrollReadingProgress, shouldFlushReadingProgress } from "../../lib/reading-progress";
 
 function useSetContentKindMissing() {
@@ -253,7 +253,6 @@ function ReaderPaneInner({
   const selectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const menuScrollY = useRef(0);
 
-  const toggleRead = useToggleRead(bookmark?.folderId ?? null);
   const setContentKind = useSetContentKind();
   const createHighlight = useCreateHighlight();
   const updateHighlight = useUpdateHighlight();
@@ -268,13 +267,16 @@ function ReaderPaneInner({
 
   // Auto-mark read on open — filed and unfiled (folderId null) alike.
   // Completion is driven by reading progress, never by opening.
+  // A due reminder clears on open; upcoming reminders stay until they fire.
   useEffect(() => {
     if (protectedDetail) return;
-    if (bookmark && !bookmark.isRead && markedRef.current !== bookmark.id) {
-      markedRef.current = bookmark.id;
-      toggleRead.mutate({ id: bookmark.id, isRead: true });
-    }
-  }, [bookmark?.id, bookmark?.isRead, protectedDetail]);
+    if (!bookmark) return;
+    if (markedRef.current === bookmark.id) return;
+    const due = reminderClearsOnOpen(bookmark.remindAt);
+    if (bookmark.isRead && !due) return;
+    markedRef.current = bookmark.id;
+    ackBookmarkOpened(bookmark);
+  }, [bookmark?.id, bookmark?.isRead, bookmark?.remindAt, protectedDetail]);
 
   useEffect(() => {
     setUnlockOpen(protectedDetail && Boolean(lockedFolderId));

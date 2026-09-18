@@ -72,6 +72,14 @@ export function formatReminderWhen(unix: number, now = new Date()): string {
   return when;
 }
 
+/** Due reminders clear when the bookmark is opened; upcoming ones stay. */
+export function reminderClearsOnOpen(
+  remindAt: number | null | undefined,
+  now = new Date(),
+): boolean {
+  return reminderStatus(remindAt, unixSeconds(now)) === "due";
+}
+
 /** Longer local datetime for toasts and the custom panel. */
 export function formatReminderFull(unix: number): string {
   return new Date(unix * 1000).toLocaleString(undefined, {

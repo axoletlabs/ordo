@@ -8,6 +8,7 @@ import {
   defaultCustomReminderAt,
   formatReminderWhen,
   hour12To24,
+  reminderClearsOnOpen,
   reminderMonthGrid,
   reminderPresetAt,
   reminderPresetDetail,
@@ -43,6 +44,14 @@ test("due rows stay labeled until the reminder is cleared", () => {
   assert.equal(bookmarkReminderStatus(past, now), "due");
   assert.match(formatReminderWhen(past, now), /^Due /);
   assert.equal(bookmarkReminderStatus(null, now), "none");
+});
+
+test("opening a bookmark clears a due reminder, not an upcoming one", () => {
+  const past = unixSeconds(new Date(2026, 8, 17, 9, 0, 0));
+  const later = unixSeconds(new Date(2026, 8, 18, 9, 0, 0));
+  assert.equal(reminderClearsOnOpen(past, now), true);
+  assert.equal(reminderClearsOnOpen(later, now), false);
+  assert.equal(reminderClearsOnOpen(null, now), false);
 });
 
 test("due labels keep a local date when the ping was on another day", () => {

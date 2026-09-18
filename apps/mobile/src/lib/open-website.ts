@@ -12,8 +12,9 @@ import { toast } from "../components/ui/toast-store";
 import { queryClient } from "./query-client";
 import { bookmarksApi } from "./api/bookmarks";
 import { qk } from "./api/query-keys";
-import { bumpFolderCount, updateBookmarkEverywhere } from "./cache-helpers";
+import { bumpFolderCount, syncReminderInCache, updateBookmarkEverywhere } from "./cache-helpers";
 import { bookmarkOpensAsWebsite } from "./bookmark-reader";
+import { reminderClearsOnOpen } from "./bookmark-reminders";
 import { useSettingsStore, type WebsiteBrowser } from "../store/settings";
 
 export type SystemBrowser = Exclude<WebsiteBrowser, "ordo">;
@@ -49,28 +50,60 @@ export async function openLivePage(url: string, browser: SystemBrowser): Promise
   else await openExternalBrowser(url);
 }
 
-function markOpened(bookmark: BookmarkDto): void {
-  if (bookmark.isRead) return;
-  updateBookmarkEverywhere(queryClient, bookmark.id, (current) => ({ ...current, isRead: true }));
-  bumpFolderCount(queryClient, bookmark.folderId, 0, -1);
+export function ackBookmarkOpened(bookmark: BookmarkDto): void {
+  const due = reminderClearsOnOpen(bookmark.remindAt);
+  if (bookmark.isRead && !due) return;
+
+  const patch: { isRead?: true; remindAt?: null } = {};
+  if (!bookmark.isRead) patch.isRead = true;
+  if (due) patch.remindAt = null;
+  const previous = { isRead: bookmark.isRead, remindAt: bookmark.remindAt };
+
+  updateBookmarkEverywhere(queryClient, bookmark.id, (current) => ({ ...current, ...patch }));
+  if (!bookmark.isRead) bumpFolderCount(queryClient, bookmark.folderId, 0, -1);
+  if (due) {
+    syncReminderInCache(queryClient, {
+      id: bookmark.id,
+      folderId: bookmark.folderId,
+      title: bookmark.title,
+      remindAt: null,
+    });
+  }
+
   void bookmarksApi
-    .update(bookmark.id, { isRead: true }, { folderId: bookmark.folderId })
+    .update(bookmark.id, patch, { folderId: bookmark.folderId })
     .then((updated) => {
       updateBookmarkEverywhere(queryClient, updated.id, (current) => ({ ...current, ...updated }));
-      void queryClient.invalidateQueries({ queryKey: qk.folders });
+      if (due) {
+        syncReminderInCache(queryClient, updated);
+        void import("./reminder-notifications").then(({ syncBookmarkReminder }) =>
+          syncBookmarkReminder(updated),
+        );
+        void queryClient.invalidateQueries({ queryKey: qk.reminders });
+      }
+      if (!bookmark.isRead) void queryClient.invalidateQueries({ queryKey: qk.folders });
     })
     .catch(() => {
       updateBookmarkEverywhere(queryClient, bookmark.id, (current) => ({
         ...current,
-        isRead: bookmark.isRead,
+        isRead: previous.isRead,
+        remindAt: previous.remindAt,
       }));
-      bumpFolderCount(queryClient, bookmark.folderId, 0, 1);
+      if (!bookmark.isRead) bumpFolderCount(queryClient, bookmark.folderId, 0, 1);
+      if (due) {
+        syncReminderInCache(queryClient, {
+          id: bookmark.id,
+          folderId: bookmark.folderId,
+          title: bookmark.title,
+          remindAt: previous.remindAt,
+        });
+      }
     });
 }
 
 /** Open the live page in the device browser app, even if websites usually stay in ordo. */
 export function openBookmarkInExternalBrowser(bookmark: BookmarkDto): void {
-  markOpened(bookmark);
+  ackBookmarkOpened(bookmark);
   void openExternalBrowser(bookmark.url);
 }
 
@@ -81,7 +114,7 @@ export function openBookmarkInExternalBrowser(bookmark: BookmarkDto): void {
 export function openListBookmark(bookmark: BookmarkDto, openReader: () => void): void {
   const browser = websiteBrowser();
   if (bookmarkOpensAsWebsite(bookmark) && browser !== "ordo") {
-    markOpened(bookmark);
+    ackBookmarkOpened(bookmark);
     void openLivePage(bookmark.url, browser);
     return;
   }

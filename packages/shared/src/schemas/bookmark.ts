@@ -45,7 +45,7 @@ export const UpdateBookmarkSchema = z
       .optional(),
     /** `article` / `web` forces presentation; `null` clears the override. */
     contentKindOverride: z.enum(["article", "web"]).nullable().optional(),
-    /** Unix seconds. `null` clears. A past value stays due until cleared. */
+    /** Unix seconds. `null` clears. A past value stays due until opened or cleared. */
     remindAt: UnixSecondsSchema.nullable().optional(),
   })
   .refine(

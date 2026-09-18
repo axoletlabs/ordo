@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { Ionicons } from "@expo/vector-icons";
 import type { BookmarkDto } from "@ordo/shared";
 import { ContextMenu, ContextMenuItem, type MenuAnchorRect } from "../ui/ContextMenu";
 import { useSetBookmarkReminder } from "../../hooks/use-bookmarks";
@@ -11,8 +12,16 @@ import {
   reminderPresetAt,
   reminderPresetDetail,
   reminderSetToast,
+  type ReminderPresetId,
 } from "../../lib/bookmark-reminders";
 import { ReminderCustomPanel } from "./ReminderCustomPanel";
+
+const PRESET_ICON: Record<ReminderPresetId, keyof typeof Ionicons.glyphMap> = {
+  "1h": "hourglass-outline",
+  "3h": "timer-outline",
+  tomorrow: "sunny-outline",
+  nextWeek: "calendar-outline",
+};
 
 export function ReminderFlow({
   visible,
@@ -59,7 +68,6 @@ export function ReminderFlow({
         visible={visible && page === "presets"}
         onDismiss={onDismiss}
         anchor={anchor}
-        width={280}
         estimatedHeight={248}
       >
         {showBack ? (
@@ -70,6 +78,7 @@ export function ReminderFlow({
           return (
             <ContextMenuItem
               key={preset.id}
+              icon={PRESET_ICON[preset.id]}
               label={preset.label}
               detail={reminderPresetDetail(preset.id, at)}
               disabled={setReminder.isPending}
@@ -78,6 +87,7 @@ export function ReminderFlow({
           );
         })}
         <ContextMenuItem
+          icon="calendar-number-outline"
           label="Custom…"
           disabled={setReminder.isPending}
           onPress={() => setPage("custom")}

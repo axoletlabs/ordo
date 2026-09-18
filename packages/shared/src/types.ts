@@ -180,7 +180,7 @@ export interface BookmarkDto {
   isRead: boolean;
   /**
    * Unix seconds when this bookmark should ping. Null means none. Stays set
-   * after the time passes so the row can stay due until the user clears it.
+   * after the time passes so the row can stay due until opened or cleared.
    */
   remindAt: number | null;
   tags: TagSummaryDto[];

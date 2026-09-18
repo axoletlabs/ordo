@@ -4,7 +4,7 @@ import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Text } from "../ui/Text";
 import { copyLink } from "../../lib/copy-link";
-import { openLivePage } from "../../lib/open-website";
+import { ackBookmarkOpened, openLivePage } from "../../lib/open-website";
 import { useSettingsStore } from "../../store/settings";
 import { bookmarkCanBeArticle, bookmarkIsArticle } from "../../lib/bookmark-reader";
 import * as bookmarkHooks from "../../hooks/use-bookmarks";
@@ -123,10 +123,11 @@ export function BookmarkActionsSheet({
                 pathname: "/reader/[id]",
                 params: { id: displayBookmark.id, view: "browser" },
               });
+              if (!displayBookmark.isRead) onToggleRead(displayBookmark);
             } else {
+              ackBookmarkOpened(displayBookmark);
               void openLivePage(displayBookmark.url, browser);
             }
-            if (!displayBookmark.isRead) onToggleRead(displayBookmark);
             onDismiss();
           }}
         />
