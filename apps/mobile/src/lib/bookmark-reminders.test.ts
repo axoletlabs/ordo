@@ -10,6 +10,10 @@ import {
   hour12To24,
   reminderClearsOnOpen,
   reminderMonthGrid,
+  reminderLaterAt,
+  reminderNotificationCopy,
+  reminderPingAction,
+  reminderPingPayload,
   reminderPresetAt,
   reminderPresetDetail,
   shiftCalendarMonth,
@@ -90,4 +94,46 @@ test("month grid is Sunday-first and marks today", () => {
 
 test("shiftCalendarMonth wraps the year", () => {
   assert.deepEqual(shiftCalendarMonth(2026, 11, 1), { year: 2027, month: 0 });
+});
+
+test("Later is the one-hour preset from now", () => {
+  assert.equal(reminderLaterAt(now), reminderPresetAt("1h", now));
+});
+
+test("notification copy is the title plus host, with no instruction", () => {
+  assert.deepEqual(
+    reminderNotificationCopy({ title: "How to remember what you read", domain: "fs.blog" }),
+    { title: "How to remember what you read", body: "fs.blog" },
+  );
+  assert.deepEqual(reminderNotificationCopy({ title: "  ", domain: "" }), { title: "Reminder" });
+  assert.deepEqual(reminderNotificationCopy({ title: "example.com", domain: "example.com" }), {
+    title: "example.com",
+  });
+});
+
+test("notification actions map Later, Open, and a default tap", () => {
+  assert.equal(reminderPingAction("later"), "later");
+  assert.equal(reminderPingAction("open"), "open");
+  assert.equal(reminderPingAction("expo.modules.notifications.actions.DEFAULT"), "open");
+  assert.equal(reminderPingAction("dismiss"), null);
+});
+
+test("notification payload reads folderId nulls from JSON-ish data", () => {
+  assert.deepEqual(
+    reminderPingPayload({
+      bookmarkId: "b1",
+      folderId: null,
+      title: "Notes",
+      domain: "example.com",
+    }),
+    { bookmarkId: "b1", folderId: null, title: "Notes", domain: "example.com" },
+  );
+  assert.equal(reminderPingPayload({ bookmarkId: "b1", folderId: "null" })?.folderId, null);
+  assert.equal(reminderPingPayload({ bookmarkId: "b1", folderId: "folder-1" })?.folderId, "folder-1");
+  assert.equal(reminderPingPayload({ title: "no id" }), null);
+  assert.equal(
+    reminderPingPayload(JSON.stringify({ bookmarkId: "b2", folderId: "", title: "A", domain: "x.com" }))
+      ?.bookmarkId,
+    "b2",
+  );
 });

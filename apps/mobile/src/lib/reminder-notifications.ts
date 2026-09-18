@@ -5,6 +5,15 @@
 import { Platform } from "react-native";
 import type { BookmarkDto, BookmarkReminderDto } from "@ordo/shared";
 import { unixSeconds } from "@ordo/shared";
+import {
+  REMINDER_PING_CATEGORY,
+  REMINDER_PING_LATER,
+  REMINDER_PING_OPEN,
+  reminderNotificationCopy,
+  reminderPingAction,
+  reminderPingPayload,
+  type ReminderPingPayload,
+} from "./bookmark-reminders";
 import { prefsGet, prefsSet, StorageKeys } from "./storage";
 
 const CHANNEL_ID = "reminders";
@@ -12,6 +21,7 @@ const ID_PREFIX = "ordo-reminder:";
 const FIRED_KEY = StorageKeys.REMINDER_FIRED;
 
 type NotificationsModule = typeof import("expo-notifications");
+type ReminderPingRow = Pick<BookmarkReminderDto, "id" | "folderId" | "title" | "domain" | "remindAt">;
 
 let notifications: NotificationsModule | null | undefined;
 let handlerReady = false;
@@ -79,6 +89,22 @@ async function ensureHandler(mod: NotificationsModule): Promise<void> {
       importance: mod.AndroidImportance.HIGH,
     });
   }
+  try {
+    await mod.setNotificationCategoryAsync(REMINDER_PING_CATEGORY, [
+      {
+        identifier: REMINDER_PING_LATER,
+        buttonTitle: "Later",
+        options: { opensAppToForeground: false },
+      },
+      {
+        identifier: REMINDER_PING_OPEN,
+        buttonTitle: "Open",
+        options: { opensAppToForeground: true },
+      },
+    ]);
+  } catch {
+    /* categories unavailable */
+  }
 }
 
 export async function ensureReminderPermissions(): Promise<boolean> {
@@ -99,39 +125,63 @@ async function cancelId(mod: NotificationsModule, bookmarkId: string): Promise<v
   }
 }
 
-function notificationContent(row: { id: string; title: string }, body: string) {
+async function dismissId(mod: NotificationsModule, bookmarkId: string): Promise<void> {
+  try {
+    await mod.dismissNotificationAsync(identifier(bookmarkId));
+  } catch {
+    /* already gone */
+  }
+}
+
+function notificationContent(row: ReminderPingRow) {
+  const copy = reminderNotificationCopy(row);
   return {
-    title: row.title || "Reminder",
-    body,
-    data: { bookmarkId: row.id },
+    title: copy.title,
+    body: copy.body ?? null,
+    categoryIdentifier: REMINDER_PING_CATEGORY,
+    data: {
+      bookmarkId: row.id,
+      folderId: row.folderId,
+      title: row.title,
+      domain: row.domain,
+    },
     sound: true as const,
     ...(Platform.OS === "android" ? { channelId: CHANNEL_ID } : null),
   };
 }
 
-async function presentDue(
-  mod: NotificationsModule,
-  row: { id: string; title: string; remindAt: number },
-): Promise<void> {
+function asPingRow(
+  row: Pick<BookmarkDto, "id" | "title" | "remindAt"> &
+    Partial<Pick<BookmarkDto, "folderId" | "domain">>,
+  remindAt: number,
+): ReminderPingRow {
+  return {
+    id: row.id,
+    folderId: row.folderId ?? null,
+    title: row.title,
+    domain: row.domain ?? "",
+    remindAt,
+  };
+}
+
+async function presentDue(mod: NotificationsModule, row: ReminderPingRow): Promise<void> {
   const map = await loadFired();
   if (map[row.id] === row.remindAt) return;
   await mod.scheduleNotificationAsync({
     identifier: identifier(row.id),
-    content: notificationContent(row, "This bookmark is due."),
+    content: notificationContent(row),
     trigger: null,
   });
   await rememberFired(row.id, row.remindAt);
 }
 
-async function scheduleFuture(
-  mod: NotificationsModule,
-  row: { id: string; title: string; remindAt: number },
-): Promise<void> {
+async function scheduleFuture(mod: NotificationsModule, row: ReminderPingRow): Promise<void> {
   await cancelId(mod, row.id);
+  await dismissId(mod, row.id);
   await forgetFired(row.id);
   await mod.scheduleNotificationAsync({
     identifier: identifier(row.id),
-    content: notificationContent(row, "Time to read this bookmark."),
+    content: notificationContent(row),
     trigger: {
       type: mod.SchedulableTriggerInputTypes.DATE,
       date: new Date(row.remindAt * 1000),
@@ -141,24 +191,27 @@ async function scheduleFuture(
 }
 
 export async function syncBookmarkReminder(
-  bookmark: Pick<BookmarkDto, "id" | "title" | "remindAt">,
+  bookmark: Pick<BookmarkDto, "id" | "title" | "remindAt"> &
+    Partial<Pick<BookmarkDto, "folderId" | "domain">>,
 ): Promise<boolean> {
   const mod = await loadNotifications();
   if (!mod) return false;
   await ensureHandler(mod);
   if (bookmark.remindAt == null) {
     await cancelId(mod, bookmark.id);
+    await dismissId(mod, bookmark.id);
     await forgetFired(bookmark.id);
     return true;
   }
   const allowed = await ensureReminderPermissions();
   if (!allowed) return false;
+  const row = asPingRow(bookmark, bookmark.remindAt);
   if (bookmark.remindAt <= unixSeconds()) {
     await cancelId(mod, bookmark.id);
-    await presentDue(mod, { id: bookmark.id, title: bookmark.title, remindAt: bookmark.remindAt });
+    await presentDue(mod, row);
     return true;
   }
-  await scheduleFuture(mod, { id: bookmark.id, title: bookmark.title, remindAt: bookmark.remindAt });
+  await scheduleFuture(mod, row);
   return true;
 }
 
@@ -166,6 +219,7 @@ export async function cancelBookmarkReminder(bookmarkId: string): Promise<void> 
   const mod = await loadNotifications();
   if (!mod) return;
   await cancelId(mod, bookmarkId);
+  await dismissId(mod, bookmarkId);
   await forgetFired(bookmarkId);
 }
 
@@ -200,7 +254,10 @@ export async function reconcileReminderNotifications(
   }
 }
 
-export function subscribeReminderNotificationTaps(onOpen: (bookmarkId: string) => void): () => void {
+export function subscribeReminderNotificationTaps(handlers: {
+  onOpen: (payload: ReminderPingPayload) => void;
+  onLater: (payload: ReminderPingPayload) => void;
+}): () => void {
   if (!nativeOk()) return () => undefined;
   let remove: (() => void) | undefined;
   void (async () => {
@@ -209,11 +266,20 @@ export function subscribeReminderNotificationTaps(onOpen: (bookmarkId: string) =
     await ensureHandler(mod);
     const last = consumedLaunchResponse ? null : await mod.getLastNotificationResponseAsync();
     consumedLaunchResponse = true;
-    const coldId = last?.notification.request.content.data?.bookmarkId;
-    if (typeof coldId === "string" && coldId) onOpen(coldId);
+    const deliver = (actionIdentifier: string, data: unknown) => {
+      const payload = reminderPingPayload(data);
+      if (!payload) return;
+      const kind =
+        reminderPingAction(actionIdentifier) ??
+        (actionIdentifier === mod.DEFAULT_ACTION_IDENTIFIER ? "open" : null);
+      if (kind === "later") handlers.onLater(payload);
+      else if (kind === "open") handlers.onOpen(payload);
+    };
+    if (last) {
+      deliver(last.actionIdentifier, last.notification.request.content.data);
+    }
     const sub = mod.addNotificationResponseReceivedListener((response) => {
-      const id = response.notification.request.content.data?.bookmarkId;
-      if (typeof id === "string" && id) onOpen(id);
+      deliver(response.actionIdentifier, response.notification.request.content.data);
     });
     remove = () => sub.remove();
   })();

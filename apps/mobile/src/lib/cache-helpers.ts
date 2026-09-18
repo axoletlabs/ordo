@@ -243,7 +243,8 @@ export function updateBookmarksEverywhere(
 /** Keep GET /bookmarks/reminders in lockstep with list/detail patches. */
 export function syncReminderInCache(
   qc: QueryClient,
-  bookmark: Pick<BookmarkDto, "id" | "folderId" | "title" | "remindAt">,
+  bookmark: Pick<BookmarkDto, "id" | "folderId" | "title" | "remindAt"> &
+    Partial<Pick<BookmarkDto, "domain">>,
 ) {
   qc.setQueryData<BookmarkReminderDto[]>(qk.reminders, (old) => {
     const rows = Array.isArray(old) ? old : [];
@@ -251,10 +252,12 @@ export function syncReminderInCache(
       const next = rows.filter((row) => row.id !== bookmark.id);
       return next.length === rows.length ? old : next;
     }
+    const existing = rows.find((row) => row.id === bookmark.id);
     const item: BookmarkReminderDto = {
       id: bookmark.id,
       folderId: bookmark.folderId,
-      title: bookmark.title,
+      title: bookmark.title || existing?.title || "",
+      domain: bookmark.domain || existing?.domain || "",
       remindAt: bookmark.remindAt,
     };
     const index = rows.findIndex((row) => row.id === bookmark.id);

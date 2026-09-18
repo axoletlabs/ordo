@@ -455,13 +455,21 @@ export class BookmarksService implements OnApplicationBootstrap {
   async listReminders(userId: string): Promise<BookmarkReminderDto[]> {
     const rows = await this.prisma.bookmark.findMany({
       where: { userId, remindAt: { not: null } },
-      select: { id: true, folderId: true, title: true, remindAt: true },
+      select: { id: true, folderId: true, title: true, domain: true, remindAt: true },
       orderBy: [{ remindAt: "asc" }, { id: "asc" }],
     });
     return rows.flatMap((row) =>
       row.remindAt == null
         ? []
-        : [{ id: row.id, folderId: row.folderId, title: row.title, remindAt: row.remindAt }],
+        : [
+            {
+              id: row.id,
+              folderId: row.folderId,
+              title: row.title,
+              domain: row.domain,
+              remindAt: row.remindAt,
+            },
+          ],
     );
   }
 

@@ -236,6 +236,8 @@ export interface BookmarkReminderDto {
   id: string;
   folderId: string | null;
   title: string;
+  /** Display host, without a leading www. */
+  domain: string;
   /** Unix seconds. */
   remindAt: number;
 }

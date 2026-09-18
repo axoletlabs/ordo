@@ -822,6 +822,7 @@ describe("Bookmarks & Folders (e2e)", () => {
           id: created.body.id,
           folderId: null,
           title: set.body.title,
+          domain: "example.com",
           remindAt: upcoming,
         },
       ]);

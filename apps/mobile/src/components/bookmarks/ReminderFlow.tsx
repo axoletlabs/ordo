@@ -48,7 +48,7 @@ export function ReminderFlow({
   const save = (remindAt: number | null) => {
     if (!target) return;
     setReminder.mutate(
-      { id: target.id, folderId: target.folderId, title: target.title, remindAt },
+      { id: target.id, folderId: target.folderId, title: target.title, domain: target.domain, remindAt },
       {
         onSuccess: (updated) => {
           if (updated.remindAt == null) toast.success(reminderClearedToast());

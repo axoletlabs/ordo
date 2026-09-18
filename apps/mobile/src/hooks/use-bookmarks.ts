@@ -286,11 +286,12 @@ export function useSetBookmarkReminder() {
       id: string;
       folderId: string | null;
       title: string;
+      domain?: string;
       remindAt: number | null;
     }) => bookmarksApi.update(id, { remindAt }, { folderId }),
-    onMutate: ({ id, folderId, title, remindAt }) => {
+    onMutate: ({ id, folderId, title, domain, remindAt }) => {
       updateBookmarkEverywhere(qc, id, (bookmark) => ({ ...bookmark, remindAt }));
-      syncReminderInCache(qc, { id, folderId, title, remindAt });
+      syncReminderInCache(qc, { id, folderId, title, domain, remindAt });
     },
     onError: () => {
       void qc.invalidateQueries({ queryKey: ["bookmarks"] });

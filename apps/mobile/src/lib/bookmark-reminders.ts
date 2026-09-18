@@ -99,6 +99,74 @@ export function reminderClearedToast(): string {
   return "Reminder cleared";
 }
 
+/** One hour out — the Later action on a reminder ping. */
+export function reminderLaterAt(now = new Date()): number {
+  return reminderPresetAt("1h", now);
+}
+
+/** Quiet OS copy: the saved page, then its host. No instruction. */
+export function reminderNotificationCopy(row: {
+  title: string;
+  domain?: string | null;
+}): { title: string; body?: string } {
+  const title = row.title.trim() || "Reminder";
+  const host = row.domain?.trim() ?? "";
+  if (!host || host === title) return { title };
+  return { title, body: host };
+}
+
+export const REMINDER_PING_CATEGORY = "ordo-reminder";
+export const REMINDER_PING_OPEN = "open";
+export const REMINDER_PING_LATER = "later";
+/** Matches expo-notifications `DEFAULT_ACTION_IDENTIFIER`. */
+export const REMINDER_PING_DEFAULT = "expo.modules.notifications.actions.DEFAULT";
+
+export type ReminderPingPayload = {
+  bookmarkId: string;
+  folderId: string | null;
+  title: string;
+  domain: string;
+};
+
+export function reminderPingAction(actionIdentifier: string): "open" | "later" | null {
+  if (actionIdentifier === REMINDER_PING_LATER) return "later";
+  if (actionIdentifier === REMINDER_PING_OPEN || actionIdentifier === REMINDER_PING_DEFAULT) {
+    return "open";
+  }
+  return null;
+}
+
+function asDataRecord(data: unknown): Record<string, unknown> | null {
+  if (data && typeof data === "object" && !Array.isArray(data)) {
+    return data as Record<string, unknown>;
+  }
+  if (typeof data !== "string") return null;
+  try {
+    const parsed: unknown = JSON.parse(data);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+export function reminderPingPayload(data: unknown): ReminderPingPayload | null {
+  const record = asDataRecord(data);
+  const bookmarkId = record?.bookmarkId;
+  if (typeof bookmarkId !== "string" || !bookmarkId) return null;
+  const folderIdRaw = record.folderId;
+  const folderId =
+    folderIdRaw == null || folderIdRaw === "" || folderIdRaw === "null" ? null : String(folderIdRaw);
+  return {
+    bookmarkId,
+    folderId,
+    title: typeof record.title === "string" ? record.title : "",
+    domain: typeof record.domain === "string" ? record.domain : "",
+  };
+}
+
 export function bookmarkReminderStatus(
   remindAt: number | null | undefined,
   now = new Date(),
