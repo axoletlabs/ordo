@@ -8,6 +8,9 @@ import {
   defaultCustomReminderAt,
   formatReminderWhen,
   hour12To24,
+  minuteOnes,
+  minuteTens,
+  composeMinute,
   reminderClearsOnOpen,
   reminderMonthGrid,
   reminderLaterAt,
@@ -72,8 +75,19 @@ test("custom date and time apply in local wall-clock fields", () => {
   assert.equal(applyLocalTime(at, 21, 15), unixSeconds(new Date(2026, 8, 17, 21, 15, 0)));
 });
 
-test("default custom time rounds forward to a quarter hour", () => {
-  assert.equal(defaultCustomReminderAt(now), unixSeconds(new Date(2026, 8, 17, 21, 45, 0)));
+test("default custom time rounds forward to five minutes", () => {
+  assert.equal(defaultCustomReminderAt(now), unixSeconds(new Date(2026, 8, 17, 21, 35, 0)));
+});
+
+test("minutes compose from a tens digit and a ones digit", () => {
+  assert.equal(composeMinute(2, 7), 27);
+  assert.equal(composeMinute(5, 9), 59);
+  assert.equal(composeMinute(0, 0), 0);
+  assert.equal(minuteTens(7), 0);
+  assert.equal(minuteOnes(7), 7);
+  assert.equal(minuteTens(59), 5);
+  assert.equal(minuteOnes(59), 9);
+  assert.equal(composeMinute(minuteTens(41), 8), 48);
 });
 
 test("12-hour clock maps noon and midnight", () => {

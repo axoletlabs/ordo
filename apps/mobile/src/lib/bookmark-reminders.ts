@@ -174,12 +174,30 @@ export function bookmarkReminderStatus(
   return reminderStatus(remindAt, unixSeconds(now));
 }
 
-/** Next quarter-hour local step at or after `now`, used when Custom has no existing time. */
+/** Next five-minute local step at or after `now`, used when Custom has no existing time. */
 export function defaultCustomReminderAt(now = new Date()): number {
-  return snapLocalMinutes(unixSeconds(now), 15);
+  return snapLocalMinutes(unixSeconds(now), 5);
 }
 
-export const QUARTER_HOUR_MINUTES = [0, 15, 30, 45] as const;
+export const MINUTE_TENS = [0, 1, 2, 3, 4, 5] as const;
+export const MINUTE_ONES = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] as const;
+
+export function minuteTens(minute: number): number {
+  return Math.floor(clampMinute(minute) / 10);
+}
+
+export function minuteOnes(minute: number): number {
+  return clampMinute(minute) % 10;
+}
+
+export function composeMinute(tens: number, ones: number): number {
+  return minuteTens(tens * 10) * 10 + minuteOnes(ones);
+}
+
+function clampMinute(minute: number): number {
+  if (!Number.isFinite(minute)) return 0;
+  return Math.min(59, Math.max(0, Math.trunc(minute)));
+}
 
 /** Advance `unix` to the next `step`-minute local boundary (always in the future when leftover is 0). */
 export function snapLocalMinutes(unix: number, step: number): number {

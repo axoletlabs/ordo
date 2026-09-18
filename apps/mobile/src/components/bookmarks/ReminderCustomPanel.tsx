@@ -13,14 +13,18 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
 import { layout, radius, spacing } from "../../theme/tokens";
 import {
-  QUARTER_HOUR_MINUTES,
+  MINUTE_ONES,
+  MINUTE_TENS,
   applyLocalDate,
   applyLocalTime,
+  composeMinute,
   defaultCustomReminderAt,
   formatMonthTitle,
   formatReminderFull,
   hour12To24,
   localTimeParts,
+  minuteOnes,
+  minuteTens,
   reminderMonthGrid,
   shiftCalendarMonth,
   weekdayNarrowLabels,
@@ -165,56 +169,50 @@ export function ReminderCustomPanel({
           {HOURS_12.map((hour) => {
             const selected = hour === parts.hour12;
             return (
-              <Pressable
+              <PadCell
                 key={hour}
-                accessibilityRole="button"
+                label={String(hour)}
                 accessibilityLabel={`${hour} o'clock`}
-                accessibilityState={{ selected }}
-                onPress={() => {
-                  haptics.selection();
-                  setTime(hour, parts.period, parts.minute);
-                }}
-                style={({ pressed }) => [
-                  styles.hourCell,
-                  {
-                    backgroundColor: selected ? palette.accentSoft : "transparent",
-                    opacity: pressed ? 0.7 : 1,
-                  },
-                ]}
-              >
-                <Text variant="caption" color={selected ? "accent" : "secondary"} align="center">
-                  {hour}
-                </Text>
-              </Pressable>
+                selected={selected}
+                width="25%"
+                onPress={() => setTime(hour, parts.period, parts.minute)}
+              />
             );
           })}
         </View>
         <View style={styles.minutes}>
-          {QUARTER_HOUR_MINUTES.map((minute) => {
-            const selected = minute === parts.minute;
+          {MINUTE_TENS.map((tens) => {
+            const selected = tens === minuteTens(parts.minute);
+            const minute = tens * 10;
             const label = `:${String(minute).padStart(2, "0")}`;
             return (
-              <Pressable
-                key={minute}
-                accessibilityRole="button"
-                accessibilityLabel={`${minute} minutes`}
-                accessibilityState={{ selected }}
-                onPress={() => {
-                  haptics.selection();
-                  setTime(parts.hour12, parts.period, minute);
-                }}
-                style={({ pressed }) => [
-                  styles.minuteCell,
-                  {
-                    backgroundColor: selected ? palette.accentSoft : "transparent",
-                    opacity: pressed ? 0.7 : 1,
-                  },
-                ]}
-              >
-                <Text variant="monoSmall" color={selected ? "accent" : "secondary"} align="center">
-                  {label}
-                </Text>
-              </Pressable>
+              <PadCell
+                key={tens}
+                label={label}
+                accessibilityLabel={`${composeMinute(tens, minuteOnes(parts.minute))} minutes`}
+                selected={selected}
+                width="16.6667%"
+                mono
+                onPress={() =>
+                  setTime(parts.hour12, parts.period, composeMinute(tens, minuteOnes(parts.minute)))
+                }
+              />
+            );
+          })}
+        </View>
+        <View style={styles.minuteOnes}>
+          {MINUTE_ONES.map((ones) => {
+            const selected = ones === minuteOnes(parts.minute);
+            return (
+              <PadCell
+                key={ones}
+                label={String(ones)}
+                accessibilityLabel={`${composeMinute(minuteTens(parts.minute), ones)} minutes`}
+                selected={selected}
+                width="20%"
+                mono
+                onPress={() => setTime(parts.hour12, parts.period, composeMinute(minuteTens(parts.minute), ones))}
+              />
             );
           })}
         </View>
@@ -232,6 +230,51 @@ export function ReminderCustomPanel({
         confirmDisabled={!future || busy}
       />
     </FloatingPanel>
+  );
+}
+
+function PadCell({
+  label,
+  accessibilityLabel,
+  selected,
+  width,
+  mono,
+  onPress,
+}: {
+  label: string;
+  accessibilityLabel: string;
+  selected: boolean;
+  width: `${number}%`;
+  mono?: boolean;
+  onPress: () => void;
+}) {
+  const { palette } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ selected }}
+      onPress={() => {
+        haptics.selection();
+        onPress();
+      }}
+      style={({ pressed }) => [
+        styles.padCell,
+        {
+          width,
+          backgroundColor: selected ? palette.accentSoft : "transparent",
+          opacity: pressed ? 0.7 : 1,
+        },
+      ]}
+    >
+      <Text
+        variant={mono ? "monoSmall" : "caption"}
+        color={selected ? "accent" : "secondary"}
+        align="center"
+      >
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -305,20 +348,17 @@ const styles = StyleSheet.create({
     flexWrap: "wrap",
     marginTop: spacing[8],
   },
-  hourCell: {
-    width: "25%",
-    height: 36,
-    borderRadius: radius.sm,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   minutes: {
     flexDirection: "row",
+    flexWrap: "wrap",
     marginTop: spacing[4],
-    gap: spacing[4],
   },
-  minuteCell: {
-    flex: 1,
+  minuteOnes: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    marginTop: spacing[2],
+  },
+  padCell: {
     height: 36,
     borderRadius: radius.sm,
     alignItems: "center",
