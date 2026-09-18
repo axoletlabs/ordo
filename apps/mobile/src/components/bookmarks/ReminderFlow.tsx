@@ -16,6 +16,11 @@ import {
 } from "../../lib/bookmark-reminders";
 import { ReminderCustomPanel } from "./ReminderCustomPanel";
 
+export type ReminderFlowBookmark = Pick<
+  BookmarkDto,
+  "id" | "folderId" | "title" | "domain" | "remindAt"
+>;
+
 const PRESET_ICON: Record<ReminderPresetId, keyof typeof Ionicons.glyphMap> = {
   "1h": "hourglass-outline",
   "3h": "timer-outline",
@@ -32,7 +37,7 @@ export function ReminderFlow({
   onBack,
 }: {
   visible: boolean;
-  bookmark: BookmarkDto | null;
+  bookmark: ReminderFlowBookmark | null;
   anchor: MenuAnchorRect | null;
   onDismiss: () => void;
   showBack?: boolean;

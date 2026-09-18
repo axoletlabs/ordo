@@ -13,10 +13,15 @@ import {
   reminderMonthGrid,
   reminderLaterAt,
   reminderNotificationCopy,
+  parseUnixSeconds,
   reminderPingAction,
   reminderPingPayload,
+  reminderPingPlan,
   reminderPresetAt,
   reminderPresetDetail,
+  REMINDER_PING_IMMINENT_SECONDS,
+  REMINDER_PING_STUCK_SECONDS,
+  scheduledTriggerUnix,
   shiftCalendarMonth,
 } from "./bookmark-reminders.ts";
 
@@ -108,40 +113,110 @@ test("Later is the one-hour preset from now", () => {
   assert.equal(reminderLaterAt(now), reminderPresetAt("1h", now));
 });
 
-test("notification copy is the title plus host, with no instruction", () => {
+test("notification copy is the title plus a Reminder chip and host", () => {
   assert.deepEqual(
     reminderNotificationCopy({ title: "How to remember what you read", domain: "fs.blog" }),
-    { title: "How to remember what you read", body: "fs.blog" },
+    { title: "How to remember what you read", subtitle: "Reminder", body: "fs.blog" },
   );
-  assert.deepEqual(reminderNotificationCopy({ title: "  ", domain: "" }), { title: "Reminder" });
+  assert.deepEqual(reminderNotificationCopy({ title: "  ", domain: "" }), {
+    title: "Saved page",
+    subtitle: "Reminder",
+  });
   assert.deepEqual(reminderNotificationCopy({ title: "example.com", domain: "example.com" }), {
     title: "example.com",
+    subtitle: "Reminder",
   });
 });
 
-test("notification actions map Later, Open, and a default tap", () => {
+test("notification actions map Later, Reschedule, Open, and a default tap", () => {
   assert.equal(reminderPingAction("later"), "later");
+  assert.equal(reminderPingAction("reschedule"), "reschedule");
   assert.equal(reminderPingAction("open"), "open");
   assert.equal(reminderPingAction("expo.modules.notifications.actions.DEFAULT"), "open");
   assert.equal(reminderPingAction("dismiss"), null);
 });
 
-test("notification payload reads folderId nulls from JSON-ish data", () => {
+test("notification payload reads folderId nulls and remindAt from JSON-ish data", () => {
   assert.deepEqual(
     reminderPingPayload({
       bookmarkId: "b1",
       folderId: null,
       title: "Notes",
       domain: "example.com",
+      remindAt: 1_789_664_542,
     }),
-    { bookmarkId: "b1", folderId: null, title: "Notes", domain: "example.com" },
+    {
+      bookmarkId: "b1",
+      folderId: null,
+      title: "Notes",
+      domain: "example.com",
+      remindAt: 1_789_664_542,
+    },
   );
   assert.equal(reminderPingPayload({ bookmarkId: "b1", folderId: "null" })?.folderId, null);
   assert.equal(reminderPingPayload({ bookmarkId: "b1", folderId: "folder-1" })?.folderId, "folder-1");
+  assert.equal(reminderPingPayload({ bookmarkId: "b1", remindAt: "1789664542" })?.remindAt, 1_789_664_542);
+  assert.equal(reminderPingPayload({ bookmarkId: "b1", remindAt: 1_789_664_542_000 })?.remindAt, 1_789_664_542);
   assert.equal(reminderPingPayload({ title: "no id" }), null);
   assert.equal(
     reminderPingPayload(JSON.stringify({ bookmarkId: "b2", folderId: "", title: "A", domain: "x.com" }))
       ?.bookmarkId,
     "b2",
   );
+  assert.equal(reminderPingPayload({ bookmarkId: "b1" })?.remindAt, null);
+});
+
+test("parseUnixSeconds accepts seconds, milliseconds, and numeric strings", () => {
+  assert.equal(parseUnixSeconds(1_789_664_542), 1_789_664_542);
+  assert.equal(parseUnixSeconds(1_789_664_542_000), 1_789_664_542);
+  assert.equal(parseUnixSeconds("1789664542"), 1_789_664_542);
+  assert.equal(parseUnixSeconds(new Date(1_789_664_542_000)), 1_789_664_542);
+  assert.equal(parseUnixSeconds(0), null);
+  assert.equal(parseUnixSeconds("nope"), null);
+});
+
+test("scheduledTriggerUnix reads Android DATE value-as-ms and iOS date fields", () => {
+  assert.equal(
+    scheduledTriggerUnix({ type: "date", repeats: false, value: 1_789_664_542_000 }),
+    1_789_664_542,
+  );
+  assert.equal(scheduledTriggerUnix({ type: "date", date: 1_789_664_542 }), 1_789_664_542);
+  assert.equal(scheduledTriggerUnix({ type: "unknown" }), null);
+});
+
+test("reminder ping plan leaves matching future DATE schedules alone", () => {
+  const at = 1_000_000;
+  const remindAt = at + 3600;
+  assert.equal(reminderPingPlan({ remindAt, now: at, scheduledAt: remindAt }), "skip");
+  assert.equal(reminderPingPlan({ remindAt, now: at }), "schedule");
+  assert.equal(reminderPingPlan({ remindAt, now: at, scheduledAt: remindAt + 60 }), "schedule");
+});
+
+test("reminder ping plan does not re-present a due ping that already fired", () => {
+  const at = 1_000_000;
+  const remindAt = at - 5;
+  assert.equal(reminderPingPlan({ remindAt, now: at, firedAt: remindAt }), "skip");
+  assert.equal(reminderPingPlan({ remindAt, now: at, presented: true }), "skip");
+  assert.equal(reminderPingPlan({ remindAt, now: at }), "present");
+});
+
+test("reminder ping plan waits briefly for a just-due DATE, then catch-up presents", () => {
+  const at = 1_000_000;
+  const remindAt = at - 10;
+  assert.equal(reminderPingPlan({ remindAt, now: at, scheduledAt: remindAt }), "skip");
+  assert.equal(
+    reminderPingPlan({
+      remindAt: at - REMINDER_PING_STUCK_SECONDS - 1,
+      now: at,
+      scheduledAt: at - REMINDER_PING_STUCK_SECONDS - 1,
+    }),
+    "present",
+  );
+});
+
+test("reminder ping plan presents imminent times that are not already scheduled", () => {
+  const at = 1_000_000;
+  const remindAt = at + REMINDER_PING_IMMINENT_SECONDS - 1;
+  assert.equal(reminderPingPlan({ remindAt, now: at }), "present");
+  assert.equal(reminderPingPlan({ remindAt, now: at, scheduledAt: remindAt }), "skip");
 });

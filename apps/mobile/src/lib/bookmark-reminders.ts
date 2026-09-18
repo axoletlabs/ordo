@@ -99,41 +99,110 @@ export function reminderClearedToast(): string {
   return "Reminder cleared";
 }
 
-/** One hour out — the Later action on a reminder ping. */
+/** One hour out — the in-app "In 1 hour" preset. */
 export function reminderLaterAt(now = new Date()): number {
   return reminderPresetAt("1h", now);
 }
 
-/** Quiet OS copy: the saved page, then its host. No instruction. */
+/** Small type chip so reminder pings stay distinct from other notifications. */
+export const REMINDER_PING_SUBTITLE = "Reminder";
+
+/**
+ * Quiet OS copy: bookmark title, a Reminder subtitle (Android subText / iOS
+ * subtitle), and the host when expanded. No instruction.
+ */
 export function reminderNotificationCopy(row: {
   title: string;
   domain?: string | null;
-}): { title: string; body?: string } {
-  const title = row.title.trim() || "Reminder";
+}): { title: string; subtitle: string; body?: string } {
+  const title = row.title.trim() || "Saved page";
   const host = row.domain?.trim() ?? "";
-  if (!host || host === title) return { title };
-  return { title, body: host };
+  if (!host || host === title) return { title, subtitle: REMINDER_PING_SUBTITLE };
+  return { title, subtitle: REMINDER_PING_SUBTITLE, body: host };
 }
 
 export const REMINDER_PING_CATEGORY = "ordo-reminder";
 export const REMINDER_PING_OPEN = "open";
 export const REMINDER_PING_LATER = "later";
+export const REMINDER_PING_RESCHEDULE = "reschedule";
 /** Matches expo-notifications `DEFAULT_ACTION_IDENTIFIER`. */
 export const REMINDER_PING_DEFAULT = "expo.modules.notifications.actions.DEFAULT";
+
+export type ReminderPingKind = "open" | "later" | "reschedule";
 
 export type ReminderPingPayload = {
   bookmarkId: string;
   folderId: string | null;
   title: string;
   domain: string;
+  remindAt: number | null;
 };
 
-export function reminderPingAction(actionIdentifier: string): "open" | "later" | null {
+export function reminderPingAction(actionIdentifier: string): ReminderPingKind | null {
   if (actionIdentifier === REMINDER_PING_LATER) return "later";
+  if (actionIdentifier === REMINDER_PING_RESCHEDULE) return "reschedule";
   if (actionIdentifier === REMINDER_PING_OPEN || actionIdentifier === REMINDER_PING_DEFAULT) {
     return "open";
   }
   return null;
+}
+
+/** Unix seconds from notification data / native DATE triggers (seconds or ms). */
+export function parseUnixSeconds(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return value > 1e12 ? Math.trunc(value / 1000) : Math.trunc(value);
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    if (/^-?\d+(\.\d+)?$/.test(trimmed)) return parseUnixSeconds(Number(trimmed));
+    const parsed = Date.parse(trimmed);
+    if (Number.isFinite(parsed) && parsed > 0) return Math.trunc(parsed / 1000);
+  }
+  if (value instanceof Date) {
+    const ms = value.getTime();
+    if (Number.isFinite(ms) && ms > 0) return Math.trunc(ms / 1000);
+  }
+  return null;
+}
+
+/** Next fire time from a scheduled expo-notifications trigger blob. */
+export function scheduledTriggerUnix(trigger: unknown): number | null {
+  if (!trigger || typeof trigger !== "object") return null;
+  const record = trigger as Record<string, unknown>;
+  return parseUnixSeconds(record.value) ?? parseUnixSeconds(record.date) ?? parseUnixSeconds(record.timestamp);
+}
+
+export type ReminderPingPlan = "present" | "schedule" | "skip";
+
+/** Near-term DATE triggers are presented immediately — Android often drops them. */
+export const REMINDER_PING_IMMINENT_SECONDS = 8;
+/** Past DATE still sitting in the scheduler after this is treated as a missed fire. */
+export const REMINDER_PING_STUCK_SECONDS = 60;
+
+/**
+ * Decide whether to show, schedule, or leave an existing OS ping alone.
+ * Reconcile used to cancel+reschedule every future DATE, which both missed
+ * near-term fires and re-presented the banner after Open.
+ */
+export function reminderPingPlan(input: {
+  remindAt: number;
+  now: number;
+  firedAt?: number | null;
+  scheduledAt?: number | null;
+  presented?: boolean;
+}): ReminderPingPlan {
+  const { remindAt, now, firedAt, scheduledAt, presented } = input;
+  if (remindAt > now + REMINDER_PING_IMMINENT_SECONDS) {
+    return scheduledAt === remindAt ? "skip" : "schedule";
+  }
+  if (firedAt === remindAt || presented) return "skip";
+  if (scheduledAt === remindAt) {
+    if (remindAt > now) return "skip";
+    if (now - remindAt < REMINDER_PING_STUCK_SECONDS) return "skip";
+    return "present";
+  }
+  return "present";
 }
 
 function asDataRecord(data: unknown): Record<string, unknown> | null {
@@ -164,6 +233,7 @@ export function reminderPingPayload(data: unknown): ReminderPingPayload | null {
     folderId,
     title: typeof record.title === "string" ? record.title : "",
     domain: typeof record.domain === "string" ? record.domain : "",
+    remindAt: parseUnixSeconds(record.remindAt),
   };
 }
 
