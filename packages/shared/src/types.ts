@@ -238,6 +238,8 @@ export interface BookmarkReminderDto {
   title: string;
   /** Display host, without a leading www. */
   domain: string;
+  /** Standfirst / excerpt; null when extraction has not produced one. */
+  description: string | null;
   /** Unix seconds. */
   remindAt: number;
 }

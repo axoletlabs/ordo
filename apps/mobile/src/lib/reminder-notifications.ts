@@ -25,15 +25,18 @@ import { prefsGet, prefsSet, StorageKeys } from "./storage";
 const CHANNEL_ID = "reminders";
 const FIRED_KEY = StorageKeys.REMINDER_FIRED;
 /** Bump when shade actions change so already-presented pings get new PendingIntents. */
-const ACTIONS_REV = 4;
+const ACTIONS_REV = 5;
 const CATEGORY_OPTIONS = {
   previewPlaceholder: "Reminder",
   showTitle: true,
-  showSubtitle: true,
+  showSubtitle: false,
 } as const;
 
 type NotificationsModule = typeof import("expo-notifications");
-type ReminderPingRow = Pick<BookmarkReminderDto, "id" | "folderId" | "title" | "domain" | "remindAt">;
+type ReminderPingRow = Pick<
+  BookmarkReminderDto,
+  "id" | "folderId" | "title" | "domain" | "description" | "remindAt"
+>;
 type TapHandlers = {
   onOpen: (payload: ReminderPingPayload) => void;
   onReschedule: (payload: ReminderPingPayload) => void;
@@ -158,6 +161,7 @@ async function refreshPresentedReminderActions(mod: NotificationsModule): Promis
           folderId: payload.folderId,
           title: payload.title,
           domain: payload.domain,
+          description: payload.description,
           remindAt,
         },
         remindAt,
@@ -241,7 +245,6 @@ function notificationContent(row: ReminderPingRow) {
   const copy = reminderNotificationCopy(row);
   return {
     title: copy.title,
-    subtitle: copy.subtitle,
     body: copy.body ?? null,
     categoryIdentifier: REMINDER_PING_CATEGORY,
     data: {
@@ -249,6 +252,7 @@ function notificationContent(row: ReminderPingRow) {
       folderId: row.folderId,
       title: row.title,
       domain: row.domain,
+      description: row.description ?? "",
       remindAt: row.remindAt,
     },
     sound: true as const,
@@ -261,7 +265,7 @@ function notificationContent(row: ReminderPingRow) {
 
 function asPingRow(
   row: Pick<BookmarkDto, "id" | "title" | "remindAt"> &
-    Partial<Pick<BookmarkDto, "folderId" | "domain">>,
+    Partial<Pick<BookmarkDto, "folderId" | "domain" | "description">>,
   remindAt: number,
 ): ReminderPingRow {
   return {
@@ -269,6 +273,7 @@ function asPingRow(
     folderId: row.folderId ?? null,
     title: row.title,
     domain: row.domain ?? "",
+    description: row.description ?? null,
     remindAt,
   };
 }

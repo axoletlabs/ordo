@@ -116,19 +116,42 @@ test("Later is the one-hour preset from now", () => {
   assert.equal(reminderLaterAt(now), reminderPresetAt("1h", now));
 });
 
-test("notification copy is the title plus a Reminder chip and host", () => {
+test("notification copy is the title, with description when expanded", () => {
   assert.deepEqual(
-    reminderNotificationCopy({ title: "How to remember what you read", domain: "fs.blog" }),
-    { title: "How to remember what you read", subtitle: "Reminder", body: "fs.blog" },
+    reminderNotificationCopy({
+      title: "How to remember what you read",
+      description: "A few habits that make reading stick.",
+      domain: "fs.blog",
+    }),
+    {
+      title: "How to remember what you read",
+      body: "A few habits that make reading stick.",
+    },
   );
   assert.deepEqual(reminderNotificationCopy({ title: "  ", domain: "" }), {
     title: "Saved page",
-    subtitle: "Reminder",
   });
-  assert.deepEqual(reminderNotificationCopy({ title: "example.com", domain: "example.com" }), {
-    title: "example.com",
-    subtitle: "Reminder",
-  });
+  assert.deepEqual(
+    reminderNotificationCopy({ title: "example.com", domain: "example.com" }),
+    { title: "example.com" },
+  );
+  assert.deepEqual(
+    reminderNotificationCopy({ title: "Saved page", domain: "fs.blog" }),
+    { title: "Saved page", body: "fs.blog" },
+  );
+  assert.deepEqual(
+    reminderNotificationCopy({
+      title: "How to remember what you read",
+      description: "How to remember what you read",
+      domain: "fs.blog",
+    }),
+    { title: "How to remember what you read", body: "fs.blog" },
+  );
+  const long = "A dek. ".repeat(40).trim();
+  const clipped = reminderNotificationCopy({ title: "Notes", description: long });
+  assert.equal(clipped.title, "Notes");
+  assert.ok(clipped.body && clipped.body.endsWith("…"));
+  assert.ok((clipped.body?.length ?? 0) <= 221);
 });
 
 test("notification actions map Reschedule, Open, and a default tap", () => {
@@ -149,6 +172,7 @@ test("notification payload reads folderId nulls and remindAt from JSON-ish data"
       folderId: null,
       title: "Notes",
       domain: "example.com",
+      description: "A summary.",
       remindAt: 1_789_664_542,
     }),
     {
@@ -156,6 +180,7 @@ test("notification payload reads folderId nulls and remindAt from JSON-ish data"
       folderId: null,
       title: "Notes",
       domain: "example.com",
+      description: "A summary.",
       remindAt: 1_789_664_542,
     },
   );
@@ -170,6 +195,7 @@ test("notification payload reads folderId nulls and remindAt from JSON-ish data"
     "b2",
   );
   assert.equal(reminderPingPayload({ bookmarkId: "b1" })?.remindAt, null);
+  assert.equal(reminderPingPayload({ bookmarkId: "b1" })?.description, "");
 });
 
 test("notification payload falls back to dataString and the request identifier", () => {
@@ -177,13 +203,14 @@ test("notification payload falls back to dataString and the request identifier",
     reminderPingFromNotification({
       dataString: JSON.stringify({ bookmarkId: "b3", folderId: null, title: "A", domain: "x.com", remindAt: 10 }),
     }),
-    { bookmarkId: "b3", folderId: null, title: "A", domain: "x.com", remindAt: 10 },
+    { bookmarkId: "b3", folderId: null, title: "A", domain: "x.com", description: "", remindAt: 10 },
   );
   assert.deepEqual(reminderPingFromNotification({ identifier: "ordo-reminder:b4" }), {
     bookmarkId: "b4",
     folderId: null,
     title: "",
     domain: "",
+    description: "",
     remindAt: null,
   });
   assert.equal(reminderPingFromNotification({ identifier: "other:b4" }), null);

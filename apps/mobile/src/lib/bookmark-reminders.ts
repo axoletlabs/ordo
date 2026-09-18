@@ -104,21 +104,49 @@ export function reminderLaterAt(now = new Date()): number {
   return reminderPresetAt("1h", now);
 }
 
-/** Small type chip so reminder pings stay distinct from other notifications. */
-export const REMINDER_PING_SUBTITLE = "Reminder";
+function collapseNotificationText(raw: string | null | undefined): string {
+  return (raw ?? "").replace(/\s+/g, " ").trim();
+}
+
+function isRedundantNotificationDescription(title: string, description: string): boolean {
+  if (!title || !description) return false;
+  if (description === title) return true;
+  return (
+    description.startsWith(title) &&
+    description.length > title.length &&
+    !/\s/.test(description[title.length]!)
+  );
+}
+
+const NOTIFICATION_BODY_MAX = 220;
+
+function clipNotificationBody(text: string): string {
+  if (text.length <= NOTIFICATION_BODY_MAX) return text;
+  const slice = text.slice(0, NOTIFICATION_BODY_MAX);
+  const breakAt = Math.max(slice.lastIndexOf(" "), slice.lastIndexOf("\n"));
+  return `${(breakAt > 80 ? slice.slice(0, breakAt) : slice).trimEnd()}…`;
+}
 
 /**
- * Quiet OS copy: bookmark title, a Reminder subtitle (Android subText / iOS
- * subtitle), and the host when expanded. No instruction.
+ * Collapsed shade is the title. Expanded body is the standfirst when we have
+ * one, otherwise the host — no type chip, no instruction.
  */
 export function reminderNotificationCopy(row: {
   title: string;
+  description?: string | null;
   domain?: string | null;
-}): { title: string; subtitle: string; body?: string } {
-  const title = row.title.trim() || "Saved page";
-  const host = row.domain?.trim() ?? "";
-  if (!host || host === title) return { title, subtitle: REMINDER_PING_SUBTITLE };
-  return { title, subtitle: REMINDER_PING_SUBTITLE, body: host };
+}): { title: string; body?: string } {
+  const title = collapseNotificationText(row.title) || "Saved page";
+  const description = collapseNotificationText(row.description);
+  const host = collapseNotificationText(row.domain);
+  const raw =
+    description && !isRedundantNotificationDescription(title, description)
+      ? description
+      : host && host !== title
+        ? host
+        : "";
+  if (!raw) return { title };
+  return { title, body: clipNotificationBody(raw) };
 }
 
 /** expo-notifications: `:` / `-` in a category id can break action buttons. */
@@ -148,6 +176,7 @@ export type ReminderPingPayload = {
   folderId: string | null;
   title: string;
   domain: string;
+  description: string;
   remindAt: number | null;
 };
 
@@ -247,6 +276,7 @@ export function reminderPingPayload(data: unknown): ReminderPingPayload | null {
     folderId,
     title: typeof record.title === "string" ? record.title : "",
     domain: typeof record.domain === "string" ? record.domain : "",
+    description: typeof record.description === "string" ? record.description : "",
     remindAt: parseUnixSeconds(record.remindAt),
   };
 }
@@ -261,7 +291,7 @@ export function reminderPingFromNotification(input: {
   if (fromData) return fromData;
   const bookmarkId = input.identifier ? bookmarkIdFromReminderIdentifier(input.identifier) : null;
   if (!bookmarkId) return null;
-  return { bookmarkId, folderId: null, title: "", domain: "", remindAt: null };
+  return { bookmarkId, folderId: null, title: "", domain: "", description: "", remindAt: null };
 }
 
 export function bookmarkReminderStatus(

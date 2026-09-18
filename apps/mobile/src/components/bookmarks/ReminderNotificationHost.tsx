@@ -69,6 +69,7 @@ export function ReminderNotificationHost() {
       folderId: edit.folderId ?? row?.folderId ?? null,
       title: edit.title || row?.title || "",
       domain: edit.domain || row?.domain || "",
+      description: edit.description || row?.description || null,
       remindAt: edit.remindAt ?? row?.remindAt ?? unixSeconds(),
     };
   }, [edit, reminders.data]);

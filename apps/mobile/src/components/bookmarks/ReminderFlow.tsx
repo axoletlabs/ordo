@@ -18,7 +18,7 @@ import { ReminderCustomPanel } from "./ReminderCustomPanel";
 
 export type ReminderFlowBookmark = Pick<
   BookmarkDto,
-  "id" | "folderId" | "title" | "domain" | "remindAt"
+  "id" | "folderId" | "title" | "domain" | "description" | "remindAt"
 >;
 
 const PRESET_ICON: Record<ReminderPresetId, keyof typeof Ionicons.glyphMap> = {
@@ -37,7 +37,14 @@ export function useSaveReminder(bookmark: ReminderFlowBookmark | null, onDismiss
     const target = bookmarkRef.current;
     if (!target) return;
     setReminder.mutate(
-      { id: target.id, folderId: target.folderId, title: target.title, domain: target.domain, remindAt },
+      {
+        id: target.id,
+        folderId: target.folderId,
+        title: target.title,
+        domain: target.domain,
+        description: target.description,
+        remindAt,
+      },
       {
         onSuccess: (updated) => {
           if (updated.remindAt == null) toast.success(reminderClearedToast());
