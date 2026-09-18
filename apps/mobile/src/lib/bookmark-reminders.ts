@@ -179,6 +179,8 @@ export type ReminderPingPlan = "present" | "schedule" | "skip";
 export const REMINDER_PING_IMMINENT_SECONDS = 8;
 /** Past DATE still sitting in the scheduler after this is treated as a missed fire. */
 export const REMINDER_PING_STUCK_SECONDS = 60;
+/** After this, a due reminder stays in the list but we do not re-banner it. */
+export const REMINDER_PING_CATCHUP_SECONDS = 15 * 60;
 
 /**
  * Decide whether to show, schedule, or leave an existing OS ping alone.
@@ -200,8 +202,8 @@ export function reminderPingPlan(input: {
   if (scheduledAt === remindAt) {
     if (remindAt > now) return "skip";
     if (now - remindAt < REMINDER_PING_STUCK_SECONDS) return "skip";
-    return "present";
   }
+  if (remindAt <= now && now - remindAt > REMINDER_PING_CATCHUP_SECONDS) return "skip";
   return "present";
 }
 

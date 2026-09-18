@@ -19,6 +19,7 @@ import {
   reminderPingPlan,
   reminderPresetAt,
   reminderPresetDetail,
+  REMINDER_PING_CATCHUP_SECONDS,
   REMINDER_PING_IMMINENT_SECONDS,
   REMINDER_PING_STUCK_SECONDS,
   scheduledTriggerUnix,
@@ -219,4 +220,13 @@ test("reminder ping plan presents imminent times that are not already scheduled"
   const remindAt = at + REMINDER_PING_IMMINENT_SECONDS - 1;
   assert.equal(reminderPingPlan({ remindAt, now: at }), "present");
   assert.equal(reminderPingPlan({ remindAt, now: at, scheduledAt: remindAt }), "skip");
+});
+
+test("reminder ping plan does not re-banner a long-due reminder on the next launch", () => {
+  const at = 1_000_000;
+  assert.equal(
+    reminderPingPlan({ remindAt: at - REMINDER_PING_CATCHUP_SECONDS - 1, now: at }),
+    "skip",
+  );
+  assert.equal(reminderPingPlan({ remindAt: at - 30, now: at }), "present");
 });
