@@ -239,6 +239,7 @@ describe("PrismaService legacy schema migration", () => {
       "completedAt",
       "contentKindOverride",
       "articleUndoSnapshot",
+      "remindAt",
     ]) {
       expect(bookmarkCols.some((c) => c.name === column)).toBe(true);
     }
@@ -293,6 +294,7 @@ describe("PrismaService legacy schema migration", () => {
       "Bookmark_folderId_idx",
       "Bookmark_userId_fetchStatus_idx",
       "Bookmark_userId_idx",
+      "Bookmark_userId_remindAt_idx",
       "sqlite_autoindex_Bookmark_1",
     ]);
 
