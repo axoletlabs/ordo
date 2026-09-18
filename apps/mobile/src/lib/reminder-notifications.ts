@@ -52,6 +52,7 @@ let queuedTap: { kind: ReminderPingKind; payload: ReminderPingPayload } | null =
 const seenResponseKeys = new Set<string>();
 let fired: Record<string, number> = {};
 let firedLoaded = false;
+let exactAlarmScreenShown = false;
 
 function nativeOk(): boolean {
   return Platform.OS === "android" || Platform.OS === "ios";
@@ -126,6 +127,8 @@ async function ensureHandler(mod: NotificationsModule): Promise<void> {
       await mod.setNotificationChannelAsync(CHANNEL_ID, {
         name: "Reminders",
         importance: mod.AndroidImportance.HIGH,
+        enableVibrate: true,
+        lockscreenVisibility: mod.AndroidNotificationVisibility.PUBLIC,
       });
     }
   }
@@ -256,6 +259,7 @@ function notificationContent(row: ReminderPingRow) {
       remindAt: row.remindAt,
     },
     sound: true as const,
+    interruptionLevel: "timeSensitive" as const,
     autoDismiss: true,
     ...(Platform.OS === "android"
       ? { channelId: CHANNEL_ID, priority: "high", color: "#ED6F5C" }
@@ -317,20 +321,72 @@ async function presentDue(mod: NotificationsModule, row: ReminderPingRow): Promi
   await rememberFired(row.id, row.remindAt);
 }
 
+async function androidAllowsExactAlarms(): Promise<boolean> {
+  if (Platform.OS !== "android") return true;
+  const api = typeof Platform.Version === "number" ? Platform.Version : Number(Platform.Version);
+  if (!Number.isFinite(api) || api < 31) return true;
+  try {
+    const { PermissionsAndroid } = await import("react-native");
+    return await PermissionsAndroid.check("android.permission.SCHEDULE_EXACT_ALARM");
+  } catch {
+    return false;
+  }
+}
+
+async function ensureExactAlarms(): Promise<void> {
+  if (Platform.OS !== "android") return;
+  const api = typeof Platform.Version === "number" ? Platform.Version : Number(Platform.Version);
+  if (!Number.isFinite(api) || api < 31) return;
+  if (exactAlarmScreenShown) return;
+  if (await androidAllowsExactAlarms()) return;
+  exactAlarmScreenShown = true;
+  try {
+    const IntentLauncher = await import("expo-intent-launcher");
+    const Constants = (await import("expo-constants")).default;
+    const pkg = Constants.expoConfig?.android?.package ?? "com.axolet.ordo";
+    await IntentLauncher.startActivityAsync("android.settings.REQUEST_SCHEDULE_EXACT_ALARM", {
+      data: `package:${pkg}`,
+    });
+  } catch {
+    /* settings screen unavailable */
+  }
+}
+
+function futureTrigger(mod: NotificationsModule, remindAt: number) {
+  const date = new Date(remindAt * 1000);
+  if (Platform.OS === "ios") {
+    return {
+      type: mod.SchedulableTriggerInputTypes.CALENDAR,
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+      day: date.getDate(),
+      hour: date.getHours(),
+      minute: date.getMinutes(),
+      second: date.getSeconds(),
+      repeats: false,
+    };
+  }
+  return {
+    type: mod.SchedulableTriggerInputTypes.DATE,
+    date,
+    channelId: CHANNEL_ID,
+  };
+}
+
 async function scheduleFuture(mod: NotificationsModule, row: ReminderPingRow): Promise<void> {
   const map = await loadFired();
   if (map[row.id] !== row.remindAt) await forgetFired(row.id);
-  await cancelId(mod, row.id);
   await dismissId(mod, row.id);
-  await mod.scheduleNotificationAsync({
-    identifier: identifier(row.id),
-    content: notificationContent(row),
-    trigger: {
-      type: mod.SchedulableTriggerInputTypes.DATE,
-      date: new Date(row.remindAt * 1000),
-      channelId: Platform.OS === "android" ? CHANNEL_ID : undefined,
-    },
-  });
+  await ensureExactAlarms();
+  try {
+    await mod.scheduleNotificationAsync({
+      identifier: identifier(row.id),
+      content: notificationContent(row),
+      trigger: futureTrigger(mod, row.remindAt),
+    });
+  } catch {
+    /* OS refused the DATE (often missing exact-alarm permission) */
+  }
 }
 
 async function applyPing(

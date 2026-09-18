@@ -211,7 +211,33 @@ export function parseUnixSeconds(value: unknown): number | null {
 export function scheduledTriggerUnix(trigger: unknown): number | null {
   if (!trigger || typeof trigger !== "object") return null;
   const record = trigger as Record<string, unknown>;
-  return parseUnixSeconds(record.value) ?? parseUnixSeconds(record.date) ?? parseUnixSeconds(record.timestamp);
+  return (
+    parseUnixSeconds(record.value) ??
+    parseUnixSeconds(record.date) ??
+    parseUnixSeconds(record.timestamp) ??
+    calendarTriggerUnix(record)
+  );
+}
+
+function asDateComponent(value: unknown): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  return Math.trunc(value);
+}
+
+/** Absolute wall time from an iOS UNCalendarNotificationTrigger payload. */
+export function calendarTriggerUnix(trigger: Record<string, unknown>): number | null {
+  const year = asDateComponent(trigger.year);
+  const month = asDateComponent(trigger.month);
+  const day = asDateComponent(trigger.day);
+  const hour = asDateComponent(trigger.hour);
+  const minute = asDateComponent(trigger.minute);
+  if (year == null || month == null || day == null || hour == null || minute == null) return null;
+  const monthIndex = month >= 1 && month <= 12 ? month - 1 : month;
+  if (monthIndex < 0 || monthIndex > 11) return null;
+  const second = asDateComponent(trigger.second) ?? 0;
+  const date = new Date(year, monthIndex, day, hour, minute, second, 0);
+  if (!Number.isFinite(date.getTime())) return null;
+  return unixSeconds(date);
 }
 
 export type ReminderPingPlan = "present" | "schedule" | "skip";
@@ -243,6 +269,7 @@ export function reminderPingPlan(input: {
   if (scheduledAt === remindAt) {
     if (remindAt > now) return "skip";
     if (now - remindAt < REMINDER_PING_STUCK_SECONDS) return "skip";
+    return "present";
   }
   if (remindAt <= now && now - remindAt > REMINDER_PING_CATCHUP_SECONDS) return "skip";
   return "present";

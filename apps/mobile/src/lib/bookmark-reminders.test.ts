@@ -234,6 +234,22 @@ test("scheduledTriggerUnix reads Android DATE value-as-ms and iOS date fields", 
   assert.equal(scheduledTriggerUnix({ type: "unknown" }), null);
 });
 
+test("scheduledTriggerUnix reads an iOS calendar wall-clock", () => {
+  const at = new Date(2026, 8, 18, 21, 45, 30);
+  assert.equal(
+    scheduledTriggerUnix({
+      type: "calendar",
+      year: 2026,
+      month: 9,
+      day: 18,
+      hour: 21,
+      minute: 45,
+      second: 30,
+    }),
+    unixSeconds(at),
+  );
+});
+
 test("reminder ping plan leaves matching future DATE schedules alone", () => {
   const at = 1_000_000;
   const remindAt = at + 3600;
@@ -269,6 +285,18 @@ test("reminder ping plan presents imminent times that are not already scheduled"
   const remindAt = at + REMINDER_PING_IMMINENT_SECONDS - 1;
   assert.equal(reminderPingPlan({ remindAt, now: at }), "present");
   assert.equal(reminderPingPlan({ remindAt, now: at, scheduledAt: remindAt }), "skip");
+});
+
+test("reminder ping plan presents a DATE that stayed scheduled after it was due", () => {
+  const at = 1_000_000;
+  assert.equal(
+    reminderPingPlan({
+      remindAt: at - REMINDER_PING_CATCHUP_SECONDS - 1,
+      now: at,
+      scheduledAt: at - REMINDER_PING_CATCHUP_SECONDS - 1,
+    }),
+    "present",
+  );
 });
 
 test("reminder ping plan does not re-banner a long-due reminder on the next launch", () => {
