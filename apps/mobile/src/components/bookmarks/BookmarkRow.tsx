@@ -299,6 +299,16 @@ export const BookmarkRow = React.memo(function BookmarkRow({
                 {highlightTitle(title, searchQuery, searchFuzzy)}
               </Text>
             </View>
+            {bookmark.remindAt != null ? (
+              <RowStatusSlot>
+                <Ionicons
+                  name="alarm-outline"
+                  size={ROW_STATUS_ICON_SIZE}
+                  color={reminderDue ? palette.accent : palette.textTertiary}
+                  accessible={false}
+                />
+              </RowStatusSlot>
+            ) : null}
             {isPending ? (
               <RowStatusSlot>
                 <Spinner
