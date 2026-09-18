@@ -7,7 +7,7 @@ import type { BookmarkDto, BookmarkReminderDto } from "@ordo/shared";
 import { unixSeconds } from "@ordo/shared";
 import {
   REMINDER_PING_CATEGORY,
-  REMINDER_PING_LATER,
+  REMINDER_PING_COMPLETE,
   REMINDER_PING_OPEN,
   REMINDER_PING_RESCHEDULE,
   reminderNotificationCopy,
@@ -28,7 +28,7 @@ type NotificationsModule = typeof import("expo-notifications");
 type ReminderPingRow = Pick<BookmarkReminderDto, "id" | "folderId" | "title" | "domain" | "remindAt">;
 type TapHandlers = {
   onOpen: (payload: ReminderPingPayload) => void;
-  onLater: (payload: ReminderPingPayload) => void;
+  onComplete: (payload: ReminderPingPayload) => void;
   onReschedule: (payload: ReminderPingPayload) => void;
 };
 
@@ -109,18 +109,18 @@ async function ensureHandler(mod: NotificationsModule): Promise<void> {
       REMINDER_PING_CATEGORY,
       [
         {
-          identifier: REMINDER_PING_LATER,
-          buttonTitle: "Later",
+          identifier: REMINDER_PING_COMPLETE,
+          buttonTitle: "Complete",
           options: { opensAppToForeground: false },
-        },
-        {
-          identifier: REMINDER_PING_RESCHEDULE,
-          buttonTitle: "Reschedule",
-          options: { opensAppToForeground: true },
         },
         {
           identifier: REMINDER_PING_OPEN,
           buttonTitle: "Open",
+          options: { opensAppToForeground: true },
+        },
+        {
+          identifier: REMINDER_PING_RESCHEDULE,
+          buttonTitle: "Reschedule",
           options: { opensAppToForeground: true },
         },
       ],
@@ -177,7 +177,9 @@ function notificationContent(row: ReminderPingRow) {
     },
     sound: true as const,
     autoDismiss: true,
-    ...(Platform.OS === "android" ? { channelId: CHANNEL_ID, priority: "high" } : null),
+    ...(Platform.OS === "android"
+      ? { channelId: CHANNEL_ID, priority: "high", color: "#ED6F5C" }
+      : null),
   };
 }
 
@@ -364,7 +366,7 @@ function emitTap(kind: ReminderPingKind, payload: ReminderPingPayload) {
     queuedTap = { kind, payload };
     return;
   }
-  if (kind === "later") tapHandlers.onLater(payload);
+  if (kind === "complete") tapHandlers.onComplete(payload);
   else if (kind === "open") tapHandlers.onOpen(payload);
   else tapHandlers.onReschedule(payload);
 }

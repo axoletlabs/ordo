@@ -129,8 +129,9 @@ test("notification copy is the title plus a Reminder chip and host", () => {
   });
 });
 
-test("notification actions map Later, Reschedule, Open, and a default tap", () => {
-  assert.equal(reminderPingAction("later"), "later");
+test("notification actions map Complete, Reschedule, Open, and a default tap", () => {
+  assert.equal(reminderPingAction("complete"), "complete");
+  assert.equal(reminderPingAction("later"), "complete");
   assert.equal(reminderPingAction("reschedule"), "reschedule");
   assert.equal(reminderPingAction("open"), "open");
   assert.equal(reminderPingAction("expo.modules.notifications.actions.DEFAULT"), "open");

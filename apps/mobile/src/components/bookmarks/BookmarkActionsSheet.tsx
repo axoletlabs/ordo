@@ -17,7 +17,8 @@ import { useServerInfo } from "../../hooks/queries";
 import { formatReminderWhen } from "../../lib/bookmark-reminders";
 import type { MenuAnchorRect } from "../../lib/menu-anchor";
 import type { BookmarkDto } from "@ordo/shared";
-import { ReminderFlow } from "./ReminderFlow";
+import { ReminderCustomPanel } from "./ReminderCustomPanel";
+import { ReminderPresetItems, useSaveReminder } from "./ReminderFlow";
 
 function useSetContentKindMissing() {
   return { mutate: () => undefined, isPending: false };
@@ -52,11 +53,20 @@ export function BookmarkActionsSheet({
   const router = useRouter();
   const setContentKind = useSetContentKind();
   const [mode, setMode] = useOverlaySessionMode<"menu" | "remind" | "delete">(visible, "menu");
+  const [remindPage, setRemindPage] = useOverlaySessionMode<"presets" | "custom">(
+    visible && mode === "remind",
+    "presets",
+  );
   const serverInfo = useServerInfo();
   const remindersSupported = serverInfo.data?.reminders === true;
   const bookmarkRef = React.useRef(bookmark);
   if (bookmark) bookmarkRef.current = bookmark;
   const displayBookmark = bookmark ?? bookmarkRef.current;
+  const { save: saveReminder, busy: reminderBusy } = useSaveReminder(displayBookmark, onDismiss);
+  const remindNow = React.useMemo(
+    () => new Date(),
+    [visible, mode, displayBookmark?.id, displayBookmark?.remindAt],
+  );
 
   useEffect(() => {
     if (!visible || !displayBookmark) return;
@@ -72,7 +82,24 @@ export function BookmarkActionsSheet({
 
   return (
     <>
-      <ContextMenu visible={visible && mode === "menu"} onDismiss={onDismiss} anchor={anchor}>
+      <ContextMenu
+        visible={visible && (mode === "menu" || (mode === "remind" && remindPage === "presets"))}
+        onDismiss={onDismiss}
+        anchor={anchor}
+        sessionKey={visible ? displayBookmark.id : undefined}
+      >
+        {mode === "remind" ? (
+          <ReminderPresetItems
+            bookmark={displayBookmark}
+            now={remindNow}
+            busy={reminderBusy}
+            showBack
+            onBack={() => setMode("menu")}
+            onPick={saveReminder}
+            onCustom={() => setRemindPage("custom")}
+          />
+        ) : (
+          <>
         <ContextMenuItem
           icon={displayBookmark.isRead ? "radio-button-off" : "checkmark-circle"}
           label={displayBookmark.isRead ? "Mark as unread" : "Mark as read"}
@@ -184,14 +211,15 @@ export function BookmarkActionsSheet({
           tone="danger"
           onPress={() => setMode("delete")}
         />
+          </>
+        )}
       </ContextMenu>
-      <ReminderFlow
-        visible={visible && mode === "remind"}
-        bookmark={displayBookmark}
-        anchor={anchor}
-        showBack
-        onBack={() => setMode("menu")}
-        onDismiss={onDismiss}
+      <ReminderCustomPanel
+        visible={visible && mode === "remind" && remindPage === "custom"}
+        initialUnix={displayBookmark.remindAt}
+        busy={reminderBusy}
+        onDismiss={() => setRemindPage("presets")}
+        onConfirm={(unix) => saveReminder(unix)}
       />
       <ConfirmDialog
         visible={visible && mode === "delete"}

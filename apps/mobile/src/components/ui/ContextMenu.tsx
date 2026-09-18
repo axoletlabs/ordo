@@ -45,6 +45,7 @@ export function ContextMenu({
   backdrop = true,
   preferredPlacement,
   estimatedHeight = 200,
+  sessionKey,
 }: {
   visible: boolean;
   onDismiss: () => void;
@@ -55,6 +56,11 @@ export function ContextMenu({
   backdrop?: boolean;
   preferredPlacement?: MenuPlacement["placement"];
   estimatedHeight?: number;
+  /**
+   * Keep the panel where it first landed across hide/show in the same
+   * overlay session (Remind, Custom, Back). A new key starts a fresh place.
+   */
+  sessionKey?: string | number | null;
 }) {
   const { palette, shadows } = useTheme();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -75,13 +81,25 @@ export function ContextMenu({
   const layoutKeyRef = React.useRef("");
   const lastChildren = React.useRef(children);
   if (visible) lastChildren.current = children;
-  // New open: drop the previous row's measured height so a leftover
-  // delete-confirm size cannot flash below, then jump above.
-  if (visible && !wasVisibleRef.current) {
+  const sessionKeyRef = React.useRef(sessionKey);
+  if (sessionKeyRef.current !== sessionKey) {
+    sessionKeyRef.current = sessionKey;
     contentHeightRef.current = 0;
     placementLock.current = null;
     sessionSide.current = null;
     if (contentHeight !== 0) setContentHeight(0);
+  }
+  // New open: drop the previous row's measured height so a leftover
+  // delete-confirm size cannot flash below, then jump above — unless this
+  // is the same overlay session coming back from a nested page.
+  if (visible && !wasVisibleRef.current) {
+    const continueSession = sessionKey != null && placementLock.current != null;
+    if (!continueSession) {
+      contentHeightRef.current = 0;
+      placementLock.current = null;
+      sessionSide.current = null;
+      if (contentHeight !== 0) setContentHeight(0);
+    }
   }
   wasVisibleRef.current = visible;
 

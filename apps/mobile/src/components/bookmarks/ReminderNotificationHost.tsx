@@ -1,16 +1,18 @@
 /**
- * Keeps local OS reminder pings in sync with the server, and handles Later /
- * Reschedule / Open on the system banner.
+ * Keeps local OS reminder pings in sync with the server, and handles
+ * Complete / Reschedule / Open on the system banner.
  */
 import { useEffect, useMemo, useState } from "react";
 import { AppState, useWindowDimensions } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
+import type { BookmarkReminderDto } from "@ordo/shared";
 import { unixSeconds } from "@ordo/shared";
 import { bookmarksApi } from "../../lib/api/bookmarks";
 import { qk } from "../../lib/api/query-keys";
 import { queryClient } from "../../lib/query-client";
 import { useAuthStore } from "../../store/auth";
+import { useSetBookmarkReminder } from "../../hooks/use-bookmarks";
 import { CONTEXT_MENU_WIDTH, type MenuAnchorRect } from "../../lib/menu-anchor";
 import {
   reminderNotificationsReady,
@@ -18,7 +20,9 @@ import {
   subscribeReminderNotificationTaps,
 } from "../../lib/reminder-notifications";
 import { isBookmarkDeletePending } from "../../lib/undoable-delete";
-import type { ReminderPingPayload } from "../../lib/bookmark-reminders";
+import { reminderCompletedToast, type ReminderPingPayload } from "../../lib/bookmark-reminders";
+import { errorMessage } from "../../lib/error-message";
+import { toast } from "../ui/toast-store";
 import { ReminderFlow } from "./ReminderFlow";
 
 export function ReminderNotificationHost() {
@@ -26,6 +30,7 @@ export function ReminderNotificationHost() {
   const status = useAuthStore((s) => s.status);
   const { width, height } = useWindowDimensions();
   const [edit, setEdit] = useState<ReminderPingPayload | null>(null);
+  const setReminder = useSetBookmarkReminder();
   const reminders = useQuery({
     queryKey: qk.reminders,
     queryFn: () => bookmarksApi.reminders(),
@@ -37,10 +42,28 @@ export function ReminderNotificationHost() {
     if (status !== "authenticated") return;
     return subscribeReminderNotificationTaps({
       onOpen: (payload) => router.push(`/reader/${payload.bookmarkId}`),
-      onLater: () => undefined,
+      onComplete: (payload) => {
+        const rows = queryClient.getQueryData<BookmarkReminderDto[]>(qk.reminders);
+        const row = rows?.find((item) => item.id === payload.bookmarkId);
+        setReminder.mutate(
+          {
+            id: payload.bookmarkId,
+            folderId: payload.folderId ?? row?.folderId ?? null,
+            title: payload.title || row?.title || "",
+            domain: payload.domain || row?.domain || "",
+            remindAt: null,
+          },
+          {
+            onSuccess: () => {
+              if (AppState.currentState === "active") toast.success(reminderCompletedToast());
+            },
+            onError: (err) => toast.error(errorMessage(err, "Couldn't complete this reminder.")),
+          },
+        );
+      },
       onReschedule: (payload) => setEdit(payload),
     });
-  }, [router, status]);
+  }, [router, setReminder, status]);
 
   useEffect(() => {
     const rows = reminders.data;

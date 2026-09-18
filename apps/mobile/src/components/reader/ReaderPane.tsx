@@ -59,7 +59,8 @@ import type { HighlightSelectDraft } from "./article-highlight-ui";
 import { ReaderControlsSheet } from "./ReaderControlsSheet";
 import { EditTagsSheet } from "../tags/EditTagsSheet";
 import { LockPrompt } from "../bookmarks/LockPrompt";
-import { ReminderFlow } from "../bookmarks/ReminderFlow";
+import { ReminderCustomPanel } from "../bookmarks/ReminderCustomPanel";
+import { ReminderPresetItems, useSaveReminder } from "../bookmarks/ReminderFlow";
 import { formatReminderWhen } from "../../lib/bookmark-reminders";
 import { READER_BODY_SIZE, resolveReaderFont } from "./reader-typography";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
@@ -231,8 +232,16 @@ function ReaderPaneInner({
 
   const [controlsOpen, setControlsOpen] = useState(false);
   const [unlockOpen, setUnlockOpen] = useState(false);
-  const [actionPanel, setActionPanel] = useState<"actions" | "contents" | "highlights" | "remind" | null>(null);
+  const [actionPanel, setActionPanel] = useState<
+    "actions" | "contents" | "highlights" | "remind" | "remind-custom" | null
+  >(null);
   const [actionsAnchor, setActionsAnchor] = useState<MenuAnchorRect | null>(null);
+  const closeActions = useCallback(() => setActionPanel(null), []);
+  const { save: saveReminder, busy: reminderBusy } = useSaveReminder(bookmark ?? null, closeActions);
+  const remindNow = useMemo(
+    () => new Date(),
+    [actionPanel, bookmark?.id, bookmark?.remindAt],
+  );
   const [editTagsOpen, setEditTagsOpen] = useState(false);
   const [headingState, setHeadingState] = useState<{
     bookmarkId: string;
@@ -1162,10 +1171,23 @@ function ReaderPaneInner({
         onDismiss={() => setEditTagsOpen(false)}
       />
       <ContextMenu
-        visible={actionPanel === "actions"}
-        onDismiss={() => setActionPanel(null)}
+        visible={actionPanel === "actions" || actionPanel === "remind"}
+        onDismiss={closeActions}
         anchor={actionsAnchor}
+        sessionKey={actionPanel ? bookmark?.id : undefined}
       >
+        {actionPanel === "remind" && bookmark ? (
+          <ReminderPresetItems
+            bookmark={bookmark}
+            now={remindNow}
+            busy={reminderBusy}
+            showBack
+            onBack={() => setActionPanel("actions")}
+            onPick={saveReminder}
+            onCustom={() => setActionPanel("remind-custom")}
+          />
+        ) : (
+          <>
         {hasHtml && articleHeadings.length >= 3 && !showWebsiteView ? (
           <ContextMenuItem
             icon="list-outline"
@@ -1267,14 +1289,15 @@ function ReaderPaneInner({
             }}
           />
         ) : null}
+          </>
+        )}
       </ContextMenu>
-      <ReminderFlow
-        visible={actionPanel === "remind"}
-        bookmark={bookmark ?? null}
-        anchor={actionsAnchor}
-        showBack
-        onBack={() => setActionPanel("actions")}
-        onDismiss={() => setActionPanel(null)}
+      <ReminderCustomPanel
+        visible={actionPanel === "remind-custom"}
+        initialUnix={bookmark?.remindAt ?? null}
+        busy={reminderBusy}
+        onDismiss={() => setActionPanel("remind")}
+        onConfirm={(unix) => saveReminder(unix)}
       />
       <LockPrompt
         visible={unlockOpen && Boolean(lockedFolderId)}
