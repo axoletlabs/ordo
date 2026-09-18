@@ -2,7 +2,7 @@
  * Keeps local OS reminder pings in sync with the server, and opens the reader
  * when the user taps a notification.
  */
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import { AppState } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
