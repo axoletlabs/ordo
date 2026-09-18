@@ -133,7 +133,7 @@ export default function AboutScreen() {
         </SettingsGroup>
 
         <Text variant="footnote" color="tertiary" align="center" style={styles.footer}>
-          © {PUBLISHED_YEAR} Axolet Labs
+          © {PUBLISHED_YEAR} Axolet
         </Text>
       </SettingsScrollView>
 
