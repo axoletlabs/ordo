@@ -242,6 +242,24 @@ export function calendarTriggerUnix(trigger: Record<string, unknown>): number | 
 
 export type ReminderPingPlan = "present" | "schedule" | "skip";
 
+/** Android 12 (API 31) introduced the user-toggleable exact-alarm app-op. */
+export const EXACT_ALARM_API_LEVEL = 31;
+
+/**
+ * Whether to send the user to system exact-alarm settings.
+ * `SCHEDULE_EXACT_ALARM` is an app-op, not a runtime permission, so JS cannot
+ * read the toggle. Ask at most once and remember it in prefs.
+ */
+export function shouldOpenExactAlarmSettings(input: {
+  os: string;
+  apiLevel: number;
+  alreadyAsked: boolean;
+}): boolean {
+  if (input.os !== "android") return false;
+  if (!Number.isFinite(input.apiLevel) || input.apiLevel < EXACT_ALARM_API_LEVEL) return false;
+  return !input.alreadyAsked;
+}
+
 /** Near-term DATE triggers are presented immediately — Android often drops them. */
 export const REMINDER_PING_IMMINENT_SECONDS = 8;
 /** Past DATE still sitting in the scheduler after this is treated as a missed fire. */

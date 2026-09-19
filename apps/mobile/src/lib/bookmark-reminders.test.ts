@@ -25,6 +25,7 @@ import {
   REMINDER_PING_IMMINENT_SECONDS,
   REMINDER_PING_STUCK_SECONDS,
   scheduledTriggerUnix,
+  shouldOpenExactAlarmSettings,
   shiftCalendarMonth,
 } from "./bookmark-reminders.ts";
 
@@ -306,4 +307,11 @@ test("reminder ping plan does not re-banner a long-due reminder on the next laun
     "skip",
   );
   assert.equal(reminderPingPlan({ remindAt: at - 30, now: at }), "present");
+});
+
+test("exact-alarm settings open once on Android 12+, never from a remembered ask", () => {
+  assert.equal(shouldOpenExactAlarmSettings({ os: "ios", apiLevel: 34, alreadyAsked: false }), false);
+  assert.equal(shouldOpenExactAlarmSettings({ os: "android", apiLevel: 30, alreadyAsked: false }), false);
+  assert.equal(shouldOpenExactAlarmSettings({ os: "android", apiLevel: 31, alreadyAsked: false }), true);
+  assert.equal(shouldOpenExactAlarmSettings({ os: "android", apiLevel: 34, alreadyAsked: true }), false);
 });

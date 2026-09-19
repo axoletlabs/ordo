@@ -76,4 +76,5 @@ export const StorageKeys = {
   IMPORT_JOB: "ordo.importJob",
   REMINDER_FIRED: "ordo.reminderFired",
   REMINDER_ACTIONS_REV: "ordo.reminderActionsRev",
+  REMINDER_EXACT_ALARM_ASKED: "ordo.reminderExactAlarmAsked",
 } as const;

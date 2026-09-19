@@ -17,6 +17,7 @@ import {
   reminderPingFromNotification,
   reminderPingPlan,
   scheduledTriggerUnix,
+  shouldOpenExactAlarmSettings,
   type ReminderPingKind,
   type ReminderPingPayload,
 } from "./bookmark-reminders";
@@ -324,29 +325,28 @@ async function presentDue(mod: NotificationsModule, row: ReminderPingRow): Promi
   await rememberFired(row.id, row.remindAt);
 }
 
-async function androidAllowsExactAlarms(): Promise<boolean> {
-  if (Platform.OS !== "android") return true;
+function androidApiLevel(): number {
   const api = typeof Platform.Version === "number" ? Platform.Version : Number(Platform.Version);
-  if (!Number.isFinite(api) || api < 31) return true;
-  try {
-    const { PermissionsAndroid } = await import("react-native");
-    // Special app-op, not in RN's dangerous-permission union.
-    const permission = "android.permission.SCHEDULE_EXACT_ALARM" as Parameters<
-      typeof PermissionsAndroid.check
-    >[0];
-    return await PermissionsAndroid.check(permission);
-  } catch {
-    return false;
-  }
+  return Number.isFinite(api) ? api : 0;
 }
 
 async function ensureExactAlarms(): Promise<void> {
   if (Platform.OS !== "android") return;
-  const api = typeof Platform.Version === "number" ? Platform.Version : Number(Platform.Version);
-  if (!Number.isFinite(api) || api < 31) return;
+  if (
+    !shouldOpenExactAlarmSettings({
+      os: Platform.OS,
+      apiLevel: androidApiLevel(),
+      alreadyAsked: false,
+    })
+  ) {
+    return;
+  }
   if (exactAlarmScreenShown) return;
-  if (await androidAllowsExactAlarms()) return;
   exactAlarmScreenShown = true;
+  if ((await prefsGet<boolean>(StorageKeys.REMINDER_EXACT_ALARM_ASKED)) === true) return;
+  // Remember before opening: returning from Settings can reload JS, and
+  // PermissionsAndroid cannot read this app-op so a check would look denied.
+  await prefsSet(StorageKeys.REMINDER_EXACT_ALARM_ASKED, true);
   try {
     const IntentLauncher = await import("expo-intent-launcher");
     const Constants = (await import("expo-constants")).default;
