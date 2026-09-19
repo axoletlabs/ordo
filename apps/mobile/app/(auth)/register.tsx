@@ -2,7 +2,8 @@
  * Register screen. Respects server registration status (info.registrationEnabled).
  */
 import React, { useCallback, useState } from "react";
-import { BackHandler, StyleSheet, View } from "react-native";
+import { BackHandler, Pressable, StyleSheet, View } from "react-native";
+import { Ionicons } from "@expo/vector-icons";
 import { Link, useFocusEffect, useRouter } from "expo-router";
 import { AuthShell } from "../../src/components/auth/AuthShell";
 import { Input } from "../../src/components/ui/Input";
@@ -11,11 +12,15 @@ import { Text } from "../../src/components/ui/Text";
 import { EyeToggle } from "../../src/components/ui/EyeToggle";
 import { useRegister } from "../../src/hooks/use-auth-actions";
 import { useServerInfo } from "../../src/hooks/queries";
+import { useSettingsStore } from "../../src/store/settings";
+import { isCloudServerUrl } from "../../src/lib/hosting";
 import { errorMessage } from "../../src/lib/error-message";
 import { haptics } from "../../src/lib/haptics";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { radius, spacing } from "../../src/theme/tokens";
 import { RegisterSchema } from "@ordo/shared";
+
+const AGE_CONFIRM_ERROR = "Confirm that you are at least 13 years old.";
 
 export default function RegisterScreen() {
   const { palette } = useTheme();
@@ -23,12 +28,14 @@ export default function RegisterScreen() {
   const register = useRegister();
   const { data: info } = useServerInfo();
   const registrationEnabled = info?.registrationEnabled ?? true;
+  const isCloud = isCloudServerUrl(useSettingsStore((s) => s.serverUrl));
 
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPwd, setShowPwd] = useState(false);
+  const [atLeast13, setAtLeast13] = useState(false);
   const [formError, setFormError] = useState("");
 
   useFocusEffect(
@@ -45,6 +52,10 @@ export default function RegisterScreen() {
     setFormError("");
     if (password !== confirm) {
       setFormError("Passwords don't match.");
+      return;
+    }
+    if (isCloud && !atLeast13) {
+      setFormError(AGE_CONFIRM_ERROR);
       return;
     }
     const parsed = RegisterSchema.safeParse({
@@ -100,7 +111,7 @@ export default function RegisterScreen() {
             autoComplete="name"
             autoCapitalize="words"
             importantForAutofill="yes"
-            error={formError || undefined}
+            error={formError && formError !== AGE_CONFIRM_ERROR ? formError : undefined}
           />
           <View style={{ height: spacing[16] }} />
           <Input
@@ -137,6 +148,37 @@ export default function RegisterScreen() {
             importantForAutofill="yes"
           />
 
+          {isCloud ? (
+            <>
+              <View style={{ height: spacing[16] }} />
+              <Pressable
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: atLeast13 }}
+                accessibilityLabel="I am at least 13 years old"
+                onPress={() => {
+                  setAtLeast13((v) => !v);
+                  setFormError("");
+                }}
+                hitSlop={8}
+                style={styles.check}
+              >
+                <Ionicons
+                  name={atLeast13 ? "checkbox" : "square-outline"}
+                  size={20}
+                  color={atLeast13 ? palette.accent : palette.textTertiary}
+                />
+                <Text variant="footnote" style={styles.checkLabel}>
+                  I am at least 13 years old
+                </Text>
+              </Pressable>
+              {formError === AGE_CONFIRM_ERROR ? (
+                <Text variant="footnote" color="danger" style={{ marginTop: spacing[6] }}>
+                  {formError}
+                </Text>
+              ) : null}
+            </>
+          ) : null}
+
           <View style={{ height: spacing[24] }} />
           <Button label="Create account" block size="lg" onPress={submit} loading={register.isPending} />
         </>
@@ -149,4 +191,11 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", justifyContent: "center" },
   link: { textDecorationLine: "underline" },
   disabledCard: { padding: spacing[16], borderRadius: radius.lg, borderWidth: 1 },
+  check: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[8],
+    alignSelf: "stretch",
+  },
+  checkLabel: { flex: 1 },
 });
