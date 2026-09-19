@@ -122,7 +122,10 @@ const styles = StyleSheet.create({
     padding: spacing[16],
   },
   panel: {
-    overflow: "hidden",
+    // Chrome walks the caret extra on Backspace when an <input> is inside
+    // overflow:hidden + border-radius (especially with the caret in the
+    // middle). Native still clips to the radius; web relies on padding.
+    overflow: Platform.OS === "web" ? "visible" : "hidden",
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius["3xl"],
   },

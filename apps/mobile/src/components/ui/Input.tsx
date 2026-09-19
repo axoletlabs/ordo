@@ -3,7 +3,7 @@
  * border, coral 1.5px focus ring, radius 8. URLs/mono handled by the caller via
  * a `mono` flag (JetBrains Mono).
  */
-import React, { useState } from "react";
+import React, { useLayoutEffect, useRef, useState } from "react";
 import {
   Platform,
   StyleSheet,
@@ -16,6 +16,27 @@ import {
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
+import { caretAfterKey, shouldCorrectWebCaret } from "../../lib/web-input-caret";
+
+type WebCaretNode = TextInput & {
+  selectionStart?: number | null;
+  selectionEnd?: number | null;
+  setSelectionRange?: (start: number, end: number) => void;
+};
+
+function webCaretNode(value: unknown): WebCaretNode | null {
+  if (!value || typeof (value as WebCaretNode).setSelectionRange !== "function") return null;
+  return value as WebCaretNode;
+}
+
+function restoreWebCaret(node: WebCaretNode | null, start: number | null) {
+  if (node == null || start == null) return;
+  try {
+    node.setSelectionRange?.(start, start);
+  } catch {
+    // Some input types throw if selection isn't supported.
+  }
+}
 
 export interface InputProps extends Omit<TextInputProps, "style"> {
   label?: string;
@@ -45,6 +66,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   onBlur,
   onChange,
   onChangeText,
+  onKeyPress,
   secureTextEntry,
   keyboardType,
   ...rest
@@ -52,6 +74,22 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   const { palette } = useTheme();
   const [focused, setFocused] = useState(false);
   const [overlayWidth, setOverlayWidth] = useState(0);
+  const inputRef = useRef<TextInput>(null);
+  const pendingCaret = useRef<number | null>(null);
+
+  const setInputRef = (node: TextInput | null) => {
+    inputRef.current = node;
+    if (typeof ref === "function") ref(node);
+    else if (ref) ref.current = node;
+  };
+
+  useLayoutEffect(() => {
+    if (Platform.OS !== "web") return;
+    const start = pendingCaret.current;
+    if (start == null) return;
+    restoreWebCaret(webCaretNode(inputRef.current), start);
+    pendingCaret.current = null;
+  });
 
   const borderColor = error ? palette.danger : focused ? palette.accent : palette.border;
   const borderWidth = error ? 1 : focused ? 1.5 : 1;
@@ -78,6 +116,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
       ? ({
           fontVariantLigatures: "none",
           fontFeatureSettings: '"liga" 0, "calt" 0',
+          unicodeBidi: "normal",
         } as TextStyle)
       : null;
 
@@ -101,7 +140,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
       >
         {icon ? <View style={styles.icon}>{icon}</View> : null}
         <TextInput
-          ref={ref}
+          ref={setInputRef}
           placeholderTextColor={palette.textFaint}
           autoCorrect={false}
           autoCapitalize="none"
@@ -117,7 +156,34 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
             setFocused(false);
             onBlur?.(e);
           }}
-          onChange={onChange}
+          onKeyPress={(event) => {
+            if (Platform.OS === "web") {
+              const native = event.nativeEvent as typeof event.nativeEvent & {
+                metaKey?: boolean;
+                ctrlKey?: boolean;
+                altKey?: boolean;
+                isComposing?: boolean;
+                keyCode?: number;
+              };
+              if (shouldCorrectWebCaret(native)) {
+                const node = webCaretNode(inputRef.current);
+                const start = node?.selectionStart ?? 0;
+                const end = node?.selectionEnd ?? start;
+                pendingCaret.current = caretAfterKey(start, end, native.key);
+              } else {
+                pendingCaret.current = null;
+              }
+            }
+            onKeyPress?.(event);
+          }}
+          onChange={(event) => {
+            onChange?.(event);
+            if (Platform.OS !== "web") return;
+            restoreWebCaret(
+              webCaretNode(event.target ?? event.nativeEvent?.target),
+              pendingCaret.current,
+            );
+          }}
           onChangeText={onChangeText}
           style={[
             styles.input,
