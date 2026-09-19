@@ -33,6 +33,9 @@ const CATEGORY_OPTIONS = {
 } as const;
 
 type NotificationsModule = typeof import("expo-notifications");
+type NotificationTriggerInput = import("expo-notifications").NotificationTriggerInput;
+type CalendarTriggerInput = import("expo-notifications").CalendarTriggerInput;
+type DateTriggerInput = import("expo-notifications").DateTriggerInput;
 type ReminderPingRow = Pick<
   BookmarkReminderDto,
   "id" | "folderId" | "title" | "domain" | "description" | "remindAt"
@@ -327,7 +330,11 @@ async function androidAllowsExactAlarms(): Promise<boolean> {
   if (!Number.isFinite(api) || api < 31) return true;
   try {
     const { PermissionsAndroid } = await import("react-native");
-    return await PermissionsAndroid.check("android.permission.SCHEDULE_EXACT_ALARM");
+    // Special app-op, not in RN's dangerous-permission union.
+    const permission = "android.permission.SCHEDULE_EXACT_ALARM" as Parameters<
+      typeof PermissionsAndroid.check
+    >[0];
+    return await PermissionsAndroid.check(permission);
   } catch {
     return false;
   }
@@ -352,11 +359,11 @@ async function ensureExactAlarms(): Promise<void> {
   }
 }
 
-function futureTrigger(mod: NotificationsModule, remindAt: number) {
+function futureTrigger(mod: NotificationsModule, remindAt: number): NotificationTriggerInput {
   const date = new Date(remindAt * 1000);
   if (Platform.OS === "ios") {
-    return {
-      type: mod.SchedulableTriggerInputTypes.CALENDAR,
+    const trigger: CalendarTriggerInput = {
+      type: mod.SchedulableTriggerInputTypes.CALENDAR as CalendarTriggerInput["type"],
       year: date.getFullYear(),
       month: date.getMonth() + 1,
       day: date.getDate(),
@@ -365,12 +372,14 @@ function futureTrigger(mod: NotificationsModule, remindAt: number) {
       second: date.getSeconds(),
       repeats: false,
     };
+    return trigger;
   }
-  return {
-    type: mod.SchedulableTriggerInputTypes.DATE,
+  const trigger: DateTriggerInput = {
+    type: mod.SchedulableTriggerInputTypes.DATE as DateTriggerInput["type"],
     date,
     channelId: CHANNEL_ID,
   };
+  return trigger;
 }
 
 async function scheduleFuture(mod: NotificationsModule, row: ReminderPingRow): Promise<void> {
