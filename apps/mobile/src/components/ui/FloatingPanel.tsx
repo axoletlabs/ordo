@@ -58,7 +58,8 @@ export function FloatingPanel({
   }));
   // Opacity only: a transform on this card (even translateY(0)) puts every
   // nested <input> in a containing transform, and browsers then walk the
-  // caret one character off on Backspace.
+  // caret one character off on Backspace. ThemedScrollView strips RN-web's
+  // translateZ(0) for the same reason.
   const panelStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
   }));

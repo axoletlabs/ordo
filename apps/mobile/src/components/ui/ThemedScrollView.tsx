@@ -13,6 +13,8 @@ import {
   View,
   type FlatListProps,
   type ScrollViewProps,
+  type StyleProp,
+  type ViewStyle,
 } from "react-native";
 import { type FlashListProps } from "@shopify/flash-list";
 import {
@@ -63,6 +65,13 @@ const nativeScrollBarProps = {
   persistentScrollbar: false,
 } as const;
 
+// RN-web paints ScrollView with translateZ(0) for a compositor layer. That
+// identity transform is still a containing transform, and Chrome then walks
+// the caret one extra character on Backspace in nested <input>s (server URL
+// fields, overlay forms). Overflow scrolling does not need the layer.
+const webNoContainingTransform: StyleProp<ViewStyle> =
+  Platform.OS === "web" ? { transform: "none" } : null;
+
 export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewProps>(
   function ThemedScrollView(
     {
@@ -86,7 +95,7 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
         <ScrollView
           ref={ref}
           horizontal
-          style={style}
+          style={[style, webNoContainingTransform]}
           onScroll={onScroll}
           onLayout={onLayout}
           onContentSizeChange={onContentSizeChange}
@@ -115,6 +124,7 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
             fill ? styles.fill : null,
             !fill && wrapper?.maxHeight != null ? { maxHeight: wrapper.maxHeight } : null,
             inner,
+            webNoContainingTransform,
           ]}
           onScroll={chainHandlers(bar.onScroll, onScroll)}
           onContentSizeChange={chainHandlers(bar.onContentSizeChange, onContentSizeChange)}
