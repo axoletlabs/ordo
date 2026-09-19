@@ -45,7 +45,7 @@ export class AuthGuard implements CanActivate {
     if (result.expired) {
       throw new AppError(ErrorCode.TOKEN_EXPIRED, "Your session has expired.");
     }
-    req.user = { userId: result.userId, sessionId: result.sessionId };
+    req.user = { userId: result.userId, sessionId: result.sessionId, dek: result.dek };
 
     if (this.cfg.mfaRequired) {
       const allow = this.reflector.getAllAndOverride<boolean>(ALLOW_WITHOUT_MFA_KEY, [

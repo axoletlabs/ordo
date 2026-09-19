@@ -25,6 +25,14 @@ model User {
   avatarUpdatedAt DateTime?
   /// Used only when AVATAR_STORAGE=database.
   avatarBytes     Bytes?
+  /// scrypt salt for the password-wrapped data-encryption key.
+  dekKdfSalt      String?
+  /// AES-GCM wrap of the library DEK using the account password.
+  dekPasswordWrapped String?
+  /// AES-GCM wrap of the library DEK using the one-time recovery key.
+  dekRecoveryWrapped String?
+  /// 0 = plaintext legacy library; 1 = fields encrypted with the account DEK.
+  dataEncryptionVersion Int                @default(0)
   createdAt       DateTime                 @default(now())
   updatedAt       DateTime                 @updatedAt
 
@@ -96,6 +104,10 @@ model Session {
   deviceType            String?
   ip                    String?
   lastSeenAt            DateTime @default(now())
+  /// Library DEK wrapped with HKDF(access token). Null for plaintext users.
+  dekWrapped            String?
+  /// Library DEK wrapped with HKDF(refresh token).
+  dekRefreshWrapped     String?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 

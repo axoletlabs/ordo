@@ -77,7 +77,7 @@ export const authApi = {
       { auth: false },
     ),
 
-  resetPassword: (body: { email: string; token: string; newPassword: string }) =>
+  resetPassword: (body: { email: string; token: string; newPassword: string; recoveryKey?: string }) =>
     api.post<typeof AuthRoutes.resetPassword.response>(
       AuthRoutes.resetPassword.path,
       body,

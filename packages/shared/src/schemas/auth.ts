@@ -117,6 +117,12 @@ export const ResetPasswordSchema = z.object({
   email,
   token: emailOtp,
   newPassword: password,
+  recoveryKey: z
+    .string()
+    .trim()
+    .min(1, { message: "Enter your library recovery key." })
+    .max(200)
+    .optional(),
 });
 export type ResetPasswordInput = z.infer<typeof ResetPasswordSchema>;
 

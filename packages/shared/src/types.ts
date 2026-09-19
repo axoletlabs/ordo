@@ -10,6 +10,8 @@ export interface UserDto {
   avatarUpdatedAt: string | null;
   mfaEnabled: boolean;
   preferences: ReaderPreferences;
+  /** True once this account's library is encrypted at rest. */
+  libraryEncrypted: boolean;
   createdAt: string;
 }
 
@@ -51,6 +53,8 @@ export interface AuthResponse {
   user: UserDto;
   session: SessionDto;
   tokens: AuthTokens;
+  /** Shown once when a library recovery key is created. Never stored again. */
+  recoveryKey?: string;
 }
 
 /** Password was accepted but TOTP (or a backup code) is still required. */

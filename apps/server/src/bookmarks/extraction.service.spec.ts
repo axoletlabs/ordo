@@ -1,6 +1,7 @@
 import { EXTRACTION_VERSION, extractionPollIntervalMs } from "@ordo/shared";
 import { ExtractionService } from "./extraction.service.js";
 import { ReaderService, UnsupportedContentError } from "./reader.service.js";
+import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
 
 describe("extractionPollIntervalMs", () => {
   it("backs off from 200ms to 1.5s", () => {
@@ -32,6 +33,7 @@ describe("ExtractionService", () => {
       prisma as never,
       reader as never,
       { refreshSafely: () => undefined } as never,
+      new LibraryCryptoService(),
     );
 
     return { prisma, service };
@@ -116,6 +118,7 @@ describe("ExtractionService", () => {
       prisma as never,
       { extract: jest.fn().mockRejectedValue(new Error("offline")), classifyShellText: () => null } as never,
       { refreshSafely: () => undefined } as never,
+      new LibraryCryptoService(),
     );
     service.enqueue(
       Array.from({ length: 5 }, (_, i) => ({
@@ -162,6 +165,7 @@ describe("ExtractionService", () => {
       prisma as never,
       { extract, classifyShellText: () => null } as never,
       { refreshSafely: () => undefined } as never,
+      new LibraryCryptoService(),
     );
 
     await service.enrichBookmark("bookmark-1", "https://grugbrain.dev/");
@@ -202,6 +206,7 @@ describe("ExtractionService", () => {
       prisma as never,
       { extract, classifyShellText: () => null } as never,
       { refreshSafely } as never,
+      new LibraryCryptoService(),
     );
 
     await service.enrichBookmark("bookmark-1", "https://grugbrain.dev/", "full", true);
@@ -244,6 +249,7 @@ describe("ExtractionService", () => {
       prisma as never,
       { extract, classifyShellText: () => null } as never,
       { refreshSafely: () => undefined } as never,
+      new LibraryCryptoService(),
     );
 
     await service.enrichBookmark("bookmark-1", "https://example.com/article");
@@ -287,6 +293,7 @@ describe("ExtractionService", () => {
       prisma as never,
       { extract, classifyShellText: () => null } as never,
       { refreshSafely: () => undefined } as never,
+      new LibraryCryptoService(),
     );
 
     const pending = service.enrichBookmark("bookmark-1", "https://example.com/article");

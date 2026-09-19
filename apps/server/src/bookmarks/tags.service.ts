@@ -3,7 +3,6 @@ import { Prisma, type Tag } from "../prisma/client.js";
 import {
   DEFAULT_TAG_COLOR,
   ErrorCode,
-  tagNameKey,
   type CreateTagInput,
   type TagDto,
   type UpdateTagInput,
@@ -12,12 +11,14 @@ import { AppError } from "../common/errors/app-error.js";
 import { toTagDto } from "../common/mappers.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { FolderAccessService } from "./folder-access.service.js";
+import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
 
 @Injectable()
 export class TagsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: FolderAccessService,
+    private readonly crypto: LibraryCryptoService,
   ) {}
 
   /** Tags with visible bookmark counts: protected-folder assignments are
@@ -35,21 +36,24 @@ export class TagsService {
       },
     });
     return tags
-      .map((tag) => toTagDto(tag))
+      .map((tag) => toTagDto(this.crypto.openTag(tag) as typeof tag))
       .sort((a, b) => b.bookmarkCount - a.bookmarkCount || a.name.localeCompare(b.name));
   }
 
   async create(userId: string, input: CreateTagInput): Promise<TagDto> {
     try {
+      const id = this.crypto.active() ? this.crypto.newId() : undefined;
+      const sealed = this.crypto.sealTag(userId, id ?? "pending", { name: input.name });
       const tag = await this.prisma.tag.create({
         data: {
+          ...(id ? { id } : {}),
           userId,
-          name: input.name,
-          normalizedName: tagNameKey(input.name),
+          name: sealed.name,
+          normalizedName: sealed.normalizedName,
           color: input.color ?? DEFAULT_TAG_COLOR,
         },
       });
-      return toTagDto(tag);
+      return toTagDto(this.crypto.openTag(tag) as typeof tag);
     } catch (error) {
       this.rethrowUniqueName(error);
     }
@@ -63,12 +67,12 @@ export class TagsService {
         data: {
           ...(input.name === undefined
             ? {}
-            : { name: input.name, normalizedName: tagNameKey(input.name) }),
+            : this.crypto.sealTag(userId, tagId, { name: input.name })),
           ...(input.color === undefined ? {} : { color: input.color }),
         },
         include: { _count: { select: { bookmarks: true } } },
       });
-      return toTagDto(tag);
+      return toTagDto(this.crypto.openTag(tag) as typeof tag);
     } catch (error) {
       this.rethrowUniqueName(error);
     }

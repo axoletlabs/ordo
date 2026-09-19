@@ -12,6 +12,8 @@ import { TagsController } from "./tags.controller.js";
 import { TagsService } from "./tags.service.js";
 import { TagSuggestionService } from "./tag-suggestion.service.js";
 import { HighlightsService } from "./highlights.service.js";
+import { APP_INTERCEPTOR } from "@nestjs/core";
+import { LibraryCryptoInterceptor } from "../crypto/library-crypto.interceptor.js";
 
 @Module({
   imports: [AuthModule],
@@ -26,7 +28,8 @@ import { HighlightsService } from "./highlights.service.js";
     TagsService,
     TagSuggestionService,
     HighlightsService,
+    { provide: APP_INTERCEPTOR, useClass: LibraryCryptoInterceptor },
   ],
-  exports: [ExtractionService],
+  exports: [ExtractionService, TagSuggestionService],
 })
 export class BookmarksModule {}

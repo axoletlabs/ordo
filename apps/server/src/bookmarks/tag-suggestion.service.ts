@@ -2,6 +2,7 @@ import { Injectable, Logger } from "@nestjs/common";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { scoreTagSuggestions } from "./tag-suggestions.js";
 import { htmlToSearchText } from "./html-text.js";
+import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
 
 /**
  * Maintains deterministic pending tag suggestions for a bookmark. Suggestions
@@ -13,13 +14,17 @@ import { htmlToSearchText } from "./html-text.js";
 export class TagSuggestionService {
   private readonly logger = new Logger(TagSuggestionService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly crypto: LibraryCryptoService,
+  ) {}
 
   /** Recompute pending suggestions from the bookmark's latest stored content. */
   async refresh(bookmarkId: string): Promise<void> {
     const bookmark = await this.prisma.bookmark.findUnique({
       where: { id: bookmarkId },
       select: {
+        id: true,
         userId: true,
         fetchStatus: true,
         title: true,
@@ -31,6 +36,7 @@ export class TagSuggestionService {
       },
     });
     if (!bookmark || bookmark.fetchStatus !== "ok") return;
+    const opened = this.crypto.openBookmark(bookmark);
 
     const excluded = new Set<string>([
       ...bookmark.tags.map(({ tagId }) => tagId),
@@ -41,16 +47,20 @@ export class TagSuggestionService {
 
     const candidates = await this.prisma.tag.findMany({
       where: { userId: bookmark.userId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, userId: true },
     });
+    const named = candidates.map((tag) => this.crypto.openTag(tag));
 
     const suggested = scoreTagSuggestions(
-      candidates.filter((tag) => !excluded.has(tag.id)),
+      named.filter((tag) => !excluded.has(tag.id as string)).map((tag) => ({
+        id: tag.id as string,
+        name: tag.name as string,
+      })),
       {
-        title: bookmark.title,
-        description: bookmark.description,
-        domain: bookmark.domain,
-        body: htmlToSearchText(bookmark.contentHtml),
+        title: opened.title as string,
+        description: (opened.description as string | null) ?? null,
+        domain: opened.domain as string,
+        body: htmlToSearchText((opened.contentHtml as string | null) ?? null),
       },
     ).map(({ id }) => id);
 
@@ -70,7 +80,8 @@ export class TagSuggestionService {
 
   /** Fire-and-forget wrapper for use inside the extraction pipeline. */
   refreshSafely(bookmarkId: string): void {
-    this.refresh(bookmarkId).catch((err: unknown) => {
+    const dek = this.crypto.snapshot();
+    this.crypto.runAsync(dek, () => this.refresh(bookmarkId)).catch((err: unknown) => {
       // Suggestion failures must never affect the bookmark itself.
       this.logger.warn(
         `Tag suggestions failed for bookmark ${bookmarkId}: ${(err as Error).message}`,

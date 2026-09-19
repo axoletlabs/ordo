@@ -157,13 +157,11 @@ describe("MFA + avatars (e2e)", () => {
         .expect(200);
       expect(recovered.body.user.mfaEnabled).toBe(false);
 
-      const { agent: reEnrolled } = await enrollTotp("stayon@ordo.app");
-      void reEnrolled;
+      const { auth: stayon } = await enrollTotp("stayon@ordo.app");
       await ctx.prisma.user.update({
         where: { email: "stayon@ordo.app" },
         data: { emailVerifiedAt: new Date() },
       });
-      // Re-enroll stayon — enrollTotp already enabled MFA. Request a reset.
       sent.length = 0;
       await request(ctx.app.getHttpServer())
         .post("/api/auth/forgot-password")
@@ -175,6 +173,7 @@ describe("MFA + avatars (e2e)", () => {
           email: "stayon@ordo.app",
           token: sent.at(-1)!.token,
           newPassword: "brandnewpass",
+          recoveryKey: stayon.recoveryKey,
         })
         .expect(200);
       const user = await ctx.prisma.user.findUniqueOrThrow({ where: { email: "stayon@ordo.app" } });

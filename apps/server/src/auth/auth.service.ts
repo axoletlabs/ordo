@@ -27,6 +27,9 @@ import { RateLimitService } from "../common/rate-limit/rate-limit.service.js";
 import { toUserDto, toSessionDto } from "../common/mappers.js";
 import { MfaService } from "./mfa.service.js";
 import { AvatarService } from "./avatar.service.js";
+import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
+import { LibraryKeyService } from "../crypto/library-key.service.js";
+import { DATA_ENCRYPTION_VERSION } from "../crypto/library-crypto.js";
 
 const BCRYPT_COST = 12;
 
@@ -50,6 +53,8 @@ export class AuthService {
     private readonly rateLimit: RateLimitService,
     private readonly mfa: MfaService,
     private readonly avatars: AvatarService,
+    private readonly crypto: LibraryCryptoService,
+    private readonly libraryKeys: LibraryKeyService,
   ) {}
 
   async register(
@@ -68,6 +73,7 @@ export class AuthService {
     }
 
     const passwordHash = await bcrypt.hash(input.password, BCRYPT_COST);
+    const keyMaterial = await this.libraryKeys.createKeyMaterial(input.password);
 
     const user = await this.prisma.user.create({
       data: {
@@ -75,6 +81,10 @@ export class AuthService {
         displayName,
         email,
         passwordHash,
+        dekKdfSalt: keyMaterial.dekKdfSalt,
+        dekPasswordWrapped: keyMaterial.dekPasswordWrapped,
+        dekRecoveryWrapped: keyMaterial.dekRecoveryWrapped,
+        dataEncryptionVersion: keyMaterial.dataEncryptionVersion,
       },
     });
 
@@ -82,8 +92,8 @@ export class AuthService {
       await this.createAndSendOtp(user.id, email, EMAIL_OTP_PURPOSE.VERIFY);
     }
 
-    const { session, tokens } = await this.sessions.create(user.id, meta);
-    return this.buildAuthResponse(user, session, tokens);
+    const { session, tokens } = await this.sessions.create(user.id, meta, keyMaterial.dek);
+    return this.buildAuthResponse(user, session, tokens, keyMaterial.recoveryKey);
   }
 
   async login(
@@ -120,19 +130,25 @@ export class AuthService {
       );
     }
 
-    if (this.mfa.isEnabled(user)) {
-      return this.mfa.createLoginChallenge(user);
+    const provisioned = await this.libraryKeys.provisionWithPassword(user, input.password);
+    const account =
+      provisioned.recoveryKey
+        ? ((await this.prisma.user.findUnique({ where: { id: user.id } })) ?? user)
+        : user;
+
+    if (this.mfa.isEnabled(account)) {
+      return this.mfa.createLoginChallenge(account, provisioned.dek, provisioned.recoveryKey);
     }
 
-    const { session, tokens } = await this.sessions.create(user.id, meta);
-    return this.buildAuthResponse(user, session, tokens);
+    const { session, tokens } = await this.sessions.create(account.id, meta, provisioned.dek);
+    return this.buildAuthResponse(account, session, tokens, provisioned.recoveryKey);
   }
 
   async completeMfaLogin(challengeToken: string, code: string, meta: ClientMeta): Promise<AuthResponse> {
-    const user = await this.mfa.consumeLoginCode(challengeToken, code);
+    const { user, dek, recoveryKey } = await this.mfa.consumeLoginCode(challengeToken, code);
     this.rateLimit.clearLogin({ accountKey: user.email, userId: user.id });
-    const { session, tokens } = await this.sessions.create(user.id, meta);
-    return this.buildAuthResponse(user, session, tokens);
+    const { session, tokens } = await this.sessions.create(user.id, meta, dek);
+    return this.buildAuthResponse(user, session, tokens, recoveryKey);
   }
 
   async requestMfaEmailRecovery(challengeToken: string): Promise<void> {
@@ -144,10 +160,10 @@ export class AuthService {
     otp: string,
     meta: ClientMeta,
   ): Promise<AuthResponse> {
-    const user = await this.mfa.consumeEmailRecovery(challengeToken, otp);
+    const { user, dek, recoveryKey } = await this.mfa.consumeEmailRecovery(challengeToken, otp);
     this.rateLimit.clearLogin({ accountKey: user.email, userId: user.id });
-    const { session, tokens } = await this.sessions.create(user.id, meta);
-    return this.buildAuthResponse(user, session, tokens);
+    const { session, tokens } = await this.sessions.create(user.id, meta, dek);
+    return this.buildAuthResponse(user, session, tokens, recoveryKey);
   }
 
   async refresh(refreshToken: string | null | undefined, meta?: Omit<ClientMeta, "ip">): Promise<AuthResponse> {
@@ -307,14 +323,21 @@ export class AuthService {
       throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Incorrect password.");
     }
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_COST);
+    const dek =
+      this.crypto.snapshot() ??
+      (user.dekPasswordWrapped && user.dekKdfSalt
+        ? await this.crypto.unwrapPassword(user.dekPasswordWrapped, currentPassword, user.dekKdfSalt)
+        : null);
     const updated = await this.prisma.user.update({
       where: { id: userId },
       data: { passwordHash },
     });
+    if (dek) await this.libraryKeys.rewrapPassword(userId, dek, newPassword);
     // Sign out everywhere (including this session) and start fresh.
     await this.sessions.revokeAll(userId);
-    const { session, tokens } = await this.sessions.create(updated.id, meta);
-    return this.buildAuthResponse(updated, session, tokens);
+    const { session, tokens } = await this.sessions.create(updated.id, meta, dek);
+    const fresh = dek ? ((await this.prisma.user.findUnique({ where: { id: userId } })) ?? updated) : updated;
+    return this.buildAuthResponse(fresh, session, tokens);
   }
 
   async deleteAccount(
@@ -345,7 +368,12 @@ export class AuthService {
     await this.createAndSendOtp(user.id, user.email, EMAIL_OTP_PURPOSE.PASSWORD_RESET);
   }
 
-  async resetPassword(email: string, token: string, newPassword: string): Promise<void> {
+  async resetPassword(
+    email: string,
+    token: string,
+    newPassword: string,
+    recoveryKey?: string,
+  ): Promise<void> {
     const user = await this.prisma.user.findUnique({
       where: { email: email.toLowerCase().trim() },
     });
@@ -353,6 +381,24 @@ export class AuthService {
       throw this.invalidOtp();
     }
     const record = await this.matchOtp(user.id, token, EMAIL_OTP_PURPOSE.PASSWORD_RESET);
+    let dek: Buffer | null = null;
+    if (user.dataEncryptionVersion >= DATA_ENCRYPTION_VERSION) {
+      const trimmed = recoveryKey?.trim();
+      if (!trimmed) {
+        throw new AppError(
+          ErrorCode.RECOVERY_KEY_REQUIRED,
+          "Enter the recovery key you saved when you created this account.",
+        );
+      }
+      if (!user.dekRecoveryWrapped) {
+        throw new AppError(ErrorCode.RECOVERY_KEY_INVALID, "That recovery key is incorrect.");
+      }
+      try {
+        dek = await this.crypto.unwrapRecovery(user.dekRecoveryWrapped, trimmed);
+      } catch {
+        throw new AppError(ErrorCode.RECOVERY_KEY_INVALID, "That recovery key is incorrect.");
+      }
+    }
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_COST);
     await this.prisma.$transaction([
       this.prisma.emailVerificationToken.update({
@@ -367,6 +413,7 @@ export class AuthService {
         },
       }),
     ]);
+    if (dek) await this.libraryKeys.rewrapPassword(user.id, dek, newPassword);
     await this.sessions.revokeAll(user.id);
   }
 
@@ -434,6 +481,7 @@ export class AuthService {
     user: User,
     session: Session,
     tokens: { accessToken: string; refreshToken: string; expiresIn: number },
+    recoveryKey?: string,
   ): AuthResponse {
     return {
       user: toUserDto(user),
@@ -443,6 +491,7 @@ export class AuthService {
         refreshToken: tokens.refreshToken,
         expiresIn: tokens.expiresIn,
       },
+      ...(recoveryKey ? { recoveryKey } : {}),
     };
   }
 }

@@ -209,7 +209,7 @@ export const AuthRoutes = {
   resetPassword: {
     path: `${API_PREFIX}/auth/reset-password`,
     method: "POST",
-    body: {} as { email: string; token: string; newPassword: string },
+    body: {} as { email: string; token: string; newPassword: string; recoveryKey?: string },
     query: {} as Empty,
     params: {} as Empty,
     response: {} as { success: true },

@@ -5,11 +5,13 @@ import { PrismaService } from "../prisma/prisma.service.js";
 import { AppError } from "../common/errors/app-error.js";
 import type { TokenPair } from "./token.service.js";
 import { TokenService } from "./token.service.js";
+import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
 
 export interface AccessValidation {
   userId: string;
   sessionId: string;
   expired: boolean;
+  dek: Buffer | null;
 }
 
 /** Manages session rows: creation, access validation, refresh rotation, revocation. */
@@ -18,13 +20,16 @@ export class SessionService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokens: TokenService,
+    private readonly crypto: LibraryCryptoService,
   ) {}
 
   async create(
     userId: string,
     meta: { deviceInfo: string; deviceName: string | null; deviceType: SessionDeviceType; ip: string },
+    dek: Buffer | null = null,
   ): Promise<{ session: Session; tokens: TokenPair }> {
     const pair = this.tokens.generatePair();
+    const wraps = dek ? this.crypto.wrapForSession(dek, pair) : { dekWrapped: null, dekRefreshWrapped: null };
     const session = await this.prisma.session.create({
       data: {
         userId,
@@ -37,6 +42,8 @@ export class SessionService {
         refreshTokenHash: pair.refreshHash,
         refreshTokenExpiresAt: pair.refreshTokenExpiresAt,
         lastSeenAt: new Date(),
+        dekWrapped: wraps.dekWrapped,
+        dekRefreshWrapped: wraps.dekRefreshWrapped,
       },
     });
     return { session, tokens: pair };
@@ -47,7 +54,13 @@ export class SessionService {
     const hash = this.tokens.hash(token);
     const session = await this.prisma.session.findUnique({
       where: { accessTokenHash: hash },
-      select: { id: true, userId: true, accessTokenExpiresAt: true, refreshTokenExpiresAt: true },
+      select: {
+        id: true,
+        userId: true,
+        accessTokenExpiresAt: true,
+        refreshTokenExpiresAt: true,
+        dekWrapped: true,
+      },
     });
     if (!session) return null;
 
@@ -59,7 +72,16 @@ export class SessionService {
     }
     // Access expired but session alive → client should refresh.
     if (session.accessTokenExpiresAt < now) {
-      return { userId: session.userId, sessionId: session.id, expired: true };
+      return { userId: session.userId, sessionId: session.id, expired: true, dek: null };
+    }
+
+    let dek: Buffer | null = null;
+    if (session.dekWrapped) {
+      try {
+        dek = this.crypto.unwrapAccess(session.dekWrapped, token);
+      } catch {
+        return null;
+      }
     }
 
     // Throttle lastSeen updates to ~once per minute via a fire-and-forget.
@@ -67,7 +89,7 @@ export class SessionService {
       .update({ where: { id: session.id }, data: { lastSeenAt: now } })
       .catch(() => undefined);
 
-    return { userId: session.userId, sessionId: session.id, expired: false };
+    return { userId: session.userId, sessionId: session.id, expired: false, dek };
   }
 
   /** Rotate the token pair on an existing session (rotating refresh token). */
@@ -87,7 +109,17 @@ export class SessionService {
       throw new AppError(ErrorCode.TOKEN_EXPIRED, "Your session has expired.");
     }
 
+    let dek: Buffer | null = null;
+    if (session.dekRefreshWrapped) {
+      try {
+        dek = this.crypto.unwrapRefresh(session.dekRefreshWrapped, refreshToken);
+      } catch {
+        throw new AppError(ErrorCode.SESSION_REVOKED, "Your session has ended. Please sign in again.");
+      }
+    }
+
     const pair = this.tokens.generatePair();
+    const wraps = dek ? this.crypto.wrapForSession(dek, pair) : { dekWrapped: null, dekRefreshWrapped: null };
     const updated = await this.prisma.session.update({
       where: { id: session.id },
       data: {
@@ -96,6 +128,8 @@ export class SessionService {
         refreshTokenHash: pair.refreshHash,
         refreshTokenExpiresAt: pair.refreshTokenExpiresAt,
         lastSeenAt: new Date(),
+        dekWrapped: wraps.dekWrapped,
+        dekRefreshWrapped: wraps.dekRefreshWrapped,
         ...(meta && {
           deviceInfo: meta.deviceInfo,
           deviceName: meta.deviceName,

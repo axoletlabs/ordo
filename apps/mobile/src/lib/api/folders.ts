@@ -22,12 +22,15 @@ export const foldersApi = {
     api.patch<typeof FolderRoutes.update.response>(buildPath(FolderRoutes.update.path, { id }), input),
 
   remove: (id: string) =>
-    api.delete<typeof FolderRoutes.remove.response>(buildPath(FolderRoutes.remove.path, { id })),
+    api.delete<typeof FolderRoutes.remove.response>(buildPath(FolderRoutes.remove.path, { id }), {
+      folderId: id,
+    }),
 
   setPassword: (id: string, input: SetFolderPasswordInput) =>
     api.post<typeof FolderRoutes.setPassword.response>(
       buildPath(FolderRoutes.setPassword.path, { id }),
       input,
+      { folderId: id },
     ),
 
   removePassword: (id: string, body: RemoveFolderPasswordInput) =>
@@ -42,5 +45,5 @@ export const foldersApi = {
     }),
 
   batch: (body: BatchFoldersInput) =>
-    api.post<typeof FolderRoutes.batch.response>(FolderRoutes.batch.path, body),
+    api.post<typeof FolderRoutes.batch.response>(FolderRoutes.batch.path, body, { folderTokens: true }),
 };

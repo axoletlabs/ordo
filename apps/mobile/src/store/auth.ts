@@ -11,7 +11,7 @@
  * refresh writes that copy back; we adopt it on hydrate and foreground.
  */
 import { create } from "zustand";
-import { normalizeReaderPreferences, type AuthTokens, type UserDto } from "@ordo/shared";
+import { normalizeReaderPreferences, type AuthResponse, type AuthTokens, type UserDto } from "@ordo/shared";
 import { accessExpiresAtFromNow } from "../lib/auth-session-policy";
 import { shouldAdoptQuickShareSession } from "../lib/share-intake";
 import { readQuickShareSession, syncQuickShareSession } from "../lib/share-targets";
@@ -39,6 +39,7 @@ export function normalizePersistedUser(raw: unknown): UserDto | null {
     avatarUpdatedAt: typeof u.avatarUpdatedAt === "string" ? u.avatarUpdatedAt : null,
     mfaEnabled: Boolean(u.mfaEnabled),
     preferences: normalizeReaderPreferences(u.preferences),
+    libraryEncrypted: Boolean(u.libraryEncrypted),
     createdAt: typeof u.createdAt === "string" ? u.createdAt : new Date(0).toISOString(),
   };
 }
@@ -60,15 +61,18 @@ export interface AuthState {
   accessExpiresAt: number | null;
   sessionUpdatedAt: number | null;
   status: AuthStatus;
+  /** One-time library recovery key, kept until the user saves or dismisses it. */
+  pendingRecoveryKey: string | null;
 
   hydrate: () => Promise<void>;
   /** Pull tokens the Android Quick Save activity may have rotated. */
   reconcileShareSession: () => Promise<void>;
-  setSession: (session: PersistedAuth) => void;
+  setSession: (session: PersistedAuth & Pick<Partial<AuthResponse>, "recoveryKey">) => void;
   /** Replace only the token pair (used after transparent refresh). */
   setTokens: (tokens: AuthTokens) => void;
   /** Replace only the user (used after profile edits). */
   setUser: (user: UserDto) => void;
+  acknowledgeRecoveryKey: () => void;
   clear: () => Promise<void>;
 }
 
@@ -107,9 +111,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   accessExpiresAt: null,
   sessionUpdatedAt: null,
   status: "loading",
+  pendingRecoveryKey: null,
 
   hydrate: async () => {
     const saved = await secureGet<PersistedAuth>(StorageKeys.AUTH);
+    const pendingRecoveryKey = await secureGet<string>(StorageKeys.RECOVERY_KEY);
     const user = normalizePersistedUser(saved?.user);
     if (user && saved?.tokens?.accessToken && saved?.tokens?.refreshToken) {
       let tokens = saved.tokens;
@@ -134,6 +140,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         accessExpiresAt,
         sessionUpdatedAt: nextUpdatedAt,
         status: "authenticated",
+        pendingRecoveryKey: typeof pendingRecoveryKey === "string" ? pendingRecoveryKey : null,
       });
       persistAuth(user, tokens, accessExpiresAt, nextUpdatedAt);
     } else {
@@ -143,6 +150,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         accessExpiresAt: null,
         sessionUpdatedAt: null,
         status: "unauthenticated",
+        pendingRecoveryKey: typeof pendingRecoveryKey === "string" ? pendingRecoveryKey : null,
       });
       void syncQuickShareSession(null);
     }
@@ -165,14 +173,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   setSession: (session) => {
     const accessExpiresAt = session.accessExpiresAt ?? accessExpiresAtFromNow(session.tokens.expiresIn);
     const sessionUpdatedAt = Date.now();
+    const pendingRecoveryKey = session.recoveryKey ?? get().pendingRecoveryKey;
     set({
       user: session.user,
       tokens: session.tokens,
       accessExpiresAt,
       sessionUpdatedAt,
       status: "authenticated",
+      pendingRecoveryKey,
     });
     persistAuth(session.user, session.tokens, accessExpiresAt, sessionUpdatedAt);
+    if (session.recoveryKey) void secureSet(StorageKeys.RECOVERY_KEY, session.recoveryKey);
   },
 
   setTokens: (tokens) => {
@@ -189,6 +200,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     if (!tokens) return;
     set({ user });
     persistAuth(user, tokens, accessExpiresAt, sessionUpdatedAt ?? Date.now());
+  },
+
+  acknowledgeRecoveryKey: () => {
+    set({ pendingRecoveryKey: null });
+    void secureDelete(StorageKeys.RECOVERY_KEY);
   },
 
   clear: async () => {

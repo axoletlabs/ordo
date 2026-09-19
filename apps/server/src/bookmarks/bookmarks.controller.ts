@@ -139,8 +139,8 @@ export class BookmarksController {
   }
 
   @Get("reminders")
-  async reminders(@CurrentUser() user: AuthContext): Promise<BookmarkReminderDto[]> {
-    return this.bookmarks.listReminders(user.userId);
+  async reminders(@CurrentUser() user: AuthContext, @Req() req: Request): Promise<BookmarkReminderDto[]> {
+    return this.bookmarks.listReminders(user.userId, getPresentedFolderTokens(req));
   }
 
   @Get(":id")

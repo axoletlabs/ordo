@@ -6,6 +6,7 @@ import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter.js";
 import { ClientIpMiddleware } from "./common/middleware/client-ip.middleware.js";
 import { createStandardSchemaPipe } from "./common/pipes/standard-schema-pipe.js";
 import { RateLimitModule } from "./common/rate-limit/rate-limit.module.js";
+import { LibraryCryptoModule } from "./crypto/library-crypto.module.js";
 import { AuthModule } from "./auth/auth.module.js";
 import { BookmarksModule } from "./bookmarks/bookmarks.module.js";
 import { ImportExportModule } from "./import-export/import-export.module.js";
@@ -15,6 +16,7 @@ import { ServerModule } from "./server/server.module.js";
   imports: [
     AppConfigModule,
     PrismaModule,
+    LibraryCryptoModule,
     RateLimitModule,
     AuthModule,
     BookmarksModule,

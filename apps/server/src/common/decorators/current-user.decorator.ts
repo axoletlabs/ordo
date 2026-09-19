@@ -5,6 +5,8 @@ import type { Request } from "express";
 export interface AuthContext {
   userId: string;
   sessionId: string;
+  /** Unwrapped library DEK for this request. Null for plaintext legacy users. */
+  dek: Buffer | null;
 }
 
 export interface AuthenticatedRequest extends Request {

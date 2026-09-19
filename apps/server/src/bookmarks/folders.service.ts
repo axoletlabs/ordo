@@ -15,6 +15,7 @@ import { RateLimitService } from "../common/rate-limit/rate-limit.service.js";
 import { FolderTokenService } from "./folder-token.service.js";
 import { FolderAccessService } from "./folder-access.service.js";
 import { toFolderDto } from "../common/mappers.js";
+import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
 
 @Injectable()
 export class FoldersService {
@@ -23,6 +24,7 @@ export class FoldersService {
     private readonly folderTokens: FolderTokenService,
     private readonly access: FolderAccessService,
     private readonly rateLimit: RateLimitService,
+    private readonly crypto: LibraryCryptoService,
   ) {}
 
   async list(userId: string): Promise<FolderDto[]> {
@@ -47,7 +49,7 @@ export class FoldersService {
     );
 
     return folders.map((f) =>
-      toFolderDto(f, {
+      this.presentFolder(f, {
         bookmarkCount: f._count.bookmarks,
         unreadCount: unreadByFolder.get(f.id) ?? 0,
       }),
@@ -59,43 +61,49 @@ export class FoldersService {
       where: { userId },
       _max: { position: true },
     });
+    const id = this.crypto.active() ? this.crypto.newId() : undefined;
     const folder = await this.prisma.folder.create({
       data: {
+        ...(id ? { id } : {}),
         userId,
-        name: input.name,
+        name: this.crypto.sealFolderName(userId, id ?? "pending", input.name),
         // undefined falls back to the schema default (folder-outline)
         ...(input.icon !== undefined ? { icon: input.icon } : {}),
         position: (maxPosition._max.position ?? -1) + 1,
       },
     });
-    return toFolderDto(folder, { bookmarkCount: 0, unreadCount: 0 });
+    return this.presentFolder(folder, { bookmarkCount: 0, unreadCount: 0 });
   }
 
   /** Partial metadata update: name, icon, and/or pinned. */
-  async update(folderId: string, userId: string, input: UpdateFolderInput): Promise<FolderDto> {
-    const folder = await this.prisma.folder.findFirst({ where: { id: folderId, userId } });
-    if (!folder) throw new AppError(ErrorCode.FOLDER_NOT_FOUND, "This folder no longer exists.");
-
+  async update(
+    folderId: string,
+    userId: string,
+    input: UpdateFolderInput,
+    tokens: readonly string[] = [],
+  ): Promise<FolderDto> {
+    const folder = await this.access.requireFolder(folderId, userId, tokens);
     const data: { name?: string; icon?: string; pinned?: boolean } = {};
-    if (input.name !== undefined) data.name = input.name;
+    if (input.name !== undefined) data.name = this.crypto.sealFolderName(userId, folderId, input.name);
     if (input.icon !== undefined) data.icon = input.icon;
     if (input.pinned !== undefined) data.pinned = input.pinned;
 
     const updated = await this.prisma.folder.update({ where: { id: folderId }, data });
-    return toFolderDto(updated, await this.folderCounts(folderId));
+    return this.presentFolder(updated, await this.folderCounts(folderId));
   }
 
-  /** Any folder may be deleted. Bookmarks inside are removed by the schema's
-   *  cascading delete. */
-  async remove(folderId: string, userId: string): Promise<void> {
-    const folder = await this.prisma.folder.findFirst({ where: { id: folderId, userId } });
-    if (!folder) throw new AppError(ErrorCode.FOLDER_NOT_FOUND, "This folder no longer exists.");
+  /** Locked folders can only be deleted while unlocked (token presented). */
+  async remove(folderId: string, userId: string, tokens: readonly string[] = []): Promise<void> {
+    await this.access.requireFolder(folderId, userId, tokens);
     await this.prisma.folder.delete({ where: { id: folderId } });
   }
 
-  async batch(userId: string, input: BatchFoldersInput): Promise<{ updated: number }> {
+  async batch(userId: string, input: BatchFoldersInput, tokens: readonly string[] = []): Promise<{ updated: number }> {
     const ids = [...new Set(input.ids)];
     if (input.action === "delete") {
+      for (const id of ids) {
+        await this.access.requireFolder(id, userId, tokens);
+      }
       const result = await this.prisma.folder.deleteMany({
         where: { id: { in: ids }, userId },
       });
@@ -108,8 +116,16 @@ export class FoldersService {
     return { updated: result.count };
   }
 
-  async setPassword(folderId: string, userId: string, input: SetFolderPasswordInput): Promise<void> {
-    await this.access.loadOwned(folderId, userId);
+  async setPassword(
+    folderId: string,
+    userId: string,
+    input: SetFolderPasswordInput,
+    tokens: readonly string[] = [],
+  ): Promise<void> {
+    const folder = await this.access.loadOwned(folderId, userId);
+    if (folder.passwordHash) {
+      await this.access.requireFolder(folderId, userId, tokens);
+    }
     await this.folderTokens.setPassword(folderId, input.password, input.lockType);
   }
 
@@ -180,5 +196,12 @@ export class FoldersService {
       this.prisma.bookmark.count({ where: { folderId, isRead: false } }),
     ]);
     return { bookmarkCount, unreadCount };
+  }
+
+  private presentFolder(
+    folder: Parameters<typeof toFolderDto>[0],
+    counts: { bookmarkCount: number; unreadCount: number },
+  ): FolderDto {
+    return toFolderDto(this.crypto.openFolder(folder), counts);
   }
 }

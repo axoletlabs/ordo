@@ -43,9 +43,11 @@ import { ExtractionService } from "../bookmarks/extraction.service.js";
 import { detectAndParse } from "./parsers/index.js";
 import type { InvalidRow, ParsedEntry, ParsedFolder } from "./parsers/parse-utils.js";
 import { flattenFolderName, safeHostname } from "./parsers/parse-utils.js";
+import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
 
 interface FolderRow {
   id: string;
+  userId: string;
   name: string;
   passwordHash: string | null;
 }
@@ -93,6 +95,7 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly tokens: TokenService,
     private readonly extraction: ExtractionService,
+    private readonly crypto: LibraryCryptoService,
   ) {}
 
   onApplicationBootstrap(): void {
@@ -125,7 +128,7 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
         expiresAt: new Date(Date.now() + IMPORT_EXPORT.JOB_TTL_MS),
       },
     });
-    void this.parseJob(job.id, userId, text);
+    void this.crypto.runAsync(this.crypto.snapshot(), () => this.parseJob(job.id, userId, text));
     return { jobId: job.id };
   }
 
@@ -136,7 +139,7 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
       await this.prisma.importJob.deleteMany({ where: { id: job.id } }).catch(() => undefined);
       throw new AppError(ErrorCode.IMPORT_NOT_FOUND, "This import expired. Upload the file again.");
     }
-    return toJobDto(job);
+    return toJobDto(this.crypto.openImportJob(job));
   }
 
   /** Delete a staged or finished job. */
@@ -171,7 +174,9 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
         `This import is ${job.status}; only a previewed import can be confirmed.`,
       );
     }
-    void this.runCommit(jobId, userId, input, folderTokens);
+    void this.crypto.runAsync(this.crypto.snapshot(), () =>
+      this.runCommit(jobId, userId, input, folderTokens),
+    );
     return this.getJob(userId, jobId);
   }
 
@@ -189,7 +194,7 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
       );
       await this.prisma.importJob.update({
         where: { id: jobId },
-        data: {
+        data: this.crypto.sealImportJob(userId, jobId, {
           status: "ready",
           sourceFormat: parsed.format,
           entries: JSON.stringify({
@@ -197,7 +202,7 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
             folders: parsed.folders,
           } satisfies StagedPayload),
           preview: JSON.stringify(preview),
-        },
+        }),
       });
     } catch (err) {
       const message = err instanceof AppError ? err.message : "The file could not be parsed.";
@@ -217,13 +222,13 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
     invalid: InvalidRow[],
     folders: ParsedFolder[],
   ): Promise<ImportPreviewDto> {
-    const existingUrls = new Set(
+      const existingUrls = new Set(
       (
         await this.prisma.bookmark.findMany({
           where: { userId },
-          select: { url: true },
+          select: { id: true, userId: true, url: true },
         })
-      ).map((b) => normalizeUrlForMatch(b.url)),
+      ).map((b) => normalizeUrlForMatch(this.crypto.openBookmark(b).url as string)),
     );
     const ownedFolders = await this.loadFolders(userId);
 
@@ -299,7 +304,8 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
     try {
       const job = await this.prisma.importJob.findUnique({ where: { id: jobId } });
       if (!job?.entries) throw new AppError(ErrorCode.IMPORT_NOT_FOUND, "This import no longer exists.");
-      const staged = JSON.parse(job.entries) as StagedPayload;
+      const opened = this.crypto.openImportJob(job);
+      const staged = JSON.parse(opened.entries as string) as StagedPayload;
 
       const plan = await this.plan(userId, staged, input.duplicatePolicy, folderTokens);
       if (input.atomic && plan.lockedFolders.length > 0) {
@@ -315,12 +321,12 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
 
       await this.prisma.importJob.update({
         where: { id: jobId },
-        data: {
+        data: this.crypto.sealImportJob(userId, jobId, {
           status: "completed",
           result: JSON.stringify(result),
           entries: null,
           expiresAt: new Date(Date.now() + IMPORT_EXPORT.JOB_TTL_MS),
-        },
+        }),
       });
 
       if (plan.creates.length > 0) {
@@ -331,6 +337,7 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
             userId,
             mode: "content" as const,
             priority: "high" as const,
+            dek: this.crypto.snapshot(),
           })),
         );
       }
@@ -357,6 +364,7 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
       where: { userId },
       select: {
         id: true,
+        userId: true,
         url: true,
         folderId: true,
         isRead: true,
@@ -368,8 +376,20 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
     });
     const byNormUrl = new Map<string, BookmarkRow>();
     for (const b of existingBookmarks) {
-      const norm = normalizeUrlForMatch(b.url);
-      if (!byNormUrl.has(norm)) byNormUrl.set(norm, b);
+      const open = this.crypto.openBookmark(b);
+      const norm = normalizeUrlForMatch(open.url as string);
+      if (!byNormUrl.has(norm)) {
+        byNormUrl.set(norm, {
+          id: b.id,
+          url: open.url as string,
+          folderId: b.folderId,
+          isRead: b.isRead,
+          readProgress: b.readProgress,
+          completedAt: b.completedAt,
+          description: (open.description as string | null) ?? null,
+          author: (open.author as string | null) ?? null,
+        });
+      }
     }
 
     const seenInFile = new Set<string>();
@@ -523,10 +543,12 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
     const max = await tx.folder.aggregate({ where: { userId }, _max: { position: true } });
     let position = (max._max.position ?? -1) + 1;
     for (const folder of toCreate) {
+      const id = this.crypto.active() ? this.crypto.newId() : undefined;
       const created = await tx.folder.create({
         data: {
+          ...(id ? { id } : {}),
           userId,
-          name: folder.name,
+          name: this.crypto.sealFolderName(userId, id ?? "pending", folder.name),
           ...(folder.icon ? { icon: folder.icon } : {}),
           ...(folder.pinned !== undefined ? { pinned: folder.pinned } : {}),
           position: position++,
@@ -550,7 +572,7 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
     for (let i = 0; i < plan.creates.length; i += IMPORT_EXPORT.BATCH_SIZE) {
       const batch = plan.creates.slice(i, i + IMPORT_EXPORT.BATCH_SIZE).map(({ entry, id, folder }) => {
         const createdAt = entry.createdAt ? new Date(entry.createdAt) : undefined;
-        return {
+        return this.crypto.sealBookmark(userId, id, {
           id,
           userId,
           folderId: resolve(folder),
@@ -570,7 +592,7 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
           isRead: entry.isRead,
           fetchStatus: "pending",
           ...(createdAt ? { createdAt } : {}),
-        };
+        });
       });
       await tx.bookmark.createMany({ data: batch });
     }
@@ -592,7 +614,10 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
         data.folder = { connect: { id: targetId } };
       }
       if (Object.keys(data).length > 0) {
-        await tx.bookmark.update({ where: { id: existing.id }, data });
+        await tx.bookmark.update({
+          where: { id: existing.id },
+          data: this.crypto.sealBookmark(userId, existing.id, data as Record<string, unknown>),
+        });
       }
     }
   }
@@ -610,23 +635,30 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
     if (tagged.length === 0) return;
 
     const names = [...new Set(tagged.flatMap((row) => row.tags.map((t) => tagNameKey(t))))];
+    const indexes = names.map((name) => this.crypto.tagIndex(userId, name));
     const existing = await tx.tag.findMany({
-      where: { userId, normalizedName: { in: names } },
+      where: { userId, normalizedName: { in: indexes } },
       select: { id: true, normalizedName: true },
     });
     const tagIds = new Map(existing.map((t) => [t.normalizedName, t.id] as const));
     for (const name of names) {
-      if (tagIds.has(name)) continue;
+      const index = this.crypto.tagIndex(userId, name);
+      if (tagIds.has(index)) continue;
       const display = tagged.flatMap((r) => r.tags).find((t) => tagNameKey(t) === name) ?? name;
+      const id = this.crypto.active() ? this.crypto.newId() : undefined;
+      const sealed = this.crypto.sealTag(userId, id ?? "pending", {
+        name: display.slice(0, TAG_NAME_MAX_LENGTH),
+      });
       const created = await tx.tag.create({
         data: {
+          ...(id ? { id } : {}),
           userId,
-          name: display.slice(0, TAG_NAME_MAX_LENGTH),
-          normalizedName: name,
+          name: sealed.name,
+          normalizedName: sealed.normalizedName,
           color: DEFAULT_TAG_COLOR,
         },
       });
-      tagIds.set(name, created.id);
+      tagIds.set(index, created.id);
     }
 
     const existingLinks = await tx.bookmarkTag.findMany({
@@ -639,7 +671,7 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
     for (const row of tagged) {
       const seen = new Set<string>();
       for (const tag of row.tags.slice(0, MAX_TAGS_PER_BOOKMARK)) {
-        const tagId = tagIds.get(tagNameKey(tag));
+        const tagId = tagIds.get(this.crypto.tagIndex(userId, tagNameKey(tag)));
         if (!tagId || seen.has(tagId)) continue;
         seen.add(tagId);
         const key = `${row.id}:${tagId}`;
@@ -656,11 +688,12 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
   // --- helpers ---
 
   private async loadFolders(userId: string): Promise<FolderRow[]> {
-    return this.prisma.folder.findMany({
+    const rows = await this.prisma.folder.findMany({
       where: { userId },
-      select: { id: true, name: true, passwordHash: true },
+      select: { id: true, userId: true, name: true, passwordHash: true },
       orderBy: { createdAt: "asc" },
     });
+    return rows.map((row) => this.crypto.openFolder(row) as FolderRow);
   }
 
   /** True when any supplied token unlocks the folder. */

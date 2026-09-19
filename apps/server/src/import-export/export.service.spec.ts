@@ -1,5 +1,6 @@
 import { Readable } from "node:stream";
 import { ExportService } from "./export.service.js";
+import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
 
 function rows(books: Array<Record<string, unknown>>) {
   return books.map((b, i) => ({
@@ -72,7 +73,7 @@ describe("ExportService", () => {
       folderToken: { findUnique: jest.fn().mockResolvedValue(null) },
     };
     const tokens = { hash: jest.fn((t: string) => `hash-${t}`) };
-    const service = new ExportService(prisma as never, tokens as never);
+    const service = new ExportService(prisma as never, tokens as never, new LibraryCryptoService());
     return { prisma, tokens, service, folders };
   }
 

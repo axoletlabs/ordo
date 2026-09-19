@@ -31,8 +31,15 @@ import { APP_CONFIG, type AppConfig } from "../config/config.module.js";
 import { TokenService } from "./token.service.js";
 import { MailService } from "./mail.service.js";
 import { toUserDto } from "../common/mappers.js";
+import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
 
 const TOTP_KEY_INFO = "totp-secret-enc";
+
+export interface MfaLoginCompletion {
+  user: User;
+  dek: Buffer | null;
+  recoveryKey?: string;
+}
 
 @Injectable()
 export class MfaService {
@@ -44,6 +51,7 @@ export class MfaService {
     private readonly tokens: TokenService,
     private readonly mail: MailService,
     @Inject(APP_CONFIG) private readonly cfg: AppConfig,
+    private readonly crypto: LibraryCryptoService,
   ) {
     this.totpKey = deriveKey(cfg.jwtSecret, TOTP_KEY_INFO);
   }
@@ -62,11 +70,19 @@ export class MfaService {
     return { totpEnabled: this.isEnabled(user), backupCodesRemaining: remaining };
   }
 
-  createLoginChallengeResponse(user: User): Promise<MfaRequiredResponse> {
-    return this.createLoginChallenge(user);
+  createLoginChallengeResponse(
+    user: User,
+    dek: Buffer | null,
+    recoveryKey?: string,
+  ): Promise<MfaRequiredResponse> {
+    return this.createLoginChallenge(user, dek, recoveryKey);
   }
 
-  async createLoginChallenge(user: User): Promise<MfaRequiredResponse> {
+  async createLoginChallenge(
+    user: User,
+    dek: Buffer | null = null,
+    recoveryKey?: string,
+  ): Promise<MfaRequiredResponse> {
     await this.prisma.mfaChallenge.deleteMany({
       where: { userId: user.id, purpose: MFA_CHALLENGE_PURPOSE.LOGIN },
     });
@@ -76,6 +92,7 @@ export class MfaService {
         userId: user.id,
         tokenHash: hashToken(token),
         purpose: MFA_CHALLENGE_PURPOSE.LOGIN,
+        payload: dek ? this.crypto.wrapMfaStash(token, { dek, recoveryKey }) : null,
         expiresAt: new Date(Date.now() + MFA.CHALLENGE_TTL_MS),
       },
     });
@@ -87,7 +104,7 @@ export class MfaService {
     };
   }
 
-  async consumeLoginCode(challengeToken: string, code: string): Promise<User> {
+  async consumeLoginCode(challengeToken: string, code: string): Promise<MfaLoginCompletion> {
     const challenge = await this.matchChallenge(challengeToken, MFA_CHALLENGE_PURPOSE.LOGIN);
     const user = await this.requireUser(challenge.userId);
     const ok = await this.verifyMfaCode(user, code, { consumeBackup: true });
@@ -95,8 +112,9 @@ export class MfaService {
       await this.recordChallengeFailure(challenge.id, challenge.attempts);
       throw this.invalid();
     }
+    const stash = this.readStash(challengeToken, challenge.payload);
     await this.prisma.mfaChallenge.delete({ where: { id: challenge.id } }).catch(() => undefined);
-    return user;
+    return { user, ...stash };
   }
 
   async requestEmailRecovery(challengeToken: string): Promise<void> {
@@ -106,9 +124,10 @@ export class MfaService {
     await this.createAndSendRecoveryOtp(user.id, user.email);
   }
 
-  async consumeEmailRecovery(challengeToken: string, otp: string): Promise<User> {
+  async consumeEmailRecovery(challengeToken: string, otp: string): Promise<MfaLoginCompletion> {
     const challenge = await this.matchChallenge(challengeToken, MFA_CHALLENGE_PURPOSE.LOGIN);
     const user = await this.requireUser(challenge.userId);
+    const stash = this.readStash(challengeToken, challenge.payload);
     const record = await this.matchRecoveryOtp(user.id, otp);
     await this.prisma.$transaction([
       this.prisma.emailVerificationToken.update({
@@ -117,7 +136,7 @@ export class MfaService {
       }),
       this.prisma.mfaChallenge.deleteMany({ where: { userId: user.id } }),
     ]);
-    return this.disableMfa(user.id);
+    return { user: await this.disableMfa(user.id), ...stash };
   }
 
   async beginTotp(userId: string, mfaCode?: string): Promise<TotpBeginDto> {
@@ -344,6 +363,16 @@ export class MfaService {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new AppError(ErrorCode.UNAUTHORIZED, "Account not found.");
     return user;
+  }
+
+  private readStash(challengeToken: string, payload: string | null): { dek: Buffer | null; recoveryKey?: string } {
+    if (!payload) return { dek: null };
+    try {
+      const stash = this.crypto.unwrapMfaStash(challengeToken, payload);
+      return { dek: stash.dek, recoveryKey: stash.recoveryKey };
+    } catch {
+      return { dek: null };
+    }
   }
 
   private invalid(): AppError {

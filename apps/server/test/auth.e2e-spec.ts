@@ -38,6 +38,8 @@ describe("Auth (e2e)", () => {
       expect(res.body.user.displayName).toBe("alice");
       expect(res.body.user.mfaEnabled).toBe(false);
       expect(res.body.user.hasAvatar).toBe(false);
+      expect(res.body.user.libraryEncrypted).toBe(true);
+      expect(res.body.recoveryKey).toMatch(/^rk1\./);
       expect(res.body.user.id).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
       );
@@ -60,6 +62,7 @@ describe("Auth (e2e)", () => {
 
       expect(res.body.tokens.accessToken).toBe("");
       expect(res.body.tokens.refreshToken).toBe("");
+      expect(res.body.recoveryKey).toMatch(/^rk1\./);
       const cookies = res.headers["set-cookie"] as string[];
       expect(cookies?.some((c) => c.startsWith("ordo_access="))).toBe(true);
     });
@@ -491,12 +494,34 @@ describe("Auth (e2e)", () => {
       expect(last.to).toBe("resetme@ordo.app");
       expect(last.token).toMatch(/^\d{6}$/);
 
+      const missingKey = await request(pctx.app.getHttpServer())
+        .post("/api/auth/reset-password")
+        .send({
+          email: "resetme@ordo.app",
+          token: last.token,
+          newPassword: "brandnewpass",
+        })
+        .expect(400);
+      expect(missingKey.body.error.code).toBe(ErrorCode.RECOVERY_KEY_REQUIRED);
+
+      const wrongKey = await request(pctx.app.getHttpServer())
+        .post("/api/auth/reset-password")
+        .send({
+          email: "resetme@ordo.app",
+          token: last.token,
+          newPassword: "brandnewpass",
+          recoveryKey: "rk1.not-the-key",
+        })
+        .expect(400);
+      expect(wrongKey.body.error.code).toBe(ErrorCode.RECOVERY_KEY_INVALID);
+
       await request(pctx.app.getHttpServer())
         .post("/api/auth/reset-password")
         .send({
           email: "resetme@ordo.app",
           token: last.token,
           newPassword: "brandnewpass",
+          recoveryKey: auth.recoveryKey,
         })
         .expect(200);
 

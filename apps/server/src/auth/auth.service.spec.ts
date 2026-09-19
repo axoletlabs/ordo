@@ -28,6 +28,8 @@ describe("AuthService account deletion", () => {
       { enabled: false, checkLogin() {}, recordLoginFailure() {}, clearLogin() {} } as never,
       { assertStepUp } as never,
       { deleteStored: async () => undefined } as never,
+      {} as never,
+      {} as never,
     );
     return { service, deleteUser, assertStepUp };
   };
@@ -96,6 +98,14 @@ describe("email OTP schemas", () => {
         email: "a@ordo.app",
         token: "123456",
         newPassword: "newpassword",
+      }).success,
+    ).toBe(true);
+    expect(
+      ResetPasswordSchema.safeParse({
+        email: "a@ordo.app",
+        token: "123456",
+        newPassword: "newpassword",
+        recoveryKey: "rk1.abc",
       }).success,
     ).toBe(true);
     expect(

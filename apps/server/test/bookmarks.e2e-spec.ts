@@ -1,6 +1,8 @@
 import request from "supertest";
 import { DEFAULT_FOLDER_ICON, ErrorCode, EXTRACTION_VERSION } from "@ordo/shared";
 import { ReaderService, UnsupportedContentError } from "../src/bookmarks/reader.service.js";
+import { TagSuggestionService } from "../src/bookmarks/tag-suggestion.service.js";
+import { LibraryCryptoService } from "../src/crypto/library-crypto.service.js";
 import {
   clearDb,
   createTestApp,
@@ -262,15 +264,17 @@ describe("Bookmarks & Folders (e2e)", () => {
         stored = await ctx.prisma.bookmark.findUnique({ where: { id: res.body.id } });
       }
       expect(stored).toMatchObject({
-        title: "Sample Article",
         fetchStatus: "ok",
         extractionVersion: EXTRACTION_VERSION,
         extractionReason: null,
-        author: "Jane Doe",
         readingTimeMinutes: 4,
         publishedAt: new Date("2026-01-15T09:30:00.000Z"),
       });
+      expect(stored?.title).toMatch(/^enc1\./);
+      expect(stored?.author).toMatch(/^enc1\./);
       const ready = await agent.get(`/api/bookmarks/${res.body.id}`).expect(200);
+      expect(ready.body.title).toBe("Sample Article");
+      expect(ready.body.author).toBe("Jane Doe");
       expect(ready.body.contentKind).toBe("article");
       expect(ready.body.contentHtml).toBe("<p>Hello world.</p>");
       const listed = await agent.get("/api/bookmarks").expect(200);
@@ -364,7 +368,8 @@ describe("Bookmarks & Folders (e2e)", () => {
         extractionReason: "not_an_article",
         contentHtml: null,
       });
-      const originalTitle = stored?.title;
+      const before = await agent.get(`/api/bookmarks/${res.body.id}`).expect(200);
+      const originalTitle = before.body.title as string;
 
       const marked = await agent
         .put(`/api/bookmarks/${res.body.id}/content-kind`)
@@ -378,11 +383,14 @@ describe("Bookmarks & Folders (e2e)", () => {
       }
       expect(stored).toMatchObject({
         fetchStatus: "ok",
-        title: "Sample Article",
-        contentHtml: "<p>Hello world.</p>",
         readingTimeMinutes: 4,
         contentKindOverride: "article",
       });
+      expect(stored?.title).toMatch(/^enc1\./);
+      expect(stored?.contentHtml).toMatch(/^enc1\./);
+      const extracted = await agent.get(`/api/bookmarks/${res.body.id}`).expect(200);
+      expect(extracted.body.title).toBe("Sample Article");
+      expect(extracted.body.contentHtml).toBe("<p>Hello world.</p>");
 
       const unmarked = await agent
         .put(`/api/bookmarks/${res.body.id}/content-kind`)
@@ -399,12 +407,14 @@ describe("Bookmarks & Folders (e2e)", () => {
       expect(stored).toMatchObject({
         fetchStatus: "unsupported",
         extractionReason: "not_an_article",
-        title: originalTitle,
         contentHtml: null,
         readingTimeMinutes: null,
         contentKindOverride: null,
         articleUndoSnapshot: null,
       });
+      expect(stored?.title).toMatch(/^enc1\./);
+      const restored = await agent.get(`/api/bookmarks/${res.body.id}`).expect(200);
+      expect(restored.body.title).toBe(originalTitle);
     });
 
     it("creates an unfiled bookmark with an explicit null folderId", async () => {
@@ -1439,7 +1449,7 @@ describe("Bookmarks & Folders (e2e)", () => {
       expect(res.body.items).toHaveLength(1);
     });
     it("suggests existing tags after extraction and honors accept/dismiss", async () => {
-      const { agent } = await setup();
+      const { agent, userId } = await setup();
       const sample = await agent.post("/api/tags").send({ name: "sample" }).expect(201);
       const article = await agent.post("/api/tags").send({ name: "article" }).expect(201);
       const created = await agent
@@ -1473,8 +1483,10 @@ describe("Bookmarks & Folders (e2e)", () => {
         where: { id: created.body.id },
         data: { extractionVersion: null },
       });
-      const { TagSuggestionService } = await import("../src/bookmarks/tag-suggestion.service.js");
-      await new TagSuggestionService(ctx.prisma).refresh(created.body.id);
+      const crypto = ctx.app.get(LibraryCryptoService);
+      const user = await ctx.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+      const dek = await crypto.unwrapPassword(user.dekPasswordWrapped!, "password123", user.dekKdfSalt!);
+      await crypto.runAsync(dek, () => ctx.app.get(TagSuggestionService).refresh(created.body.id));
       const after = await agent.get(`/api/bookmarks/${created.body.id}`).expect(200);
       expect(after.body.suggestedTags).toEqual([]);
       expect(after.body.tags.map((t: { id: string }) => t.id)).toEqual([sample.body.id]);
@@ -1922,9 +1934,14 @@ describe("Bookmarks & Folders (e2e)", () => {
         "password",
       );
 
-      // PIN lock round-trip
+      // PIN lock round-trip (already locked — unlock token required)
+      const firstUnlock = await agent
+        .post(`/api/folders/${folder.body.id}/unlock`)
+        .send({ password: "1234" })
+        .expect(200);
       await agent
         .post(`/api/folders/${folder.body.id}/password`)
+        .set("x-folder-token", firstUnlock.body.token)
         .send({ password: "4321", lockType: "pin" })
         .expect(200);
       listed = await agent.get("/api/folders").expect(200);
@@ -1938,14 +1955,21 @@ describe("Bookmarks & Folders (e2e)", () => {
 
       await agent
         .post(`/api/folders/${folder.body.id}/password`)
+        .set("x-folder-token", pinUnlock.body.token)
         .send({ password: "654321", lockType: "pin" })
         .expect(200);
       listed = await agent.get("/api/folders").expect(200);
       expect(listed.body.find((f: { id: string }) => f.id === folder.body.id).pinLength).toBe(6);
 
+      const sixUnlock = await agent
+        .post(`/api/folders/${folder.body.id}/unlock`)
+        .send({ password: "654321" })
+        .expect(200);
+
       // pattern lock round-trip + removal with the account password
       await agent
         .post(`/api/folders/${folder.body.id}/password`)
+        .set("x-folder-token", sixUnlock.body.token)
         .send({ password: "0-1-4-8", lockType: "pattern" })
         .expect(200);
       listed = await agent.get("/api/folders").expect(200);
@@ -2050,12 +2074,22 @@ describe("Bookmarks & Folders (e2e)", () => {
         .expect(200);
     });
 
-    it("deleting a protected folder requires no token (ownership only)", async () => {
+    it("deleting a protected folder requires an unlock token", async () => {
       const { agent } = await setup();
       const folder = await agent.post("/api/folders").send({ name: "Bye" }).expect(201);
       await agent.post(`/api/folders/${folder.body.id}/password`).send({ password: "1234" }).expect(200);
 
-      await agent.delete(`/api/folders/${folder.body.id}`).expect(200);
+      const blocked = await agent.delete(`/api/folders/${folder.body.id}`).expect(403);
+      expect(blocked.body.error.code).toBe(ErrorCode.FOLDER_PROTECTED);
+
+      const unlocked = await agent
+        .post(`/api/folders/${folder.body.id}/unlock`)
+        .send({ password: "1234" })
+        .expect(200);
+      await agent
+        .delete(`/api/folders/${folder.body.id}`)
+        .set("x-folder-token", unlocked.body.token)
+        .expect(200);
       expect((await agent.get("/api/folders").expect(200)).body).toHaveLength(0);
     });
 

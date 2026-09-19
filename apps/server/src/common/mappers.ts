@@ -28,6 +28,7 @@ export type UserDtoFields = Pick<
   | "totpEnabledAt"
   | "avatarUpdatedAt"
   | "createdAt"
+  | "dataEncryptionVersion"
 >;
 
 /** Map a user row (or a superset) to a DTO; preferences fall back to defaults when malformed. */
@@ -41,6 +42,7 @@ export function toUserDto(u: UserDtoFields): UserDto {
     avatarUpdatedAt: u.avatarUpdatedAt?.toISOString() ?? null,
     mfaEnabled: u.totpEnabledAt !== null,
     preferences: normalizeReaderPreferences(u.preferences),
+    libraryEncrypted: (u.dataEncryptionVersion ?? 0) >= 1,
     createdAt: u.createdAt.toISOString(),
   };
 }

@@ -1,6 +1,7 @@
 import type { CommitImportInput } from "@ordo/shared";
 import { ImportService } from "./import.service.js";
 import type { ParsedEntry } from "./parsers/parse-utils.js";
+import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
 
 /** Minimal entry factory. */
 function entry(overrides: Partial<ParsedEntry> = {}): ParsedEntry {
@@ -101,7 +102,12 @@ describe("ImportService.commit", () => {
     };
     const tokens = { hash: jest.fn((t: string) => `hash-${t}`) };
     const extraction = { enqueue: jest.fn() };
-    const service = new ImportService(prisma as never, tokens as never, extraction as never);
+    const service = new ImportService(
+      prisma as never,
+      tokens as never,
+      extraction as never,
+      new LibraryCryptoService(),
+    );
 
     const run = async (
       entries: ParsedEntry[],
@@ -265,7 +271,7 @@ describe("ImportService.getJob", () => {
     const prisma = {
       importJob: { findFirst: jest.fn().mockResolvedValue(null), deleteMany: jest.fn() },
     };
-    const service = new ImportService(prisma as never, {} as never, {} as never);
+    const service = new ImportService(prisma as never, {} as never, {} as never, new LibraryCryptoService());
     await expect(service.getJob("u1", "j1")).rejects.toMatchObject({
       response: expect.objectContaining({ code: "import_not_found" }),
     });
@@ -287,7 +293,7 @@ describe("ImportService.getJob", () => {
         deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     };
-    const service = new ImportService(prisma as never, {} as never, {} as never);
+    const service = new ImportService(prisma as never, {} as never, {} as never, new LibraryCryptoService());
     await expect(service.getJob("u1", "j1")).rejects.toMatchObject({
       response: expect.objectContaining({ code: "import_not_found" }),
     });
@@ -321,7 +327,7 @@ describe("ImportService.getJob", () => {
         deleteMany: jest.fn(),
       },
     };
-    const service = new ImportService(prisma as never, {} as never, {} as never);
+    const service = new ImportService(prisma as never, {} as never, {} as never, new LibraryCryptoService());
     const job = await service.getJob("u1", "j1");
     expect(job.preview?.duplicateSamples).toEqual([]);
     expect(job.preview?.uniqueDuplicates).toBe(1);

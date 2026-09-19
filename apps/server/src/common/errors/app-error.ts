@@ -11,6 +11,8 @@ const STATUS_BY_CODE: Record<string, HttpStatus> = {
   [ErrorCode.MFA_REQUIRED]: HttpStatus.UNAUTHORIZED,
   [ErrorCode.MFA_ENROLLMENT_REQUIRED]: HttpStatus.FORBIDDEN,
   [ErrorCode.MFA_INVALID]: HttpStatus.UNAUTHORIZED,
+  [ErrorCode.RECOVERY_KEY_REQUIRED]: HttpStatus.BAD_REQUEST,
+  [ErrorCode.RECOVERY_KEY_INVALID]: HttpStatus.BAD_REQUEST,
 
   [ErrorCode.EMAIL_ALREADY_EXISTS]: HttpStatus.CONFLICT,
   [ErrorCode.INVALID_VERIFICATION_TOKEN]: HttpStatus.BAD_REQUEST,

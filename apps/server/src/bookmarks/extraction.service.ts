@@ -15,6 +15,8 @@ import {
 } from "./reader.service.js";
 import { TagSuggestionService } from "./tag-suggestion.service.js";
 import { htmlToSearchText } from "./html-text.js";
+import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
+import { isLibraryCiphertext } from "../crypto/library-crypto.js";
 
 /** `full` overwrites title/metadata; `content` keeps the imported title. */
 export type ExtractionMode = "full" | "content";
@@ -28,6 +30,8 @@ export interface ExtractionTask {
   /** Re-extract with the user's "this is an article" override. */
   forceArticle?: boolean;
   priority?: ExtractionPriority;
+  /** Copied off the request so background workers can encrypt writes. */
+  dek?: Buffer | null;
 }
 
 const CONCURRENCY = 8;
@@ -46,6 +50,7 @@ export class ExtractionService {
   /** userId → number of pending rows observed in this fetch wave. */
   private readonly waves = new Map<string, number>();
   private readonly idleWaiters: Array<() => void> = [];
+  private readonly resumedUsers = new Set<string>();
   private active = 0;
   private lowActive = 0;
 
@@ -53,6 +58,7 @@ export class ExtractionService {
     private readonly prisma: PrismaService,
     private readonly reader: ReaderService,
     private readonly tagSuggestions: TagSuggestionService,
+    private readonly crypto: LibraryCryptoService,
   ) {}
 
   /** Queue work; `countTowardProgress` is for newly pending rows (not stale refresh). */
@@ -79,6 +85,40 @@ export class ExtractionService {
       }
     }
     this.pump();
+  }
+
+  /** After a live session has the DEK, retry pending rows that boot skipped. */
+  resumePending(userId: string, dek: Buffer | null): void {
+    if (this.resumedUsers.has(userId)) return;
+    this.resumedUsers.add(userId);
+    void this.enqueuePending(userId, dek);
+  }
+
+  private async enqueuePending(userId: string, dek: Buffer | null): Promise<void> {
+    const rows = await this.prisma.bookmark.findMany({
+      where: { userId, fetchStatus: "pending" },
+      select: { id: true, url: true, userId: true, contentKindOverride: true },
+    });
+    const tasks: ExtractionTask[] = [];
+    for (const row of rows) {
+      let url = row.url;
+      try {
+        url = this.crypto.run(dek, () => this.crypto.openBookmark(row).url as string);
+      } catch {
+        continue;
+      }
+      if (isLibraryCiphertext(url)) continue;
+      tasks.push({
+        bookmarkId: row.id,
+        url,
+        userId,
+        mode: "full",
+        forceArticle: row.contentKindOverride === "article",
+        priority: "high",
+        dek,
+      });
+    }
+    if (tasks.length > 0) this.enqueue(tasks, false);
   }
 
   /** Drop queued work and abort an in-flight fetch for a deleted bookmark. */
@@ -128,9 +168,10 @@ export class ExtractionService {
     if (this.canceled.has(bookmarkId)) return;
     const existingOverride = await this.prisma.bookmark.findUnique({
       where: { id: bookmarkId },
-      select: { contentKindOverride: true },
+      select: { contentKindOverride: true, userId: true },
     });
     if (this.canceled.has(bookmarkId)) return;
+    const userId = existingOverride?.userId;
     const force = forceArticle || existingOverride?.contentKindOverride === "article";
     const controller = new AbortController();
     this.controllers.set(bookmarkId, controller);
@@ -143,14 +184,16 @@ export class ExtractionService {
         onHtml: (html) => {
           capturedHtml = html;
         },
-        onMetadata: (meta) => this.writeEarlyMetadata(bookmarkId, meta, mode, force),
+        onMetadata: (meta) => this.writeEarlyMetadata(bookmarkId, userId, meta, mode, force),
       });
       if (this.canceled.has(bookmarkId)) return;
       const written = await this.prisma.bookmark.updateMany({
         where: force
           ? { id: bookmarkId, contentKindOverride: "article" }
           : { id: bookmarkId },
-        data:
+        data: this.sealExtractionWrite(
+          userId,
+          bookmarkId,
           mode === "full"
             ? {
                 title: extracted.title,
@@ -171,6 +214,7 @@ export class ExtractionService {
                 extractionReason: null,
                 extractionVersion: EXTRACTION_VERSION,
               },
+        ),
       });
       if (written.count > 0) this.tagSuggestions.refreshSafely(bookmarkId);
     } catch (err) {
@@ -182,11 +226,18 @@ export class ExtractionService {
       );
       const existing = await this.prisma.bookmark.findUnique({
         where: { id: bookmarkId },
-        select: { contentHtml: true },
+        select: { contentHtml: true, userId: true },
       });
       if (this.canceled.has(bookmarkId)) return;
-      const storedContentIsShell = existing?.contentHtml
-        ? this.reader.classifyShellText(htmlToSearchText(existing.contentHtml)) !== null
+      const storedHtml = existing
+        ? (this.crypto.openBookmark({
+            id: bookmarkId,
+            userId: existing.userId,
+            contentHtml: existing.contentHtml,
+          }).contentHtml as string | null)
+        : null;
+      const storedContentIsShell = storedHtml
+        ? this.reader.classifyShellText(htmlToSearchText(storedHtml)) !== null
         : false;
       const definitivelyUnreadable =
         unsupported &&
@@ -199,7 +250,7 @@ export class ExtractionService {
             : { id: bookmarkId },
           data:
             definitivelyUnreadable || (unsupported && !existing?.contentHtml)
-              ? {
+              ? this.sealExtractionWrite(userId ?? existing?.userId, bookmarkId, {
                   fetchStatus: "unsupported",
                   extractionReason: reason,
                   extractionVersion: EXTRACTION_VERSION,
@@ -208,7 +259,7 @@ export class ExtractionService {
                   publishedAt: null,
                   contentHtml: null,
                   readingTimeMinutes: null,
-                }
+                })
               : existing?.contentHtml
                 ? {
                     fetchStatus: "ok",
@@ -243,6 +294,7 @@ export class ExtractionService {
 
   private async writeEarlyMetadata(
     bookmarkId: string,
+    userId: string | undefined,
     meta: ArticleMetadata,
     mode: ExtractionMode,
     force: boolean,
@@ -265,13 +317,22 @@ export class ExtractionService {
         where: force
           ? { id: bookmarkId, contentKindOverride: "article", fetchStatus: "pending" }
           : { id: bookmarkId, fetchStatus: "pending" },
-        data,
+        data: this.sealExtractionWrite(userId, bookmarkId, data),
       })
       .catch((err: unknown) => {
         this.logger.debug(
           `Early metadata write skipped for ${bookmarkId}: ${(err as Error).message}`,
         );
       });
+  }
+
+  private sealExtractionWrite<T extends Record<string, unknown>>(
+    userId: string | undefined,
+    bookmarkId: string,
+    data: T,
+  ): T {
+    if (!userId) return data;
+    return this.crypto.sealBookmark(userId, bookmarkId, data);
   }
 
   private pump(): void {
@@ -285,16 +346,18 @@ export class ExtractionService {
       this.active += 1;
       if (isLow) this.lowActive += 1;
       this.bumpHost(task.url, 1);
-      void this.enrichBookmark(task.bookmarkId, task.url, task.mode, task.forceArticle).finally(
-        () => {
+      void this.crypto
+        .runAsync(task.dek ?? null, () =>
+          this.enrichBookmark(task.bookmarkId, task.url, task.mode, task.forceArticle),
+        )
+        .finally(() => {
           this.active -= 1;
           if (isLow) this.lowActive -= 1;
           this.bumpHost(task.url, -1);
           this.queuedIds.delete(task.bookmarkId);
           this.pump();
           this.notifyIdle();
-        },
-      );
+        });
     }
     this.notifyIdle();
   }

@@ -29,6 +29,7 @@ import { TagsService } from "./tags.service.js";
 import { ExtractionService } from "./extraction.service.js";
 import { provisionalTitle } from "./provisional-title.js";
 import { toBookmarkDto, toBookmarkDetailDto } from "../common/mappers.js";
+import { htmlToSearchText } from "./html-text.js";
 import {
   clampLimit,
   decodeCursor,
@@ -39,6 +40,8 @@ import {
   decodeTitleCursor,
 } from "../common/utils/cursor.js";
 import { findFtsBookmarkIds, ftsBodyQuery, ftsPrefixQuery } from "../prisma/bookmark-fts.js";
+import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
+import { isLibraryCiphertext } from "../crypto/library-crypto.js";
 
 const LIST_SELECT = {
   id: true,
@@ -140,6 +143,7 @@ export class BookmarksService implements OnApplicationBootstrap {
     private readonly extraction: ExtractionService,
     private readonly access: FolderAccessService,
     private readonly tags: TagsService,
+    private readonly crypto: LibraryCryptoService,
   ) {}
 
   async onApplicationBootstrap(): Promise<void> {
@@ -165,20 +169,36 @@ export class BookmarksService implements OnApplicationBootstrap {
   ): Promise<BookmarkDto> {
     await this.tags.requireOwnedIds(userId, tagIds);
     const domain = this.safeHostname(url);
+    const id = this.crypto.active() ? this.crypto.newId() : undefined;
+    const fields = this.crypto.sealBookmark(userId, id ?? "pending", {
+      url,
+      title: provisionalTitle(url, domain),
+      domain,
+    });
     const bookmark = await this.prisma.bookmark.create({
       data: {
+        ...(id ? { id } : {}),
         userId,
         folderId: folder ? folder.id : null,
-        url,
-        title: provisionalTitle(url, domain),
-        domain,
+        url: fields.url as string,
+        title: fields.title as string,
+        domain: fields.domain as string,
         fetchStatus: "pending",
         tags: { create: tagIds.map((tagId) => ({ tagId })) },
       },
       select: LIST_SELECT,
     });
-    this.extraction.enqueue([{ bookmarkId: bookmark.id, url, userId, mode: "full", priority: "high" }]);
-    return toBookmarkDto(bookmark);
+    this.extraction.enqueue([
+      {
+        bookmarkId: bookmark.id,
+        url,
+        userId,
+        mode: "full",
+        priority: "high",
+        dek: this.crypto.snapshot(),
+      },
+    ]);
+    return this.present(bookmark);
   }
 
   /** List a folder's bookmarks; a null folder lists only unfiled bookmarks.
@@ -211,7 +231,7 @@ export class BookmarksService implements OnApplicationBootstrap {
       },
       opts.cursor,
       opts.limit,
-      (b) => toBookmarkDto(b),
+      (b) => this.present(b),
       parseBookmarkListSort(opts.sort),
     );
   }
@@ -253,7 +273,16 @@ export class BookmarksService implements OnApplicationBootstrap {
     };
 
     if (!term) {
-      return this.paginate(where, opts.cursor, opts.limit, (b) => toBookmarkDto(b));
+      return this.paginate(where, opts.cursor, opts.limit, (b) => this.present(b));
+    }
+
+    if (this.crypto.active()) {
+      return this.searchEncrypted(where, term, {
+        cursor: opts.cursor,
+        limit: opts.limit,
+        fuzzy,
+        tagIds,
+      });
     }
 
     const andMatch = ftsPrefixQuery(tokens, { fuzzy, includeHidden: includeHiddenFields, op: "AND" });
@@ -303,7 +332,7 @@ export class BookmarksService implements OnApplicationBootstrap {
 
     const ranked = rankSearchResults(
       rows.map((row) => ({
-        ...toBookmarkDto(row),
+        ...this.present(row),
         contentText: includeHiddenFields && bodyIds.has(row.id) ? tokens.join(" ") : null,
       })),
       term,
@@ -338,7 +367,7 @@ export class BookmarksService implements OnApplicationBootstrap {
     if (bookmark.folderId) {
       await this.access.requireFolder(bookmark.folderId, userId, tokens);
     }
-    return toBookmarkDetailDto(bookmark);
+    return toBookmarkDetailDto(this.crypto.openBookmark(bookmark));
   }
 
   async update(
@@ -353,10 +382,11 @@ export class BookmarksService implements OnApplicationBootstrap {
     },
     tokens: readonly string[],
   ): Promise<BookmarkDto> {
-    const bookmark = await this.prisma.bookmark.findFirst({
+    const raw = await this.prisma.bookmark.findFirst({
       where: { id: bookmarkId, userId },
     });
-    if (!bookmark) throw new AppError(ErrorCode.BOOKMARK_NOT_FOUND, "This bookmark no longer exists.");
+    if (!raw) throw new AppError(ErrorCode.BOOKMARK_NOT_FOUND, "This bookmark no longer exists.");
+    const bookmark = this.crypto.openBookmark(raw);
 
     // If the current folder is protected, require a valid token to mutate it.
     if (bookmark.folderId) {
@@ -434,7 +464,7 @@ export class BookmarksService implements OnApplicationBootstrap {
 
     const updated = await this.prisma.bookmark.update({
       where: { id: bookmarkId },
-      data,
+      data: this.crypto.sealBookmark(userId, bookmarkId, data),
       select: LIST_SELECT,
     });
     if (changes.contentKindOverride === "article" && (bookmark.fetchStatus !== "ok" || !bookmark.contentHtml)) {
@@ -446,32 +476,38 @@ export class BookmarksService implements OnApplicationBootstrap {
           mode: "full",
           forceArticle: true,
           priority: "high",
+          dek: this.crypto.snapshot(),
         },
       ]);
     }
-    return toBookmarkDto(updated);
+    return this.present(updated);
   }
 
-  async listReminders(userId: string): Promise<BookmarkReminderDto[]> {
+  async listReminders(userId: string, folderTokens: readonly string[] = []): Promise<BookmarkReminderDto[]> {
+    const authorized = await this.access.authorizedFolderIds(userId, folderTokens);
     const rows = await this.prisma.bookmark.findMany({
-      where: { userId, remindAt: { not: null } },
-      select: { id: true, folderId: true, title: true, domain: true, description: true, remindAt: true },
+      where: {
+        userId,
+        remindAt: { not: null },
+        AND: [this.access.visibleBookmarksFilter(authorized)],
+      },
+      select: { id: true, userId: true, folderId: true, title: true, domain: true, description: true, remindAt: true },
       orderBy: [{ remindAt: "asc" }, { id: "asc" }],
     });
-    return rows.flatMap((row) =>
-      row.remindAt == null
-        ? []
-        : [
-            {
-              id: row.id,
-              folderId: row.folderId,
-              title: row.title,
-              domain: row.domain,
-              description: row.description,
-              remindAt: row.remindAt,
-            },
-          ],
-    );
+    return rows.flatMap((row) => {
+      if (row.remindAt == null) return [];
+      const open = this.crypto.openBookmark(row);
+      return [
+        {
+          id: open.id as string,
+          folderId: open.folderId as string | null,
+          title: open.title as string,
+          domain: open.domain as string,
+          description: (open.description as string | null) ?? null,
+          remindAt: row.remindAt,
+        },
+      ];
+    });
   }
 
   async remove(
@@ -525,7 +561,7 @@ export class BookmarksService implements OnApplicationBootstrap {
       });
       return tx.bookmark.findUniqueOrThrow({ where: { id: bookmarkId }, select: LIST_SELECT });
     });
-    return toBookmarkDto(updated);
+    return this.present(updated);
   }
 
   /** Mark every unread bookmark in a folder as read; a null folder targets the
@@ -682,14 +718,20 @@ export class BookmarksService implements OnApplicationBootstrap {
         if (stale.length === 0) return;
 
         this.extraction.enqueue(
-          stale.map((row) => ({
-            bookmarkId: row.id,
-            url: row.url,
-            userId: row.userId,
-            mode: "full" as const,
-            forceArticle: row.contentKindOverride === "article",
-            priority: "low" as const,
-          })),
+          stale.flatMap((row) =>
+            isLibraryCiphertext(row.url)
+              ? []
+              : [
+                  {
+                    bookmarkId: row.id,
+                    url: row.url,
+                    userId: row.userId,
+                    mode: "full" as const,
+                    forceArticle: row.contentKindOverride === "article",
+                    priority: "low" as const,
+                  },
+                ],
+          ),
           false,
         );
         await this.extraction.whenIdle();
@@ -713,6 +755,9 @@ export class BookmarksService implements OnApplicationBootstrap {
     sort: BookmarkListSort = DEFAULT_BOOKMARK_LIST_SORT,
   ): Promise<CursorPage<T>> {
     const limit = clampLimit(rawLimit, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+    if (this.crypto.active() && (sort === "title" || sort === "titleDesc")) {
+      return this.paginateDecryptedTitles(where, rawCursor, limit, map, sort);
+    }
     const cursorWhere = listCursorWhere(sort, rawCursor);
 
     const items: ListItem[] = await this.prisma.bookmark.findMany({
@@ -758,6 +803,75 @@ export class BookmarksService implements OnApplicationBootstrap {
         ],
       },
     ];
+  }
+
+  private present(row: ListItem): BookmarkDto {
+    return toBookmarkDto(this.crypto.openBookmark(row) as ListItem);
+  }
+
+  private async searchEncrypted(
+    where: Prisma.BookmarkWhereInput,
+    term: string,
+    opts: { cursor?: string; limit?: number; fuzzy?: boolean; tagIds: string[] },
+  ): Promise<CursorPage<BookmarkDto>> {
+    const includeHiddenFields = tokensAllowArticleText(tokenizeSearchQuery(term));
+    const rows = await this.prisma.bookmark.findMany({
+      where,
+      select: includeHiddenFields ? { ...LIST_SELECT, contentHtml: true } : LIST_SELECT,
+    });
+    const ranked = rankSearchResults(
+      rows.map((row) => {
+        const opened = this.crypto.openBookmark(row);
+        return {
+          ...toBookmarkDto(opened as ListItem),
+          contentText: includeHiddenFields
+            ? htmlToSearchText((opened as { contentHtml?: string | null }).contentHtml ?? null)
+            : null,
+        };
+      }),
+      term,
+      { fuzzy: !!opts.fuzzy, omitTagIds: opts.tagIds },
+    );
+    const limit = clampLimit(opts.limit, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
+    const offset = decodeSearchOffsetCursor(opts.cursor) ?? 0;
+    const slice = ranked.slice(offset, offset + limit);
+    const hasMore = ranked.length > offset + limit;
+    return {
+      items: slice.map(({ contentText: _body, ...item }) => item),
+      nextCursor: hasMore ? encodeSearchOffsetCursor(offset + slice.length) : null,
+      hasMore,
+    };
+  }
+
+  private async paginateDecryptedTitles<T>(
+    where: Prisma.BookmarkWhereInput,
+    rawCursor: string | undefined,
+    limit: number,
+    map: (row: ListItem) => T,
+    sort: "title" | "titleDesc",
+  ): Promise<CursorPage<T>> {
+    const rows = await this.prisma.bookmark.findMany({ where, select: LIST_SELECT });
+    const opened = rows
+      .map((row) => this.crypto.openBookmark(row) as ListItem)
+      .sort((a, b) => {
+        const byTitle = a.title.localeCompare(b.title, "en-US", { sensitivity: "base" });
+        if (byTitle !== 0) return sort === "title" ? byTitle : -byTitle;
+        return sort === "title" ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id);
+      });
+    const cursor = decodeTitleCursor(rawCursor ?? null);
+    let start = 0;
+    if (cursor) {
+      const index = opened.findIndex((row) => row.id === cursor.id);
+      start = index >= 0 ? index + 1 : 0;
+    }
+    const slice = opened.slice(start, start + limit);
+    const last = slice[slice.length - 1];
+    const hasMore = opened.length > start + slice.length;
+    return {
+      items: slice.map(map),
+      nextCursor: hasMore && last ? encodeTitleCursor({ title: last.title, id: last.id }) : null,
+      hasMore,
+    };
   }
 
   private async tagMatchIds(

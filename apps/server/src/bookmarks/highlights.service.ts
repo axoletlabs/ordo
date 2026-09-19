@@ -11,6 +11,7 @@ import { PrismaService } from "../prisma/prisma.service.js";
 import { AppError } from "../common/errors/app-error.js";
 import { toHighlightDto } from "../common/mappers.js";
 import { FolderAccessService } from "./folder-access.service.js";
+import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
 
 type HighlightRow = {
   id: string;
@@ -26,6 +27,7 @@ export class HighlightsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly access: FolderAccessService,
+    private readonly crypto: LibraryCryptoService,
   ) {}
 
   async create(
@@ -35,8 +37,10 @@ export class HighlightsService {
     tokens: readonly string[],
   ): Promise<HighlightDto> {
     const bookmark = await this.requireBookmark(userId, bookmarkId, tokens);
-    const rows = await this.prisma.bookmarkHighlight.findMany({ where: { bookmarkId } });
-    return this.persistMerged(bookmarkId, bookmark.contentHtml, rows, input);
+    const rows = (await this.prisma.bookmarkHighlight.findMany({ where: { bookmarkId } })).map((row) =>
+      this.crypto.openHighlight(userId, row),
+    );
+    return this.persistMerged(userId, bookmarkId, bookmark.contentHtml, rows, input);
   }
 
   async update(
@@ -47,12 +51,14 @@ export class HighlightsService {
     tokens: readonly string[],
   ): Promise<HighlightDto> {
     const bookmark = await this.requireBookmark(userId, bookmarkId, tokens);
-    const rows = await this.prisma.bookmarkHighlight.findMany({ where: { bookmarkId } });
+    const rows = (await this.prisma.bookmarkHighlight.findMany({ where: { bookmarkId } })).map((row) =>
+      this.crypto.openHighlight(userId, row),
+    );
     const current = rows.find((row) => row.id === highlightId);
     if (!current) {
       throw new AppError(ErrorCode.HIGHLIGHT_NOT_FOUND, "This highlight no longer exists.");
     }
-    return this.persistMerged(bookmarkId, bookmark.contentHtml, rows, input, highlightId);
+    return this.persistMerged(userId, bookmarkId, bookmark.contentHtml, rows, input, highlightId);
   }
 
   async remove(
@@ -71,6 +77,7 @@ export class HighlightsService {
   }
 
   private async persistMerged(
+    userId: string,
     bookmarkId: string,
     html: string | null,
     rows: HighlightRow[],
@@ -127,25 +134,29 @@ export class HighlightsService {
       if (survivingId) {
         const updated = await tx.bookmarkHighlight.update({
           where: { id: survivingId },
-          data: {
+          data: this.crypto.sealHighlight(userId, survivingId, {
             exact: union.quote.exact,
             prefix: union.quote.prefix ?? "",
             suffix: union.quote.suffix ?? "",
             href,
-          },
+          }),
         });
-        return toHighlightDto(updated);
+        return toHighlightDto(this.crypto.openHighlight(userId, updated));
       }
+      const id = this.crypto.active() ? this.crypto.newId() : undefined;
       const created = await tx.bookmarkHighlight.create({
         data: {
+          ...(id ? { id } : {}),
           bookmarkId,
-          exact: union.quote.exact,
-          prefix: union.quote.prefix ?? "",
-          suffix: union.quote.suffix ?? "",
-          href,
+          ...this.crypto.sealHighlight(userId, id ?? "pending", {
+            exact: union.quote.exact,
+            prefix: union.quote.prefix ?? "",
+            suffix: union.quote.suffix ?? "",
+            href,
+          }),
         },
       });
-      return toHighlightDto(created);
+      return toHighlightDto(this.crypto.openHighlight(userId, created));
     });
   }
 
@@ -158,6 +169,7 @@ export class HighlightsService {
     if (bookmark.folderId) {
       await this.access.requireFolder(bookmark.folderId, userId, tokens);
     }
-    return bookmark;
+    const opened = this.crypto.openBookmark({ ...bookmark, userId });
+    return { id: bookmark.id, folderId: bookmark.folderId, contentHtml: opened.contentHtml as string | null };
   }
 }

@@ -22,12 +22,14 @@ import {
 import { PrismaService } from "../prisma/prisma.service.js";
 import { TokenService } from "../auth/token.service.js";
 import { AppError } from "../common/errors/app-error.js";
+import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
 
 const PAGE_SIZE = 500;
 
 /** Bookmark fields an export carries (metadata only — never content). */
 const EXPORT_SELECT = {
   id: true,
+  userId: true,
   folderId: true,
   url: true,
   title: true,
@@ -44,6 +46,7 @@ const EXPORT_SELECT = {
 
 type ExportRow = {
   id: string;
+  userId?: string;
   folderId: string | null;
   url: string;
   title: string;
@@ -76,6 +79,7 @@ export class ExportService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokens: TokenService,
+    private readonly crypto: LibraryCryptoService,
   ) {}
 
   async export(
@@ -123,7 +127,12 @@ export class ExportService {
 
     const date = new Date().toISOString().slice(0, 10);
     const filename = `ordo-export-${date}.${input.format}`;
-    const includedFolders = folders.filter((f) => includedFolderIds.includes(f.id));
+    const dek = this.crypto.snapshot();
+    const includedFolders = this.crypto.run(dek, () =>
+      folders
+        .filter((f) => includedFolderIds.includes(f.id))
+        .map((f) => this.crypto.openFolder({ ...f, userId })),
+    );
 
     const libraryWhere: Prisma.BookmarkWhereInput = includeUnfiled
       ? { userId, OR: [{ folderId: null }, { folderId: { in: includedFolderIds } }] }
@@ -131,10 +140,10 @@ export class ExportService {
 
     const stream =
       input.format === "json"
-        ? this.jsonStream(includedFolders, libraryWhere)
+        ? this.jsonStream(userId, dek, includedFolders, libraryWhere)
         : input.format === "html"
-          ? this.htmlStream(userId, includedFolders, includeUnfiled)
-          : this.csvStream(includedFolders, libraryWhere);
+          ? this.htmlStream(userId, dek, includedFolders, includeUnfiled)
+          : this.csvStream(userId, dek, includedFolders, libraryWhere);
 
     return { stream, contentType: CONTENT_TYPES[input.format], filename };
   }
@@ -143,11 +152,14 @@ export class ExportService {
 
   /** Ordo JSON envelope: folders list + every included bookmark. */
   private jsonStream(
+    userId: string,
+    dek: Buffer | null,
     folders: Array<{ id: string; name: string; icon: string; pinned: boolean; createdAt: Date }>,
     where: Prisma.BookmarkWhereInput,
   ): Readable {
     const nameById = new Map(folders.map((f) => [f.id, f.name] as const));
     const prisma = this.prisma;
+    const crypto = this.crypto;
 
     async function* generate(): AsyncGenerator<string> {
       yield `{"format":"ordo-export","version":1,"exportedAt":${JSON.stringify(new Date().toISOString())}`;
@@ -171,15 +183,16 @@ export class ExportService {
           where: cursorCondition(where, cursor),
           orderBy: [{ createdAt: "asc" }, { id: "asc" }],
           take: PAGE_SIZE,
-          select: { ...EXPORT_SELECT, tags: { select: { tag: { select: { name: true } } } } },
+          select: { ...EXPORT_SELECT, tags: { select: { tag: { select: { id: true, name: true } } } } },
         });
         if (rows.length === 0) break;
-        for (const row of rows) {
+        for (const raw of rows) {
+          const row = crypto.run(dek, () => crypto.openBookmark({ ...raw, userId })) as ExportRow;
           const payload = {
             url: row.url,
             title: row.title,
             folder: row.folderId ? (nameById.get(row.folderId) ?? null) : null,
-            tags: (row.tags ?? []).map((t) => t.tag.name).sort(),
+            tags: (raw.tags ?? []).map((t) => crypto.run(dek, () => crypto.openTag({ ...t.tag, userId })).name as string).sort(),
             isRead: row.isRead,
             readProgress: row.readProgress,
             completedAt: row.completedAt?.toISOString() ?? null,
@@ -206,10 +219,12 @@ export class ExportService {
   /** Netscape bookmark HTML: one flat folder section per folder, then unfiled. */
   private htmlStream(
     userId: string,
+    dek: Buffer | null,
     folders: Array<{ id: string; name: string }>,
     includeUnfiled: boolean,
   ): Readable {
     const prisma = this.prisma;
+    const crypto = this.crypto;
 
     async function* generate(): AsyncGenerator<string> {
       yield `<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<!-- This is an automatically generated file. It will be read and overwritten. DO NOT EDIT! -->\n<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n<DL><p>\n`;
@@ -222,8 +237,11 @@ export class ExportService {
         // Library exports skip empty folders; a chosen folder is always emitted.
         if (rows.length === 0 && folderId !== null && includeUnfiled) return;
         yield `    <DT><H3>${escapeHtml(folderName)}</H3>\n    <DL><p>\n`;
-        for (const row of rows) {
-          const tagList = (row.tags ?? []).map((t) => t.tag.name).join(",");
+        for (const raw of rows) {
+          const row = crypto.run(dek, () => crypto.openBookmark({ ...raw, userId })) as ExportRow;
+          const tagList = (raw.tags ?? [])
+            .map((t) => crypto.run(dek, () => crypto.openTag({ ...t.tag, userId })).name as string)
+            .join(",");
           yield `        <DT><A HREF="${escapeAttr(row.url)}" ADD_DATE="${unixSeconds(row.createdAt)}"${tagList ? ` TAGS="${escapeAttr(tagList)}"` : ""}>${escapeHtml(row.title)}</A>\n`;
         }
         yield `    </DL><p>\n`;
@@ -241,21 +259,25 @@ export class ExportService {
 
   /** Ordo CSV profile: one row per bookmark. */
   private csvStream(
+    userId: string,
+    dek: Buffer | null,
     folders: Array<{ id: string; name: string }>,
     where: Prisma.BookmarkWhereInput,
   ): Readable {
     const nameById = new Map(folders.map((f) => [f.id, f.name] as const));
     const prisma = this.prisma;
+    const crypto = this.crypto;
 
     async function* generate(): AsyncGenerator<string> {
       yield "url,title,folder,tags,isRead,readProgress,completedAt,createdAt,updatedAt,description,author,publishedAt,readingTimeMinutes\n";
       const rows = await pageAll(prisma, where);
-      for (const row of rows) {
+      for (const raw of rows) {
+        const row = crypto.run(dek, () => crypto.openBookmark({ ...raw, userId })) as ExportRow;
         yield [
           row.url,
           row.title,
           row.folderId ? (nameById.get(row.folderId) ?? "") : "",
-          (row.tags ?? []).map((t) => t.tag.name).join(","),
+          (raw.tags ?? []).map((t) => crypto.run(dek, () => crypto.openTag({ ...t.tag, userId })).name as string).join(","),
           String(row.isRead),
           String(row.readProgress),
           row.completedAt?.toISOString() ?? "",
@@ -299,7 +321,7 @@ async function pageAll(
       where: cursorCondition(where, cursor),
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       take: PAGE_SIZE,
-      select: { ...EXPORT_SELECT, tags: { select: { tag: { select: { name: true } } } } },
+      select: { ...EXPORT_SELECT, tags: { select: { tag: { select: { id: true, name: true } } } } },
     });
     rows.push(...page);
     if (page.length < PAGE_SIZE) break;

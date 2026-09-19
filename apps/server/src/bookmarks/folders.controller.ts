@@ -7,8 +7,10 @@ import {
   Param,
   Patch,
   Post,
+  Req,
   UseGuards,
 } from "@nestjs/common";
+import type { Request } from "express";
 import {
   BatchFoldersSchema,
   CreateFolderSchema,
@@ -30,6 +32,7 @@ import {
   type AuthenticatedRequest,
 } from "../common/decorators/current-user.decorator.js";
 import { FoldersService } from "./folders.service.js";
+import { getPresentedFolderTokens } from "../common/utils/folder-tokens.js";
 
 @UseGuards(AuthGuard)
 @Controller("api/folders")
@@ -54,8 +57,9 @@ export class FoldersController {
   async batch(
     @CurrentUser() user: AuthContext,
     @Body({ schema: BatchFoldersSchema }) body: BatchFoldersInput,
+    @Req() req: Request,
   ): Promise<{ updated: number }> {
-    return this.folders.batch(user.userId, body);
+    return this.folders.batch(user.userId, body, getPresentedFolderTokens(req));
   }
 
   @Patch(":id")
@@ -63,8 +67,9 @@ export class FoldersController {
     @CurrentUser() user: AuthContext,
     @Param("id") id: string,
     @Body({ schema: UpdateFolderSchema }) body: UpdateFolderInput,
+    @Req() req: Request,
   ): Promise<FolderDto> {
-    return this.folders.update(id, user.userId, body);
+    return this.folders.update(id, user.userId, body, getPresentedFolderTokens(req));
   }
 
   @Delete(":id")
@@ -72,8 +77,9 @@ export class FoldersController {
   async remove(
     @CurrentUser() user: AuthContext,
     @Param("id") id: string,
+    @Req() req: Request,
   ): Promise<{ success: true }> {
-    await this.folders.remove(id, user.userId);
+    await this.folders.remove(id, user.userId, getPresentedFolderTokens(req));
     return { success: true };
   }
 
@@ -83,8 +89,9 @@ export class FoldersController {
     @CurrentUser() user: AuthContext,
     @Param("id") id: string,
     @Body({ schema: SetFolderPasswordSchema }) body: SetFolderPasswordInput,
+    @Req() req: Request,
   ): Promise<{ success: true }> {
-    await this.folders.setPassword(id, user.userId, body);
+    await this.folders.setPassword(id, user.userId, body, getPresentedFolderTokens(req));
     return { success: true };
   }
 

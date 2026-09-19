@@ -82,6 +82,14 @@ export async function repairLegacySchema(client: LegacyRepairClient): Promise<vo
   }
 
   await ensureSessionTable(client);
+  if (await tableExists(client, "Session")) {
+    await addMissingColumns(
+      client,
+      "Session",
+      SESSION_ADDITIVE_COLUMNS,
+      await client.$queryRaw<SqliteColumn[]>(Prisma.sql`PRAGMA table_info("Session")`),
+    );
+  }
   await ensureMfaTables(client);
   await ensureTagTables(client);
   await ensureImportJobTable(client);
@@ -313,6 +321,15 @@ const USER_ADDITIVE_COLUMNS: ReadonlyArray<readonly [name: string, ddl: string]>
   ["avatarMime", "TEXT"],
   ["avatarUpdatedAt", "DATETIME"],
   ["avatarBytes", "BLOB"],
+  ["dekKdfSalt", "TEXT"],
+  ["dekPasswordWrapped", "TEXT"],
+  ["dekRecoveryWrapped", "TEXT"],
+  ["dataEncryptionVersion", "INTEGER NOT NULL DEFAULT 0"],
+];
+
+const SESSION_ADDITIVE_COLUMNS: ReadonlyArray<readonly [name: string, ddl: string]> = [
+  ["dekWrapped", "TEXT"],
+  ["dekRefreshWrapped", "TEXT"],
 ];
 
 const EMAIL_TOKEN_ADDITIVE_COLUMNS: ReadonlyArray<readonly [name: string, ddl: string]> = [
