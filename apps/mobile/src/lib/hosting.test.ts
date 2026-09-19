@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  CLOUD_PRIVACY_URL,
   CLOUD_SERVER_URL,
+  CLOUD_TERMS_URL,
+  CLOUD_WEBSITE_URL,
   DEFAULT_SERVER_URL,
   hostingDisplayName,
   hostingModeOf,
@@ -13,6 +16,12 @@ import {
 test("new installs default to ordo Cloud", () => {
   assert.equal(DEFAULT_SERVER_URL, "https://api.ordo.axolet.com");
   assert.equal(CLOUD_SERVER_URL, DEFAULT_SERVER_URL);
+});
+
+test("cloud legal pages live on the public site", () => {
+  assert.equal(CLOUD_WEBSITE_URL, "https://ordo.axolet.com");
+  assert.equal(CLOUD_TERMS_URL, "https://ordo.axolet.com/terms");
+  assert.equal(CLOUD_PRIVACY_URL, "https://ordo.axolet.com/privacy");
 });
 
 test("cloud URL matching ignores trailing slashes and paths", () => {

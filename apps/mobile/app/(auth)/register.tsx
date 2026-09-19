@@ -1,8 +1,8 @@
 /**
  * Register screen. Respects server registration status (info.registrationEnabled).
  */
-import React, { useCallback, useState } from "react";
-import { BackHandler, Pressable, StyleSheet, View } from "react-native";
+import React, { useCallback, useRef, useState } from "react";
+import { BackHandler, Linking, Pressable, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Link, useFocusEffect, useRouter } from "expo-router";
 import { AuthShell } from "../../src/components/auth/AuthShell";
@@ -13,14 +13,15 @@ import { EyeToggle } from "../../src/components/ui/EyeToggle";
 import { useRegister } from "../../src/hooks/use-auth-actions";
 import { useServerInfo } from "../../src/hooks/queries";
 import { useSettingsStore } from "../../src/store/settings";
-import { isCloudServerUrl } from "../../src/lib/hosting";
+import { CLOUD_PRIVACY_URL, CLOUD_TERMS_URL, isCloudServerUrl } from "../../src/lib/hosting";
 import { errorMessage } from "../../src/lib/error-message";
 import { haptics } from "../../src/lib/haptics";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { radius, spacing } from "../../src/theme/tokens";
 import { RegisterSchema } from "@ordo/shared";
 
-const AGE_CONFIRM_ERROR = "Confirm that you are at least 13 years old.";
+const AGE_CONFIRM_LABEL = "I am 13 or older and agree to the Terms and Privacy Policy.";
+const AGE_CONFIRM_ERROR = "Please confirm you are 13 or older.";
 
 export default function RegisterScreen() {
   const { palette } = useTheme();
@@ -37,6 +38,13 @@ export default function RegisterScreen() {
   const [showPwd, setShowPwd] = useState(false);
   const [atLeast13, setAtLeast13] = useState(false);
   const [formError, setFormError] = useState("");
+  const skipAgeToggle = useRef(false);
+  const markLegalOpen = () => {
+    skipAgeToggle.current = true;
+    setTimeout(() => {
+      skipAgeToggle.current = false;
+    }, 300);
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -154,8 +162,12 @@ export default function RegisterScreen() {
               <Pressable
                 accessibilityRole="checkbox"
                 accessibilityState={{ checked: atLeast13 }}
-                accessibilityLabel="I am at least 13 years old"
+                accessibilityLabel={AGE_CONFIRM_LABEL}
                 onPress={() => {
+                  if (skipAgeToggle.current) {
+                    skipAgeToggle.current = false;
+                    return;
+                  }
                   setAtLeast13((v) => !v);
                   setFormError("");
                 }}
@@ -168,7 +180,11 @@ export default function RegisterScreen() {
                   color={atLeast13 ? palette.accent : palette.textTertiary}
                 />
                 <Text variant="footnote" style={styles.checkLabel}>
-                  I am at least 13 years old
+                  I am 13 or older and agree to the{" "}
+                  <LegalLink label="Terms" url={CLOUD_TERMS_URL} onOpen={markLegalOpen} />
+                  {" "}and{" "}
+                  <LegalLink label="Privacy Policy" url={CLOUD_PRIVACY_URL} onOpen={markLegalOpen} />
+                  .
                 </Text>
               </Pressable>
               {formError === AGE_CONFIRM_ERROR ? (
@@ -187,13 +203,41 @@ export default function RegisterScreen() {
   );
 }
 
+function LegalLink({
+  label,
+  url,
+  onOpen,
+}: {
+  label: string;
+  url: string;
+  onOpen: () => void;
+}) {
+  return (
+    <Text
+      variant="footnote"
+      color="accent"
+      accessibilityRole="link"
+      accessibilityLabel={label}
+      onPress={(event) => {
+        event.stopPropagation();
+        onOpen();
+        haptics.light();
+        Linking.openURL(url).catch(() => {});
+      }}
+      style={styles.link}
+    >
+      {label.replaceAll(" ", "\u00a0")}
+    </Text>
+  );
+}
+
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", justifyContent: "center" },
   link: { textDecorationLine: "underline" },
   disabledCard: { padding: spacing[16], borderRadius: radius.lg, borderWidth: 1 },
   check: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: spacing[8],
     alignSelf: "stretch",
   },

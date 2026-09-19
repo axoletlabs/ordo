@@ -8,6 +8,11 @@ export const CLOUD_SERVER_URL = "https://api.ordo.axolet.com";
 
 export const CLOUD_DISPLAY_NAME = "ordo Cloud";
 
+/** Public product site. Pretty paths are canonical (`/privacy.html` 308s). */
+export const CLOUD_WEBSITE_URL = "https://ordo.axolet.com";
+export const CLOUD_TERMS_URL = `${CLOUD_WEBSITE_URL}/terms`;
+export const CLOUD_PRIVACY_URL = `${CLOUD_WEBSITE_URL}/privacy`;
+
 /** Product default for new installs (no saved server URL). */
 export const DEFAULT_SERVER_URL = CLOUD_SERVER_URL;
 
