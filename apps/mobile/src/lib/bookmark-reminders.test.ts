@@ -153,6 +153,47 @@ test("notification copy is the title, with description when expanded", () => {
   assert.equal(clipped.title, "Notes");
   assert.ok(clipped.body && clipped.body.endsWith("…"));
   assert.ok((clipped.body?.length ?? 0) <= 221);
+  assert.deepEqual(
+    reminderNotificationCopy({
+      title: "Kaooot/bedrock-network-data",
+      description:
+        "Kaooot/bedrock-network-data: This repository contains network protocol data.",
+      domain: "github.com",
+    }),
+    {
+      title: "Kaooot/bedrock-network-data",
+      body: "This repository contains network protocol data.",
+    },
+  );
+  assert.deepEqual(
+    reminderNotificationCopy({
+      title:
+        "Kaooot/bedrock-network-data: This repository contains network protocol data that is essential for the operation of a Minecraft server.",
+      domain: "github.com",
+    }),
+    {
+      title: "Kaooot/bedrock-network-data",
+      body: "This repository contains network protocol data that is essential for the operation of a Minecraft server.",
+    },
+  );
+  assert.deepEqual(
+    reminderNotificationCopy({
+      title: "example.com",
+      description: "example.com/path",
+      domain: "example.com",
+    }),
+    { title: "example.com" },
+  );
+  assert.deepEqual(
+    reminderNotificationCopy({
+      title: "Re: Your order confirmation from last week that was delayed",
+      domain: "shop.example",
+    }),
+    {
+      title: "Re: Your order confirmation from last week that was delayed",
+      body: "shop.example",
+    },
+  );
 });
 
 test("notification actions map Reschedule, Open, and a default tap", () => {
@@ -307,6 +348,24 @@ test("reminder ping plan does not re-banner a long-due reminder on the next laun
     "skip",
   );
   assert.equal(reminderPingPlan({ remindAt: at - 30, now: at }), "present");
+});
+
+test("reminder ping plan does not re-banner a dismissed ping the OS already delivered", () => {
+  const at = 1_000_000;
+  const remindAt = at - 30;
+  assert.equal(reminderPingPlan({ remindAt, now: at, armedAt: remindAt }), "skip");
+  assert.equal(
+    reminderPingPlan({ remindAt, now: at, armedAt: remindAt, presented: true }),
+    "skip",
+  );
+  assert.equal(
+    reminderPingPlan({
+      remindAt: at + 3600,
+      now: at,
+      armedAt: at + 3600,
+    }),
+    "schedule",
+  );
 });
 
 test("exact-alarm settings open once on Android 12+, never from a remembered ask", () => {

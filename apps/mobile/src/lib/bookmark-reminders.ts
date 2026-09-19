@@ -108,14 +108,29 @@ function collapseNotificationText(raw: string | null | undefined): string {
   return (raw ?? "").replace(/\s+/g, " ").trim();
 }
 
-function isRedundantNotificationDescription(title: string, description: string): boolean {
-  if (!title || !description) return false;
-  if (description === title) return true;
-  return (
-    description.startsWith(title) &&
-    description.length > title.length &&
-    !/\s/.test(description[title.length]!)
-  );
+function isPathContinuation(title: string, description: string): boolean {
+  if (!description.startsWith(title) || description.length <= title.length) return false;
+  return /^[/?#]/.test(description.slice(title.length));
+}
+
+/** Standfirst for the expanded shade. Drops a title prefix like `Repo: dek`. */
+function reminderNotificationStandfirst(title: string, description: string): string {
+  if (!description || description === title || isPathContinuation(title, description)) return "";
+  if (description.startsWith(title)) {
+    return description.slice(title.length).replace(/^[\s:;|—–-]+/, "").trim();
+  }
+  return description;
+}
+
+/** `Name: longer dek` page titles (GitHub, many articles) split so the dek can expand. */
+function splitTitledNotificationDek(title: string): { title: string; body: string } | null {
+  const at = title.indexOf(": ");
+  if (at < 1 || at > 80) return null;
+  const head = title.slice(0, at).trim();
+  const tail = title.slice(at + 2).trim();
+  if (!head || tail.length < 20) return null;
+  if (head.length < 8 && !head.includes("/")) return null;
+  return { title: head, body: tail };
 }
 
 const NOTIFICATION_BODY_MAX = 220;
@@ -130,6 +145,10 @@ function clipNotificationBody(text: string): string {
 /**
  * Collapsed shade is the title. Expanded body is the standfirst when we have
  * one, otherwise the host — no type chip, no instruction.
+ *
+ * Android only offers the expand chevron (and, on some OEMs, the action
+ * buttons) when BigText has a body. GitHub-style `repo: about` titles used
+ * to land as a long title with no body, so one ping in a stack looked inert.
  */
 export function reminderNotificationCopy(row: {
   title: string;
@@ -139,14 +158,12 @@ export function reminderNotificationCopy(row: {
   const title = collapseNotificationText(row.title) || "Saved page";
   const description = collapseNotificationText(row.description);
   const host = collapseNotificationText(row.domain);
-  const raw =
-    description && !isRedundantNotificationDescription(title, description)
-      ? description
-      : host && host !== title
-        ? host
-        : "";
-  if (!raw) return { title };
-  return { title, body: clipNotificationBody(raw) };
+  const standfirst = reminderNotificationStandfirst(title, description);
+  if (standfirst) return { title, body: clipNotificationBody(standfirst) };
+  const split = splitTitledNotificationDek(title);
+  if (split) return { title: split.title, body: clipNotificationBody(split.body) };
+  if (host && host !== title) return { title, body: clipNotificationBody(host) };
+  return { title };
 }
 
 /** expo-notifications: `:` / `-` in a category id can break action buttons. */
@@ -270,7 +287,10 @@ export const REMINDER_PING_CATCHUP_SECONDS = 15 * 60;
 /**
  * Decide whether to show, schedule, or leave an existing OS ping alone.
  * Reconcile used to cancel+reschedule every future DATE, which both missed
- * near-term fires and re-presented the banner after Open.
+ * near-term fires and re-presented the banner after Open. A later catch-up
+ * also re-presented after a shade dismiss: once we have armed the OS, a due
+ * ping that is gone from both the scheduler and the tray is treated as
+ * already delivered.
  */
 export function reminderPingPlan(input: {
   remindAt: number;
@@ -278,8 +298,10 @@ export function reminderPingPlan(input: {
   firedAt?: number | null;
   scheduledAt?: number | null;
   presented?: boolean;
+  /** Last remindAt we successfully handed to the OS scheduler. */
+  armedAt?: number | null;
 }): ReminderPingPlan {
-  const { remindAt, now, firedAt, scheduledAt, presented } = input;
+  const { remindAt, now, firedAt, scheduledAt, presented, armedAt } = input;
   if (remindAt > now + REMINDER_PING_IMMINENT_SECONDS) {
     return scheduledAt === remindAt ? "skip" : "schedule";
   }
@@ -289,6 +311,9 @@ export function reminderPingPlan(input: {
     if (now - remindAt < REMINDER_PING_STUCK_SECONDS) return "skip";
     return "present";
   }
+  // Scheduler consumed this ping and it is gone from the shade: the OS already
+  // delivered it (and the user may have dismissed it). Do not banner again.
+  if (armedAt === remindAt && remindAt <= now) return "skip";
   if (remindAt <= now && now - remindAt > REMINDER_PING_CATCHUP_SECONDS) return "skip";
   return "present";
 }

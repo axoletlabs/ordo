@@ -25,8 +25,9 @@ import { prefsGet, prefsSet, StorageKeys } from "./storage";
 
 const CHANNEL_ID = "reminders";
 const FIRED_KEY = StorageKeys.REMINDER_FIRED;
-/** Bump when shade actions change so already-presented pings get new PendingIntents. */
-const ACTIONS_REV = 5;
+const ARMED_KEY = StorageKeys.REMINDER_ARMED;
+/** Bump when shade actions or copy change so already-presented pings rebuild. */
+const ACTIONS_REV = 6;
 const CATEGORY_OPTIONS = {
   previewPlaceholder: "Reminder",
   showTitle: true,
@@ -56,6 +57,8 @@ let queuedTap: { kind: ReminderPingKind; payload: ReminderPingPayload } | null =
 const seenResponseKeys = new Set<string>();
 let fired: Record<string, number> = {};
 let firedLoaded = false;
+let armed: Record<string, number> = {};
+let armedLoaded = false;
 let exactAlarmScreenShown = false;
 
 function nativeOk(): boolean {
@@ -92,20 +95,48 @@ function reminderActions() {
   ];
 }
 
+async function loadMap(
+  loaded: boolean,
+  current: Record<string, number>,
+  key: string,
+): Promise<Record<string, number>> {
+  if (loaded) return current;
+  const stored = await prefsGet<Record<string, number>>(key);
+  return stored && typeof stored === "object" ? stored : {};
+}
+
 async function loadFired(): Promise<Record<string, number>> {
-  if (firedLoaded) return fired;
-  firedLoaded = true;
-  const stored = await prefsGet<Record<string, number>>(FIRED_KEY);
-  fired = stored && typeof stored === "object" ? stored : {};
+  if (!firedLoaded) {
+    fired = await loadMap(firedLoaded, fired, FIRED_KEY);
+    firedLoaded = true;
+  }
   return fired;
+}
+
+async function loadArmed(): Promise<Record<string, number>> {
+  if (!armedLoaded) {
+    armed = await loadMap(armedLoaded, armed, ARMED_KEY);
+    armedLoaded = true;
+  }
+  return armed;
 }
 
 async function rememberFired(bookmarkId: string, remindAt: number): Promise<void> {
   const map = await loadFired();
+  if (map[bookmarkId] !== remindAt) {
+    map[bookmarkId] = remindAt;
+    fired = map;
+    await prefsSet(FIRED_KEY, map);
+  }
+  await forgetArmed(bookmarkId);
+}
+
+async function rememberArmed(bookmarkId: string, remindAt: number): Promise<void> {
+  const map = await loadArmed();
   if (map[bookmarkId] === remindAt) return;
   map[bookmarkId] = remindAt;
-  fired = map;
-  await prefsSet(FIRED_KEY, map);
+  armed = map;
+  await prefsSet(ARMED_KEY, map);
 }
 
 async function forgetFired(bookmarkId: string): Promise<void> {
@@ -114,6 +145,19 @@ async function forgetFired(bookmarkId: string): Promise<void> {
   delete map[bookmarkId];
   fired = map;
   await prefsSet(FIRED_KEY, map);
+}
+
+async function forgetArmed(bookmarkId: string): Promise<void> {
+  const map = await loadArmed();
+  if (!(bookmarkId in map)) return;
+  delete map[bookmarkId];
+  armed = map;
+  await prefsSet(ARMED_KEY, map);
+}
+
+async function forgetPingState(bookmarkId: string): Promise<void> {
+  await forgetFired(bookmarkId);
+  await forgetArmed(bookmarkId);
 }
 
 async function ensureHandler(mod: NotificationsModule): Promise<void> {
@@ -146,6 +190,19 @@ async function ensureHandler(mod: NotificationsModule): Promise<void> {
   await refreshPresentedReminderActions(mod);
 }
 
+function payloadFromPresented(item: {
+  request: { identifier: string; content: { data?: unknown; dataString?: unknown } };
+}): ReminderPingPayload | null {
+  const requestId = item.request.identifier;
+  if (typeof requestId !== "string") return null;
+  const content = item.request.content;
+  return reminderPingFromNotification({
+    identifier: requestId,
+    data: content.data,
+    dataString: content.dataString,
+  });
+}
+
 async function refreshPresentedReminderActions(mod: NotificationsModule): Promise<void> {
   const rev = await prefsGet<number>(StorageKeys.REMINDER_ACTIONS_REV);
   if (rev === ACTIONS_REV) return;
@@ -153,14 +210,8 @@ async function refreshPresentedReminderActions(mod: NotificationsModule): Promis
     const presented = await mod.getPresentedNotificationsAsync();
     for (const item of presented) {
       const requestId = item.request.identifier;
-      if (typeof requestId !== "string") continue;
-      const content = item.request.content as { data?: unknown; dataString?: unknown };
-      const payload = reminderPingFromNotification({
-        identifier: requestId,
-        data: content.data,
-        dataString: content.dataString,
-      });
-      if (!payload) continue;
+      const payload = payloadFromPresented(item);
+      if (!payload || (!payload.title && !payload.description)) continue;
       const remindAt = payload.remindAt ?? unixSeconds();
       const row = asPingRow(
         {
@@ -228,12 +279,7 @@ async function dismissReminderShade(
     for (const item of presented) {
       const requestId = item.request.identifier;
       if (typeof requestId !== "string") continue;
-      const content = item.request.content as { data?: unknown; dataString?: unknown };
-      const payload = reminderPingFromNotification({
-        identifier: requestId,
-        data: content.data,
-        dataString: content.dataString,
-      });
+      const payload = payloadFromPresented(item);
       if (payload?.bookmarkId === bookmarkId) ids.add(requestId);
     }
   } catch {
@@ -259,7 +305,7 @@ function notificationContent(row: ReminderPingRow) {
       folderId: row.folderId,
       title: row.title,
       domain: row.domain,
-      description: row.description ?? "",
+      description: copy.body ?? "",
       remindAt: row.remindAt,
     },
     sound: true as const,
@@ -286,14 +332,15 @@ function asPingRow(
   };
 }
 
-async function presentedIds(mod: NotificationsModule): Promise<Set<string>> {
+async function presentedBookmarkIds(mod: NotificationsModule): Promise<Set<string>> {
   try {
     const presented = await mod.getPresentedNotificationsAsync();
-    return new Set(
-      presented
-        .map((item) => item.request.identifier)
-        .filter((id): id is string => typeof id === "string" && id.startsWith(REMINDER_PING_ID_PREFIX)),
-    );
+    const ids = new Set<string>();
+    for (const item of presented) {
+      const payload = payloadFromPresented(item);
+      if (payload) ids.add(payload.bookmarkId);
+    }
+    return ids;
   } catch {
     return new Set();
   }
@@ -393,6 +440,7 @@ async function scheduleFuture(mod: NotificationsModule, row: ReminderPingRow): P
       content: notificationContent(row),
       trigger: futureTrigger(mod, row.remindAt),
     });
+    await rememberArmed(row.id, row.remindAt);
   } catch {
     /* OS refused the DATE (often missing exact-alarm permission) */
   }
@@ -405,15 +453,23 @@ async function applyPing(
   scheduledAt: number | null | undefined,
   presented: boolean,
 ): Promise<void> {
-  const map = await loadFired();
+  const [firedMap, armedMap] = await Promise.all([loadFired(), loadArmed()]);
   const plan = reminderPingPlan({
     remindAt: row.remindAt,
     now,
-    firedAt: map[row.id],
+    firedAt: firedMap[row.id],
     scheduledAt,
     presented,
+    armedAt: armedMap[row.id],
   });
-  if (plan === "skip") return;
+  if (plan === "skip") {
+    if (scheduledAt === row.remindAt) await rememberArmed(row.id, row.remindAt);
+    if (presented) await rememberFired(row.id, row.remindAt);
+    else if (row.remindAt <= now && scheduledAt !== row.remindAt && armedMap[row.id] === row.remindAt) {
+      await rememberFired(row.id, row.remindAt);
+    }
+    return;
+  }
   if (plan === "present") {
     await cancelId(mod, row.id);
     await presentDue(mod, row);
@@ -424,7 +480,7 @@ async function applyPing(
 
 export async function syncBookmarkReminder(
   bookmark: Pick<BookmarkDto, "id" | "title" | "remindAt"> &
-    Partial<Pick<BookmarkDto, "folderId" | "domain">>,
+    Partial<Pick<BookmarkDto, "folderId" | "domain" | "description">>,
 ): Promise<boolean> {
   const mod = await loadNotifications();
   if (!mod) return false;
@@ -432,18 +488,18 @@ export async function syncBookmarkReminder(
   if (bookmark.remindAt == null) {
     await cancelId(mod, bookmark.id);
     await dismissId(mod, bookmark.id);
-    await forgetFired(bookmark.id);
+    await forgetPingState(bookmark.id);
     return true;
   }
   const allowed = await ensureReminderPermissions();
   if (!allowed) return false;
-  const [scheduled, presented] = await Promise.all([scheduledAtByBookmark(mod), presentedIds(mod)]);
+  const [scheduled, presented] = await Promise.all([scheduledAtByBookmark(mod), presentedBookmarkIds(mod)]);
   await applyPing(
     mod,
     asPingRow(bookmark, bookmark.remindAt),
     unixSeconds(),
     scheduled.get(bookmark.id),
-    presented.has(identifier(bookmark.id)),
+    presented.has(bookmark.id),
   );
   return true;
 }
@@ -453,7 +509,7 @@ export async function cancelBookmarkReminder(bookmarkId: string): Promise<void> 
   if (!mod) return;
   await cancelId(mod, bookmarkId);
   await dismissId(mod, bookmarkId);
-  await forgetFired(bookmarkId);
+  await forgetPingState(bookmarkId);
 }
 
 export async function reconcileReminderNotifications(
@@ -465,12 +521,12 @@ export async function reconcileReminderNotifications(
   await ensureHandler(mod);
   const allowed = await ensureReminderPermissions();
   const wanted = new Set(rows.map((row) => row.id));
-  const [scheduled, presented] = await Promise.all([scheduledAtByBookmark(mod), presentedIds(mod)]);
+  const [scheduled, presented] = await Promise.all([scheduledAtByBookmark(mod), presentedBookmarkIds(mod)]);
   for (const bookmarkId of scheduled.keys()) {
     if (wanted.has(bookmarkId)) continue;
     await cancelId(mod, bookmarkId);
     await dismissId(mod, bookmarkId);
-    await forgetFired(bookmarkId);
+    await forgetPingState(bookmarkId);
   }
   if (!allowed) return;
   const now = unixSeconds();
@@ -480,7 +536,7 @@ export async function reconcileReminderNotifications(
       row,
       now,
       scheduled.get(row.id),
-      presented.has(identifier(row.id)),
+      presented.has(row.id),
     );
   }
 }
@@ -547,7 +603,7 @@ async function bootReminderNotifications(): Promise<void> {
   const mod = await loadNotifications();
   if (!mod) return;
   await ensureHandler(mod);
-  await loadFired();
+  await Promise.all([loadFired(), loadArmed()]);
   if (!receivedBound) {
     receivedBound = true;
     mod.addNotificationReceivedListener((notification) => {
