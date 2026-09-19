@@ -69,6 +69,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   onKeyPress,
   secureTextEntry,
   keyboardType,
+  value,
   ...rest
 }, ref) {
   const { palette } = useTheme();
@@ -76,6 +77,13 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   const [overlayWidth, setOverlayWidth] = useState(0);
   const inputRef = useRef<TextInput>(null);
   const pendingCaret = useRef<number | null>(null);
+  const focusedRef = useRef(false);
+  const lastAppliedValue = useRef(value);
+  const [androidEpoch, setAndroidEpoch] = useState(0);
+  // Android re-applies a controlled `value` on every keystroke and walks the
+  // caret (type/backspace in the middle). Leave the native field uncontrolled
+  // while editing; remount when an external value arrives while blurred.
+  const androidUncontrolled = Platform.OS === "android" && !secureTextEntry;
 
   const setInputRef = (node: TextInput | null) => {
     inputRef.current = node;
@@ -91,13 +99,21 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
     pendingCaret.current = null;
   });
 
+  useLayoutEffect(() => {
+    if (!androidUncontrolled) return;
+    if (focusedRef.current) return;
+    if (value === lastAppliedValue.current) return;
+    lastAppliedValue.current = value;
+    setAndroidEpoch((n) => n + 1);
+  }, [androidUncontrolled, value]);
+
   const borderColor = error ? palette.danger : focused ? palette.accent : palette.border;
   const borderWidth = error ? 1 : focused ? 1.5 : 1;
   // iOS Password AutoFill silently ignores secure fields that use a custom
   // font. Use the system face while the value is masked.
   const fontFamily = secureTextEntry
     ? undefined
-    : mono
+    : mono && Platform.OS !== "android"
       ? resolveFont("mono", "400")
       : resolveFont("sans", "400");
   const overlay = overlayRightAccessory && !!rightAccessory;
@@ -107,10 +123,10 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
       : overlay && overlayWidth > 0
         ? overlayWidth + spacing[8]
         : undefined;
-  // RN-web maps keyboardType="url" onto <input type="url">, whose caret
-  // walks one extra character on Backspace. Keep a URL keyboard on native.
+  // RN-web maps keyboardType="url" onto <input type="url">; Android's URI
+  // variation walks the caret the same way. Keep a URL keyboard on iOS only.
   const resolvedKeyboardType =
-    Platform.OS === "web" && keyboardType === "url" ? "default" : keyboardType;
+    Platform.OS !== "ios" && keyboardType === "url" ? "default" : keyboardType;
   const webCaretFix =
     Platform.OS === "web"
       ? ({
@@ -141,18 +157,27 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
         {icon ? <View style={styles.icon}>{icon}</View> : null}
         <TextInput
           ref={setInputRef}
+          key={androidUncontrolled ? `android-field-${androidEpoch}` : undefined}
           placeholderTextColor={palette.textFaint}
           autoCorrect={false}
           autoCapitalize="none"
           secureTextEntry={secureTextEntry}
           keyboardType={resolvedKeyboardType}
+          underlineColorAndroid="transparent"
           {...rest}
           {...(Platform.OS === "web" ? { dir: "ltr" as const } : null)}
+          {...(androidUncontrolled
+            ? { defaultValue: typeof value === "string" ? value : undefined }
+            : { value })}
           onFocus={(e) => {
+            focusedRef.current = true;
+            lastAppliedValue.current = value;
             setFocused(true);
             onFocus?.(e);
           }}
           onBlur={(e) => {
+            focusedRef.current = false;
+            lastAppliedValue.current = value;
             setFocused(false);
             onBlur?.(e);
           }}
@@ -235,7 +260,15 @@ const styles = StyleSheet.create({
     minHeight: 46,
   },
   icon: { marginRight: spacing[8] },
-  input: { flex: 1, paddingVertical: spacing[10], fontSize: fontSize.md },
+  input: {
+    flex: 1,
+    paddingVertical: spacing[10],
+    fontSize: fontSize.md,
+    ...Platform.select({
+      android: { includeFontPadding: false, textAlignVertical: "center" as const },
+      default: {},
+    }),
+  },
   right: { marginLeft: spacing[8] },
   rightOverlay: {
     position: "absolute",
