@@ -18,7 +18,6 @@ import type {
   HealthDto,
   ServerInfoDto,
   TelemetryHeartbeatResponse,
-  TelemetryStatsDto,
   SessionDto,
   TagDto,
   TotpBeginDto,
@@ -586,7 +585,7 @@ export const ServerRoutes = {
   },
 } satisfies Record<string, RouteDef>;
 
-// ---------- Telemetry (anonymous install ping; stats are secret-gated) ----------
+// ---------- Telemetry (anonymous install ping to this server) ----------
 export const TelemetryRoutes = {
   heartbeat: {
     path: `${API_PREFIX}/telemetry/heartbeat`,
@@ -595,14 +594,6 @@ export const TelemetryRoutes = {
     query: {} as Empty,
     params: {} as Empty,
     response: {} as TelemetryHeartbeatResponse,
-  },
-  stats: {
-    path: `${API_PREFIX}/telemetry/stats`,
-    method: "GET",
-    body: {} as Empty,
-    query: {} as Empty,
-    params: {} as Empty,
-    response: {} as TelemetryStatsDto,
   },
 } satisfies Record<string, RouteDef>;
 

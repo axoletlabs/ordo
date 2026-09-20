@@ -1,11 +1,8 @@
-import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
+import { Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from "@nestjs/common";
 import { Prisma } from "../prisma/client.js";
-import { ErrorCode, type TelemetryHeartbeatInput, type TelemetryStatsDto } from "@ordo/shared";
-import { APP_CONFIG, type AppConfig } from "../config/config.module.js";
-import { AppError } from "../common/errors/app-error.js";
+import { type TelemetryHeartbeatInput, type TelemetryDayDto } from "@ordo/shared";
 import { RateLimitService } from "../common/rate-limit/rate-limit.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
-import { secretsEqual } from "./telemetry-access.js";
 import { addUtcDays, asCount, dayStartUtc, eachUtcDay, utcDay } from "./utc-day.js";
 
 const SNAPSHOT_MS = 60 * 60 * 1000;
@@ -21,7 +18,6 @@ export class TelemetryService implements OnModuleInit, OnModuleDestroy {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rateLimit: RateLimitService,
-    @Inject(APP_CONFIG) private readonly cfg: AppConfig,
   ) {}
 
   onModuleInit(): void {
@@ -40,13 +36,6 @@ export class TelemetryService implements OnModuleInit, OnModuleDestroy {
   onModuleDestroy(): void {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
-  }
-
-  assertStatsAccess(secret: string): void {
-    const expected = this.cfg.telemetryStatsSecret;
-    if (!expected || !secretsEqual(secret, expected)) {
-      throw new AppError(ErrorCode.NOT_FOUND, "That item wasn't found.");
-    }
   }
 
   async heartbeat(input: TelemetryHeartbeatInput, ip: string): Promise<{ ok: true }> {
@@ -96,27 +85,7 @@ export class TelemetryService implements OnModuleInit, OnModuleDestroy {
     return { ok: true };
   }
 
-  async stats(now = new Date()): Promise<TelemetryStatsDto> {
-    const history = await this.refreshHistory(now);
-    const today = utcDay(now);
-      const current = history.find((row) => row.day === today) ?? (await this.snapshotForDay(today));
-    return {
-      generatedAt: now.toISOString(),
-      current: {
-        total: current.total,
-        newCount: current.newCount,
-        dau: current.dau,
-        wau: current.wau,
-        mau: current.mau,
-        hosting: current.hosting,
-        platform: current.platform,
-        version: current.version,
-      },
-      history,
-    };
-  }
-
-  async refreshHistory(now = new Date()): Promise<TelemetryStatsDto["history"]> {
+  async refreshHistory(now = new Date()): Promise<TelemetryDayDto[]> {
     const today = utcDay(now);
     const earliest = await this.earliestDay();
     const from = earliest ? maxDay(earliest, addUtcDays(today, -(HISTORY_CAP_DAYS - 1))) : today;

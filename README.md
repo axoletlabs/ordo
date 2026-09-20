@@ -141,7 +141,6 @@ first run. You can also copy `apps/server/.env.example` yourself.
 | `TRUST_PROXY` | `0` | Set to `1` behind nginx, Caddy, or Cloudflare |
 | `MFA_REQUIRED` | `false` | Require MFA for every account |
 | `CORS_ALLOWED_ORIGINS` | reflect the request | Comma-separated origins. Empty allows the caller. |
-| `TELEMETRY_STATS_SECRET` | unset | Cloud-only. Bearer or `?secret=` for `/api/telemetry/stats`. Leave unset on a server you host. |
 
 ## Layout
 

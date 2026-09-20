@@ -1,5 +1,5 @@
 import request from "supertest";
-import { ErrorCode, TelemetryRoutes } from "@ordo/shared";
+import { TelemetryRoutes } from "@ordo/shared";
 import { createTestApp, teardownApp, type TestCtx } from "./utils.js";
 
 const INSTALL_A = "11111111-1111-4111-8111-111111111111";
@@ -9,7 +9,7 @@ describe("Telemetry (e2e)", () => {
   let ctx: TestCtx;
 
   beforeAll(async () => {
-    ctx = await createTestApp({ config: { telemetryStatsSecret: "stats-secret" } });
+    ctx = await createTestApp();
   });
 
   afterAll(async () => {
@@ -37,17 +37,15 @@ describe("Telemetry (e2e)", () => {
 
     await request(ctx.app.getHttpServer()).post(TelemetryRoutes.heartbeat.path).send(ping).expect(200);
 
-    const stats = await request(ctx.app.getHttpServer())
-      .get(TelemetryRoutes.stats.path)
-      .set("Authorization", "Bearer stats-secret")
-      .expect(200);
-
-    expect(stats.body.current.total).toBe(1);
-    expect(stats.body.current.dau).toBe(1);
-    expect(stats.body.current.newCount).toBe(1);
-    expect(stats.body.current.hosting).toEqual({ selfhosted: 1 });
-    expect(stats.body.current.platform).toEqual({ android: 1 });
-    expect(stats.body.history.at(-1)?.dau).toBe(1);
+    const installs = await ctx.prisma.appInstall.findMany();
+    const days = await ctx.prisma.appInstallDay.findMany();
+    expect(installs).toHaveLength(1);
+    expect(days).toHaveLength(1);
+    expect(installs[0]).toMatchObject({
+      id: INSTALL_A,
+      platform: "android",
+      hosting: "selfhosted",
+    });
   });
 
   it("splits cloud and self-host installs", async () => {
@@ -70,34 +68,15 @@ describe("Telemetry (e2e)", () => {
       })
       .expect(200);
 
-    const stats = await request(ctx.app.getHttpServer())
-      .get(TelemetryRoutes.stats.path)
-      .set("Authorization", "Bearer stats-secret")
-      .expect(200);
-
-    expect(stats.body.current.total).toBe(2);
-    expect(stats.body.current.hosting).toEqual({ cloud: 1, selfhosted: 1 });
+    const rows = await ctx.prisma.appInstall.findMany({ orderBy: { hosting: "asc" } });
+    expect(rows.map((row) => row.hosting).sort()).toEqual(["cloud", "selfhosted"]);
   });
 
-  it("hides stats without the secret and serves html to browsers", async () => {
-    await request(ctx.app.getHttpServer())
-      .get(TelemetryRoutes.stats.path)
-      .expect(404)
-      .expect((res) => {
-        expect(res.body.error.code).toBe(ErrorCode.NOT_FOUND);
-      });
-
-    const html = await request(ctx.app.getHttpServer())
-      .get(`${TelemetryRoutes.stats.path}?secret=stats-secret`)
-      .set("Accept", "text/html")
-      .expect(200);
-
-    expect(html.headers["content-type"]).toMatch(/html/);
-    expect(html.text).toContain("ordo installs");
-    expect(html.text).toContain("Daily");
+  it("does not expose a stats page on the API", async () => {
+    await request(ctx.app.getHttpServer()).get("/api/telemetry/stats").expect(404);
   });
 
-  it("rejects a heartbeat that includes extra identifying fields by ignoring them", async () => {
+  it("ignores extra identifying fields on a heartbeat", async () => {
     await request(ctx.app.getHttpServer())
       .post(TelemetryRoutes.heartbeat.path)
       .send({

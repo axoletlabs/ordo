@@ -37,11 +37,6 @@ export interface AppConfig {
   avatarDir: string;
   avatarAllowAnimated: boolean;
   mfaRequired: boolean;
-  /**
-   * Bearer/query secret for GET /api/telemetry/stats. Empty disables the page
-   * (self-host default). Heartbeats still work without it.
-   */
-  telemetryStatsSecret: string;
 }
 
 const EnvSchema = z.object({
@@ -79,7 +74,6 @@ const EnvSchema = z.object({
     .string()
     .default("false")
     .transform((v) => v.toLowerCase()),
-  TELEMETRY_STATS_SECRET: z.string().optional(),
 });
 
 function toBool(v: string): boolean {
@@ -205,7 +199,6 @@ export function loadConfig(): AppConfig {
     avatarDir,
     avatarAllowAnimated: toBool(parsed.AVATAR_ALLOW_ANIMATED),
     mfaRequired: toBool(parsed.MFA_REQUIRED),
-    telemetryStatsSecret: parsed.TELEMETRY_STATS_SECRET?.trim() ?? "",
   };
 }
 
