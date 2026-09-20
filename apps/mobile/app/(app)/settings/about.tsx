@@ -23,7 +23,13 @@ import { useTheme } from "../../../src/theme/ThemeProvider";
 import { radius, spacing } from "../../../src/theme/tokens";
 
 const REPO_URL = "https://github.com/axoletlabs/ordo";
+const AXOLET_URL = "https://axolet.com";
+const LEGAL_URL = "https://ordo.axolet.com";
 const PUBLISHED_YEAR = 2026;
+
+function openURL(url: string): void {
+  void Linking.openURL(url).catch(() => {});
+}
 
 async function copyFingerprint(value: string): Promise<void> {
   haptics.light();
@@ -68,11 +74,7 @@ export default function AboutScreen() {
             icon="git-commit-outline"
             label="Commit"
             value={commit}
-            onPress={
-              commitRef
-                ? () => Linking.openURL(`${REPO_URL}/commit/${commitRef}`).catch(() => {})
-                : undefined
-            }
+            onPress={commitRef ? () => openURL(`${REPO_URL}/commit/${commitRef}`) : undefined}
             divider={false}
           />
         </SettingsGroup>
@@ -122,10 +124,28 @@ export default function AboutScreen() {
             icon="logo-github"
             label="Source"
             value="GitHub"
-            onPress={() => Linking.openURL(REPO_URL).catch(() => {})}
+            onPress={() => openURL(REPO_URL)}
+          />
+          <SettingRow
+            icon="document-text-outline"
+            label="Terms"
+            value="ordo.axolet.com/terms"
+            onPress={() => openURL(`${LEGAL_URL}/terms`)}
+          />
+          <SettingRow
+            icon="lock-closed-outline"
+            label="Privacy"
+            value="ordo.axolet.com/privacy"
+            onPress={() => openURL(`${LEGAL_URL}/privacy`)}
           />
           <SettingRow
             icon="shield-checkmark-outline"
+            label="Security"
+            value="ordo.axolet.com/security"
+            onPress={() => openURL(`${LEGAL_URL}/security`)}
+          />
+          <SettingRow
+            icon="ribbon-outline"
             label="License"
             value="AGPL-3.0"
             divider={false}
@@ -138,7 +158,15 @@ export default function AboutScreen() {
           server URL, or library data is included.
         </Text>
         <Text variant="footnote" color="tertiary" align="center" style={styles.copyright}>
-          © {PUBLISHED_YEAR} Axolet
+          © {PUBLISHED_YEAR}{" "}
+          <Text
+            variant="footnote"
+            color="accent"
+            onPress={() => openURL(AXOLET_URL)}
+            suppressHighlighting
+          >
+            Axolet
+          </Text>
         </Text>
       </SettingsScrollView>
 
