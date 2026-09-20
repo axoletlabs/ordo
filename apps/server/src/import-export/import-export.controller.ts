@@ -1,8 +1,8 @@
 /**
  * Import / export endpoints.
  *
- * Import is a staged job: POST the file (multipart), poll GET until the
- * preview is ready, then POST commit with a duplicate policy. Export streams
+ * Import is a staged job: POST the file (multipart or JSON `{filename,text}`),
+ * poll GET until the preview is ready, then POST commit with a duplicate policy. Export streams
  * a file download. Folder tokens arrive via x-folder-token (one folder)
  * and x-folder-tokens (comma-separated, library or multi-folder exports).
  */
@@ -39,6 +39,7 @@ import { AppError } from "../common/errors/app-error.js";
 import { RateLimit } from "../common/rate-limit/rate-limit.decorator.js";
 import { ImportService } from "./import.service.js";
 import { ExportService } from "./export.service.js";
+import { importUploadPayload } from "./import-upload.js";
 
 /** Multer cap sits above the contract limit so we control the error shape. */
 const IMPORT_UPLOAD = FileInterceptor("file", {
@@ -59,18 +60,16 @@ export class ImportExportController {
   async upload(
     @CurrentUser() user: AuthContext,
     @UploadedFile() file: { buffer?: Buffer; size?: number; originalname?: string } | undefined,
+    @Body() body: unknown,
   ): Promise<{ jobId: string }> {
-    if (!file?.buffer) {
-      throw new AppError(ErrorCode.VALIDATION_ERROR, "Choose a file to import.");
-    }
-    if ((file.size ?? file.buffer.length) > IMPORT_EXPORT.MAX_FILE_BYTES) {
+    const payload = importUploadPayload(file, body);
+    if ((payload.size ?? Buffer.byteLength(payload.text, "utf8")) > IMPORT_EXPORT.MAX_FILE_BYTES) {
       throw new AppError(
         ErrorCode.IMPORT_FILE_TOO_LARGE,
         `Import files can be at most ${Math.floor(IMPORT_EXPORT.MAX_FILE_BYTES / 1024 / 1024)} MB.`,
       );
     }
-    const text = file.buffer.toString("utf8").replace(/^\uFEFF/, "");
-    return this.imports.createJob(user.userId, file.originalname ?? "import", text);
+    return this.imports.createJob(user.userId, payload.name, payload.text);
   }
 
   @Get("import/:id")

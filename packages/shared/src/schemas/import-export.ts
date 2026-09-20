@@ -111,6 +111,16 @@ export const OrdoExportFileSchema = z.object({
 });
 export type OrdoExportFile = z.infer<typeof OrdoExportFileSchema>;
 
+/**
+ * Native clients send the file as JSON so Android does not have to attach a
+ * Downloads `content://` URI through FormData (that fails as a "network" error).
+ */
+export const ImportUploadJsonSchema = z.object({
+  filename: z.string().trim().min(1).max(255),
+  text: z.string().min(1),
+});
+export type ImportUploadJsonInput = z.infer<typeof ImportUploadJsonSchema>;
+
 /** Options offered at the confirm step of a staged import. */
 export const CommitImportSchema = z.object({
   /** What to do when an imported URL already exists in the account. */

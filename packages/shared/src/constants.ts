@@ -240,7 +240,7 @@ export function normalizeFolderIcon(value: unknown): FolderIcon {
 
 /** Import / export tuning. Limits are part of the public contract. */
 export const IMPORT_EXPORT = {
-  /** Maximum accepted import upload size (multipart file). */
+  /** Maximum accepted import upload size (multipart file or JSON text). */
   MAX_FILE_BYTES: 50 * 1024 * 1024,
   /** Staged import jobs (and their results) expire after this much idle time. */
   JOB_TTL_MS: 60 * 60 * 1000,

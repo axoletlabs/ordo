@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { contentUriFromActivityResult, isExportSaveCanceledCode } from "./import-export-uri.ts";
+import {
+  contentUriFromActivityResult,
+  isExportSaveCanceledCode,
+  normalizeFileUri,
+} from "./import-export-uri.ts";
 
 test("returns a bare content URI", () => {
   const uri = "content://com.android.providers.downloads.documents/document/msf%3A48";
@@ -42,4 +46,14 @@ test("treats the native Save As cancel code as canceled", () => {
   assert.equal(isExportSaveCanceledCode("export_save_canceled"), true);
   assert.equal(isExportSaveCanceledCode("ERR_EXPORT"), false);
   assert.equal(isExportSaveCanceledCode(undefined), false);
+});
+
+test("normalizes file URIs to a triple-slash form RN can read", () => {
+  assert.equal(normalizeFileUri("file:///data/user/0/app/cache/a.json"), "file:///data/user/0/app/cache/a.json");
+  assert.equal(normalizeFileUri("file:/data/user/0/app/cache/a.json"), "file:///data/user/0/app/cache/a.json");
+  assert.equal(normalizeFileUri("file://data/user/0/app/cache/a.json"), "file:///data/user/0/app/cache/a.json");
+  assert.equal(
+    normalizeFileUri("content://com.android.providers.downloads.documents/document/msf:1"),
+    "content://com.android.providers.downloads.documents/document/msf:1",
+  );
 });

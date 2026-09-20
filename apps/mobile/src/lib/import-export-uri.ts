@@ -25,3 +25,10 @@ export function contentUriFromActivityResult(data: string | undefined): string |
 function isFileOrContentUri(value: string): boolean {
   return value.startsWith("content://") || value.startsWith("file://");
 }
+
+/** Android sometimes hands back `file:/path` or `file://path`; RN reads `file:///path`. */
+export function normalizeFileUri(uri: string): string {
+  if (!uri.startsWith("file:")) return uri;
+  const path = uri.replace(/^file:\/+/, "/");
+  return `file://${path}`;
+}

@@ -35,6 +35,7 @@ import type {
   ExportRequestInput,
   ExtractionProgressDto,
   ImportJobDto,
+  ImportUploadJsonInput,
   RemoveFolderPasswordInput,
   SetFolderPasswordInput,
   UpdateBookmarkTagsInput,
@@ -608,11 +609,11 @@ export const TelemetryRoutes = {
 
 // ---------- Import / Export ----------
 export const ImportExportRoutes = {
-  /** Multipart upload (field "file"); parsing runs as a staged background job. */
+  /** Multipart field "file", or JSON `{ filename, text }` from native clients. */
   uploadImport: {
     path: `${API_PREFIX}/import-export/import`,
     method: "POST",
-    body: {} as Empty,
+    body: {} as ImportUploadJsonInput,
     query: {} as Empty,
     params: {} as Empty,
     response: {} as { jobId: string },

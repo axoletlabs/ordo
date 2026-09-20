@@ -1,7 +1,7 @@
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { Request } from "express";
 import cookieParser from "cookie-parser";
-import { CSRF_TOKEN_HEADER } from "@ordo/shared";
+import { CSRF_TOKEN_HEADER, IMPORT_EXPORT } from "@ordo/shared";
 import type { AppConfig } from "../config/config.module.js";
 import { corsOriginAllowed } from "./utils/cors-origin.js";
 
@@ -12,6 +12,8 @@ import { corsOriginAllowed } from "./utils/cors-origin.js";
  */
 export function applyHttp(app: NestExpressApplication, cfg: AppConfig): void {
   app.set("trust proxy", cfg.trustProxy);
+  // Native import sends the file as JSON; escaping can nearly double the bytes.
+  app.useBodyParser("json", { limit: IMPORT_EXPORT.MAX_FILE_BYTES * 2 + 5 * 1024 * 1024 });
   app.enableCors((incoming, callback) => {
     const req = incoming as Request;
     const origin = req.get("origin") || undefined;
