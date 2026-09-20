@@ -25,6 +25,11 @@ import { radius, spacing } from "../../../src/theme/tokens";
 const REPO_URL = "https://github.com/axoletlabs/ordo";
 const AXOLET_URL = "https://axolet.com";
 const LEGAL_URL = "https://ordo.axolet.com";
+const LEGAL_LINKS = [
+  { label: "Terms", path: "/terms" },
+  { label: "Privacy", path: "/privacy" },
+  { label: "Security", path: "/security" },
+];
 const PUBLISHED_YEAR = 2026;
 
 function openURL(url: string): void {
@@ -127,24 +132,6 @@ export default function AboutScreen() {
             onPress={() => openURL(REPO_URL)}
           />
           <SettingRow
-            icon="document-text-outline"
-            label="Terms"
-            value="ordo.axolet.com/terms"
-            onPress={() => openURL(`${LEGAL_URL}/terms`)}
-          />
-          <SettingRow
-            icon="lock-closed-outline"
-            label="Privacy"
-            value="ordo.axolet.com/privacy"
-            onPress={() => openURL(`${LEGAL_URL}/privacy`)}
-          />
-          <SettingRow
-            icon="shield-checkmark-outline"
-            label="Security"
-            value="ordo.axolet.com/security"
-            onPress={() => openURL(`${LEGAL_URL}/security`)}
-          />
-          <SettingRow
             icon="ribbon-outline"
             label="License"
             value="AGPL-3.0"
@@ -167,6 +154,19 @@ export default function AboutScreen() {
           >
             Axolet
           </Text>
+          {LEGAL_LINKS.map((link) => (
+            <React.Fragment key={link.path}>
+              {"  ·  "}
+              <Text
+                variant="footnote"
+                color="accent"
+                onPress={() => openURL(`${LEGAL_URL}${link.path}`)}
+                suppressHighlighting
+              >
+                {link.label}
+              </Text>
+            </React.Fragment>
+          ))}
         </Text>
       </SettingsScrollView>
 
