@@ -11,7 +11,7 @@
  * refresh writes that copy back; we adopt it on hydrate and foreground.
  */
 import { create } from "zustand";
-import { normalizeReaderPreferences, type AuthResponse, type AuthTokens, type UserDto } from "@ordo/shared";
+import { normalizeReaderPreferences, type AuthTokens, type UserDto } from "@ordo/shared";
 import { accessExpiresAtFromNow } from "../lib/auth-session-policy";
 import { shouldAdoptQuickShareSession } from "../lib/share-intake";
 import { readQuickShareSession, syncQuickShareSession } from "../lib/share-targets";
