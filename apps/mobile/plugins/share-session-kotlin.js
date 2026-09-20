@@ -116,7 +116,7 @@ import com.facebook.react.uimanager.ViewManager
 
 class OrdoShareSessionPackage : ReactPackage {
   override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
-    return listOf(OrdoShareSessionModule(reactContext))
+    return listOf(OrdoShareSessionModule(reactContext), OrdoExportFileModule(reactContext))
   }
 
   override fun createViewManagers(reactContext: ReactApplicationContext): List<ViewManager<*, *>> {

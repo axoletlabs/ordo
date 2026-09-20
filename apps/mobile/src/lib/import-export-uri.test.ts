@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { contentUriFromActivityResult } from "./import-export-uri.ts";
+import { contentUriFromActivityResult, isExportSaveCanceledCode } from "./import-export-uri.ts";
 
 test("returns a bare content URI", () => {
   const uri = "content://com.android.providers.downloads.documents/document/msf%3A48";
@@ -35,4 +35,11 @@ test("ignores missing or unrelated activity data", () => {
   assert.equal(contentUriFromActivityResult(undefined), undefined);
   assert.equal(contentUriFromActivityResult(""), undefined);
   assert.equal(contentUriFromActivityResult("Intent { flg=0x0 }"), undefined);
+});
+
+test("treats the native Save As cancel code as canceled", () => {
+  assert.equal(isExportSaveCanceledCode("ERR_EXPORT_CANCELED"), true);
+  assert.equal(isExportSaveCanceledCode("export_save_canceled"), true);
+  assert.equal(isExportSaveCanceledCode("ERR_EXPORT"), false);
+  assert.equal(isExportSaveCanceledCode(undefined), false);
 });

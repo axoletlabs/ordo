@@ -30,6 +30,7 @@ const {
   applyVersionCode,
   RELEASE_SIGNING_MARKER,
   ordoShareSessionModuleKotlin,
+  ordoExportFileModuleKotlin,
   patchMainActivityForShareTargets,
   patchMainApplicationForShareSession,
   quickShareCategory,
@@ -250,10 +251,22 @@ test("Quick Save session lives in EncryptedSharedPreferences, not files/cache", 
   const bridge = ordoShareSessionModuleKotlin('com.axolet.ordo');
   assert.match(bridge, /class OrdoShareSessionPackage/);
   assert.match(bridge, /getName\(\): String = "OrdoShareSession"/);
+  assert.match(bridge, /OrdoExportFileModule/);
   assert.match(bridge, /ShareSessionStore\.read/);
   assert.match(bridge, /ShareSessionStore\.write/);
   assert.match(bridge, /ShareSessionStore\.clear/);
   assert.match(bridge, /moveTaskToBack/);
+});
+
+test("export Save As writes the picker URI through ContentResolver", () => {
+  const source = ordoExportFileModuleKotlin("com.axolet.ordo");
+  assert.match(source, /getName\(\): String = NAME/);
+  assert.match(source, /const val NAME = "OrdoExportFile"/);
+  assert.match(source, /ACTION_CREATE_DOCUMENT/);
+  assert.match(source, /openOutputStream/);
+  assert.match(source, /MediaStore\.Downloads/);
+  assert.match(source, /ERR_EXPORT_CANCELED/);
+  assert.match(source, /takePersistableUriPermission/);
 });
 
 const EXPO_APP_GRADLE = `
