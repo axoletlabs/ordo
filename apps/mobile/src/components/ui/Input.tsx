@@ -22,6 +22,7 @@ type WebCaretNode = TextInput & {
   selectionStart?: number | null;
   selectionEnd?: number | null;
   setSelectionRange?: (start: number, end: number) => void;
+  value?: string;
 };
 
 function webCaretNode(value: unknown): WebCaretNode | null {
@@ -70,6 +71,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   secureTextEntry,
   keyboardType,
   value,
+  editable = true,
   ...rest
 }, ref) {
   const { palette } = useTheme();
@@ -164,6 +166,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
           secureTextEntry={secureTextEntry}
           keyboardType={resolvedKeyboardType}
           underlineColorAndroid="transparent"
+          editable={editable}
           {...rest}
           {...(Platform.OS === "web" ? { dir: "ltr" as const } : null)}
           {...(androidUncontrolled
@@ -204,12 +207,15 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
           onChange={(event) => {
             onChange?.(event);
             if (Platform.OS !== "web") return;
-            restoreWebCaret(
-              webCaretNode(event.target ?? event.nativeEvent?.target),
-              pendingCaret.current,
-            );
+            const target = (event.target ?? event.nativeEvent?.target) as WebCaretNode | undefined;
+            // Autofill writes locked fields even when they aren't focused.
+            // Put the controlled value back so the DOM can't drift.
+            if (!editable && target && typeof value === "string" && target.value !== value) {
+              target.value = value;
+            }
+            restoreWebCaret(webCaretNode(target), pendingCaret.current);
           }}
-          onChangeText={onChangeText}
+          onChangeText={editable ? onChangeText : undefined}
           style={[
             styles.input,
             {

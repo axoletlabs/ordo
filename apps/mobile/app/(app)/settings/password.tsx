@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform } from "react-native";
 import { useRouter } from "expo-router";
 import {
@@ -18,6 +18,7 @@ import { toast } from "../../../src/components/ui/toast-store";
 import { spacing } from "../../../src/theme/tokens";
 import { ChangePasswordSchema } from "@ordo/shared";
 import { MfaStepUpPanel } from "../../../src/components/auth/MfaStepUpPanel";
+import { lockedSecretDisplay, passwordAutofillProps } from "../../../src/lib/password-autofill";
 
 export default function ChangePasswordScreen() {
   const router = useRouter();
@@ -29,9 +30,14 @@ export default function ChangePasswordScreen() {
   const [showPwd, setShowPwd] = useState(false);
   const [formError, setFormError] = useState("");
   const [mfaOpen, setMfaOpen] = useState(false);
+  const submittedRef = useRef({ currentPassword: "", newPassword: "" });
 
   const runChange = async (mfaCode?: string) => {
-    const parsed = ChangePasswordSchema.safeParse({ currentPassword, newPassword, mfaCode });
+    const parsed = ChangePasswordSchema.safeParse({
+      currentPassword: submittedRef.current.currentPassword,
+      newPassword: submittedRef.current.newPassword,
+      mfaCode,
+    });
     if (!parsed.success) {
       const message = parsed.error.issues[0]?.message || "Please check your input.";
       setFormError(message);
@@ -54,6 +60,10 @@ export default function ChangePasswordScreen() {
       setFormError(parsed.error.issues[0]?.message || "Please check your input.");
       return;
     }
+    submittedRef.current = {
+      currentPassword: parsed.data.currentPassword,
+      newPassword: parsed.data.newPassword,
+    };
     try {
       await runChange();
     } catch (e) {
@@ -66,6 +76,10 @@ export default function ChangePasswordScreen() {
     }
   };
 
+  const currentField = lockedSecretDisplay(currentPassword, mfaOpen, showPwd);
+  const newField = lockedSecretDisplay(newPassword, mfaOpen, showPwd);
+  const confirmField = lockedSecretDisplay(confirm, mfaOpen, showPwd);
+
   return (
     <SettingsPage title="Password">
       <KeyboardAvoidingView
@@ -74,37 +88,31 @@ export default function ChangePasswordScreen() {
       >
         <SettingsScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           <SettingsGroup compact>
-            <SettingsForm style={styles.form}>
+            <SettingsForm key={mfaOpen ? "mfa-locked" : "editable"} style={styles.form}>
               <Input
                 label="Current password"
-                value={currentPassword}
+                value={currentField.value}
                 onChangeText={setCurrentPassword}
                 placeholder="Enter your current password"
-                secureTextEntry={!showPwd}
-                textContentType="password"
-                autoComplete="current-password"
-                importantForAutofill="yes"
+                secureTextEntry={currentField.secureTextEntry}
+                {...passwordAutofillProps("current-password", mfaOpen)}
                 rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
               />
               <Input
                 label="New password"
-                value={newPassword}
+                value={newField.value}
                 onChangeText={setNewPassword}
                 placeholder="At least 8 characters"
-                secureTextEntry={!showPwd}
-                textContentType="newPassword"
-                autoComplete="new-password"
-                importantForAutofill="yes"
+                secureTextEntry={newField.secureTextEntry}
+                {...passwordAutofillProps("new-password", mfaOpen)}
               />
               <Input
                 label="Confirm new password"
-                value={confirm}
+                value={confirmField.value}
                 onChangeText={setConfirm}
                 placeholder="Re-enter your new password"
-                secureTextEntry={!showPwd}
-                textContentType="newPassword"
-                autoComplete="new-password"
-                importantForAutofill="yes"
+                secureTextEntry={confirmField.secureTextEntry}
+                {...passwordAutofillProps("new-password", mfaOpen)}
               />
 
               <Button

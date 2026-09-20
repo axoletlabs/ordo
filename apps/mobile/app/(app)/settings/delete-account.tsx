@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform } from "react-native";
 import {
   DELETE_ACCOUNT_CONFIRMATION,
@@ -17,6 +17,7 @@ import { Text } from "../../../src/components/ui/Text";
 import { toast } from "../../../src/components/ui/toast-store";
 import { MfaStepUpPanel } from "../../../src/components/auth/MfaStepUpPanel";
 import { useDeleteAccount } from "../../../src/hooks/use-auth-actions";
+import { lockedSecretDisplay, passwordAutofillProps } from "../../../src/lib/password-autofill";
 import { errorMessage, isMfaRequiredError } from "../../../src/lib/error-message";
 import { haptics } from "../../../src/lib/haptics";
 import { spacing } from "../../../src/theme/tokens";
@@ -28,11 +29,12 @@ export default function DeleteAccountScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState("");
   const [mfaOpen, setMfaOpen] = useState(false);
+  const submittedRef = useRef({ currentPassword: "", confirmation: "" });
 
   const runDelete = async (mfaCode?: string) => {
     const parsed = DeleteAccountSchema.safeParse({
-      currentPassword,
-      confirmation,
+      currentPassword: submittedRef.current.currentPassword,
+      confirmation: submittedRef.current.confirmation,
       mfaCode,
     });
     if (!parsed.success) {
@@ -56,6 +58,10 @@ export default function DeleteAccountScreen() {
       setFormError(parsed.error.issues[0]?.message || "Please check your input.");
       return;
     }
+    submittedRef.current = {
+      currentPassword: parsed.data.currentPassword,
+      confirmation: parsed.data.confirmation,
+    };
 
     try {
       await runDelete();
@@ -70,6 +76,7 @@ export default function DeleteAccountScreen() {
   };
 
   const confirmed = confirmation === DELETE_ACCOUNT_CONFIRMATION;
+  const passwordField = lockedSecretDisplay(currentPassword, mfaOpen, showPassword);
 
   return (
     <SettingsPage title="Delete account">
@@ -79,14 +86,14 @@ export default function DeleteAccountScreen() {
       >
         <SettingsScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           <SettingsGroup compact>
-            <SettingsForm style={styles.form}>
+            <SettingsForm key={mfaOpen ? "mfa-locked" : "editable"} style={styles.form}>
               <Input
                 label="Password"
-                value={currentPassword}
+                value={passwordField.value}
                 onChangeText={setCurrentPassword}
                 placeholder="Enter your password"
-                secureTextEntry={!showPassword}
-                textContentType="password"
+                secureTextEntry={passwordField.secureTextEntry}
+                {...passwordAutofillProps("password", mfaOpen)}
                 rightAccessory={<EyeToggle visible={showPassword} onPress={() => setShowPassword((value) => !value)} />}
               />
               <Input

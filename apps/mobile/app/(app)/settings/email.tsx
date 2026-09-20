@@ -7,7 +7,7 @@
  * is keyed by the signed-in email so a completed change cannot leave the
  * previous address and password sitting in the next visit.
  */
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform } from "react-native";
 import { useRouter } from "expo-router";
 import {
@@ -30,6 +30,7 @@ import { spacing } from "../../../src/theme/tokens";
 import { ChangeEmailSchema } from "@ordo/shared";
 import { OtpDeliveryHint } from "../../../src/components/auth/OtpDeliveryHint";
 import { MfaStepUpPanel } from "../../../src/components/auth/MfaStepUpPanel";
+import { lockedSecretDisplay, passwordAutofillProps } from "../../../src/lib/password-autofill";
 
 export default function ChangeEmailScreen() {
   const email = useAuthStore((s) => s.user?.email ?? "");
@@ -48,6 +49,7 @@ function ChangeEmailForm() {
   const [showPwd, setShowPwd] = useState(false);
   const [formError, setFormError] = useState("");
   const [mfaOpen, setMfaOpen] = useState(false);
+  const submittedRef = useRef({ currentPassword: "", newEmail: "" });
 
   const parsedBody = () =>
     ChangeEmailSchema.safeParse({
@@ -56,7 +58,7 @@ function ChangeEmailForm() {
     });
 
   const runChange = async (mfaCode?: string) => {
-    const parsed = parsedBody();
+    const parsed = ChangeEmailSchema.safeParse(submittedRef.current);
     if (!parsed.success) {
       const message = parsed.error.issues[0]?.message || "Please check your input.";
       setFormError(message);
@@ -83,6 +85,7 @@ function ChangeEmailForm() {
       setFormError(parsed.error.issues[0]?.message || "Please check your input.");
       return;
     }
+    submittedRef.current = parsed.data;
     try {
       await runChange();
     } catch (e) {
@@ -95,6 +98,8 @@ function ChangeEmailForm() {
     }
   };
 
+  const passwordField = lockedSecretDisplay(currentPassword, mfaOpen, showPwd);
+
   return (
     <SettingsPage title="Email">
       <KeyboardAvoidingView
@@ -103,7 +108,7 @@ function ChangeEmailForm() {
       >
         <SettingsScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           <SettingsGroup compact footer={otpRequestFooter(smtpConfigured, "email-change")}>
-            <SettingsForm style={styles.form}>
+            <SettingsForm key={mfaOpen ? "mfa-locked" : "editable"} style={styles.form}>
               <OtpDeliveryHint smtpConfigured={smtpConfigured} compact />
               <Input
                 label="Current email"
@@ -127,12 +132,11 @@ function ChangeEmailForm() {
               />
               <Input
                 label="Current password"
-                value={currentPassword}
+                value={passwordField.value}
                 onChangeText={setCurrentPassword}
                 placeholder="Enter your current password"
-                secureTextEntry={!showPwd}
-                autoComplete="password"
-                textContentType="password"
+                secureTextEntry={passwordField.secureTextEntry}
+                {...passwordAutofillProps("password", mfaOpen)}
                 error={formError || undefined}
                 rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
               />
