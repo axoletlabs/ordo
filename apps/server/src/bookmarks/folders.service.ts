@@ -82,7 +82,7 @@ export class FoldersService {
     input: UpdateFolderInput,
     tokens: readonly string[] = [],
   ): Promise<FolderDto> {
-    const folder = await this.access.requireFolder(folderId, userId, tokens);
+    await this.access.requireFolder(folderId, userId, tokens);
     const data: { name?: string; icon?: string; pinned?: boolean } = {};
     if (input.name !== undefined) data.name = this.crypto.sealFolderName(userId, folderId, input.name);
     if (input.icon !== undefined) data.icon = input.icon;
