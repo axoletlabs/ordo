@@ -73,8 +73,6 @@ export class SessionService {
       }
     }
 
-    await this.upgradeAccessHash(session.id, session.accessTokenHash, this.tokens.hash(token));
-
     void this.prisma.session
       .update({ where: { id: session.id }, data: { lastSeenAt: now } })
       .catch(() => undefined);
@@ -208,13 +206,6 @@ export class SessionService {
     return this.prisma.session.findFirst({
       where: { accessTokenHash: { in: hashes } },
     });
-  }
-
-  private async upgradeAccessHash(id: string, stored: string, modern: string): Promise<void> {
-    if (stored === modern) return;
-    await this.prisma.session
-      .update({ where: { id }, data: { accessTokenHash: modern } })
-      .catch(() => undefined);
   }
 
   private async enforceSessionCap(userId: string, keepId: string): Promise<void> {

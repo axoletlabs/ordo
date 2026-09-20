@@ -52,11 +52,12 @@ export class TokenService {
     return hmacSha256Hex(token, this.cfg.jwtSecret);
   }
 
-  /** Pre-HMAC unsalted hash, for dual-read of existing sessions. */
+  /** Unsalted SHA-256 used before HMAC. Kept so old session rows still match. */
   legacyHash(token: string): string {
     return sha256Hex(token);
   }
 
+  /** Both hashes, so a pre-HMAC row still authenticates. Rows are never rewritten. */
   lookupHashes(token: string): string[] {
     const modern = this.hash(token);
     const legacy = this.legacyHash(token);

@@ -1,5 +1,4 @@
 import {
-  alreadyRegisteredNotice,
   emailChangedNotice,
   emailChangeRequestedNotice,
   mfaRecoveryEmail,
@@ -64,11 +63,5 @@ describe("account notices", () => {
     expect(mail.subject).toContain("email was changed");
     expect(mail.text).toContain("new@ordo.app");
     expect(mail.text).toContain("no longer the login");
-  });
-
-  it("does not include a signup code in the already-registered notice", () => {
-    const mail = alreadyRegisteredNotice();
-    expect(mail.subject).toContain("tried to register");
-    expect(mail.text).not.toMatch(/\b\d{6}\b/);
   });
 });

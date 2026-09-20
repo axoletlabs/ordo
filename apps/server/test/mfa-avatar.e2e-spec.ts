@@ -49,7 +49,6 @@ describe("MFA + avatars (e2e)", () => {
           sendMfaRecoveryNotice: async (to: string) => {
             notices.push(to);
           },
-          sendAlreadyRegisteredNotice: async () => undefined,
           sendEmailChangeNotice: async () => undefined,
           sendEmailChangedNotice: async () => undefined,
         }),

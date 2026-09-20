@@ -76,15 +76,14 @@ export class AuthService {
     const email = input.email.toLowerCase().trim();
     const displayName = input.displayName.trim();
     const passwordHash = await bcrypt.hash(input.password, BCRYPT_COST);
+    const keyMaterial = await this.libraryKeys.createKeyMaterial(input.password);
     const existingEmail = await this.prisma.user.findUnique({ where: { email } });
     if (existingEmail) {
       if (this.cfg.emailVerificationRequired) {
-        await this.mail.sendAlreadyRegisteredNotice(email).catch(() => undefined);
         return { pendingEmailVerification: true };
       }
       throw new AppError(ErrorCode.EMAIL_ALREADY_EXISTS, "An account with this email already exists.");
     }
-    const keyMaterial = await this.libraryKeys.createKeyMaterial(input.password);
 
     const user = await this.prisma.user.create({
       data: {

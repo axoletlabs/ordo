@@ -7,7 +7,6 @@ import { APP_CONFIG } from "../config/config.module.js";
 import type { AppConfig } from "../config/config.module.js";
 import {
   VERIFICATION_LOGO_CID,
-  alreadyRegisteredNotice,
   emailChangedNotice,
   emailChangeRequestedNotice,
   mfaRecoveryEmail,
@@ -83,11 +82,6 @@ export class MailService {
 
   async sendEmailChangedNotice(to: string, newEmail: string): Promise<void> {
     const { subject, text, html } = emailChangedNotice(newEmail);
-    await this.send({ to, subject, text, html });
-  }
-
-  async sendAlreadyRegisteredNotice(to: string): Promise<void> {
-    const { subject, text, html } = alreadyRegisteredNotice();
     await this.send({ to, subject, text, html });
   }
 

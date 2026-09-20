@@ -170,18 +170,6 @@ export function emailChangedNotice(newEmail: string): {
   });
 }
 
-export function alreadyRegisteredNotice(): {
-  subject: string;
-  text: string;
-  html: string;
-} {
-  return noticeEmail({
-    subject: `Someone tried to register this ${APP_NAME} email`,
-    kicker: "Already registered",
-    body: `This email already has an ${APP_NAME} account. If that was you, sign in. If it wasn't, you can ignore this.`,
-  });
-}
-
 function noticeEmail(copy: { subject: string; kicker: string; body: string }): {
   subject: string;
   text: string;

@@ -2,7 +2,6 @@ import request from "supertest";
 import { APP_NAME, DELETE_ACCOUNT_CONFIRMATION, EMAIL_OTP, ErrorCode, SESSION } from "@ordo/shared";
 import { MailService } from "../src/auth/mail.service.js";
 import { SessionService } from "../src/auth/session.service.js";
-import { TokenService } from "../src/auth/token.service.js";
 import { LibraryKeyService } from "../src/crypto/library-key.service.js";
 import { sha256Hex } from "../src/common/utils/tokens.js";
 import {
@@ -384,19 +383,18 @@ describe("Auth (e2e)", () => {
         .expect(401);
     });
 
-    it("accepts a pre-HMAC session hash and upgrades it", async () => {
+    it("accepts a pre-HMAC session hash without rewriting it", async () => {
       const auth = await registerUser(ctx.app, "pepper@ordo.app");
-      const tokens = ctx.app.get(TokenService);
+      const legacy = sha256Hex(auth.tokens.accessToken);
       await ctx.prisma.session.updateMany({
-        data: { accessTokenHash: sha256Hex(auth.tokens.accessToken) },
+        data: { accessTokenHash: legacy },
       });
       await request(ctx.app.getHttpServer())
         .get("/api/auth/me")
         .set("authorization", `Bearer ${auth.tokens.accessToken}`)
         .expect(200);
       const row = await ctx.prisma.session.findFirstOrThrow();
-      expect(row.accessTokenHash).toBe(tokens.hash(auth.tokens.accessToken));
-      expect(row.accessTokenHash).not.toBe(sha256Hex(auth.tokens.accessToken));
+      expect(row.accessTokenHash).toBe(legacy);
     });
   });
 
@@ -422,7 +420,6 @@ describe("Auth (e2e)", () => {
                 sent.push({ to, token });
               },
               sendMfaRecoveryNotice: async () => undefined,
-              sendAlreadyRegisteredNotice: async () => undefined,
               sendEmailChangeNotice: async (to: string) => {
                 notices.push({ to, kind: "change-requested" });
               },
@@ -841,7 +838,6 @@ describe("Auth (e2e)", () => {
 describe("signup email verification (e2e)", () => {
   let vctx: TestCtx;
   const sent: { to: string; token: string }[] = [];
-  const alreadyRegistered: string[] = [];
 
   beforeAll(async () => {
     vctx = await createTestApp({
@@ -853,9 +849,6 @@ describe("signup email verification (e2e)", () => {
             sent.push({ to, token });
           },
           sendMfaRecoveryNotice: async () => undefined,
-          sendAlreadyRegisteredNotice: async (to: string) => {
-            alreadyRegistered.push(to);
-          },
           sendEmailChangeNotice: async () => undefined,
           sendEmailChangedNotice: async () => undefined,
         }),
@@ -869,7 +862,6 @@ describe("signup email verification (e2e)", () => {
   beforeEach(async () => {
     await clearDb(vctx.prisma);
     sent.length = 0;
-    alreadyRegistered.length = 0;
   });
 
   it("emails a 6-digit code and does not issue a session until verified", async () => {
@@ -930,7 +922,6 @@ describe("signup email verification (e2e)", () => {
       .expect(201);
 
     expect(dup.body).toEqual({ pendingEmailVerification: true });
-    expect(alreadyRegistered).toEqual(["dupverify@ordo.app"]);
     expect(sent).toHaveLength(0);
     expect(await vctx.prisma.user.count({ where: { email: "dupverify@ordo.app" } })).toBe(1);
   });

@@ -44,7 +44,6 @@ describe("Library encryption (e2e)", () => {
             },
             sendMfaRecovery: async () => undefined,
             sendMfaRecoveryNotice: async () => undefined,
-            sendAlreadyRegisteredNotice: async () => undefined,
             sendEmailChangeNotice: async () => undefined,
             sendEmailChangedNotice: async () => undefined,
           })
