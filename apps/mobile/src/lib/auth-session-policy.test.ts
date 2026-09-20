@@ -45,6 +45,10 @@ test("expired and unknown 401s refresh once; session_revoked does not", () => {
     false,
   );
   assert.equal(
+    shouldRetryRequestWithRefresh({ status: 401, code: "email_not_verified" }, { auth: true, retried: false }),
+    false,
+  );
+  assert.equal(
     shouldRetryRequestWithRefresh({ status: 401, code: "unauthorized" }, { auth: true, retried: true }),
     false,
   );
@@ -56,6 +60,7 @@ test("expired and unknown 401s refresh once; session_revoked does not", () => {
 
 test("only our 401 auth codes reject a refresh; proxy/network failures do not", () => {
   assert.equal(isDefiniteRefreshRejection({ status: 401, code: "session_revoked" }), true);
+  assert.equal(isDefiniteRefreshRejection({ status: 401, code: "email_not_verified" }), true);
   assert.equal(isDefiniteRefreshRejection({ status: 401, code: "unauthorized" }), true);
   assert.equal(isDefiniteRefreshRejection({ status: 401, code: "token_expired" }), true);
   assert.equal(isDefiniteRefreshRejection({ status: 401, code: "unknown_error" }), false);
@@ -84,5 +89,12 @@ test("stale session_revoked after rotation does not clear the new tokens", () =>
       { sentAccessToken: "current", currentAccessToken: "current" },
     ),
     false,
+  );
+  assert.equal(
+    shouldClearSessionForError(
+      { status: 401, code: "email_not_verified" },
+      { sentAccessToken: "old", currentAccessToken: "new" },
+    ),
+    true,
   );
 });

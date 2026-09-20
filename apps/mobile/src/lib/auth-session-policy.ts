@@ -43,7 +43,7 @@ export function shouldRetryRequestWithRefresh(
  * a timeout, or a 5xx must not sign the user out.
  */
 export function isDefiniteRefreshRejection(err: { status: number; code: string }): boolean {
-  if (err.code === "session_revoked") return true;
+  if (err.code === "session_revoked" || err.code === "email_not_verified") return true;
   if (err.status !== 401) return false;
   return err.code === "unauthorized" || err.code === "token_expired";
 }
@@ -53,6 +53,7 @@ export function shouldClearSessionForError(
   err: { status: number; code: string },
   opts: { sentAccessToken?: string | null; currentAccessToken?: string | null },
 ): boolean {
+  if (err.code === "email_not_verified") return true;
   if (err.code !== "session_revoked") return false;
   if (!opts.currentAccessToken || !opts.sentAccessToken) return true;
   return opts.sentAccessToken === opts.currentAccessToken;

@@ -39,11 +39,11 @@ const COPY: Record<
     textHeading: "Your password reset code",
   },
   mfa_recovery: {
-    subject: `Your ${APP_NAME} authenticator recovery code`,
-    kicker: "Authenticator recovery",
-    body: `Enter this code in ${APP_NAME} to turn off your authenticator app and sign in.`,
+    subject: `Your ${APP_NAME} sign-in code`,
+    kicker: "Sign-in code",
+    body: `Enter this code in ${APP_NAME} to sign in once. Your authenticator stays on.`,
     ignore: "If you didn't request this, you can ignore this email. Your authenticator stays on.",
-    textHeading: "Your authenticator recovery code",
+    textHeading: "Your sign-in code",
   },
 };
 
@@ -130,9 +130,51 @@ export function mfaRecoveryEmail(otp: string, expiresMinutes: number) {
   return otpEmail("mfa_recovery", otp, expiresMinutes);
 }
 
+export function mfaRecoveryNoticeEmail(): {
+  subject: string;
+  text: string;
+  html: string;
+} {
+  const subject = `Someone signed in to your ${APP_NAME} account`;
+  const body =
+    `You signed in using an email code. Your authenticator is still on — you'll need it next time. ` +
+    `If this wasn't you, reset your password.`;
+  const text = [APP_NAME, "", subject, "", body].join("\n");
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width">
+  <title>${escapeHtml(subject)}</title>
+</head>
+<body style="margin:0;padding:0;background:${PAPER};">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${PAPER};">
+    <tr>
+      <td align="center" style="padding:48px 16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:440px;border-collapse:separate;border-spacing:0;">
+          <tr>
+            <td align="center" style="background:${CARD};border:1px solid ${RULE};border-radius:24px;padding:36px 32px 32px;">
+              <img src="cid:${VERIFICATION_LOGO_CID}" width="${LOGO_W}" height="${LOGO_H}" alt="${APP_NAME}" style="display:block;margin:0 auto 28px;border:0;outline:none;text-decoration:none;" />
+              <p style="margin:0 0 8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:${FAINT};">
+                Sign-in notice
+              </p>
+              <p style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px;line-height:1.5;color:${MUTE};">
+                ${escapeHtml(body)}
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+  return { subject, text, html };
+}
+
 function previewKind(kind: OtpEmailKind): string {
   if (kind === "password_reset") return "password reset";
-  if (kind === "mfa_recovery") return "authenticator recovery";
+  if (kind === "mfa_recovery") return "sign-in";
   return "verification";
 }
 

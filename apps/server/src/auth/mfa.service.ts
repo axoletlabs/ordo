@@ -38,7 +38,6 @@ const TOTP_KEY_INFO = "totp-secret-enc";
 export interface MfaLoginCompletion {
   user: User;
   dek: Buffer | null;
-  recoveryKey?: string;
 }
 
 @Injectable()
@@ -73,15 +72,13 @@ export class MfaService {
   createLoginChallengeResponse(
     user: User,
     dek: Buffer | null,
-    recoveryKey?: string,
   ): Promise<MfaRequiredResponse> {
-    return this.createLoginChallenge(user, dek, recoveryKey);
+    return this.createLoginChallenge(user, dek);
   }
 
   async createLoginChallenge(
     user: User,
     dek: Buffer | null = null,
-    recoveryKey?: string,
   ): Promise<MfaRequiredResponse> {
     await this.prisma.mfaChallenge.deleteMany({
       where: { userId: user.id, purpose: MFA_CHALLENGE_PURPOSE.LOGIN },
@@ -92,7 +89,7 @@ export class MfaService {
         userId: user.id,
         tokenHash: hashToken(token),
         purpose: MFA_CHALLENGE_PURPOSE.LOGIN,
-        payload: dek ? this.crypto.wrapMfaStash(token, { dek, recoveryKey }) : null,
+        payload: dek ? this.crypto.wrapMfaStash(token, { dek }) : null,
         expiresAt: new Date(Date.now() + MFA.CHALLENGE_TTL_MS),
       },
     });
@@ -136,7 +133,12 @@ export class MfaService {
       }),
       this.prisma.mfaChallenge.deleteMany({ where: { userId: user.id } }),
     ]);
-    return { user: await this.disableMfa(user.id), ...stash };
+    try {
+      await this.mail.sendMfaRecoveryNotice(user.email);
+    } catch (err) {
+      this.logger.error(`Failed to send MFA recovery notice: ${(err as Error).message}`);
+    }
+    return { user, ...stash };
   }
 
   async beginTotp(userId: string, mfaCode?: string): Promise<TotpBeginDto> {
@@ -365,11 +367,11 @@ export class MfaService {
     return user;
   }
 
-  private readStash(challengeToken: string, payload: string | null): { dek: Buffer | null; recoveryKey?: string } {
+  private readStash(challengeToken: string, payload: string | null): { dek: Buffer | null } {
     if (!payload) return { dek: null };
     try {
       const stash = this.crypto.unwrapMfaStash(challengeToken, payload);
-      return { dek: stash.dek, recoveryKey: stash.recoveryKey };
+      return { dek: stash.dek };
     } catch {
       return { dek: null };
     }

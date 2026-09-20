@@ -30,6 +30,7 @@ function totpNow(secret: string, email: string): string {
 describe("MFA + avatars (e2e)", () => {
   let ctx: TestCtx;
   const sent: { to: string; token: string }[] = [];
+  const notices: string[] = [];
 
   beforeAll(async () => {
     ctx = await createTestApp({
@@ -45,6 +46,9 @@ describe("MFA + avatars (e2e)", () => {
           sendMfaRecovery: async (to: string, token: string) => {
             sent.push({ to, token });
           },
+          sendMfaRecoveryNotice: async (to: string) => {
+            notices.push(to);
+          },
         }),
     });
   });
@@ -56,6 +60,7 @@ describe("MFA + avatars (e2e)", () => {
   beforeEach(async () => {
     await clearDb(ctx.prisma);
     sent.length = 0;
+    notices.length = 0;
   });
 
   async function enrollTotp(email: string) {
@@ -130,7 +135,7 @@ describe("MFA + avatars (e2e)", () => {
       expect(reused.body.error.code).toBe(ErrorCode.MFA_INVALID);
     });
 
-    it("email recovery disables MFA; forgot-password does not", async () => {
+    it("email recovery signs in once without disabling MFA; forgot-password does not disable MFA", async () => {
       const { secret } = await enrollTotp("recover@ordo.app");
       await ctx.prisma.user.update({
         where: { email: "recover@ordo.app" },
@@ -155,7 +160,21 @@ describe("MFA + avatars (e2e)", () => {
         .set("x-client-type", "mobile")
         .send({ challengeToken: challenge.body.challengeToken, token: sent.at(-1)!.token })
         .expect(200);
-      expect(recovered.body.user.mfaEnabled).toBe(false);
+      expect(recovered.body.user.mfaEnabled).toBe(true);
+      expect(notices).toContain("recover@ordo.app");
+
+      const recoveredUser = await ctx.prisma.user.findUniqueOrThrow({
+        where: { email: "recover@ordo.app" },
+      });
+      expect(recoveredUser.totpEnabledAt).not.toBeNull();
+      expect(recoveredUser.totpSecretEnc).toBeTruthy();
+
+      const again = await request(ctx.app.getHttpServer())
+        .post("/api/auth/login")
+        .set("x-client-type", "mobile")
+        .send({ identifier: "recover@ordo.app", password: "supersecret" })
+        .expect(200);
+      expect(again.body.mfaRequired).toBe(true);
 
       const { auth: stayon } = await enrollTotp("stayon@ordo.app");
       await ctx.prisma.user.update({
@@ -173,7 +192,6 @@ describe("MFA + avatars (e2e)", () => {
           email: "stayon@ordo.app",
           token: sent.at(-1)!.token,
           newPassword: "brandnewpass",
-          recoveryKey: stayon.recoveryKey,
         })
         .expect(200);
       const user = await ctx.prisma.user.findUniqueOrThrow({ where: { email: "stayon@ordo.app" } });

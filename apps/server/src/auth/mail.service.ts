@@ -8,6 +8,7 @@ import type { AppConfig } from "../config/config.module.js";
 import {
   VERIFICATION_LOGO_CID,
   mfaRecoveryEmail,
+  mfaRecoveryNoticeEmail,
   passwordResetEmail,
   verificationEmail,
 } from "./mail.templates.js";
@@ -60,6 +61,11 @@ export class MailService {
   async sendMfaRecovery(to: string, token: string): Promise<void> {
     const minutes = Math.round(EMAIL_OTP.TTL_MS / 60_000);
     const { subject, text, html } = mfaRecoveryEmail(token, minutes);
+    await this.send({ to, subject, text, html });
+  }
+
+  async sendMfaRecoveryNotice(to: string): Promise<void> {
+    const { subject, text, html } = mfaRecoveryNoticeEmail();
     await this.send({ to, subject, text, html });
   }
 

@@ -5,6 +5,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   isMfaRequiredResponse,
+  isPendingEmailVerificationResponse,
   normalizeReaderPreferences,
   type SessionDto,
   type UpdateReaderPreferencesInput,
@@ -35,6 +36,7 @@ export function useRegister() {
   return useMutation({
     mutationFn: authApi.register,
     onSuccess: (data) => {
+      if (isPendingEmailVerificationResponse(data)) return;
       setSession(data);
       scheduleProactiveRefresh(data.tokens.expiresIn);
     },
@@ -43,6 +45,10 @@ export function useRegister() {
 
 export function useVerifyEmail() {
   return useMutation({ mutationFn: authApi.verifyEmail });
+}
+
+export function useResendVerification() {
+  return useMutation({ mutationFn: authApi.resendVerification });
 }
 
 /** Write an updated user into the auth store + the `me` query cache. */

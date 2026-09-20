@@ -1,6 +1,8 @@
 import request from "supertest";
 import { DELETE_ACCOUNT_CONFIRMATION, EMAIL_OTP, ErrorCode } from "@ordo/shared";
 import { MailService } from "../src/auth/mail.service.js";
+import { SessionService } from "../src/auth/session.service.js";
+import { LibraryKeyService } from "../src/crypto/library-key.service.js";
 import { machineHostname } from "../src/server/server.service.js";
 import {
   authedAgent,
@@ -39,7 +41,7 @@ describe("Auth (e2e)", () => {
       expect(res.body.user.mfaEnabled).toBe(false);
       expect(res.body.user.hasAvatar).toBe(false);
       expect(res.body.user.libraryEncrypted).toBe(true);
-      expect(res.body.recoveryKey).toMatch(/^rk1\./);
+      expect(res.body.recoveryKey).toBeUndefined();
       expect(res.body.user.id).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
       );
@@ -62,7 +64,7 @@ describe("Auth (e2e)", () => {
 
       expect(res.body.tokens.accessToken).toBe("");
       expect(res.body.tokens.refreshToken).toBe("");
-      expect(res.body.recoveryKey).toMatch(/^rk1\./);
+      expect(res.body.recoveryKey).toBeUndefined();
       const cookies = res.headers["set-cookie"] as string[];
       expect(cookies?.some((c) => c.startsWith("ordo_access="))).toBe(true);
     });
@@ -328,6 +330,7 @@ describe("Auth (e2e)", () => {
               sendMfaRecovery: async (to: string, token: string) => {
                 sent.push({ to, token });
               },
+              sendMfaRecoveryNotice: async () => undefined,
             }),
       });
     });
@@ -494,34 +497,12 @@ describe("Auth (e2e)", () => {
       expect(last.to).toBe("resetme@ordo.app");
       expect(last.token).toMatch(/^\d{6}$/);
 
-      const missingKey = await request(pctx.app.getHttpServer())
-        .post("/api/auth/reset-password")
-        .send({
-          email: "resetme@ordo.app",
-          token: last.token,
-          newPassword: "brandnewpass",
-        })
-        .expect(400);
-      expect(missingKey.body.error.code).toBe(ErrorCode.RECOVERY_KEY_REQUIRED);
-
-      const wrongKey = await request(pctx.app.getHttpServer())
-        .post("/api/auth/reset-password")
-        .send({
-          email: "resetme@ordo.app",
-          token: last.token,
-          newPassword: "brandnewpass",
-          recoveryKey: "rk1.not-the-key",
-        })
-        .expect(400);
-      expect(wrongKey.body.error.code).toBe(ErrorCode.RECOVERY_KEY_INVALID);
-
       await request(pctx.app.getHttpServer())
         .post("/api/auth/reset-password")
         .send({
           email: "resetme@ordo.app",
           token: last.token,
           newPassword: "brandnewpass",
-          recoveryKey: auth.recoveryKey,
         })
         .expect(200);
 
@@ -769,6 +750,7 @@ describe("signup email verification (e2e)", () => {
           sendVerification: async (to: string, token: string) => {
             sent.push({ to, token });
           },
+          sendMfaRecoveryNotice: async () => undefined,
         }),
     });
   });
@@ -782,16 +764,22 @@ describe("signup email verification (e2e)", () => {
     sent.length = 0;
   });
 
-  it("emails a 6-digit code and verifies with email + code", async () => {
-    await request(vctx.app.getHttpServer())
+  it("emails a 6-digit code and does not issue a session until verified", async () => {
+    const created = await request(vctx.app.getHttpServer())
       .post("/api/auth/register")
       .set("x-client-type", "mobile")
         .send({ displayName: "verifyme", email: "verifyme@ordo.app", password: "supersecret" })
       .expect(201);
 
+    expect(created.body.pendingEmailVerification).toBe(true);
+    expect(created.body.tokens).toBeUndefined();
+    expect(created.body.user).toBeUndefined();
     expect(sent).toHaveLength(1);
     expect(sent[0].to).toBe("verifyme@ordo.app");
     expect(sent[0].token).toMatch(/^\d{6}$/);
+
+    const user = await vctx.prisma.user.findUniqueOrThrow({ where: { email: "verifyme@ordo.app" } });
+    expect(await vctx.prisma.session.count({ where: { userId: user.id } })).toBe(0);
 
     const blocked = await request(vctx.app.getHttpServer())
       .post("/api/auth/login")
@@ -801,14 +789,58 @@ describe("signup email verification (e2e)", () => {
     expect(blocked.body.error.code).toBe(ErrorCode.EMAIL_NOT_VERIFIED);
 
     await request(vctx.app.getHttpServer())
+      .post("/api/auth/verify-email/resend")
+      .send({ email: "verifyme@ordo.app" })
+      .expect(200);
+    expect(sent).toHaveLength(2);
+    expect(sent[1].to).toBe("verifyme@ordo.app");
+
+    await request(vctx.app.getHttpServer())
       .post("/api/auth/verify-email")
-      .send({ email: "verifyme@ordo.app", token: sent[0].token })
+      .send({ email: "verifyme@ordo.app", token: sent[1].token })
       .expect(200);
 
     await request(vctx.app.getHttpServer())
       .post("/api/auth/login")
       .set("x-client-type", "mobile")
       .send({ identifier: "verifyme@ordo.app", password: "supersecret" })
+      .expect(200);
+  });
+
+  it("blocks leftover sessions from library routes until the email is verified", async () => {
+    await request(vctx.app.getHttpServer())
+      .post("/api/auth/register")
+      .set("x-client-type", "mobile")
+      .send({ displayName: "leftover", email: "leftover@ordo.app", password: "supersecret" })
+      .expect(201);
+
+    const user = await vctx.prisma.user.findUniqueOrThrow({ where: { email: "leftover@ordo.app" } });
+    expect(user.dekServerWrapped).toBeTruthy();
+    const keys = vctx.app.get(LibraryKeyService);
+    const sessions = vctx.app.get(SessionService);
+    const dek = await keys.unwrapWithServerKek(user.dekServerWrapped!);
+    const { tokens } = await sessions.create(
+      user.id,
+      { deviceInfo: "test", deviceName: "test", deviceType: "unknown", ip: "127.0.0.1" },
+      dek,
+    );
+
+    const folders = await request(vctx.app.getHttpServer())
+      .get("/api/folders")
+      .auth(tokens.accessToken, { type: "bearer" })
+      .expect(401);
+    expect(folders.body.error.code).toBe(ErrorCode.EMAIL_NOT_VERIFIED);
+
+    const me = await request(vctx.app.getHttpServer())
+      .get("/api/auth/me")
+      .auth(tokens.accessToken, { type: "bearer" })
+      .expect(401);
+    expect(me.body.error.code).toBe(ErrorCode.EMAIL_NOT_VERIFIED);
+
+    await request(vctx.app.getHttpServer())
+      .post("/api/auth/logout")
+      .set("x-client-type", "mobile")
+      .auth(tokens.accessToken, { type: "bearer" })
       .expect(200);
   });
 

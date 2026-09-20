@@ -62,7 +62,7 @@ export default function LoginMfaScreen() {
     try {
       await authApi.loginMfaEmail({ challengeToken });
       setMode("email");
-      toast.success(info?.smtpConfigured === false ? "Code printed in the server console" : "Recovery code sent");
+      toast.success(info?.smtpConfigured === false ? "Code printed in the server console" : "Sign-in code sent");
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -77,6 +77,7 @@ export default function LoginMfaScreen() {
       await verifyEmail.mutateAsync({ challengeToken, token });
       setOtpStatus("success");
       haptics.success();
+      toast.success("Signed in. Your authenticator is still on.");
     } catch (e) {
       setOtpStatus("error");
       haptics.error();
@@ -112,7 +113,7 @@ export default function LoginMfaScreen() {
           />
           {emailRecovery ? (
             <Button
-              label="Email me a recovery code"
+              label="Email me a sign-in code"
               variant="ghost"
               loading={sending}
               onPress={requestEmail}
@@ -159,11 +160,11 @@ export default function LoginMfaScreen() {
             onComplete={submitEmail}
             status={otpStatus}
             error={error || undefined}
-            label="Email recovery code"
+            label="Email sign-in code"
           />
           <View style={{ height: spacing[16] }} />
           <Text variant="footnote" color="secondary">
-            This turns off your authenticator.
+            This signs you in once. Your authenticator stays on.
           </Text>
           <Button
             label="Use an authenticator code"

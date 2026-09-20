@@ -4,6 +4,7 @@ import {
   DeleteAccountSchema,
   ErrorCode,
   ForgotPasswordSchema,
+  ResendVerificationSchema,
   ResetPasswordSchema,
   VerifyEmailChangeSchema,
   VerifyEmailSchema,
@@ -93,19 +94,12 @@ describe("email OTP schemas", () => {
 
   it("accepts a forgot-password email and a reset payload", () => {
     expect(ForgotPasswordSchema.safeParse({ email: "a@ordo.app" }).success).toBe(true);
+    expect(ResendVerificationSchema.safeParse({ email: "a@ordo.app" }).success).toBe(true);
     expect(
       ResetPasswordSchema.safeParse({
         email: "a@ordo.app",
         token: "123456",
         newPassword: "newpassword",
-      }).success,
-    ).toBe(true);
-    expect(
-      ResetPasswordSchema.safeParse({
-        email: "a@ordo.app",
-        token: "123456",
-        newPassword: "newpassword",
-        recoveryKey: "rk1.abc",
       }).success,
     ).toBe(true);
     expect(

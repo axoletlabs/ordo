@@ -34,6 +34,13 @@ describe("MailService", () => {
     expect(log).toHaveBeenCalledWith(expect.stringContaining("000111"));
   });
 
+  it("prints MFA recovery notices to the console without SMTP", async () => {
+    const mail = new MailService({ ...baseCfg, smtpUrl: null });
+    await mail.sendMfaRecoveryNotice("dev@ordo.app");
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("signed in"));
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("dev@ordo.app"));
+  });
+
   it("is configured when SMTP_URL is provided", () => {
     const mail = new MailService({ ...baseCfg, smtpUrl: "smtp://127.0.0.1:1025" });
     expect(mail.isConfigured).toBe(true);

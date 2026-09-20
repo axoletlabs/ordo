@@ -18,7 +18,7 @@ import { errorMessage } from "../../src/lib/error-message";
 import { haptics } from "../../src/lib/haptics";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { fontSize, lineHeight, radius, spacing } from "../../src/theme/tokens";
-import { RegisterSchema } from "@ordo/shared";
+import { RegisterSchema, isPendingEmailVerificationResponse } from "@ordo/shared";
 
 const AGE_CONFIRM_LABEL = "I am 13 or older and agree to the Terms and Privacy Policy.";
 const AGE_CONFIRM_ERROR = "Please confirm you are 13 or older.";
@@ -77,8 +77,14 @@ export default function RegisterScreen() {
       return;
     }
     try {
-      await register.mutateAsync(parsed.data);
+      const result = await register.mutateAsync(parsed.data);
       haptics.success();
+      if (isPendingEmailVerificationResponse(result)) {
+        router.replace({
+          pathname: "/(auth)/verify-email",
+          params: { email: parsed.data.email },
+        });
+      }
     } catch (e) {
       haptics.error();
       setFormError(errorMessage(e));

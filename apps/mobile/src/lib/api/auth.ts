@@ -7,6 +7,7 @@ import type {
   BackupCodesDto,
   LoginResponse,
   MfaStatusDto,
+  RegisterResponse,
   TotpBeginDto,
   TotpConfirmDto,
   UpdateReaderPreferencesInput,
@@ -16,7 +17,7 @@ import { api } from "./client";
 
 export const authApi = {
   register: (body: { displayName: string; email: string; password: string }) =>
-    api.post<typeof AuthRoutes.register.response>(AuthRoutes.register.path, body, { auth: false }),
+    api.post<RegisterResponse>(AuthRoutes.register.path, body, { auth: false }),
 
   login: ({ identifier, password }: { identifier: string; password: string }) =>
     api.post<LoginResponse>(
@@ -52,6 +53,13 @@ export const authApi = {
       { auth: false },
     ),
 
+  resendVerification: (body: { email: string }) =>
+    api.post<typeof AuthRoutes.resendVerification.response>(
+      AuthRoutes.resendVerification.path,
+      body,
+      { auth: false },
+    ),
+
   changeDisplayName: (body: { displayName: string }) =>
     api.post<typeof AuthRoutes.changeDisplayName.response>(AuthRoutes.changeDisplayName.path, body),
 
@@ -77,7 +85,7 @@ export const authApi = {
       { auth: false },
     ),
 
-  resetPassword: (body: { email: string; token: string; newPassword: string; recoveryKey?: string }) =>
+  resetPassword: (body: { email: string; token: string; newPassword: string }) =>
     api.post<typeof AuthRoutes.resetPassword.response>(
       AuthRoutes.resetPassword.path,
       body,

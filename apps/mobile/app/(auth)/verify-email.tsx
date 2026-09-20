@@ -12,10 +12,10 @@ import { OtpDeliveryHint } from "../../src/components/auth/OtpDeliveryHint";
 import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
 import { OtpInput, holdOtpSuccess, type OtpStatus } from "../../src/components/ui/OtpInput";
-import { useVerifyEmail } from "../../src/hooks/use-auth-actions";
+import { useVerifyEmail, useResendVerification } from "../../src/hooks/use-auth-actions";
 import { useServerInfo } from "../../src/hooks/queries";
 import { errorMessage } from "../../src/lib/error-message";
-import { otpVerifySubtitle } from "../../src/lib/otp-copy";
+import { otpSentToast, otpVerifySubtitle } from "../../src/lib/otp-copy";
 import { haptics } from "../../src/lib/haptics";
 import { spacing } from "../../src/theme/tokens";
 import { toast } from "../../src/components/ui/toast-store";
@@ -24,6 +24,7 @@ export default function VerifyEmailScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{ email?: string }>();
   const verify = useVerifyEmail();
+  const resend = useResendVerification();
   const { data: info } = useServerInfo();
   const smtpConfigured = info?.smtpConfigured;
   const [email, setEmail] = useState(params.email ?? "");
@@ -60,6 +61,20 @@ export default function VerifyEmailScreen() {
       setOtpStatus("error");
       haptics.error();
       setOtpError(errorMessage(e));
+    }
+  };
+
+  const onResend = async () => {
+    const trimmedEmail = email.trim().toLowerCase();
+    if (!trimmedEmail) {
+      setEmailError("Enter your email address.");
+      return;
+    }
+    try {
+      await resend.mutateAsync({ email: trimmedEmail });
+      toast.success(otpSentToast(smtpConfigured, trimmedEmail));
+    } catch (e) {
+      toast.error(errorMessage(e));
     }
   };
 
@@ -104,6 +119,15 @@ export default function VerifyEmailScreen() {
         size="lg"
         onPress={() => void submit()}
         loading={otpStatus === "loading" || otpStatus === "success"}
+      />
+      <View style={{ height: spacing[12] }} />
+      <Button
+        label={resend.isPending ? "Sending…" : "Resend code"}
+        variant="ghost"
+        block
+        onPress={() => void onResend()}
+        loading={resend.isPending}
+        disabled={!email.trim() || otpStatus === "loading" || otpStatus === "success"}
       />
       <View style={{ height: spacing[12] }} />
       <Button label="Back to sign in" variant="ghost" block onPress={() => router.replace("/(auth)/login")} />
