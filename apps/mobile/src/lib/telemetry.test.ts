@@ -2,9 +2,22 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   existingOrNewInstallId,
+  needsTelemetryRegistration,
   shouldPing,
+  telemetryEnabled,
   telemetryPlatform,
 } from "./telemetry-policy.ts";
+
+test("pings only outside development builds", () => {
+  assert.equal(telemetryEnabled(true), false);
+  assert.equal(telemetryEnabled(false), true);
+});
+
+test("re-registers an existing install when telemetry changes", () => {
+  assert.equal(needsTelemetryRegistration(undefined, 1), true);
+  assert.equal(needsTelemetryRegistration(1, 1), false);
+  assert.equal(needsTelemetryRegistration(1, 2), true);
+});
 
 test("pings when never seen, after a day, or if the clock jumped back", () => {
   const now = 1_700_000_000_000;

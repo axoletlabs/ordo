@@ -19,16 +19,20 @@ import {
 import {
   existingOrNewInstallId,
   isTelemetryInstallId,
+  needsTelemetryRegistration,
   shouldPing,
+  telemetryEnabled,
   telemetryPlatform,
   type TelemetryWebHints,
 } from "./telemetry-policy";
 
 const RETRY_GAP_MS = 15 * 60 * 1000;
+const TELEMETRY_REVISION = 2;
 
 interface TelemetryPrefs {
   installId: string;
   lastPingAt: number | null;
+  telemetryRevision?: number;
 }
 
 let inflight: Promise<void> | null = null;
@@ -51,6 +55,7 @@ export async function pingCloudTelemetry(now = Date.now()): Promise<void> {
 }
 
 async function runPing(now: number): Promise<void> {
+  if (!telemetryEnabled(__DEV__)) return;
   if (!useOnlineStore.getState().online) return;
   if (now - lastAttemptAt < RETRY_GAP_MS) return;
   lastAttemptAt = now;
@@ -61,9 +66,15 @@ async function runPing(now: number): Promise<void> {
     await prefsSet(StorageKeys.TELEMETRY, {
       installId,
       lastPingAt: saved?.lastPingAt ?? null,
+      telemetryRevision: saved?.telemetryRevision,
     });
   }
-  if (!shouldPing(saved?.lastPingAt ?? null, now)) return;
+  if (
+    !needsTelemetryRegistration(saved?.telemetryRevision, TELEMETRY_REVISION) &&
+    !shouldPing(saved?.lastPingAt ?? null, now)
+  ) {
+    return;
+  }
 
   const payload: TelemetryHeartbeatInput = {
     installId,
@@ -85,7 +96,11 @@ async function runPing(now: number): Promise<void> {
       REQUEST_HARD_TIMEOUT_MS,
     );
     if (!response.ok) return;
-    await prefsSet(StorageKeys.TELEMETRY, { installId, lastPingAt: now });
+    await prefsSet(StorageKeys.TELEMETRY, {
+      installId,
+      lastPingAt: now,
+      telemetryRevision: TELEMETRY_REVISION,
+    });
   } catch {
     /* best-effort — retry on a later launch; install id is already saved */
   } finally {

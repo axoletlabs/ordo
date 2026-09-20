@@ -6,9 +6,11 @@ import { PrismaService } from "../prisma/prisma.service.js";
 import { addUtcDays, asCount, dayStartUtc, eachUtcDay, utcDay } from "./utc-day.js";
 
 const SNAPSHOT_MS = 60 * 60 * 1000;
+const RECENT_WINDOW_DAYS = 7;
 const WAU_DAYS = 6;
 const MAU_DAYS = 29;
 const HISTORY_CAP_DAYS = 365;
+const RETENTION_DAYS = 400;
 
 @Injectable()
 export class TelemetryService implements OnModuleInit, OnModuleDestroy {
@@ -23,7 +25,7 @@ export class TelemetryService implements OnModuleInit, OnModuleDestroy {
   onModuleInit(): void {
     if (process.env.NODE_ENV === "test") return;
     this.timer = setInterval(() => {
-      void this.refreshHistory().catch((err) => {
+      void this.refreshRecent().catch((err) => {
         this.logger.warn(`Telemetry snapshot failed: ${(err as Error).message}`);
       });
     }, SNAPSHOT_MS);
@@ -89,12 +91,32 @@ export class TelemetryService implements OnModuleInit, OnModuleDestroy {
     const today = utcDay(now);
     const earliest = await this.earliestDay();
     const from = earliest ? maxDay(earliest, addUtcDays(today, -(HISTORY_CAP_DAYS - 1))) : today;
-    const days = eachUtcDay(from, today);
+    const history = await this.persistRange(from, today, now);
+    await this.purgeOldData(today);
+    return history;
+  }
+
+  async refreshRecent(now = new Date()): Promise<TelemetryDayDto[]> {
+    const today = utcDay(now);
+    return this.persistRange(addUtcDays(today, -(RECENT_WINDOW_DAYS - 1)), today, now);
+  }
+
+  private async persistRange(from: string, to: string, now: Date): Promise<TelemetryDayDto[]> {
     const history = [];
-    for (const day of days) {
+    for (const day of eachUtcDay(from, to)) {
       history.push(await this.persistSnapshot(day, now));
     }
     return history;
+  }
+
+  private async purgeOldData(today: string): Promise<void> {
+    const cutoffDay = addUtcDays(today, -RETENTION_DAYS);
+    const cutoffDate = dayStartUtc(cutoffDay);
+    await this.prisma.$transaction([
+      this.prisma.appInstallDay.deleteMany({ where: { day: { lt: cutoffDay } } }),
+      this.prisma.appInstall.deleteMany({ where: { lastSeenAt: { lt: cutoffDate } } }),
+      this.prisma.appInstallSnapshot.deleteMany({ where: { day: { lt: cutoffDay } } }),
+    ]);
   }
 
   private async earliestDay(): Promise<string | null> {

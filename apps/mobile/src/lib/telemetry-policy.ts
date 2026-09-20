@@ -32,6 +32,18 @@ export function telemetryPlatform(
   return webSurface(ua, hints.maxTouchPoints ?? 0);
 }
 
+/**
+ * Production builds only. Dev servers, emulators, and `expo start` sessions
+ * never ping, so local development does not inflate install counts.
+ */
+export function telemetryEnabled(dev: boolean): boolean {
+  return !dev;
+}
+
+export function needsTelemetryRegistration(savedRevision: number | undefined, revision: number): boolean {
+  return savedRevision !== revision;
+}
+
 export function existingOrNewInstallId(
   saved: string | null | undefined,
   mint: () => string,
