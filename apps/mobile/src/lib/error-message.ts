@@ -6,6 +6,7 @@
  */
 import { ApiClientError, LOCAL_ERROR } from "./api/client";
 import { APP_NAME, ErrorCode } from "@ordo/shared";
+import { looksLikeNativeBridgeError } from "./native-bridge-error";
 
 const FRIENDLY: Record<string, string> = {
   [ErrorCode.EMAIL_ALREADY_EXISTS]: "An account with this email already exists.",
@@ -60,7 +61,10 @@ export function errorMessage(err: unknown, fallback = "Something went wrong."): 
     }
     return FRIENDLY[err.code] || fallback;
   }
-  if (err instanceof Error && err.message) return err.message;
+  if (err instanceof Error && err.message) {
+    if (looksLikeNativeBridgeError(err.message)) return fallback;
+    return err.message;
+  }
   return fallback;
 }
 

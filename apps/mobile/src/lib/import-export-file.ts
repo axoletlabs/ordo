@@ -5,9 +5,16 @@
  * the share sheet so "Save to Files" can pick a location. Web triggers a download.
  */
 import { Platform, Share } from "react-native";
+import { File, FileMode } from "expo-file-system";
 import * as FileSystem from "expo-file-system/legacy";
 import * as IntentLauncher from "expo-intent-launcher";
 import { EXPORT_MIME, type ExportFormat } from "@ordo/shared";
+import { contentUriFromActivityResult } from "./import-export-uri";
+
+export { contentUriFromActivityResult } from "./import-export-uri";
+
+/** FLAG_GRANT_READ_URI_PERMISSION | FLAG_GRANT_WRITE_URI_PERMISSION */
+const GRANT_READ_WRITE_URI = 1 | 2;
 
 export const EXPORT_SAVE_CANCELED = "export_save_canceled";
 
@@ -69,11 +76,10 @@ function saveOnWeb(body: string, filename: string, mimeType: string): void {
 }
 
 /**
- * Android Save As: ACTION_CREATE_DOCUMENT returns a writable content URI.
- * If that intent isn't available, fall back to picking a folder with SAF.
- *
- * Expo's IntentLauncher puts the result Intent's string form in `data`, so we
- * extract `dat=` (the content URI). Newer Expo versions may already return the URI.
+ * Android Save As: ACTION_CREATE_DOCUMENT returns a content URI with write
+ * access. Expo's legacy FileSystem only treats com.android.externalstorage as
+ * writable SAF, so Downloads (`com.android.providers.downloads.documents`)
+ * fails with "isn't writable" even though the picker granted us the URI.
  */
 async function saveOnAndroid(body: string, filename: string, mimeType: string): Promise<void> {
   let launched = false;
@@ -82,6 +88,7 @@ async function saveOnAndroid(body: string, filename: string, mimeType: string): 
       type: mimeType,
       category: "android.intent.category.OPENABLE",
       extra: { "android.intent.extra.TITLE": filename },
+      flags: GRANT_READ_WRITE_URI,
     });
     launched = true;
     if (result.resultCode === IntentLauncher.ResultCode.Canceled) {
@@ -89,7 +96,7 @@ async function saveOnAndroid(body: string, filename: string, mimeType: string): 
     }
     const uri = contentUriFromActivityResult(result.data);
     if (!uri) throw new Error("Couldn't open a save location.");
-    await FileSystem.StorageAccessFramework.writeAsStringAsync(uri, body, { encoding: "utf8" });
+    await writeAndroidUri(uri, body);
     return;
   } catch (err) {
     if (isExportSaveCanceled(err)) throw err;
@@ -99,15 +106,28 @@ async function saveOnAndroid(body: string, filename: string, mimeType: string): 
   await saveViaDirectoryPicker(body, filename, mimeType);
 }
 
-/** Pull a content/file URI out of IntentLauncher's activity result. */
-export function contentUriFromActivityResult(data: string | undefined): string | undefined {
-  if (!data) return undefined;
-  const trimmed = data.trim();
-  if (trimmed.startsWith("content://") || trimmed.startsWith("file://")) return trimmed;
-  const match = trimmed.match(/\bdat=([^\s}]+)/);
-  const uri = match?.[1];
-  if (uri?.startsWith("content://") || uri?.startsWith("file://")) return uri;
-  return undefined;
+/**
+ * Write to a Save As / SAF document URI. Prefer the modern File API, which
+ * opens the content resolver instead of checking DocumentFile.canWrite().
+ */
+async function writeAndroidUri(uri: string, body: string): Promise<void> {
+  if (uri.startsWith("file:")) {
+    await FileSystem.writeAsStringAsync(uri, body, { encoding: "utf8" });
+    return;
+  }
+  const file = new File(uri);
+  try {
+    file.write(body);
+    return;
+  } catch {
+    /* File.write() calls create() when exists is false, which throws for content:// */
+  }
+  const handle = file.open(FileMode.WriteOnly);
+  try {
+    handle.writeBytes(new TextEncoder().encode(body));
+  } finally {
+    handle.close();
+  }
 }
 
 async function saveViaDirectoryPicker(
@@ -122,9 +142,7 @@ async function saveViaDirectoryPicker(
     basenameWithoutExt(filename),
     mimeType,
   );
-  await FileSystem.StorageAccessFramework.writeAsStringAsync(created, body, {
-    encoding: "utf8",
-  });
+  await writeAndroidUri(created, body);
 }
 
 /** iOS has no Save As API; "Save to Files" on the file share sheet is the picker. */
