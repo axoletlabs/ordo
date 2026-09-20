@@ -30,7 +30,7 @@ import { decryptSecret, deriveKey, encryptSecret } from "../common/utils/secret-
 import { APP_CONFIG, type AppConfig } from "../config/config.module.js";
 import { TokenService } from "./token.service.js";
 import { MailService } from "./mail.service.js";
-import { toUserDto } from "../common/mappers.js";
+import { userDtoWithRename } from "../server/instance-admin.js";
 import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
 
 const TOTP_KEY_INFO = "totp-secret-enc";
@@ -195,7 +195,10 @@ export class MfaService {
         },
       });
     });
-    return { backupCodes: codes.map(formatBackupCode), user: toUserDto(updated) };
+    return {
+      backupCodes: codes.map(formatBackupCode),
+      user: await userDtoWithRename(this.prisma, this.cfg, updated),
+    };
   }
 
   async disableTotp(userId: string, mfaCode: string): Promise<User> {

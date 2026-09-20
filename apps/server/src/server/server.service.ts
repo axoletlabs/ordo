@@ -1,22 +1,16 @@
-import { hostname as osHostname } from "node:os";
-import { isIP } from "node:net";
 import { Injectable, Inject } from "@nestjs/common";
-import { APP_CONFIG, type AppConfig } from "../config/config.module.js";
 import { ErrorCode, type HealthDto, type ServerInfoDto } from "@ordo/shared";
+import { APP_CONFIG, type AppConfig } from "../config/config.module.js";
 import { AppError } from "../common/errors/app-error.js";
 import { MailService } from "../auth/mail.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
+import {
+  INSTANCE_SETTINGS_ID,
+  instanceDisplayName,
+  userCanRenameInstance,
+} from "./instance-admin.js";
 
 const VERSION = "0.1.0";
-const INSTANCE_SETTINGS_ID = "instance";
-
-/** Short machine name: first DNS label, or the raw hostname when it is an IP. */
-export function machineHostname(): string {
-  const raw = osHostname().trim();
-  if (!raw) return "ordo";
-  const value = isIP(raw) ? raw : (raw.split(".")[0]?.trim() || raw);
-  return value.slice(0, 64) || "ordo";
-}
 
 @Injectable()
 export class ServerService {
@@ -26,23 +20,31 @@ export class ServerService {
     private readonly mail: MailService,
   ) {}
 
-  hostname(): string {
-    return machineHostname();
-  }
-
   async displayName(): Promise<string> {
     const row = await this.prisma.instanceSettings.findUnique({
       where: { id: INSTANCE_SETTINGS_ID },
     });
-    const stored = row?.name.trim();
-    return stored || this.hostname();
+    return instanceDisplayName(row?.name);
   }
 
-  async setDisplayName(name: string): Promise<string> {
+  async setDisplayName(userId: string, name: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true },
+    });
+    if (!user) throw new AppError(ErrorCode.UNAUTHORIZED, "Sign in to continue.");
+    if (!(await userCanRenameInstance(this.prisma, this.cfg, user))) {
+      throw new AppError(
+        ErrorCode.FORBIDDEN,
+        this.cfg.instanceRenameEnabled
+          ? "Only the server owner can rename this instance."
+          : "This server does not allow renaming.",
+      );
+    }
     const trimmed = name.trim();
     await this.prisma.instanceSettings.upsert({
       where: { id: INSTANCE_SETTINGS_ID },
-      create: { id: INSTANCE_SETTINGS_ID, name: trimmed },
+      create: { id: INSTANCE_SETTINGS_ID, name: trimmed, ownerUserId: user.id },
       update: { name: trimmed },
     });
     return trimmed;
@@ -60,7 +62,6 @@ export class ServerService {
   async info(): Promise<ServerInfoDto> {
     return {
       name: await this.displayName(),
-      hostname: this.hostname(),
       version: VERSION,
       registrationEnabled: this.cfg.registrationEnabled,
       emailVerificationRequired: this.cfg.emailVerificationRequired,

@@ -25,7 +25,8 @@ import { SessionService } from "./session.service.js";
 import { TokenService } from "./token.service.js";
 import { MailService } from "./mail.service.js";
 import { RateLimitService } from "../common/rate-limit/rate-limit.service.js";
-import { toUserDto, toSessionDto } from "../common/mappers.js";
+import { toSessionDto } from "../common/mappers.js";
+import { claimInstanceOwner, userDtoWithRename } from "../server/instance-admin.js";
 import { MfaService } from "./mfa.service.js";
 import { AvatarService } from "./avatar.service.js";
 import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
@@ -88,6 +89,7 @@ export class AuthService {
         dataEncryptionVersion: keyMaterial.dataEncryptionVersion,
       },
     });
+    await claimInstanceOwner(this.prisma, user.id);
 
     if (this.cfg.emailVerificationRequired) {
       await this.createAndSendOtp(user.id, email, EMAIL_OTP_PURPOSE.VERIFY);
@@ -191,7 +193,11 @@ export class AuthService {
   async me(userId: string): Promise<UserDto> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new AppError(ErrorCode.UNAUTHORIZED, "Account not found.");
-    return toUserDto(user);
+    return this.presentUser(user);
+  }
+
+  async presentUser(user: User): Promise<UserDto> {
+    return userDtoWithRename(this.prisma, this.cfg, user);
   }
 
   /** Merge a validated partial patch into the stored reader preferences. */
@@ -206,7 +212,7 @@ export class AuthService {
       where: { id: userId },
       data: { preferences: JSON.stringify(merged) },
     });
-    return toUserDto(updated);
+    return this.presentUser(updated);
   }
 
   async listSessions(userId: string, currentSessionId: string): Promise<SessionDto[]> {
@@ -249,7 +255,7 @@ export class AuthService {
       where: { id: userId },
       data: { displayName: displayName.trim() },
     });
-    return toUserDto(user);
+    return this.presentUser(user);
   }
 
   async requestEmailChange(
@@ -307,7 +313,7 @@ export class AuthService {
         },
       });
     });
-    return toUserDto(updated);
+    return this.presentUser(updated);
   }
 
   async changePassword(
@@ -481,13 +487,13 @@ export class AuthService {
     }
   }
 
-  private buildAuthResponse(
+  private async buildAuthResponse(
     user: User,
     session: Session,
     tokens: { accessToken: string; refreshToken: string; expiresIn: number },
-  ): AuthResponse {
+  ): Promise<AuthResponse> {
     return {
-      user: toUserDto(user),
+      user: await this.presentUser(user),
       session: toSessionDto({ ...session, current: true }),
       tokens: {
         accessToken: tokens.accessToken,

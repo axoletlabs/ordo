@@ -57,7 +57,7 @@ proxy), then installs, builds, and migrates SQLite. Check it:
 curl http://localhost:3000/api/server/info
 ```
 
-You should see JSON with `name`, `version`, and `registrationEnabled`.
+You should see JSON with `name` (`ordo` until renamed), `version`, and `registrationEnabled`. The payload does not include the machine hostname.
 
 ### Update
 
@@ -142,6 +142,8 @@ first run. You can also copy `apps/server/.env.example` yourself.
 | `SMTP_FROM` | `ordo <noreply@ordo.local>` | From address when SMTP is set |
 | `TRUST_PROXY` | `0` | Set to `1` behind nginx, Caddy, or Cloudflare |
 | `MFA_REQUIRED` | `false` | Require MFA for every account |
+| `INSTANCE_RENAME_ENABLED` | `true` (off for ordo Cloud) | Allow the owner to rename this instance from the app |
+| `INSTANCE_ADMIN_EMAIL` | unset | If set, only this email may rename. Otherwise the first account. |
 | `CORS_ALLOWED_ORIGINS` | reflect the request | Comma-separated origins. Empty allows the caller. |
 
 ## Layout

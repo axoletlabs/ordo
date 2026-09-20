@@ -285,9 +285,11 @@ model ImportJob {
 
 /// Singleton row for this self-hosted instance (display name, etc.).
 model InstanceSettings {
-  id        String   @id
-  name      String
-  updatedAt DateTime @updatedAt
+  id          String   @id
+  name        String
+  /// First account (or the oldest remaining one). Null until someone registers.
+  ownerUserId String?
+  updatedAt   DateTime @updatedAt
 }
 
 /// Anonymous app install. No account, email, IP, or server URL.

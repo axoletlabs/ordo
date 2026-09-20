@@ -31,6 +31,8 @@ export async function createTestApp(
     databaseUrl: `file:${dbPath}`,
     registrationEnabled: true,
     emailVerificationRequired: false,
+    instanceRenameEnabled: true,
+    instanceAdminEmail: null,
     smtpUrl: null,
     rateLimitEnabled: false,
     trustProxy: 0,

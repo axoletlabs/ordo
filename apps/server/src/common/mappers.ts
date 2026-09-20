@@ -32,7 +32,7 @@ export type UserDtoFields = Pick<
 >;
 
 /** Map a user row (or a superset) to a DTO; preferences fall back to defaults when malformed. */
-export function toUserDto(u: UserDtoFields): UserDto {
+export function toUserDto(u: UserDtoFields, canRenameInstance = false): UserDto {
   return {
     id: u.id,
     displayName: u.displayName,
@@ -43,6 +43,7 @@ export function toUserDto(u: UserDtoFields): UserDto {
     mfaEnabled: u.totpEnabledAt !== null,
     preferences: normalizeReaderPreferences(u.preferences),
     libraryEncrypted: (u.dataEncryptionVersion ?? 0) >= 1,
+    canRenameInstance,
     createdAt: u.createdAt.toISOString(),
   };
 }

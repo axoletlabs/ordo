@@ -12,6 +12,8 @@ export interface UserDto {
   preferences: ReaderPreferences;
   /** True once this account's library is encrypted at rest. */
   libraryEncrypted: boolean;
+  /** True when this account may change the instance display name. */
+  canRenameInstance: boolean;
   createdAt: string;
 }
 
@@ -228,10 +230,8 @@ export interface CursorPage<T> {
 }
 
 export interface ServerInfoDto {
-  /** Editable instance name. Defaults to the machine hostname. */
+  /** Instance display name. Defaults to "ordo"; never an OS hostname. */
   name: string;
-  /** OS hostname of this server (e.g. a VPS label like `v67xxxx`). */
-  hostname: string;
   version: string;
   registrationEnabled: boolean;
   emailVerificationRequired: boolean;

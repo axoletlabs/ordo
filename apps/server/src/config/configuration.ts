@@ -43,6 +43,10 @@ export interface AppConfig {
   avatarDir: string;
   avatarAllowAnimated: boolean;
   mfaRequired: boolean;
+  /** When false, nobody can PATCH the instance name (ordo Cloud). Default on. */
+  instanceRenameEnabled: boolean;
+  /** If set, only this email may rename the instance. Otherwise the first user. */
+  instanceAdminEmail: string | null;
 }
 
 const EnvSchema = z.object({
@@ -81,6 +85,11 @@ const EnvSchema = z.object({
     .string()
     .default("false")
     .transform((v) => v.toLowerCase()),
+  INSTANCE_RENAME_ENABLED: z
+    .string()
+    .default("true")
+    .transform((v) => v.toLowerCase()),
+  INSTANCE_ADMIN_EMAIL: z.string().optional(),
 });
 
 function toBool(v: string): boolean {
@@ -238,6 +247,8 @@ export function loadConfig(): AppConfig {
     avatarDir,
     avatarAllowAnimated: toBool(parsed.AVATAR_ALLOW_ANIMATED),
     mfaRequired: toBool(parsed.MFA_REQUIRED),
+    instanceRenameEnabled: toBool(parsed.INSTANCE_RENAME_ENABLED),
+    instanceAdminEmail: parsed.INSTANCE_ADMIN_EMAIL?.trim().toLowerCase() || null,
   };
 }
 

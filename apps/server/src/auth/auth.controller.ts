@@ -74,7 +74,6 @@ import { AllowUnverifiedEmail } from "./allow-unverified-email.decorator.js";
 import { RateLimit } from "../common/rate-limit/rate-limit.decorator.js";
 import { AppError } from "../common/errors/app-error.js";
 import { ErrorCode } from "@ordo/shared";
-import { toUserDto } from "../common/mappers.js";
 
 const AVATAR_UPLOAD = FileInterceptor("file", {
   limits: { fileSize: 20 * 1024 * 1024, files: 1 },
@@ -383,7 +382,7 @@ export class AuthController {
     @Body({ schema: MfaCodeBodySchema }) body: { mfaCode: string },
   ): Promise<UserDto> {
     const updated = await this.mfa.disableTotp(user.userId, body.mfaCode);
-    return toUserDto(updated);
+    return this.auth.presentUser(updated);
   }
 
   @Post("mfa/backup-codes/regenerate")

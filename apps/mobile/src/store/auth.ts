@@ -40,6 +40,7 @@ export function normalizePersistedUser(raw: unknown): UserDto | null {
     mfaEnabled: Boolean(u.mfaEnabled),
     preferences: normalizeReaderPreferences(u.preferences),
     libraryEncrypted: Boolean(u.libraryEncrypted),
+    canRenameInstance: Boolean(u.canRenameInstance),
     createdAt: typeof u.createdAt === "string" ? u.createdAt : new Date(0).toISOString(),
   };
 }

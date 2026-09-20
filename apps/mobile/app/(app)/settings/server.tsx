@@ -40,6 +40,7 @@ import {
   probeServer,
 } from "../../../src/lib/server-probe";
 import { errorMessage } from "../../../src/lib/error-message";
+import { useAuthStore } from "../../../src/store/auth";
 import { useSettingsStore } from "../../../src/store/settings";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { haptics } from "../../../src/lib/haptics";
@@ -48,6 +49,7 @@ import { radius, spacing } from "../../../src/theme/tokens";
 export default function ServerScreen() {
   const { palette } = useTheme();
   const currentUrl = useSettingsStore((s) => s.serverUrl);
+  const canRename = useAuthStore((s) => Boolean(s.user?.canRenameInstance));
   const serverInfo = useServerInfo();
   const { commit, busy } = useCommitServerSwitch();
   const [editorUrl, setEditorUrl] = useState<string | null>(null);
@@ -63,7 +65,6 @@ export default function ServerScreen() {
       : "Checking…";
   const statusTone = serverInfo.error ? "danger" : serverInfo.data ? "green" : "neutral";
   const displayName = cloud ? CLOUD_DISPLAY_NAME : instanceNameOf(serverInfo.data, currentUrl);
-  const hostname = serverInfo.data?.hostname?.trim() || "";
   const toCloud = Boolean(confirmedUrl && isCloudServerUrl(confirmedUrl));
 
   const openEditor = (url: string) => {
@@ -174,8 +175,7 @@ export default function ServerScreen() {
           visible
           initialName={displayName}
           initialUrl={editorUrl}
-          hostname={hostname}
-          canRename={Boolean(serverInfo.data)}
+          canRename={canRename}
           onDismiss={() => setEditorUrl(null)}
           onRenamed={(info) => {
             queryClient.setQueryData(qk.serverInfo(currentUrl), info);
@@ -225,7 +225,6 @@ function ServerEditPanel({
   visible,
   initialName,
   initialUrl,
-  hostname,
   canRename,
   onDismiss,
   onRenamed,
@@ -234,7 +233,6 @@ function ServerEditPanel({
   visible: boolean;
   initialName: string;
   initialUrl: string;
-  hostname: string;
   canRename: boolean;
   onDismiss: () => void;
   onRenamed: (info: Awaited<ReturnType<typeof serverApi.rename>>) => void;
@@ -377,12 +375,14 @@ function ServerEditPanel({
               setNameError("");
               setName(next);
             }}
-            placeholder={hostname || "Server name"}
+            placeholder={APP_NAME}
             autoCapitalize="words"
             autoComplete="off"
             editable={canRename && !busy && !rename.isPending}
             error={nameError || undefined}
-            helper={!nameError && !canRename ? "Reach this server to rename it." : undefined}
+            helper={
+              !nameError && !canRename ? "Only the server owner can rename this instance." : undefined
+            }
             onSubmitEditing={() => urlRef.current?.focus()}
           />
           <Input

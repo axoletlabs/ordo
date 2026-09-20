@@ -6,7 +6,7 @@ import { AVATAR, ErrorCode } from "@ordo/shared";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { AppError } from "../common/errors/app-error.js";
 import { APP_CONFIG, type AppConfig } from "../config/config.module.js";
-import { toUserDto } from "../common/mappers.js";
+import { userDtoWithRename } from "../server/instance-admin.js";
 import type { UserDto } from "@ordo/shared";
 
 const WEBP_QUALITY = 82;
@@ -65,7 +65,7 @@ export class AvatarService {
           avatarUpdatedAt: now,
         },
       });
-      return toUserDto(user);
+      return userDtoWithRename(this.prisma, this.cfg, user);
     }
 
     await this.writeFile(userId, processed);
@@ -77,7 +77,7 @@ export class AvatarService {
         avatarUpdatedAt: now,
       },
     });
-    return toUserDto(user);
+    return userDtoWithRename(this.prisma, this.cfg, user);
   }
 
   async get(userId: string): Promise<AvatarPayload | null> {
@@ -115,7 +115,7 @@ export class AvatarService {
       where: { id: userId },
       data: { avatarBytes: null, avatarMime: null, avatarUpdatedAt: null },
     });
-    return toUserDto(user);
+    return userDtoWithRename(this.prisma, this.cfg, user);
   }
 
   /** Best-effort disk cleanup when the account row is deleted. */

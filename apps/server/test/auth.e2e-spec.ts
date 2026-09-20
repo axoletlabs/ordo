@@ -1,9 +1,8 @@
 import request from "supertest";
-import { DELETE_ACCOUNT_CONFIRMATION, EMAIL_OTP, ErrorCode } from "@ordo/shared";
+import { APP_NAME, DELETE_ACCOUNT_CONFIRMATION, EMAIL_OTP, ErrorCode } from "@ordo/shared";
 import { MailService } from "../src/auth/mail.service.js";
 import { SessionService } from "../src/auth/session.service.js";
 import { LibraryKeyService } from "../src/crypto/library-key.service.js";
-import { machineHostname } from "../src/server/server.service.js";
 import {
   authedAgent,
   clearDb,
@@ -41,6 +40,7 @@ describe("Auth (e2e)", () => {
       expect(res.body.user.mfaEnabled).toBe(false);
       expect(res.body.user.hasAvatar).toBe(false);
       expect(res.body.user.libraryEncrypted).toBe(true);
+      expect(res.body.user.canRenameInstance).toBe(true);
       expect(res.body.recoveryKey).toBeUndefined();
       expect(res.body.user.id).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
@@ -148,11 +148,9 @@ describe("Auth (e2e)", () => {
 
   describe("server info", () => {
     it("reports smtpConfigured false when SMTP_URL is unset", async () => {
-      const host = machineHostname();
       const res = await request(ctx.app.getHttpServer()).get("/api/server/info").expect(200);
       expect(res.body).toMatchObject({
-        name: host,
-        hostname: host,
+        name: APP_NAME,
         registrationEnabled: true,
         emailVerificationRequired: false,
         smtpConfigured: false,
@@ -161,23 +159,49 @@ describe("Auth (e2e)", () => {
         folderLockTypes: true,
         reminders: true,
       });
+      expect(res.body.hostname).toBeUndefined();
       expect(res.body.profilePictureMaxBytes).toBe(2 * 1024 * 1024);
     });
 
-    it("lets a signed-in user rename the instance", async () => {
-      const host = machineHostname();
+    it("lets only the first user rename the instance", async () => {
       await request(ctx.app.getHttpServer())
         .patch("/api/server/name")
         .send({ name: "Home lab" })
         .expect(401);
 
-      const agent = await authedAgent(ctx.app, "server-name@ordo.app");
-      const renamed = await agent.patch("/api/server/name").send({ name: "  Home lab  " }).expect(200);
-      expect(renamed.body).toMatchObject({ name: "Home lab", hostname: host });
+      const owner = await authedAgent(ctx.app, "server-owner@ordo.app");
+      const guest = await authedAgent(ctx.app, "server-guest@ordo.app");
+
+      const guestMe = await guest.get("/api/auth/me").expect(200);
+      expect(guestMe.body.canRenameInstance).toBe(false);
+      const hijack = await guest.patch("/api/server/name").send({ name: "Hijack" }).expect(403);
+      expect(hijack.body.error.code).toBe(ErrorCode.FORBIDDEN);
+
+      const ownerMe = await owner.get("/api/auth/me").expect(200);
+      expect(ownerMe.body.canRenameInstance).toBe(true);
+      const renamed = await owner.patch("/api/server/name").send({ name: "  Home lab  " }).expect(200);
+      expect(renamed.body).toMatchObject({ name: "Home lab" });
+      expect(renamed.body.hostname).toBeUndefined();
 
       const info = await request(ctx.app.getHttpServer()).get("/api/server/info").expect(200);
       expect(info.body.name).toBe("Home lab");
-      expect(info.body.hostname).toBe(host);
+      expect(info.body.hostname).toBeUndefined();
+    });
+
+    it("refuses rename when instance rename is disabled", async () => {
+      const disabled = await createTestApp({ config: { instanceRenameEnabled: false } });
+      try {
+        const agent = await authedAgent(disabled.app, "cloud-owner@ordo.app");
+        const me = await agent.get("/api/auth/me").expect(200);
+        expect(me.body.canRenameInstance).toBe(false);
+        const res = await agent.patch("/api/server/name").send({ name: "Nope" }).expect(403);
+        expect(res.body.error.code).toBe(ErrorCode.FORBIDDEN);
+        const info = await request(disabled.app.getHttpServer()).get("/api/server/info").expect(200);
+        expect(info.body.name).toBe(APP_NAME);
+        expect(info.body.hostname).toBeUndefined();
+      } finally {
+        await teardownApp(disabled);
+      }
     });
   });
 
