@@ -138,7 +138,7 @@ first run. You can also copy `apps/server/.env.example` yourself.
 | `LIBRARY_KEK` | auto-saved to `.ordo-library-key` | Wraps library encryption keys so email password reset still works. Keep this file. |
 | `REGISTRATION_ENABLED` | `true` | Allow new sign-ups |
 | `EMAIL_VERIFICATION_REQUIRED` | `false` (on for ordo Cloud) | Require a code on sign-up |
-| `SMTP_URL` | unset | Mail for verification, reset, and account notices. Leave empty to print codes in the console. Resend: `smtps://resend:re_…@smtp.resend.com:465` |
+| `SMTP_URL` | unset | Mail for verification, reset, and account notices. Leave empty to print codes in the console. Resend: `smtp://resend:re_…@smtp.resend.com:587` (use 2465 if you need implicit TLS; 465 is often blocked) |
 | `SMTP_FROM` | `ordo <noreply@ordo.local>` | From address when SMTP is set. Use a domain you verified with the provider. |
 | `SMTP_REQUIRED` | `false` (on for ordo Cloud) | Never print codes. Missing or failed SMTP is an error. |
 | `TRUST_PROXY` | `0` | Set to `1` behind nginx, Caddy, or Cloudflare |
