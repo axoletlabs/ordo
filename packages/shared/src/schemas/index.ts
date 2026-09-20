@@ -6,3 +6,4 @@ export * from "./reader.js";
 export * from "./tag.js";
 export * from "./import-export.js";
 export * from "./server.js";
+export * from "./telemetry.js";

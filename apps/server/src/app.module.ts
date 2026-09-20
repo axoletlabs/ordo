@@ -11,6 +11,7 @@ import { AuthModule } from "./auth/auth.module.js";
 import { BookmarksModule } from "./bookmarks/bookmarks.module.js";
 import { ImportExportModule } from "./import-export/import-export.module.js";
 import { ServerModule } from "./server/server.module.js";
+import { TelemetryModule } from "./telemetry/telemetry.module.js";
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { ServerModule } from "./server/server.module.js";
     BookmarksModule,
     ImportExportModule,
     ServerModule,
+    TelemetryModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },

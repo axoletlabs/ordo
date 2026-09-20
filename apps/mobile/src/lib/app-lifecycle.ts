@@ -10,6 +10,7 @@ import { AppState, Platform } from "react-native";
 import type { AppStateStatus } from "react-native";
 import { focusManager } from "@tanstack/react-query";
 import { cancelProactiveRefresh, ensureFreshAccessToken } from "./api/client";
+import { pingCloudTelemetry } from "./telemetry";
 import { useAuthStore } from "../store/auth";
 
 let started = false;
@@ -27,6 +28,7 @@ async function onBecameActive() {
   } catch {
     /* ensureFresh already swallows refresh failures into a result union */
   }
+  void pingCloudTelemetry();
   if (lastState === "active") setNativeFocused(true);
 }
 

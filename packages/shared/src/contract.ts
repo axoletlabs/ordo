@@ -17,6 +17,8 @@ import type {
   MfaStatusDto,
   HealthDto,
   ServerInfoDto,
+  TelemetryHeartbeatResponse,
+  TelemetryStatsDto,
   SessionDto,
   TagDto,
   TotpBeginDto,
@@ -44,6 +46,7 @@ import type {
   UpdateTagInput,
   CreateTagInput,
   ChangeServerNameInput,
+  TelemetryHeartbeatInput,
 } from "./schemas/index.js";
 
 export const API_PREFIX = "/api";
@@ -580,6 +583,26 @@ export const ServerRoutes = {
     query: {} as Empty,
     params: {} as Empty,
     response: {} as ServerInfoDto,
+  },
+} satisfies Record<string, RouteDef>;
+
+// ---------- Telemetry (anonymous install ping; stats are secret-gated) ----------
+export const TelemetryRoutes = {
+  heartbeat: {
+    path: `${API_PREFIX}/telemetry/heartbeat`,
+    method: "POST",
+    body: {} as TelemetryHeartbeatInput,
+    query: {} as Empty,
+    params: {} as Empty,
+    response: {} as TelemetryHeartbeatResponse,
+  },
+  stats: {
+    path: `${API_PREFIX}/telemetry/stats`,
+    method: "GET",
+    body: {} as Empty,
+    query: {} as Empty,
+    params: {} as Empty,
+    response: {} as TelemetryStatsDto,
   },
 } satisfies Record<string, RouteDef>;
 

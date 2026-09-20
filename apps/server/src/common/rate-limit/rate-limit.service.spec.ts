@@ -225,4 +225,18 @@ describe("RateLimitService", () => {
     limiter.resetAll();
     expect(() => limiter.consumeRegister("1.1.1.1")).not.toThrow();
   });
+
+  it("limits install heartbeats per IP, with a tighter cap on new ids", () => {
+    const limiter = service();
+    for (let i = 0; i < RATE_LIMIT.heartbeatIp.limit; i++) {
+      expect(() => limiter.consumeHeartbeat("1.1.1.1")).not.toThrow();
+    }
+    expectLimited(() => limiter.consumeHeartbeat("1.1.1.1"), "install pings");
+    expect(() => limiter.consumeHeartbeat("2.2.2.2")).not.toThrow();
+
+    for (let i = 0; i < RATE_LIMIT.heartbeatNewIp.limit; i++) {
+      expect(() => limiter.consumeHeartbeatNew("3.3.3.3")).not.toThrow();
+    }
+    expectLimited(() => limiter.consumeHeartbeatNew("3.3.3.3"), "new install pings");
+  });
 });

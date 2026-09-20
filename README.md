@@ -21,7 +21,10 @@
 - Optional **your own backend** on SQLite, if you want to run a server
 
 The app talks to ordo Cloud unless you opt into a server you host. Existing
-installs keep the server URL they already saved.
+installs keep the server URL they already saved. The official app also sends
+one anonymous daily ping to ordo Cloud so we can count installs. It does not
+include your account, server URL, or library. A server you host does not
+receive these pings.
 
 ## Use ordo Cloud
 
@@ -138,6 +141,7 @@ first run. You can also copy `apps/server/.env.example` yourself.
 | `TRUST_PROXY` | `0` | Set to `1` behind nginx, Caddy, or Cloudflare |
 | `MFA_REQUIRED` | `false` | Require MFA for every account |
 | `CORS_ALLOWED_ORIGINS` | reflect the request | Comma-separated origins. Empty allows the caller. |
+| `TELEMETRY_STATS_SECRET` | unset | Cloud-only. Bearer or `?secret=` for `/api/telemetry/stats`. Leave unset on a server you host. |
 
 ## Layout
 

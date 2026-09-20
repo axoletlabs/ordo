@@ -287,3 +287,44 @@ model InstanceSettings {
   name      String
   updatedAt DateTime @updatedAt
 }
+
+/// Anonymous app install. No account, email, IP, or server URL.
+model AppInstall {
+  id          String          @id
+  platform    String
+  hosting     String
+  appVersion  String
+  firstSeenAt DateTime
+  lastSeenAt  DateTime
+  days        AppInstallDay[]
+
+  @@index([firstSeenAt])
+  @@index([lastSeenAt])
+}
+
+/// Calendar-day presence for an install (UTC `YYYY-MM-DD`).
+model AppInstallDay {
+  installId  String
+  day        String
+  platform   String
+  hosting    String
+  appVersion String
+  install    AppInstall @relation(fields: [installId], references: [id], onDelete: Cascade)
+
+  @@id([installId, day])
+  @@index([day])
+}
+
+/// Frozen daily totals so history survives as lastSeenAt moves forward.
+model AppInstallSnapshot {
+  day      String   @id
+  total    Int
+  newCount Int
+  dau      Int
+  wau      Int
+  mau      Int
+  hosting  String
+  platform String
+  version  String
+  takenAt  DateTime
+}

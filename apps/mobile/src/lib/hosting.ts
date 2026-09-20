@@ -2,6 +2,7 @@
  * Cloud vs self-host. Fresh installs talk to ordo Cloud; a saved URL is never
  * rewritten. Self-host is opt-in and stays a different origin.
  */
+import type { TelemetryHosting } from "@ordo/shared";
 
 /** Hosted API origin. Trailing slashes are not part of the origin. */
 export const CLOUD_SERVER_URL = "https://api.ordo.axolet.com";
@@ -37,6 +38,11 @@ export function isCloudServerUrl(url: string | null | undefined): boolean {
 
 export function hostingModeOf(url: string): HostingMode {
   return isCloudServerUrl(url) ? "cloud" : "selfHosted";
+}
+
+/** Wire value for the anonymous install ping. Never includes the server URL. */
+export function telemetryHosting(url: string): TelemetryHosting {
+  return hostingModeOf(url) === "cloud" ? "cloud" : "selfhosted";
 }
 
 export function hostingDisplayName(url: string): string {

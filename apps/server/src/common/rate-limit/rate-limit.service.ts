@@ -180,6 +180,20 @@ export class RateLimitService implements OnModuleInit, OnModuleDestroy {
     this.consumeWindow(`export:${userId}`, RATE_LIMIT.exportUser, "exports");
   }
 
+  consumeHeartbeat(ip: string): void {
+    if (!this.enabled) return;
+    this.consumeWindow(this.ipStoreKey("heartbeat", ip), RATE_LIMIT.heartbeatIp, "install pings");
+  }
+
+  consumeHeartbeatNew(ip: string): void {
+    if (!this.enabled) return;
+    this.consumeWindow(
+      this.ipStoreKey("heartbeat-new", ip),
+      RATE_LIMIT.heartbeatNewIp,
+      "new install pings",
+    );
+  }
+
   private accountStoreKey(accountKey: string): string {
     return `login:id:${accountKey}`;
   }

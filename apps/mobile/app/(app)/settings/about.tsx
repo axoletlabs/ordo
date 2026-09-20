@@ -133,6 +133,10 @@ export default function AboutScreen() {
         </SettingsGroup>
 
         <Text variant="footnote" color="tertiary" align="center" style={styles.footer}>
+          The app sends an anonymous daily ping to ordo Cloud to count installs. No
+          account, server URL, or library data is included.
+        </Text>
+        <Text variant="footnote" color="tertiary" align="center" style={styles.copyright}>
           © {PUBLISHED_YEAR} Axolet
         </Text>
       </SettingsScrollView>
@@ -164,6 +168,7 @@ export default function AboutScreen() {
 
 const styles = StyleSheet.create({
   footer: { marginTop: spacing[24] },
+  copyright: { marginTop: spacing[8] },
   fingerprintBox: {
     marginTop: spacing[4],
     borderWidth: StyleSheet.hairlineWidth,

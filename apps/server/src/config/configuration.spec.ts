@@ -81,6 +81,24 @@ describe("loadConfig identity flags", () => {
   });
 });
 
+describe("loadConfig telemetry stats secret", () => {
+  const original = process.env.TELEMETRY_STATS_SECRET;
+
+  afterEach(() => {
+    restore("TELEMETRY_STATS_SECRET", original);
+  });
+
+  it("defaults to empty so the stats page stays off", () => {
+    delete process.env.TELEMETRY_STATS_SECRET;
+    expect(loadConfig().telemetryStatsSecret).toBe("");
+  });
+
+  it("trims TELEMETRY_STATS_SECRET", () => {
+    process.env.TELEMETRY_STATS_SECRET = "  hunter2  ";
+    expect(loadConfig().telemetryStatsSecret).toBe("hunter2");
+  });
+});
+
 describe("parseDotEnv", () => {
   it("skips comments and does not override existing env keys", () => {
     expect(

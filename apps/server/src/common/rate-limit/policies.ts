@@ -33,6 +33,10 @@ export const RATE_LIMIT = {
   avatarUploadUser: { limit: 10, windowMs: HOUR } satisfies WindowPolicy,
   importUploadUser: { limit: 10, windowMs: HOUR } satisfies WindowPolicy,
   exportUser: { limit: 30, windowMs: HOUR } satisfies WindowPolicy,
+  /** Anonymous install pings from one network. */
+  heartbeatIp: { limit: 48, windowMs: HOUR } satisfies WindowPolicy,
+  /** New install ids from one network (stops UUID flooding). */
+  heartbeatNewIp: { limit: 12, windowMs: 24 * HOUR } satisfies WindowPolicy,
 } as const;
 
 export const RATE_LIMIT_MAX_KEYS = 20_000;
