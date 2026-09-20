@@ -1,9 +1,9 @@
 /**
  * Login screen. Cloud is the default; self-host is a secondary opt-in.
  */
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { Link, useLocalSearchParams, useRouter } from "expo-router";
+import { Link, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { AuthShell } from "../../src/components/auth/AuthShell";
 import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
@@ -23,6 +23,7 @@ import { hostOf } from "../../src/lib/instance-name";
 import { haptics } from "../../src/lib/haptics";
 import { spacing } from "../../src/theme/tokens";
 import { ErrorCode, LoginSchema, isMfaRequiredResponse } from "@ordo/shared";
+import { lockedSecretDisplay, passwordAutofillProps } from "../../src/lib/password-autofill";
 
 function routeParam(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0] ?? "";
@@ -50,6 +51,14 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
   const [showServer, setShowServer] = useState(false);
   const [confirmCloud, setConfirmCloud] = useState(false);
   const [formError, setFormError] = useState("");
+  const [screenFocused, setScreenFocused] = useState(true);
+
+  useFocusEffect(
+    useCallback(() => {
+      setScreenFocused(true);
+      return () => setScreenFocused(false);
+    }, []),
+  );
 
   const submit = async () => {
     setFormError("");
@@ -86,6 +95,8 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
     }
   };
 
+  const passwordField = lockedSecretDisplay(password, !screenFocused, showPwd);
+
   return (
     <>
       <AuthShell
@@ -113,14 +124,13 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
         />
         <View style={{ height: spacing[16] }} />
         <Input
+          key={screenFocused ? "password" : "password-locked"}
           label="Password"
-          value={password}
+          value={passwordField.value}
           onChangeText={setPassword}
           placeholder="••••••••"
-          secureTextEntry={!showPwd}
-          textContentType="password"
-          autoComplete="current-password"
-          importantForAutofill="yes"
+          secureTextEntry={passwordField.secureTextEntry}
+          {...passwordAutofillProps("current-password", !screenFocused)}
           rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
         />
         <View style={styles.forgotRow}>

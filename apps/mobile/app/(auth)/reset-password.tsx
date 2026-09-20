@@ -1,10 +1,12 @@
 /**
- * Forgot password — step 2: enter the one-time code and choose a new password.
+ * Forgot password — enter the one-time code, then choose a new password.
+ * The code and password fields are never on screen together: Autofill of the
+ * reset code would otherwise rewrite the new-password boxes.
  */
 import React, { useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Link, useLocalSearchParams, useRouter } from "expo-router";
-import { ResetPasswordSchema } from "@ordo/shared";
+import { EMAIL_OTP, ResetPasswordSchema } from "@ordo/shared";
 import { AuthShell } from "../../src/components/auth/AuthShell";
 import { OtpDeliveryHint } from "../../src/components/auth/OtpDeliveryHint";
 import { Input } from "../../src/components/ui/Input";
@@ -16,6 +18,7 @@ import { useForgotPassword, useResetPassword } from "../../src/hooks/use-auth-ac
 import { useServerInfo } from "../../src/hooks/queries";
 import { errorMessage } from "../../src/lib/error-message";
 import { otpEnterHelper, otpSentToast } from "../../src/lib/otp-copy";
+import { passwordAutofillProps } from "../../src/lib/password-autofill";
 import { haptics } from "../../src/lib/haptics";
 import { spacing } from "../../src/theme/tokens";
 import { toast } from "../../src/components/ui/toast-store";
@@ -29,6 +32,7 @@ export default function ResetPasswordScreen() {
   const smtpConfigured = info?.smtpConfigured;
 
   const email = (params.email ?? "").trim().toLowerCase();
+  const [stage, setStage] = useState<"code" | "password">("code");
   const [token, setToken] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -38,26 +42,41 @@ export default function ResetPasswordScreen() {
   const [otpStatus, setOtpStatus] = useState<OtpStatus>("idle");
   const inFlight = useRef(false);
 
-  const submit = async (code = token, fromOtp = false) => {
+  const goToPassword = (code: string) => {
+    setToken(code);
+    setOtpError("");
+    setOtpStatus("idle");
+    setStage("password");
+  };
+
+  const goToCode = () => {
+    setFormError("");
+    setOtpStatus("idle");
+    setStage("code");
+  };
+
+  const submit = async () => {
     if (inFlight.current || otpStatus === "success") return;
     setFormError("");
     setOtpError("");
     if (newPassword !== confirm) {
-      if (fromOtp) return;
       setFormError("New passwords don't match.");
       return;
     }
     const parsed = ResetPasswordSchema.safeParse({
       email,
-      token: code,
+      token,
       newPassword,
     });
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
       const message = issue?.message || "Please check your input.";
-      if (fromOtp && issue?.path[0] !== "token") return;
-      if (issue?.path[0] === "token") setOtpError(message);
-      else setFormError(message);
+      if (issue?.path[0] === "token") {
+        setOtpError(message);
+        setStage("code");
+      } else {
+        setFormError(message);
+      }
       return;
     }
     inFlight.current = true;
@@ -74,7 +93,7 @@ export default function ResetPasswordScreen() {
       });
     } catch (e) {
       inFlight.current = false;
-      setOtpStatus("error");
+      setOtpStatus("idle");
       haptics.error();
       setFormError(errorMessage(e));
     }
@@ -91,11 +110,12 @@ export default function ResetPasswordScreen() {
   };
 
   const busy = otpStatus === "loading" || otpStatus === "success";
+  const codeReady = token.replace(/\D/g, "").length === EMAIL_OTP.LENGTH;
 
   return (
     <AuthShell
-      title="Choose a new password"
-      subtitle={otpEnterHelper(smtpConfigured, email || undefined)}
+      title={stage === "code" ? "Enter your reset code" : "Choose a new password"}
+      subtitle={stage === "code" ? otpEnterHelper(smtpConfigured, email || undefined) : undefined}
       footer={
         <View style={styles.row}>
           <Link href="/(auth)/login" asChild replace>
@@ -104,74 +124,92 @@ export default function ResetPasswordScreen() {
         </View>
       }
     >
-      <OtpDeliveryHint smtpConfigured={smtpConfigured} />
-      <OtpInput
-        label="Reset code"
-        value={token}
-        onChange={(value) => {
-          setToken(value);
-          setOtpError("");
-          setOtpStatus((s) => (s === "error" ? "idle" : s));
-        }}
-        status={otpStatus}
-        error={otpError || undefined}
-        onComplete={(code) => void submit(code, true)}
-      />
-      <View style={{ height: spacing[16] }} />
-      <Input
-        label="Email"
-        value={email}
-        onChangeText={() => {}}
-        showSoftInputOnFocus={false}
-        caretHidden
-        keyboardType="email-address"
-        textContentType="emailAddress"
-        autoComplete="email"
-        importantForAutofill="yes"
-      />
-      <View style={{ height: spacing[16] }} />
-      <Input
-        label="New password"
-        value={newPassword}
-        onChangeText={setNewPassword}
-        placeholder="At least 8 characters"
-        secureTextEntry={!showPwd}
-        textContentType="newPassword"
-        autoComplete="new-password"
-        importantForAutofill="yes"
-        passwordRules="minlength: 8;"
-        rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
-      />
-      <View style={{ height: spacing[16] }} />
-      <Input
-        label="Confirm new password"
-        value={confirm}
-        onChangeText={setConfirm}
-        placeholder="Re-enter your new password"
-        secureTextEntry={!showPwd}
-        textContentType="newPassword"
-        autoComplete="new-password"
-        importantForAutofill="yes"
-        passwordRules="minlength: 8;"
-        error={formError || undefined}
-      />
-      <View style={{ height: spacing[24] }} />
-      <Button
-        label="Reset password"
-        block
-        size="lg"
-        onPress={() => void submit()}
-        loading={busy}
-      />
-      <View style={{ height: spacing[12] }} />
-      <Button
-        label={resend.isPending ? "Sending…" : "Resend code"}
-        variant="ghost"
-        block
-        onPress={onResend}
-        loading={resend.isPending}
-        disabled={!email || busy}
-      />
+      {stage === "code" ? (
+        <>
+          <OtpDeliveryHint smtpConfigured={smtpConfigured} />
+          <OtpInput
+            label="Reset code"
+            value={token}
+            onChange={(value) => {
+              setToken(value);
+              setOtpError("");
+              setOtpStatus((s) => (s === "error" ? "idle" : s));
+            }}
+            status={otpStatus}
+            error={otpError || undefined}
+            onComplete={goToPassword}
+          />
+          <View style={{ height: spacing[24] }} />
+          <Button
+            label="Continue"
+            block
+            size="lg"
+            onPress={() => goToPassword(token)}
+            disabled={!codeReady}
+          />
+          <View style={{ height: spacing[12] }} />
+          <Button
+            label={resend.isPending ? "Sending…" : "Resend code"}
+            variant="ghost"
+            block
+            onPress={onResend}
+            loading={resend.isPending}
+            disabled={!email}
+          />
+        </>
+      ) : (
+        <>
+          <Input
+            label="Email"
+            value={email}
+            onChangeText={() => {}}
+            showSoftInputOnFocus={false}
+            caretHidden
+            keyboardType="email-address"
+            textContentType="emailAddress"
+            autoComplete="email"
+            importantForAutofill="yes"
+          />
+          <View style={{ height: spacing[16] }} />
+          <Input
+            label="New password"
+            value={newPassword}
+            onChangeText={setNewPassword}
+            placeholder="At least 8 characters"
+            secureTextEntry={!showPwd}
+            {...passwordAutofillProps("new-password")}
+            passwordRules="minlength: 8;"
+            rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
+          />
+          <View style={{ height: spacing[16] }} />
+          <Input
+            label="Confirm new password"
+            value={confirm}
+            onChangeText={setConfirm}
+            placeholder="Re-enter your new password"
+            secureTextEntry={!showPwd}
+            {...passwordAutofillProps("new-password")}
+            passwordRules="minlength: 8;"
+            error={formError || undefined}
+          />
+          <View style={{ height: spacing[24] }} />
+          <Button
+            label="Reset password"
+            block
+            size="lg"
+            onPress={() => void submit()}
+            loading={busy}
+          />
+          <View style={{ height: spacing[12] }} />
+          <Button
+            label="Use a different code"
+            variant="ghost"
+            block
+            onPress={goToCode}
+            disabled={busy}
+          />
+        </>
+      )}
     </AuthShell>
   );
 }
