@@ -29,7 +29,9 @@ model User {
   dekKdfSalt      String?
   /// AES-GCM wrap of the library DEK using the account password.
   dekPasswordWrapped String?
-  /// AES-GCM wrap of the library DEK using the one-time recovery key.
+  /// AES-GCM wrap of the library DEK using the server library key (email reset).
+  dekServerWrapped String?
+  /// Unused leftover from recovery-key wraps; kept so existing DBs still load.
   dekRecoveryWrapped String?
   /// 0 = plaintext legacy library; 1 = fields encrypted with the account DEK.
   dataEncryptionVersion Int                @default(0)

@@ -8,7 +8,6 @@ import {
 } from "node:crypto";
 
 export const LIBRARY_CIPHER_PREFIX = "enc1.";
-export const RECOVERY_KEY_PREFIX = "rk1.";
 export const DATA_ENCRYPTION_VERSION = 1;
 
 const IV_LEN = 12;
@@ -21,7 +20,7 @@ const SCRYPT_P = 1;
 
 const WRAP_AAD = {
   password: "ordo:dek:password:v1",
-  recovery: "ordo:dek:recovery:v1",
+  server: "ordo:dek:server:v1",
   access: "ordo:dek:session-access:v1",
   refresh: "ordo:dek:session-refresh:v1",
   mfa: "ordo:dek:mfa:v1",
@@ -35,14 +34,6 @@ export function isLibraryCiphertext(value: string | null | undefined): boolean {
 
 export function generateDek(): Buffer {
   return randomBytes(DEK_LEN);
-}
-
-export function generateRecoveryKey(): string {
-  return `${RECOVERY_KEY_PREFIX}${randomBytes(DEK_LEN).toString("base64url")}`;
-}
-
-export function normalizeRecoveryKey(value: string): string {
-  return value.trim().replace(/\s+/g, "");
 }
 
 export function generateKdfSalt(): string {
@@ -93,25 +84,12 @@ export async function unwrapDekWithPassword(
   return unpackDek(key, wrapped, WRAP_AAD.password);
 }
 
-export async function wrapDekWithRecoveryKey(dek: Buffer, recoveryKey: string): Promise<string> {
-  const salt = randomBytes(SALT_LEN);
-  const key = await kdfRecovery(recoveryKey, salt);
-  const packed = packCipher(key, dek, WRAP_AAD.recovery);
-  return `${LIBRARY_CIPHER_PREFIX}${Buffer.concat([
-    salt,
-    Buffer.from(packed.slice(LIBRARY_CIPHER_PREFIX.length), "base64url"),
-  ]).toString("base64url")}`;
+export function wrapDekWithServerKek(dek: Buffer, kek: Buffer): string {
+  return packCipher(requireKek(kek), dek, WRAP_AAD.server);
 }
 
-export async function unwrapDekWithRecoveryKey(wrapped: string, recoveryKey: string): Promise<Buffer> {
-  const raw = decodePrefixed(wrapped);
-  if (raw.length < SALT_LEN + IV_LEN + TAG_LEN + DEK_LEN) {
-    throw new Error("recovery wrap too short");
-  }
-  const salt = raw.subarray(0, SALT_LEN);
-  const body = `${LIBRARY_CIPHER_PREFIX}${raw.subarray(SALT_LEN).toString("base64url")}`;
-  const key = await kdfRecovery(recoveryKey, salt);
-  return unpackDek(key, body, WRAP_AAD.recovery);
+export function unwrapDekWithServerKek(wrapped: string, kek: Buffer): Buffer {
+  return unpackDek(requireKek(kek), wrapped, WRAP_AAD.server);
 }
 
 export function wrapDekWithToken(dek: Buffer, token: string, purpose: "access" | "refresh" | "mfa"): string {
@@ -137,25 +115,23 @@ export function tagBlindIndex(dek: Buffer, userId: string, normalizedName: strin
 
 export interface MfaDekStash {
   dek: Buffer;
-  recoveryKey?: string;
 }
 
 export function wrapMfaDekStash(challengeToken: string, stash: MfaDekStash): string {
-  const payload = JSON.stringify({
-    dek: stash.dek.toString("base64url"),
-    recoveryKey: stash.recoveryKey,
-  });
+  const payload = JSON.stringify({ dek: stash.dek.toString("base64url") });
   return encryptText(tokenKey(challengeToken, "mfa"), payload, WRAP_AAD.mfa);
 }
 
 export function unwrapMfaDekStash(challengeToken: string, packed: string): MfaDekStash {
   const json = decryptText(tokenKey(challengeToken, "mfa"), packed, WRAP_AAD.mfa);
-  const parsed = JSON.parse(json) as { dek?: string; recoveryKey?: string };
+  const parsed = JSON.parse(json) as { dek?: string };
   if (typeof parsed.dek !== "string") throw new Error("mfa dek stash missing");
-  return {
-    dek: Buffer.from(parsed.dek, "base64url"),
-    recoveryKey: typeof parsed.recoveryKey === "string" ? parsed.recoveryKey : undefined,
-  };
+  return { dek: Buffer.from(parsed.dek, "base64url") };
+}
+
+function requireKek(kek: Buffer): Buffer {
+  if (kek.length !== DEK_LEN) throw new Error("library server key must be 32 bytes");
+  return kek;
 }
 
 function scryptParams() {
@@ -170,10 +146,6 @@ function scryptParams() {
 
 async function kdfPassword(password: string, salt: string): Promise<Buffer> {
   return deriveKey(password, Buffer.from(salt, "base64url"));
-}
-
-async function kdfRecovery(recoveryKey: string, salt: Buffer): Promise<Buffer> {
-  return deriveKey(normalizeRecoveryKey(recoveryKey), salt);
 }
 
 function deriveKey(secret: string, salt: Buffer): Promise<Buffer> {

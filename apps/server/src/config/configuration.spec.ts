@@ -81,6 +81,24 @@ describe("loadConfig identity flags", () => {
   });
 });
 
+describe("loadConfig library wrapping key", () => {
+  const original = process.env.LIBRARY_KEK;
+
+  afterEach(() => {
+    restore("LIBRARY_KEK", original);
+  });
+
+  it("uses a 32-byte hex LIBRARY_KEK as-is", () => {
+    process.env.LIBRARY_KEK = "AA".repeat(32);
+    expect(loadConfig().libraryKek).toBe("aa".repeat(32));
+  });
+
+  it("derives a 32-byte key from a passphrase", () => {
+    process.env.LIBRARY_KEK = "not-hex";
+    expect(loadConfig().libraryKek).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
 describe("parseDotEnv", () => {
   it("skips comments and does not override existing env keys", () => {
     expect(

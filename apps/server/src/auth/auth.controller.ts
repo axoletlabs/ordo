@@ -29,16 +29,19 @@ import {
   MfaCodeBodySchema,
   RegisterSchema,
   ResetPasswordSchema,
+  ResendVerificationSchema,
   TotpBeginSchema,
   TotpConfirmSchema,
   UpdateReaderPreferencesSchema,
   VerifyEmailChangeSchema,
   VerifyEmailSchema,
   isMfaRequiredResponse,
+  isPendingEmailVerificationResponse,
   type AuthResponse,
   type BackupCodesDto,
   type ForgotPasswordInput,
   type LoginResponse,
+  type RegisterResponse,
   type MfaStatusDto,
   type ResetPasswordInput,
   type SessionDto,
@@ -67,6 +70,7 @@ import {
 import { clearAuthCookies, setAuthCookies } from "./cookies.js";
 import { AuthGuard } from "./auth.guard.js";
 import { AllowWithoutMfa } from "./allow-without-mfa.decorator.js";
+import { AllowUnverifiedEmail } from "./allow-unverified-email.decorator.js";
 import { RateLimit } from "../common/rate-limit/rate-limit.decorator.js";
 import { AppError } from "../common/errors/app-error.js";
 import { ErrorCode } from "@ordo/shared";
@@ -100,9 +104,10 @@ export class AuthController {
     @Body({ schema: RegisterSchema }) body: { displayName: string; email: string; password: string },
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
-  ): Promise<AuthResponse> {
+  ): Promise<RegisterResponse> {
     const mobile = isMobileClient(req);
     const result = await this.auth.register(body, this.clientMeta(req));
+    if (isPendingEmailVerificationResponse(result)) return result;
     if (!mobile) setAuthCookies(res, result.tokens);
     return this.maybeStripTokens(result, mobile);
   }
@@ -191,13 +196,14 @@ export class AuthController {
   async resetPassword(
     @Body({ schema: ResetPasswordSchema }) body: ResetPasswordInput,
   ): Promise<{ success: true }> {
-    await this.auth.resetPassword(body.email, body.token, body.newPassword, body.recoveryKey);
+    await this.auth.resetPassword(body.email, body.token, body.newPassword);
     return { success: true };
   }
 
   @Post("logout")
   @UseGuards(AuthGuard)
   @AllowWithoutMfa()
+  @AllowUnverifiedEmail()
   @HttpCode(200)
   async logout(
     @CurrentUser() user: AuthContext,
@@ -246,11 +252,22 @@ export class AuthController {
   }
 
   @Post("verify-email")
+  @RateLimit("verify-email")
   @HttpCode(200)
   async verifyEmail(
     @Body({ schema: VerifyEmailSchema }) body: VerifyEmailInput,
   ): Promise<{ success: true }> {
     await this.auth.verifyEmail(body.email, body.token);
+    return { success: true };
+  }
+
+  @Post("verify-email/resend")
+  @RateLimit("resend-verification")
+  @HttpCode(200)
+  async resendVerification(
+    @Body({ schema: ResendVerificationSchema }) body: { email: string },
+  ): Promise<{ success: true }> {
+    await this.auth.resendVerification(body.email);
     return { success: true };
   }
 

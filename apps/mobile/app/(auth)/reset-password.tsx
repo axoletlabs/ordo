@@ -32,7 +32,6 @@ export default function ResetPasswordScreen() {
   const [token, setToken] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirm, setConfirm] = useState("");
-  const [recoveryKey, setRecoveryKey] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [formError, setFormError] = useState("");
   const [otpError, setOtpError] = useState("");
@@ -52,7 +51,6 @@ export default function ResetPasswordScreen() {
       email,
       token: code,
       newPassword,
-      ...(recoveryKey.trim() ? { recoveryKey: recoveryKey.trim() } : {}),
     });
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
@@ -78,9 +76,7 @@ export default function ResetPasswordScreen() {
       inFlight.current = false;
       setOtpStatus("error");
       haptics.error();
-      const message = errorMessage(e);
-      if (/recovery/i.test(message)) setFormError(message);
-      else setOtpError(message);
+      setFormError(errorMessage(e));
     }
   };
 
@@ -157,19 +153,7 @@ export default function ResetPasswordScreen() {
         autoComplete="new-password"
         importantForAutofill="yes"
         passwordRules="minlength: 8;"
-        error={formError && !/recovery/i.test(formError) ? formError : undefined}
-      />
-      <View style={{ height: spacing[16] }} />
-      <Input
-        label="Recovery key"
-        value={recoveryKey}
-        onChangeText={setRecoveryKey}
-        placeholder="rk1.… (from when you signed up)"
-        autoCapitalize="none"
-        autoCorrect={false}
-        importantForAutofill="no"
-        error={formError && /recovery/i.test(formError) ? formError : undefined}
-        helper="Needed if you saved a recovery key when you created this account."
+        error={formError || undefined}
       />
       <View style={{ height: spacing[24] }} />
       <Button

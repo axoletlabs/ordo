@@ -123,6 +123,34 @@ export class RateLimitService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
+  consumeResendVerification(ip: string, email: string | null): void {
+    if (!this.enabled) return;
+    const checks: Array<{ key: string; policy: WindowPolicy; action: string }> = [
+      {
+        key: this.ipStoreKey("verify-resend", ip),
+        policy: RATE_LIMIT.resendVerificationIp,
+        action: "verification emails",
+      },
+    ];
+    if (email) {
+      checks.unshift({
+        key: `verify-resend:email:${email}`,
+        policy: RATE_LIMIT.resendVerificationEmail,
+        action: "verification emails",
+      });
+    }
+    this.consumeAll(checks);
+  }
+
+  consumeVerifyEmail(ip: string): void {
+    if (!this.enabled) return;
+    this.consumeWindow(
+      this.ipStoreKey("verify-email", ip),
+      RATE_LIMIT.verifyEmailIp,
+      "verification attempts",
+    );
+  }
+
   consumeBookmarkCreate(userId: string): void {
     if (!this.enabled) return;
     this.consumeWindow(`bookmark:${userId}`, RATE_LIMIT.bookmarkCreateUser, "URLs fetched");

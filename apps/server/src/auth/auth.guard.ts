@@ -13,12 +13,14 @@ import { PrismaService } from "../prisma/prisma.service.js";
 import { APP_CONFIG, type AppConfig } from "../config/config.module.js";
 import { Inject } from "@nestjs/common";
 import { ALLOW_WITHOUT_MFA_KEY } from "./allow-without-mfa.decorator.js";
+import { ALLOW_UNVERIFIED_EMAIL_KEY } from "./allow-unverified-email.decorator.js";
 
 /**
  * Validates the access token (cookie or Bearer) against the session table and
  * attaches `req.user = { userId, sessionId }`. Distinguishes expired tokens so
- * the client can transparently refresh. When MFA_REQUIRED is on, blocks
- * everything except AllowWithoutMfa routes until TOTP is enabled.
+ * the client can transparently refresh. When EMAIL_VERIFICATION_REQUIRED is
+ * on, blocks everything except AllowUnverifiedEmail routes. When MFA_REQUIRED
+ * is on, blocks everything except AllowWithoutMfa routes until TOTP is enabled.
  */
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -47,22 +49,35 @@ export class AuthGuard implements CanActivate {
     }
     req.user = { userId: result.userId, sessionId: result.sessionId, dek: result.dek };
 
-    if (this.cfg.mfaRequired) {
-      const allow = this.reflector.getAllAndOverride<boolean>(ALLOW_WITHOUT_MFA_KEY, [
+    const needsEmail = this.cfg.emailVerificationRequired;
+    const needsMfa = this.cfg.mfaRequired;
+    if (needsEmail || needsMfa) {
+      const allowUnverified = this.reflector.getAllAndOverride<boolean>(ALLOW_UNVERIFIED_EMAIL_KEY, [
         ctx.getHandler(),
         ctx.getClass(),
       ]);
-      if (!allow) {
-        const user = await this.prisma.user.findUnique({
-          where: { id: result.userId },
-          select: { totpEnabledAt: true },
-        });
-        if (!user?.totpEnabledAt) {
-          throw new AppError(
-            ErrorCode.MFA_ENROLLMENT_REQUIRED,
-            "Set up an authenticator app to continue.",
-          );
-        }
+      const allowWithoutMfa = this.reflector.getAllAndOverride<boolean>(ALLOW_WITHOUT_MFA_KEY, [
+        ctx.getHandler(),
+        ctx.getClass(),
+      ]);
+      const user = await this.prisma.user.findUnique({
+        where: { id: result.userId },
+        select: { emailVerifiedAt: true, totpEnabledAt: true },
+      });
+      if (!user) {
+        throw new AppError(ErrorCode.UNAUTHORIZED, "Sign in to continue.");
+      }
+      if (needsEmail && !allowUnverified && user.emailVerifiedAt === null) {
+        throw new AppError(
+          ErrorCode.EMAIL_NOT_VERIFIED,
+          "Please verify your email before signing in.",
+        );
+      }
+      if (needsMfa && !allowWithoutMfa && !user.totpEnabledAt) {
+        throw new AppError(
+          ErrorCode.MFA_ENROLLMENT_REQUIRED,
+          "Set up an authenticator app to continue.",
+        );
       }
     }
     return true;

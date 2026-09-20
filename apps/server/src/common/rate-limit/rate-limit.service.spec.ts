@@ -82,6 +82,16 @@ describe("RateLimitService", () => {
     expect(() => limiter.consumeForgotPassword("1.1.1.1", "other@ordo.app")).not.toThrow();
   });
 
+  it("rate-limits verification resend by email and by IP independently", () => {
+    const limiter = service();
+    const email = "verify@ordo.app";
+    for (let i = 0; i < RATE_LIMIT.resendVerificationEmail.limit; i++) {
+      expect(() => limiter.consumeResendVerification("1.1.1.1", email)).not.toThrow();
+    }
+    expectLimited(() => limiter.consumeResendVerification("1.1.1.1", email), "verification emails");
+    expect(() => limiter.consumeResendVerification("1.1.1.1", "other@ordo.app")).not.toThrow();
+  });
+
   it("locks an account after max failures and escalates the wait", () => {
     const limiter = service();
     let now = 1_700_000_000_000;

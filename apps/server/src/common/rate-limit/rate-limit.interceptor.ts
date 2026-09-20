@@ -45,6 +45,12 @@ export class RateLimitInterceptor implements NestInterceptor {
       case "reset-password":
         this.rateLimit.consumeResetPassword(ip);
         return;
+      case "resend-verification":
+        this.rateLimit.consumeResendVerification(ip, emailFromBody(req));
+        return;
+      case "verify-email":
+        this.rateLimit.consumeVerifyEmail(ip);
+        return;
       case "bookmark-create": {
         const userId = req.user?.userId;
         if (userId) this.rateLimit.consumeBookmarkCreate(userId);

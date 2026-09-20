@@ -10,6 +10,7 @@ import {
   type AuthResponse,
   type EmailOtpPurpose,
   type LoginResponse,
+  type RegisterResponse,
   type SessionDeviceType,
   type SessionDto,
   type UpdateReaderPreferencesInput,
@@ -60,7 +61,7 @@ export class AuthService {
   async register(
     input: { displayName: string; email: string; password: string },
     meta: ClientMeta,
-  ): Promise<AuthResponse> {
+  ): Promise<RegisterResponse> {
     if (!this.cfg.registrationEnabled) {
       throw new AppError(ErrorCode.REGISTRATION_DISABLED, "This server isn't accepting new sign-ups.");
     }
@@ -83,17 +84,18 @@ export class AuthService {
         passwordHash,
         dekKdfSalt: keyMaterial.dekKdfSalt,
         dekPasswordWrapped: keyMaterial.dekPasswordWrapped,
-        dekRecoveryWrapped: keyMaterial.dekRecoveryWrapped,
+        dekServerWrapped: keyMaterial.dekServerWrapped,
         dataEncryptionVersion: keyMaterial.dataEncryptionVersion,
       },
     });
 
     if (this.cfg.emailVerificationRequired) {
       await this.createAndSendOtp(user.id, email, EMAIL_OTP_PURPOSE.VERIFY);
+      return { pendingEmailVerification: true };
     }
 
     const { session, tokens } = await this.sessions.create(user.id, meta, keyMaterial.dek);
-    return this.buildAuthResponse(user, session, tokens, keyMaterial.recoveryKey);
+    return this.buildAuthResponse(user, session, tokens);
   }
 
   async login(
@@ -122,33 +124,24 @@ export class AuthService {
     }
 
     this.rateLimit.clearLogin({ accountKey: email, userId: user.id });
-
-    if (this.cfg.emailVerificationRequired && user.emailVerifiedAt === null) {
-      throw new AppError(
-        ErrorCode.EMAIL_NOT_VERIFIED,
-        "Please verify your email before signing in.",
-      );
-    }
+    this.assertEmailVerified(user);
 
     const provisioned = await this.libraryKeys.provisionWithPassword(user, input.password);
-    const account =
-      provisioned.recoveryKey
-        ? ((await this.prisma.user.findUnique({ where: { id: user.id } })) ?? user)
-        : user;
 
-    if (this.mfa.isEnabled(account)) {
-      return this.mfa.createLoginChallenge(account, provisioned.dek, provisioned.recoveryKey);
+    if (this.mfa.isEnabled(user)) {
+      return this.mfa.createLoginChallenge(user, provisioned.dek);
     }
 
-    const { session, tokens } = await this.sessions.create(account.id, meta, provisioned.dek);
-    return this.buildAuthResponse(account, session, tokens, provisioned.recoveryKey);
+    const { session, tokens } = await this.sessions.create(user.id, meta, provisioned.dek);
+    return this.buildAuthResponse(user, session, tokens);
   }
 
   async completeMfaLogin(challengeToken: string, code: string, meta: ClientMeta): Promise<AuthResponse> {
-    const { user, dek, recoveryKey } = await this.mfa.consumeLoginCode(challengeToken, code);
+    const { user, dek } = await this.mfa.consumeLoginCode(challengeToken, code);
+    this.assertEmailVerified(user);
     this.rateLimit.clearLogin({ accountKey: user.email, userId: user.id });
     const { session, tokens } = await this.sessions.create(user.id, meta, dek);
-    return this.buildAuthResponse(user, session, tokens, recoveryKey);
+    return this.buildAuthResponse(user, session, tokens);
   }
 
   async requestMfaEmailRecovery(challengeToken: string): Promise<void> {
@@ -160,10 +153,11 @@ export class AuthService {
     otp: string,
     meta: ClientMeta,
   ): Promise<AuthResponse> {
-    const { user, dek, recoveryKey } = await this.mfa.consumeEmailRecovery(challengeToken, otp);
+    const { user, dek } = await this.mfa.consumeEmailRecovery(challengeToken, otp);
+    this.assertEmailVerified(user);
     this.rateLimit.clearLogin({ accountKey: user.email, userId: user.id });
     const { session, tokens } = await this.sessions.create(user.id, meta, dek);
-    return this.buildAuthResponse(user, session, tokens, recoveryKey);
+    return this.buildAuthResponse(user, session, tokens);
   }
 
   async refresh(refreshToken: string | null | undefined, meta?: Omit<ClientMeta, "ip">): Promise<AuthResponse> {
@@ -175,6 +169,12 @@ export class AuthService {
     if (!user) {
       await this.sessions.revokeByAccessHash(tokens.accessHash).catch(() => undefined);
       throw new AppError(ErrorCode.SESSION_REVOKED, "Your session has ended. Please sign in again.");
+    }
+    try {
+      this.assertEmailVerified(user);
+    } catch (err) {
+      await this.sessions.revokeByAccessHash(tokens.accessHash).catch(() => undefined);
+      throw err;
     }
     return this.buildAuthResponse(user, session, tokens);
   }
@@ -372,7 +372,6 @@ export class AuthService {
     email: string,
     token: string,
     newPassword: string,
-    recoveryKey?: string,
   ): Promise<void> {
     const user = await this.prisma.user.findUnique({
       where: { email: email.toLowerCase().trim() },
@@ -383,20 +382,16 @@ export class AuthService {
     const record = await this.matchOtp(user.id, token, EMAIL_OTP_PURPOSE.PASSWORD_RESET);
     let dek: Buffer | null = null;
     if (user.dataEncryptionVersion >= DATA_ENCRYPTION_VERSION) {
-      const trimmed = recoveryKey?.trim();
-      if (!trimmed) {
+      if (!user.dekServerWrapped) {
         throw new AppError(
-          ErrorCode.RECOVERY_KEY_REQUIRED,
-          "Enter the recovery key you saved when you created this account.",
+          ErrorCode.FORBIDDEN,
+          "Sign in with your current password once, then you can reset it by email.",
         );
       }
-      if (!user.dekRecoveryWrapped) {
-        throw new AppError(ErrorCode.RECOVERY_KEY_INVALID, "That recovery key is incorrect.");
-      }
       try {
-        dek = await this.crypto.unwrapRecovery(user.dekRecoveryWrapped, trimmed);
+        dek = await this.libraryKeys.unwrapWithServerKek(user.dekServerWrapped);
       } catch {
-        throw new AppError(ErrorCode.RECOVERY_KEY_INVALID, "That recovery key is incorrect.");
+        throw new AppError(ErrorCode.INTERNAL_ERROR, "Couldn't unlock the library for this reset.");
       }
     }
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_COST);
@@ -477,11 +472,19 @@ export class AuthService {
     return record;
   }
 
+  private assertEmailVerified(user: Pick<User, "emailVerifiedAt">): void {
+    if (this.cfg.emailVerificationRequired && user.emailVerifiedAt === null) {
+      throw new AppError(
+        ErrorCode.EMAIL_NOT_VERIFIED,
+        "Please verify your email before signing in.",
+      );
+    }
+  }
+
   private buildAuthResponse(
     user: User,
     session: Session,
     tokens: { accessToken: string; refreshToken: string; expiresIn: number },
-    recoveryKey?: string,
   ): AuthResponse {
     return {
       user: toUserDto(user),
@@ -491,7 +494,6 @@ export class AuthService {
         refreshToken: tokens.refreshToken,
         expiresIn: tokens.expiresIn,
       },
-      ...(recoveryKey ? { recoveryKey } : {}),
     };
   }
 }

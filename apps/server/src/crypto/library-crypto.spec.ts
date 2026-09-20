@@ -1,12 +1,11 @@
 import {
   generateDek,
-  generateRecoveryKey,
   isLibraryCiphertext,
   unwrapDekWithPassword,
-  unwrapDekWithRecoveryKey,
+  unwrapDekWithServerKek,
   unwrapDekWithToken,
   wrapDekWithPassword,
-  wrapDekWithRecoveryKey,
+  wrapDekWithServerKek,
   wrapDekWithToken,
   wrapMfaDekStash,
   unwrapMfaDekStash,
@@ -28,25 +27,25 @@ describe("library-crypto", () => {
     expect(() => decryptText(null, packed, "aad-a")).toThrow(/without the account key/);
   });
 
-  it("wraps the DEK with password, recovery key, session tokens, and MFA stash", async () => {
+  it("wraps the DEK with password, server key, session tokens, and MFA stash", async () => {
     const dek = generateDek();
     const salt = generateKdfSalt();
     const passwordWrap = await wrapDekWithPassword(dek, "password123", salt);
     expect(Buffer.compare(await unwrapDekWithPassword(passwordWrap, "password123", salt), dek)).toBe(0);
     await expect(unwrapDekWithPassword(passwordWrap, "nope", salt)).rejects.toThrow();
 
-    const recovery = generateRecoveryKey();
-    const recoveryWrap = await wrapDekWithRecoveryKey(dek, recovery);
-    expect(Buffer.compare(await unwrapDekWithRecoveryKey(recoveryWrap, `  ${recovery}  `), dek)).toBe(0);
+    const kek = generateDek();
+    const serverWrap = wrapDekWithServerKek(dek, kek);
+    expect(Buffer.compare(unwrapDekWithServerKek(serverWrap, kek), dek)).toBe(0);
+    expect(() => unwrapDekWithServerKek(serverWrap, generateDek())).toThrow();
 
     const access = wrapDekWithToken(dek, "access-token", "access");
     expect(Buffer.compare(unwrapDekWithToken(access, "access-token", "access"), dek)).toBe(0);
     expect(() => unwrapDekWithToken(access, "access-token", "refresh")).toThrow();
 
-    const stash = wrapMfaDekStash("challenge", { dek, recoveryKey: recovery });
+    const stash = wrapMfaDekStash("challenge", { dek });
     const opened = unwrapMfaDekStash("challenge", stash);
     expect(Buffer.compare(opened.dek, dek)).toBe(0);
-    expect(opened.recoveryKey).toBe(recovery);
   });
 
   it("blinds tag names so duplicates can be detected without storing plaintext", () => {

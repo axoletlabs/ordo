@@ -78,6 +78,7 @@ export const StorageKeys = {
   REMINDER_ARMED: "ordo.reminderArmed",
   REMINDER_ACTIONS_REV: "ordo.reminderActionsRev",
   REMINDER_EXACT_ALARM_ASKED: "ordo.reminderExactAlarmAsked",
+  /** Leftover from the removed recovery-key prompt; wiped on hydrate. */
   RECOVERY_KEY: "ordo.recoveryKey",
   TELEMETRY: "ordo.telemetry",
 } as const;

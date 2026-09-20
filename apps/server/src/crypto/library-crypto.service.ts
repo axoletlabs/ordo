@@ -6,15 +6,11 @@ import {
   encryptText,
   generateDek,
   generateKdfSalt,
-  generateRecoveryKey,
   isLibraryCiphertext,
-  normalizeRecoveryKey,
   unwrapDekWithPassword,
-  unwrapDekWithRecoveryKey,
   unwrapDekWithToken,
   unwrapMfaDekStash,
   wrapDekWithPassword,
-  wrapDekWithRecoveryKey,
   wrapDekWithToken,
   wrapMfaDekStash,
   type MfaDekStash,
@@ -166,20 +162,8 @@ export class LibraryCryptoService {
     return unwrapDekWithPassword(wrapped, password, salt);
   }
 
-  async wrapRecovery(dek: Buffer, recoveryKey: string): Promise<string> {
-    return wrapDekWithRecoveryKey(dek, recoveryKey);
-  }
-
-  async unwrapRecovery(wrapped: string, recoveryKey: string): Promise<Buffer> {
-    return unwrapDekWithRecoveryKey(wrapped, normalizeRecoveryKey(recoveryKey));
-  }
-
   generateDek(): Buffer {
     return generateDek();
-  }
-
-  generateRecoveryKey(): string {
-    return generateRecoveryKey();
   }
 
   generateKdfSalt(): string {

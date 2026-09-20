@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { randomBytes } from "node:crypto";
+import { hkdfSync, randomBytes } from "node:crypto";
 import { APP_NAME, AVATAR } from "@ordo/shared";
 
 export type AvatarStorage = "filesystem" | "database";
@@ -15,7 +15,13 @@ export interface AppConfig {
   databaseUrl: string;
   /** App secret / token pepper. Auto-generated + persisted if unset. */
   jwtSecret: string;
+  /**
+   * AES-256 key (hex) that wraps library DEKs for email password reset.
+   * Auto-generated + persisted to `.ordo-library-key` if unset.
+   */
+  libraryKek: string;
   registrationEnabled: boolean;
+  /** Require a signup code. ordo Cloud turns this on; self-host default is off. */
   emailVerificationRequired: boolean;
   corsAllowedOrigins: string[]; // [] => reflect request origin
   smtpUrl: string | null;
@@ -45,6 +51,7 @@ const EnvSchema = z.object({
     .string()
     .default(resolve(process.cwd(), "prisma", "ordo.db").replace(/^file:/, "")),
   JWT_SECRET: z.string().optional(),
+  LIBRARY_KEK: z.string().optional(),
   REGISTRATION_ENABLED: z
     .string()
     .default("true")
@@ -129,6 +136,36 @@ function resolveSecret(): string {
   return generated;
 }
 
+/** 32-byte library wrapping key. Independent of JWT_SECRET. */
+function resolveLibraryKek(): string {
+  const fromEnv = process.env.LIBRARY_KEK?.trim();
+  if (fromEnv) return normalizeLibraryKek(fromEnv);
+
+  // Jest should not write a key file into the package directory.
+  if (process.env.NODE_ENV === "test") {
+    return randomBytes(32).toString("hex");
+  }
+
+  const keyPath = join(process.cwd(), ".ordo-library-key");
+  if (existsSync(keyPath)) {
+    return normalizeLibraryKek(readFileSync(keyPath, "utf8").trim());
+  }
+  const generated = randomBytes(32).toString("hex");
+  try {
+    mkdirSync(process.cwd(), { recursive: true });
+    writeFileSync(keyPath, generated, { mode: 0o600 });
+  } catch {
+    /* best-effort persistence; boot still works in memory */
+  }
+  return generated;
+}
+
+function normalizeLibraryKek(raw: string): string {
+  const hex = raw.replace(/^0x/i, "");
+  if (/^[0-9a-f]{64}$/i.test(hex)) return hex.toLowerCase();
+  return Buffer.from(hkdfSync("sha256", raw, "ordo", "ordo:library-kek:v1", 32)).toString("hex");
+}
+
 function sqliteFilePath(databaseUrl: string): string | null {
   if (!databaseUrl.startsWith("file:")) return null;
   return databaseUrl.slice("file:".length);
@@ -167,6 +204,7 @@ export function loadConfig(): AppConfig {
   }
   const parsed = EnvSchema.parse(process.env);
   const secret = resolveSecret();
+  const libraryKek = resolveLibraryKek();
 
   const corsRaw = (parsed.CORS_ALLOWED_ORIGINS ?? "").trim();
   const corsAllowedOrigins = corsRaw
@@ -187,6 +225,7 @@ export function loadConfig(): AppConfig {
     port: parsed.PORT,
     databaseUrl,
     jwtSecret: secret,
+    libraryKek,
     registrationEnabled: toBool(parsed.REGISTRATION_ENABLED),
     emailVerificationRequired: toBool(parsed.EMAIL_VERIFICATION_REQUIRED),
     corsAllowedOrigins,

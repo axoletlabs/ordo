@@ -7,6 +7,7 @@ import type {
   AuthResponse,
   AuthTokens,
   BackupCodesDto,
+  RegisterResponse,
   BookmarkDetailDto,
   BookmarkDto,
   BookmarkReminderDto,
@@ -76,7 +77,7 @@ export const AuthRoutes = {
     body: {} as { displayName: string; email: string; password: string },
     query: {} as Empty,
     params: {} as Empty,
-    response: {} as AuthResponse,
+    response: {} as RegisterResponse,
   },
   login: {
     path: `${API_PREFIX}/auth/login`,
@@ -160,6 +161,14 @@ export const AuthRoutes = {
     params: {} as Empty,
     response: {} as { success: true },
   },
+  resendVerification: {
+    path: `${API_PREFIX}/auth/verify-email/resend`,
+    method: "POST",
+    body: {} as { email: string },
+    query: {} as Empty,
+    params: {} as Empty,
+    response: {} as { success: true },
+  },
   changeDisplayName: {
     path: `${API_PREFIX}/auth/display-name`,
     method: "POST",
@@ -211,7 +220,7 @@ export const AuthRoutes = {
   resetPassword: {
     path: `${API_PREFIX}/auth/reset-password`,
     method: "POST",
-    body: {} as { email: string; token: string; newPassword: string; recoveryKey?: string },
+    body: {} as { email: string; token: string; newPassword: string },
     query: {} as Empty,
     params: {} as Empty,
     response: {} as { success: true },

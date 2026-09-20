@@ -422,6 +422,9 @@ describe("PrismaService legacy schema migration", () => {
       `SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_prisma%' AND name NOT LIKE 'BookmarkFts_%'`,
     )) as Array<{ name: string }>;
     expect(tables.map((row) => row.name).sort()).toEqual([
+      "AppInstall",
+      "AppInstallDay",
+      "AppInstallSnapshot",
       "Bookmark",
       "BookmarkFts",
       "BookmarkHighlight",

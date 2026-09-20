@@ -91,7 +91,6 @@ export async function registerUser(
 ): Promise<{
   user: { id: string; displayName: string; email: string };
   tokens: { accessToken: string; refreshToken: string; expiresIn: number };
-  recoveryKey?: string;
 }> {
   const supertest = (await import("supertest")).default;
   let name = email.split("@")[0] ?? "user";

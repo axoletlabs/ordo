@@ -134,8 +134,9 @@ first run. You can also copy `apps/server/.env.example` yourself.
 | `PORT` | `3000` | HTTP port |
 | `DATABASE_URL` | `file:./ordo.db` | SQLite file (under `apps/server/prisma/`) |
 | `JWT_SECRET` | auto-saved to `.ordo-secret` | Session secret. Keep this file. |
+| `LIBRARY_KEK` | auto-saved to `.ordo-library-key` | Wraps library encryption keys so email password reset still works. Keep this file. |
 | `REGISTRATION_ENABLED` | `true` | Allow new sign-ups |
-| `EMAIL_VERIFICATION_REQUIRED` | `false` | Require a code on sign-up |
+| `EMAIL_VERIFICATION_REQUIRED` | `false` (on for ordo Cloud) | Require a code on sign-up |
 | `SMTP_URL` | unset | Mail for verification and reset codes. Leave empty to print codes in the console. |
 | `SMTP_FROM` | `ordo <noreply@ordo.local>` | From address when SMTP is set |
 | `TRUST_PROXY` | `0` | Set to `1` behind nginx, Caddy, or Cloudflare |

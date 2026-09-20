@@ -16,7 +16,6 @@ import { screenAnimationDuration, stackScreenAnimation } from "../../src/lib/nav
 import { MfaEnrollmentScreen } from "../../src/components/auth/MfaEnrollmentScreen";
 import { NavigationRail, useRailSceneOffset } from "../../src/components/navigation/NavigationRail";
 import { ReminderNotificationHost } from "../../src/components/bookmarks/ReminderNotificationHost";
-import { RecoveryKeyHost } from "../../src/components/auth/RecoveryKeyHost";
 
 enableFreeze(true);
 
@@ -97,7 +96,6 @@ export default function AppLayout() {
           <MfaEnrollmentScreen />
         </View>
       ) : null}
-      <RecoveryKeyHost />
     </View>
   );
 }

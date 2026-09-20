@@ -1,12 +1,14 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { tagNameKey } from "@ordo/shared";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { APP_CONFIG, type AppConfig } from "../config/config.module.js";
 import {
   DATA_ENCRYPTION_VERSION,
   isLibraryCiphertext,
   unwrapDekWithPassword,
+  unwrapDekWithServerKek,
   wrapDekWithPassword,
-  wrapDekWithRecoveryKey,
+  wrapDekWithServerKek,
 } from "./library-crypto.js";
 import { LibraryCryptoService } from "./library-crypto.service.js";
 import { sealBookmark, sealFolderName, sealHighlight, sealImportJob, sealTag } from "./library-fields.js";
@@ -16,6 +18,7 @@ export class LibraryKeyService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: LibraryCryptoService,
+    @Inject(APP_CONFIG) private readonly cfg: AppConfig,
   ) {}
 
   /**
@@ -28,51 +31,49 @@ export class LibraryKeyService {
       dataEncryptionVersion: number;
       dekKdfSalt: string | null;
       dekPasswordWrapped: string | null;
+      dekServerWrapped: string | null;
     },
     password: string,
-  ): Promise<{ dek: Buffer; recoveryKey?: string }> {
+  ): Promise<{ dek: Buffer }> {
     if (
       user.dataEncryptionVersion >= DATA_ENCRYPTION_VERSION &&
       user.dekKdfSalt &&
       user.dekPasswordWrapped
     ) {
       const dek = await unwrapDekWithPassword(user.dekPasswordWrapped, password, user.dekKdfSalt);
+      await this.ensureServerWrap(user.id, dek);
       return { dek };
     }
 
     const dek = this.crypto.generateDek();
-    const recoveryKey = this.crypto.generateRecoveryKey();
     const salt = this.crypto.generateKdfSalt();
     await this.prisma.user.update({
       where: { id: user.id },
       data: {
         dekKdfSalt: salt,
         dekPasswordWrapped: await wrapDekWithPassword(dek, password, salt),
-        dekRecoveryWrapped: await wrapDekWithRecoveryKey(dek, recoveryKey),
+        dekServerWrapped: wrapDekWithServerKek(dek, this.kek()),
         dataEncryptionVersion: DATA_ENCRYPTION_VERSION,
       },
     });
     await this.migrateLibrary(user.id, dek);
-    return { dek, recoveryKey };
+    return { dek };
   }
 
   async createKeyMaterial(password: string): Promise<{
     dek: Buffer;
-    recoveryKey: string;
     dekKdfSalt: string;
     dekPasswordWrapped: string;
-    dekRecoveryWrapped: string;
+    dekServerWrapped: string;
     dataEncryptionVersion: number;
   }> {
     const dek = this.crypto.generateDek();
-    const recoveryKey = this.crypto.generateRecoveryKey();
     const dekKdfSalt = this.crypto.generateKdfSalt();
     return {
       dek,
-      recoveryKey,
       dekKdfSalt,
       dekPasswordWrapped: await wrapDekWithPassword(dek, password, dekKdfSalt),
-      dekRecoveryWrapped: await wrapDekWithRecoveryKey(dek, recoveryKey),
+      dekServerWrapped: wrapDekWithServerKek(dek, this.kek()),
       dataEncryptionVersion: DATA_ENCRYPTION_VERSION,
     };
   }
@@ -84,18 +85,26 @@ export class LibraryKeyService {
       data: {
         dekKdfSalt: salt,
         dekPasswordWrapped: await wrapDekWithPassword(dek, newPassword, salt),
+        dekServerWrapped: wrapDekWithServerKek(dek, this.kek()),
         dataEncryptionVersion: DATA_ENCRYPTION_VERSION,
       },
     });
   }
 
-  async rotateRecoveryKey(userId: string, dek: Buffer): Promise<string> {
-    const recoveryKey = this.crypto.generateRecoveryKey();
+  async unwrapWithServerKek(wrapped: string): Promise<Buffer> {
+    return unwrapDekWithServerKek(wrapped, this.kek());
+  }
+
+  async ensureServerWrap(userId: string, dek: Buffer): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { dekServerWrapped: true },
+    });
+    if (!user || user.dekServerWrapped) return;
     await this.prisma.user.update({
       where: { id: userId },
-      data: { dekRecoveryWrapped: await wrapDekWithRecoveryKey(dek, recoveryKey) },
+      data: { dekServerWrapped: wrapDekWithServerKek(dek, this.kek()) },
     });
-    return recoveryKey;
   }
 
   async migrateLibrary(userId: string, dek: Buffer): Promise<void> {
@@ -164,5 +173,9 @@ export class LibraryKeyService {
         });
       }
     });
+  }
+
+  private kek(): Buffer {
+    return Buffer.from(this.cfg.libraryKek, "hex");
   }
 }

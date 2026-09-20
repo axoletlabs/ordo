@@ -53,8 +53,19 @@ export interface AuthResponse {
   user: UserDto;
   session: SessionDto;
   tokens: AuthTokens;
-  /** Shown once when a library recovery key is created. Never stored again. */
-  recoveryKey?: string;
+}
+
+/** Account created; sign-in waits until the email code is confirmed. */
+export interface PendingEmailVerificationResponse {
+  pendingEmailVerification: true;
+}
+
+export type RegisterResponse = AuthResponse | PendingEmailVerificationResponse;
+
+export function isPendingEmailVerificationResponse(
+  value: RegisterResponse,
+): value is PendingEmailVerificationResponse {
+  return "pendingEmailVerification" in value && value.pendingEmailVerification === true;
 }
 
 /** Password was accepted but TOTP (or a backup code) is still required. */
@@ -272,7 +283,7 @@ export interface TelemetryDayDto extends TelemetryCounts {
   version: TelemetryBreakdown;
 }
 
-/** Anonymous install totals. Cloud operator view only. */
+/** Anonymous install totals. Operator dashboard only — not an API route. */
 export interface TelemetryStatsDto {
   generatedAt: string;
   current: Omit<TelemetryDayDto, "day">;

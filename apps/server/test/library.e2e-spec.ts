@@ -43,6 +43,7 @@ describe("Library encryption (e2e)", () => {
               sent.push({ to, token });
             },
             sendMfaRecovery: async () => undefined,
+            sendMfaRecoveryNotice: async () => undefined,
           })
           .overrideProvider(ReaderService)
           .useValue(fakeReader()),
@@ -86,6 +87,8 @@ describe("Library encryption (e2e)", () => {
     expect(stored.url).toMatch(/^enc1\./);
     expect(stored.title).toMatch(/^enc1\./);
     expect(stored.domain).toMatch(/^enc1\./);
+    const vaultUser = await ctx.prisma.user.findUniqueOrThrow({ where: { id: auth.user.id } });
+    expect(vaultUser.dekServerWrapped).toMatch(/^enc1\./);
 
     const listed = await agent.get("/api/folders").expect(200);
     expect(listed.body[0].name).toBe("Reading");
@@ -197,7 +200,6 @@ describe("Library encryption (e2e)", () => {
         email: "keys@ordo.app",
         token: sent.at(-1)!.token,
         newPassword: "afterresetpass",
-        recoveryKey: auth.recoveryKey,
       })
       .expect(200);
 
