@@ -133,8 +133,9 @@ export default function AboutScreen() {
         </SettingsGroup>
 
         <Text variant="footnote" color="tertiary" align="center" style={styles.footer}>
-          The app sends an anonymous daily ping to ordo Cloud to count installs. No
-          account, server URL, or library data is included.
+          The app sends an anonymous daily ping to ordo Cloud to count installs
+          (app vs browser, coarse OS, version, Cloud or self-host). No account,
+          server URL, or library data is included.
         </Text>
         <Text variant="footnote" color="tertiary" align="center" style={styles.copyright}>
           © {PUBLISHED_YEAR} Axolet

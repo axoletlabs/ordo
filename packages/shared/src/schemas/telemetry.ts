@@ -1,6 +1,15 @@
 import { z } from "zod";
 
-export const TELEMETRY_PLATFORMS = ["android", "ios", "web", "other"] as const;
+export const TELEMETRY_PLATFORMS = [
+  "android",
+  "ios",
+  "web",
+  "web-android",
+  "web-ios",
+  "web-desktop",
+  "desktop",
+  "other",
+] as const;
 export const TELEMETRY_HOSTING = ["cloud", "selfhosted"] as const;
 
 export const TelemetryPlatformSchema = z.enum(TELEMETRY_PLATFORMS);

@@ -96,4 +96,19 @@ describe("Telemetry (e2e)", () => {
       appVersion: "0.1.0",
     });
   });
+
+  it("records a phone browser separately from the Android app", async () => {
+    await request(ctx.app.getHttpServer())
+      .post(TelemetryRoutes.heartbeat.path)
+      .send({
+        installId: INSTALL_A,
+        platform: "web-android",
+        hosting: "cloud",
+        appVersion: "0.1.0",
+      })
+      .expect(200);
+
+    const row = await ctx.prisma.appInstall.findUnique({ where: { id: INSTALL_A } });
+    expect(row?.platform).toBe("web-android");
+  });
 });
