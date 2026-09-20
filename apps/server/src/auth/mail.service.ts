@@ -7,11 +7,16 @@ import { APP_CONFIG } from "../config/config.module.js";
 import type { AppConfig } from "../config/config.module.js";
 import {
   VERIFICATION_LOGO_CID,
+  alreadyRegisteredNotice,
+  emailChangedNotice,
+  emailChangeRequestedNotice,
   mfaRecoveryEmail,
   mfaRecoveryNoticeEmail,
   passwordResetEmail,
   verificationEmail,
 } from "./mail.templates.js";
+import { AppError } from "../common/errors/app-error.js";
+import { ErrorCode } from "@ordo/shared";
 
 /** Resolved from both `src/auth` and compiled `dist/auth`. */
 function emailLogoPath(): string {
@@ -27,15 +32,17 @@ export class MailService {
   private readonly logger = new Logger(MailService.name);
   private readonly transporter: Transporter | null = null;
   private readonly from: string;
+  private readonly smtpRequired: boolean;
 
   constructor(@Inject(APP_CONFIG) cfg: AppConfig) {
     this.from = cfg.smtpFrom;
+    this.smtpRequired = cfg.smtpRequired;
     if (cfg.smtpUrl) {
       try {
         this.transporter = nodemailer.createTransport(cfg.smtpUrl);
       } catch (err) {
         this.logger.warn(
-          `Failed to initialize SMTP transport, falling back to console: ${(err as Error).message}`,
+          `Failed to initialize SMTP transport: ${(err as Error).message}`,
         );
         this.transporter = null;
       }
@@ -69,6 +76,21 @@ export class MailService {
     await this.send({ to, subject, text, html });
   }
 
+  async sendEmailChangeNotice(to: string, newEmail: string): Promise<void> {
+    const { subject, text, html } = emailChangeRequestedNotice(newEmail);
+    await this.send({ to, subject, text, html });
+  }
+
+  async sendEmailChangedNotice(to: string, newEmail: string): Promise<void> {
+    const { subject, text, html } = emailChangedNotice(newEmail);
+    await this.send({ to, subject, text, html });
+  }
+
+  async sendAlreadyRegisteredNotice(to: string): Promise<void> {
+    const { subject, text, html } = alreadyRegisteredNotice();
+    await this.send({ to, subject, text, html });
+  }
+
   private async send(opts: {
     to: string;
     subject: string;
@@ -76,6 +98,12 @@ export class MailService {
     html: string;
   }): Promise<void> {
     if (!this.transporter) {
+      if (this.smtpRequired) {
+        throw new AppError(
+          ErrorCode.INTERNAL_ERROR,
+          "This server can't send email. Ask the owner to configure SMTP.",
+        );
+      }
       this.logConsole(opts);
       return;
     }
@@ -89,10 +117,11 @@ export class MailService {
         attachments: logoAttachment(),
       });
     } catch (err) {
-      this.logger.warn(
-        `SMTP send failed, printing the one-time code instead: ${(err as Error).message}`,
+      this.logger.warn(`SMTP send failed: ${(err as Error).message}`);
+      throw new AppError(
+        ErrorCode.INTERNAL_ERROR,
+        "Couldn't send that email. Try again in a moment.",
       );
-      this.logConsole(opts);
     }
   }
 

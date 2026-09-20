@@ -44,6 +44,12 @@ export const TOKEN_TTL = {
   FOLDER_MS: 10 * 60 * 1000, // 10 minutes
 } as const;
 
+/** How many devices can stay signed in, and when an unused session dies. */
+export const SESSION = {
+  MAX_PER_USER: 10,
+  IDLE_MS: 14 * 24 * 60 * 60 * 1000, // 14 days without lastSeenAt
+} as const;
+
 /** Email OTPs (signup verification, email change, password reset). */
 export const EMAIL_OTP = {
   LENGTH: 6,

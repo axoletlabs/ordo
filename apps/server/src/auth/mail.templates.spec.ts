@@ -1,4 +1,11 @@
-import { mfaRecoveryEmail, mfaRecoveryNoticeEmail, verificationEmail } from "./mail.templates.js";
+import {
+  alreadyRegisteredNotice,
+  emailChangedNotice,
+  emailChangeRequestedNotice,
+  mfaRecoveryEmail,
+  mfaRecoveryNoticeEmail,
+  verificationEmail,
+} from "./mail.templates.js";
 
 describe("verificationEmail", () => {
   it("includes the code in subject-adjacent text and html", () => {
@@ -41,5 +48,27 @@ describe("mfaRecoveryNoticeEmail", () => {
     expect(mail.text).toContain("authenticator is still on");
     expect(mail.html).toContain("Sign-in notice");
     expect(mail.html).toContain("reset your password");
+  });
+});
+
+describe("account notices", () => {
+  it("tells the current inbox about an email-change request", () => {
+    const mail = emailChangeRequestedNotice("new@ordo.app");
+    expect(mail.subject).toContain("Email change requested");
+    expect(mail.text).toContain("new@ordo.app");
+    expect(mail.html).toContain("Email change");
+  });
+
+  it("tells the old inbox after the address actually changes", () => {
+    const mail = emailChangedNotice("new@ordo.app");
+    expect(mail.subject).toContain("email was changed");
+    expect(mail.text).toContain("new@ordo.app");
+    expect(mail.text).toContain("no longer the login");
+  });
+
+  it("does not include a signup code in the already-registered notice", () => {
+    const mail = alreadyRegisteredNotice();
+    expect(mail.subject).toContain("tried to register");
+    expect(mail.text).not.toMatch(/\b\d{6}\b/);
   });
 });

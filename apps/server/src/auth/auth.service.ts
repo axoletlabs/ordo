@@ -18,7 +18,7 @@ import {
 } from "@ordo/shared";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { AppError } from "../common/errors/app-error.js";
-import { equalHex, hashEmailOtp, hashToken } from "../common/utils/tokens.js";
+import { equalHex, hashEmailOtp } from "../common/utils/tokens.js";
 import { APP_CONFIG } from "../config/config.module.js";
 import type { AppConfig } from "../config/config.module.js";
 import { SessionService } from "./session.service.js";
@@ -34,6 +34,12 @@ import { LibraryKeyService } from "../crypto/library-key.service.js";
 import { DATA_ENCRYPTION_VERSION } from "../crypto/library-crypto.js";
 
 const BCRYPT_COST = 12;
+let dummyPasswordHash: Promise<string> | null = null;
+
+function dummyBcryptCompare(password: string): Promise<boolean> {
+  dummyPasswordHash ??= bcrypt.hash("ordo-timing-dummy", BCRYPT_COST);
+  return dummyPasswordHash.then((hash) => bcrypt.compare(password, hash));
+}
 
 interface ClientMeta {
   deviceInfo: string;
@@ -69,12 +75,15 @@ export class AuthService {
 
     const email = input.email.toLowerCase().trim();
     const displayName = input.displayName.trim();
+    const passwordHash = await bcrypt.hash(input.password, BCRYPT_COST);
     const existingEmail = await this.prisma.user.findUnique({ where: { email } });
     if (existingEmail) {
+      if (this.cfg.emailVerificationRequired) {
+        await this.mail.sendAlreadyRegisteredNotice(email).catch(() => undefined);
+        return { pendingEmailVerification: true };
+      }
       throw new AppError(ErrorCode.EMAIL_ALREADY_EXISTS, "An account with this email already exists.");
     }
-
-    const passwordHash = await bcrypt.hash(input.password, BCRYPT_COST);
     const keyMaterial = await this.libraryKeys.createKeyMaterial(input.password);
 
     const user = await this.prisma.user.create({
@@ -116,6 +125,7 @@ export class AuthService {
     }
 
     if (!user) {
+      await dummyBcryptCompare(input.password);
       this.rateLimit.recordLoginFailure(loginKeys);
       throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Incorrect email or password.");
     }
@@ -184,7 +194,7 @@ export class AuthService {
   async logout(sessionId: string, accessToken: string | null): Promise<void> {
     if (accessToken) {
       // revoke by access hash covers the rotating-token case robustly
-      await this.sessions.revokeByAccessHash(hashToken(accessToken)).catch(() => undefined);
+      await this.sessions.revokeByAccessToken(accessToken).catch(() => undefined);
       return;
     }
     await this.prisma.session.delete({ where: { id: sessionId } }).catch(() => undefined);
@@ -262,6 +272,7 @@ export class AuthService {
     userId: string,
     currentPassword: string,
     newEmail: string,
+    mfaCode?: string,
   ): Promise<void> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new AppError(ErrorCode.UNAUTHORIZED, "Account not found.");
@@ -270,6 +281,7 @@ export class AuthService {
     if (!ok) {
       throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Incorrect password.");
     }
+    await this.mfa.assertStepUp(user, mfaCode);
 
     if (newEmail === user.email) {
       throw new AppError(ErrorCode.VALIDATION_ERROR, "New email must be different from your current email.");
@@ -282,6 +294,7 @@ export class AuthService {
 
     await this.prisma.user.update({ where: { id: userId }, data: { pendingEmail: newEmail } });
     await this.createAndSendOtp(userId, newEmail, EMAIL_OTP_PURPOSE.EMAIL_CHANGE);
+    await this.mail.sendEmailChangeNotice(user.email, newEmail).catch(() => undefined);
   }
 
   async resendEmailChange(userId: string): Promise<void> {
@@ -313,6 +326,9 @@ export class AuthService {
         },
       });
     });
+    const previousEmail = user.email;
+    const nextEmail = user.pendingEmail as string;
+    await this.mail.sendEmailChangedNotice(previousEmail, nextEmail).catch(() => undefined);
     return this.presentUser(updated);
   }
 
@@ -321,6 +337,7 @@ export class AuthService {
     currentPassword: string,
     newPassword: string,
     meta: ClientMeta,
+    mfaCode?: string,
   ): Promise<AuthResponse> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user) throw new AppError(ErrorCode.UNAUTHORIZED, "Account not found.");
@@ -328,6 +345,7 @@ export class AuthService {
     if (!ok) {
       throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Incorrect password.");
     }
+    await this.mfa.assertStepUp(user, mfaCode);
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_COST);
     const dek =
       this.crypto.snapshot() ??

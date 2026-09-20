@@ -64,9 +64,8 @@ export class FolderTokenService {
 
   /** Verify a folder token is valid for the given folder. */
   async verify(folderId: string, token: string): Promise<boolean> {
-    const hash = this.tokens.hash(token);
-    const record = await this.prisma.folderToken.findUnique({
-      where: { tokenHash: hash },
+    const record = await this.prisma.folderToken.findFirst({
+      where: { tokenHash: { in: this.tokens.lookupHashes(token) } },
     });
     if (!record || record.folderId !== folderId) return false;
     if (record.expiresAt < new Date()) {
@@ -80,7 +79,9 @@ export class FolderTokenService {
   async resolveFolderIds(tokens: readonly string[]): Promise<string[]> {
     if (tokens.length === 0) return [];
     const records = await this.prisma.folderToken.findMany({
-      where: { tokenHash: { in: [...new Set(tokens)].map((t) => this.tokens.hash(t)) } },
+      where: {
+        tokenHash: { in: [...new Set(tokens.flatMap((t) => this.tokens.lookupHashes(t)))] },
+      },
       select: { folderId: true, expiresAt: true },
     });
     const now = new Date();

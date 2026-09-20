@@ -110,6 +110,8 @@ model Session {
   dekWrapped            String?
   /// Library DEK wrapped with HKDF(refresh token).
   dekRefreshWrapped     String?
+  /// Previous refresh hash, kept so a reused (stolen) token can kill this session.
+  previousRefreshTokenHash String? @unique
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 

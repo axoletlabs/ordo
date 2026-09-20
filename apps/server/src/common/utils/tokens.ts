@@ -1,13 +1,22 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 /** Generate a URL-safe opaque token of the given entropy (bytes). */
 export function generateToken(byteLength = 32): string {
   return randomBytes(byteLength).toString("base64url");
 }
 
-/** Deterministic hash for token storage (we never store raw tokens). */
+export function sha256Hex(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+/** HMAC-SHA256 so a DB dump is not enough to match a leaked raw token. */
+export function hmacSha256Hex(value: string, secret: string): string {
+  return createHmac("sha256", secret).update(value).digest("hex");
+}
+
+/** Unsalted SHA-256. Only for reading session rows minted before HMAC. */
 export function hashToken(token: string): string {
-  return createHash("sha256").update(token).digest("hex");
+  return sha256Hex(token);
 }
 
 /** Constant-time comparison of a raw token against its stored hash. */

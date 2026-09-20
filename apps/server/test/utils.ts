@@ -35,6 +35,7 @@ export async function createTestApp(
     instanceRenameEnabled: true,
     instanceAdminEmail: null,
     smtpUrl: null,
+    smtpRequired: false,
     rateLimitEnabled: false,
     trustProxy: 0,
     ...(options.config ?? {}),

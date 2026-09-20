@@ -1,4 +1,4 @@
-import { equalHex, equalUtf8, hashEmailOtp, pepperedHash } from "./tokens.js";
+import { equalHex, equalUtf8, hashEmailOtp, hmacSha256Hex, pepperedHash, sha256Hex } from "./tokens.js";
 
 describe("token helpers", () => {
   it("peppers hashes so a DB leak of 6-digit codes is not enough", () => {
@@ -27,5 +27,13 @@ describe("token helpers", () => {
     expect(equalUtf8("token", "token")).toBe(true);
     expect(equalUtf8("token", "other")).toBe(false);
     expect(equalUtf8("token", "tok")).toBe(false);
+  });
+
+  it("HMACs session tokens so a DB dump cannot match a leaked raw token", () => {
+    const token = "raw-token";
+    const hmac = hmacSha256Hex(token, "secret");
+    expect(hmac).not.toBe(sha256Hex(token));
+    expect(hmacSha256Hex(token, "secret")).toBe(hmac);
+    expect(hmacSha256Hex(token, "other")).not.toBe(hmac);
   });
 });

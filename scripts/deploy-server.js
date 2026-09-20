@@ -386,6 +386,7 @@ function renderEnv(settings) {
     if (settings.smtpFrom) lines.push(`SMTP_FROM=${quoteEnv(settings.smtpFrom)}`);
   } else {
     lines.push("# SMTP_URL=smtp://user:pass@smtp.example.com:587");
+    lines.push("# SMTP_REQUIRED=true  # never print codes; fail if mail cannot send");
   }
   lines.push("");
   return lines.join("\n");

@@ -29,6 +29,11 @@ export interface AppConfig {
   smtpUrl: string | null;
   smtpFrom: string;
   /**
+   * When true, missing or failed SMTP is an error. Codes are never printed.
+   * ordo Cloud turns this on.
+   */
+  smtpRequired: boolean;
+  /**
    * When false, every rate-limit check is a no-op. Defaults on except in
    * `NODE_ENV=test` (Jest), so local/prod are protected and existing tests
    * keep their unlimited register/login loops. Override with RATE_LIMIT_ENABLED.
@@ -69,6 +74,10 @@ const EnvSchema = z.object({
   CORS_ALLOWED_ORIGINS: z.string().default(""),
   SMTP_URL: z.string().optional(),
   SMTP_FROM: z.string().default(`${APP_NAME} <noreply@ordo.local>`),
+  SMTP_REQUIRED: z
+    .string()
+    .default("false")
+    .transform((v) => v.toLowerCase()),
   RATE_LIMIT_ENABLED: z.string().optional(),
   TRUST_PROXY: z.coerce.number().int().min(0).max(32).default(0),
   PROFILE_PICTURE_MAX_BYTES: z.coerce
@@ -236,6 +245,7 @@ export function loadConfig(): AppConfig {
     corsAllowedOrigins,
     smtpUrl: parsed.SMTP_URL?.trim() || null,
     smtpFrom: parsed.SMTP_FROM,
+    smtpRequired: toBool(parsed.SMTP_REQUIRED),
     rateLimitEnabled: resolveRateLimitEnabled(parsed.RATE_LIMIT_ENABLED),
     trustProxy: parsed.TRUST_PROXY,
     profilePictureMaxBytes: parsed.PROFILE_PICTURE_MAX_BYTES,

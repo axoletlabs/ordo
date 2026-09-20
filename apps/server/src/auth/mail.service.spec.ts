@@ -1,9 +1,12 @@
 import { Logger } from "@nestjs/common";
+import { ErrorCode } from "@ordo/shared";
 import { MailService } from "./mail.service.js";
+import { AppError } from "../common/errors/app-error.js";
 import type { AppConfig } from "../config/config.module.js";
 
 const baseCfg = {
   smtpFrom: "ordo <noreply@ordo.local>",
+  smtpRequired: false,
 } as AppConfig;
 
 describe("MailService", () => {
@@ -44,5 +47,28 @@ describe("MailService", () => {
   it("is configured when SMTP_URL is provided", () => {
     const mail = new MailService({ ...baseCfg, smtpUrl: "smtp://127.0.0.1:1025" });
     expect(mail.isConfigured).toBe(true);
+  });
+
+  it("never prints the OTP when SMTP is required and unset", async () => {
+    const mail = new MailService({ ...baseCfg, smtpUrl: null, smtpRequired: true });
+    await expect(mail.sendVerification("dev@ordo.app", "482193")).rejects.toMatchObject({
+      code: ErrorCode.INTERNAL_ERROR,
+    });
+    expect(log).not.toHaveBeenCalled();
+  });
+
+  it("does not print the OTP when a configured SMTP send fails", async () => {
+    const mail = new MailService({ ...baseCfg, smtpUrl: "smtp://127.0.0.1:1025" });
+    (
+      mail as unknown as { transporter: { sendMail: () => Promise<never> } }
+    ).transporter = {
+      sendMail: async () => {
+        throw new Error("upstream rejected");
+      },
+    };
+
+    await expect(mail.sendVerification("dev@ordo.app", "999888")).rejects.toBeInstanceOf(AppError);
+    expect(log).not.toHaveBeenCalledWith(expect.stringContaining("999888"));
+    expect(log).not.toHaveBeenCalledWith(expect.stringContaining("Printing the one-time code"));
   });
 });

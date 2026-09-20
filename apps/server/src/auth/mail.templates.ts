@@ -135,10 +135,59 @@ export function mfaRecoveryNoticeEmail(): {
   text: string;
   html: string;
 } {
-  const subject = `Someone signed in to your ${APP_NAME} account`;
-  const body =
-    `You signed in using an email code. Your authenticator is still on — you'll need it next time. ` +
-    `If this wasn't you, reset your password.`;
+  return noticeEmail({
+    subject: `Someone signed in to your ${APP_NAME} account`,
+    kicker: "Sign-in notice",
+    body:
+      `You signed in using an email code. Your authenticator is still on — you'll need it next time. ` +
+      `If this wasn't you, reset your password.`,
+  });
+}
+
+export function emailChangeRequestedNotice(newEmail: string): {
+  subject: string;
+  text: string;
+  html: string;
+} {
+  return noticeEmail({
+    subject: `Email change requested on your ${APP_NAME} account`,
+    kicker: "Email change",
+    body:
+      `Someone asked to change this account's email to ${newEmail}. A code was sent to that address. ` +
+      `If this wasn't you, sign in and change your password.`,
+  });
+}
+
+export function emailChangedNotice(newEmail: string): {
+  subject: string;
+  text: string;
+  html: string;
+} {
+  return noticeEmail({
+    subject: `Your ${APP_NAME} email was changed`,
+    kicker: "Email changed",
+    body: `This address is no longer the login for your ${APP_NAME} account. The new address is ${newEmail}. If this wasn't you, reset your password from the new inbox or contact the server owner.`,
+  });
+}
+
+export function alreadyRegisteredNotice(): {
+  subject: string;
+  text: string;
+  html: string;
+} {
+  return noticeEmail({
+    subject: `Someone tried to register this ${APP_NAME} email`,
+    kicker: "Already registered",
+    body: `This email already has an ${APP_NAME} account. If that was you, sign in. If it wasn't, you can ignore this.`,
+  });
+}
+
+function noticeEmail(copy: { subject: string; kicker: string; body: string }): {
+  subject: string;
+  text: string;
+  html: string;
+} {
+  const { subject, kicker, body } = copy;
   const text = [APP_NAME, "", subject, "", body].join("\n");
   const html = `<!DOCTYPE html>
 <html lang="en">
@@ -156,7 +205,7 @@ export function mfaRecoveryNoticeEmail(): {
             <td align="center" style="background:${CARD};border:1px solid ${RULE};border-radius:24px;padding:36px 32px 32px;">
               <img src="cid:${VERIFICATION_LOGO_CID}" width="${LOGO_W}" height="${LOGO_H}" alt="${APP_NAME}" style="display:block;margin:0 auto 28px;border:0;outline:none;text-decoration:none;" />
               <p style="margin:0 0 8px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:11px;letter-spacing:0.16em;text-transform:uppercase;color:${FAINT};">
-                Sign-in notice
+                ${escapeHtml(kicker)}
               </p>
               <p style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:15px;line-height:1.5;color:${MUTE};">
                 ${escapeHtml(body)}

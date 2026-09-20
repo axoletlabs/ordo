@@ -300,8 +300,8 @@ export class ExportService {
   private async folderUnlocked(folderId: string, tokens: string[]): Promise<boolean> {
     for (const token of tokens) {
       if (!token) continue;
-      const record = await this.prisma.folderToken.findUnique({
-        where: { tokenHash: this.tokens.hash(token) },
+      const record = await this.prisma.folderToken.findFirst({
+        where: { tokenHash: { in: this.tokens.lookupHashes(token) } },
       });
       if (record && record.folderId === folderId && record.expiresAt > new Date()) return true;
     }

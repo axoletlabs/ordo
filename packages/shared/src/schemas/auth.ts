@@ -79,6 +79,7 @@ export type ChangeDisplayNameInput = z.infer<typeof ChangeDisplayNameSchema>;
 export const ChangeEmailSchema = z.object({
   currentPassword: password,
   newEmail: email,
+  mfaCode: optionalMfaCode,
 });
 export type ChangeEmailInput = z.infer<typeof ChangeEmailSchema>;
 
@@ -86,6 +87,7 @@ export const ChangePasswordSchema = z
   .object({
     currentPassword: password,
     newPassword: password,
+    mfaCode: optionalMfaCode,
   })
   .refine((data) => data.currentPassword !== data.newPassword, {
     message: "New password must be different from your current password.",

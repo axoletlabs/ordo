@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
+import { ErrorCode, SESSION, type SessionDeviceType } from "@ordo/shared";
 import type { Session } from "../prisma/client.js";
-import { ErrorCode, type SessionDeviceType } from "@ordo/shared";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { AppError } from "../common/errors/app-error.js";
 import type { TokenPair } from "./token.service.js";
@@ -46,31 +46,20 @@ export class SessionService {
         dekRefreshWrapped: wraps.dekRefreshWrapped,
       },
     });
+    await this.enforceSessionCap(userId, session.id);
     return { session, tokens: pair };
   }
 
   /** Validate an access token against the session table. Returns null if unknown. */
   async validateAccess(token: string): Promise<AccessValidation | null> {
-    const hash = this.tokens.hash(token);
-    const session = await this.prisma.session.findUnique({
-      where: { accessTokenHash: hash },
-      select: {
-        id: true,
-        userId: true,
-        accessTokenExpiresAt: true,
-        refreshTokenExpiresAt: true,
-        dekWrapped: true,
-      },
-    });
+    const session = await this.findByAccessHashes(this.tokens.lookupHashes(token));
     if (!session) return null;
 
     const now = new Date();
-    // Whole session is dead — clean it up.
-    if (session.refreshTokenExpiresAt < now) {
+    if (this.isIdle(session, now) || session.refreshTokenExpiresAt < now) {
       await this.prisma.session.delete({ where: { id: session.id } }).catch(() => undefined);
       return null;
     }
-    // Access expired but session alive → client should refresh.
     if (session.accessTokenExpiresAt < now) {
       return { userId: session.userId, sessionId: session.id, expired: true, dek: null };
     }
@@ -84,7 +73,8 @@ export class SessionService {
       }
     }
 
-    // Throttle lastSeen updates to ~once per minute via a fire-and-forget.
+    await this.upgradeAccessHash(session.id, session.accessTokenHash, this.tokens.hash(token));
+
     void this.prisma.session
       .update({ where: { id: session.id }, data: { lastSeenAt: now } })
       .catch(() => undefined);
@@ -97,47 +87,23 @@ export class SessionService {
     refreshToken: string,
     meta?: { deviceInfo: string; deviceName: string | null; deviceType: SessionDeviceType },
   ): Promise<{ session: Session; tokens: TokenPair }> {
-    const hash = this.tokens.hash(refreshToken);
-    const session = await this.prisma.session.findUnique({
-      where: { refreshTokenHash: hash },
+    const hashes = this.tokens.lookupHashes(refreshToken);
+    const current = await this.prisma.session.findFirst({
+      where: { refreshTokenHash: { in: hashes } },
     });
-    if (!session) {
+    if (current) {
+      return this.rotateSession(current, refreshToken, meta);
+    }
+
+    const reused = await this.prisma.session.findFirst({
+      where: { previousRefreshTokenHash: { in: hashes } },
+    });
+    if (reused) {
+      await this.prisma.session.delete({ where: { id: reused.id } }).catch(() => undefined);
       throw new AppError(ErrorCode.SESSION_REVOKED, "Your session has ended. Please sign in again.");
     }
-    if (session.refreshTokenExpiresAt < new Date()) {
-      await this.prisma.session.delete({ where: { id: session.id } }).catch(() => undefined);
-      throw new AppError(ErrorCode.TOKEN_EXPIRED, "Your session has expired.");
-    }
 
-    let dek: Buffer | null = null;
-    if (session.dekRefreshWrapped) {
-      try {
-        dek = this.crypto.unwrapRefresh(session.dekRefreshWrapped, refreshToken);
-      } catch {
-        throw new AppError(ErrorCode.SESSION_REVOKED, "Your session has ended. Please sign in again.");
-      }
-    }
-
-    const pair = this.tokens.generatePair();
-    const wraps = dek ? this.crypto.wrapForSession(dek, pair) : { dekWrapped: null, dekRefreshWrapped: null };
-    const updated = await this.prisma.session.update({
-      where: { id: session.id },
-      data: {
-        accessTokenHash: pair.accessHash,
-        accessTokenExpiresAt: pair.accessTokenExpiresAt,
-        refreshTokenHash: pair.refreshHash,
-        refreshTokenExpiresAt: pair.refreshTokenExpiresAt,
-        lastSeenAt: new Date(),
-        dekWrapped: wraps.dekWrapped,
-        dekRefreshWrapped: wraps.dekRefreshWrapped,
-        ...(meta && {
-          deviceInfo: meta.deviceInfo,
-          deviceName: meta.deviceName,
-          deviceType: meta.deviceType,
-        }),
-      },
-    });
-    return { session: updated, tokens: pair };
+    throw new AppError(ErrorCode.SESSION_REVOKED, "Your session has ended. Please sign in again.");
   }
 
   async revoke(sessionId: string, userId: string): Promise<void> {
@@ -150,6 +116,12 @@ export class SessionService {
 
   async revokeByAccessHash(accessHash: string): Promise<void> {
     await this.prisma.session.deleteMany({ where: { accessTokenHash: accessHash } });
+  }
+
+  async revokeByAccessToken(accessToken: string): Promise<void> {
+    await this.prisma.session.deleteMany({
+      where: { accessTokenHash: { in: this.tokens.lookupHashes(accessToken) } },
+    });
   }
 
   /** Revoke every session for a user except the one identified by `keepSessionId`. */
@@ -183,5 +155,78 @@ export class SessionService {
       },
     });
     return sessions.map((s) => ({ ...s, current: s.id === currentSessionId }));
+  }
+
+  private async rotateSession(
+    session: Session,
+    refreshToken: string,
+    meta?: { deviceInfo: string; deviceName: string | null; deviceType: SessionDeviceType },
+  ): Promise<{ session: Session; tokens: TokenPair }> {
+    const now = new Date();
+    if (this.isIdle(session, now) || session.refreshTokenExpiresAt < now) {
+      await this.prisma.session.delete({ where: { id: session.id } }).catch(() => undefined);
+      throw new AppError(ErrorCode.TOKEN_EXPIRED, "Your session has expired.");
+    }
+
+    let dek: Buffer | null = null;
+    if (session.dekRefreshWrapped) {
+      try {
+        dek = this.crypto.unwrapRefresh(session.dekRefreshWrapped, refreshToken);
+      } catch {
+        throw new AppError(ErrorCode.SESSION_REVOKED, "Your session has ended. Please sign in again.");
+      }
+    }
+
+    const pair = this.tokens.generatePair();
+    const wraps = dek ? this.crypto.wrapForSession(dek, pair) : { dekWrapped: null, dekRefreshWrapped: null };
+    const updated = await this.prisma.session.update({
+      where: { id: session.id },
+      data: {
+        accessTokenHash: pair.accessHash,
+        accessTokenExpiresAt: pair.accessTokenExpiresAt,
+        previousRefreshTokenHash: session.refreshTokenHash,
+        refreshTokenHash: pair.refreshHash,
+        refreshTokenExpiresAt: pair.refreshTokenExpiresAt,
+        lastSeenAt: now,
+        dekWrapped: wraps.dekWrapped,
+        dekRefreshWrapped: wraps.dekRefreshWrapped,
+        ...(meta && {
+          deviceInfo: meta.deviceInfo,
+          deviceName: meta.deviceName,
+          deviceType: meta.deviceType,
+        }),
+      },
+    });
+    return { session: updated, tokens: pair };
+  }
+
+  private isIdle(session: Pick<Session, "lastSeenAt">, now: Date): boolean {
+    return now.getTime() - session.lastSeenAt.getTime() > SESSION.IDLE_MS;
+  }
+
+  private async findByAccessHashes(hashes: string[]): Promise<Session | null> {
+    return this.prisma.session.findFirst({
+      where: { accessTokenHash: { in: hashes } },
+    });
+  }
+
+  private async upgradeAccessHash(id: string, stored: string, modern: string): Promise<void> {
+    if (stored === modern) return;
+    await this.prisma.session
+      .update({ where: { id }, data: { accessTokenHash: modern } })
+      .catch(() => undefined);
+  }
+
+  private async enforceSessionCap(userId: string, keepId: string): Promise<void> {
+    const others = await this.prisma.session.findMany({
+      where: { userId, id: { not: keepId } },
+      orderBy: { lastSeenAt: "asc" },
+      select: { id: true },
+    });
+    const overflow = others.length + 1 - SESSION.MAX_PER_USER;
+    if (overflow <= 0) return;
+    await this.prisma.session.deleteMany({
+      where: { id: { in: others.slice(0, overflow).map((row) => row.id) } },
+    });
   }
 }

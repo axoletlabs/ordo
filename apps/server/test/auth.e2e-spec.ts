@@ -1,8 +1,10 @@
 import request from "supertest";
-import { APP_NAME, DELETE_ACCOUNT_CONFIRMATION, EMAIL_OTP, ErrorCode } from "@ordo/shared";
+import { APP_NAME, DELETE_ACCOUNT_CONFIRMATION, EMAIL_OTP, ErrorCode, SESSION } from "@ordo/shared";
 import { MailService } from "../src/auth/mail.service.js";
 import { SessionService } from "../src/auth/session.service.js";
+import { TokenService } from "../src/auth/token.service.js";
 import { LibraryKeyService } from "../src/crypto/library-key.service.js";
+import { sha256Hex } from "../src/common/utils/tokens.js";
 import {
   authedAgent,
   clearDb,
@@ -267,12 +269,10 @@ describe("Auth (e2e)", () => {
       expect(res1.body.tokens.accessToken).toBeTruthy();
       expect(res1.body.tokens.refreshToken).not.toBe(auth.tokens.refreshToken);
 
-      // old refresh token no longer works
       await request(ctx.app.getHttpServer())
-        .post("/api/auth/refresh")
-        .set("x-client-type", "mobile")
-        .send({ refreshToken: auth.tokens.refreshToken })
-        .expect(401);
+        .get("/api/auth/me")
+        .set("authorization", `Bearer ${res1.body.tokens.accessToken}`)
+        .expect(200);
 
       // old access token is invalidated by rotation (lookup by hash fails).
       // Clients should refresh, not treat this as a hard logout.
@@ -281,6 +281,25 @@ describe("Auth (e2e)", () => {
         .set("authorization", `Bearer ${auth.tokens.accessToken}`)
         .expect(401);
       expect(stale.body.error.code).toBe(ErrorCode.TOKEN_EXPIRED);
+
+      // Presenting the previous refresh token kills this session (theft).
+      const reused = await request(ctx.app.getHttpServer())
+        .post("/api/auth/refresh")
+        .set("x-client-type", "mobile")
+        .send({ refreshToken: auth.tokens.refreshToken })
+        .expect(401);
+      expect(reused.body.error.code).toBe(ErrorCode.SESSION_REVOKED);
+
+      await request(ctx.app.getHttpServer())
+        .get("/api/auth/me")
+        .set("authorization", `Bearer ${res1.body.tokens.accessToken}`)
+        .expect(401);
+
+      await request(ctx.app.getHttpServer())
+        .post("/api/auth/refresh")
+        .set("x-client-type", "mobile")
+        .send({ refreshToken: res1.body.tokens.refreshToken })
+        .expect(401);
     });
 
     it("logs out and revokes the session instantly", async () => {
@@ -332,11 +351,59 @@ describe("Auth (e2e)", () => {
         .set("authorization", `Bearer ${second.body.tokens.accessToken}`)
         .expect(401);
     });
+
+    it("drops the oldest session when a user exceeds the device cap", async () => {
+      const first = await registerUser(ctx.app, "capped@ordo.app");
+      for (let i = 0; i < SESSION.MAX_PER_USER; i++) {
+        await request(ctx.app.getHttpServer())
+          .post("/api/auth/login")
+          .set("x-client-type", "mobile")
+          .send({ identifier: "capped@ordo.app", password: "password123" })
+          .expect(200);
+      }
+      expect(await ctx.prisma.session.count()).toBe(SESSION.MAX_PER_USER);
+      await request(ctx.app.getHttpServer())
+        .get("/api/auth/me")
+        .set("authorization", `Bearer ${first.tokens.accessToken}`)
+        .expect(401);
+    });
+
+    it("revokes an idle session", async () => {
+      const auth = await registerUser(ctx.app, "idle@ordo.app");
+      await ctx.prisma.session.updateMany({
+        data: { lastSeenAt: new Date(Date.now() - SESSION.IDLE_MS - 1000) },
+      });
+      await request(ctx.app.getHttpServer())
+        .get("/api/auth/me")
+        .set("authorization", `Bearer ${auth.tokens.accessToken}`)
+        .expect(401);
+      await request(ctx.app.getHttpServer())
+        .post("/api/auth/refresh")
+        .set("x-client-type", "mobile")
+        .send({ refreshToken: auth.tokens.refreshToken })
+        .expect(401);
+    });
+
+    it("accepts a pre-HMAC session hash and upgrades it", async () => {
+      const auth = await registerUser(ctx.app, "pepper@ordo.app");
+      const tokens = ctx.app.get(TokenService);
+      await ctx.prisma.session.updateMany({
+        data: { accessTokenHash: sha256Hex(auth.tokens.accessToken) },
+      });
+      await request(ctx.app.getHttpServer())
+        .get("/api/auth/me")
+        .set("authorization", `Bearer ${auth.tokens.accessToken}`)
+        .expect(200);
+      const row = await ctx.prisma.session.findFirstOrThrow();
+      expect(row.accessTokenHash).toBe(tokens.hash(auth.tokens.accessToken));
+      expect(row.accessTokenHash).not.toBe(sha256Hex(auth.tokens.accessToken));
+    });
   });
 
   describe("profile edits", () => {
     let pctx: TestCtx;
     const sent: { to: string; token: string }[] = [];
+    const notices: { to: string; kind: string }[] = [];
 
     beforeAll(async () => {
       pctx = await createTestApp({
@@ -355,6 +422,13 @@ describe("Auth (e2e)", () => {
                 sent.push({ to, token });
               },
               sendMfaRecoveryNotice: async () => undefined,
+              sendAlreadyRegisteredNotice: async () => undefined,
+              sendEmailChangeNotice: async (to: string) => {
+                notices.push({ to, kind: "change-requested" });
+              },
+              sendEmailChangedNotice: async (to: string) => {
+                notices.push({ to, kind: "changed" });
+              },
             }),
       });
     });
@@ -366,6 +440,7 @@ describe("Auth (e2e)", () => {
     beforeEach(async () => {
       await clearDb(pctx.prisma);
       sent.length = 0;
+      notices.length = 0;
     });
 
     describe("display name", () => {
@@ -425,6 +500,7 @@ describe("Auth (e2e)", () => {
         const last = sent[sent.length - 1];
         expect(last.to).toBe("changed@ordo.app");
         expect(last.token).toMatch(/^\d{6}$/);
+        expect(notices).toContainEqual({ to: "change@ordo.app", kind: "change-requested" });
 
         const res = await agent
           .post("/api/auth/email/verify-change")
@@ -432,6 +508,7 @@ describe("Auth (e2e)", () => {
           .expect(200);
         expect(res.body.email).toBe("changed@ordo.app");
         expect(res.body.emailVerified).toBe(true);
+        expect(notices).toContainEqual({ to: "change@ordo.app", kind: "changed" });
 
         // pending email is cleared
         const dbUser = await pctx.prisma.user.findUnique({ where: { email: "changed@ordo.app" } });
@@ -764,6 +841,7 @@ describe("Auth (e2e)", () => {
 describe("signup email verification (e2e)", () => {
   let vctx: TestCtx;
   const sent: { to: string; token: string }[] = [];
+  const alreadyRegistered: string[] = [];
 
   beforeAll(async () => {
     vctx = await createTestApp({
@@ -775,6 +853,11 @@ describe("signup email verification (e2e)", () => {
             sent.push({ to, token });
           },
           sendMfaRecoveryNotice: async () => undefined,
+          sendAlreadyRegisteredNotice: async (to: string) => {
+            alreadyRegistered.push(to);
+          },
+          sendEmailChangeNotice: async () => undefined,
+          sendEmailChangedNotice: async () => undefined,
         }),
     });
   });
@@ -786,6 +869,7 @@ describe("signup email verification (e2e)", () => {
   beforeEach(async () => {
     await clearDb(vctx.prisma);
     sent.length = 0;
+    alreadyRegistered.length = 0;
   });
 
   it("emails a 6-digit code and does not issue a session until verified", async () => {
@@ -829,6 +913,26 @@ describe("signup email verification (e2e)", () => {
       .set("x-client-type", "mobile")
       .send({ identifier: "verifyme@ordo.app", password: "supersecret" })
       .expect(200);
+  });
+
+  it("returns the same pending body for a duplicate email", async () => {
+    await request(vctx.app.getHttpServer())
+      .post("/api/auth/register")
+      .set("x-client-type", "mobile")
+      .send({ displayName: "verifyme", email: "dupverify@ordo.app", password: "supersecret" })
+      .expect(201);
+    sent.length = 0;
+
+    const dup = await request(vctx.app.getHttpServer())
+      .post("/api/auth/register")
+      .set("x-client-type", "mobile")
+      .send({ displayName: "other", email: "dupverify@ordo.app", password: "different1" })
+      .expect(201);
+
+    expect(dup.body).toEqual({ pendingEmailVerification: true });
+    expect(alreadyRegistered).toEqual(["dupverify@ordo.app"]);
+    expect(sent).toHaveLength(0);
+    expect(await vctx.prisma.user.count({ where: { email: "dupverify@ordo.app" } })).toBe(1);
   });
 
   it("blocks leftover sessions from library routes until the email is verified", async () => {

@@ -70,9 +70,9 @@ describe("ExportService", () => {
           matchWhere(args.where),
         ),
       },
-      folderToken: { findUnique: jest.fn().mockResolvedValue(null) },
+      folderToken: { findFirst: jest.fn().mockResolvedValue(null) },
     };
-    const tokens = { hash: jest.fn((t: string) => `hash-${t}`) };
+    const tokens = { lookupHashes: jest.fn((t: string) => [`hash-${t}`]) };
     const service = new ExportService(prisma as never, tokens as never, new LibraryCryptoService());
     return { prisma, tokens, service, folders };
   }
@@ -97,14 +97,14 @@ describe("ExportService", () => {
 
   it("includes a locked folder when its token is valid", async () => {
     const { service, prisma, tokens } = setup();
-    prisma.folderToken.findUnique.mockImplementation(async ({ where }: { where: { tokenHash: string } }) => ({
+    prisma.folderToken.findFirst.mockImplementation(async ({ where }: { where: { tokenHash: { in: string[] } } }) => ({
       folderId: "f2",
       expiresAt: new Date(Date.now() + 60_000),
-      tokenHash: where.tokenHash,
+      tokenHash: where.tokenHash.in[0],
     }));
 
     const file = await service.export("u1", { format: "json", folderId: null }, ["tok-priv"]);
-    expect(tokens.hash).toHaveBeenCalledWith("tok-priv");
+    expect(tokens.lookupHashes).toHaveBeenCalledWith("tok-priv");
     const body = JSON.parse(await readAll(file.stream));
     expect(body.folders.map((f: { name: string }) => f.name)).toEqual(["Public", "Private"]);
     expect(body.bookmarks).toHaveLength(3);
@@ -146,10 +146,10 @@ describe("ExportService", () => {
 
   it("folderIds export includes only those folders and omits unfiled", async () => {
     const { service, prisma } = setup();
-    prisma.folderToken.findUnique.mockImplementation(async ({ where }: { where: { tokenHash: string } }) => ({
+    prisma.folderToken.findFirst.mockImplementation(async ({ where }: { where: { tokenHash: { in: string[] } } }) => ({
       folderId: "f2",
       expiresAt: new Date(Date.now() + 60_000),
-      tokenHash: where.tokenHash,
+      tokenHash: where.tokenHash.in[0],
     }));
 
     const file = await service.export("u1", { format: "json", folderIds: ["f1", "f2"] }, ["tok-priv"]);

@@ -1,7 +1,8 @@
-import { randomInt } from "node:crypto";
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { EMAIL_OTP, TOKEN_TTL } from "@ordo/shared";
-import { generateToken, hashToken } from "../common/utils/tokens.js";
+import { randomInt } from "node:crypto";
+import { APP_CONFIG, type AppConfig } from "../config/config.module.js";
+import { generateToken, hmacSha256Hex, sha256Hex } from "../common/utils/tokens.js";
 
 export interface TokenPair {
   accessToken: string;
@@ -17,6 +18,8 @@ export interface TokenPair {
 /** Creates opaque random-byte token pairs and hashes for storage. */
 @Injectable()
 export class TokenService {
+  constructor(@Inject(APP_CONFIG) private readonly cfg: AppConfig) {}
+
   generatePair(): TokenPair {
     const accessToken = generateToken(32);
     const refreshToken = generateToken(48);
@@ -26,8 +29,8 @@ export class TokenService {
     return {
       accessToken,
       refreshToken,
-      accessHash: hashToken(accessToken),
-      refreshHash: hashToken(refreshToken),
+      accessHash: this.hash(accessToken),
+      refreshHash: this.hash(refreshToken),
       accessTokenExpiresAt,
       refreshTokenExpiresAt,
       expiresIn: Math.round(TOKEN_TTL.ACCESS_MS / 1000),
@@ -36,7 +39,7 @@ export class TokenService {
 
   generateFolderToken(): { token: string; hash: string } {
     const token = generateToken(32);
-    return { token, hash: hashToken(token) };
+    return { token, hash: this.hash(token) };
   }
 
   generateVerificationToken(): string {
@@ -44,7 +47,19 @@ export class TokenService {
     return String(randomInt(0, max)).padStart(EMAIL_OTP.LENGTH, "0");
   }
 
+  /** HMAC with JWT_SECRET. New rows always store this. */
   hash(token: string): string {
-    return hashToken(token);
+    return hmacSha256Hex(token, this.cfg.jwtSecret);
+  }
+
+  /** Pre-HMAC unsalted hash, for dual-read of existing sessions. */
+  legacyHash(token: string): string {
+    return sha256Hex(token);
+  }
+
+  lookupHashes(token: string): string[] {
+    const modern = this.hash(token);
+    const legacy = this.legacyHash(token);
+    return modern === legacy ? [modern] : [modern, legacy];
   }
 }

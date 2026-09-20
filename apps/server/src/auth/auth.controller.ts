@@ -286,9 +286,9 @@ export class AuthController {
   async changeEmail(
     @CurrentUser() user: AuthContext,
     @Body({ schema: ChangeEmailSchema })
-    body: { currentPassword: string; newEmail: string },
+    body: { currentPassword: string; newEmail: string; mfaCode?: string },
   ): Promise<{ success: true }> {
-    await this.auth.requestEmailChange(user.userId, body.currentPassword, body.newEmail);
+    await this.auth.requestEmailChange(user.userId, body.currentPassword, body.newEmail, body.mfaCode);
     return { success: true };
   }
 
@@ -316,7 +316,7 @@ export class AuthController {
   async changePassword(
     @CurrentUser() user: AuthContext,
     @Body({ schema: ChangePasswordSchema })
-    body: { currentPassword: string; newPassword: string },
+    body: { currentPassword: string; newPassword: string; mfaCode?: string },
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthResponse> {
@@ -326,6 +326,7 @@ export class AuthController {
       body.currentPassword,
       body.newPassword,
       this.clientMeta(req),
+      body.mfaCode,
     );
     if (!mobile) setAuthCookies(req, res, result.tokens);
     return this.maybeStripTokens(result, mobile);

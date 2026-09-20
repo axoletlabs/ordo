@@ -63,7 +63,7 @@ export const authApi = {
   changeDisplayName: (body: { displayName: string }) =>
     api.post<typeof AuthRoutes.changeDisplayName.response>(AuthRoutes.changeDisplayName.path, body),
 
-  requestEmailChange: (body: { currentPassword: string; newEmail: string }) =>
+  requestEmailChange: (body: { currentPassword: string; newEmail: string; mfaCode?: string }) =>
     api.post<typeof AuthRoutes.changeEmail.response>(AuthRoutes.changeEmail.path, body),
 
   resendEmailChange: () =>
@@ -75,7 +75,7 @@ export const authApi = {
       { token },
     ),
 
-  changePassword: (body: { currentPassword: string; newPassword: string }) =>
+  changePassword: (body: { currentPassword: string; newPassword: string; mfaCode?: string }) =>
     api.post<typeof AuthRoutes.changePassword.response>(AuthRoutes.changePassword.path, body),
 
   forgotPassword: (body: { email: string }) =>

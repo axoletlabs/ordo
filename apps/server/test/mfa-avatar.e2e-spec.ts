@@ -49,6 +49,9 @@ describe("MFA + avatars (e2e)", () => {
           sendMfaRecoveryNotice: async (to: string) => {
             notices.push(to);
           },
+          sendAlreadyRegisteredNotice: async () => undefined,
+          sendEmailChangeNotice: async () => undefined,
+          sendEmailChangedNotice: async () => undefined,
         }),
     });
   });
@@ -200,13 +203,41 @@ describe("MFA + avatars (e2e)", () => {
       void secret;
     });
 
-    it("lets you change the password with only the current password once MFA is enrolled", async () => {
-      const { agent } = await enrollTotp("stepup@ordo.app");
-      const changed = await agent
+    it("requires MFA to change the password once it is enrolled", async () => {
+      const { agent, secret } = await enrollTotp("stepup@ordo.app");
+      const missing = await agent
         .post("/api/auth/password")
         .send({ currentPassword: "supersecret", newPassword: "anothersecret" })
+        .expect(401);
+      expect(missing.body.error.code).toBe(ErrorCode.MFA_REQUIRED);
+
+      const changed = await agent
+        .post("/api/auth/password")
+        .send({
+          currentPassword: "supersecret",
+          newPassword: "anothersecret",
+          mfaCode: totpNow(secret, "stepup@ordo.app"),
+        })
         .expect(200);
       expect(changed.body.user.email).toBe("stepup@ordo.app");
+    });
+
+    it("requires MFA to request an email change once it is enrolled", async () => {
+      const { agent, secret } = await enrollTotp("email-mfa@ordo.app");
+      const missing = await agent
+        .post("/api/auth/email/change")
+        .send({ currentPassword: "supersecret", newEmail: "email-mfa-2@ordo.app" })
+        .expect(401);
+      expect(missing.body.error.code).toBe(ErrorCode.MFA_REQUIRED);
+
+      await agent
+        .post("/api/auth/email/change")
+        .send({
+          currentPassword: "supersecret",
+          newEmail: "email-mfa-2@ordo.app",
+          mfaCode: totpNow(secret, "email-mfa@ordo.app"),
+        })
+        .expect(200);
     });
 
     it("requires MFA to delete the account once it is enrolled", async () => {

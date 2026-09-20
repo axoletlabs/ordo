@@ -124,6 +124,24 @@ SMTP_FROM='ordo <a@b.c>'
   });
 });
 
+describe("loadConfig SMTP_REQUIRED", () => {
+  const original = process.env.SMTP_REQUIRED;
+
+  afterEach(() => {
+    restore("SMTP_REQUIRED", original);
+  });
+
+  it("treats SMTP_REQUIRED=false as off", () => {
+    process.env.SMTP_REQUIRED = "false";
+    expect(loadConfig().smtpRequired).toBe(false);
+  });
+
+  it("honors SMTP_REQUIRED", () => {
+    process.env.SMTP_REQUIRED = "true";
+    expect(loadConfig().smtpRequired).toBe(true);
+  });
+});
+
 describe("loadConfig cors allowlist", () => {
   const original = process.env.CORS_ALLOWED_ORIGINS;
 

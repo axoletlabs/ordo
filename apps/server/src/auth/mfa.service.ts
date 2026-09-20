@@ -18,7 +18,6 @@ import {
   equalHex,
   generateToken,
   hashEmailOtp,
-  hashToken,
 } from "../common/utils/tokens.js";
 import {
   formatBackupCode,
@@ -87,7 +86,7 @@ export class MfaService {
     await this.prisma.mfaChallenge.create({
       data: {
         userId: user.id,
-        tokenHash: hashToken(token),
+        tokenHash: this.tokens.hash(token),
         purpose: MFA_CHALLENGE_PURPOSE.LOGIN,
         payload: dek ? this.crypto.wrapMfaStash(token, { dek }) : null,
         expiresAt: new Date(Date.now() + MFA.CHALLENGE_TTL_MS),
@@ -154,7 +153,7 @@ export class MfaService {
     await this.prisma.mfaChallenge.create({
       data: {
         userId,
-        tokenHash: hashToken(generateToken(32)),
+        tokenHash: this.tokens.hash(generateToken(32)),
         purpose: MFA_CHALLENGE_PURPOSE.ENROLL,
         payload: encryptSecret(secret.base32, this.totpKey),
         expiresAt: new Date(Date.now() + MFA.CHALLENGE_TTL_MS),
@@ -297,8 +296,8 @@ export class MfaService {
   }
 
   private async matchChallenge(token: string, purpose: string) {
-    const record = await this.prisma.mfaChallenge.findUnique({
-      where: { tokenHash: hashToken(token) },
+    const record = await this.prisma.mfaChallenge.findFirst({
+      where: { tokenHash: { in: this.tokens.lookupHashes(token) } },
     });
     if (!record || record.purpose !== purpose || record.expiresAt < new Date()) {
       throw this.invalid();

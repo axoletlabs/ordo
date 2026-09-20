@@ -1,12 +1,18 @@
 import { Test } from "@nestjs/testing";
 import { TokenService } from "./token.service.js";
+import { APP_CONFIG } from "../config/config.module.js";
+import { hmacSha256Hex, sha256Hex } from "../common/utils/tokens.js";
 
 describe("TokenService", () => {
   let svc: TokenService;
+  const jwtSecret = "test-jwt-secret";
 
   beforeAll(async () => {
     const mod = await Test.createTestingModule({
-      providers: [TokenService],
+      providers: [
+        TokenService,
+        { provide: APP_CONFIG, useValue: { jwtSecret } },
+      ],
     }).compile();
     svc = mod.get(TokenService);
   });
@@ -31,6 +37,8 @@ describe("TokenService", () => {
   it("hashes the same token deterministically", () => {
     const pair = svc.generatePair();
     expect(svc.hash(pair.accessToken)).toBe(pair.accessHash);
+    expect(pair.accessHash).toBe(hmacSha256Hex(pair.accessToken, jwtSecret));
+    expect(pair.accessHash).not.toBe(sha256Hex(pair.accessToken));
   });
 
   it("generates unique tokens each call", () => {
@@ -38,6 +46,14 @@ describe("TokenService", () => {
     const b = svc.generatePair();
     expect(a.accessToken).not.toBe(b.accessToken);
     expect(a.refreshToken).not.toBe(b.refreshToken);
+  });
+
+  it("looks up both HMAC and legacy SHA-256 hashes", () => {
+    const pair = svc.generatePair();
+    expect(svc.lookupHashes(pair.accessToken)).toEqual([
+      hmacSha256Hex(pair.accessToken, jwtSecret),
+      sha256Hex(pair.accessToken),
+    ]);
   });
 
   it("generates a folder token with matching hash", () => {

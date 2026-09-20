@@ -35,7 +35,7 @@ type MockedImportPrisma = {
   folder: { findMany: jest.Mock; aggregate: jest.Mock; create: jest.Mock };
   tag: { findMany: jest.Mock; create: jest.Mock };
   bookmarkTag: { findMany: jest.Mock; createMany: jest.Mock };
-  folderToken: { findUnique: jest.Mock };
+  folderToken: { findFirst: jest.Mock };
   $transaction: (fn: (tx: unknown) => Promise<unknown>) => Promise<unknown>;
 };
 
@@ -97,10 +97,10 @@ describe("ImportService.commit", () => {
         findMany: jest.fn().mockResolvedValue([]),
         createMany: jest.fn().mockResolvedValue({ count: 0 }),
       },
-      folderToken: { findUnique: jest.fn().mockResolvedValue(null) },
+      folderToken: { findFirst: jest.fn().mockResolvedValue(null) },
       $transaction: jest.fn((fn: (tx: unknown) => Promise<unknown>) => fn(prisma)),
     };
-    const tokens = { hash: jest.fn((t: string) => `hash-${t}`) };
+    const tokens = { lookupHashes: jest.fn((t: string) => [`hash-${t}`]) };
     const extraction = { enqueue: jest.fn() };
     const service = new ImportService(
       prisma as never,
