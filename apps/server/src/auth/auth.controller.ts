@@ -107,7 +107,7 @@ export class AuthController {
     const mobile = isMobileClient(req);
     const result = await this.auth.register(body, this.clientMeta(req));
     if (isPendingEmailVerificationResponse(result)) return result;
-    if (!mobile) setAuthCookies(res, result.tokens);
+    if (!mobile) setAuthCookies(req, res, result.tokens);
     return this.maybeStripTokens(result, mobile);
   }
 
@@ -121,7 +121,7 @@ export class AuthController {
     const mobile = isMobileClient(req);
     const result = await this.auth.login(body, this.clientMeta(req));
     if (isMfaRequiredResponse(result)) return result;
-    if (!mobile) setAuthCookies(res, result.tokens);
+    if (!mobile) setAuthCookies(req, res, result.tokens);
     return this.maybeStripTokens(result, mobile);
   }
 
@@ -135,7 +135,7 @@ export class AuthController {
   ): Promise<AuthResponse> {
     const mobile = isMobileClient(req);
     const result = await this.auth.completeMfaLogin(body.challengeToken, body.code, this.clientMeta(req));
-    if (!mobile) setAuthCookies(res, result.tokens);
+    if (!mobile) setAuthCookies(req, res, result.tokens);
     return this.maybeStripTokens(result, mobile);
   }
 
@@ -163,7 +163,7 @@ export class AuthController {
       body.token,
       this.clientMeta(req),
     );
-    if (!mobile) setAuthCookies(res, result.tokens);
+    if (!mobile) setAuthCookies(req, res, result.tokens);
     return this.maybeStripTokens(result, mobile);
   }
 
@@ -175,7 +175,7 @@ export class AuthController {
   ): Promise<AuthResponse> {
     const mobile = isMobileClient(req);
     const result = await this.auth.refresh(getRefreshToken(req), getDeviceMetadata(req));
-    if (!mobile) setAuthCookies(res, result.tokens);
+    if (!mobile) setAuthCookies(req, res, result.tokens);
     return this.maybeStripTokens(result, mobile);
   }
 
@@ -327,7 +327,7 @@ export class AuthController {
       body.newPassword,
       this.clientMeta(req),
     );
-    if (!mobile) setAuthCookies(res, result.tokens);
+    if (!mobile) setAuthCookies(req, res, result.tokens);
     return this.maybeStripTokens(result, mobile);
   }
 

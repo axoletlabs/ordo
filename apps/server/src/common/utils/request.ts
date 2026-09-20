@@ -14,13 +14,32 @@ export function isMobileClient(req: Request): boolean {
   return req.get(CLIENT_TYPE_HEADER)?.toLowerCase() === CLIENT_TYPE_MOBILE;
 }
 
-export function getAccessToken(req: Request): string | null {
-  const header = req.get("authorization");
-  if (header?.toLowerCase().startsWith("bearer ")) {
-    return header.slice(7).trim() || null;
+function cookieValue(req: Request, ...names: string[]): string | null {
+  const cookies = req.cookies as Record<string, unknown> | undefined;
+  if (!cookies) return null;
+  for (const name of names) {
+    const value = cookies[name];
+    if (typeof value === "string" && value) return value;
   }
-  const cookie = req.cookies?.[COOKIES.ACCESS];
-  return typeof cookie === "string" && cookie ? cookie : null;
+  return null;
+}
+
+export function getBearerToken(req: Request): string | null {
+  const header = req.get("authorization");
+  if (!header?.toLowerCase().startsWith("bearer ")) return null;
+  return header.slice(7).trim() || null;
+}
+
+export function getAccessCookie(req: Request): string | null {
+  return cookieValue(req, COOKIES.ACCESS_HOST, COOKIES.ACCESS);
+}
+
+export function getCsrfCookie(req: Request): string | null {
+  return cookieValue(req, COOKIES.CSRF_HOST, COOKIES.CSRF);
+}
+
+export function getAccessToken(req: Request): string | null {
+  return getBearerToken(req) ?? getAccessCookie(req);
 }
 
 export function getRefreshToken(req: Request): string | null {
@@ -28,8 +47,7 @@ export function getRefreshToken(req: Request): string | null {
   if (fromHeader) return fromHeader;
   const fromBody = (req.body as { refreshToken?: string } | undefined)?.refreshToken;
   if (fromBody) return fromBody;
-  const cookie = req.cookies?.[COOKIES.REFRESH];
-  return typeof cookie === "string" && cookie ? cookie : null;
+  return cookieValue(req, COOKIES.REFRESH_HOST, COOKIES.REFRESH);
 }
 
 export function getFolderToken(req: Request): string | null {

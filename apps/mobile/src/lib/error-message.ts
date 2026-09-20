@@ -18,6 +18,7 @@ const FRIENDLY: Record<string, string> = {
   [ErrorCode.MFA_REQUIRED]: "Enter your authenticator or backup code.",
   [ErrorCode.MFA_ENROLLMENT_REQUIRED]: "Set up an authenticator app to continue.",
   [ErrorCode.MFA_INVALID]: "That code is incorrect or has expired.",
+  [ErrorCode.CSRF_INVALID]: "Reload the page and try again.",
   [ErrorCode.AVATAR_UNSUPPORTED_TYPE]: "Use a JPEG, PNG, or WebP image.",
   [ErrorCode.AVATAR_ANIMATED_DISABLED]: "Animated images are disabled on this server.",
   [ErrorCode.AVATAR_NOT_FOUND]: "No profile picture yet.",

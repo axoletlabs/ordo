@@ -53,7 +53,7 @@ Options
   --smtp-url <url>               SMTP URL; omit to print codes in the console
   --smtp-from <addr>             From address when SMTP is set
   --trust-proxy <n>              Reverse-proxy hops (default 0; 1 behind nginx/Caddy)
-  --cors <origins>               Comma-separated origins (empty allows the caller)
+  --cors <origins>               Extra browser origins (empty = same-origin + localhost)
   --database-url <url>           SQLite URL (default file:./ordo.db)
   --jwt-secret <secret>          Session secret (default: auto-saved .ordo-secret)
   --write-env                    Write apps/server/.env in non-interactive mode

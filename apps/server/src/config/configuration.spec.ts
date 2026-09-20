@@ -124,6 +124,27 @@ SMTP_FROM='ordo <a@b.c>'
   });
 });
 
+describe("loadConfig cors allowlist", () => {
+  const original = process.env.CORS_ALLOWED_ORIGINS;
+
+  afterEach(() => {
+    restore("CORS_ALLOWED_ORIGINS", original);
+  });
+
+  it("defaults to empty (same-origin plus loopback)", () => {
+    delete process.env.CORS_ALLOWED_ORIGINS;
+    expect(loadConfig().corsAllowedOrigins).toEqual([]);
+  });
+
+  it("parses a comma-separated list", () => {
+    process.env.CORS_ALLOWED_ORIGINS = "https://ordo.axolet.com/, http://localhost:8081";
+    expect(loadConfig().corsAllowedOrigins).toEqual([
+      "https://ordo.axolet.com",
+      "http://localhost:8081",
+    ]);
+  });
+});
+
 describe("resolveDatabaseUrl", () => {
   it("keeps absolute sqlite paths and resolves relative ones under prisma/", () => {
     expect(resolveDatabaseUrl("file:/tmp/ordo.db")).toBe("file:/tmp/ordo.db");

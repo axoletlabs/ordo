@@ -144,7 +144,7 @@ first run. You can also copy `apps/server/.env.example` yourself.
 | `MFA_REQUIRED` | `false` | Require MFA for every account |
 | `INSTANCE_RENAME_ENABLED` | `true` (off for ordo Cloud) | Allow the owner to rename this instance from the app |
 | `INSTANCE_ADMIN_EMAIL` | unset | If set, only this email may rename. Otherwise the first account. |
-| `CORS_ALLOWED_ORIGINS` | reflect the request | Comma-separated origins. Empty allows the caller. |
+| `CORS_ALLOWED_ORIGINS` | this origin + localhost | Comma-separated extra origins. Empty never echoes strangers. ordo Cloud sets the website. |
 
 ## Layout
 

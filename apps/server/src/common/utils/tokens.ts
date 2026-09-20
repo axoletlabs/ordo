@@ -31,6 +31,14 @@ export function equalHex(a: string, b: string): boolean {
   return timingSafeEqual(left, right);
 }
 
+/** Constant-time equality for CSRF cookies vs the header. */
+export function equalUtf8(a: string, b: string): boolean {
+  const left = Buffer.from(a);
+  const right = Buffer.from(b);
+  if (left.length !== right.length) return false;
+  return timingSafeEqual(left, right);
+}
+
 /** Hash a 6-digit email OTP bound to a user so identical codes don't collide. */
 export function hashEmailOtp(userId: string, otp: string, secret: string): string {
   return pepperedHash(`${userId}:${otp}`, secret);

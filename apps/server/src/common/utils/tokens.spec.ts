@@ -1,4 +1,4 @@
-import { equalHex, hashEmailOtp, pepperedHash } from "./tokens.js";
+import { equalHex, equalUtf8, hashEmailOtp, pepperedHash } from "./tokens.js";
 
 describe("token helpers", () => {
   it("peppers hashes so a DB leak of 6-digit codes is not enough", () => {
@@ -21,5 +21,11 @@ describe("token helpers", () => {
     expect(equalHex(hash, hash)).toBe(true);
     expect(equalHex(hash, pepperedHash("user-1:000000", "secret"))).toBe(false);
     expect(equalHex(hash, "abcd")).toBe(false);
+  });
+
+  it("compares UTF-8 CSRF tokens in constant time", () => {
+    expect(equalUtf8("token", "token")).toBe(true);
+    expect(equalUtf8("token", "other")).toBe(false);
+    expect(equalUtf8("token", "tok")).toBe(false);
   });
 });

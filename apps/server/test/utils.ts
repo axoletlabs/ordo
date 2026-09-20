@@ -1,14 +1,15 @@
 import { existsSync, unlinkSync } from "node:fs";
 import { Test, type TestingModuleBuilder } from "@nestjs/testing";
-import type { INestApplication } from "@nestjs/common";
-import cookieParser from "cookie-parser";
+import type { NestExpressApplication } from "@nestjs/platform-express";
 import { AppModule } from "../src/app.module.js";
 import { APP_CONFIG } from "../src/config/config.module.js";
+import type { AppConfig } from "../src/config/config.module.js";
 import { loadConfig } from "../src/config/configuration.js";
+import { applyHttp } from "../src/common/http.js";
 import { PrismaService } from "../src/prisma/prisma.service.js";
 
 export interface TestCtx {
-  app: INestApplication;
+  app: NestExpressApplication;
   prisma: PrismaService;
   dbPath: string;
 }
@@ -16,7 +17,7 @@ export interface TestCtx {
 /** Provisions a fresh temp SQLite DB; PrismaService applies migrations on boot. */
 export async function createTestApp(
   options: {
-    config?: Record<string, unknown>;
+    config?: Partial<AppConfig>;
     customize?: (builder: TestingModuleBuilder) => TestingModuleBuilder;
   } = {},
 ): Promise<TestCtx> {
@@ -26,7 +27,7 @@ export async function createTestApp(
   if (existsSync(dbPath)) unlinkSync(dbPath);
 
   const base = loadConfig();
-  const cfg = {
+  const cfg: AppConfig = {
     ...base,
     databaseUrl: `file:${dbPath}`,
     registrationEnabled: true,
@@ -46,8 +47,8 @@ export async function createTestApp(
     builder.useValue(cfg),
   ).compile();
 
-  const app = moduleRef.createNestApplication();
-  app.use(cookieParser());
+  const app = moduleRef.createNestApplication<NestExpressApplication>();
+  applyHttp(app, cfg);
   await app.init();
 
   return { app, prisma: app.get(PrismaService), dbPath };
@@ -86,7 +87,7 @@ export async function teardownApp(ctx: TestCtx): Promise<void> {
 
 /** Register a user via the API and return the mobile auth response (with tokens). */
 export async function registerUser(
-  app: INestApplication,
+  app: NestExpressApplication,
   email = "user@ordo.app",
   password = "password123",
   displayName?: string,
@@ -106,7 +107,7 @@ export async function registerUser(
 }
 
 /** Obtain a bearer-authenticated supertest agent. */
-export async function authedAgent(app: INestApplication, email?: string, password?: string) {
+export async function authedAgent(app: NestExpressApplication, email?: string, password?: string) {
   const supertest = (await import("supertest")).default;
   const auth = await registerUser(app, email, password);
   return supertest.agent(app.getHttpServer()).auth(auth.tokens.accessToken, { type: "bearer" });

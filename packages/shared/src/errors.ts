@@ -16,6 +16,7 @@ export const ErrorCode = {
   MFA_REQUIRED: "mfa_required",
   MFA_ENROLLMENT_REQUIRED: "mfa_enrollment_required",
   MFA_INVALID: "mfa_invalid",
+  CSRF_INVALID: "csrf_invalid",
 
   // avatars
   AVATAR_TOO_LARGE: "avatar_too_large",

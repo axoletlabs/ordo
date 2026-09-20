@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { hkdfSync, randomBytes } from "node:crypto";
 import { APP_NAME, AVATAR } from "@ordo/shared";
+import { parseCorsAllowlist } from "../common/utils/cors-origin.js";
 
 export type AvatarStorage = "filesystem" | "database";
 
@@ -23,7 +24,8 @@ export interface AppConfig {
   registrationEnabled: boolean;
   /** Require a signup code. ordo Cloud turns this on; self-host default is off. */
   emailVerificationRequired: boolean;
-  corsAllowedOrigins: string[]; // [] => reflect request origin
+  /** Extra browser origins. Empty = same-origin plus loopback (never echo strangers). */
+  corsAllowedOrigins: string[];
   smtpUrl: string | null;
   smtpFrom: string;
   /**
@@ -215,13 +217,7 @@ export function loadConfig(): AppConfig {
   const secret = resolveSecret();
   const libraryKek = resolveLibraryKek();
 
-  const corsRaw = (parsed.CORS_ALLOWED_ORIGINS ?? "").trim();
-  const corsAllowedOrigins = corsRaw
-    ? corsRaw
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean)
-    : [];
+  const corsAllowedOrigins = parseCorsAllowlist(parsed.CORS_ALLOWED_ORIGINS);
 
   const databaseUrl = resolveDatabaseUrl(parsed.DATABASE_URL);
 

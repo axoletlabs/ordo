@@ -1,5 +1,15 @@
 import type { Request } from "express";
-import { attachClientIp, getClientIp, normalizeIp, resolveClientIp } from "./request.js";
+import {
+  attachClientIp,
+  getAccessCookie,
+  getAccessToken,
+  getBearerToken,
+  getClientIp,
+  getCsrfCookie,
+  getRefreshToken,
+  normalizeIp,
+  resolveClientIp,
+} from "./request.js";
 
 function fakeReq(opts: { forwarded?: string; remote?: string; ip?: string }): Request {
   return {
@@ -48,5 +58,28 @@ describe("client IP", () => {
     const req = fakeReq({ forwarded: "203.0.113.10", remote: "10.0.0.1" });
     expect(attachClientIp(req, 1)).toBe("203.0.113.10");
     expect(getClientIp(req)).toBe("203.0.113.10");
+  });
+});
+
+describe("request tokens", () => {
+  it("prefers Bearer over cookies and reads both cookie name variants", () => {
+    const req = {
+      get: (name: string) =>
+        name.toLowerCase() === "authorization" ? "Bearer abc" : undefined,
+      cookies: {
+        ordo_access: "cookie-access",
+        "__Host-ordo_access": "host-access",
+        ordo_refresh: "cookie-refresh",
+        "__Host-ordo_refresh": "host-refresh",
+        ordo_csrf: "cookie-csrf",
+        "__Host-ordo_csrf": "host-csrf",
+      },
+    } as unknown as Request;
+
+    expect(getBearerToken(req)).toBe("abc");
+    expect(getAccessToken(req)).toBe("abc");
+    expect(getAccessCookie(req)).toBe("host-access");
+    expect(getRefreshToken(req)).toBe("host-refresh");
+    expect(getCsrfCookie(req)).toBe("host-csrf");
   });
 });

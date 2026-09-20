@@ -1,8 +1,9 @@
 import { MiddlewareConsumer, Module, type NestModule } from "@nestjs/common";
-import { APP_FILTER, APP_PIPE } from "@nestjs/core";
+import { APP_FILTER, APP_GUARD, APP_PIPE } from "@nestjs/core";
 import { AppConfigModule } from "./config/config.module.js";
 import { PrismaModule } from "./prisma/prisma.module.js";
 import { AllExceptionsFilter } from "./common/filters/all-exceptions.filter.js";
+import { CsrfGuard } from "./common/guards/csrf.guard.js";
 import { ClientIpMiddleware } from "./common/middleware/client-ip.middleware.js";
 import { createStandardSchemaPipe } from "./common/pipes/standard-schema-pipe.js";
 import { RateLimitModule } from "./common/rate-limit/rate-limit.module.js";
@@ -28,6 +29,7 @@ import { TelemetryModule } from "./telemetry/telemetry.module.js";
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
     { provide: APP_PIPE, useFactory: createStandardSchemaPipe },
+    { provide: APP_GUARD, useClass: CsrfGuard },
   ],
 })
 export class AppModule implements NestModule {

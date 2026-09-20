@@ -19,10 +19,22 @@ export const FOLDER_TOKENS_HEADER = "x-folder-tokens";
 /** Header carrying the opaque refresh token when not using cookies. */
 export const REFRESH_TOKEN_HEADER = "x-refresh-token";
 
-/** Cookie names for web clients. */
+/** Header matching the CSRF cookie on cookie-authenticated writes. */
+export const CSRF_TOKEN_HEADER = "x-csrf-token";
+
+/**
+ * Cookie names for web clients.
+ * HTTPS sets the `__Host-` names (Secure, Path=/, no Domain). HTTP self-host
+ * keeps the unprefixed names with Path=/api so cookie login still works
+ * without TLS.
+ */
 export const COOKIES = {
   ACCESS: "ordo_access",
   REFRESH: "ordo_refresh",
+  CSRF: "ordo_csrf",
+  ACCESS_HOST: "__Host-ordo_access",
+  REFRESH_HOST: "__Host-ordo_refresh",
+  CSRF_HOST: "__Host-ordo_csrf",
 } as const;
 
 /** Token lifetimes (milliseconds) for client-side scheduling. */
