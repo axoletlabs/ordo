@@ -44,9 +44,10 @@ export function FloatingPanel({
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const hideAndDismiss = React.useCallback(() => {
+    if (!dismissible) return;
     dismissKeyboard();
     onDismiss();
-  }, [onDismiss]);
+  }, [dismissible, onDismiss]);
   const { rendered, progress } = useOverlayPresence(visible, hideAndDismiss);
 
   React.useEffect(() => {

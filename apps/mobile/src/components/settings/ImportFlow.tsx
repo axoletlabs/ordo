@@ -56,6 +56,8 @@ export function ImportFlow({
   const qc = useQueryClient();
   const toasted = useRef<string | null>(null);
   const prevStatus = useRef<string | undefined>(undefined);
+  /** True after the user dismisses; upload must not reopen the panel. */
+  const dismissedRef = useRef(false);
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [jobId, setJobId] = useState<string | null>(null);
@@ -97,6 +99,7 @@ export function ImportFlow({
   }, [preview, folders]);
 
   const reset = (cancel = true) => {
+    dismissedRef.current = true;
     if (cancel && jobId) void importExportApi.cancelImport(jobId).catch(() => undefined);
     persistJob(null);
     setPhase("idle");
@@ -127,6 +130,7 @@ export function ImportFlow({
       toast.error("That file is larger than 50 MB.");
       return;
     }
+    dismissedRef.current = false;
     setPhase("uploading");
     try {
       const { jobId: id } = await importExportApi.uploadImport({
@@ -135,9 +139,14 @@ export function ImportFlow({
         name: asset.name || "import",
         size: asset.size,
       });
+      if (dismissedRef.current) {
+        void importExportApi.cancelImport(id).catch(() => undefined);
+        return;
+      }
       persistJob(id);
       setPhase("active");
     } catch (err) {
+      if (dismissedRef.current) return;
       toast.error(errorMessage(err, "The upload failed."));
       setPhase("idle");
     }
@@ -176,8 +185,6 @@ export function ImportFlow({
 
   const overlayOpen = phase === "uploading" || phase === "active";
   const busy = job?.status === "committing" || commitMutation.isPending;
-  const canScrimDismiss =
-    job?.status === "completed" || job?.status === "failed" || jobQuery.isError;
 
   return (
     <>
@@ -193,10 +200,8 @@ export function ImportFlow({
 
       <FloatingPanel
         visible={overlayOpen}
-        onDismiss={() => {
-          if (canScrimDismiss) reset(true);
-        }}
-        dismissible={canScrimDismiss}
+        onDismiss={() => reset(true)}
+        dismissible={!busy}
         maxWidth={440}
       >
         <ThemedScrollView

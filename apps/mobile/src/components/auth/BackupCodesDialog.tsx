@@ -41,7 +41,7 @@ export function BackupCodesDialog({
   };
 
   return (
-    <FloatingPanel visible={visible} onDismiss={onClose} maxWidth={layout.overlayConfirmWidth} dismissible={false}>
+    <FloatingPanel visible={visible} onDismiss={onClose} maxWidth={layout.overlayConfirmWidth} dismissible={!saving}>
       <PanelHeader
         icon="key-outline"
         iconColor={palette.accent}

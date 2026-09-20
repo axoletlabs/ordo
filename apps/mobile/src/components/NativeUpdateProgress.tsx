@@ -31,7 +31,8 @@ export function NativeUpdateProgress() {
   return (
     <FloatingPanel
       visible={visible}
-      onDismiss={downloading || update.installing ? () => {} : update.dismissDownload}
+      onDismiss={update.dismissDownload}
+      dismissible={!downloading && !update.installing}
       maxWidth={layout.overlayConfirmWidth}
     >
       <PanelHeader

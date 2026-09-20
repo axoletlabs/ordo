@@ -85,7 +85,7 @@ export function MfaStepUpPanel({
   };
 
   return (
-    <FloatingPanel visible={visible} onDismiss={close}>
+    <FloatingPanel visible={visible} onDismiss={close} dismissible={!busy}>
       <PanelHeader title={title} subtitle={description} />
       <View>
         <MfaCodeField

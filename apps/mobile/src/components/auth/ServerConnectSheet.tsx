@@ -174,7 +174,8 @@ export function ServerConnectSheet({
   return (
     <FloatingPanel
       visible={visible}
-      onDismiss={confirming ? () => {} : onDismiss}
+      onDismiss={onDismiss}
+      dismissible={!confirming}
       onShow={() => {
         setTimeout(() => inputRef.current?.focus(), 100);
       }}
