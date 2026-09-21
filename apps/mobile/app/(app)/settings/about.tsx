@@ -160,8 +160,20 @@ export default function AboutScreen() {
           ))}
         </SettingsGroup>
 
-        <Text variant="footnote" color="tertiary" style={styles.copyright}>
-          © {PUBLISHED_YEAR} Axolet
+        <Text
+          variant="footnote"
+          color="tertiary"
+          align="center"
+          onPress={() => openURL(AXOLET_URL)}
+          suppressHighlighting
+          accessibilityRole="link"
+          accessibilityLabel="© Axolet"
+          style={styles.copyright}
+        >
+          © {PUBLISHED_YEAR}{" "}
+          <Text variant="footnote" color="accent">
+            Axolet
+          </Text>
         </Text>
       </SettingsScrollView>
 
@@ -192,7 +204,6 @@ export default function AboutScreen() {
 
 const styles = StyleSheet.create({
   copyright: {
-    paddingHorizontal: spacing[4],
     paddingTop: spacing[16],
     paddingBottom: spacing[8],
   },
