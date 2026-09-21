@@ -51,13 +51,17 @@ cd ordo
 ```
 
 On a terminal the script asks a few questions (port, sign-ups, mail, reverse
-proxy), then installs, builds, and migrates SQLite. Check it:
+proxy), then installs, builds, and migrates SQLite. The API binds
+`127.0.0.1` so it is not on the LAN until you put nginx or Caddy in front
+(`deploy/nginx.conf.example`, `TRUST_PROXY=1`) or pass `--public`. Check it:
 
 ```bash
 curl http://localhost:3000/api/server/info
 ```
 
-You should see JSON with `name` (`ordo` until renamed), `version`, and `registrationEnabled`. The payload does not include the machine hostname.
+You should see JSON with `name` (`ordo` until renamed), `version`, and
+`registrationEnabled` (`true` until the first account exists). The payload
+does not include the machine hostname.
 
 ### Update
 
@@ -83,7 +87,8 @@ Same steps, no prompts. Flags override defaults. Use this in scripts and CI.
 
 ```bash
 ./scripts/deploy-server --yes
-./scripts/deploy-server --yes --port 8080 --trust-proxy 1 --registration false --start
+./scripts/deploy-server --yes --port 8080 --trust-proxy 1 --start
+./scripts/deploy-server --yes --public --registration true
 ```
 
 `./scripts/deploy-server --help` lists every flag. `--dry-run` prints the plan
@@ -106,12 +111,10 @@ pnpm --filter @ordo/server dev
 ### Create an account
 
 On ordo Cloud, open the app and sign in. On a server you run, complete
-**Use your own server** and register there. Registration on a self-hosted
-server is on by default.
-
-If you don't want anyone else creating an account, pass
-`--registration false` to the deploy script, or set
-`REGISTRATION_ENABLED=false` in `apps/server/.env` and restart.
+**Use your own server** and register there. The first account can always
+register. After that, sign-ups stay closed unless you pass
+`--registration true` or set `REGISTRATION_ENABLED=true` in
+`apps/server/.env` and restart.
 
 If you skip SMTP, one-time email codes are printed in the server console.
 
@@ -133,15 +136,16 @@ first run. You can also copy `apps/server/.env.example` yourself.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PORT` | `3000` | HTTP port |
+| `LISTEN_HOST` | `127.0.0.1` | Bind address. `0.0.0.0` or `--public` if you skip a reverse proxy |
 | `DATABASE_URL` | `file:./ordo.db` | SQLite file (under `apps/server/prisma/`) |
 | `JWT_SECRET` | auto-saved to `.ordo-secret` | Session secret. Keep this file. |
 | `LIBRARY_KEK` | auto-saved to `.ordo-library-key` | Wraps library encryption keys so email password reset still works. Keep this file. |
-| `REGISTRATION_ENABLED` | `true` | Allow new sign-ups |
+| `REGISTRATION_ENABLED` | `false` | Allow sign-ups after the first account. The first account can always register |
 | `EMAIL_VERIFICATION_REQUIRED` | `false` (on for ordo Cloud) | Require a code on sign-up |
 | `SMTP_URL` | unset | Mail for verification, reset, and account notices. Leave empty to print codes in the console. Resend: `smtp://resend:re_…@smtp.resend.com:587` (use 2465 if you need implicit TLS; 465 is often blocked) |
 | `SMTP_FROM` | `ordo <noreply@ordo.local>` | From address when SMTP is set. Use a domain you verified with the provider. |
 | `SMTP_REQUIRED` | `false` (on for ordo Cloud) | Never print codes. Missing or failed SMTP is an error. |
-| `TRUST_PROXY` | `0` | Set to `1` behind nginx, Caddy, or Cloudflare |
+| `TRUST_PROXY` | `0` | Set to `1` behind nginx, Caddy, or Cloudflare. See `deploy/nginx.conf.example` |
 | `MFA_REQUIRED` | `false` | Require MFA for every account |
 | `INSTANCE_RENAME_ENABLED` | `true` (off for ordo Cloud) | Allow the owner to rename this instance from the app |
 | `INSTANCE_ADMIN_EMAIL` | unset | If set, only this email may rename. Otherwise the first account. |

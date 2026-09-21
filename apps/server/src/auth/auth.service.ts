@@ -26,6 +26,7 @@ import { TokenService } from "./token.service.js";
 import { MailService } from "./mail.service.js";
 import { RateLimitService } from "../common/rate-limit/rate-limit.service.js";
 import { toSessionDto } from "../common/mappers.js";
+import { isRegistrationOpen } from "./registration-open.js";
 import { claimInstanceOwner, userDtoWithRename } from "../server/instance-admin.js";
 import { MfaService } from "./mfa.service.js";
 import { AvatarService } from "./avatar.service.js";
@@ -69,7 +70,7 @@ export class AuthService {
     input: { displayName: string; email: string; password: string },
     meta: ClientMeta,
   ): Promise<RegisterResponse> {
-    if (!this.cfg.registrationEnabled) {
+    if (!(await isRegistrationOpen(this.prisma, this.cfg.registrationEnabled))) {
       throw new AppError(ErrorCode.REGISTRATION_DISABLED, "This server isn't accepting new sign-ups.");
     }
 

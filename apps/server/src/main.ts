@@ -15,9 +15,10 @@ async function bootstrap(): Promise<void> {
   const cfg = app.get<AppConfig>(APP_CONFIG);
   applyHttp(app, cfg);
 
-  await app.listen(cfg.port, () => {
-    new Logger("Bootstrap").log(`${APP_NAME} server listening on http://localhost:${cfg.port}`);
-  });
+  await app.listen(cfg.port, cfg.listenHost);
+  new Logger("Bootstrap").log(
+    `${APP_NAME} server listening on http://${cfg.listenHost}:${cfg.port}`,
+  );
 }
 
 bootstrap().catch((err) => {

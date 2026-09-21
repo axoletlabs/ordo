@@ -13,6 +13,8 @@ export type AvatarStorage = "filesystem" | "database";
  */
 export interface AppConfig {
   port: number;
+  /** Bind address. Default 127.0.0.1; `--public` or LISTEN_HOST=0.0.0.0 exposes the LAN. */
+  listenHost: string;
   databaseUrl: string;
   /** App secret / token pepper. Auto-generated + persisted if unset. */
   jwtSecret: string;
@@ -21,6 +23,10 @@ export interface AppConfig {
    * Auto-generated + persisted to `.ordo-library-key` if unset.
    */
   libraryKek: string;
+  /**
+   * After the first account. The first account can always register so a
+   * closed instance can still be bootstrapped. Self-host default is off.
+   */
   registrationEnabled: boolean;
   /** Require a signup code. ordo Cloud turns this on; self-host default is off. */
   emailVerificationRequired: boolean;
@@ -63,9 +69,13 @@ const EnvSchema = z.object({
     .default(resolve(process.cwd(), "prisma", "ordo.db").replace(/^file:/, "")),
   JWT_SECRET: z.string().optional(),
   LIBRARY_KEK: z.string().optional(),
+  LISTEN_HOST: z
+    .string()
+    .default("127.0.0.1")
+    .transform((v) => v.trim() || "127.0.0.1"),
   REGISTRATION_ENABLED: z
     .string()
-    .default("true")
+    .default("false")
     .transform((v) => v.toLowerCase()),
   EMAIL_VERIFICATION_REQUIRED: z
     .string()
@@ -237,6 +247,7 @@ export function loadConfig(): AppConfig {
 
   return {
     port: parsed.PORT,
+    listenHost: resolveListenHost(parsed.LISTEN_HOST),
     databaseUrl,
     jwtSecret: secret,
     libraryKek,
@@ -261,4 +272,16 @@ export function loadConfig(): AppConfig {
 function resolveRateLimitEnabled(raw: string | undefined): boolean {
   if (raw !== undefined && raw.trim() !== "") return toBool(raw);
   return process.env.NODE_ENV !== "test";
+}
+
+const LISTEN_HOSTS = new Set(["127.0.0.1", "0.0.0.0", "::1", "::"]);
+
+function resolveListenHost(raw: string): string {
+  if (process.argv.includes("--public")) return "0.0.0.0";
+  if (!LISTEN_HOSTS.has(raw)) {
+    throw new Error(
+      `LISTEN_HOST must be 127.0.0.1, 0.0.0.0, ::1, or :: (got ${JSON.stringify(raw)})`,
+    );
+  }
+  return raw;
 }

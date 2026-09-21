@@ -43,6 +43,7 @@ test("parseArgs reads long flags, equals form, and booleans", () => {
     "--port=8080",
     "--registration",
     "false",
+    "--public",
     "--trust-proxy",
     "1",
     "--smtp-url",
@@ -55,6 +56,7 @@ test("parseArgs reads long flags, equals form, and booleans", () => {
   assert.equal(args.yes, true);
   assert.equal(args.port, 8080);
   assert.equal(args.registration, false);
+  assert.equal(args.public, true);
   assert.equal(args.trustProxy, 1);
   assert.equal(args.smtpUrl, "smtp://mail.example:587");
   assert.equal(args.start, false);
@@ -102,13 +104,22 @@ test("settingsFromSources prefer flags over an existing .env", () => {
   );
   assert.equal(settings.port, 4000);
   assert.equal(settings.registration, false);
+  assert.equal(settings.listenHost, "127.0.0.1");
   assert.equal(settings.trustProxy, 1);
+});
+
+test("--public binds 0.0.0.0 even when .env says localhost", () => {
+  const settings = settingsFromSources(parseArgs(["--public"]), {
+    LISTEN_HOST: "127.0.0.1",
+  });
+  assert.equal(settings.listenHost, "0.0.0.0");
 });
 
 test("renderEnv quotes values that need it and comments unset secrets", () => {
   const text = renderEnv({
     port: 3000,
     databaseUrl: "file:./ordo.db",
+    listenHost: "127.0.0.1",
     registration: true,
     emailVerification: false,
     mfaRequired: false,
@@ -119,6 +130,7 @@ test("renderEnv quotes values that need it and comments unset secrets", () => {
     smtpFrom: "ordo <noreply@example.com>",
   });
   assert.match(text, /PORT=3000/);
+  assert.match(text, /LISTEN_HOST=127.0.0.1/);
   assert.ok(text.includes('DATABASE_URL="file:./ordo.db"'));
   assert.match(text, /TRUST_PROXY=1/);
   assert.match(text, /JWT_SECRET auto-generates/);
@@ -269,6 +281,7 @@ test("interactive dry-run uses prompt answers", async () => {
   assert.equal(result.interactive, true);
   assert.equal(result.settings.port, 8080);
   assert.equal(result.settings.registration, false);
+  assert.equal(result.settings.listenHost, "127.0.0.1");
   assert.equal(result.settings.trustProxy, 1);
   assert.equal(result.start, false);
   assert.equal(result.pull, false);
@@ -282,6 +295,7 @@ test("--help prints usage and exits cleanly", () => {
   assert.equal(result.status, 0);
   assert.match(result.stdout, /Non-interactive/);
   assert.match(result.stdout, /--trust-proxy/);
+  assert.match(result.stdout, /--public/);
   assert.match(result.stdout, /update/);
   assert.equal(HELP.includes("migrate deploy"), true);
   assert.equal(HELP.includes("upgrade"), true);

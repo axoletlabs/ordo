@@ -3,6 +3,36 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { applyDotEnvFile, loadConfig, parseDotEnv, resolveDatabaseUrl } from "./configuration.js";
 
+describe("loadConfig listen host and registration", () => {
+  const original = {
+    LISTEN_HOST: process.env.LISTEN_HOST,
+    REGISTRATION_ENABLED: process.env.REGISTRATION_ENABLED,
+  };
+
+  afterEach(() => {
+    restore("LISTEN_HOST", original.LISTEN_HOST);
+    restore("REGISTRATION_ENABLED", original.REGISTRATION_ENABLED);
+  });
+
+  it("binds localhost and closes sign-ups after the first account by default", () => {
+    delete process.env.LISTEN_HOST;
+    delete process.env.REGISTRATION_ENABLED;
+    const cfg = loadConfig();
+    expect(cfg.listenHost).toBe("127.0.0.1");
+    expect(cfg.registrationEnabled).toBe(false);
+  });
+
+  it("honors LISTEN_HOST=0.0.0.0", () => {
+    process.env.LISTEN_HOST = "0.0.0.0";
+    expect(loadConfig().listenHost).toBe("0.0.0.0");
+  });
+
+  it("rejects an unknown LISTEN_HOST", () => {
+    process.env.LISTEN_HOST = "1.2.3.4";
+    expect(() => loadConfig()).toThrow(/LISTEN_HOST/);
+  });
+});
+
 describe("loadConfig rate-limit flags", () => {
   const original = {
     RATE_LIMIT_ENABLED: process.env.RATE_LIMIT_ENABLED,

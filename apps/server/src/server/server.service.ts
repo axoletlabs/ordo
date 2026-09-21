@@ -3,6 +3,7 @@ import { ErrorCode, type HealthDto, type ServerInfoDto } from "@ordo/shared";
 import { APP_CONFIG, type AppConfig } from "../config/config.module.js";
 import { AppError } from "../common/errors/app-error.js";
 import { MailService } from "../auth/mail.service.js";
+import { isRegistrationOpen } from "../auth/registration-open.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import {
   INSTANCE_SETTINGS_ID,
@@ -63,7 +64,7 @@ export class ServerService {
     return {
       name: await this.displayName(),
       version: VERSION,
-      registrationEnabled: this.cfg.registrationEnabled,
+      registrationEnabled: await isRegistrationOpen(this.prisma, this.cfg.registrationEnabled),
       emailVerificationRequired: this.cfg.emailVerificationRequired,
       smtpConfigured: this.mail.isConfigured,
       profilePictureMaxBytes: this.cfg.profilePictureMaxBytes,

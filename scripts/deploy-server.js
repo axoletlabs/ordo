@@ -7,7 +7,7 @@
  *
  *   ./scripts/deploy-server
  *   ./scripts/deploy-server update
- *   ./scripts/deploy-server --yes --trust-proxy 1 --registration false
+ *   ./scripts/deploy-server --yes --trust-proxy 1
  *   ./scripts/deploy-server --help
  */
 "use strict";
@@ -47,7 +47,8 @@ Modes
 Options
   -y, --yes, --non-interactive   Do not prompt
   --port <n>                     HTTP port (default 3000)
-  --registration <bool>          Allow new sign-ups (default true)
+  --registration <bool>          Allow sign-ups after the first account (default false)
+  --public                       Listen on 0.0.0.0 instead of 127.0.0.1
   --email-verification <bool>    Require a code on sign-up (default false)
   --mfa-required <bool>          Require MFA for every account (default false)
   --smtp-url <url>               SMTP URL; omit to print codes in the console
@@ -85,12 +86,14 @@ Examples
   ./scripts/deploy-server --yes
   ./scripts/deploy-server update
   ./scripts/deploy-server update --yes
-  ./scripts/deploy-server --yes --port 8080 --trust-proxy 1 --registration false --start
+  ./scripts/deploy-server --yes --port 8080 --trust-proxy 1 --start
+  ./scripts/deploy-server --yes --public --registration true
 `;
 
 const DEFAULTS = {
   port: 3000,
-  registration: true,
+  registration: false,
+  listenHost: "127.0.0.1",
   emailVerification: false,
   mfaRequired: false,
   smtpUrl: "",
@@ -155,6 +158,7 @@ function parseArgs(argv) {
     dryRun: false,
     port: null,
     registration: null,
+    public: false,
     emailVerification: null,
     mfaRequired: null,
     smtpUrl: null,
@@ -225,6 +229,9 @@ function parseArgs(argv) {
         break;
       case "--port":
         args.port = parsePort(consume());
+        break;
+      case "--public":
+        args.public = true;
         break;
       case "--registration":
         args.registration = parseBool(consume(), flag);
@@ -347,6 +354,9 @@ function settingsFromSources(args, existingEnv) {
   return {
     port: args.port ?? envInt(existingEnv.PORT, DEFAULTS.port),
     registration: args.registration ?? envBool(existingEnv.REGISTRATION_ENABLED, DEFAULTS.registration),
+    listenHost: args.public
+      ? "0.0.0.0"
+      : existingEnv.LISTEN_HOST?.trim() || DEFAULTS.listenHost,
     emailVerification:
       args.emailVerification ??
       envBool(existingEnv.EMAIL_VERIFICATION_REQUIRED, DEFAULTS.emailVerification),
@@ -369,6 +379,7 @@ function renderEnv(settings) {
   const lines = [
     "# Written by scripts/deploy-server. All keys are optional; delete a line to use the default.",
     `PORT=${settings.port}`,
+    `LISTEN_HOST=${settings.listenHost}`,
     `DATABASE_URL=${quoteEnv(settings.databaseUrl)}`,
     `REGISTRATION_ENABLED=${settings.registration}`,
     `EMAIL_VERIFICATION_REQUIRED=${settings.emailVerification}`,
@@ -586,7 +597,10 @@ async function promptSettings(ask, current) {
   };
 
   const port = parsePort(await text("HTTP port", String(current.port)));
-  const registration = await yn("Allow new sign-ups?", current.registration);
+  const registration = await yn(
+    "Allow new sign-ups after the first account?",
+    current.registration,
+  );
   const emailVerification = await yn("Require email verification?", current.emailVerification);
   const smtpUrl = await text(
     "SMTP URL (empty = print one-time codes in the console)",
@@ -601,6 +615,16 @@ async function promptSettings(ask, current) {
   const trustProxy = behindProxy
     ? parseTrustProxy(await text("Reverse-proxy hops to trust", String(current.trustProxy || 1)))
     : 0;
+  let listenHost = current.listenHost || DEFAULTS.listenHost;
+  if (behindProxy) {
+    listenHost = "127.0.0.1";
+  } else {
+    const exposeLan = await yn(
+      "Listen on the LAN without a reverse proxy (0.0.0.0)?",
+      listenHost === "0.0.0.0",
+    );
+    listenHost = exposeLan ? "0.0.0.0" : "127.0.0.1";
+  }
 
   return {
     ...current,
@@ -610,6 +634,7 @@ async function promptSettings(ask, current) {
     smtpUrl: smtp,
     smtpFrom,
     trustProxy,
+    listenHost,
   };
 }
 
@@ -785,8 +810,11 @@ async function deploy(options = {}) {
   }
 
   log("");
-  log(`API will listen on http://localhost:${settings.port}`);
-  log(`Check: curl http://localhost:${settings.port}/api/server/info`);
+  log(`API will listen on http://${settings.listenHost}:${settings.port}`);
+  log(`Check: curl http://127.0.0.1:${settings.port}/api/server/info`);
+  if (settings.listenHost === "127.0.0.1") {
+    log("Bound to localhost. Put nginx or Caddy in front (deploy/nginx.conf.example), or pass --public.");
+  }
   log(`Data:  ${dbPath}`);
   log("Secret: apps/server/.ordo-secret (created on first start if JWT_SECRET is unset)");
   log("Keep a backup of the database and the secret file.");

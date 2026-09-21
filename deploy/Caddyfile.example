@@ -1,0 +1,32 @@
+# Reverse-proxy in front of a self-hosted ordo API.
+#
+# The Node process binds 127.0.0.1 by default. Point this at that port, set
+# TRUST_PROXY=1 in apps/server/.env, and do not pass --public.
+#
+# Caddy's built-in rate limiting is a plugin; the API also rate-limits in
+# process. Uncomment the snippet if you run xcaddy with rate_limit.
+
+ordo.example.com {
+	reverse_proxy 127.0.0.1:3000
+	encode gzip
+	request_body {
+		max_size 64MB
+	}
+	header {
+		X-Content-Type-Options nosniff
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		-Server
+	}
+	# rate_limit {
+	# 	distributed
+	# 	zone auth {
+	# 		match {
+	# 			method POST
+	# 			path /api/auth/login /api/auth/register
+	# 		}
+	# 		window 1m
+	# 		events 20
+	# 	}
+	# }
+}

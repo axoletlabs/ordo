@@ -97,6 +97,32 @@ describe("Auth (e2e)", () => {
         .expect(400);
       expect(res.body.error.code).toBe(ErrorCode.VALIDATION_ERROR);
     });
+
+    it("lets the first account register when sign-ups are otherwise closed", async () => {
+      const closed = await createTestApp({ config: { registrationEnabled: false } });
+      try {
+        const open = await request(closed.app.getHttpServer()).get("/api/server/info").expect(200);
+        expect(open.body.registrationEnabled).toBe(true);
+
+        await request(closed.app.getHttpServer())
+          .post("/api/auth/register")
+          .set("x-client-type", "mobile")
+          .send({ displayName: "owner", email: "owner@ordo.app", password: "supersecret" })
+          .expect(201);
+
+        const shut = await request(closed.app.getHttpServer()).get("/api/server/info").expect(200);
+        expect(shut.body.registrationEnabled).toBe(false);
+
+        const denied = await request(closed.app.getHttpServer())
+          .post("/api/auth/register")
+          .set("x-client-type", "mobile")
+          .send({ displayName: "guest", email: "guest@ordo.app", password: "supersecret" })
+          .expect(403);
+        expect(denied.body.error.code).toBe(ErrorCode.REGISTRATION_DISABLED);
+      } finally {
+        await teardownApp(closed);
+      }
+    });
   });
 
   describe("login", () => {
@@ -143,6 +169,9 @@ describe("Auth (e2e)", () => {
   describe("health", () => {
     it("returns ok without auth when the database is reachable", async () => {
       const res = await request(ctx.app.getHttpServer()).get("/api/health").expect(200);
+      expect(res.headers["x-content-type-options"]).toBe("nosniff");
+      expect(res.headers["x-frame-options"]).toBe("DENY");
+      expect(res.headers["referrer-policy"]).toBe("no-referrer");
       expect(res.body).toEqual({ status: "ok" });
     });
   });
