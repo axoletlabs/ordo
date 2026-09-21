@@ -170,10 +170,7 @@ export default function AboutScreen() {
           accessibilityLabel="© Axolet"
           style={styles.copyright}
         >
-          © {PUBLISHED_YEAR}{" "}
-          <Text variant="footnote" color="accent">
-            Axolet
-          </Text>
+          © {PUBLISHED_YEAR} Axolet
         </Text>
       </SettingsScrollView>
 
