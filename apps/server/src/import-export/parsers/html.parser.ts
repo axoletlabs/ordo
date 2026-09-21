@@ -8,7 +8,7 @@
  */
 import { isSupportedUrl } from "@ordo/shared";
 import type { InvalidRow, ParseResult, ParsedEntry } from "./parse-utils";
-import { coerceDate, decodeEntities, sanitizeTitle, stripBrowserRootFolders } from "./parse-utils";
+import { coerceDate, decodeEntities, sanitizeTitle, stripBrowserRootFolders, ensureImportRowBudget } from "./parse-utils";
 
 interface TagMatch {
   tag: string;
@@ -119,6 +119,7 @@ export function parseNetscapeHtml(html: string): ParseResult {
         .filter((t) => t.length > 0)
         .slice(0, 20);
 
+      ensureImportRowBudget(entries.length);
       entries.push({
         url: href,
         title,

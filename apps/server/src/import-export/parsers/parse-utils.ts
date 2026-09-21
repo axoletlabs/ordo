@@ -45,6 +45,15 @@ export interface ParseResult {
   folders: ParsedFolder[];
 }
 
+/** Reject files that would enqueue tens of thousands of reader fetches. */
+export function ensureImportRowBudget(count: number): void {
+  if (count >= IMPORT_EXPORT.MAX_BOOKMARK_ROWS) {
+    throw new Error(
+      `Import files can contain at most ${IMPORT_EXPORT.MAX_BOOKMARK_ROWS} bookmarks.`,
+    );
+  }
+}
+
 /** Flatten nested source folder segments into a single Ordo folder name. */
 export function flattenFolderName(segments: readonly string[]): string | null {
   const name = segments

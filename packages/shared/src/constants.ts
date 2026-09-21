@@ -254,6 +254,8 @@ export const IMPORT_EXPORT = {
   FOLDER_NAME_MAX: 100,
   /** Max length of an imported bookmark title; longer titles are truncated. */
   TITLE_MAX: 500,
+  /** Cap on bookmark rows in one import (all formats). */
+  MAX_BOOKMARK_ROWS: 5_000,
   /** Separator used when flattening nested source folders into Ordo names. */
   FOLDER_PATH_SEPARATOR: " / ",
 } as const;

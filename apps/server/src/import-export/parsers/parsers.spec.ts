@@ -263,4 +263,14 @@ describe("parseOrdoJson", () => {
       parseOrdoJson(JSON.stringify({ ...file, version: 2 })),
     ).toThrow(/Unsupported ordo export version/);
   });
+
+  it("rejects files with too many bookmark rows", () => {
+    const bookmarks = Array.from({ length: 5001 }, (_, i) => ({
+      url: `https://example.com/${i}`,
+      title: "A",
+    }));
+    expect(() =>
+      parseOrdoJson(JSON.stringify({ ...file, bookmarks })),
+    ).toThrow(/at most 5000 bookmarks/);
+  });
 });

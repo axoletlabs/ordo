@@ -4,12 +4,13 @@
  */
 import {
   APP_NAME,
+  IMPORT_EXPORT,
   OrdoExportBookmarkSchema,
   OrdoExportFolderSchema,
   isSupportedUrl,
 } from "@ordo/shared";
 import type { InvalidRow, ParseResult, ParsedEntry } from "./parse-utils";
-import { clampProgress, sanitizeTitle } from "./parse-utils";
+import { clampProgress, sanitizeTitle, ensureImportRowBudget } from "./parse-utils";
 
 /** Returns true when the text parses as an Ordo export envelope. */
 export function looksLikeOrdoJson(text: string): boolean {
@@ -41,6 +42,11 @@ export function parseOrdoJson(text: string): ParseResult {
   if (!Array.isArray(envelope.bookmarks)) {
     throw new Error(`The ${APP_NAME} export is missing its bookmarks list.`);
   }
+  if (envelope.bookmarks.length > IMPORT_EXPORT.MAX_BOOKMARK_ROWS) {
+    throw new Error(
+      `Import files can contain at most ${IMPORT_EXPORT.MAX_BOOKMARK_ROWS} bookmarks.`,
+    );
+  }
 
   const entries: ParsedEntry[] = [];
   const invalid: InvalidRow[] = [];
@@ -66,6 +72,7 @@ export function parseOrdoJson(text: string): ParseResult {
       invalid.push({ line, reason: "Only http(s) URLs can be imported.", url: url.slice(0, 200) });
       return;
     }
+    ensureImportRowBudget(entries.length);
     entries.push({
       url,
       title: sanitizeTitle(b.title),

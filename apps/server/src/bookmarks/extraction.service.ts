@@ -129,8 +129,8 @@ export class ExtractionService {
     this.controllers.get(bookmarkId)?.abort();
   }
 
-  prefetch(url: string): void {
-    this.reader.prefetch(url);
+  prefetch(url: string, userId?: string): void {
+    this.reader.prefetch(url, userId);
   }
 
   async progress(userId: string): Promise<ExtractionProgressDto> {
@@ -181,6 +181,7 @@ export class ExtractionService {
         forceArticle: force,
         html: cachedHtml,
         signal: controller.signal,
+        userId,
         onHtml: (html) => {
           capturedHtml = html;
         },

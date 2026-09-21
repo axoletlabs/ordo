@@ -107,7 +107,7 @@ export const OrdoExportFileSchema = z.object({
   version: z.literal(1),
   exportedAt: z.string(),
   folders: z.array(OrdoExportFolderSchema).max(1000).default([]),
-  bookmarks: z.array(OrdoExportBookmarkSchema),
+  bookmarks: z.array(OrdoExportBookmarkSchema).max(IMPORT_EXPORT.MAX_BOOKMARK_ROWS),
 });
 export type OrdoExportFile = z.infer<typeof OrdoExportFileSchema>;
 

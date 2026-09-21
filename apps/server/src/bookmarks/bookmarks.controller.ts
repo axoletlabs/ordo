@@ -133,9 +133,10 @@ export class BookmarksController {
   @HttpCode(204)
   @RateLimit("bookmark-prefetch")
   async prefetch(
+    @CurrentUser() user: AuthContext,
     @Body({ schema: PrefetchBookmarkSchema }) body: { url: string },
   ): Promise<void> {
-    this.extraction.prefetch(body.url);
+    this.extraction.prefetch(body.url, user.userId);
   }
 
   @Get("reminders")

@@ -12,9 +12,11 @@ import { join } from "node:path";
 describe("article fetch dispatcher", () => {
   it("pairs the undici Agent with undici fetch, not global fetch", () => {
     const src = readFileSync(join(__dirname, "reader.service.ts"), "utf8");
-    expect(src).toContain('import { Agent, fetch as undiciFetch } from "undici"');
+    expect(src).toContain('import { Agent, buildConnector, fetch as undiciFetch } from "undici"');
     expect(src).toContain("undiciFetch(current");
     expect(src).toContain("dispatcher: this.dispatcher");
+    expect(src).toContain("buildConnector({");
+    expect(src).toContain("socket.remoteAddress");
     expect(src).toContain("await fetch(current, { redirect: \"manual\", signal: combined, headers })");
   });
 });

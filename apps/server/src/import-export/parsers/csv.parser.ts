@@ -9,7 +9,7 @@
  */
 import { APP_NAME, isSupportedUrl } from "@ordo/shared";
 import type { InvalidRow, ParseResult, ParsedEntry } from "./parse-utils";
-import { clampProgress, coerceDate, sanitizeTitle } from "./parse-utils";
+import { clampProgress, coerceDate, sanitizeTitle, ensureImportRowBudget } from "./parse-utils";
 
 /** Split CSV text into rows of cells. Handles quotes, escaped quotes, CRLF. */
 export function splitCsv(text: string): string[][] {
@@ -175,6 +175,7 @@ export function parseCsv(text: string): ParseResult {
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
 
+    ensureImportRowBudget(entries.length);
     entries.push({
       url,
       title,

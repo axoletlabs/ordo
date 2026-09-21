@@ -470,9 +470,12 @@ describe("ReaderService", () => {
       mockFetchNeverCalled();
       await expectUnsupported("http://localhost/admin", "non_html_content");
       await expectUnsupported("http://127.0.0.1/admin", "non_html_content");
+      await expectUnsupported("http://127.1/admin", "non_html_content");
+      await expectUnsupported("http://2130706433/", "non_html_content");
       await expectUnsupported("http://169.254.169.254/latest/meta-data", "non_html_content");
       await expectUnsupported("http://192.168.1.1/", "non_html_content");
       await expectUnsupported("http://[::1]/", "non_html_content");
+      await expectUnsupported("http://[::ffff:127.0.0.1]/", "non_html_content");
     });
 
     it("rejects JSON-LD Product pages even when the body is long enough to parse", async () => {

@@ -1,11 +1,18 @@
 import { Injectable, Logger, type OnModuleDestroy } from "@nestjs/common";
 import { isIP } from "node:net";
 import { setDefaultResultOrder } from "node:dns";
-import { Agent, fetch as undiciFetch } from "undici";
+import { Agent, buildConnector, fetch as undiciFetch } from "undici";
 import { classifyDestination, type ReaderRejectionReason } from "./reader-classify.js";
 import { UnsupportedContentError } from "./reader-errors.js";
 import { DnsCache } from "./dns-cache.js";
 import { HtmlCache } from "./html-cache.js";
+import {
+  FetchBudget,
+  assertHttpUrl,
+  assertPublicHost,
+  canonicalHostname,
+  isPublicIp,
+} from "./public-destination.js";
 import { ExtractPool } from "./reader-pool.js";
 import {
   ampHtmlHref,
@@ -31,8 +38,14 @@ export { UnsupportedContentError } from "./reader-errors.js";
 export interface ExtractOptions extends ParseOptions {
   signal?: AbortSignal;
   html?: string;
+  userId?: string;
   onHtml?: (html: string) => void;
   onMetadata?: (meta: ArticleMetadata) => void | Promise<void>;
+}
+
+interface LoadHtmlOptions {
+  cache?: boolean;
+  userId?: string;
 }
 
 const FETCH_TIMEOUT_MS = 8_000;
@@ -50,15 +63,8 @@ export class ReaderService implements OnModuleDestroy {
   private readonly htmlCache = new HtmlCache();
   private readonly dnsCache = new DnsCache();
   private readonly pool = new ExtractPool();
-  private readonly dispatcher = process.env.JEST_WORKER_ID
-    ? null
-    : new Agent({
-        connections: 16,
-        connect: { timeout: CONNECT_TIMEOUT_MS, lookup: this.dnsCache.asLookup() },
-        bodyTimeout: FETCH_TIMEOUT_MS,
-        headersTimeout: FETCH_TIMEOUT_MS,
-        keepAliveTimeout: 30_000,
-      });
+  private readonly fetchBudget = new FetchBudget();
+  private readonly dispatcher = process.env.JEST_WORKER_ID ? null : this.createDispatcher();
 
   async onModuleDestroy(): Promise<void> {
     await this.pool.close();
@@ -69,14 +75,14 @@ export class ReaderService implements OnModuleDestroy {
     return classifyShellText(text);
   }
 
-  /** Warm the HTML cache for a URL the user is about to save. */
-  prefetch(url: string): void {
+  /** Fetch a URL the user is about to save. Prefetch HTML is not stored globally. */
+  prefetch(url: string, userId?: string): void {
     try {
       this.rejectUnsupportedDestination(url, false);
     } catch {
       return;
     }
-    void this.loadHtml(url, false).catch((err: unknown) => {
+    void this.loadHtml(url, false, undefined, { cache: false, userId }).catch((err: unknown) => {
       this.logger.debug(`Prefetch skipped for ${safeHostname(url)}: ${(err as Error).message}`);
     });
   }
@@ -87,7 +93,7 @@ export class ReaderService implements OnModuleDestroy {
 
     const loaded = options.html
       ? { html: options.html }
-      : await this.loadHtml(url, forceArticle, options.signal);
+      : await this.loadHtml(url, forceArticle, options.signal, { userId: options.userId });
     options.onHtml?.(loaded.html);
     try {
       await options.onMetadata?.(peekMetadata(loaded.html, url));
@@ -108,38 +114,48 @@ export class ReaderService implements OnModuleDestroy {
     url: string,
     forceArticle = false,
     signal?: AbortSignal,
+    options: LoadHtmlOptions = {},
   ): Promise<{ html: string; fallbackHtml?: string }> {
-    if (process.env.JEST_WORKER_ID) {
-      return this.fetchAndMaybeAmp(url, forceArticle, signal);
+    const persist = options.cache !== false && !process.env.JEST_WORKER_ID;
+    if (!persist) {
+      this.noteFetch(options.userId);
+      return this.fetchAndMaybeAmp(url, forceArticle, signal, options);
     }
-    const html = await this.htmlCache.remember(url, () =>
-      this.fetchHtml(url, forceArticle, signal),
-    );
-    return this.followAmp(url, html, forceArticle, signal);
+    const html = await this.htmlCache.remember(url, () => {
+      this.noteFetch(options.userId);
+      return this.fetchHtml(url, forceArticle, signal);
+    });
+    return this.followAmp(url, html, forceArticle, signal, options);
   }
 
   private async fetchAndMaybeAmp(
     url: string,
     forceArticle: boolean,
-    signal?: AbortSignal,
+    signal: AbortSignal | undefined,
+    options: LoadHtmlOptions,
   ): Promise<{ html: string; fallbackHtml?: string }> {
     const html = await this.fetchHtml(url, forceArticle, signal);
-    return this.followAmp(url, html, forceArticle, signal);
+    return this.followAmp(url, html, forceArticle, signal, options);
   }
 
   private async followAmp(
     url: string,
     html: string,
     forceArticle: boolean,
-    signal?: AbortSignal,
+    signal: AbortSignal | undefined,
+    options: LoadHtmlOptions,
   ): Promise<{ html: string; fallbackHtml?: string }> {
     const amp = !isAmpUrl(url) ? ampHtmlHref(html, url) : null;
     if (!amp) return { html };
     try {
       this.rejectUnsupportedDestination(amp, forceArticle);
-      const ampHtml = process.env.JEST_WORKER_ID
-        ? await this.fetchHtml(amp, forceArticle, signal)
-        : await this.htmlCache.remember(amp, () => this.fetchHtml(amp, forceArticle, signal));
+      const persist = options.cache !== false && !process.env.JEST_WORKER_ID;
+      const ampHtml = persist
+        ? await this.htmlCache.remember(amp, () => {
+            this.noteFetch(options.userId);
+            return this.fetchHtml(amp, forceArticle, signal);
+          })
+        : await this.fetchHtml(amp, forceArticle, signal);
       return { html: ampHtml, fallbackHtml: html };
     } catch (err) {
       this.logger.debug(`AMP fetch skipped for ${url}: ${(err as Error).message}`);
@@ -312,50 +328,46 @@ export class ReaderService implements OnModuleDestroy {
     }
   }
 
-  private async assertPublicDestination(url: URL): Promise<void> {
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      throw new UnsupportedContentError("non_html_content", "Only HTTP pages are supported");
-    }
-    const host = url.hostname.toLowerCase().replace(/^\[|\]$/g, "");
-    if (host === "localhost" || host.endsWith(".localhost")) {
-      throw new UnsupportedContentError("non_html_content", "Private network URLs are not supported");
-    }
-    const addresses = isIP(host)
-      ? [{ address: host }]
-      : await this.dnsCache.lookupAll(host);
-    if (addresses.length === 0 || addresses.some(({ address }) => !this.isPublicIp(address))) {
-      throw new UnsupportedContentError("non_html_content", "Private network URLs are not supported");
-    }
+  private createDispatcher(): Agent {
+    const connector = buildConnector({
+      timeout: CONNECT_TIMEOUT_MS,
+      lookup: this.dnsCache.asLookup(),
+    });
+    return new Agent({
+      connections: 16,
+      connect: (opts, callback) => {
+        connector(opts, (err, socket) => {
+          if (err || !socket) {
+            callback(err ?? new Error("connect failed"), null);
+            return;
+          }
+          if (!isPublicIp(socket.remoteAddress ?? "")) {
+            socket.destroy();
+            callback(new Error("Private network URLs are not supported"), null);
+            return;
+          }
+          callback(null, socket);
+        });
+      },
+      bodyTimeout: FETCH_TIMEOUT_MS,
+      headersTimeout: FETCH_TIMEOUT_MS,
+      keepAliveTimeout: 30_000,
+    });
   }
 
-  private isPublicIp(address: string): boolean {
-    if (address.includes(":")) {
-      const normalized = address.toLowerCase();
-      const mapped = normalized.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/)?.[1];
-      if (mapped) return this.isPublicIp(mapped);
-      return !(
-        normalized === "::" ||
-        normalized === "::1" ||
-        /^f[cd]/.test(normalized) ||
-        /^fe[89ab]/.test(normalized) ||
-        normalized.startsWith("2001:db8:")
-      );
+  private noteFetch(userId?: string): void {
+    if (process.env.JEST_WORKER_ID) return;
+    this.fetchBudget.consume(userId);
+  }
+
+  private async assertPublicDestination(url: URL): Promise<void> {
+    assertHttpUrl(url);
+    const host = canonicalHostname(url.hostname);
+    assertPublicHost(host);
+    const addresses = isIP(host) ? [{ address: host }] : await this.dnsCache.lookupAll(host);
+    if (addresses.length === 0 || addresses.some(({ address }) => !isPublicIp(address))) {
+      throw new UnsupportedContentError("non_html_content", "Private network URLs are not supported");
     }
-    const octets = address.split(".").map(Number);
-    if (octets.length !== 4 || octets.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
-      return false;
-    }
-    const [a, b, c] = octets;
-    return !(
-      a === 0 || a === 10 || a === 127 || a >= 224 ||
-      (a === 100 && b >= 64 && b <= 127) ||
-      (a === 169 && b === 254) ||
-      (a === 172 && b >= 16 && b <= 31) ||
-      (a === 192 && b === 168) ||
-      (a === 192 && b === 0 && (c === 0 || c === 2)) ||
-      (a === 198 && (b === 18 || b === 19 || b === 51)) ||
-      (a === 203 && b === 0 && c === 113)
-    );
   }
 }
 
