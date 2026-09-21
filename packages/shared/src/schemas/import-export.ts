@@ -81,7 +81,12 @@ export const OrdoExportFolderSchema = z.object({
 export type OrdoExportFolder = z.infer<typeof OrdoExportFolderSchema>;
 
 export const OrdoExportBookmarkSchema = z.object({
-  url: z.string().trim().min(1).max(2048),
+  url: z
+    .string()
+    .trim()
+    .min(1)
+    .max(2048)
+    .refine(isSupportedUrl, { message: "Only http(s) URLs can be imported." }),
   title: z.string().max(IMPORT_EXPORT.TITLE_MAX).default(""),
   /** Flattened Ordo folder name; null/omitted means unfiled. */
   folder: z.string().trim().max(IMPORT_EXPORT.FOLDER_NAME_MAX).nullable().optional(),

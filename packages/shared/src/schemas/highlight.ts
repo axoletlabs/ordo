@@ -3,12 +3,13 @@ import {
   HIGHLIGHT_CONTEXT_MAX_LENGTH,
   HIGHLIGHT_QUOTE_MAX_LENGTH,
 } from "../constants.js";
+import { isSupportedUrl } from "./import-export.js";
 
 const href = z
   .string()
   .trim()
   .max(2048)
-  .url({ message: "Enter a valid URL." })
+  .refine(isSupportedUrl, { message: "Enter a valid URL." })
   .nullable()
   .optional();
 

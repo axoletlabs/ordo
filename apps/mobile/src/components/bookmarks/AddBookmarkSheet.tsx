@@ -30,6 +30,7 @@ import { toast } from "../ui/toast-store";
 import { spacing, radius } from "../../theme/tokens";
 import { useTheme } from "../../theme/ThemeProvider";
 import { domainFromUrl } from "../../lib/format";
+import { isSupportedUrl } from "@ordo/shared";
 
 export interface AddBookmarkSheetProps {
   visible: boolean;
@@ -160,9 +161,7 @@ export function AddBookmarkSheet({
     }
     let normalized = trimmed;
     if (!/^https?:\/\//i.test(normalized)) normalized = `https://${normalized}`;
-    try {
-      new URL(normalized);
-    } catch {
+    if (!isSupportedUrl(normalized)) {
       setError("Enter a valid URL.");
       if (shareIntake) setUrlEditing(true);
       return;

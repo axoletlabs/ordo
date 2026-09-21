@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { BATCH_ITEM_LIMIT, MAX_TAGS_PER_BOOKMARK } from "../constants.js";
 import { UNIX_SECONDS_MAX, UNIX_SECONDS_MIN } from "../reminders.js";
+import { isSupportedUrl } from "./import-export.js";
 
 /** Unix seconds. Null clears the reminder; a past value is immediately due. */
 export const UnixSecondsSchema = z
@@ -13,8 +14,8 @@ const url = z
   .string()
   .trim()
   .min(1, { message: "Enter a URL." })
-  .url({ message: "Enter a valid URL." })
-  .max(2048);
+  .max(2048)
+  .refine(isSupportedUrl, { message: "Enter a valid URL." });
 
 /**
  * Target folder for a bookmark. Omitted or `null` means the bookmark is
@@ -47,6 +48,8 @@ export const UpdateBookmarkSchema = z
     contentKindOverride: z.enum(["article", "web"]).nullable().optional(),
     /** Unix seconds. `null` clears. A past value stays due until opened or cleared. */
     remindAt: UnixSecondsSchema.nullable().optional(),
+    /** Rejected unless http(s); bookmark URLs are otherwise immutable. */
+    url: url.optional(),
   })
   .refine(
     (v) =>
