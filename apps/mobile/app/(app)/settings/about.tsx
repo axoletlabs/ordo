@@ -26,11 +26,13 @@ const REPO_URL = "https://github.com/axoletlabs/ordo";
 const AXOLET_URL = "https://axolet.com";
 const LEGAL_URL = "https://ordo.axolet.com";
 const LEGAL_LINKS = [
-  { label: "Terms", path: "/terms" },
-  { label: "Privacy", path: "/privacy" },
-  { label: "Security", path: "/security" },
+  { label: "Terms", path: "/terms", icon: "document-text-outline" as const },
+  { label: "Privacy", path: "/privacy", icon: "shield-checkmark-outline" as const },
+  { label: "Security", path: "/security", icon: "lock-closed-outline" as const },
 ];
 const PUBLISHED_YEAR = 2026;
+const TELEMETRY_FOOTER =
+  "The app sends an anonymous daily ping to ordo Cloud to count installs (app vs browser, coarse OS, version, Cloud or self-host). No account, server URL, or library data is included.";
 
 function openURL(url: string): void {
   void Linking.openURL(url).catch(() => {});
@@ -132,6 +134,12 @@ export default function AboutScreen() {
             onPress={() => openURL(REPO_URL)}
           />
           <SettingRow
+            icon="globe-outline"
+            label="Website"
+            value="Axolet"
+            onPress={() => openURL(AXOLET_URL)}
+          />
+          <SettingRow
             icon="ribbon-outline"
             label="License"
             value="AGPL-3.0"
@@ -139,34 +147,21 @@ export default function AboutScreen() {
           />
         </SettingsGroup>
 
-        <Text variant="footnote" color="tertiary" align="center" style={styles.footer}>
-          The app sends an anonymous daily ping to ordo Cloud to count installs
-          (app vs browser, coarse OS, version, Cloud or self-host). No account,
-          server URL, or library data is included.
-        </Text>
-        <Text variant="footnote" color="tertiary" align="center" style={styles.copyright}>
-          © {PUBLISHED_YEAR}{" "}
-          <Text
-            variant="footnote"
-            color="accent"
-            onPress={() => openURL(AXOLET_URL)}
-            suppressHighlighting
-          >
-            Axolet
-          </Text>
-          {LEGAL_LINKS.map((link) => (
-            <React.Fragment key={link.path}>
-              {"  ·  "}
-              <Text
-                variant="footnote"
-                color="accent"
-                onPress={() => openURL(`${LEGAL_URL}${link.path}`)}
-                suppressHighlighting
-              >
-                {link.label}
-              </Text>
-            </React.Fragment>
+        <SettingsGroup label="Legal" footer={TELEMETRY_FOOTER}>
+          {LEGAL_LINKS.map((link, index) => (
+            <SettingRow
+              key={link.path}
+              icon={link.icon}
+              label={link.label}
+              onPress={() => openURL(`${LEGAL_URL}${link.path}`)}
+              showChevron
+              divider={index < LEGAL_LINKS.length - 1}
+            />
           ))}
+        </SettingsGroup>
+
+        <Text variant="footnote" color="tertiary" style={styles.copyright}>
+          © {PUBLISHED_YEAR} Axolet
         </Text>
       </SettingsScrollView>
 
@@ -196,8 +191,11 @@ export default function AboutScreen() {
 }
 
 const styles = StyleSheet.create({
-  footer: { marginTop: spacing[24] },
-  copyright: { marginTop: spacing[8] },
+  copyright: {
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[16],
+    paddingBottom: spacing[8],
+  },
   fingerprintBox: {
     marginTop: spacing[4],
     borderWidth: StyleSheet.hairlineWidth,
