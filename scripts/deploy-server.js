@@ -731,7 +731,7 @@ async function deploy(options = {}) {
   if (!args.skipInstall) {
     run(
       "pnpm",
-      ["install", "--frozen-lockfile", "--config.dangerouslyAllowAllBuilds=true"],
+      ["install", "--frozen-lockfile"],
       { cwd: repoRoot, env: childEnv, dryRun: args.dryRun, log },
     );
   }

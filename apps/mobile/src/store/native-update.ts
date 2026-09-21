@@ -12,6 +12,10 @@ import {
   isNewerVersion,
   selectNativeUpdate,
 } from "../lib/app-version";
+import {
+  isTrustedGithubAssetUrl,
+  isTrustedGithubReleasePageUrl,
+} from "../lib/github-asset-url";
 import { prefsGet, prefsSet, StorageKeys } from "../lib/storage";
 
 const GITHUB_REPO_API = "https://api.github.com/repos/axoletlabs/ordo";
@@ -118,7 +122,8 @@ function selectApk(assets: GithubAsset[]): GithubAsset | null {
     (asset) =>
       asset.state === "uploaded" &&
       asset.name?.toLowerCase().endsWith(".apk") &&
-      asset.browser_download_url,
+      asset.browser_download_url &&
+      isTrustedGithubAssetUrl(asset.browser_download_url),
   );
   const architectures = (Device.supportedCpuArchitectures ?? [])
     .map((value): string | null => {
@@ -155,7 +160,9 @@ function normalizeRelease(release: GithubRelease): NativeRelease | null {
     body: release.body?.trim() ?? "",
     prerelease: !!release.prerelease || classifyReleaseVersion(version)?.kind === "prerelease",
     publishedAt: release.published_at,
-    pageUrl: release.html_url ?? "https://github.com/axoletlabs/ordo/releases",
+    pageUrl: isTrustedGithubReleasePageUrl(release.html_url ?? "")
+      ? release.html_url!
+      : "https://github.com/axoletlabs/ordo/releases",
     apkUrl: apk.browser_download_url,
     apkSize: apk.size ?? 0,
   };
@@ -248,6 +255,10 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
         ? cached.release
         : null;
     if (release && !includePrereleases && isEarlyRelease(release)) {
+      await deleteApk(release.version);
+      release = null;
+    }
+    if (release && !isTrustedGithubAssetUrl(release.apkUrl)) {
       await deleteApk(release.version);
       release = null;
     }
@@ -421,6 +432,9 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
     checkEpoch += 1;
     const release = get().release;
     if (!release) return;
+    if (!isTrustedGithubAssetUrl(release.apkUrl)) {
+      throw new Error("The update download URL is not a trusted GitHub release asset");
+    }
     const destination = apkDestination(release.version);
     if (!destination) return;
     if (await apkIsReady(destination, release.apkSize)) {

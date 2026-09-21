@@ -1,0 +1,13 @@
+title = "ordo"
+
+[extend]
+useDefault = true
+
+[allowlist]
+paths = [
+  '''(^|/)node_modules/''',
+  '''(^|/)apps/server/prisma/.*\.db''',
+  '''\.db\.bak''',
+  '''(^|/)apps/server/prisma/ordo-avatars/''',
+  '''(^|/)apps/mobile/keys/''',
+]

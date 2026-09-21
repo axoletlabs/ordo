@@ -3,7 +3,7 @@
 Two independent layers. Keep them separate in your head and everything else follows.
 
 - **Binary (native) layer:** GitHub Releases + the in-app updater. Users sideload APKs from `api.github.com/repos/axoletlabs/ordo/releases`. Any native change needs a new APK. There is no way around this, for anyone.
-- **JS layer:** EAS Update. Ships in minutes over the air. Only lands on APKs whose native fingerprint matches.
+- **JS layer:** EAS Update. Ships in minutes over the air. Only lands on APKs whose native fingerprint matches. Bundles are signed; CI uses `EXPO_UPDATES_PRIVATE_KEY` (the public cert is `apps/mobile/certs/certificate.pem`). From a machine: `eas update --private-key-path <key.pem> …` or `eas update:republish --private-key-path <key.pem> --group <id>`. Rotating the key requires a new APK.
 
 Branches decide where commits live. Tags decide what ships as a binary. Channels decide which installed APK hears an OTA. You never set a channel by hand; it is derived from the version string in `apps/mobile/app.config.js`.
 
@@ -69,7 +69,7 @@ Fix on `release/x.y`, push. OTA to production users within minutes. Tag only whe
 
 ## Escapes (rare, all non-destructive)
 
-- **Bad JS shipped via OTA:** roll back with one command from your machine: `eas update:republish --group <old-good-group-id>` (find group ids in the EAS dashboard under the update's channel, or `eas update:list`). It re-publishes the previous bundle with a fresh timestamp and every device rewinds at next launch. No force-push involved.
+- **Bad JS shipped via OTA:** roll back with one command from your machine: `eas update:republish --private-key-path <key.pem> --group <old-good-group-id>` (find group ids in the EAS dashboard under the update's channel, or `eas update:list`). It re-publishes the previous bundle with a fresh timestamp and every device rewinds at next launch. No force-push involved.
 - **Bad APK release:** delete the bad tag/release, fix on `release/x.y`, tag `vX.Y.(Z+1)`. Version codes only move forward, never rewrite.
 - **Bad source either way:** `git revert` on the right branch. History stays intact, which is what keeps the fingerprint baselines and embedded commitTime checks in CI working.
 
@@ -106,5 +106,5 @@ git checkout release/x.y; cherry-pick fix; git push   # OTA goes out on its own
 same, but expect an APK build on the release branch; tag vX.Y.(Z+1) and publish
 
 # OTA rollback (from your machine)
-eas update:republish --group <old-good-group-id>
+eas update:republish --private-key-path <key.pem> --group <old-good-group-id>
 ```

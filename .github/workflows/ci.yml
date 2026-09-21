@@ -24,9 +24,10 @@ on:
 #             (release/x.y hotfix branches cut from that tag also publish here)
 #   development — GitHub pre-release / `main` while version is alpha|beta|rc
 #   preview     — `preview` git branch dogfood APKs only (not feature branches)
-# JS-only updates on main, preview, or release/x.y go to that stream's channel
-# when the Android fingerprint matches the last (or in-flight) APK on the same
-# branch. Release branches exist so a post-release hotfix cannot be blocked by
+# JS-only updates on main, preview, or release/x.y of axoletlabs/ordo go to
+# that stream's channel when the Android fingerprint matches the last (or
+# in-flight) APK on the same branch. Forks never OTA. Bundles are signed with
+# EXPO_UPDATES_PRIVATE_KEY; the public cert is apps/mobile/certs/certificate.pem. Release branches exist so a post-release hotfix cannot be blocked by
 # newer native work on main: cut release/x.y at the tag commit, cherry-pick JS
 # fixes onto it, tag hotfixes vX.Y.Z from it, merge back to main after each fix.
 # Detect ignores packageJson:scripts and extra.ordo so a test-file list edit
@@ -168,7 +169,7 @@ jobs:
             local dir="$1"
             local out="$2"
             echo "Installing $(git -C "$dir" rev-parse --short HEAD) in $dir"
-            (cd "$dir" && pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true)
+            (cd "$dir" && pnpm install --frozen-lockfile)
             echo "Generating fingerprint for $(git -C "$dir" rev-parse --short HEAD)"
             # stdin closed: ExpoConfigLoader / autolinking inherit the Actions
             # pipe and can wait forever for EOF. timeout is a last resort if
@@ -318,7 +319,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true
+        run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma client
         run: pnpm db:generate
@@ -335,15 +336,48 @@ jobs:
       - name: Test
         run: pnpm -r test && pnpm test:scripts
 
+  supply-chain:
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'release'
+    concurrency:
+      group: ci-supply-chain-${{ github.ref }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+
+      - name: Audit production dependencies
+        run: pnpm audit --prod --audit-level=high
+
+      - name: Scan the tree and recent history for secrets
+        run: |
+          curl -fsSL -o /tmp/gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz
+          echo "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb  /tmp/gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          /tmp/gitleaks dir --redact --no-banner --max-decode-depth 0 --max-target-megabytes 2
+          /tmp/gitleaks git --redact --no-banner --max-decode-depth 0 --max-target-megabytes 2 --log-opts="-n 200"
+
   ota:
-    needs: detect
+    needs: [detect, supply-chain]
     # Publishes a JS-only update to this stream's channel:
     #   main       → production (stable version) or development (alpha/beta/rc)
     #   preview    → preview
     #   release/*  → production (hotfix line for the shipped stable)
     # Native fingerprint changes and commits marked -apk build an APK.
     # Feature branches never OTA (last-write-wins would clobber the stream).
+    # Forks never OTA even if they have a main branch.
     if: >-
+      github.repository == 'axoletlabs/ordo' &&
       github.event_name == 'push' &&
         (github.ref == 'refs/heads/main' ||
          github.ref == 'refs/heads/preview' ||
@@ -377,7 +411,7 @@ jobs:
           cache: 'pnpm'
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true
+        run: pnpm install --frozen-lockfile
 
       - name: Build shared package
         run: pnpm --filter @ordo/shared build
@@ -400,9 +434,17 @@ jobs:
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_UPDATES_PRIVATE_KEY: ${{ secrets.EXPO_UPDATES_PRIVATE_KEY }}
           CHANNEL: ${{ needs.detect.outputs.updates_channel }}
           EXTRA_RUNTIMES: ${{ needs.detect.outputs.extra_runtime_versions }}
         run: |
+          if [[ -z "${EXPO_UPDATES_PRIVATE_KEY}" ]]; then
+            echo "::error::EXPO_UPDATES_PRIVATE_KEY is required to sign OTA updates."
+            exit 1
+          fi
+          KEY="$RUNNER_TEMP/expo-updates-private-key.pem"
+          printf '%s\n' "$EXPO_UPDATES_PRIVATE_KEY" > "$KEY"
+          chmod 600 "$KEY"
           # Pin to a shipped APK runtime when detect's hash is not the
           # hash Gradle baked in, or when extra.ordo / scripts drifted.
           # --auto would publish detect's fingerprint — a runtime no
@@ -413,23 +455,26 @@ jobs:
               if [[ "$first" -eq 1 ]]; then
                 echo "Publishing JS to APK runtime ${runtime}"
                 ORDO_OTA_RUNTIME_VERSION="$runtime" eas update \
+                  --private-key-path "$KEY" \
                   --channel "$CHANNEL" --platform android --non-interactive \
                   --message "JS for APK runtime ${runtime}"
                 first=0
               else
                 echo "Reusing bundle for APK runtime ${runtime}"
                 ORDO_OTA_RUNTIME_VERSION="$runtime" eas update \
+                  --private-key-path "$KEY" \
                   --channel "$CHANNEL" --platform android --skip-bundler --non-interactive \
                   --message "Same JS for APK runtime ${runtime}"
               fi
             done
           else
-            eas update --channel "$CHANNEL" --platform android --non-interactive --auto
+            eas update --private-key-path "$KEY" \
+              --channel "$CHANNEL" --platform android --non-interactive --auto
           fi
 
   build_apk:
-    needs: detect
-    if: needs.detect.outputs.should_build == 'true'
+    needs: [detect, supply-chain]
+    if: github.repository == 'axoletlabs/ordo' && needs.detect.outputs.should_build == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -473,7 +518,7 @@ jobs:
           restore-keys: gradle-build-
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile --config.dangerouslyAllowAllBuilds=true
+        run: pnpm install --frozen-lockfile
 
       - name: Build shared package
         run: pnpm --filter @ordo/shared build

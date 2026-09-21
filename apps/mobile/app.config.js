@@ -56,6 +56,11 @@ module.exports = {
     // Custom Check / Download / Restart UI owns the fetch. Native ON_LOAD
     // would race that JS path (pending bundle vs advertised update).
     checkAutomatically: "NEVER",
+    codeSigningCertificate: "./certs/certificate.pem",
+    codeSigningMetadata: {
+      keyid: "main",
+      alg: "rsa-v1_5-sha256",
+    },
   },
   runtimeVersion: otaRuntime || { policy: "fingerprint" },
   plugins: [
