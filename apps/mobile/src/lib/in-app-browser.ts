@@ -4,8 +4,8 @@
  * Keep this file free of react-native so node tests can import it.
  */
 
-/** Schemes the WebView may navigate itself. */
-const ALLOWED_SCHEMES = new Set(["http", "https", "about", "blob", "data"]);
+/** Schemes the WebView may navigate itself. `data:` is iframe-only. */
+const ALLOWED_SCHEMES = new Set(["http", "https", "about", "blob"]);
 
 /** Schemes that should leave the app (mail, phone, maps, store, app links). */
 const EXTERNAL_SCHEMES = new Set([
@@ -15,7 +15,6 @@ const EXTERNAL_SCHEMES = new Set([
   "geo",
   "maps",
   "market",
-  "intent",
   "whatsapp",
   "tg",
   "itms",
@@ -31,6 +30,10 @@ const BLOCKED_SCHEMES = new Set([
   "chrome-extension",
   "moz-extension",
   "safari-extension",
+  "intent",
+  "package",
+  "android-app",
+  "intent-scheme",
 ]);
 
 export type WebViewRequestAction = "allow" | "block" | "external";
@@ -77,10 +80,11 @@ export function webViewRequestAction(url: string, isTopFrame = true): WebViewReq
   if (!url) return "block";
   const scheme = webViewUrlScheme(url);
   if (!scheme || BLOCKED_SCHEMES.has(scheme)) return "block";
+  if (scheme === "data") return isTopFrame ? "block" : "allow";
   if (ALLOWED_SCHEMES.has(scheme)) return "allow";
   if (!isTopFrame) return "block";
   if (EXTERNAL_SCHEMES.has(scheme)) return "external";
-  return "external";
+  return "block";
 }
 
 /** iOS -999 / Chromium aborted navigations are not real load failures. */

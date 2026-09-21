@@ -25,23 +25,15 @@ export async function createDeviceLockCredential(folderId: string): Promise<stri
   const credential = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
   await SecureStore.setItemAsync(keyFor(folderId), credential, {
     keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-    requireAuthentication: Platform.OS === "ios",
+    requireAuthentication: true,
     authenticationPrompt: "Confirm your device lock",
   });
   return credential;
 }
 
 export async function getDeviceLockCredential(folderId: string): Promise<string | null> {
-  if (Platform.OS === "android") {
-    const authentication = await LocalAuthentication.authenticateAsync({
-      promptMessage: "Unlock this folder",
-      cancelLabel: "Cancel",
-      disableDeviceFallback: false,
-    });
-    if (!authentication.success) throw new Error("Device authentication was unsuccessful.");
-  }
   return SecureStore.getItemAsync(keyFor(folderId), {
-    requireAuthentication: Platform.OS === "ios",
+    requireAuthentication: true,
     authenticationPrompt: "Unlock this folder",
   });
 }

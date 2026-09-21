@@ -86,6 +86,20 @@ function shortcutsXml(packageName) {
 
 const BACKUP_RULES_FILE = 'ordo_backup_rules';
 const DATA_EXTRACTION_RULES_FILE = 'ordo_data_extraction_rules';
+const NETWORK_SECURITY_CONFIG_FILE = 'network_security_config';
+
+const NETWORK_SECURITY_CONFIG_XML = `<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">axolet.com</domain>
+    </domain-config>
+</network-security-config>
+`;
 
 const BACKUP_RULES_XML = `<?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
@@ -721,16 +735,15 @@ function isSendFilter(filter) {
  */
 const withAndroidBuild = (config) => {
   // ── AndroidManifest.xml ────────────────────────────────────────────────
-  // Force usesCleartextTraffic=true. Expo SDK 52's prebuild-config silently
-  // drops the `android.usesCleartextTraffic` field from app.config.js, so without
-  // this OkHttp refuses to open HTTP connections on Android 9+ (API 28+) —
-  // the socket factory throws before connect(), the request never reaches the
-  // network, and the fetch hangs indefinitely with zero packets on the wire.
+  // Force usesCleartextTraffic=true for LAN/Tailscale self-host and HTTP
+  // websites. Expo SDK 52's prebuild-config silently drops the app.config
+  // field. Network security config still forbids cleartext to Cloud domains.
   config = withAndroidManifest(config, (c) => {
     const app = c.modResults.manifest.application?.[0];
     if (app) {
       if (!app.$) app.$ = {};
       app.$['android:usesCleartextTraffic'] = 'true';
+      app.$['android:networkSecurityConfig'] = `@xml/${NETWORK_SECURITY_CONFIG_FILE}`;
       // Own light/dark/AMOLED/sepia palettes — night-mode force-dark inverts parchment.
       app.$['android:forceDarkAllowed'] = 'false';
       app.$['android:fullBackupContent'] = `@xml/${BACKUP_RULES_FILE}`;
@@ -866,6 +879,10 @@ const withAndroidBuild = (config) => {
       await fs.writeFile(
         path.join(xmlDir, `${DATA_EXTRACTION_RULES_FILE}.xml`),
         DATA_EXTRACTION_RULES_XML
+      );
+      await fs.writeFile(
+        path.join(xmlDir, `${NETWORK_SECURITY_CONFIG_FILE}.xml`),
+        NETWORK_SECURITY_CONFIG_XML
       );
       return c;
     },
@@ -1049,6 +1066,8 @@ module.exports.BACKUP_RULES_FILE = BACKUP_RULES_FILE;
 module.exports.DATA_EXTRACTION_RULES_FILE = DATA_EXTRACTION_RULES_FILE;
 module.exports.BACKUP_RULES_XML = BACKUP_RULES_XML;
 module.exports.DATA_EXTRACTION_RULES_XML = DATA_EXTRACTION_RULES_XML;
+module.exports.NETWORK_SECURITY_CONFIG_FILE = NETWORK_SECURITY_CONFIG_FILE;
+module.exports.NETWORK_SECURITY_CONFIG_XML = NETWORK_SECURITY_CONFIG_XML;
 module.exports.quickShareCategory = quickShareCategory;
 module.exports.shortcutsXml = shortcutsXml;
 module.exports.shareIntakeKotlin = shareIntakeKotlin;

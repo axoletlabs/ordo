@@ -10,6 +10,8 @@ const {
   BACKUP_RULES_XML,
   DATA_EXTRACTION_RULES_FILE,
   DATA_EXTRACTION_RULES_XML,
+  NETWORK_SECURITY_CONFIG_FILE,
+  NETWORK_SECURITY_CONFIG_XML,
   LIGHT_SYSTEM_BARS_BOOL,
   QUICK_SHARE_ENABLED_FILE,
   QUICK_SHARE_FLAG_FILE,
@@ -317,6 +319,13 @@ test("app Gradle pulls androidx.security-crypto for the session store", () => {
   const patched = applySecurityCrypto(gradle);
   assert.match(patched, new RegExp(SECURITY_CRYPTO.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
   assert.equal(applySecurityCrypto(patched), patched);
+});
+
+test("network security config forbids cleartext to Cloud domains", () => {
+  assert.equal(NETWORK_SECURITY_CONFIG_FILE, 'network_security_config');
+  assert.match(NETWORK_SECURITY_CONFIG_XML, /cleartextTrafficPermitted="false"/);
+  assert.match(NETWORK_SECURITY_CONFIG_XML, /axolet\.com/);
+  assert.match(NETWORK_SECURITY_CONFIG_XML, /base-config cleartextTrafficPermitted="true"/);
 });
 
 test("backup rules keep SecureStore and the Quick Save session off Auto Backup", () => {

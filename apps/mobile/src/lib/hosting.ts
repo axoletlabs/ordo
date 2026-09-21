@@ -1,11 +1,12 @@
 /**
- * Cloud vs self-host. Fresh installs talk to ordo Cloud; a saved URL is never
- * rewritten. Self-host is opt-in and stays a different origin.
+ * Cloud vs self-host. Fresh installs talk to ordo Cloud. A saved self-host
+ * URL is kept; Cloud API hosts are always the HTTPS Cloud origin.
  */
 import type { TelemetryHosting } from "@ordo/shared";
 
 /** Hosted API origin. Trailing slashes are not part of the origin. */
 export const CLOUD_SERVER_URL = "https://api.ordo.axolet.com";
+const CLOUD_API_HOST = "api.ordo.axolet.com";
 
 export const CLOUD_DISPLAY_NAME = "ordo Cloud";
 
@@ -20,12 +21,25 @@ export const DEFAULT_SERVER_URL = CLOUD_SERVER_URL;
 export type HostingMode = "cloud" | "selfHosted";
 
 function originOf(raw: string): string | null {
+  return canonicalizeServerUrl(raw);
+}
+
+function isCloudApiHost(hostname: string): boolean {
+  return hostname.toLowerCase() === CLOUD_API_HOST;
+}
+
+/**
+ * Origin for a typed server URL. Cloud API hosts always become the HTTPS
+ * Cloud origin so cleartext cannot be used against ordo Cloud.
+ */
+export function canonicalizeServerUrl(raw: string): string | null {
   let value = raw.trim();
   if (!value) return null;
   if (!/^https?:\/\//i.test(value)) value = `https://${value}`;
   try {
     const url = new URL(value);
     if (!url.hostname) return null;
+    if (isCloudApiHost(url.hostname)) return CLOUD_SERVER_URL;
     return url.origin;
   } catch {
     return null;
@@ -58,7 +72,8 @@ export function resolvePersistedServerUrl(
   fallback: string = DEFAULT_SERVER_URL,
 ): string {
   const trimmed = saved?.trim();
-  return trimmed ? trimmed : fallback;
+  if (!trimmed) return fallback;
+  return canonicalizeServerUrl(trimmed) ?? fallback;
 }
 
 /** Cloud is not a self-host destination — send people back to the hosted path. */

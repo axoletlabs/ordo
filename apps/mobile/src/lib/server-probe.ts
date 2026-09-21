@@ -7,6 +7,7 @@
 import { APP_NAME, type ServerInfoDto } from "@ordo/shared";
 import { isAbortError, isDeadlineError, raceDeadline } from "./fetch-timeout";
 import { hostOf } from "./instance-name";
+import { canonicalizeServerUrl } from "./hosting";
 
 export { hostOf } from "./instance-name";
 
@@ -47,16 +48,7 @@ const PROBE_MAX_ATTEMPTS = 2;
 
 /** Normalise a raw user URL to an origin (`scheme://host[:port]`), or null. */
 export function normalizeServerUrl(raw: string): string | null {
-  let s = raw.trim();
-  if (!s) return null;
-  if (!/^https?:\/\//i.test(s)) s = `https://${s}`;
-  try {
-    const u = new URL(s);
-    if (!u.hostname) return null;
-    return u.origin;
-  } catch {
-    return null;
-  }
+  return canonicalizeServerUrl(raw);
 }
 
 /** One-line copy for the URL field while a candidate server is checked. */

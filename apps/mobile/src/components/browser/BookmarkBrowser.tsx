@@ -272,7 +272,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           overScrollMode="never"
           cacheEnabled
           cacheMode="LOAD_DEFAULT"
-          mixedContentMode="compatibility"
+          mixedContentMode="never"
           allowsBackForwardNavigationGestures
           allowsFullscreenVideo
           sharedCookiesEnabled
@@ -289,7 +289,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           contentInsetAdjustmentBehavior="never"
           hideKeyboardAccessoryView
           showsHorizontalScrollIndicator={false}
-          originWhitelist={["*"]}
+          originWhitelist={["http://*", "https://*", "about:blank"]}
           setBuiltInZoomControls
           setDisplayZoomControls={false}
           injectedJavaScriptBeforeContentLoaded={injected}

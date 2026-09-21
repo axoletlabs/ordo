@@ -138,7 +138,17 @@ module.exports = {
       // The flag only *allows* the panel rate; 60Hz hardware stays at 60.
       CADisableMinimumFrameDurationOnPhone: true,
       NSAppTransportSecurity: {
+        // WebView HTTP pages + LAN/Tailscale self-host. Cloud hosts re-enable ATS below.
         NSAllowsArbitraryLoads: true,
+        NSAllowsArbitraryLoadsInWebContent: true,
+        NSAllowsLocalNetworking: true,
+        NSExceptionDomains: {
+          "axolet.com": {
+            NSExceptionAllowsInsecureHTTPLoads: false,
+            NSIncludesSubdomains: true,
+            NSExceptionRequiresForwardSecrecy: true,
+          },
+        },
       },
     },
   },

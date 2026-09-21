@@ -23,7 +23,7 @@ export async function secureGet<T = any>(key: string): Promise<T | null> {
 export async function secureSet(key: string, value: unknown): Promise<void> {
   try {
     await SecureStore.setItemAsync(key, JSON.stringify(value), {
-      keychainAccessible: SecureStore.WHEN_UNLOCKED,
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
     });
   } catch {
     /* ignore — best effort */

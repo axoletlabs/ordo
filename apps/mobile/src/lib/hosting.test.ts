@@ -29,7 +29,7 @@ test("cloud URL matching ignores trailing slashes and paths", () => {
   assert.equal(isCloudServerUrl(CLOUD_SERVER_URL), true);
   assert.equal(isCloudServerUrl("https://api.ordo.axolet.com/"), true);
   assert.equal(isCloudServerUrl("https://api.ordo.axolet.com/api"), true);
-  assert.equal(isCloudServerUrl("http://api.ordo.axolet.com"), false);
+  assert.equal(isCloudServerUrl("http://api.ordo.axolet.com"), true);
   assert.equal(isCloudServerUrl("http://localhost:3000"), false);
   assert.equal(isCloudServerUrl(""), false);
   assert.equal(isCloudServerUrl(null), false);
@@ -44,12 +44,13 @@ test("hosting mode and display name follow the origin", () => {
   assert.equal(telemetryHosting("http://localhost:3000"), "selfhosted");
 });
 
-test("saved server URLs are left alone", () => {
+test("saved self-host URLs are kept; Cloud HTTP is upgraded", () => {
   assert.equal(resolvePersistedServerUrl("http://localhost:3000"), "http://localhost:3000");
   assert.equal(
     resolvePersistedServerUrl(" https://ordo.example "),
     "https://ordo.example",
   );
+  assert.equal(resolvePersistedServerUrl("http://api.ordo.axolet.com"), CLOUD_SERVER_URL);
   assert.equal(resolvePersistedServerUrl(""), CLOUD_SERVER_URL);
   assert.equal(resolvePersistedServerUrl("   "), CLOUD_SERVER_URL);
   assert.equal(resolvePersistedServerUrl(undefined), CLOUD_SERVER_URL);
@@ -58,6 +59,7 @@ test("saved server URLs are left alone", () => {
 
 test("cloud is not a self-host destination", () => {
   assert.equal(isSelfHostDestination(CLOUD_SERVER_URL), false);
+  assert.equal(isSelfHostDestination("http://api.ordo.axolet.com"), false);
   assert.equal(isSelfHostDestination("https://ordo.example"), true);
   assert.equal(isSelfHostDestination("not a url"), false);
 });

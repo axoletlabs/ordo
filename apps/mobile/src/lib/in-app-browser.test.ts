@@ -30,13 +30,17 @@ test("http(s) and in-page documents load in the WebView", () => {
   assert.equal(webViewRequestAction("about:blank"), "allow");
   assert.equal(webViewRequestAction("about:srcdoc"), "allow");
   assert.equal(webViewRequestAction("blob:https://example.com/1"), "allow");
-  assert.equal(webViewRequestAction("data:text/html,hi"), "allow");
+  assert.equal(webViewRequestAction("data:text/html,hi", false), "allow");
+  assert.equal(webViewRequestAction("data:text/html,hi"), "block");
 });
 
-test("javascript and local files never load", () => {
+test("javascript, local files, and intent URLs never load", () => {
   assert.equal(webViewRequestAction("javascript:alert(1)"), "block");
   assert.equal(webViewRequestAction("file:///etc/passwd"), "block");
   assert.equal(webViewRequestAction("content://media/1"), "block");
+  assert.equal(webViewRequestAction("intent://scan/#Intent;end"), "block");
+  assert.equal(webViewRequestAction("package:com.evil"), "block");
+  assert.equal(webViewRequestAction("unknown-scheme:foo"), "block");
   assert.equal(webViewRequestAction(""), "block");
 });
 
@@ -45,7 +49,6 @@ test("mail and phone links leave the app on the top frame only", () => {
   assert.equal(webViewRequestAction("tel:+1555"), "external");
   assert.equal(webViewRequestAction("sms:+1555"), "external");
   assert.equal(webViewRequestAction("mailto:hi@example.com", false), "block");
-  assert.equal(webViewRequestAction("intent://scan/#Intent;end"), "external");
 });
 
 test("cancelled navigations are not shown as failures", () => {

@@ -6,7 +6,7 @@
 import { create } from "zustand";
 import { setHapticsEnabled as applyHapticsEnabled } from "../lib/haptics";
 import { patchQuickShareSessionServerUrl, syncQuickShareFlags } from "../lib/share-targets";
-import { DEFAULT_SERVER_URL, resolvePersistedServerUrl } from "../lib/hosting";
+import { canonicalizeServerUrl, DEFAULT_SERVER_URL, resolvePersistedServerUrl } from "../lib/hosting";
 import { prefsGet, prefsSet, StorageKeys } from "../lib/storage";
 import type { ThemeMode } from "../theme/theme";
 
@@ -124,9 +124,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   },
 
   setServerUrl: async (url) => {
-    set({ serverUrl: url });
-    await prefsSet(StorageKeys.SETTINGS, { ...get(), serverUrl: url });
-    void patchQuickShareSessionServerUrl(url);
+    const next = canonicalizeServerUrl(url) ?? url;
+    set({ serverUrl: next });
+    await prefsSet(StorageKeys.SETTINGS, { ...get(), serverUrl: next });
+    void patchQuickShareSessionServerUrl(next);
   },
   setThemeMode: (mode) => {
     set({ themeMode: mode });
