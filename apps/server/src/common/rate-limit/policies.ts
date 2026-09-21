@@ -1,4 +1,8 @@
-/** In-memory rate-limit policies. Numbers are part of the public threat model. */
+/**
+ * In-memory rate-limit policies. Numbers are part of the public threat model.
+ * The store stays in-process (no Redis/SQLite) so the hot path is a Map lookup.
+ * Active lockouts are never LRU-evicted; new window keys fail closed at cap.
+ */
 
 const SECOND = 1000;
 const MINUTE = 60 * SECOND;

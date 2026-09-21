@@ -5,6 +5,7 @@ import {
   formatRetryAfter,
   LOGIN_ACCOUNT,
   RATE_LIMIT,
+  RATE_LIMIT_MAX_KEYS,
   rateLimitMessage,
 } from "./policies.js";
 import type { AppConfig } from "../../config/config.module.js";
@@ -158,11 +159,11 @@ describe("RateLimitService", () => {
     );
   });
 
-  it("caps failed logins per IP across accounts", () => {
+  it("caps logins per IP across accounts, including successes", () => {
     const limiter = service();
     const ip = "7.7.7.7";
     for (let i = 0; i < RATE_LIMIT.loginIp.limit; i++) {
-      limiter.recordLoginFailure({ accountKey: `user-${i}@ordo.app`, ip });
+      limiter.checkLogin({ accountKey: `user-${i}@ordo.app`, ip });
     }
     expectLimited(
       () => limiter.checkLogin({ accountKey: "fresh@ordo.app", ip }),
@@ -234,6 +235,21 @@ describe("RateLimitService", () => {
     }
     limiter.resetAll();
     expect(() => limiter.consumeRegister("1.1.1.1")).not.toThrow();
+  });
+
+  it("never evicts an active lock when the store is full", () => {
+    const limiter = service();
+    const keys = { accountKey: "locked@ordo.app", ip: "5.5.5.5" };
+    for (let i = 0; i < LOGIN_ACCOUNT.maxFailures; i++) {
+      limiter.recordLoginFailure(keys);
+    }
+    expectLimited(() => limiter.checkLogin(keys), "login attempts");
+
+    for (let i = 0; i < RATE_LIMIT_MAX_KEYS - 1; i++) {
+      limiter.consumeRegister(`fill-${i}`);
+    }
+    expectLimited(() => limiter.consumeRegister("198.51.100.1"), "requests");
+    expectLimited(() => limiter.checkLogin(keys), "login attempts");
   });
 
   it("limits install heartbeats per IP, with a tighter cap on new ids", () => {

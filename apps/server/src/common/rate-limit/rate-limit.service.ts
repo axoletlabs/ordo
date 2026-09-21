@@ -55,16 +55,18 @@ export class RateLimitService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * Reject if this account (or source IP) is currently locked / over quota.
-   * Does not record a failure.
+   * Reject if this account is locked. Counts every attempt (success or failure)
+   * against the source-IP window so bcrypt cannot be used as a cheap DoS.
+   * The identifier-only call consumes the IP; the follow-up with `userId` does not.
    */
   checkLogin(keys: LoginAttemptKeys): void {
     if (!this.enabled) return;
     this.assertAccountAvailable(this.accountStoreKey(keys.accountKey), "login attempts");
     if (keys.userId) {
       this.assertAccountAvailable(this.userStoreKey(keys.userId), "login attempts");
+      return;
     }
-    this.assertWindow(
+    this.consumeWindow(
       this.ipStoreKey("login", keys.ip),
       RATE_LIMIT.loginIp,
       "login attempts from this network",
@@ -77,11 +79,6 @@ export class RateLimitService implements OnModuleInit, OnModuleDestroy {
     if (keys.userId) {
       this.recordAccountFailure(this.userStoreKey(keys.userId));
     }
-    this.consumeWindow(
-      this.ipStoreKey("login", keys.ip),
-      RATE_LIMIT.loginIp,
-      "login attempts from this network",
-    );
   }
 
   clearLogin(keys: Pick<LoginAttemptKeys, "accountKey" | "userId">): void {
@@ -326,18 +323,37 @@ export class RateLimitService implements OnModuleInit, OnModuleDestroy {
   }
 
   private set(key: string, entry: Entry): void {
+    const now = Date.now();
+    const existed = this.store.has(key);
     // Re-insert so the map stays LRU-ordered (oldest keys first).
     this.store.delete(key);
+    if (!existed) this.ensureCapacity(entry, now);
     this.store.set(key, entry);
-    this.evict();
   }
 
-  private evict(): void {
-    while (this.store.size > RATE_LIMIT_MAX_KEYS) {
-      const oldest = this.store.keys().next().value;
-      if (oldest === undefined) break;
-      this.store.delete(oldest);
+  /**
+   * Drop expired records first. New windows fail closed at capacity so an
+   * attacker cannot rotate keys to evict a lock. Account lockouts may displace
+   * the oldest windows; active locks are never removed.
+   */
+  private ensureCapacity(incoming: Entry, now: number): void {
+    if (this.store.size < RATE_LIMIT_MAX_KEYS) return;
+    this.sweep();
+    if (this.store.size < RATE_LIMIT_MAX_KEYS) return;
+
+    if (incoming.kind === "account") {
+      for (const [key, entry] of this.store) {
+        if (this.isActiveLock(entry, now)) continue;
+        this.store.delete(key);
+        if (this.store.size < RATE_LIMIT_MAX_KEYS) return;
+      }
     }
+
+    this.deny(incoming.kind === "account" ? "login attempts" : "requests", 60);
+  }
+
+  private isActiveLock(entry: Entry, now: number): boolean {
+    return entry.kind === "account" && now < entry.lockedUntil;
   }
 
   private sweep(): void {
