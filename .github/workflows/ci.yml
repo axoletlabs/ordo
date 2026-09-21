@@ -354,6 +354,9 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: '22'
+          # Audit does not install; v5 would otherwise auto-cache pnpm and
+          # fail the post step because the store path does not exist.
+          package-manager-cache: false
 
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level=high

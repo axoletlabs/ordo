@@ -1,5 +1,5 @@
 import type { NestExpressApplication } from "@nestjs/platform-express";
-import type { Request } from "express";
+import type { Request, Response, NextFunction } from "express";
 import cookieParser from "cookie-parser";
 import { CSRF_TOKEN_HEADER, IMPORT_EXPORT } from "@ordo/shared";
 import type { AppConfig } from "../config/config.module.js";
@@ -13,7 +13,7 @@ import { corsOriginAllowed } from "./utils/cors-origin.js";
  */
 export function applyHttp(app: NestExpressApplication, cfg: AppConfig): void {
   app.set("trust proxy", cfg.trustProxy);
-  app.use((_req, res, next) => {
+  app.use((_req: Request, res: Response, next: NextFunction) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
     res.setHeader("Referrer-Policy", "no-referrer");
