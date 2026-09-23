@@ -46,6 +46,7 @@ import {
   raceDeadline,
 } from "../fetch-timeout";
 import { reportServerUnreachable } from "../server-availability";
+import { noteServerError, noteTimeout } from "../telemetry";
 
 /** Client-side error codes not present on the wire. */
 export const LOCAL_ERROR = {
@@ -125,6 +126,11 @@ async function parseError(res: Response): Promise<ApiClientError> {
     /* not JSON */
   }
   return new ApiClientError(res.status, body);
+}
+
+function noteApiFailure(err: ApiClientError): void {
+  if (err.code === LOCAL_ERROR.TIMEOUT) noteTimeout();
+  else if (err.status >= 500) noteServerError();
 }
 
 function noteUnreachable(url: string) {
@@ -348,6 +354,7 @@ async function request<T>(
     if (shouldRetryRequestWithRefresh(err, { auth, retried })) {
       const refresh = await refreshOnce();
       if (refresh === "ok") return request<T>(path, options, true);
+      noteApiFailure(err);
       if (refresh === "rejected") {
         throw new ApiClientError(401, { code: "session_revoked", message: "Your session has ended. Please sign in again." });
       }
@@ -357,6 +364,7 @@ async function request<T>(
         message: "Couldn't reach the server. Check your connection.",
       });
     }
+    noteApiFailure(err);
     if (
       shouldClearSessionForError(err, {
         sentAccessToken,

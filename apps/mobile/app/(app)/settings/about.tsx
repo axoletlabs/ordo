@@ -32,7 +32,7 @@ const LEGAL_LINKS = [
 ];
 const PUBLISHED_YEAR = 2026;
 const TELEMETRY_FOOTER =
-  "The app sends an anonymous daily ping to ordo Cloud to count installs (app vs browser, coarse OS, version, Cloud or self-host). No account, server URL, or library data is included.";
+  "The app sends anonymous counts to ordo Cloud: installs, opens, sign-ins, registrations, and coarse health (timeouts, server errors, sign-in failures, startup speed). Platform, version, and Cloud or self-host are included. Your account, server URL, and library are not.";
 
 function openURL(url: string): void {
   void Linking.openURL(url).catch(() => {});

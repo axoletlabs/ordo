@@ -15,7 +15,12 @@ export const TELEMETRY_HOSTING = ["cloud", "selfhosted"] as const;
 export const TelemetryPlatformSchema = z.enum(TELEMETRY_PLATFORMS);
 export const TelemetryHostingSchema = z.enum(TELEMETRY_HOSTING);
 
-/** Anonymous once-a-day install ping. No account, email, IP, or server URL. */
+const telemetryCount = z.number().int().min(0).max(500).default(0);
+
+/**
+ * Anonymous install ping. No account, email, IP, device name, or server URL.
+ * Sign-in and registration are separate flags. Health fields are coarse counts.
+ */
 export const TelemetryHeartbeatSchema = z.object({
   installId: z
     .string()
@@ -30,6 +35,20 @@ export const TelemetryHeartbeatSchema = z.object({
     .trim()
     .min(1, { message: "Enter an app version." })
     .max(32, { message: "App version must be 32 characters or fewer." }),
+  /** UTC day these counters belong to (`YYYY-MM-DD`). Omitted pings count as today. */
+  day: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+  opens: telemetryCount,
+  loggedIn: z.boolean().default(false),
+  registered: z.boolean().default(false),
+  timeouts: telemetryCount,
+  serverErrors: telemetryCount,
+  signInFailures: telemetryCount,
+  startupFast: telemetryCount,
+  startupOk: telemetryCount,
+  startupSlow: telemetryCount,
 });
 
 export type TelemetryHeartbeatInput = z.infer<typeof TelemetryHeartbeatSchema>;

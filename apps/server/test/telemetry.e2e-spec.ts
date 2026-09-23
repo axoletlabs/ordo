@@ -97,6 +97,47 @@ describe("Telemetry (e2e)", () => {
     });
   });
 
+  it("keeps sign-ins, registrations, and counters separate", async () => {
+    await request(ctx.app.getHttpServer())
+      .post(TelemetryRoutes.heartbeat.path)
+      .send({
+        installId: INSTALL_A,
+        platform: "android",
+        hosting: "cloud",
+        appVersion: "0.2.0",
+        opens: 3,
+        registered: true,
+        loggedIn: false,
+        timeouts: 2,
+        startupFast: 1,
+      })
+      .expect(200);
+    await request(ctx.app.getHttpServer())
+      .post(TelemetryRoutes.heartbeat.path)
+      .send({
+        installId: INSTALL_A,
+        platform: "android",
+        hosting: "cloud",
+        appVersion: "0.2.0",
+        opens: 1,
+        registered: false,
+        loggedIn: true,
+        timeouts: 0,
+        signInFailures: 4,
+      })
+      .expect(200);
+
+    const row = await ctx.prisma.appInstallDay.findFirst({ where: { installId: INSTALL_A } });
+    expect(row).toMatchObject({
+      opens: 3,
+      registered: true,
+      loggedIn: true,
+      timeouts: 2,
+      signInFailures: 4,
+      startupFast: 1,
+    });
+  });
+
   it("records a phone browser separately from the Android app", async () => {
     await request(ctx.app.getHttpServer())
       .post(TelemetryRoutes.heartbeat.path)

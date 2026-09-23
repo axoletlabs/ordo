@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  applyTelemetryNote,
+  countsAsSignInFailure,
+  emptyTelemetryCounters,
   existingOrNewInstallId,
   needsTelemetryRegistration,
+  shouldFlushTelemetry,
   shouldPing,
+  startupBucket,
+  telemetryDirty,
   telemetryEnabled,
   telemetryPlatform,
 } from "./telemetry-policy.ts";
@@ -72,6 +78,58 @@ test("splits browsers so a phone site visit is not an Android install", () => {
       userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Electron/28.0.0",
     }),
     "desktop",
+  );
+});
+
+test("counts a sign-in and a registration as different events", () => {
+  const day = emptyTelemetryCounters("2026-09-23");
+  const signedIn = applyTelemetryNote(day, "loggedIn");
+  const registered = applyTelemetryNote(day, "registered");
+  assert.equal(signedIn.loggedIn, true);
+  assert.equal(signedIn.registered, false);
+  assert.equal(registered.registered, true);
+  assert.equal(registered.loggedIn, false);
+  assert.equal(applyTelemetryNote(signedIn, "registered").loggedIn, true);
+  assert.equal(applyTelemetryNote(signedIn, "registered").registered, true);
+});
+
+test("buckets startup and treats only HTTP 4xx as a sign-in failure", () => {
+  assert.equal(startupBucket(400), "fast");
+  assert.equal(startupBucket(1000), "ok");
+  assert.equal(startupBucket(3000), "slow");
+  assert.equal(countsAsSignInFailure(401), true);
+  assert.equal(countsAsSignInFailure(500), false);
+  assert.equal(countsAsSignInFailure(0), false);
+});
+
+test("flushes a later sign-in the same day without waiting for the gap", () => {
+  const now = 1_700_000_000_000;
+  const counters = applyTelemetryNote(emptyTelemetryCounters("2026-09-23"), "loggedIn");
+  const ack = emptyTelemetryCounters("2026-09-23");
+  assert.equal(telemetryDirty(counters, ack), true);
+  assert.equal(
+    shouldFlushTelemetry({
+      lastPingAt: now - 60_000,
+      ackDay: "2026-09-23",
+      today: "2026-09-23",
+      now,
+      dirty: true,
+      force: false,
+      immediate: true,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldFlushTelemetry({
+      lastPingAt: now - 60_000,
+      ackDay: "2026-09-23",
+      today: "2026-09-23",
+      now,
+      dirty: true,
+      force: false,
+      immediate: false,
+    }),
+    false,
   );
 });
 

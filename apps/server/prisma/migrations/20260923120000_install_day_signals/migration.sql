@@ -1,0 +1,10 @@
+-- Anonymous per-install day counters. Sign-in and registration stay separate.
+ALTER TABLE "AppInstallDay" ADD COLUMN "opens" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "AppInstallDay" ADD COLUMN "loggedIn" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "AppInstallDay" ADD COLUMN "registered" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "AppInstallDay" ADD COLUMN "timeouts" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "AppInstallDay" ADD COLUMN "serverErrors" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "AppInstallDay" ADD COLUMN "signInFailures" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "AppInstallDay" ADD COLUMN "startupFast" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "AppInstallDay" ADD COLUMN "startupOk" INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE "AppInstallDay" ADD COLUMN "startupSlow" INTEGER NOT NULL DEFAULT 0;

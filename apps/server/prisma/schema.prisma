@@ -309,13 +309,27 @@ model AppInstall {
 }
 
 /// Calendar-day presence for an install (UTC `YYYY-MM-DD`).
+/// Counters stay on the install id. Sign-in and registration are separate.
+/// No account, email, IP, or server URL.
 model AppInstallDay {
-  installId  String
-  day        String
-  platform   String
-  hosting    String
-  appVersion String
-  install    AppInstall @relation(fields: [installId], references: [id], onDelete: Cascade)
+  installId       String
+  day             String
+  platform        String
+  hosting         String
+  appVersion      String
+  /// Times the app came to the foreground this day.
+  opens           Int     @default(0)
+  /// This install completed a sign-in (not a new account) this day.
+  loggedIn        Boolean @default(false)
+  /// This install created an account this day.
+  registered      Boolean @default(false)
+  timeouts        Int     @default(0)
+  serverErrors    Int     @default(0)
+  signInFailures  Int     @default(0)
+  startupFast     Int     @default(0)
+  startupOk       Int     @default(0)
+  startupSlow     Int     @default(0)
+  install         AppInstall @relation(fields: [installId], references: [id], onDelete: Cascade)
 
   @@id([installId, day])
   @@index([day])

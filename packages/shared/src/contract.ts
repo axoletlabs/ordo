@@ -595,7 +595,7 @@ export const ServerRoutes = {
   },
 } satisfies Record<string, RouteDef>;
 
-// ---------- Telemetry (anonymous install ping to this server) ----------
+// ---------- Telemetry (anonymous install ping to ordo Cloud) ----------
 export const TelemetryRoutes = {
   heartbeat: {
     path: `${API_PREFIX}/telemetry/heartbeat`,

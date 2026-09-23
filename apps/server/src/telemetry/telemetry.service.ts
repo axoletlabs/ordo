@@ -3,6 +3,7 @@ import { Prisma } from "../prisma/client.js";
 import { type TelemetryHeartbeatInput, type TelemetryDayDto } from "@ordo/shared";
 import { RateLimitService } from "../common/rate-limit/rate-limit.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
+import { emptyInstallSignals, mergeInstallSignals, resolveSignalDay } from "./install-signals.js";
 import { addUtcDays, asCount, dayStartUtc, eachUtcDay, utcDay } from "./utc-day.js";
 
 const SNAPSHOT_MS = 60 * 60 * 1000;
@@ -49,7 +50,14 @@ export class TelemetryService implements OnModuleInit, OnModuleDestroy {
     if (!existing) this.rateLimit.consumeHeartbeatNew(ip);
 
     const now = new Date();
-    const day = utcDay(now);
+    const resolved = resolveSignalDay(input.day, utcDay(now));
+    const existingDay = await this.prisma.appInstallDay.findUnique({
+      where: { installId_day: { installId: input.installId, day: resolved.day } },
+    });
+    const signals = mergeInstallSignals(
+      existingDay,
+      resolved.keepSignals ? input : emptyInstallSignals(),
+    );
     await this.prisma.$transaction([
       this.prisma.appInstall.upsert({
         where: { id: input.installId },
@@ -69,18 +77,20 @@ export class TelemetryService implements OnModuleInit, OnModuleDestroy {
         },
       }),
       this.prisma.appInstallDay.upsert({
-        where: { installId_day: { installId: input.installId, day } },
+        where: { installId_day: { installId: input.installId, day: resolved.day } },
         create: {
           installId: input.installId,
-          day,
+          day: resolved.day,
           platform: input.platform,
           hosting: input.hosting,
           appVersion: input.appVersion,
+          ...signals,
         },
         update: {
           platform: input.platform,
           hosting: input.hosting,
           appVersion: input.appVersion,
+          ...signals,
         },
       }),
     ]);

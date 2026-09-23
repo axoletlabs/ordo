@@ -7,6 +7,7 @@
  * is dismissed only after the correct route is ready and a minimum brand beat
  * has elapsed, so the native logo remains the same size for the whole launch.
  */
+import { launchStartedAt } from "../src/lib/launch-clock";
 import React, { useEffect } from "react";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -34,7 +35,7 @@ import { ErrorBoundary } from "../src/components/ErrorBoundary";
 import { LaunchSplash } from "../src/components/LaunchSplash";
 import { fontAssets } from "../src/theme/tokens";
 import { IncomingShareHandler } from "../src/components/IncomingShareHandler";
-import { pingCloudTelemetry } from "../src/lib/telemetry";
+import { recordColdStart } from "../src/lib/telemetry";
 import { AddBookmarkSheet } from "../src/components/bookmarks/AddBookmarkSheet";
 import { returnToShareSender } from "../src/lib/share-target";
 import { shareSavedToast } from "../src/lib/share-intake";
@@ -204,7 +205,7 @@ export default function RootLayout() {
         console.warn("Query cache reset failed", error);
       } finally {
         setBooted(true);
-        void pingCloudTelemetry();
+        void recordColdStart(Date.now() - launchStartedAt);
       }
     })();
   }, []);

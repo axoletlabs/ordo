@@ -22,10 +22,11 @@
 
 The app talks to ordo Cloud unless you opt into a server you host. Existing
 installs keep the server URL they already saved. The official app also sends
-one anonymous daily ping to ordo Cloud so we can count installs (app vs
-browser, coarse OS, version, Cloud or self-host). It does not include your
-account, server URL, or library. A server you host does not receive these
-pings.
+anonymous counts to ordo Cloud: installs, opens, sign-ins, registrations, and
+coarse health (timeouts, server errors, sign-in failures, startup speed), plus
+platform, version, and Cloud or self-host. Sign-ins and registrations are
+counted separately. It does not include your account, server URL, or library.
+A server you host does not receive these pings.
 
 ## Use ordo Cloud
 
