@@ -26,8 +26,8 @@ on:
 #   preview     — `preview` git branch dogfood APKs only (not feature branches)
 # JS-only updates on main, preview, or release/x.y of axoletlabs/ordo go to
 # that stream's channel when the Android fingerprint matches the last (or
-# in-flight) APK on the same branch. Forks never OTA. Bundles are signed with
-# EXPO_UPDATES_PRIVATE_KEY; the public cert is apps/mobile/certs/certificate.pem. Release branches exist so a post-release hotfix cannot be blocked by
+# in-flight) APK on the same branch. Forks never OTA. Release branches exist so
+# a post-release hotfix cannot be blocked by
 # newer native work on main: cut release/x.y at the tag commit, cherry-pick JS
 # fixes onto it, tag hotfixes vX.Y.Z from it, merge back to main after each fix.
 # Detect ignores packageJson:scripts and extra.ordo so a test-file list edit
@@ -437,17 +437,9 @@ jobs:
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          EXPO_UPDATES_PRIVATE_KEY: ${{ secrets.EXPO_UPDATES_PRIVATE_KEY }}
           CHANNEL: ${{ needs.detect.outputs.updates_channel }}
           EXTRA_RUNTIMES: ${{ needs.detect.outputs.extra_runtime_versions }}
         run: |
-          if [[ -z "${EXPO_UPDATES_PRIVATE_KEY}" ]]; then
-            echo "::error::EXPO_UPDATES_PRIVATE_KEY is required to sign OTA updates."
-            exit 1
-          fi
-          KEY="$RUNNER_TEMP/expo-updates-private-key.pem"
-          printf '%s\n' "$EXPO_UPDATES_PRIVATE_KEY" > "$KEY"
-          chmod 600 "$KEY"
           # Pin to a shipped APK runtime when detect's hash is not the
           # hash Gradle baked in, or when extra.ordo / scripts drifted.
           # --auto would publish detect's fingerprint — a runtime no
@@ -458,20 +450,18 @@ jobs:
               if [[ "$first" -eq 1 ]]; then
                 echo "Publishing JS to APK runtime ${runtime}"
                 ORDO_OTA_RUNTIME_VERSION="$runtime" eas update \
-                  --private-key-path "$KEY" \
                   --channel "$CHANNEL" --platform android --non-interactive \
                   --message "JS for APK runtime ${runtime}"
                 first=0
               else
                 echo "Reusing bundle for APK runtime ${runtime}"
                 ORDO_OTA_RUNTIME_VERSION="$runtime" eas update \
-                  --private-key-path "$KEY" \
                   --channel "$CHANNEL" --platform android --skip-bundler --non-interactive \
                   --message "Same JS for APK runtime ${runtime}"
               fi
             done
           else
-            eas update --private-key-path "$KEY" \
+            eas update \
               --channel "$CHANNEL" --platform android --non-interactive --auto
           fi
 
