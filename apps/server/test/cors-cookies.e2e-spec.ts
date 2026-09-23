@@ -1,5 +1,9 @@
 import request from "supertest";
 import { COOKIES, CSRF_TOKEN_HEADER, ErrorCode } from "@ordo/shared";
+import {
+  CONTENT_SECURITY_POLICY,
+  STRICT_TRANSPORT_SECURITY,
+} from "../src/common/http.js";
 import { createTestApp, teardownApp, type TestCtx } from "./utils.js";
 
 function setCookies(res: request.Response): string[] {
@@ -119,6 +123,8 @@ describe("CORS, cookies, CSRF (e2e)", () => {
         expect(access).toMatch(/Path=\//i);
         expect(access).not.toMatch(/Path=\/api/i);
         expect(isClearedCookie(cookieHeader(jar, COOKIES.ACCESS))).toBe(true);
+        expect(res.headers["strict-transport-security"]).toBe(STRICT_TRANSPORT_SECURITY);
+        expect(res.headers["content-security-policy"]).toBe(CONTENT_SECURITY_POLICY);
       } finally {
         await teardownApp(httpsApp);
       }

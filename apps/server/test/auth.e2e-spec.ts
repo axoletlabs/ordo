@@ -1,6 +1,7 @@
 import request from "supertest";
 import { APP_NAME, DELETE_ACCOUNT_CONFIRMATION, EMAIL_OTP, ErrorCode, SESSION } from "@ordo/shared";
 import { MailService } from "../src/auth/mail.service.js";
+import { CONTENT_SECURITY_POLICY } from "../src/common/http.js";
 import { SessionService } from "../src/auth/session.service.js";
 import { LibraryKeyService } from "../src/crypto/library-key.service.js";
 import { sha256Hex } from "../src/common/utils/tokens.js";
@@ -172,7 +173,18 @@ describe("Auth (e2e)", () => {
       expect(res.headers["x-content-type-options"]).toBe("nosniff");
       expect(res.headers["x-frame-options"]).toBe("DENY");
       expect(res.headers["referrer-policy"]).toBe("no-referrer");
+      expect(res.headers["content-security-policy"]).toBe(CONTENT_SECURITY_POLICY);
+      expect(res.headers["strict-transport-security"]).toBeUndefined();
       expect(res.body).toEqual({ status: "ok" });
+    });
+
+    it("does not send HSTS when X-Forwarded-Proto is spoofed", async () => {
+      const res = await request(ctx.app.getHttpServer())
+        .get("/api/health")
+        .set("X-Forwarded-Proto", "https")
+        .expect(200);
+      expect(res.headers["strict-transport-security"]).toBeUndefined();
+      expect(res.headers["content-security-policy"]).toBe(CONTENT_SECURITY_POLICY);
     });
   });
 
