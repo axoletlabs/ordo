@@ -19,7 +19,9 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider, useTheme } from "../src/theme/ThemeProvider";
 import { queryClient } from "../src/lib/query-client";
-import { wipeLeftoverQuerySnapshots } from "../src/lib/query-cache";
+import { prepareLaunchLibrary, restoreQueryPersistence, stopQueryPersistence } from "../src/lib/query-cache";
+import { qk } from "../src/lib/api/query-keys";
+import { isServerUnreachable } from "../src/lib/server-availability";
 import { useAuthStore } from "../src/store/auth";
 import { useSettingsStore } from "../src/store/settings";
 import { useFolderTokenStore } from "../src/store/folder-tokens";
@@ -71,6 +73,8 @@ function RootShell() {
   const segments = useSegments();
   const status = useAuthStore((s) => s.status);
   const tokens = useAuthStore((s) => s.tokens);
+  const userId = useAuthStore((s) => s.user?.id);
+  const serverUrl = useSettingsStore((s) => s.serverUrl);
   const restarting = useUpdateRestartStore((s) => s.restarting);
   const { restartCount } = Updates.useUpdates();
   const runtimeRestart = restarting || restartCount > 0 || peekRestartCover() != null;
@@ -108,6 +112,17 @@ function RootShell() {
     }
     void ensureFreshAccessToken();
   }, [status, tokens?.accessToken]);
+
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      stopQueryPersistence();
+      return;
+    }
+    if (status !== "authenticated" || !userId) return;
+    const info = queryClient.getQueryState(qk.serverInfo(serverUrl));
+    if (info?.status === "error" && isServerUnreachable(info.error)) return;
+    void restoreQueryPersistence(userId, serverUrl);
+  }, [status, userId, serverUrl]);
 
   // Keep the native splash visible while the redirect reconciles with auth so
   // the wrong group (e.g. login for an authenticated user) is never shown.
@@ -200,9 +215,9 @@ export default function RootLayout() {
       }
 
       try {
-        wipeLeftoverQuerySnapshots();
+        await prepareLaunchLibrary();
       } catch (error) {
-        console.warn("Query cache reset failed", error);
+        console.warn("Launch library prepare failed", error);
       } finally {
         setBooted(true);
         void recordColdStart(Date.now() - launchStartedAt);

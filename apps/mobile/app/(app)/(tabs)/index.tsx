@@ -112,7 +112,10 @@ export default function BookmarksScreen() {
     ],
     [folderItems, items],
   );
-  const libraryLoading = (folders.isLoading || bookmarks.isLoading) && libraryItems.length === 0;
+  // Folders return first. Keep the skeleton until the unfiled page is in
+  // too, so a cold start never paints folders and then pops bookmarks in.
+  const libraryLoading =
+    (folders.isPending && !folders.isError) || (bookmarks.isPending && !bookmarks.isError);
   const selectedBookmarks = useMemo(
     () => items.filter((bookmark) => selection.has(bookmarkKey(bookmark.id))),
     [items, selection],
@@ -362,7 +365,7 @@ export default function BookmarksScreen() {
             onScroll={drag.onScroll}
             onContentSizeChange={drag.onContentSizeChange}
             scrollEventThrottle={drag.scrollEventThrottle}
-            data={libraryItems}
+            data={libraryLoading ? [] : libraryItems}
             extraData={`${selectionRevision}:${folderSort}:${unfiledSort}`}
             key={`home:${folderSort}:${unfiledSort}`}
             keyExtractor={libraryKeyExtractor}

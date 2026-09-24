@@ -8,6 +8,7 @@ import { authApi } from "../lib/api/auth";
 import { serverApi } from "../lib/api/server";
 import { foldersApi } from "../lib/api/folders";
 import { qk } from "../lib/api/query-keys";
+import { PERSISTED_QUERY_GC_TIME_MS } from "../lib/query-persist";
 import { useAuthStore } from "../store/auth";
 import { useSettingsStore } from "../store/settings";
 
@@ -76,5 +77,6 @@ export function useFolders() {
       }));
     },
     staleTime: 30_000,
+    gcTime: PERSISTED_QUERY_GC_TIME_MS,
   });
 }
