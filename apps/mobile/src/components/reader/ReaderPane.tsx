@@ -1301,7 +1301,7 @@ function ReaderPaneInner({
               handleOpenOriginal();
             }}
           />
-        ) : null}
+        )}
           </>
         )}
       </ContextMenu>
