@@ -14,6 +14,26 @@ When a change can be seen on screen (layout, chrome, overlay, type, color, spaci
 
 Shoot **dark mode** (`themeMode: "dark"`, not system). Switch Appearance → Theme → Dark if the session is on light or system. Open the same state in both layouts (same screen, same overlay, same hover if that was the point). Wait until the UI has settled (menus fade in from opacity 0). Then screenshot.
 
-Prefer the preview/browser tools (`preview_snapshot` with `save: true`, then resize). If those are unavailable, use headless Chrome against the Expo web app. If you cannot capture, say so and what you used instead.
+## How to capture — `ui-shot` (mandatory on this VPS)
+
+**Never launch `google-chrome` yourself.** Raw headless Chrome spawns a full browser tree (25+ procs, ~2.1 GB) that piles up when parallel agents each spawn their own and nothing cleans them up. Always use the wrapper instead:
+
+```
+ui-shot URL OUT.png [W H] [--wait MS] [--full]
+```
+
+- Uses playwright's `chromium-headless-shell` (single lightweight process, ~150-400 MB, exits by itself when done — verify with `pgrep -af headless.shell` if unsure; nothing should remain).
+- Examples:
+  - `ui-shot http://localhost:8081 /tmp/ordo-portrait.png 390 844 --wait 2500`
+  - `ui-shot http://localhost:8081 /tmp/ordo-landscape.png 1280 800 --wait 2500`
+- `--wait 2500` gives Expo web time to settle fonts/animations; raise it if the shot catches a skeleton state.
+- `--full` for full-page scrollout instead of the viewport.
+- Concurrent shots are safe (each is its own short-lived process), but run them sequentially if the box is already under load.
+
+Prefer `preview_snapshot` (with `save: true`) when the tool is available in-session. Use `ui-shot` otherwise. If you cannot capture, say so and what you used instead.
 
 A single portrait frame is not enough. Add a light-mode shot only when the change is specifically light-theme chrome.
+
+## Screenshot hygiene (always)
+
+Before finishing a session that took screenshots: `pgrep -af 'headless.shell|google-chrome'` — if anything you spawned is still alive, kill it (`pkill -9 -f headless.shell`). Never leave browser processes running when you exit.
