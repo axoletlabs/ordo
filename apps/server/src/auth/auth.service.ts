@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger } from "@nestjs/common";
+import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnModuleDestroy } from "@nestjs/common";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "node:crypto";
 import type { Session, User } from "../prisma/client.js";
@@ -49,9 +49,12 @@ interface ClientMeta {
   ip: string;
 }
 
+const UNVERIFIED_SIGNUP_SWEEP_MS = 60_000;
+
 @Injectable()
-export class AuthService {
+export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(AuthService.name);
+  private sweepTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -66,6 +69,17 @@ export class AuthService {
     private readonly libraryKeys: LibraryKeyService,
   ) {}
 
+  onApplicationBootstrap(): void {
+    void this.purgeExpiredUnverifiedSignups();
+    this.sweepTimer = setInterval(() => void this.purgeExpiredUnverifiedSignups(), UNVERIFIED_SIGNUP_SWEEP_MS);
+    this.sweepTimer.unref?.();
+  }
+
+  onModuleDestroy(): void {
+    if (this.sweepTimer) clearInterval(this.sweepTimer);
+    this.sweepTimer = null;
+  }
+
   async register(
     input: { displayName: string; email: string; password: string },
     meta: ClientMeta,
@@ -78,6 +92,7 @@ export class AuthService {
     const displayName = input.displayName.trim();
     const passwordHash = await bcrypt.hash(input.password, BCRYPT_COST);
     const keyMaterial = await this.libraryKeys.createKeyMaterial(input.password);
+    await this.purgeExpiredUnverifiedSignups();
     const existingEmail = await this.prisma.user.findUnique({ where: { email } });
     if (existingEmail) {
       if (this.cfg.emailVerificationRequired) {
@@ -118,6 +133,7 @@ export class AuthService {
 
     this.rateLimit.checkLogin(loginKeys);
 
+    await this.purgeExpiredUnverifiedSignups();
     const user = await this.prisma.user.findUnique({ where: { email } });
 
     if (user) {
@@ -235,6 +251,7 @@ export class AuthService {
   }
 
   async verifyEmail(email: string, token: string): Promise<void> {
+    await this.purgeExpiredUnverifiedSignups();
     const user = await this.prisma.user.findUnique({
       where: { email: email.toLowerCase().trim() },
     });
@@ -255,6 +272,7 @@ export class AuthService {
   }
 
   async resendVerification(email: string): Promise<void> {
+    await this.purgeExpiredUnverifiedSignups();
     const user = await this.prisma.user.findUnique({ where: { email: email.toLowerCase().trim() } });
     if (!user || user.emailVerifiedAt !== null) return; // no-op to avoid enumeration
     await this.createAndSendOtp(user.id, user.email, EMAIL_OTP_PURPOSE.VERIFY);
@@ -494,6 +512,32 @@ export class AuthService {
       throw this.invalidOtp();
     }
     return record;
+  }
+
+  /**
+   * Drop signups that never verified. The window is the verification code's
+   * lifetime; resending replaces that code and starts another 10 minutes.
+   * Accounts with no verify code are left alone (verification was not required).
+   */
+  async purgeExpiredUnverifiedSignups(now = new Date()): Promise<void> {
+    try {
+      const stale = await this.prisma.user.findMany({
+        where: {
+          emailVerifiedAt: null,
+          emailTokens: {
+            some: { purpose: EMAIL_OTP_PURPOSE.VERIFY, expiresAt: { lt: now } },
+            none: { purpose: EMAIL_OTP_PURPOSE.VERIFY, expiresAt: { gte: now } },
+          },
+        },
+        select: { id: true },
+      });
+      for (const user of stale) {
+        await this.avatars.deleteStored(user.id);
+        await this.prisma.user.deleteMany({ where: { id: user.id, emailVerifiedAt: null } });
+      }
+    } catch (err) {
+      this.logger.warn(`Unverified signup sweep failed: ${(err as Error).message}`);
+    }
   }
 
   private assertEmailVerified(user: Pick<User, "emailVerifiedAt">): void {

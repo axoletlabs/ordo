@@ -967,6 +967,89 @@ describe("signup email verification (e2e)", () => {
     expect(await vctx.prisma.user.count({ where: { email: "dupverify@ordo.app" } })).toBe(1);
   });
 
+  it("deletes an unverified account once the code window has passed", async () => {
+    await request(vctx.app.getHttpServer())
+      .post("/api/auth/register")
+      .set("x-client-type", "mobile")
+      .send({ displayName: "expire", email: "expire@ordo.app", password: "supersecret" })
+      .expect(201);
+
+    const first = await vctx.prisma.user.findUniqueOrThrow({ where: { email: "expire@ordo.app" } });
+    await vctx.prisma.emailVerificationToken.updateMany({
+      where: { userId: first.id },
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
+    sent.length = 0;
+
+    const blocked = await request(vctx.app.getHttpServer())
+      .post("/api/auth/login")
+      .set("x-client-type", "mobile")
+      .send({ identifier: "expire@ordo.app", password: "supersecret" })
+      .expect(401);
+    expect(blocked.body.error.code).toBe(ErrorCode.INVALID_CREDENTIALS);
+    expect(await vctx.prisma.user.count({ where: { email: "expire@ordo.app" } })).toBe(0);
+
+    const again = await request(vctx.app.getHttpServer())
+      .post("/api/auth/register")
+      .set("x-client-type", "mobile")
+      .send({ displayName: "expire", email: "expire@ordo.app", password: "brandnew1" })
+      .expect(201);
+    expect(again.body.pendingEmailVerification).toBe(true);
+    expect(sent).toHaveLength(1);
+
+    const second = await vctx.prisma.user.findUniqueOrThrow({ where: { email: "expire@ordo.app" } });
+    expect(second.id).not.toBe(first.id);
+
+    await request(vctx.app.getHttpServer())
+      .post("/api/auth/verify-email")
+      .send({ email: "expire@ordo.app", token: sent[0].token })
+      .expect(200);
+    await request(vctx.app.getHttpServer())
+      .post("/api/auth/login")
+      .set("x-client-type", "mobile")
+      .send({ identifier: "expire@ordo.app", password: "brandnew1" })
+      .expect(200);
+  });
+
+  it("keeps an unverified account when a resent code is still valid", async () => {
+    await request(vctx.app.getHttpServer())
+      .post("/api/auth/register")
+      .set("x-client-type", "mobile")
+      .send({ displayName: "resend", email: "resend-window@ordo.app", password: "supersecret" })
+      .expect(201);
+
+    const user = await vctx.prisma.user.findUniqueOrThrow({ where: { email: "resend-window@ordo.app" } });
+    const firstToken = await vctx.prisma.emailVerificationToken.findFirstOrThrow({
+      where: { userId: user.id },
+    });
+    await vctx.prisma.emailVerificationToken.update({
+      where: { id: firstToken.id },
+      data: { expiresAt: new Date(Date.now() + 30_000) },
+    });
+
+    await request(vctx.app.getHttpServer())
+      .post("/api/auth/verify-email/resend")
+      .send({ email: "resend-window@ordo.app" })
+      .expect(200);
+
+    const resent = await vctx.prisma.emailVerificationToken.findFirstOrThrow({
+      where: { userId: user.id, consumedAt: null },
+    });
+    expect(resent.expiresAt.getTime()).toBeGreaterThan(Date.now() + 60_000);
+
+    sent.length = 0;
+    const dup = await request(vctx.app.getHttpServer())
+      .post("/api/auth/register")
+      .set("x-client-type", "mobile")
+      .send({ displayName: "other", email: "resend-window@ordo.app", password: "different1" })
+      .expect(201);
+    expect(dup.body).toEqual({ pendingEmailVerification: true });
+    expect(sent).toHaveLength(0);
+    expect(await vctx.prisma.user.findUniqueOrThrow({ where: { email: "resend-window@ordo.app" } })).toMatchObject({
+      id: user.id,
+    });
+  });
+
   it("blocks leftover sessions from library routes until the email is verified", async () => {
     await request(vctx.app.getHttpServer())
       .post("/api/auth/register")
