@@ -69,3 +69,6 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# machine-local agent rules (per-VPS setup; global rules live in AGENTS.md)
+.cursor/rules/*.local.mdc
