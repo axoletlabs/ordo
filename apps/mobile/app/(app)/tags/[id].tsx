@@ -193,8 +193,9 @@ export default function TagDetailScreen() {
       contentContainerStyle={{
         paddingBottom: selection.active ? selectionClearance : FAB_LIST_CLEARANCE,
       }}
-      refreshing={refreshing}
-      onRefresh={onRefresh}
+      refreshing={selection.active ? undefined : refreshing}
+      onRefresh={selection.active ? undefined : onRefresh}
+      waitFor={drag.scrollWaitFor}
       onEndReached={onEndReached}
       ListFooterComponent={loadingMore ? <ListLoadingFooter /> : null}
     />

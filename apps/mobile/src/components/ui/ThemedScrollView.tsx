@@ -17,6 +17,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { type FlashListProps } from "@shopify/flash-list";
+import { FlatList as GestureFlatList } from "react-native-gesture-handler";
 import {
   chainHandlers,
   splitScrollLayoutStyle,
@@ -54,10 +55,14 @@ export type ThemedScrollViewProps = ScrollViewProps & {
 
 export type ThemedFlashListProps<T> = FlashListProps<T> & {
   scrollBarInsets?: ScrollBarInsets;
+  /** Gesture the list scroller waits on, so a selection drag can win over scroll and pull-to-refresh. */
+  waitFor?: unknown;
 };
 
 export type ThemedFlatListProps<T> = FlatListProps<T> & {
   scrollBarInsets?: ScrollBarInsets;
+  /** Gesture the list scroller waits on, so a selection drag can win over scroll and pull-to-refresh. */
+  waitFor?: unknown;
 };
 
 const nativeScrollBarProps = {
@@ -196,6 +201,7 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
     refreshing,
     onRefresh,
     refreshControl,
+    waitFor,
     scrollBarInsets,
     contentContainerStyle,
     data,
@@ -212,10 +218,11 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
       style={[styles.host, fill ? styles.fill : null, wrapper]}
       onLayout={chainHandlers(bar.onLayout, onLayout)}
     >
-      <FlatList
-        ref={ref}
+      <GestureFlatList
+        ref={ref as never}
         data={data}
         {...rest}
+        waitFor={waitFor as never}
         {...nativeScrollBarProps}
         showsVerticalScrollIndicator={
           Platform.OS === "web" ? (showsVerticalScrollIndicator ?? true) : false

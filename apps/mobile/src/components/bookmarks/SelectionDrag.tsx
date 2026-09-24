@@ -14,6 +14,7 @@ import {
   type NativeSyntheticEvent,
   type View as ViewType,
 } from "react-native";
+import { Gesture } from "react-native-gesture-handler";
 import { haptics } from "../../lib/haptics";
 import {
   autoScrollStep,
@@ -307,7 +308,14 @@ export function useSelectionDrag({
   );
 
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
-    offsetRef.current = event.nativeEvent.contentOffset.y;
+    const next = event.nativeEvent.contentOffset.y;
+    const delta = next - offsetRef.current;
+    offsetRef.current = next;
+    if (delta === 0) return;
+    for (const frame of frames.current.values()) {
+      frame.top -= delta;
+      frame.bottom -= delta;
+    }
   }, []);
 
   const onContentSizeChange = useCallback((_width: number, height: number) => {
@@ -321,6 +329,68 @@ export function useSelectionDrag({
     },
     [measureHost],
   );
+
+  const beginAtRef = useRef(beginAt);
+  beginAtRef.current = beginAt;
+  const applyAtRef = useRef(applyAt);
+  applyAtRef.current = applyAt;
+  const endDragRef = useRef(endDrag);
+  endDragRef.current = endDrag;
+
+  const scrollWaitFor = useMemo(() => {
+    let origin: { x: number; y: number; t: number } | null = null;
+    return Gesture.Pan()
+      .runOnJS(true)
+      .manualActivation(true)
+      .onTouchesDown((event, manager) => {
+        if (!enabledRef.current) {
+          manager.fail();
+          return;
+        }
+        const touch = event.allTouches[0];
+        if (!touch) {
+          manager.fail();
+          return;
+        }
+        origin = { x: touch.absoluteX, y: touch.absoluteY, t: Date.now() };
+        remeasureAll(() => {});
+      })
+      .onTouchesMove((event, manager) => {
+        if (!enabledRef.current || !origin) {
+          manager.fail();
+          return;
+        }
+        const touch = event.changedTouches[0] ?? event.allTouches[0];
+        if (!touch) return;
+        const dx = touch.absoluteX - origin.x;
+        const dy = touch.absoluteY - origin.y;
+        const elapsed = Date.now() - origin.t;
+        if (!shouldClaimSelectionDrag(dx, dy, elapsed)) {
+          if (Math.abs(dy) >= 12 && Math.abs(dy) / Math.max(elapsed, 1) > 1.05) manager.fail();
+          if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) >= 12) manager.fail();
+          return;
+        }
+        if (!beginAtRef.current(touch.absoluteY)) {
+          manager.fail();
+          return;
+        }
+        manager.activate();
+      })
+      .onTouchesUp((_event, manager) => {
+        origin = null;
+        if (!dragRef.current) manager.fail();
+      })
+      .onUpdate((event) => {
+        const session = dragRef.current;
+        if (!session) return;
+        session.pointerY = event.absoluteY;
+        applyAtRef.current(event.absoluteY);
+      })
+      .onFinalize(() => {
+        origin = null;
+        endDragRef.current();
+      });
+  }, [remeasureAll]);
 
   const panHandlers = useMemo(
     () => ({
@@ -391,6 +461,7 @@ export function useSelectionDrag({
     panHandlers,
     onHostLayout,
     listRef,
+    scrollWaitFor: Platform.OS === "web" ? undefined : scrollWaitFor,
     onScroll,
     onContentSizeChange,
     scrollEventThrottle: 16 as const,

@@ -43,24 +43,20 @@ export function sameSelection(current: ReadonlySet<string>, next: readonly strin
   return true;
 }
 
-/** Index of the mounted row under `y`, or the nearest mounted row. */
+/** Index of the mounted row that actually contains `y`. Gaps do not snap to a neighbor. */
 export function indexAtPoint(
   keys: readonly string[],
   frames: ReadonlyMap<string, SelectionRowFrame>,
   y: number,
 ): number | null {
-  let nearest: { index: number; dist: number } | null = null;
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
     if (key == null) continue;
     const frame = frames.get(key);
     if (!frame || frame.bottom <= frame.top) continue;
     if (y >= frame.top && y < frame.bottom) return i;
-    const mid = (frame.top + frame.bottom) / 2;
-    const dist = Math.abs(y - mid);
-    if (!nearest || dist < nearest.dist) nearest = { index: i, dist };
   }
-  return nearest?.index ?? null;
+  return null;
 }
 
 /** Pixels to add to the scroll offset this frame. Negative scrolls toward the start. */

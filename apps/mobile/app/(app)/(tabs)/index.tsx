@@ -383,8 +383,9 @@ export default function BookmarksScreen() {
             }
             ListFooterComponent={loadingMore ? <ListLoadingFooter /> : null}
             contentContainerStyle={listContentStyle}
-            refreshing={refreshing}
-            onRefresh={onRefresh}
+            refreshing={selection.active ? undefined : refreshing}
+            onRefresh={selection.active ? undefined : onRefresh}
+            waitFor={drag.scrollWaitFor}
             onEndReached={onEndReached}
           />
           </SelectionDragFrame>

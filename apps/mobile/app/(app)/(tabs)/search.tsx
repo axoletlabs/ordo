@@ -468,6 +468,7 @@ export default function SearchScreen() {
       onScroll={drag.onScroll}
       onContentSizeChange={drag.onContentSizeChange}
       scrollEventThrottle={drag.scrollEventThrottle}
+      waitFor={drag.scrollWaitFor}
       data={items}
       extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}:${trimmed}:${listFilters.tagIds.join(",")}:${listFilters.folderIds.join(",")}:${listFilters.unfiled}:${listFilters.status}:${listFilters.kind}:${listFilters.reminder}:${listFilters.fuzzy}`}
       keyExtractor={(b: BookmarkDto) => b.id}

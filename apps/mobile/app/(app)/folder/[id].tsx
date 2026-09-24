@@ -221,8 +221,9 @@ export default function FolderDetailScreen() {
       keyExtractor={(b: BookmarkDto) => b.id}
       renderItem={renderBookmark}
       contentContainerStyle={{ paddingBottom: listContentPadding }}
-      refreshing={refreshing}
-      onRefresh={onRefresh}
+      refreshing={selection.active ? undefined : refreshing}
+      onRefresh={selection.active ? undefined : onRefresh}
+      waitFor={drag.scrollWaitFor}
       onEndReached={onEndReached}
       ListFooterComponent={loadingMore ? <ListLoadingFooter /> : null}
     />

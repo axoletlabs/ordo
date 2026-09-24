@@ -34,7 +34,7 @@ test("indexAtPoint prefers the row containing the pointer", () => {
   ]);
   assert.equal(indexAtPoint(keys, frames, 10), 0);
   assert.equal(indexAtPoint(keys, frames, 100), 2);
-  assert.equal(indexAtPoint(keys, frames, 60), 0);
+  assert.equal(indexAtPoint(keys, frames, 60), null);
 });
 
 test("autoScrollStep points outward inside the edge bands only", () => {
