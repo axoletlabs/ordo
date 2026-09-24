@@ -861,15 +861,7 @@ function ReaderPaneInner({
 
   const rightActions = bookmark ? (
     <HeaderActions>
-      {showWebsiteView ? (
-        <HeaderIconButton
-          name="open-outline"
-          color={palette.text}
-          onPress={() => handleOpenSystemBrowser()}
-          accessibilityLabel="Open in external browser"
-          accessibilityHint="Opens this page in Safari or Chrome."
-        />
-      ) : (
+      {showWebsiteView ? null : (
         <HeaderIconButton
           name="options-outline"
           color={palette.text}
@@ -1209,6 +1201,16 @@ function ReaderPaneInner({
             onPress={() => {
               setActionPanel(null);
               browserRef.current?.reload();
+            }}
+          />
+        ) : null}
+        {showWebsiteView ? (
+          <ContextMenuItem
+            icon="open-outline"
+            label="Open in external browser"
+            onPress={() => {
+              setActionPanel(null);
+              handleOpenSystemBrowser();
             }}
           />
         ) : null}
