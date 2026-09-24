@@ -51,6 +51,7 @@ export function SelectionHeader({
         {
           maxWidth,
           paddingTop: insets.top + spacing[4],
+          paddingBottom: layout.headerContentGap,
           paddingLeft: Math.max(insets.left, spacing[16]),
           paddingRight: Math.max(insets.right, spacing[16]),
           borderBottomColor: palette.border,
@@ -100,7 +101,6 @@ const styles = StyleSheet.create({
   wrap: {
     width: "100%",
     alignSelf: "center",
-    paddingBottom: spacing[6],
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   row: {

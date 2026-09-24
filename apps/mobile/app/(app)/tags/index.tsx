@@ -160,7 +160,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[12],
-    paddingVertical: spacing[12],
+    paddingVertical: spacing[8],
     paddingHorizontal: spacing[16],
   },
   skeletonCopy: { flex: 1, minWidth: 0 },

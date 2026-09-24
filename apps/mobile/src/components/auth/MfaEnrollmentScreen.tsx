@@ -20,7 +20,7 @@ export function MfaEnrollmentScreen() {
     <View style={{ flex: 1, backgroundColor: palette.background }}>
       <Header title="Protect your account" large maxWidth={layout.maxSettingsWidth} />
       <SettingsScrollView>
-        <View style={{ gap: spacing[16], paddingVertical: spacing[8] }}>
+        <View style={{ gap: spacing[16] }}>
           <Text variant="body" color="secondary">
             This server requires an authenticator before you can continue.
           </Text>

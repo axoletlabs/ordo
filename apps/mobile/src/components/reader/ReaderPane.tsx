@@ -1047,7 +1047,7 @@ function ReaderPaneInner({
             onScroll={onScroll}
             scrollEventThrottle={16}
             contentContainerStyle={{
-              paddingTop: spacing[16],
+              paddingTop: layout.headerContentGap,
               paddingBottom: spacing[16] + (safeBottom ? insets.bottom : 0),
             }}
           >

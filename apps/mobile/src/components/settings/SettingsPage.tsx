@@ -153,10 +153,10 @@ export function SettingsGroup({
 const styles = StyleSheet.create({
   page: { flex: 1 },
   scroll: { flex: 1 },
-  // The header→content gap is defined once here; screens must not add their
-  // own top padding for the first group (compact labels sit flush under it).
-  scrollContent: { paddingTop: spacing[8], paddingBottom: spacing[40] },
-  contentFrame: { width: "100%", paddingTop: spacing[8] },
+  // Header owns the gap above the first group. Compact labels sit flush;
+  // later section labels add their own top padding.
+  scrollContent: { paddingBottom: spacing[40] },
+  contentFrame: { width: "100%" },
   contentColumn: { width: "100%", alignSelf: "center" },
   formColumn: { width: "100%", alignSelf: "center" },
   sectionLabel: {

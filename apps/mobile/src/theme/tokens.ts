@@ -168,6 +168,8 @@ export const fontAssets = {
 /** Layout constants. */
 export const layout = {
   screenHorizontalPad: 16,
+  /** Space under the header block before the first screen element. */
+  headerContentGap: 8,
   touchTargetMin: 44,
   tabBarHeight: 60,
   maxContentWidth: 640,

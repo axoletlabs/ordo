@@ -126,6 +126,7 @@ export function Header({
         {
           maxWidth,
           paddingTop: topInset + spacing[4],
+          paddingBottom: layout.headerContentGap,
           paddingLeft: sidePad,
           paddingRight: endPad,
           borderBottomColor: palette.border,
@@ -227,13 +228,11 @@ const styles = StyleSheet.create({
   wrap: {
     width: "100%",
     alignSelf: "center",
-    paddingBottom: spacing[6],
     overflow: "visible",
   },
   cluster: {
     position: "relative",
     justifyContent: "flex-start",
-    minHeight: HEADER_CONTROL_SIZE,
     overflow: "visible",
   },
   titleSlot: {

@@ -195,7 +195,7 @@ const styles = StyleSheet.create({
   skeleton: { width: "100%", marginBottom: spacing[10] },
   list: { width: "100%", maxWidth: layout.maxSettingsWidth, alignSelf: "center" },
   // Matches SettingsPage so loading, error, and loaded states do not jump.
-  listContent: { paddingTop: spacing[8], paddingBottom: spacing[40] },
+  listContent: { paddingBottom: spacing[40] },
   listContentEmpty: { flexGrow: 1, justifyContent: "center" },
   card: { width: "100%", borderWidth: StyleSheet.hairlineWidth, borderRadius: radius["2xl"], padding: spacing[14] },
   cardHead: { flexDirection: "row", gap: spacing[12], alignItems: "center" },
