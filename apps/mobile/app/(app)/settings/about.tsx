@@ -19,12 +19,13 @@ import { useBuildInfo } from "../../../src/hooks/use-build-info";
 import { useOtaUpdate } from "../../../src/hooks/use-ota-update";
 import { useNativeUpdateStore } from "../../../src/store/native-update";
 import { haptics } from "../../../src/lib/haptics";
+import { CLOUD_WEBSITE_URL } from "../../../src/lib/hosting";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { radius, spacing } from "../../../src/theme/tokens";
 
 const REPO_URL = "https://github.com/axoletlabs/ordo";
 const AXOLET_URL = "https://axolet.com";
-const LEGAL_URL = "https://ordo.axolet.com";
+const LEGAL_URL = CLOUD_WEBSITE_URL;
 const LEGAL_LINKS = [
   { label: "Terms", path: "/terms", icon: "document-text-outline" as const },
   { label: "Privacy", path: "/privacy", icon: "shield-checkmark-outline" as const },
@@ -136,8 +137,8 @@ export default function AboutScreen() {
           <SettingRow
             icon="globe-outline"
             label="Website"
-            value="Axolet"
-            onPress={() => openURL(AXOLET_URL)}
+            value="Ordo"
+            onPress={() => openURL(CLOUD_WEBSITE_URL)}
           />
           <SettingRow
             icon="ribbon-outline"
@@ -160,18 +161,18 @@ export default function AboutScreen() {
           ))}
         </SettingsGroup>
 
-        <Text
-          variant="footnote"
-          color="tertiary"
-          align="center"
-          onPress={() => openURL(AXOLET_URL)}
-          suppressHighlighting
-          accessibilityRole="link"
-          accessibilityLabel="© Axolet"
-          style={styles.copyright}
-        >
-          © {PUBLISHED_YEAR} Axolet
-        </Text>
+        <View style={styles.copyrightRow}>
+          <Text
+            variant="footnote"
+            color="tertiary"
+            onPress={() => openURL(AXOLET_URL)}
+            suppressHighlighting
+            accessibilityRole="link"
+            accessibilityLabel="© Axolet"
+          >
+            © {PUBLISHED_YEAR} Axolet
+          </Text>
+        </View>
       </SettingsScrollView>
 
       <FloatingPanel visible={fingerprintOpen} onDismiss={() => setFingerprintOpen(false)}>
@@ -200,7 +201,8 @@ export default function AboutScreen() {
 }
 
 const styles = StyleSheet.create({
-  copyright: {
+  copyrightRow: {
+    alignItems: "center",
     paddingTop: spacing[16],
     paddingBottom: spacing[8],
   },
