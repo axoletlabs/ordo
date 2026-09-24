@@ -148,6 +148,24 @@ export function BookmarkActionsSheet({
             onDismiss();
           }}
         />
+        <ContextMenuItem
+          icon="globe-outline"
+          label="Open original"
+          onPress={() => {
+            const browser = useSettingsStore.getState().websiteBrowser;
+            if (browser === "ordo") {
+              router.push({
+                pathname: "/reader/[id]",
+                params: { id: displayBookmark.id, view: "browser" },
+              });
+              if (!displayBookmark.isRead) onToggleRead(displayBookmark);
+            } else {
+              ackBookmarkOpened(displayBookmark);
+              void openLivePage(displayBookmark.url, browser);
+            }
+            onDismiss();
+          }}
+        />
         {typeof bookmarkHooks.useSetContentKind === "function" && bookmarkIsArticle(displayBookmark) ? (
           <ContextMenuItem
             icon="globe-outline"
@@ -187,24 +205,6 @@ export function BookmarkActionsSheet({
             }}
           />
         ) : null}
-        <ContextMenuItem
-          icon="globe-outline"
-          label="Open original"
-          onPress={() => {
-            const browser = useSettingsStore.getState().websiteBrowser;
-            if (browser === "ordo") {
-              router.push({
-                pathname: "/reader/[id]",
-                params: { id: displayBookmark.id, view: "browser" },
-              });
-              if (!displayBookmark.isRead) onToggleRead(displayBookmark);
-            } else {
-              ackBookmarkOpened(displayBookmark);
-              void openLivePage(displayBookmark.url, browser);
-            }
-            onDismiss();
-          }}
-        />
         <ContextMenuItem
           icon="trash-outline"
           label="Delete bookmark"
