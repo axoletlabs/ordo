@@ -82,9 +82,11 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   const { palette } = useTheme();
   const router = useRouter();
   const rowRef = React.useRef<View>(null);
-  const dragRow = useSelectionDragRow(selectionMode ? bookmarkKey(bookmark.id) : null);
+  const dragRow = useSelectionDragRow(bookmarkKey(bookmark.id));
   const bodyStartY = React.useRef(0);
   const bodyMoved = React.useRef(false);
+  const leadStartY = React.useRef(0);
+  const leadMoved = React.useRef(false);
   const setRowRef = React.useCallback(
     (node: View | null) => {
       rowRef.current = node;
@@ -164,16 +166,6 @@ export const BookmarkRow = React.memo(function BookmarkRow({
     onPress(bookmark);
   };
 
-  const handleLeadingLongPress = onEnterSelection
-    ? () => {
-        // Keep this handler attached after enter so RN does not reclassify
-        // the still-down finger as a tap once the favicon becomes a checkbox.
-        if (selectionModeRef.current) return;
-        hold.markEnter();
-        onEnterSelection(bookmark);
-      }
-    : undefined;
-
   const warmBookmark = () => {
     if (selectionMode) return;
     void prefetchBookmarkDetail(bookmark.id, bookmark.folderId);
@@ -221,6 +213,20 @@ export const BookmarkRow = React.memo(function BookmarkRow({
         : null)}
     >
       <RowHighlight color={rowFill} />
+      <SelectionDragHandle
+        selectionKey={bookmarkKey(bookmark.id)}
+        selectionMode={!!selectionMode}
+        onEnter={
+          onEnterSelection
+            ? () => {
+                if (selectionModeRef.current) return;
+                hold.markEnter();
+                onEnterSelection(bookmark);
+              }
+            : undefined
+        }
+        style={styles.leadingHit}
+      >
       <ListPressable
         accessibilityRole="button"
         accessibilityLabel={`Select ${title}`}
@@ -228,19 +234,26 @@ export const BookmarkRow = React.memo(function BookmarkRow({
         accessible={!selectionMode}
         importantForAccessibility={selectionMode ? "no" : "yes"}
         style={styles.leading}
+        onTouchStart={(event) => {
+          leadStartY.current = event.nativeEvent.pageY;
+          leadMoved.current = false;
+        }}
+        onTouchMove={(event) => {
+          if (Math.abs(event.nativeEvent.pageY - leadStartY.current) > 10) leadMoved.current = true;
+        }}
         onPressIn={() => {
           hold.pressIn();
           warmBookmark();
         }}
         onPressOut={() => hold.pressOut()}
-        onPress={openBookmark}
-        onLongPress={handleLeadingLongPress}
-        delayLongPress={SELECTION_LONG_PRESS_MS}
+        onPress={() => {
+          if (leadMoved.current) return;
+          openBookmark();
+        }}
       >
+        <View pointerEvents="none">
         {selectionMode ? (
-          <SelectionDragHandle selectionKey={bookmarkKey(bookmark.id)} enabled>
-            <SelectionMark selected={!!selected} />
-          </SelectionDragHandle>
+          <SelectionMark selected={!!selected} />
         ) : (
           <View
             style={[
@@ -271,7 +284,9 @@ export const BookmarkRow = React.memo(function BookmarkRow({
             ) : null}
           </View>
         )}
+        </View>
       </ListPressable>
+      </SelectionDragHandle>
 
       <ListPressable
         accessibilityRole={selectionMode ? "checkbox" : "button"}
@@ -456,6 +471,9 @@ const styles = StyleSheet.create({
     flexGrow: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
     paddingRight: spacing[16],
+  },
+  leadingHit: {
+    alignSelf: "stretch",
   },
   leading: {
     alignSelf: "stretch",

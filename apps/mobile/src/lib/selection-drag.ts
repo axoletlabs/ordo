@@ -49,14 +49,49 @@ export function indexAtPoint(
   frames: ReadonlyMap<string, SelectionRowFrame>,
   y: number,
 ): number | null {
+  let best: number | null = null;
+  let bestDist = Infinity;
   for (let i = 0; i < keys.length; i++) {
     const key = keys[i];
     if (key == null) continue;
     const frame = frames.get(key);
     if (!frame || frame.bottom <= frame.top) continue;
-    if (y >= frame.top && y < frame.bottom) return i;
+    if (y < frame.top || y >= frame.bottom) continue;
+    const dist = Math.abs(y - (frame.top + frame.bottom) / 2);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = i;
+    }
   }
-  return null;
+  return best;
+}
+
+/**
+ * Row under a selection drag. A hairline gap between measured rows follows the
+ * nearer edge. A real gap keeps the previous row instead of jumping.
+ */
+export function indexForDrag(
+  keys: readonly string[],
+  frames: ReadonlyMap<string, SelectionRowFrame>,
+  y: number,
+): number | null {
+  const hit = indexAtPoint(keys, frames, y);
+  if (hit != null) return hit;
+  let best: number | null = null;
+  let bestDist = Infinity;
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    if (key == null) continue;
+    const frame = frames.get(key);
+    if (!frame || frame.bottom <= frame.top) continue;
+    const dist = y < frame.top ? frame.top - y : y - frame.bottom;
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = i;
+    }
+  }
+  if (best == null || bestDist > 8) return null;
+  return best;
 }
 
 /** Pixels to add to the scroll offset this frame. Negative scrolls toward the start. */

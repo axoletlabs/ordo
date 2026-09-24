@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   autoScrollStep,
   indexAtPoint,
+  indexForDrag,
   keysAfterDrag,
   sameSelection,
   shouldClaimSelectionDrag,
@@ -35,6 +36,16 @@ test("indexAtPoint prefers the row containing the pointer", () => {
   assert.equal(indexAtPoint(keys, frames, 10), 0);
   assert.equal(indexAtPoint(keys, frames, 100), 2);
   assert.equal(indexAtPoint(keys, frames, 60), null);
+});
+
+test("indexForDrag snaps a hairline gap and ignores a real one", () => {
+  const frames = new Map([
+    ["a", { top: 0, bottom: 40 }],
+    ["b", { top: 48, bottom: 80 }],
+    ["c", { top: 160, bottom: 200 }],
+  ]);
+  assert.equal(indexForDrag(keys, frames, 45), 1);
+  assert.equal(indexForDrag(keys, frames, 100), null);
 });
 
 test("autoScrollStep points outward inside the edge bands only", () => {

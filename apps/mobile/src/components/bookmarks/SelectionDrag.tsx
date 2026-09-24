@@ -6,6 +6,7 @@
  */
 import React, { useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import {
+  Platform,
   View,
   type FlatList,
   type LayoutChangeEvent,
@@ -21,13 +22,13 @@ import {
 import { haptics } from "../../lib/haptics";
 import {
   autoScrollStep,
-  indexAtPoint,
+  indexForDrag,
   keysAfterDrag,
   sameSelection,
   type SelectionDragMode,
   type SelectionRowFrame,
 } from "../../lib/selection-drag";
-import type { SelectionKey } from "../../hooks/use-selection";
+import { SELECTION_LONG_PRESS_MS, type SelectionKey } from "../../hooks/use-selection";
 
 /** Native activation distance. Smaller than Android's scroll touch-slop so the mark wins first. */
 const MARK_ACTIVATE_PX = 4;
@@ -92,12 +93,14 @@ export function useSelectionDragRow(key: string | null) {
  */
 export function SelectionDragHandle({
   selectionKey,
-  enabled,
+  selectionMode,
+  onEnter,
   style,
   children,
 }: {
   selectionKey: string;
-  enabled: boolean;
+  selectionMode: boolean;
+  onEnter?: () => void;
   style?: StyleProp<ViewStyle>;
   children: React.ReactNode;
 }) {
@@ -106,38 +109,55 @@ export function SelectionDragHandle({
   ctxRef.current = ctx;
   const keyRef = useRef(selectionKey);
   keyRef.current = selectionKey;
+  const modeRef = useRef(selectionMode);
+  modeRef.current = selectionMode;
+  const onEnterRef = useRef(onEnter);
+  onEnterRef.current = onEnter;
+  const fingerDown = useRef(false);
+  // Stay on the long-press config until the entering finger lifts, so the
+  // handler that just activated is not reconfigured mid-gesture.
+  const [armed, setArmed] = React.useState(selectionMode);
+
+  useEffect(() => {
+    if (!fingerDown.current) setArmed(selectionMode);
+  }, [selectionMode]);
 
   const handleRef = useRef<HandleRef>(null);
 
   useEffect(() => {
     const current = ctxRef.current;
-    if (!enabled || !current) return;
+    if (!current) return;
     current.registerHandle(handleRef);
     return () => current.unregisterHandle(handleRef);
-  }, [enabled]);
+  }, [ctx]);
 
-  const onFinish = useCallback(() => {
+  const finish = useCallback(() => {
+    fingerDown.current = false;
+    setArmed(modeRef.current);
     ctxRef.current?.end();
   }, []);
 
   return (
     <PanGestureHandler
       ref={handleRef}
-      enabled={enabled}
-      activeOffsetY={[-MARK_ACTIVATE_PX, MARK_ACTIVATE_PX]}
+      enabled
+      activateAfterLongPress={armed ? 0 : SELECTION_LONG_PRESS_MS}
+      activeOffsetY={armed ? [-MARK_ACTIVATE_PX, MARK_ACTIVATE_PX] : [-10000, 10000]}
       shouldCancelWhenOutside={false}
       onActivated={(event) => {
+        fingerDown.current = true;
         const y = (event.nativeEvent as unknown as { absoluteY: number }).absoluteY;
+        if (!modeRef.current) onEnterRef.current?.();
         ctxRef.current?.beginFromKey(keyRef.current, y);
       }}
       onGestureEvent={(event) => {
         ctxRef.current?.moveTo(event.nativeEvent.absoluteY);
       }}
-      onEnded={onFinish}
-      onCancelled={onFinish}
-      onFailed={onFinish}
+      onEnded={finish}
+      onCancelled={finish}
+      onFailed={finish}
     >
-      <View style={[style, enabled ? handleStyle : null]} collapsable={false}>
+      <View style={[style, handleStyle]} collapsable={false}>
         {children}
       </View>
     </PanGestureHandler>
@@ -179,12 +199,16 @@ export function useSelectionDrag({
   const rafRef = useRef(0);
   const clearSuppressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const placeFrame = useCallback((key: string, windowTop: number, height: number) => {
+    frames.current.set(key, { top: windowTop, bottom: windowTop + height });
+  }, []);
+
   const measureNode = useCallback((key: string, node: Measurable) => {
     node.measureInWindow?.((x, y, width, height) => {
       if (nodes.current.get(key) !== node || height <= 0 || width <= 0) return;
-      frames.current.set(key, { top: y, bottom: y + height });
+      placeFrame(key, y, height);
     });
-  }, []);
+  }, [placeFrame]);
 
   const register = useCallback(
     (key: string, node: Measurable | null) => {
@@ -215,14 +239,14 @@ export function useSelectionDrag({
         finish();
         continue;
       }
-      node.measureInWindow((x, y, width, height) => {
-        if (nodes.current.get(key) === node && height > 0 && width > 0) {
-          frames.current.set(key, { top: y, bottom: y + height });
-        }
-        finish();
-      });
+        node.measureInWindow((x, y, width, height) => {
+          if (nodes.current.get(key) === node && height > 0 && width > 0) {
+            placeFrame(key, y, height);
+          }
+          finish();
+        });
     }
-  }, []);
+  }, [placeFrame]);
 
   const measureHost = useCallback((done?: () => void) => {
     hostRef.current?.measureInWindow?.((x, y, width, height) => {
@@ -235,9 +259,10 @@ export function useSelectionDrag({
   }, []);
 
   const applyAt = useCallback((pointerY: number) => {
+    // Window coordinates, shifted only by the scroll delta.
     const session = dragRef.current;
     if (!session) return;
-    const hit = indexAtPoint(keysRef.current, frames.current, pointerY);
+    const hit = indexForDrag(keysRef.current, frames.current, pointerY);
     const index = hit ?? session.lastIndex;
     if (hit != null) session.lastIndex = hit;
     const next = keysAfterDrag(keysRef.current, session.baseline, session.anchorKey, index, session.mode);
@@ -260,20 +285,15 @@ export function useSelectionDrag({
     if (step !== 0 && maxOffsetRef.current > 0) {
       const next = Math.min(maxOffsetRef.current, Math.max(0, offsetRef.current + step));
       if (next !== offsetRef.current) {
-        offsetRef.current = next;
         listRef.current?.scrollToOffset({ offset: next, animated: false });
       }
     }
-    remeasureAll(() => {
-      if (!dragRef.current) return;
-      applyAt(dragRef.current.pointerY);
-      rafRef.current = requestAnimationFrame(tick);
-    });
-  }, [applyAt, remeasureAll]);
+    applyAt(session.pointerY);
+    rafRef.current = requestAnimationFrame(tick);
+  }, [applyAt]);
 
   const beginFromKey = useCallback(
     (key: string, y: number) => {
-      if (!enabledRef.current) return;
       const anchorIndex = keysRef.current.indexOf(key as SelectionKey);
       if (anchorIndex < 0) return;
       const baseline = new Set(selectedRef.current);
@@ -294,6 +314,23 @@ export function useSelectionDrag({
           rafRef.current = requestAnimationFrame(tick);
         });
       });
+      if (Platform.OS === "web" && typeof window !== "undefined") {
+        const move = (event: PointerEvent) => {
+          const session = dragRef.current;
+          if (!session || event.buttons === 0) return;
+          session.pointerY = event.clientY;
+          applyAt(event.clientY);
+        };
+        const up = () => {
+          window.removeEventListener("pointermove", move);
+          window.removeEventListener("pointerup", up);
+          window.removeEventListener("pointercancel", up);
+          endDrag();
+        };
+        window.addEventListener("pointermove", move);
+        window.addEventListener("pointerup", up);
+        window.addEventListener("pointercancel", up);
+      }
     },
     [applyAt, measureHost, remeasureAll, stopLoop, tick],
   );
@@ -365,7 +402,9 @@ export function useSelectionDrag({
       frame.top -= delta;
       frame.bottom -= delta;
     }
-  }, []);
+    const session = dragRef.current;
+    if (session) applyAt(session.pointerY);
+  }, [applyAt]);
 
   const onContentSizeChange = useCallback((_width: number, height: number) => {
     contentHeightRef.current = height;

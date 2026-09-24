@@ -38,9 +38,11 @@ export interface FolderRowProps {
 export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore, onEnterSelection, selected, selectionMode, highlighted: highlightedProp }: FolderRowProps) {
   const { palette } = useTheme();
   const rowRef = React.useRef<View>(null);
-  const dragRow = useSelectionDragRow(selectionMode ? folderKey(folder.id) : null);
+  const dragRow = useSelectionDragRow(folderKey(folder.id));
   const bodyStartY = React.useRef(0);
   const bodyMoved = React.useRef(false);
+  const leadStartY = React.useRef(0);
+  const leadMoved = React.useRef(false);
   const setRowRef = React.useCallback(
     (node: View | null) => {
       rowRef.current = node;
@@ -76,13 +78,6 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
     onPress(folder);
   };
 
-  const handleLeadingLongPress = onEnterSelection
-    ? () => {
-        if (selectionModeRef.current) return;
-        hold.markEnter();
-        onEnterSelection(folder);
-      }
-    : undefined;
   const warmFolder = () => {
     if (selectionMode || (folder.protected && !sessionUnlocked)) return;
     void prefetchFolderBookmarks(folder.id);
@@ -118,6 +113,20 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
         : null)}
     >
       <RowHighlight color={rowFill} />
+      <SelectionDragHandle
+        selectionKey={folderKey(folder.id)}
+        selectionMode={!!selectionMode}
+        onEnter={
+          onEnterSelection
+            ? () => {
+                if (selectionModeRef.current) return;
+                hold.markEnter();
+                onEnterSelection(folder);
+              }
+            : undefined
+        }
+        style={styles.leadingHit}
+      >
       <ListPressable
         accessibilityRole="button"
         accessibilityLabel={`Select ${folder.name}`}
@@ -125,19 +134,26 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
         accessible={!selectionMode}
         importantForAccessibility={selectionMode ? "no" : "yes"}
         style={styles.leading}
+        onTouchStart={(event) => {
+          leadStartY.current = event.nativeEvent.pageY;
+          leadMoved.current = false;
+        }}
+        onTouchMove={(event) => {
+          if (Math.abs(event.nativeEvent.pageY - leadStartY.current) > 10) leadMoved.current = true;
+        }}
         onPressIn={() => {
           hold.pressIn();
           warmFolder();
         }}
         onPressOut={() => hold.pressOut()}
-        onPress={openFolder}
-        onLongPress={handleLeadingLongPress}
-        delayLongPress={SELECTION_LONG_PRESS_MS}
+        onPress={() => {
+          if (leadMoved.current) return;
+          openFolder();
+        }}
       >
+        <View pointerEvents="none">
         {selectionMode ? (
-          <SelectionDragHandle selectionKey={folderKey(folder.id)} enabled>
-            <SelectionMark selected={!!selected} />
-          </SelectionDragHandle>
+          <SelectionMark selected={!!selected} />
         ) : (
           <View
             style={[
@@ -148,7 +164,9 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
             <Ionicons name={folder.icon ?? DEFAULT_FOLDER_ICON} size={18} color={palette.accent} />
           </View>
         )}
+        </View>
       </ListPressable>
+      </SelectionDragHandle>
 
       <ListPressable
         accessibilityRole={selectionMode ? "checkbox" : "button"}
@@ -232,6 +250,9 @@ const styles = StyleSheet.create({
     flexGrow: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
     paddingRight: spacing[16],
+  },
+  leadingHit: {
+    alignSelf: "stretch",
   },
   leading: {
     alignSelf: "stretch",
