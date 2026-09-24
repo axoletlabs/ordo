@@ -29,6 +29,7 @@ import { TagChip } from "../../../src/components/tags/TagChip";
 import { ReaderPane, ReaderPanePlaceholder } from "../../../src/components/reader/ReaderPane";
 import { useInfiniteSearch, useToggleRead, useDeleteBookmark } from "../../../src/hooks/use-bookmarks";
 import { bookmarkKey, useSelectionMode } from "../../../src/hooks/use-selection";
+import { SelectionDragFrame, useSelectionDrag } from "../../../src/components/bookmarks/SelectionDrag";
 import { useTags } from "../../../src/hooks/use-tags";
 import { useFolders } from "../../../src/hooks/use-folders";
 import { useResponsiveLayout } from "../../../src/hooks/use-responsive-layout";
@@ -376,6 +377,13 @@ export default function SearchScreen() {
     }, event);
   }, []);
 
+  const drag = useSelectionDrag({
+    enabled: selection.active,
+    keys: selectableKeys,
+    selected: selection.ids,
+    onSelectedChange: selection.assign,
+  });
+
   const selectionActive = selection.active;
   const selectionRevision = selection.revision;
   const renderBookmark = useCallback(
@@ -454,7 +462,12 @@ export default function SearchScreen() {
   ) : null;
 
   const listPane = (
+    <SelectionDragFrame drag={drag}>
     <ThemedFlashList
+      ref={drag.listRef}
+      onScroll={drag.onScroll}
+      onContentSizeChange={drag.onContentSizeChange}
+      scrollEventThrottle={drag.scrollEventThrottle}
       data={items}
       extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}:${trimmed}:${listFilters.tagIds.join(",")}:${listFilters.folderIds.join(",")}:${listFilters.unfiled}:${listFilters.status}:${listFilters.kind}:${listFilters.reminder}:${listFilters.fuzzy}`}
       keyExtractor={(b: BookmarkDto) => b.id}
@@ -467,6 +480,7 @@ export default function SearchScreen() {
       contentContainerStyle={listContentStyle}
       onEndReached={onEndReached}
     />
+    </SelectionDragFrame>
   );
 
   const resultMeta = browsing && items.length > 0

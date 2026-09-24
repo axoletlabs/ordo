@@ -39,6 +39,7 @@ import {
 } from "../../../src/hooks/use-bookmarks";
 import { useFloatingDockMetrics } from "../../../src/hooks/use-floating-dock-metrics";
 import { bookmarkKey, folderKey, useSelectionMode } from "../../../src/hooks/use-selection";
+import { SelectionDragFrame, useSelectionDrag } from "../../../src/components/bookmarks/SelectionDrag";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { haptics } from "../../../src/lib/haptics";
 import { toast } from "../../../src/components/ui/toast-store";
@@ -207,6 +208,13 @@ export default function BookmarksScreen() {
     selectionRef.current.enter(bookmarkKey(bookmark.id));
   }, []);
 
+  const drag = useSelectionDrag({
+    enabled: selection.active,
+    keys: selectableKeys,
+    selected: selection.ids,
+    onSelectedChange: selection.assign,
+  });
+
   const selectionActive = selection.active;
   const selectionRevision = selection.revision;
   const renderLibraryItem = useCallback(
@@ -249,7 +257,8 @@ export default function BookmarksScreen() {
     (item: LibraryItem) => (item.type === "folder" ? folderKey(item.folder.id) : bookmarkKey(item.bookmark.id)),
     [],
   );
-  // No paddingTop — FolderRow / BookmarkRow already pad the header gap.
+  // No paddingTop — the header gap is `layout.headerContentGap`, and the
+  // first row's own padding sits inside that.
   const listContentStyle = useMemo(
     () => ({
       paddingBottom: selection.active
@@ -347,7 +356,12 @@ export default function BookmarksScreen() {
         </ScreenContent>
       ) : (
         <ScreenContent maxWidth={layout.maxContentWidth} style={styles.content}>
+          <SelectionDragFrame drag={drag}>
           <ThemedFlashList
+            ref={drag.listRef}
+            onScroll={drag.onScroll}
+            onContentSizeChange={drag.onContentSizeChange}
+            scrollEventThrottle={drag.scrollEventThrottle}
             data={libraryItems}
             extraData={`${selectionRevision}:${folderSort}:${unfiledSort}`}
             key={`home:${folderSort}:${unfiledSort}`}
@@ -373,6 +387,7 @@ export default function BookmarksScreen() {
             onRefresh={onRefresh}
             onEndReached={onEndReached}
           />
+          </SelectionDragFrame>
         </ScreenContent>
       )}
 

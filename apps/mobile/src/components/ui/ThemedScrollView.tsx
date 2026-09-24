@@ -141,7 +141,10 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
  * duplicate page rows showed as gaps; a fetch-next also set `isFetching`,
  * which spun the native refresh bar at the bottom in a loop.
  */
-export function ThemedFlashList<T>(props: ThemedFlashListProps<T>) {
+export const ThemedFlashList = React.forwardRef(function ThemedFlashList<T>(
+  props: ThemedFlashListProps<T>,
+  ref: React.ForwardedRef<FlatList<T>>,
+) {
   const chromeInsets = useScrollBarInsets();
   const {
     getItemType: _getItemType,
@@ -165,6 +168,7 @@ export function ThemedFlashList<T>(props: ThemedFlashListProps<T>) {
 
   return (
     <ThemedFlatList
+      ref={ref}
       removeClippedSubviews={false}
       initialNumToRender={12}
       maxToRenderPerBatch={8}
@@ -175,7 +179,7 @@ export function ThemedFlashList<T>(props: ThemedFlashListProps<T>) {
       scrollBarInsets={scrollBarInsets ?? chromeInsets}
     />
   );
-}
+}) as <T>(props: ThemedFlashListProps<T> & { ref?: React.Ref<FlatList<T>> }) => React.ReactElement;
 
 export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
   props: ThemedFlatListProps<T>,

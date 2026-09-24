@@ -36,6 +36,7 @@ import {
 } from "../../../src/hooks/use-bookmarks";
 import { useResponsiveLayout } from "../../../src/hooks/use-responsive-layout";
 import { bookmarkKey, useSelectionMode } from "../../../src/hooks/use-selection";
+import { SelectionDragFrame, useSelectionDrag } from "../../../src/components/bookmarks/SelectionDrag";
 import { useFloatingDockMetrics } from "../../../src/hooks/use-floating-dock-metrics";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { haptics } from "../../../src/lib/haptics";
@@ -143,6 +144,13 @@ export default function FolderDetailScreen() {
     selectionRef.current.enter(bookmarkKey(bookmark.id));
   }, []);
 
+  const drag = useSelectionDrag({
+    enabled: selection.active,
+    keys: selectableKeys,
+    selected: selection.ids,
+    onSelectedChange: selection.assign,
+  });
+
   const selectionActive = selection.active;
   const selectionRevision = selection.revision;
   const renderBookmark = useCallback(
@@ -201,7 +209,12 @@ export default function FolderDetailScreen() {
 
   const listContentPadding = selection.active ? selectionClearance : FAB_LIST_CLEARANCE;
   const listPane = (
+    <SelectionDragFrame drag={drag}>
     <ThemedFlashList
+      ref={drag.listRef}
+      onScroll={drag.onScroll}
+      onContentSizeChange={drag.onContentSizeChange}
+      scrollEventThrottle={drag.scrollEventThrottle}
       data={items}
       extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}:${bookmarkSort}`}
       key={`folder:${folderId ?? "root"}:${bookmarkSort}`}
@@ -213,6 +226,7 @@ export default function FolderDetailScreen() {
       onEndReached={onEndReached}
       ListFooterComponent={loadingMore ? <ListLoadingFooter /> : null}
     />
+    </SelectionDragFrame>
   );
 
   return (

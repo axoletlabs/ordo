@@ -30,6 +30,7 @@ import {
 } from "../../../src/hooks/use-bookmarks";
 import { useResponsiveLayout } from "../../../src/hooks/use-responsive-layout";
 import { bookmarkKey, useSelectionMode } from "../../../src/hooks/use-selection";
+import { SelectionDragFrame, useSelectionDrag } from "../../../src/components/bookmarks/SelectionDrag";
 import { useFloatingDockMetrics } from "../../../src/hooks/use-floating-dock-metrics";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { haptics } from "../../../src/lib/haptics";
@@ -139,6 +140,13 @@ export default function TagDetailScreen() {
     router.replace(`/tags/${tagId}`);
   }, [router]);
 
+  const drag = useSelectionDrag({
+    enabled: selection.active,
+    keys: selectableKeys,
+    selected: selection.ids,
+    onSelectedChange: selection.assign,
+  });
+
   const selectionActive = selection.active;
   const selectionRevision = selection.revision;
   const renderBookmark = useCallback(
@@ -172,7 +180,12 @@ export default function TagDetailScreen() {
   );
 
   const listPane = (
+    <SelectionDragFrame drag={drag}>
     <ThemedFlashList
+      ref={drag.listRef}
+      onScroll={drag.onScroll}
+      onContentSizeChange={drag.onContentSizeChange}
+      scrollEventThrottle={drag.scrollEventThrottle}
       data={items}
       extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}`}
       keyExtractor={(b: BookmarkDto) => b.id}
@@ -185,6 +198,7 @@ export default function TagDetailScreen() {
       onEndReached={onEndReached}
       ListFooterComponent={loadingMore ? <ListLoadingFooter /> : null}
     />
+    </SelectionDragFrame>
   );
 
   if (!routeId) return null;

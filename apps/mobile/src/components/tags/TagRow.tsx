@@ -14,6 +14,7 @@ import { SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
 import { prefetchTaggedBookmarks } from "../../hooks/use-tags";
 import { tagColorValue } from "../../lib/tag-colors";
 import { radius, spacing } from "../../theme/tokens";
+import { RowHighlight } from "../bookmarks/RowHighlight";
 import type { TagDto } from "@ordo/shared";
 
 export const TAG_ROW_SIZE = 72;
@@ -60,13 +61,7 @@ export const TagRow = React.memo(function TagRow({
     <View
       ref={rowRef}
       collapsable={false}
-      style={[
-        styles.wrap,
-        {
-          backgroundColor: rowFill,
-          borderBottomColor: palette.border,
-        },
-      ]}
+      style={[styles.wrap, { borderBottomColor: palette.border }]}
       {...(Platform.OS === "web"
         ? {
             onMouseEnter: () => setHovered(true),
@@ -80,6 +75,7 @@ export const TagRow = React.memo(function TagRow({
           }
         : null)}
     >
+      <RowHighlight color={rowFill} />
       <ListPressable
         accessibilityRole="button"
         accessibilityLabel={`${tag.name}, ${countLabel}`}
@@ -130,7 +126,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[12],
-    paddingVertical: spacing[12],
+    paddingVertical: spacing[8],
     paddingLeft: spacing[16],
     paddingRight: spacing[16],
     ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),

@@ -11,7 +11,9 @@ import { ListPressable } from "../ui/ListPressable";
 import { Spinner } from "../ui/Spinner";
 import { Text } from "../ui/Text";
 import { TagChip } from "../tags/TagChip";
+import { RowHighlight } from "./RowHighlight";
 import { SelectionMark } from "./SelectionMark";
+import { useSelectionDragRow } from "./SelectionDrag";
 import { RowStatusSlot, ROW_STATUS_ICON_SIZE } from "./RowStatusIcon";
 import { useTheme } from "../../theme/ThemeProvider";
 import { domainFromUrl, relativeTime } from "../../lib/format";
@@ -80,6 +82,14 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   const { palette } = useTheme();
   const router = useRouter();
   const rowRef = React.useRef<View>(null);
+  const dragRow = useSelectionDragRow(selectionMode ? bookmarkKey(bookmark.id) : null);
+  const setRowRef = React.useCallback(
+    (node: View | null) => {
+      rowRef.current = node;
+      dragRow.bind(node);
+    },
+    [dragRow],
+  );
   const selectionModeRef = React.useRef(!!selectionMode);
   selectionModeRef.current = !!selectionMode;
   const hold = useSelectionHoldGuard();
@@ -142,6 +152,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   };
 
   const openBookmark = () => {
+    if (dragRow.consumePress()) return;
     if (hold.consumePress()) return;
     if (selectionMode) {
       onPress(bookmark);
@@ -186,14 +197,12 @@ export const BookmarkRow = React.memo(function BookmarkRow({
 
   return (
     <View
-      ref={rowRef}
+      ref={setRowRef}
       collapsable={false}
+      onLayout={() => dragRow.bind(rowRef.current)}
       style={[
         styles.wrap,
-        {
-          backgroundColor: rowFill,
-          borderBottomColor: palette.border,
-        },
+        { borderBottomColor: palette.border },
       ]}
       {...(Platform.OS === "web"
         ? {
@@ -209,6 +218,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
           }
         : null)}
     >
+      <RowHighlight color={rowFill} />
       <ListPressable
         accessibilityRole="button"
         accessibilityLabel={`Select ${title}`}
@@ -437,7 +447,7 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: spacing[12],
+    paddingVertical: spacing[8],
     paddingLeft: spacing[16],
     ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
   },
@@ -445,7 +455,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: spacing[12],
+    paddingVertical: spacing[8],
     paddingLeft: spacing[12],
     paddingRight: spacing[8],
   },

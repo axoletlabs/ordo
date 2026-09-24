@@ -74,6 +74,14 @@ export function useSelectionMode() {
     [bump],
   );
 
+  /** Drag-select writes the set without a haptic on every row. */
+  const assign = useCallback(
+    (keys: readonly SelectionKey[]) => {
+      bump(new Set(keys), true);
+    },
+    [bump],
+  );
+
   const activeRef = useRef(active);
   const focusedRef = useRef(false);
   activeRef.current = active;
@@ -108,6 +116,7 @@ export function useSelectionMode() {
     exit,
     toggle,
     replace,
+    assign,
     has: (key: SelectionKey) => ids.has(key),
   };
 }

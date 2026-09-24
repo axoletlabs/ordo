@@ -1,5 +1,5 @@
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../theme/ThemeProvider";
 import { radius } from "../../theme/tokens";
@@ -30,10 +30,13 @@ export function SelectionMark({ selected, size = SELECTION_MARK_SIZE }: { select
 
 const styles = StyleSheet.create({
   mark: {
-    borderRadius: radius.sm,
+    borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
+    ...(Platform.OS === "web"
+      ? ({ cornerShape: "squircle" } as object)
+      : { borderCurve: "continuous" as const }),
   },
 });

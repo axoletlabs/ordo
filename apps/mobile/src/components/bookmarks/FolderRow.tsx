@@ -9,7 +9,9 @@ import { ListPressable } from "../ui/ListPressable";
 import { PinIcon } from "../ui/PinIcon";
 import { Text } from "../ui/Text";
 import { Badge } from "../ui/Badge";
+import { RowHighlight } from "./RowHighlight";
 import { SelectionMark } from "./SelectionMark";
+import { useSelectionDragRow } from "./SelectionDrag";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
 import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
@@ -36,6 +38,14 @@ export interface FolderRowProps {
 export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore, onEnterSelection, selected, selectionMode, highlighted: highlightedProp }: FolderRowProps) {
   const { palette } = useTheme();
   const rowRef = React.useRef<View>(null);
+  const dragRow = useSelectionDragRow(selectionMode ? folderKey(folder.id) : null);
+  const setRowRef = React.useCallback(
+    (node: View | null) => {
+      rowRef.current = node;
+      dragRow.bind(node);
+    },
+    [dragRow],
+  );
   const selectionModeRef = React.useRef(!!selectionMode);
   selectionModeRef.current = !!selectionMode;
   const hold = useSelectionHoldGuard();
@@ -54,6 +64,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
   const countLabel = `${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}`;
   const lockLabel = folder.protected ? (sessionUnlocked ? ", unlocked" : ", locked") : "";
   const openFolder = () => {
+    if (dragRow.consumePress()) return;
     if (hold.consumePress()) return;
     if (selectionMode) {
       onPress(folder);
@@ -86,15 +97,10 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
 
   return (
     <View
-      ref={rowRef}
+      ref={setRowRef}
       collapsable={false}
-      style={[
-        styles.wrap,
-        {
-          backgroundColor: rowFill,
-          borderBottomColor: palette.border,
-        },
-      ]}
+      onLayout={() => dragRow.bind(rowRef.current)}
+      style={[styles.wrap, { borderBottomColor: palette.border }]}
       {...(Platform.OS === "web"
         ? {
             onMouseEnter: () => setHovered(true),
@@ -109,6 +115,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
           }
         : null)}
     >
+      <RowHighlight color={rowFill} />
       <ListPressable
         accessibilityRole="button"
         accessibilityLabel={`Select ${folder.name}`}
@@ -216,7 +223,7 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: spacing[12],
+    paddingVertical: spacing[8],
     paddingLeft: spacing[16],
     ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
   },
@@ -225,7 +232,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[12],
-    paddingVertical: spacing[12],
+    paddingVertical: spacing[8],
     paddingLeft: spacing[12],
     paddingRight: spacing[8],
   },
