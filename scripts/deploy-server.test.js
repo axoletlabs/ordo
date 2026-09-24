@@ -16,6 +16,15 @@ const {
   looksInstalled,
   inferCommand,
   backupSqlite,
+  dirtyWorktreeMessage,
+  shouldReexec,
+  reexecArgs,
+  dependenciesReady,
+  parseSsPids,
+  isOrdoServer,
+  chooseStart,
+  healthUrl,
+  isOrdoInfo,
   decideWriteEnv,
   compareNodeVersion,
   deploy,
@@ -286,6 +295,82 @@ test("interactive dry-run uses prompt answers", async () => {
   assert.equal(result.start, false);
   assert.equal(result.pull, false);
   assert.equal(i, answers.length);
+});
+
+test("dirty worktree blocks pull, and a new HEAD re-execs once", () => {
+  assert.equal(dirtyWorktreeMessage("?? scripts/notes.txt\n"), null);
+  assert.match(dirtyWorktreeMessage(" M scripts/deploy-server.js\n"), /--no-pull/);
+  assert.equal(shouldReexec("aaa", "bbb", undefined), true);
+  assert.equal(shouldReexec("aaa", "aaa", undefined), false);
+  assert.equal(shouldReexec("aaa", "bbb", "bbb"), false);
+  assert.deepEqual(reexecArgs(["update", "--yes"]), ["update", "--yes", "--no-pull"]);
+  assert.deepEqual(reexecArgs(["update", "--no-pull"]), ["update", "--no-pull"]);
+});
+
+test("matching lockfiles skip install", () => {
+  const { writeFileSync } = require("node:fs");
+  const root = tempRepo();
+  assert.equal(dependenciesReady(root), false);
+  const lock = join(root, "pnpm-lock.yaml");
+  const installed = join(root, "node_modules", ".pnpm", "lock.yaml");
+  writeFileSync(lock, "lockfileVersion: 9.0\n");
+  mkdirSync(join(root, "node_modules", ".pnpm"), { recursive: true });
+  writeFileSync(installed, "lockfileVersion: 9.0\n");
+  assert.equal(dependenciesReady(root), true);
+  writeFileSync(installed, "different\n");
+  assert.equal(dependenciesReady(root), false);
+});
+
+test("port listeners and restart choice", () => {
+  assert.deepEqual(parseSsPids('LISTEN 0 128 127.0.0.1:3000 users:(("node",pid=42,fd=20))'), [42]);
+  assert.equal(
+    isOrdoServer({ pid: 42, cwd: "/opt/ordo/apps/server", cmdline: "node dist/main.js" }, "/opt/ordo/apps/server"),
+    true,
+  );
+  assert.equal(
+    isOrdoServer({ pid: 7, cwd: "/other", cmdline: "node dist/main.js" }, "/opt/ordo/apps/server"),
+    false,
+  );
+  assert.equal(chooseStart({ wasRunning: true, start: null }), "detached");
+  assert.equal(chooseStart({ wasRunning: true, start: false }), "none");
+  assert.equal(chooseStart({ wasRunning: false, start: true }), "foreground");
+  assert.equal(healthUrl({ listenHost: "127.0.0.1", port: 3000 }), "http://127.0.0.1:3000/api/server/info");
+  assert.equal(isOrdoInfo({ version: "0.1.0", registrationEnabled: false }), true);
+  assert.equal(isOrdoInfo({ ok: true }), false);
+});
+
+test("update dry-run plans to restart a running server without stopping it yet", async () => {
+  const root = tempRepo();
+  mkdirSync(join(root, ".git"));
+  writeFileSync(join(root, "apps", "server", ".env"), "PORT=3000\n");
+  const lines = [];
+  const result = await deploy({
+    argv: ["update", "--yes", "--dry-run", "--skip-install", "--skip-build", "--skip-migrate", "--no-pull"],
+    repoRoot: root,
+    env: { ...process.env, CI: "1" },
+    listener: { kind: "ordo", pid: 42 },
+    log: (line) => lines.push(String(line)),
+  });
+  const log = lines.join("\n");
+  assert.equal(result.launch, "detached");
+  assert.match(log, /pid 42/);
+  assert.match(log, /background/);
+  assert.doesNotMatch(log, /Stopping ordo/);
+});
+
+test("a foreign process on the port aborts before install", async () => {
+  const root = tempRepo();
+  await assert.rejects(
+    () =>
+      deploy({
+        argv: ["install", "--yes", "--dry-run", "--start", "--no-pull"],
+        repoRoot: root,
+        env: { ...process.env, CI: "1" },
+        listener: { kind: "other", pid: 9, command: "python -m http.server" },
+        log: () => {},
+      }),
+    /python -m http.server/,
+  );
 });
 
 test("--help prints usage and exits cleanly", () => {

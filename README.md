@@ -75,10 +75,20 @@ touching `apps/server/.env`:
 ```
 
 If you omit the command and `.env` or a database is already there, **update**
-is assumed. `update` runs `git pull --ff-only` (skip with `--no-pull`), snapshots
-SQLite next to the live file, then applies pending Prisma migrations — including
-adopting an older `db push` database. Do not run `prisma migrate deploy` yourself
-on a file that has no `_prisma_migrations` table.
+is assumed. `update` runs `git pull --ff-only` (skip with `--no-pull`). A dirty
+worktree stops the pull before anything else changes; untracked files are fine.
+If that pull checks out a newer copy of this script, the new copy finishes the
+update. When `node_modules` already matches `pnpm-lock.yaml`, install is skipped.
+
+The script then builds, snapshots SQLite next to the live file, and applies
+pending Prisma migrations — including adopting an older `db push` database.
+Do not run `prisma migrate deploy` yourself on a file that has no
+`_prisma_migrations` table.
+
+If ordo is already listening, the script stops it before touching the database
+and starts it again in the background (`apps/server/ordo.log`). `--start` still
+attaches to the foreground. `--no-start` leaves it stopped. Another program on
+the same port is not killed.
 
 `pnpm deploy:server:update` is the same as `./scripts/deploy-server update`.
 

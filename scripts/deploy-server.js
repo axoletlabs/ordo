@@ -20,6 +20,7 @@ const {
   mkdirSync,
   openSync,
   readFileSync,
+  readlinkSync,
   readSync,
   statSync,
   writeFileSync,
@@ -71,6 +72,13 @@ Options
   --skip-migrate                 Skip prisma generate / schema upgrade
   --dry-run                      Print the plan without changing anything
   -h, --help                     Show this help
+
+Running server
+  update stops an ordo process that is already listening on the port before
+  it snapshots or migrates SQLite, then starts that process again in the
+  background (logs: apps/server/ordo.log). --start still runs in the
+  foreground. --no-start leaves it stopped. A different program on the port
+  is left alone, and the script refuses to bind over it.
 
 Database
   Missing or empty SQLite file  → generate client, apply all migrations
@@ -522,6 +530,66 @@ function backupSqlite(filePath, { log, dryRun, now } = {}) {
   return backupPath;
 }
 
+function blockingGitChanges(porcelain) {
+  return String(porcelain)
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line && !line.startsWith("??"));
+}
+
+function dirtyWorktreeMessage(porcelain) {
+  const changes = blockingGitChanges(porcelain);
+  if (changes.length === 0) return null;
+  return [
+    "Working tree has local changes, so git pull --ff-only would fail:",
+    ...changes.map((line) => `  ${line}`),
+    "Commit or stash them, or pass --no-pull.",
+  ].join("\n");
+}
+
+function gitOutput(repoRoot, args) {
+  const result = spawnSync("git", args, {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+  return result;
+}
+
+function assertCleanGit(repoRoot) {
+  const status = gitOutput(repoRoot, ["status", "--porcelain"]);
+  if (status.status !== 0) {
+    throw new Error("git status failed. Fix the repository or pass --no-pull.");
+  }
+  const message = dirtyWorktreeMessage(status.stdout ?? "");
+  if (message) throw new Error(message);
+}
+
+function gitHead(repoRoot) {
+  const result = gitOutput(repoRoot, ["rev-parse", "HEAD"]);
+  if (result.status !== 0) return null;
+  return String(result.stdout ?? "").trim() || null;
+}
+
+function shouldReexec(before, after, already) {
+  return Boolean(before && after && before !== after && already !== after);
+}
+
+function reexecArgs(argv) {
+  if (argv.includes("--no-pull")) return [...argv];
+  return [...argv, "--no-pull"];
+}
+
+/** Continue the update with the script that git pull just checked out. */
+function reexecDeploy(repoRoot, argv, head, env) {
+  const script = join(repoRoot, "scripts", "deploy-server.js");
+  const result = spawnSync(process.execPath, [script, ...reexecArgs(argv)], {
+    cwd: repoRoot,
+    env: { ...env, ORDO_DEPLOY_HEAD: head },
+    stdio: "inherit",
+  });
+  return result.status ?? 1;
+}
+
 function gitPull(repoRoot, { log, dryRun } = {}) {
   const gitDir = join(repoRoot, ".git");
   if (!existsSync(gitDir)) {
@@ -530,6 +598,7 @@ function gitPull(repoRoot, { log, dryRun } = {}) {
   }
   log?.("$ git pull --ff-only");
   if (dryRun) return { pulled: true, reason: "dry-run" };
+  assertCleanGit(repoRoot);
   const result = spawnSync("git", ["pull", "--ff-only"], {
     cwd: repoRoot,
     stdio: "inherit",
@@ -540,6 +609,159 @@ function gitPull(repoRoot, { log, dryRun } = {}) {
     );
   }
   return { pulled: true, reason: "ok" };
+}
+
+function dependenciesReady(repoRoot) {
+  const lock = join(repoRoot, "pnpm-lock.yaml");
+  const installed = join(repoRoot, "node_modules", ".pnpm", "lock.yaml");
+  if (!existsSync(lock) || !existsSync(installed)) return false;
+  return readFileSync(lock).equals(readFileSync(installed));
+}
+
+function parseSsPids(text) {
+  const pids = new Set();
+  for (const match of String(text).matchAll(/pid=(\d+)/g)) {
+    pids.add(Number(match[1]));
+  }
+  return [...pids];
+}
+
+function readPidFile(pidPath) {
+  if (!existsSync(pidPath)) return null;
+  const n = Number(readFileSync(pidPath, "utf8").trim());
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function processDetails(pid) {
+  try {
+    const cmdline = readFileSync(`/proc/${pid}/cmdline`).toString("utf8").replaceAll("\0", " ").trim();
+    const cwd = readlinkSync(`/proc/${pid}/cwd`);
+    return { pid, cmdline, cwd };
+  } catch {
+    return null;
+  }
+}
+
+function isOrdoServer(details, serverDir) {
+  if (!details) return false;
+  return details.cwd === serverDir && details.cmdline.includes("dist/main.js");
+}
+
+function classifyPort(port, serverDir, pidPath, ssText) {
+  const pids = new Set(parseSsPids(ssText));
+  const filed = readPidFile(pidPath);
+  if (filed) pids.add(filed);
+  let ordo = null;
+  for (const pid of pids) {
+    if (!pidAlive(pid)) continue;
+    const details = processDetails(pid);
+    if (isOrdoServer(details, serverDir)) {
+      ordo = { kind: "ordo", pid, cwd: details.cwd };
+      continue;
+    }
+    if (parseSsPids(ssText).includes(pid)) {
+      return {
+        kind: "other",
+        pid,
+        command: details?.cmdline?.slice(0, 160) || `pid ${pid}`,
+      };
+    }
+  }
+  return ordo;
+}
+
+function chooseStart({ wasRunning, start }) {
+  if (start === true) return "foreground";
+  if (wasRunning && start !== false) return "detached";
+  return "none";
+}
+
+function healthUrl(settings) {
+  const host =
+    settings.listenHost === "::1" || settings.listenHost === "::" ? "[::1]" : "127.0.0.1";
+  return `http://${host}:${settings.port}/api/server/info`;
+}
+
+function isOrdoInfo(body) {
+  return Boolean(body && typeof body.version === "string" && "registrationEnabled" in body);
+}
+
+function sleepMs(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function stopPid(pid, log) {
+  log(`Stopping ordo (pid ${pid}) so the database can be updated.`);
+  try {
+    process.kill(pid, "SIGTERM");
+  } catch (error) {
+    if (error.code === "ESRCH") return;
+    throw error;
+  }
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline) {
+    if (!pidAlive(pid)) return;
+    sleepMs(200);
+  }
+  log(`ordo (pid ${pid}) did not exit. Sending SIGKILL.`);
+  try {
+    process.kill(pid, "SIGKILL");
+  } catch {
+    /* already gone */
+  }
+}
+
+function listenSnapshot(port) {
+  const result = spawnSync("ss", ["-lptnH", `sport = :${port}`], { encoding: "utf8" });
+  if (result.status !== 0) return "";
+  return result.stdout ?? "";
+}
+
+function startDetached(serverDir, childEnv, logPath, pidPath, log) {
+  const { spawn } = require("node:child_process");
+  mkdirSync(serverDir, { recursive: true });
+  const logFd = openSync(logPath, "a");
+  const child = spawn("pnpm", ["start"], {
+    cwd: serverDir,
+    env: childEnv,
+    detached: true,
+    stdio: ["ignore", logFd, logFd],
+  });
+  closeSync(logFd);
+  child.unref();
+  writeFileSync(pidPath, `${child.pid}\n`, { encoding: "utf8" });
+  log(`Started ordo in the background (pid ${child.pid}). Logs: ${logPath}`);
+  return child.pid;
+}
+
+async function waitForReady(settings, { fetchImpl = globalThis.fetch, attempts = 60, delayMs = 500 } = {}) {
+  const url = healthUrl(settings);
+  let last = "no response";
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      const response = await fetchImpl(url);
+      if (response.ok) {
+        const body = await response.json();
+        if (isOrdoInfo(body)) return body;
+        last = "response was not ordo";
+      } else {
+        last = `HTTP ${response.status}`;
+      }
+    } catch (error) {
+      last = error instanceof Error ? error.message : String(error);
+    }
+    if (i < attempts - 1) sleepMs(delayMs);
+  }
+  throw new Error(`Server did not become ready at ${url} (${last}).`);
 }
 
 function decideWriteEnv(args, envExists) {
@@ -717,13 +939,34 @@ async function deploy(options = {}) {
   const backup =
     args.backup !== false && migrate.action !== "skip" && existsSync(dbPath) && statSync(dbPath).size > 0;
 
+  const pidPath = join(serverDir, ".ordo.pid");
+  const logPath = join(serverDir, "ordo.log");
+  const listener =
+    options.listener !== undefined
+      ? options.listener
+      : args.dryRun
+        ? null
+        : classifyPort(settings.port, serverDir, pidPath, listenSnapshot(settings.port));
+
   let start = args.start;
-  if (start == null && interactive) {
+  if (start == null && interactive && listener?.kind === "ordo") {
+    const raw = (await ask()(`Restart the running server on port ${settings.port} when done? [Y/n] `))
+      .trim()
+      .toLowerCase();
+    if (["n", "no"].includes(raw)) start = false;
+  } else if (start == null && interactive) {
     start = ["y", "yes"].includes(
       (await ask()("Start the server in the foreground when done? [y/N] ")).trim().toLowerCase(),
     );
   }
-  if (start == null) start = false;
+  if (start == null && listener?.kind !== "ordo") start = false;
+
+  const launch = chooseStart({ wasRunning: listener?.kind === "ordo", start });
+  if (listener?.kind === "other" && launch !== "none") {
+    throw new Error(
+      `Port ${settings.port} is already used by ${listener.command} (pid ${listener.pid}). Stop it or choose another --port.`,
+    );
+  }
 
   log("");
   log(command === "update" ? "Updating the existing backend." : "Installing the backend.");
@@ -733,10 +976,33 @@ async function deploy(options = {}) {
   else log("Skipping git pull.");
   if (backup) log("Will snapshot SQLite before applying schema changes.");
   else if (args.backup === false) log("Skipping SQLite backup (--no-backup).");
+  if (listener?.kind === "ordo") {
+    const next =
+      launch === "foreground"
+        ? "start it in the foreground"
+        : launch === "detached"
+          ? "start it in the background"
+          : "leave it stopped";
+    log(`Will stop ordo (pid ${listener.pid}) before the database change, then ${next}.`);
+  } else if (listener?.kind === "other") {
+    log(`Port ${settings.port} is in use by ${listener.command} (pid ${listener.pid}). It will not be stopped.`);
+  }
+  if (!args.skipInstall && dependenciesReady(repoRoot)) {
+    log("Dependencies already match pnpm-lock.yaml. Skipping pnpm install.");
+  }
   if (args.dryRun) log("Dry run: no files or commands will change.");
   log("");
 
-  if (pull) gitPull(repoRoot, { log, dryRun: args.dryRun });
+  if (pull) {
+    const before = args.dryRun ? null : gitHead(repoRoot);
+    gitPull(repoRoot, { log, dryRun: args.dryRun });
+    const after = args.dryRun ? null : gitHead(repoRoot);
+    if (!args.dryRun && shouldReexec(before, after, env.ORDO_DEPLOY_HEAD)) {
+      log("Checked out a new deploy script. Continuing with that copy.");
+      const exitCode = (options.reexec ?? reexecDeploy)(repoRoot, argv, after, env);
+      return { ok: exitCode === 0, reexec: true, exitCode, command };
+    }
+  }
   if (!args.dryRun) checkToolchain(repoRoot);
 
   const childEnv = {
@@ -753,7 +1019,7 @@ async function deploy(options = {}) {
     log(`Wrote ${envPath}`);
   }
 
-  if (!args.skipInstall) {
+  if (!args.skipInstall && !dependenciesReady(repoRoot)) {
     run(
       "pnpm",
       ["install", "--frozen-lockfile"],
@@ -779,34 +1045,55 @@ async function deploy(options = {}) {
       dryRun: args.dryRun,
       log,
     });
-    if (backup) {
-      backupSqlite(dbPath, { log, dryRun: args.dryRun });
-    }
-    if (!args.skipBuild) {
-      run("pnpm", ["--filter", "@ordo/server", "build"], {
-        cwd: repoRoot,
-        env: childEnv,
-        dryRun: args.dryRun,
-        log,
-      });
-    } else if (!args.dryRun && !existsSync(upgradeCli)) {
-      throw new Error(
-        "Server build is missing (dist/prisma/upgrade-cli.js). Drop --skip-build or build @ordo/server first.",
-      );
-    }
-    run("node", ["dist/prisma/upgrade-cli.js"], {
-      cwd: serverDir,
-      env: childEnv,
-      dryRun: args.dryRun,
-      log,
-    });
-  } else if (!args.skipBuild) {
+  }
+
+  if (!args.skipBuild) {
     run("pnpm", ["--filter", "@ordo/server", "build"], {
       cwd: repoRoot,
       env: childEnv,
       dryRun: args.dryRun,
       log,
     });
+  } else if (migrate.action !== "skip" && !args.dryRun && !existsSync(upgradeCli)) {
+    throw new Error(
+      "Server build is missing (dist/prisma/upgrade-cli.js). Drop --skip-build or build @ordo/server first.",
+    );
+  }
+
+  let backupPath = null;
+  let stopped = false;
+  const quietDb = listener?.kind === "ordo" && (migrate.action !== "skip" || launch !== "none");
+  try {
+    if (quietDb && !args.dryRun) {
+      stopPid(listener.pid, log);
+      stopped = true;
+    }
+    if (backup) {
+      backupPath = backupSqlite(dbPath, { log, dryRun: args.dryRun });
+    }
+    if (migrate.action !== "skip") {
+      run("node", ["dist/prisma/upgrade-cli.js"], {
+        cwd: serverDir,
+        env: childEnv,
+        dryRun: args.dryRun,
+        log,
+      });
+    }
+  } catch (error) {
+    if (stopped && start !== false) {
+      try {
+        startDetached(serverDir, childEnv, logPath, pidPath, log);
+      } catch {
+        log("The previous server was stopped and could not be restarted.");
+      }
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    if (backupPath) {
+      throw new Error(
+        `${message}\nDatabase snapshot: ${backupPath}\nRestore with: cp ${JSON.stringify(backupPath)} ${JSON.stringify(dbPath)}`,
+      );
+    }
+    throw error instanceof Error ? error : new Error(message);
   }
 
   log("");
@@ -818,19 +1105,27 @@ async function deploy(options = {}) {
   log(`Data:  ${dbPath}`);
   log("Secret: apps/server/.ordo-secret (created on first start if JWT_SECRET is unset)");
   log("Keep a backup of the database and the secret file.");
-  if (!start) {
+  if (launch === "none") {
     log("");
     log("Start with:");
     log(`  cd apps/server && NODE_ENV=production pnpm start`);
   }
 
-  if (start) {
+  if (launch === "foreground") {
     run("pnpm", ["start"], {
       cwd: serverDir,
       env: childEnv,
       dryRun: args.dryRun,
       log,
     });
+  } else if (launch === "detached") {
+    if (!args.dryRun) {
+      startDetached(serverDir, childEnv, logPath, pidPath, log);
+      const info = await (options.waitForReady ?? waitForReady)(settings);
+      log(`Ready: ${healthUrl(settings)} (${info.name ?? "ordo"} ${info.version})`);
+    } else {
+      log(`$ pnpm start  # background, then check ${healthUrl(settings)}`);
+    }
   }
 
   return {
@@ -841,7 +1136,8 @@ async function deploy(options = {}) {
     envDecision,
     pull,
     backup,
-    start,
+    start: launch === "foreground",
+    launch,
     db,
     interactive,
   };
@@ -862,14 +1158,28 @@ module.exports = {
   inferCommand,
   backupSqlite,
   gitPull,
+  dirtyWorktreeMessage,
+  shouldReexec,
+  reexecArgs,
+  dependenciesReady,
+  parseSsPids,
+  isOrdoServer,
+  classifyPort,
+  chooseStart,
+  healthUrl,
+  isOrdoInfo,
   decideWriteEnv,
   compareNodeVersion,
   deploy,
 };
 
 if (require.main === module) {
-  deploy().catch((error) => {
-    console.error(`error: ${error.message}`);
-    process.exit(1);
-  });
+  deploy()
+    .then((result) => {
+      if (result?.reexec) process.exit(result.exitCode ?? 1);
+    })
+    .catch((error) => {
+      console.error(`error: ${error.message}`);
+      process.exit(1);
+    });
 }

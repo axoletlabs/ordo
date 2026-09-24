@@ -25,9 +25,10 @@ apps/server/prisma/data/
 apps/server/src/generated/
 
 
-# auto-generated secrets
+# auto-generated secrets and the deploy script's background server
 .ordo-secret
 .ordo-library-key
+.ordo.pid
 
 # Android upload keystore (CI secret; never commit)
 *.keystore
