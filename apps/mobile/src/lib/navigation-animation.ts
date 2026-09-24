@@ -1,9 +1,11 @@
 /**
  * Map the Appearance "Page animation" setting onto stack pushes and tab switches.
  *
- * Changing the native animation type while a slide/shift is on screen leaves
- * translateX on frozen views. Hold the in-flight type until tabs are focused
- * again, and keep a 0px translateX on fade so the native driver can clear it.
+ * Changing the tab animation type while a slide/shift is frozen leaves
+ * translateX on those scenes. Tab switches wait until the tabs are focused
+ * again. Stack pushes and pops follow the current preference, including the
+ * trip back after you change it. Fade keeps a 0px translateX so a leftover
+ * shift can clear.
  *
  * Scene interpolators come from expo-router, not `@react-navigation/*` — SDK 56
  * fails the OTA Metro bundle on those imports.

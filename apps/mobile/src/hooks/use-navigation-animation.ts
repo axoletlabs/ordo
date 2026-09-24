@@ -1,5 +1,6 @@
 /**
- * Apply the page-animation setting without rewriting an in-flight transition.
+ * Apply the page-animation setting to tab scenes without rewriting a frozen
+ * shift while a stack screen is still on top.
  */
 import React from "react";
 import { useSegments } from "expo-router";

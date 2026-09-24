@@ -3,6 +3,7 @@ import { test } from "node:test";
 import {
   isTabNavigatorFocused,
   resolveAppliedNavigationAnimation,
+  resolveStackNavigationAnimation,
   shouldDetachInactiveTabScenes,
 } from "./navigation-animation-policy.ts";
 
@@ -13,7 +14,13 @@ test("stack details are not the tab navigator", () => {
   assert.equal(isTabNavigatorFocused(["(app)", "(tabs)"]), true);
 });
 
-test("the new animation waits until tabs are focused again", () => {
+test("the stack trip back uses the animation you just picked", () => {
+  assert.equal(resolveStackNavigationAnimation("fade"), "fade");
+  assert.equal(resolveStackNavigationAnimation("instant"), "instant");
+  assert.equal(resolveStackNavigationAnimation("slide"), "slide");
+});
+
+test("tab scenes wait to switch until the tabs are focused again", () => {
   assert.equal(resolveAppliedNavigationAnimation("fade", false, "slide"), "slide");
   assert.equal(resolveAppliedNavigationAnimation("instant", false, "slide"), "slide");
   assert.equal(resolveAppliedNavigationAnimation("fade", true, "slide"), "fade");

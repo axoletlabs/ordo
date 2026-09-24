@@ -11,8 +11,9 @@ import { useTheme } from "../../src/theme/ThemeProvider";
 import { useServerInfo, useValidateSession } from "../../src/hooks/queries";
 import { useFloatingDockMetrics } from "../../src/hooks/use-floating-dock-metrics";
 import { useAuthStore } from "../../src/store/auth";
-import { useAppliedNavigationAnimation } from "../../src/hooks/use-navigation-animation";
 import { screenAnimationDuration, stackScreenAnimation } from "../../src/lib/navigation-animation";
+import { resolveStackNavigationAnimation } from "../../src/lib/navigation-animation-policy";
+import { useSettingsStore } from "../../src/store/settings";
 import { MfaEnrollmentScreen } from "../../src/components/auth/MfaEnrollmentScreen";
 import { NavigationRail, useRailSceneOffset } from "../../src/components/navigation/NavigationRail";
 import { ReminderNotificationHost } from "../../src/components/bookmarks/ReminderNotificationHost";
@@ -26,7 +27,9 @@ export const unstable_settings = {
 export default function AppLayout() {
   const { palette } = useTheme();
   const user = useAuthStore((s) => s.user);
-  const navigationAnimation = useAppliedNavigationAnimation();
+  const navigationAnimation = resolveStackNavigationAnimation(
+    useSettingsStore((s) => s.navigationAnimation),
+  );
   const { data: serverInfo } = useServerInfo();
   const { floating, sideNavigation } = useFloatingDockMetrics();
   const sceneOffset = useRailSceneOffset();
