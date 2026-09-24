@@ -88,8 +88,9 @@ export function useSelectionDragRow(key: string | null) {
 }
 
 /**
- * Pan attached only to the selection mark. Disabled outside multi-select so
- * the long-press that enters selection still belongs to the pressable.
+ * Pan on the leading icon. Before multi-select it activates on the same
+ * long-press that enters selection, then keeps that finger as the drag.
+ * After that, a short move on the icon starts the drag immediately.
  */
 export function SelectionDragHandle({
   selectionKey,
@@ -199,7 +200,12 @@ export function useSelectionDrag({
   const rafRef = useRef(0);
   const clearSuppressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Once a drag is moving, keep the frames that onScroll shifts. A late
+  // measureInWindow from before the scroll would put the finger on the wrong row.
+  const replaceFrames = useRef(true);
+
   const placeFrame = useCallback((key: string, windowTop: number, height: number) => {
+    if (!replaceFrames.current && frames.current.has(key)) return;
     frames.current.set(key, { top: windowTop, bottom: windowTop + height });
   }, []);
 
@@ -249,7 +255,12 @@ export function useSelectionDrag({
   }, [placeFrame]);
 
   const measureHost = useCallback((done?: () => void) => {
-    hostRef.current?.measureInWindow?.((x, y, width, height) => {
+    const node = hostRef.current;
+    if (!node?.measureInWindow) {
+      done?.();
+      return;
+    }
+    node.measureInWindow((x, y, width, height) => {
       if (height > 0) {
         viewportRef.current = { top: y, bottom: y + height, height };
         maxOffsetRef.current = Math.max(0, contentHeightRef.current - height);
@@ -292,12 +303,35 @@ export function useSelectionDrag({
     rafRef.current = requestAnimationFrame(tick);
   }, [applyAt]);
 
+  const detachPointer = useRef<(() => void) | null>(null);
+  const waitFrame = useRef(0);
+  const publishHandlesRef = useRef<() => void>(() => {});
+
+  const endDrag = useCallback(() => {
+    detachPointer.current?.();
+    detachPointer.current = null;
+    const hadSession = dragRef.current != null;
+    dragRef.current = null;
+    replaceFrames.current = true;
+    stopLoop();
+    publishHandlesRef.current();
+    if (!hadSession) return;
+    suppressRef.current = true;
+    if (clearSuppressRef.current) clearTimeout(clearSuppressRef.current);
+    clearSuppressRef.current = setTimeout(() => {
+      suppressRef.current = false;
+    }, 120);
+  }, [stopLoop]);
+
   const beginFromKey = useCallback(
     (key: string, y: number) => {
       const anchorIndex = keysRef.current.indexOf(key as SelectionKey);
       if (anchorIndex < 0) return;
+      detachPointer.current?.();
+      detachPointer.current = null;
       const baseline = new Set(selectedRef.current);
       suppressRef.current = true;
+      replaceFrames.current = true;
       dragRef.current = {
         anchorKey: key,
         mode: baseline.has(key as SelectionKey) ? "deselect" : "select",
@@ -309,6 +343,7 @@ export function useSelectionDrag({
       measureHost(() => {
         remeasureAll(() => {
           if (!dragRef.current) return;
+          replaceFrames.current = false;
           applyAt(y);
           stopLoop();
           rafRef.current = requestAnimationFrame(tick);
@@ -317,22 +352,22 @@ export function useSelectionDrag({
       if (Platform.OS === "web" && typeof window !== "undefined") {
         const move = (event: PointerEvent) => {
           const session = dragRef.current;
-          if (!session || event.buttons === 0) return;
+          if (!session) return;
           session.pointerY = event.clientY;
           applyAt(event.clientY);
         };
-        const up = () => {
-          window.removeEventListener("pointermove", move);
-          window.removeEventListener("pointerup", up);
-          window.removeEventListener("pointercancel", up);
-          endDrag();
-        };
+        const up = () => endDrag();
         window.addEventListener("pointermove", move);
         window.addEventListener("pointerup", up);
         window.addEventListener("pointercancel", up);
+        detachPointer.current = () => {
+          window.removeEventListener("pointermove", move);
+          window.removeEventListener("pointerup", up);
+          window.removeEventListener("pointercancel", up);
+        };
       }
     },
-    [applyAt, measureHost, remeasureAll, stopLoop, tick],
+    [applyAt, endDrag, measureHost, remeasureAll, stopLoop, tick],
   );
 
   const moveTo = useCallback(
@@ -345,23 +380,13 @@ export function useSelectionDrag({
     [applyAt],
   );
 
-  const endDrag = useCallback(() => {
-    if (!dragRef.current) {
-      suppressRef.current = false;
-      return;
-    }
-    dragRef.current = null;
-    stopLoop();
-    if (clearSuppressRef.current) clearTimeout(clearSuppressRef.current);
-    clearSuppressRef.current = setTimeout(() => {
-      suppressRef.current = false;
-    }, 80);
-  }, [stopLoop]);
-
   useEffect(
     () => () => {
+      detachPointer.current?.();
+      detachPointer.current = null;
       stopLoop();
       if (clearSuppressRef.current) clearTimeout(clearSuppressRef.current);
+      if (waitFrame.current) cancelAnimationFrame(waitFrame.current);
     },
     [stopLoop],
   );
@@ -370,15 +395,26 @@ export function useSelectionDrag({
     if (!enabled) endDrag();
   }, [enabled, endDrag]);
 
+  const publishHandles = useCallback(() => {
+    if (dragRef.current) return;
+    if (waitFrame.current) cancelAnimationFrame(waitFrame.current);
+    waitFrame.current = requestAnimationFrame(() => {
+      waitFrame.current = 0;
+      if (dragRef.current) return;
+      setScrollWaitFor([...handles.current]);
+    });
+  }, []);
+  publishHandlesRef.current = publishHandles;
+
   const registerHandle = useCallback((ref: React.RefObject<HandleRef | null>) => {
     handles.current.add(ref);
-    setScrollWaitFor([...handles.current]);
-  }, []);
+    publishHandles();
+  }, [publishHandles]);
 
   const unregisterHandle = useCallback((ref: React.RefObject<HandleRef | null>) => {
     handles.current.delete(ref);
-    setScrollWaitFor([...handles.current]);
-  }, []);
+    publishHandles();
+  }, [publishHandles]);
 
   const context = useMemo<DragContextValue>(
     () => ({
