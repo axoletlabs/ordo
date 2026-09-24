@@ -142,6 +142,7 @@ function RootShell() {
     <>
       <OverlayHost>
         <Stack
+          initialRouteName={status === "authenticated" ? "(app)" : "(auth)"}
           screenOptions={{
             headerShown: false,
             contentStyle: { backgroundColor: palette.background },

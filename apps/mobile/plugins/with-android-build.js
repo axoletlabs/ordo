@@ -393,6 +393,83 @@ class QuickShareReceiverActivity : Activity() {
 `;
 }
 
+function screenSharePrivacyKotlin(packageName) {
+  return `package ${packageName}
+
+import android.app.Activity
+import android.os.Build
+import android.view.View
+import android.view.ViewGroup
+import android.view.ViewTreeObserver
+import java.util.Collections
+import java.util.WeakHashMap
+
+/**
+ * Android 15 marks a window secure during screen share when any visible view
+ * has a password or username autofill hint. React Native password fields get
+ * that hint from their input type, so login, register, and other forms turn
+ * the whole window black ("Content hidden"). Opt those views out. The field
+ * still masks the password; only the full-window privacy screen is removed.
+ */
+object ScreenSharePrivacy {
+  private val watched = Collections.newSetFromMap(WeakHashMap<View, Boolean>())
+
+  fun install(activity: Activity) {
+    if (Build.VERSION.SDK_INT < 35) return
+    val decor = activity.window.decorView
+    val observer = decor.viewTreeObserver
+    val listener = ViewTreeObserver.OnPreDrawListener {
+      watchNewWindows()
+      true
+    }
+    observer.addOnPreDrawListener(listener)
+    watchNewWindows()
+  }
+
+  private fun watchNewWindows() {
+    for (root in windowRoots()) {
+      if (!watched.add(root)) continue
+      root.viewTreeObserver.addOnGlobalLayoutListener { disarmTree(root) }
+      disarmTree(root)
+    }
+  }
+
+  private fun disarmTree(view: View) {
+    if (Build.VERSION.SDK_INT < 35) return
+    if (view.isContentSensitive) {
+      view.setContentSensitivity(View.CONTENT_SENSITIVITY_NOT_SENSITIVE)
+    }
+    if (view is ViewGroup) {
+      for (i in 0 until view.childCount) {
+        disarmTree(view.getChildAt(i))
+      }
+    }
+  }
+
+  private fun windowRoots(): List<View> {
+    return try {
+      val clazz = Class.forName("android.view.WindowManagerGlobal")
+      val instance = clazz.getMethod("getInstance").invoke(null)
+      val field = clazz.getDeclaredField("mViews")
+      field.isAccessible = true
+      val views = field.get(instance)
+      when (views) {
+        is List<*> -> views.filterIsInstance<View>()
+        is Array<*> -> views.filterIsInstance<View>()
+        else -> emptyList()
+      }
+    } catch (_: Throwable) {
+      emptyList()
+    }
+  }
+}
+`;
+}
+
+function screenSharePrivacyCall(isJava) {
+  return isJava ? 'ScreenSharePrivacy.INSTANCE.install(this);' : 'ScreenSharePrivacy.install(this)';
+}
+
 function shareTargetSyncCall(isJava) {
   return isJava ? 'ShareIntake.watchAndSync(this);' : 'ShareIntake.watchAndSync(this)';
 }
@@ -447,7 +524,7 @@ function patchMainActivityForShareTargets(contents, language) {
     comment: '    //',
     offset: 1,
     anchor: /super\.onCreate\(null\)/,
-    newSrc: `    ${shareTargetSyncCall(isJava)}`,
+    newSrc: `    ${shareTargetSyncCall(isJava)}\n    ${screenSharePrivacyCall(isJava)}`,
   }).contents;
   next = mergeContents({
     src: next,
@@ -847,6 +924,10 @@ const withAndroidBuild = (config) => {
       await fs.writeFile(path.join(valuesNightDir, 'bools.xml'), DARK_SYSTEM_BARS_BOOL_XML);
 
       await fs.writeFile(path.join(sourceDir, 'ShareIntake.kt'), shareIntakeKotlin(packageName));
+      await fs.writeFile(
+        path.join(sourceDir, 'ScreenSharePrivacy.kt'),
+        screenSharePrivacyKotlin(packageName)
+      );
       await fs.writeFile(path.join(sourceDir, 'ShareSessionStore.kt'), shareSessionStoreKotlin(packageName));
       await fs.writeFile(
         path.join(sourceDir, 'OrdoShareSessionModule.kt'),
@@ -1079,6 +1160,7 @@ module.exports.shareReceiverKotlin = shareReceiverKotlin;
 module.exports.quickShareReceiverKotlin = quickShareReceiverKotlin;
 module.exports.shareReceiverActivity = shareReceiverActivity;
 module.exports.shareReceiverAlias = shareReceiverAlias;
+module.exports.screenSharePrivacyKotlin = screenSharePrivacyKotlin;
 module.exports.patchMainActivityForShareTargets = patchMainActivityForShareTargets;
 module.exports.patchMainApplicationForShareSession = patchMainApplicationForShareSession;
 module.exports.applySecurityCrypto = applySecurityCrypto;

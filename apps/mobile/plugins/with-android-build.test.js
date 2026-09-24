@@ -34,6 +34,7 @@ const {
   ordoShareSessionModuleKotlin,
   ordoExportFileModuleKotlin,
   patchMainActivityForShareTargets,
+  screenSharePrivacyKotlin,
   patchMainApplicationForShareSession,
   quickShareCategory,
   quickShareReceiverKotlin,
@@ -339,10 +340,19 @@ test("backup rules keep SecureStore and the Quick Save session off Auto Backup",
   assert.match(DATA_EXTRACTION_RULES_XML, new RegExp(`path="${QUICK_SHARE_SESSION_PREFS}"`));
 });
 
+test("screen share privacy opts password windows out of Android 15 capture hiding", () => {
+  const source = screenSharePrivacyKotlin("com.axolet.ordo");
+  assert.match(source, /package com\.axolet\.ordo/);
+  assert.match(source, /CONTENT_SENSITIVITY_NOT_SENSITIVE/);
+  assert.match(source, /SDK_INT < 35/);
+  assert.match(source, /isContentSensitive/);
+});
+
 test("MainActivity syncs the disabled Quick Bookmark target on create and pause", () => {
   const patched = patchMainActivityForShareTargets(KOTLIN_ACTIVITY, 'kt');
   assert.match(patched, /ShareIntake\.watchAndSync\(this\)/);
   assert.match(patched, /ShareIntake\.consumeShareIntent\(this\)/);
+  assert.match(patched, /ScreenSharePrivacy\.install\(this\)/);
   assert.match(patched, /override fun onPause\(\)/);
   assert.match(patched, /override fun onNewIntent\(intent: android\.content\.Intent\) \{/);
   assert.doesNotMatch(patched, /onNewIntent\(intent: android\.content\.Intent\?\)/);
@@ -355,6 +365,7 @@ test("patches Java MainActivity for the Quick Bookmark target", () => {
   const patched = patchMainActivityForShareTargets(JAVA_ACTIVITY, 'java');
   assert.match(patched, /ShareIntake\.watchAndSync\(this\);/);
   assert.match(patched, /ShareIntake\.consumeShareIntent\(this\);/);
+  assert.match(patched, /ScreenSharePrivacy\.INSTANCE\.install\(this\);/);
   assert.match(patched, /public void onPause\(\)/);
   assert.match(patched, /public void onNewIntent/);
 });
