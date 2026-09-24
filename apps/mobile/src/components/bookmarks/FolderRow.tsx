@@ -11,7 +11,7 @@ import { Text } from "../ui/Text";
 import { Badge } from "../ui/Badge";
 import { RowHighlight } from "./RowHighlight";
 import { SelectionMark } from "./SelectionMark";
-import { useSelectionDragRow } from "./SelectionDrag";
+import { SelectionDragHandle, useSelectionDragRow } from "./SelectionDrag";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
 import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
@@ -39,6 +39,8 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
   const { palette } = useTheme();
   const rowRef = React.useRef<View>(null);
   const dragRow = useSelectionDragRow(selectionMode ? folderKey(folder.id) : null);
+  const bodyStartY = React.useRef(0);
+  const bodyMoved = React.useRef(false);
   const setRowRef = React.useCallback(
     (node: View | null) => {
       rowRef.current = node;
@@ -133,7 +135,9 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         {selectionMode ? (
-          <SelectionMark selected={!!selected} />
+          <SelectionDragHandle selectionKey={folderKey(folder.id)} enabled>
+            <SelectionMark selected={!!selected} />
+          </SelectionDragHandle>
         ) : (
           <View
             style={[
@@ -170,12 +174,22 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
             : undefined
         }
         style={styles.body}
+        onTouchStart={(event) => {
+          bodyStartY.current = event.nativeEvent.pageY;
+          bodyMoved.current = false;
+        }}
+        onTouchMove={(event) => {
+          if (Math.abs(event.nativeEvent.pageY - bodyStartY.current) > 10) bodyMoved.current = true;
+        }}
         onPressIn={() => {
           hold.pressIn();
           warmFolder();
         }}
         onPressOut={() => hold.pressOut()}
-        onPress={openFolder}
+        onPress={() => {
+          if (bodyMoved.current) return;
+          openFolder();
+        }}
         onLongPress={selectionMode ? undefined : onMore ? (event) => openMore(event) : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >

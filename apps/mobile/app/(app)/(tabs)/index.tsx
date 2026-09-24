@@ -383,8 +383,8 @@ export default function BookmarksScreen() {
             }
             ListFooterComponent={loadingMore ? <ListLoadingFooter /> : null}
             contentContainerStyle={listContentStyle}
-            refreshing={selection.active ? undefined : refreshing}
-            onRefresh={selection.active ? undefined : onRefresh}
+            refreshing={refreshing}
+            onRefresh={onRefresh}
             waitFor={drag.scrollWaitFor}
             onEndReached={onEndReached}
           />

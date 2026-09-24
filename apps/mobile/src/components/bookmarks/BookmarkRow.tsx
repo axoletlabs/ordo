@@ -13,7 +13,7 @@ import { Text } from "../ui/Text";
 import { TagChip } from "../tags/TagChip";
 import { RowHighlight } from "./RowHighlight";
 import { SelectionMark } from "./SelectionMark";
-import { useSelectionDragRow } from "./SelectionDrag";
+import { SelectionDragHandle, useSelectionDragRow } from "./SelectionDrag";
 import { RowStatusSlot, ROW_STATUS_ICON_SIZE } from "./RowStatusIcon";
 import { useTheme } from "../../theme/ThemeProvider";
 import { domainFromUrl, relativeTime } from "../../lib/format";
@@ -83,6 +83,8 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   const router = useRouter();
   const rowRef = React.useRef<View>(null);
   const dragRow = useSelectionDragRow(selectionMode ? bookmarkKey(bookmark.id) : null);
+  const bodyStartY = React.useRef(0);
+  const bodyMoved = React.useRef(false);
   const setRowRef = React.useCallback(
     (node: View | null) => {
       rowRef.current = node;
@@ -236,7 +238,9 @@ export const BookmarkRow = React.memo(function BookmarkRow({
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         {selectionMode ? (
-          <SelectionMark selected={!!selected} />
+          <SelectionDragHandle selectionKey={bookmarkKey(bookmark.id)} enabled>
+            <SelectionMark selected={!!selected} />
+          </SelectionDragHandle>
         ) : (
           <View
             style={[
@@ -293,12 +297,22 @@ export const BookmarkRow = React.memo(function BookmarkRow({
             : undefined
         }
         style={styles.body}
+        onTouchStart={(event) => {
+          bodyStartY.current = event.nativeEvent.pageY;
+          bodyMoved.current = false;
+        }}
+        onTouchMove={(event) => {
+          if (Math.abs(event.nativeEvent.pageY - bodyStartY.current) > 10) bodyMoved.current = true;
+        }}
         onPressIn={() => {
           hold.pressIn();
           warmBookmark();
         }}
         onPressOut={() => hold.pressOut()}
-        onPress={openBookmark}
+        onPress={() => {
+          if (bodyMoved.current) return;
+          openBookmark();
+        }}
         onLongPress={selectionMode ? undefined : onMore ? (event) => openMore(event) : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
