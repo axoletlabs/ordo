@@ -1204,16 +1204,6 @@ function ReaderPaneInner({
             }}
           />
         ) : null}
-        {showWebsiteView ? (
-          <ContextMenuItem
-            icon="open-outline"
-            label="Open in external browser"
-            onPress={() => {
-              setActionPanel(null);
-              handleOpenSystemBrowser();
-            }}
-          />
-        ) : null}
         <ContextMenuItem
           icon="share-social-outline"
           label={showWebsiteView ? "Share page" : "Share article"}
@@ -1281,7 +1271,16 @@ function ReaderPaneInner({
             }}
           />
         ) : null}
-        {!showWebsiteView ? (
+        {showWebsiteView ? (
+          <ContextMenuItem
+            icon="open-outline"
+            label="Open in external browser"
+            onPress={() => {
+              setActionPanel(null);
+              handleOpenSystemBrowser();
+            }}
+          />
+        ) : (
           <ContextMenuItem
             icon="globe-outline"
             label="Open original"
@@ -1413,20 +1412,6 @@ function ReaderPaneInner({
             }}
           />
         ) : null}
-        {highlightChoice.canRemove ? (
-          <ContextMenuItem
-            icon="trash-outline"
-            label="Remove highlight"
-            tone="danger"
-            busy={
-              removeHighlight.isPending || updateHighlight.isPending || createHighlight.isPending
-            }
-            disabled={
-              removeHighlight.isPending || updateHighlight.isPending || createHighlight.isPending
-            }
-            onPress={() => void unhighlightSelection()}
-          />
-        ) : null}
         <ContextMenuItem
           icon="copy-outline"
           label="Copy"
@@ -1445,6 +1430,20 @@ function ReaderPaneInner({
               dismissSelectionMenu();
               if (href) void copyLink(href);
             }}
+          />
+        ) : null}
+        {highlightChoice.canRemove ? (
+          <ContextMenuItem
+            icon="trash-outline"
+            label="Remove highlight"
+            tone="danger"
+            busy={
+              removeHighlight.isPending || updateHighlight.isPending || createHighlight.isPending
+            }
+            disabled={
+              removeHighlight.isPending || updateHighlight.isPending || createHighlight.isPending
+            }
+            onPress={() => void unhighlightSelection()}
           />
         ) : null}
       </ContextMenu>

@@ -141,20 +141,10 @@ export function BookmarkActionsSheet({
           />
         ) : null}
         <ContextMenuItem
-          icon="globe-outline"
-          label="Open original"
+          icon="link-outline"
+          label="Copy link"
           onPress={() => {
-            const browser = useSettingsStore.getState().websiteBrowser;
-            if (browser === "ordo") {
-              router.push({
-                pathname: "/reader/[id]",
-                params: { id: displayBookmark.id, view: "browser" },
-              });
-              if (!displayBookmark.isRead) onToggleRead(displayBookmark);
-            } else {
-              ackBookmarkOpened(displayBookmark);
-              void openLivePage(displayBookmark.url, browser);
-            }
+            void copyLink(displayBookmark.url);
             onDismiss();
           }}
         />
@@ -198,10 +188,20 @@ export function BookmarkActionsSheet({
           />
         ) : null}
         <ContextMenuItem
-          icon="link-outline"
-          label="Copy link"
+          icon="globe-outline"
+          label="Open original"
           onPress={() => {
-            void copyLink(displayBookmark.url);
+            const browser = useSettingsStore.getState().websiteBrowser;
+            if (browser === "ordo") {
+              router.push({
+                pathname: "/reader/[id]",
+                params: { id: displayBookmark.id, view: "browser" },
+              });
+              if (!displayBookmark.isRead) onToggleRead(displayBookmark);
+            } else {
+              ackBookmarkOpened(displayBookmark);
+              void openLivePage(displayBookmark.url, browser);
+            }
             onDismiss();
           }}
         />
