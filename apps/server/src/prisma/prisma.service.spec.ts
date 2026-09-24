@@ -293,6 +293,7 @@ describe("PrismaService legacy schema migration", () => {
       "Bookmark_createdAt_idx",
       "Bookmark_folderId_idx",
       "Bookmark_userId_fetchStatus_idx",
+      "Bookmark_userId_folderId_createdAt_idx",
       "Bookmark_userId_idx",
       "Bookmark_userId_remindAt_idx",
       "sqlite_autoindex_Bookmark_1",
