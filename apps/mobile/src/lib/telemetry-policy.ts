@@ -156,11 +156,12 @@ export function shouldFlushTelemetry(input: {
 }): boolean {
   if (input.force || input.immediate) return true;
   const gap = input.gapMs ?? TELEMETRY_FLUSH_GAP_MS;
-  const unseenToday = input.lastPingAt == null || input.ackDay !== input.today;
-  if (unseenToday) return input.dirty || input.lastPingAt == null;
+  const lastPingAt = input.lastPingAt;
+  const unseenToday = lastPingAt == null || input.ackDay !== input.today;
+  if (unseenToday) return input.dirty || lastPingAt == null;
   if (!input.dirty) return false;
-  if (input.lastPingAt > input.now) return true;
-  return input.now - input.lastPingAt >= gap;
+  if (lastPingAt > input.now) return true;
+  return input.now - lastPingAt >= gap;
 }
 
 export interface TelemetryWebHints {
