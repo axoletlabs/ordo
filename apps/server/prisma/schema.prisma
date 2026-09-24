@@ -330,6 +330,8 @@ model AppInstallDay {
   startupFast     Int     @default(0)
   startupOk       Int     @default(0)
   startupSlow     Int     @default(0)
+  /// Unix seconds of the ping that last wrote this row. Not a timezone.
+  lastPingAt      Int     @default(0)
   install         AppInstall @relation(fields: [installId], references: [id], onDelete: Cascade)
 
   @@id([installId, day])

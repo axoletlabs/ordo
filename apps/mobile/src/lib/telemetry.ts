@@ -7,6 +7,7 @@
 import { Platform } from "react-native";
 import Constants from "expo-constants";
 import * as Crypto from "expo-crypto";
+import * as Updates from "expo-updates";
 import { TelemetryRoutes, type TelemetryHeartbeatInput } from "@ordo/shared";
 import { CLOUD_SERVER_URL, resolvePersistedServerUrl, telemetryHosting } from "./hosting";
 import { prefsGet, prefsSet, StorageKeys } from "./storage";
@@ -51,6 +52,24 @@ let lastAttemptAt = 0;
 let cachedInstallId: string | null = null;
 let coldStartRecorded = false;
 let chain: Promise<void> = Promise.resolve();
+let buildChannel: string | null | undefined;
+
+/** EAS channel baked into the binary. Read once; it does not change at runtime. */
+function readBuildChannel(): string | null {
+  if (buildChannel === undefined) {
+    try {
+      const channel = Updates.channel;
+      buildChannel = typeof channel === "string" ? channel : null;
+    } catch {
+      buildChannel = null;
+    }
+  }
+  return buildChannel;
+}
+
+function reportingEnabled(): boolean {
+  return telemetryEnabled(__DEV__, readBuildChannel());
+}
 
 export { shouldFlushTelemetry, startupBucket, telemetryPlatform } from "./telemetry-policy";
 
@@ -60,6 +79,7 @@ export function telemetryAppVersion(): string {
 }
 
 export function recordColdStart(elapsedMs: number, now = Date.now()): Promise<void> {
+  if (!reportingEnabled()) return Promise.resolve();
   if (coldStartRecorded) return pingCloudTelemetry(now);
   coldStartRecorded = true;
   const bucket = startupBucket(elapsedMs);
@@ -68,30 +88,37 @@ export function recordColdStart(elapsedMs: number, now = Date.now()): Promise<vo
 }
 
 export function recordForeground(now = Date.now()): Promise<void> {
+  if (!reportingEnabled()) return Promise.resolve();
   return record((counters) => applyTelemetryNote(counters, "open"), now);
 }
 
 export function noteLoggedIn(now = Date.now()): void {
+  if (!reportingEnabled()) return;
   void record((counters) => applyTelemetryNote(counters, "loggedIn"), now);
 }
 
 export function noteRegistered(now = Date.now()): void {
+  if (!reportingEnabled()) return;
   void record((counters) => applyTelemetryNote(counters, "registered"), now);
 }
 
 export function noteTimeout(now = Date.now()): void {
+  if (!reportingEnabled()) return;
   void record((counters) => applyTelemetryNote(counters, "timeout"), now);
 }
 
 export function noteServerError(now = Date.now()): void {
+  if (!reportingEnabled()) return;
   void record((counters) => applyTelemetryNote(counters, "serverError"), now);
 }
 
 export function noteSignInFailure(now = Date.now()): void {
+  if (!reportingEnabled()) return;
   void record((counters) => applyTelemetryNote(counters, "signInFailure"), now);
 }
 
 export async function pingCloudTelemetry(now = Date.now(), followUp = false): Promise<void> {
+  if (!reportingEnabled()) return;
   if (inflight) {
     await inflight;
     if (followUp) return;
@@ -113,6 +140,7 @@ function enqueue<T>(task: () => Promise<T>): Promise<T> {
 }
 
 async function record(mutate: (counters: TelemetryCounters) => TelemetryCounters, now: number): Promise<void> {
+  if (!reportingEnabled()) return;
   const saved = await enqueue(() => loadStored(now));
   if (pendingPreviousDay(saved, utcDay(now))) await pingCloudTelemetry(now);
   await enqueue(async () => {
@@ -125,7 +153,7 @@ async function record(mutate: (counters: TelemetryCounters) => TelemetryCounters
 }
 
 async function runPing(now: number): Promise<void> {
-  if (!telemetryEnabled(__DEV__)) return;
+  if (!reportingEnabled()) return;
   if (!useOnlineStore.getState().online) return;
 
   const prepared = await enqueue(() => preparePing(now));
@@ -200,7 +228,7 @@ async function preparePing(now: number): Promise<{
     platform: telemetryPlatform(Platform.OS, webHints()),
     hosting: telemetryHosting(await resolveServerUrl()),
     appVersion: telemetryAppVersion(),
-    day: counters.day,
+    ts: reportTs(counters.day, now),
     opens: counters.opens,
     loggedIn: counters.loggedIn,
     registered: counters.registered,
@@ -261,4 +289,12 @@ async function resolveServerUrl(): Promise<string> {
 
 function utcDay(now: number): string {
   return new Date(now).toISOString().slice(0, 10);
+}
+
+/** Unix seconds on the counter's UTC day, so a flush just after midnight still lands there. */
+function reportTs(day: string, nowMs: number): number {
+  const nowSec = Math.floor(nowMs / 1000);
+  const start = Math.floor(Date.parse(`${day}T00:00:00.000Z`) / 1000);
+  if (!Number.isFinite(start)) return nowSec;
+  return Math.min(start + 86_400 - 1, Math.max(start, nowSec));
 }

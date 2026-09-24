@@ -1,4 +1,4 @@
-import { addUtcDays, asCount, dayStartUtc, eachUtcDay, utcDay } from "./utc-day.js";
+import { addUtcDays, asCount, dayStartUtc, eachUtcDay, utcDay, utcDayFromUnix } from "./utc-day.js";
 
 describe("utc-day", () => {
   it("formats and shifts UTC calendar days", () => {
@@ -12,6 +12,12 @@ describe("utc-day", () => {
       "2026-09-21",
     ]);
     expect(eachUtcDay("2026-09-21", "2026-09-19")).toEqual([]);
+  });
+
+  it("resolves a unix timestamp to its UTC day", () => {
+    expect(utcDayFromUnix(Math.floor(Date.parse("2026-09-23T00:00:00.000Z") / 1000))).toBe("2026-09-23");
+    expect(utcDayFromUnix(Math.floor(Date.parse("2026-09-23T23:59:59.000Z") / 1000))).toBe("2026-09-23");
+    expect(utcDayFromUnix(Math.floor(Date.parse("2026-09-24T00:00:00.000Z") / 1000))).toBe("2026-09-24");
   });
 
   it("coerces sqlite counts", () => {

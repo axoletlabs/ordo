@@ -3,7 +3,7 @@ import { Prisma } from "../prisma/client.js";
 import { type TelemetryHeartbeatInput, type TelemetryDayDto } from "@ordo/shared";
 import { RateLimitService } from "../common/rate-limit/rate-limit.service.js";
 import { PrismaService } from "../prisma/prisma.service.js";
-import { emptyInstallSignals, mergeInstallSignals, resolveSignalDay } from "./install-signals.js";
+import { emptyInstallSignals, mergeInstallSignals, resolveSignalTimestamp } from "./install-signals.js";
 import { addUtcDays, asCount, dayStartUtc, eachUtcDay, utcDay } from "./utc-day.js";
 
 const SNAPSHOT_MS = 60 * 60 * 1000;
@@ -50,7 +50,7 @@ export class TelemetryService implements OnModuleInit, OnModuleDestroy {
     if (!existing) this.rateLimit.consumeHeartbeatNew(ip);
 
     const now = new Date();
-    const resolved = resolveSignalDay(input.day, utcDay(now));
+    const resolved = resolveSignalTimestamp(input.ts, now);
     const existingDay = await this.prisma.appInstallDay.findUnique({
       where: { installId_day: { installId: input.installId, day: resolved.day } },
     });
@@ -84,12 +84,14 @@ export class TelemetryService implements OnModuleInit, OnModuleDestroy {
           platform: input.platform,
           hosting: input.hosting,
           appVersion: input.appVersion,
+          lastPingAt: input.ts,
           ...signals,
         },
         update: {
           platform: input.platform,
           hosting: input.hosting,
           appVersion: input.appVersion,
+          lastPingAt: input.ts,
           ...signals,
         },
       }),

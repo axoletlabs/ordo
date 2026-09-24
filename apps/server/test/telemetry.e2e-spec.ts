@@ -28,6 +28,7 @@ describe("Telemetry (e2e)", () => {
       platform: "android",
       hosting: "selfhosted",
       appVersion: "0.1.0",
+      ts: Math.floor(Date.now() / 1000),
     };
     await request(ctx.app.getHttpServer())
       .post(TelemetryRoutes.heartbeat.path)
@@ -46,6 +47,7 @@ describe("Telemetry (e2e)", () => {
       platform: "android",
       hosting: "selfhosted",
     });
+    expect(days[0]?.lastPingAt).toBeGreaterThan(1_700_000_000);
   });
 
   it("splits cloud and self-host installs", async () => {
@@ -56,6 +58,7 @@ describe("Telemetry (e2e)", () => {
         platform: "android",
         hosting: "cloud",
         appVersion: "0.1.0",
+      ts: Math.floor(Date.now() / 1000),
       })
       .expect(200);
     await request(ctx.app.getHttpServer())
@@ -65,6 +68,7 @@ describe("Telemetry (e2e)", () => {
         platform: "ios",
         hosting: "selfhosted",
         appVersion: "0.1.0",
+      ts: Math.floor(Date.now() / 1000),
       })
       .expect(200);
 
@@ -84,6 +88,7 @@ describe("Telemetry (e2e)", () => {
         platform: "web",
         hosting: "cloud",
         appVersion: "0.1.0",
+      ts: Math.floor(Date.now() / 1000),
         email: "nope@example.com",
         serverUrl: "https://evil.example",
       })
@@ -94,6 +99,7 @@ describe("Telemetry (e2e)", () => {
       platform: "web",
       hosting: "cloud",
       appVersion: "0.1.0",
+      ts: Math.floor(Date.now() / 1000),
     });
   });
 
@@ -105,6 +111,7 @@ describe("Telemetry (e2e)", () => {
         platform: "android",
         hosting: "cloud",
         appVersion: "0.2.0",
+      ts: Math.floor(Date.now() / 1000),
         opens: 3,
         registered: true,
         loggedIn: false,
@@ -119,6 +126,7 @@ describe("Telemetry (e2e)", () => {
         platform: "android",
         hosting: "cloud",
         appVersion: "0.2.0",
+      ts: Math.floor(Date.now() / 1000),
         opens: 1,
         registered: false,
         loggedIn: true,
@@ -146,6 +154,7 @@ describe("Telemetry (e2e)", () => {
         platform: "web-android",
         hosting: "cloud",
         appVersion: "0.1.0",
+      ts: Math.floor(Date.now() / 1000),
       })
       .expect(200);
 

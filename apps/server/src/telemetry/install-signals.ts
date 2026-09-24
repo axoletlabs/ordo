@@ -1,4 +1,6 @@
-import { addUtcDays } from "./utc-day.js";
+import { utcDay, utcDayFromUnix } from "./utc-day.js";
+
+const MAX_SIGNAL_AGE_SEC = 24 * 60 * 60;
 
 export const TELEMETRY_COUNTER_MAX = 500;
 
@@ -66,15 +68,18 @@ export function mergeInstallSignals(previous: InstallSignals | null, incoming: I
 }
 
 /**
- * Counters may land on today or yesterday so a flush just after midnight
- * still belongs to the day they were counted. Any other day only refreshes
- * today's presence and drops the counters.
+ * Bucket a ping by the UTC day of its unix timestamp. A timestamp more than
+ * 24 hours old, or in the future, counts as presence on the server's today
+ * and drops the counters.
  */
-export function resolveSignalDay(
-  day: string | undefined,
-  today: string,
+export function resolveSignalTimestamp(
+  ts: number,
+  now: Date,
 ): { day: string; keepSignals: boolean } {
-  if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return { day: today, keepSignals: true };
-  if (day === today || day === addUtcDays(today, -1)) return { day, keepSignals: true };
-  return { day: today, keepSignals: false };
+  const today = utcDay(now);
+  const nowSec = Math.floor(now.getTime() / 1000);
+  if (!Number.isInteger(ts) || ts > nowSec || nowSec - ts > MAX_SIGNAL_AGE_SEC) {
+    return { day: today, keepSignals: false };
+  }
+  return { day: utcDayFromUnix(ts), keepSignals: true };
 }

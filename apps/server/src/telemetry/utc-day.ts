@@ -6,6 +6,11 @@ export function utcDay(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** UTC calendar day for a unix timestamp in seconds. */
+export function utcDayFromUnix(ts: number): string {
+  return utcDay(new Date(ts * 1000));
+}
+
 export function dayStartUtc(day: string): Date {
   const match = day.match(DAY_RE);
   if (!match) throw new Error(`Invalid telemetry day '${day}'`);

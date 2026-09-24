@@ -35,11 +35,8 @@ export const TelemetryHeartbeatSchema = z.object({
     .trim()
     .min(1, { message: "Enter an app version." })
     .max(32, { message: "App version must be 32 characters or fewer." }),
-  /** UTC day these counters belong to (`YYYY-MM-DD`). Omitted pings count as today. */
-  day: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/)
-    .optional(),
+  /** Unix time of this ping, in seconds. The server derives the UTC day from it. */
+  ts: z.number().int(),
   opens: telemetryCount,
   loggedIn: z.boolean().default(false),
   registered: z.boolean().default(false),

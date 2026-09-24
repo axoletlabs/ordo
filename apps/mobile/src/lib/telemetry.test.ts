@@ -14,9 +14,13 @@ import {
   telemetryPlatform,
 } from "./telemetry-policy.ts";
 
-test("pings only outside development builds", () => {
-  assert.equal(telemetryEnabled(true), false);
-  assert.equal(telemetryEnabled(false), true);
+test("pings only on the production channel outside development", () => {
+  assert.equal(telemetryEnabled(true, "production"), false);
+  assert.equal(telemetryEnabled(false, "production"), true);
+  assert.equal(telemetryEnabled(false, "preview"), false);
+  assert.equal(telemetryEnabled(false, "development"), false);
+  assert.equal(telemetryEnabled(false, null), false);
+  assert.equal(telemetryEnabled(false, ""), false);
 });
 
 test("re-registers an existing install when telemetry changes", () => {

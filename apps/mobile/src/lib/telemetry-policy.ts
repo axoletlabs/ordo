@@ -195,11 +195,11 @@ export function telemetryPlatform(
 }
 
 /**
- * Production builds only. Dev servers, emulators, and `expo start` sessions
- * never ping, so local development does not inflate install counts.
+ * Stable production builds only. Dev sessions and any channel other than
+ * `production` (preview, development) never ping or store counters.
  */
-export function telemetryEnabled(dev: boolean): boolean {
-  return !dev;
+export function telemetryEnabled(dev: boolean, channel: string | null): boolean {
+  return !dev && channel === "production";
 }
 
 export function needsTelemetryRegistration(savedRevision: number | undefined, revision: number): boolean {

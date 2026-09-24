@@ -171,6 +171,7 @@ describe("CORS, cookies, CSRF (e2e)", () => {
           platform: "android",
           hosting: "selfhosted",
           appVersion: "0.1.0",
+          ts: Math.floor(Date.now() / 1000),
         })
         .expect(200);
     });
