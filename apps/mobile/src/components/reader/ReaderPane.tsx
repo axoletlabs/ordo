@@ -64,6 +64,7 @@ import { ReminderPresetItems, useSaveReminder } from "../bookmarks/ReminderFlow"
 import { formatReminderWhen } from "../../lib/bookmark-reminders";
 import { READER_BODY_SIZE, resolveReaderFont } from "./reader-typography";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
+import { readerColorSchemeOverride } from "../../theme/reader-color-scheme";
 import { resolveReaderPalette } from "../../theme/reader-theme";
 import { pinSystemChrome } from "../../theme/pin-system-chrome";
 import { appearanceOverride, resolvePalette, type Palette } from "../../theme/theme";
@@ -571,21 +572,32 @@ function ReaderPaneInner({
     : palette.background;
   const effectiveDark = palette.mode === "dark";
 
-  // Full-screen reader: match the native color scheme to the reader palette
-  // so Android night-mode force-dark cannot invert parchment pages. Embedded
-  // split-view keeps the app scheme so the library pane does not flash.
+  // Full-screen reader: pin a fixed light/dark scheme so Android night-mode
+  // force-dark cannot invert parchment. System stays unspecified — pinning the
+  // resolved mode feeds useColorScheme and flashes light/dark after sepia.
+  // Restore the app scheme only when leaving the reader, not on palette changes.
   useEffect(() => {
     if (embedded || showWebsiteView) return;
     if (typeof Appearance.setColorScheme === "function") {
-      Appearance.setColorScheme(readerPalette.mode);
+      Appearance.setColorScheme(readerColorSchemeOverride(preferences.theme));
     }
+  }, [embedded, showWebsiteView, preferences.theme]);
+
+  useEffect(() => {
+    if (embedded || showWebsiteView) return;
+    return () => {
+      if (typeof Appearance.setColorScheme !== "function") return;
+      const { themeMode } = useSettingsStore.getState();
+      Appearance.setColorScheme(appearanceOverride(themeMode));
+    };
+  }, [embedded, showWebsiteView]);
+
+  useEffect(() => {
+    if (embedded || showWebsiteView) return;
     void pinSystemChrome(readerPalette).catch(() => {});
     return () => {
       const { themeMode, amoled } = useSettingsStore.getState();
       const app = resolvePalette(themeMode, amoled, Appearance.getColorScheme());
-      if (typeof Appearance.setColorScheme === "function") {
-        Appearance.setColorScheme(appearanceOverride(themeMode));
-      }
       void pinSystemChrome(app).catch(() => {});
       setStatusBarStyle(app.mode === "dark" ? "light" : "dark");
     };

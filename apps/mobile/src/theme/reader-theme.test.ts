@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readerColorSchemeOverride } from "./reader-color-scheme.ts";
 
 /**
  * Contrast contract for reader light/sepia. Keep these hex values in sync with
@@ -27,6 +28,13 @@ test("light reader uses dark ink on parchment", () => {
   assert.ok(luminance(LIGHT_BG) > 0.7);
   assert.ok(luminance(LIGHT_INK) < 0.15);
   assert.ok(luminance(LIGHT_BODY) < 0.2);
+});
+
+test("system reader does not pin the resolved color scheme", () => {
+  assert.equal(readerColorSchemeOverride("system"), "unspecified");
+  assert.equal(readerColorSchemeOverride("sepia"), "light");
+  assert.equal(readerColorSchemeOverride("light"), "light");
+  assert.equal(readerColorSchemeOverride("dark"), "dark");
 });
 
 test("sepia reader is warm paper with dark ink, not an inverted dark theme", () => {
