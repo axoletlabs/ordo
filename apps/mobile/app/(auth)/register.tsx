@@ -2,9 +2,9 @@
  * Register screen. Respects server registration status (info.registrationEnabled).
  */
 import React, { useCallback, useRef, useState } from "react";
-import { BackHandler, Linking, Pressable, StyleSheet, View } from "react-native";
+import { BackHandler, Linking, Pressable, StyleSheet, View, type TextInput } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { Link, useFocusEffect, useRouter } from "expo-router";
+import { Link, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { AuthShell } from "../../src/components/auth/AuthShell";
 import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
@@ -19,6 +19,12 @@ import { haptics } from "../../src/lib/haptics";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { fontSize, lineHeight, radius, spacing } from "../../src/theme/tokens";
 import { RegisterSchema, isPendingEmailVerificationResponse } from "@ordo/shared";
+import { readSignupDraft, saveSignupDraft } from "../../src/lib/signup-draft";
+
+function routeParam(value: string | string[] | undefined): string {
+  if (Array.isArray(value)) return value[0] ?? "";
+  return value ?? "";
+}
 
 const AGE_CONFIRM_LABEL = "I am 13 or older and agree to the Terms and Privacy Policy.";
 const AGE_CONFIRM_ERROR = "Please confirm you are 13 or older.";
@@ -27,19 +33,24 @@ const CHECK_ICON_SIZE = Math.round(fontSize.sm * lineHeight.normal);
 export default function RegisterScreen() {
   const { palette } = useTheme();
   const router = useRouter();
+  const params = useLocalSearchParams<{ focus?: string; email?: string }>();
+  const focusEmail = routeParam(params.focus) === "email";
+  const paramEmail = routeParam(params.email);
   const register = useRegister();
   const { data: info } = useServerInfo();
   const registrationEnabled = info?.registrationEnabled ?? true;
   const isCloud = isCloudServerUrl(useSettingsStore((s) => s.serverUrl));
 
-  const [displayName, setDisplayName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirm, setConfirm] = useState("");
+  const returning = focusEmail ? readSignupDraft() : null;
+  const [displayName, setDisplayName] = useState(returning?.displayName ?? "");
+  const [email, setEmail] = useState(paramEmail || returning?.email || "");
+  const [password, setPassword] = useState(returning?.password ?? "");
+  const [confirm, setConfirm] = useState(returning?.confirm ?? "");
   const [showPwd, setShowPwd] = useState(false);
-  const [atLeast13, setAtLeast13] = useState(false);
+  const [atLeast13, setAtLeast13] = useState(returning?.atLeast13 ?? false);
   const [formError, setFormError] = useState("");
   const skipAgeToggle = useRef(false);
+  const emailRef = useRef<TextInput>(null);
   const markLegalOpen = () => {
     skipAgeToggle.current = true;
     setTimeout(() => {
@@ -55,6 +66,14 @@ export default function RegisterScreen() {
       });
       return () => subscription.remove();
     }, [router]),
+  );
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!focusEmail) return;
+      const handle = requestAnimationFrame(() => emailRef.current?.focus());
+      return () => cancelAnimationFrame(handle);
+    }, [focusEmail]),
   );
 
   const submit = async () => {
@@ -80,9 +99,16 @@ export default function RegisterScreen() {
       const result = await register.mutateAsync(parsed.data);
       haptics.success();
       if (isPendingEmailVerificationResponse(result)) {
+        saveSignupDraft({
+          displayName: displayName.trim(),
+          email: parsed.data.email,
+          password,
+          confirm,
+          atLeast13,
+        });
         router.replace({
           pathname: "/(auth)/verify-email",
-          params: { email: parsed.data.email },
+          params: { email: parsed.data.email, sent: "1" },
         });
       }
     } catch (e) {
@@ -130,6 +156,7 @@ export default function RegisterScreen() {
           />
           <View style={{ height: spacing[16] }} />
           <Input
+            ref={emailRef}
             label="Email"
             value={email}
             onChangeText={setEmail}
@@ -138,6 +165,7 @@ export default function RegisterScreen() {
             textContentType="emailAddress"
             autoComplete="email"
             autoCapitalize="none"
+            autoFocus={focusEmail}
           />
           <View style={{ height: spacing[16] }} />
           <Input
