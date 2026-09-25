@@ -280,13 +280,22 @@ jobs:
           NATIVE_CHANGED: ${{ steps.eligibility.outputs.native_changed || 'true' }}
         run: |
           MSG=$(echo "$COMMIT_MSG" | head -1)
-          if [[ "${{ github.event_name }}" = "release" ]]; then
+          REF="${{ github.ref }}"
+          EVENT="${{ github.event_name }}"
+          stream=false
+          case "$REF" in
+            refs/heads/main|refs/heads/preview|refs/heads/release/*) stream=true ;;
+          esac
+          # release/* is included on purpose. A native change on a maintenance
+          # branch has to mint an APK. An OTA there would target a runtime
+          # that no installed binary has.
+          if [[ "$EVENT" = "release" ]]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
-          elif [[ "${{ github.event_name }}" = "workflow_dispatch" && "$BUILD_INPUT" = "true" ]]; then
+          elif [[ "$EVENT" = "workflow_dispatch" && "$BUILD_INPUT" = "true" ]]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
           elif [[ "$MSG" == *-apk ]]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
-          elif [[ "x${GITHUB_REF_NAME}" = x"${GITHUB_REF_NAME%release/*}" && "${{ github.event_name }}" = "push" && ( "${{ github.ref }}" = "refs/heads/main" || "${{ github.ref }}" = "refs/heads/preview" ) && "$NATIVE_CHANGED" = "true" ]]; then
+          elif [[ "$EVENT" = "push" && "$stream" = "true" && "$NATIVE_CHANGED" = "true" ]]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
           else
             echo "should_build=false" >> "$GITHUB_OUTPUT"
