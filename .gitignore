@@ -27,6 +27,8 @@ apps/server/src/generated/
 
 # auto-generated secrets and the deploy script's background server
 .ordo-secret
+# version recorded for the GitHub Release this install is on
+apps/server/release.json
 .ordo-library-key
 .ordo.pid
 

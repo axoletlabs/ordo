@@ -51,8 +51,9 @@ cd ordo
 ./scripts/deploy-server
 ```
 
-On a terminal the script asks a few questions (port, sign-ups, mail, reverse
-proxy), then installs, builds, and migrates SQLite. The API binds
+On a terminal the script asks which GitHub Release to install, then a few
+questions (port, sign-ups, mail, reverse proxy), then installs, builds, and
+migrates SQLite. The API binds
 `127.0.0.1` so it is not on the LAN until you put nginx or Caddy in front
 (`deploy/nginx.conf.example`, `TRUST_PROXY=1`) or pass `--public`. Check it:
 
@@ -66,19 +67,38 @@ does not include the machine hostname.
 
 ### Update
 
-On a machine that already has ordo, pull, rebuild, and migrate without
-touching `apps/server/.env`:
+On a machine that already has ordo, install a **published GitHub Release**,
+rebuild, and migrate without touching `apps/server/.env`. This does not pull
+`main` or whatever branch is checked out.
 
 ```bash
 ./scripts/deploy-server update
 ./scripts/deploy-server update --yes
+./scripts/deploy-server update --yes --release v0.1.0
+./scripts/deploy-server update --yes --release latest --pre
 ```
 
+On a terminal the script lists recent releases and asks which one to install.
+`--yes` with no `--release` installs the latest stable release. That fails
+with a clear error until the first `vX.Y.Z` GitHub Release exists; `--from-git`
+or `--no-release` still update the tree you already have. `--pre` lets
+"latest" be a pre-release. `--release` takes `latest` or a tag (`v0.1.0` or
+`0.1.0`).
+
+CI attaches `ordo-server-vX.Y.Z.tar.gz` (and a `.sha256` file) to the GitHub
+Release after the server compiles. The script installs that archive, checks
+the checksum, and leaves `.env`, secrets, SQLite, backups, and avatars in
+place. A release published before that asset existed is installed by checking
+out the tag instead. `--require-asset` refuses those. `--source-archive`
+always uses GitHub's source tarball for the tag.
+
 If you omit the command and `.env` or a database is already there, **update**
-is assumed. `update` runs `git pull --ff-only` (skip with `--no-pull`). A dirty
-worktree stops the pull before anything else changes; untracked files are fine.
-If that pull checks out a newer copy of this script, the new copy finishes the
-update. When `node_modules` already matches `pnpm-lock.yaml`, install is skipped.
+is assumed. `--no-release` (or `--no-pull`) rebuilds the tree already on disk.
+`--from-git` (or `--pull`) is the old `git pull --ff-only` of the current
+branch. A dirty worktree stops a release checkout before anything else
+changes; untracked files are fine. If the release replaces this script, the
+new copy finishes the update. When `node_modules` already matches
+`pnpm-lock.yaml`, install is skipped.
 
 The script then builds, snapshots SQLite next to the live file, and applies
 pending Prisma migrations — including adopting an older `db push` database.
@@ -94,7 +114,8 @@ the same port is not killed.
 
 ### Non-interactive
 
-Same steps, no prompts. Flags override defaults. Use this in scripts and CI.
+Same steps, no prompts. `--yes` installs the latest stable release. Flags
+override defaults. Use this in scripts and CI.
 
 ```bash
 ./scripts/deploy-server --yes

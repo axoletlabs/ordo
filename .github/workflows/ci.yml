@@ -47,6 +47,10 @@ on:
 # Concurrency is per-job, not workflow-wide. A workflow-level group would
 # cancel an in-flight APK when a later JS-only push starts OTA, leaving that
 # native fingerprint with no binary.
+# Server archive (same GitHub Release as the APKs):
+#   package_server compiles @ordo/server, then uploads ordo-server-vX.Y.Z.tar.gz
+#   (the tagged source, plus apps/server/release.json) and a sha256 file.
+#   scripts/deploy-server installs that release instead of pulling a branch.
 jobs:
   detect:
     runs-on: ubuntu-latest
@@ -589,6 +593,71 @@ jobs:
         with:
           name: ordo-apk-${{ needs.detect.outputs.updates_channel }}
           path: apps/mobile/android/app/build/outputs/apk/release/*.apk
+
+  package_server:
+    needs: [detect, supply-chain]
+    if: github.repository == 'axoletlabs/ordo' && needs.detect.outputs.is_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter @ordo/shared build
+
+      - name: Generate Prisma client
+        run: pnpm --filter @ordo/server db:generate
+
+      - name: Build server
+        run: pnpm --filter @ordo/server build
+
+      # The archive is source at this tag, not dist/. The host compiles
+      # native modules. The build above is the gate: a release that does not
+      # compile does not get a server asset.
+      - name: Package server archive
+        run: |
+          bash .github/scripts/package-server-archive.sh \
+            "${{ needs.detect.outputs.version }}" \
+            "${{ github.event.release.tag_name }}" \
+            "${{ github.sha }}" \
+            "$RUNNER_TEMP/server-release"
+
+      - name: Upload server archive to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          DIR="$RUNNER_TEMP/server-release"
+          ok=0
+          for attempt in 1 2 3; do
+            if gh release upload "$TAG" "$DIR"/ordo-server-v*.tar.gz "$DIR"/ordo-server-v*.tar.gz.sha256 --clobber -R "$GITHUB_REPOSITORY"; then
+              ok=1
+              break
+            fi
+            echo "release upload failed (attempt ${attempt}), retrying..."
+            sleep 5
+          done
+          if [[ "$ok" != 1 ]]; then
+            echo "::error::Could not upload the server archive to ${TAG}"
+            exit 1
+          fi
+          {
+            echo "## Server archive"
+            ls -1 "$DIR"/ordo-server-v*.tar.gz | sed 's/^/- /'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   release:
     needs: [detect, build_apk]

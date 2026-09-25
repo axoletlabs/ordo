@@ -2,12 +2,13 @@
 /**
  * Install, migrate, and optionally start the Ordo backend.
  *
- * Interactive on a TTY (asks port, sign-ups, mail, reverse proxy).
- * Non-interactive with --yes, CI=true, or a non-TTY stdin.
+ * Updates install a published GitHub Release (latest stable, or the one you
+ * pick). They do not pull the current branch. Interactive on a TTY. Non-interactive
+ * with --yes, CI=true, or a non-TTY stdin.
  *
  *   ./scripts/deploy-server
  *   ./scripts/deploy-server update
- *   ./scripts/deploy-server --yes --trust-proxy 1
+ *   ./scripts/deploy-server update --yes --release v0.1.0
  *   ./scripts/deploy-server --help
  */
 "use strict";
@@ -28,25 +29,53 @@ const {
 const { dirname, join, resolve } = require("node:path");
 const readline = require("node:readline/promises");
 const { stdin, stdout } = require("node:process");
+const { createHash } = require("node:crypto");
+const {
+  DEFAULT_REPO,
+  applySelectedRelease,
+  chooseListedRelease,
+  formatReleaseMenu,
+  githubToken,
+  listReleases,
+  normalizeReleaseSpec,
+  normalizeRepo,
+  planLines,
+  readInstalledRelease,
+  releaseApplyMode,
+  releaseByTag,
+  resolveReleaseChoice,
+  visibleReleases,
+} = require("./server-release.js");
 
 const HELP = `Usage: deploy-server [install|update] [options]
 
-Install, update, and migrate the Ordo backend.
+Install, update, and migrate the Ordo backend from a GitHub Release.
 
 Commands
   install   First-time setup: prompts (on a TTY), writes .env, install, migrate, build
-  update    Keep .env, pull git, backup SQLite, rebuild, apply all pending migrations
+  update    Keep .env, install a release, backup SQLite, rebuild, apply pending migrations
 
 If you omit the command and this already looks like an install (.env or a
 database), update is assumed. Otherwise install is assumed.
 
+A release is a published GitHub Release, not the tip of main or whatever
+branch is checked out. Interactive runs list recent releases and ask which
+one to install. --yes with no --release installs the latest stable release.
+
 Modes
   Interactive (default on a terminal): install asks port, sign-ups, mail, proxy.
-  update only asks about git pull and whether to start.
+  Both commands ask which release to install, then whether to start.
   Non-interactive: --yes, CI=true, or piped stdin. Uses flags and defaults.
 
 Options
   -y, --yes, --non-interactive   Do not prompt
+  --release <tag|latest>         Release to install (default latest; latest-pre includes pre-releases)
+  --pre                          Let "latest" be a pre-release, and show pre-releases in the menu
+  --repo <owner/name>            GitHub repository (default ${DEFAULT_REPO})
+  --require-asset                Refuse a release that has no ordo-server-vX.Y.Z.tar.gz asset
+  --source-archive               Use the GitHub source archive even when the server asset exists
+  --no-release                   Do not download a release; build the tree already on disk
+  --from-git                     git pull --ff-only the current branch instead of a release
   --port <n>                     HTTP port (default 3000)
   --registration <bool>          Allow sign-ups after the first account (default false)
   --public                       Listen on 0.0.0.0 instead of 127.0.0.1
@@ -61,8 +90,8 @@ Options
   --write-env                    Write apps/server/.env in non-interactive mode
   --force-env                    Overwrite an existing .env
   --no-write-env                 Never write .env
-  --pull                         git pull --ff-only before install (update default)
-  --no-pull                      Do not pull
+  --pull                         Same as --from-git
+  --no-pull                      Same as --no-release
   --backup                       Snapshot SQLite before migrating (default)
   --no-backup                    Do not snapshot SQLite
   --start                        Start the server in the foreground when done
@@ -80,6 +109,10 @@ Running server
   foreground. --no-start leaves it stopped. A different program on the port
   is left alone, and the script refuses to bind over it.
 
+Release data
+  .env, .ordo-secret, .ordo-library-key, SQLite, backups, and avatars under
+  apps/server/prisma/ are kept. Other files are replaced by the release.
+
 Database
   Missing or empty SQLite file  → generate client, apply all migrations
   Already on Prisma migrate     → generate client, apply pending migrations
@@ -94,6 +127,9 @@ Examples
   ./scripts/deploy-server --yes
   ./scripts/deploy-server update
   ./scripts/deploy-server update --yes
+  ./scripts/deploy-server update --yes --release v0.1.0
+  ./scripts/deploy-server update --yes --release latest --pre
+  ./scripts/deploy-server update --from-git
   ./scripts/deploy-server --yes --port 8080 --trust-proxy 1 --start
   ./scripts/deploy-server --yes --public --registration true
 `;
@@ -164,6 +200,13 @@ function parseArgs(argv) {
     skipBuild: false,
     skipMigrate: false,
     dryRun: false,
+    release: null,
+    pre: false,
+    repo: null,
+    noRelease: false,
+    fromGit: false,
+    requireAsset: false,
+    sourceArchive: false,
     port: null,
     registration: null,
     public: false,
@@ -211,11 +254,34 @@ function parseArgs(argv) {
       case "--no-start":
         args.start = false;
         break;
+      case "--release":
+        args.release = consume();
+        break;
+      case "--pre":
+        args.pre = true;
+        break;
+      case "--repo":
+        args.repo = normalizeRepo(consume());
+        break;
+      case "--require-asset":
+        args.requireAsset = true;
+        break;
+      case "--source-archive":
+        args.sourceArchive = true;
+        break;
+      case "--no-release":
+        args.noRelease = true;
+        break;
+      case "--from-git":
+        args.fromGit = true;
+        break;
       case "--pull":
         args.pull = true;
+        args.fromGit = true;
         break;
       case "--no-pull":
         args.pull = false;
+        args.noRelease = true;
         break;
       case "--backup":
         args.backup = true;
@@ -277,6 +343,17 @@ function parseArgs(argv) {
         throw new Error(`Unknown option ${flag}. See --help.`);
     }
   }
+
+  if (args.fromGit && args.noRelease) {
+    throw new Error("Use either --from-git or --no-release, not both.");
+  }
+  if (args.release && args.fromGit) {
+    throw new Error("--release cannot be combined with --from-git.");
+  }
+  if (args.release && args.noRelease) {
+    throw new Error("--release cannot be combined with --no-release.");
+  }
+  if (args.repo) normalizeRepo(args.repo);
 
   return args;
 }
@@ -537,13 +614,13 @@ function blockingGitChanges(porcelain) {
     .filter((line) => line && !line.startsWith("??"));
 }
 
-function dirtyWorktreeMessage(porcelain) {
+function dirtyWorktreeMessage(porcelain, flag = "--no-release") {
   const changes = blockingGitChanges(porcelain);
   if (changes.length === 0) return null;
   return [
-    "Working tree has local changes, so git pull --ff-only would fail:",
+    "Working tree has local changes, so switching to a release would fail:",
     ...changes.map((line) => `  ${line}`),
-    "Commit or stash them, or pass --no-pull.",
+    `Commit or stash them, or pass ${flag}.`,
   ].join("\n");
 }
 
@@ -555,12 +632,12 @@ function gitOutput(repoRoot, args) {
   return result;
 }
 
-function assertCleanGit(repoRoot) {
+function assertCleanGit(repoRoot, flag = "--no-release") {
   const status = gitOutput(repoRoot, ["status", "--porcelain"]);
   if (status.status !== 0) {
-    throw new Error("git status failed. Fix the repository or pass --no-pull.");
+    throw new Error(`git status failed. Fix the repository or pass ${flag}.`);
   }
-  const message = dirtyWorktreeMessage(status.stdout ?? "");
+  const message = dirtyWorktreeMessage(status.stdout ?? "", flag);
   if (message) throw new Error(message);
 }
 
@@ -574,17 +651,27 @@ function shouldReexec(before, after, already) {
   return Boolean(before && after && before !== after && already !== after);
 }
 
-function reexecArgs(argv) {
-  if (argv.includes("--no-pull")) return [...argv];
+function reexecArgs(argv, mode = "git") {
+  if (mode === "release") {
+    if (argv.includes("--no-release") || argv.includes("--no-pull")) return [...argv];
+    return [...argv, "--no-release"];
+  }
+  if (argv.includes("--no-pull") || argv.includes("--no-release")) return [...argv];
   return [...argv, "--no-pull"];
 }
 
-/** Continue the update with the script that git pull just checked out. */
-function reexecDeploy(repoRoot, argv, head, env) {
+function fileHash(path) {
+  if (!existsSync(path)) return null;
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+/** Continue the update with the script that the release or pull just checked out. */
+function reexecDeploy(repoRoot, argv, stamp, env, mode = "git") {
   const script = join(repoRoot, "scripts", "deploy-server.js");
-  const result = spawnSync(process.execPath, [script, ...reexecArgs(argv)], {
+  const stampEnv = mode === "release" ? "ORDO_DEPLOY_SCRIPT" : "ORDO_DEPLOY_HEAD";
+  const result = spawnSync(process.execPath, [script, ...reexecArgs(argv, mode)], {
     cwd: repoRoot,
-    env: { ...env, ORDO_DEPLOY_HEAD: head },
+    env: { ...env, [stampEnv]: stamp },
     stdio: "inherit",
   });
   return result.status ?? 1;
@@ -598,7 +685,7 @@ function gitPull(repoRoot, { log, dryRun } = {}) {
   }
   log?.("$ git pull --ff-only");
   if (dryRun) return { pulled: true, reason: "dry-run" };
-  assertCleanGit(repoRoot);
+  assertCleanGit(repoRoot, "--no-pull");
   const result = spawnSync("git", ["pull", "--ff-only"], {
     cwd: repoRoot,
     stdio: "inherit",
@@ -885,6 +972,53 @@ function createAsk(streamIn, streamOut) {
   };
 }
 
+async function resolveDeployRelease({
+  args,
+  interactive,
+  ask,
+  repoRoot,
+  log,
+  releases,
+  fetchImpl,
+  token,
+}) {
+  const repo = args.repo ?? DEFAULT_REPO;
+  const installed = readInstalledRelease(repoRoot);
+  const hasGit = existsSync(join(repoRoot, ".git"));
+  let release;
+  if (interactive && args.release == null) {
+    const catalog = Array.isArray(releases) ? releases : await listReleases(repo, { fetchImpl, token });
+    if (visibleReleases(catalog, { pre: args.pre }).length === 0) {
+      throw new Error(
+        args.pre
+          ? `No GitHub releases were found on ${repo}. Publish a vX.Y.Z release, or pass --from-git to update the current branch.`
+          : `No stable GitHub releases were found on ${repo}. Pass --pre to include pre-releases, or pass --from-git to update the current branch.`,
+      );
+    }
+    log("");
+    log(`Published releases of ${repo}`);
+    const menu = formatReleaseMenu(catalog, { installedTag: installed?.tag ?? null, pre: args.pre });
+    if (menu) log(menu);
+    log("");
+    const raw = await ask("Release to install [latest]: ");
+    try {
+      release = chooseListedRelease(catalog, raw, { pre: args.pre });
+    } catch (error) {
+      if (!error.fetchTag || Array.isArray(releases)) throw error;
+      release = await releaseByTag(repo, error.fetchTag, { fetchImpl, token });
+    }
+  } else {
+    const spec = normalizeReleaseSpec(args.release ?? "latest", { pre: args.pre });
+    release = await resolveReleaseChoice(spec, { repo, releases, fetchImpl, token });
+  }
+  const mode = releaseApplyMode(release, {
+    hasGit,
+    sourceArchive: args.sourceArchive,
+    requireAsset: args.requireAsset,
+  });
+  return { release, mode, installed, repo };
+}
+
 async function deploy(options = {}) {
   const argv = options.argv ?? process.argv.slice(2);
   const env = options.env ?? process.env;
@@ -930,10 +1064,20 @@ async function deploy(options = {}) {
   }
 
   const gitPresent = existsSync(join(repoRoot, ".git"));
-  let pull = args.pull ?? (command === "update" && gitPresent);
-  if (interactive && command === "update" && args.pull == null && gitPresent) {
-    const raw = (await ask()("Pull the latest commits with git pull --ff-only? [Y/n] ")).trim().toLowerCase();
-    pull = !["n", "no"].includes(raw);
+  const fromGit = args.fromGit;
+  let pull = fromGit && gitPresent;
+  let chosen = null;
+  if (!fromGit && !args.noRelease) {
+    chosen = await resolveDeployRelease({
+      args,
+      interactive,
+      ask: ask(),
+      repoRoot,
+      log,
+      releases: options.releases,
+      fetchImpl: options.fetch ?? globalThis.fetch,
+      token: githubToken(env),
+    });
   }
 
   const backup =
@@ -972,8 +1116,17 @@ async function deploy(options = {}) {
   log(command === "update" ? "Updating the existing backend." : "Installing the backend.");
   log(envDecision.reason);
   log(migrate.reason);
-  if (pull) log("Will run git pull --ff-only.");
-  else log("Skipping git pull.");
+  if (fromGit && pull) log("Will run git pull --ff-only on the current branch.");
+  else if (fromGit) log("Skipping git pull (no .git directory).");
+  else if (chosen?.release) {
+    for (const line of planLines({
+      release: chosen.release,
+      mode: chosen.mode,
+      installed: chosen.installed,
+    })) {
+      log(line);
+    }
+  } else log("Staying on the copy already on disk (--no-release).");
   if (backup) log("Will snapshot SQLite before applying schema changes.");
   else if (args.backup === false) log("Skipping SQLite backup (--no-backup).");
   if (listener?.kind === "ordo") {
@@ -999,7 +1152,29 @@ async function deploy(options = {}) {
     const after = args.dryRun ? null : gitHead(repoRoot);
     if (!args.dryRun && shouldReexec(before, after, env.ORDO_DEPLOY_HEAD)) {
       log("Checked out a new deploy script. Continuing with that copy.");
-      const exitCode = (options.reexec ?? reexecDeploy)(repoRoot, argv, after, env);
+      const exitCode = (options.reexec ?? reexecDeploy)(repoRoot, argv, after, env, "git");
+      return { ok: exitCode === 0, reexec: true, exitCode, command };
+    }
+  }
+  if (chosen?.release && !args.dryRun) {
+    if (gitPresent) assertCleanGit(repoRoot, "--no-release");
+    const scriptPath = join(repoRoot, "scripts", "deploy-server.js");
+    const before = fileHash(scriptPath);
+    await applySelectedRelease({
+      repoRoot,
+      release: chosen.release,
+      repo: chosen.repo,
+      fetchImpl: options.fetch ?? globalThis.fetch,
+      token: githubToken(env),
+      sourceArchive: args.sourceArchive,
+      requireAsset: args.requireAsset,
+      dryRun: false,
+      log,
+    });
+    const after = fileHash(scriptPath);
+    if (shouldReexec(before, after, env.ORDO_DEPLOY_SCRIPT)) {
+      log("Checked out a new deploy script. Continuing with that copy.");
+      const exitCode = (options.reexec ?? reexecDeploy)(repoRoot, argv, after, env, "release");
       return { ok: exitCode === 0, reexec: true, exitCode, command };
     }
   }
@@ -1135,6 +1310,9 @@ async function deploy(options = {}) {
     migrate,
     envDecision,
     pull,
+    release: chosen?.release
+      ? { tag: chosen.release.tag_name, mode: chosen.mode }
+      : null,
     backup,
     start: launch === "foreground",
     launch,

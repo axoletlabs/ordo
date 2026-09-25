@@ -88,6 +88,28 @@ When you publish a GitHub Release, a second workflow runs alongside the APK buil
 - The in-app updater: reads releases, compares semver, picks the right ABI APK. Branch-agnostic.
 - versionCode ordering: global run number, monotonic.
 
+## Server
+
+The backend ships on the same GitHub Release as the APKs. Publishing the release runs `package_server`, which compiles `@ordo/server` and, only if that build succeeds, uploads:
+
+- `ordo-server-vX.Y.Z.tar.gz` — source at the tag, plus `apps/server/release.json`
+- `ordo-server-vX.Y.Z.tar.gz.sha256`
+
+The host still runs `pnpm install` and compiles native modules. The archive is not a prebuilt `node_modules`.
+
+Self-hosted updates install that release. They do not fast-forward the checked-out branch:
+
+```bash
+./scripts/deploy-server update                         # pick from a menu
+./scripts/deploy-server update --yes                   # latest stable
+./scripts/deploy-server update --yes --release v0.1.1  # that tag
+./scripts/deploy-server update --yes --pre             # latest, including pre-releases
+```
+
+`.env`, secrets, the SQLite file, backups, and avatars stay put. `/api/server/info` reports the version in `apps/server/release.json`.
+
+`--from-git` still pulls the current branch. That is the escape hatch, not the normal update. `--no-release` rebuilds whatever is already on disk. `--require-asset` refuses a tag whose release has no server archive (older releases, or a package job that failed).
+
 ## Cheat sheet
 
 ```bash
@@ -107,4 +129,8 @@ same, but expect an APK build on the release branch; tag vX.Y.(Z+1) and publish
 
 # OTA rollback (from your machine)
 eas update:republish --group <old-good-group-id>
+
+# self-hosted backend (GitHub Release, not the branch tip)
+./scripts/deploy-server update --yes
+./scripts/deploy-server update --yes --release vX.Y.Z
 ```

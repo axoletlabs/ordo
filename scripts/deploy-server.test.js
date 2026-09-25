@@ -30,6 +30,23 @@ const {
   deploy,
 } = require("./deploy-server.js");
 
+function publishedRelease(tag = "v0.1.0", extra = {}) {
+  return {
+    tag_name: tag,
+    draft: false,
+    prerelease: false,
+    published_at: "2026-09-01T00:00:00Z",
+    tarball_url: "https://example.test/tarball",
+    assets: [
+      {
+        name: `ordo-server-${tag}.tar.gz`,
+        browser_download_url: `https://example.test/${tag}.tar.gz`,
+      },
+    ],
+    ...extra,
+  };
+}
+
 function tempRepo() {
   const root = join(
     tmpdir(),
@@ -70,7 +87,23 @@ test("parseArgs reads long flags, equals form, and booleans", () => {
   assert.equal(args.smtpUrl, "smtp://mail.example:587");
   assert.equal(args.start, false);
   assert.equal(args.pull, false);
+  assert.equal(args.noRelease, true);
   assert.equal(args.dryRun, true);
+});
+
+test("parseArgs reads a release and rejects mixing it with git pull", () => {
+  const args = parseArgs(["update", "--release", "v0.1.2", "--pre", "--repo", "axoletlabs/ordo", "--require-asset"]);
+  assert.equal(args.command, "update");
+  assert.equal(args.release, "v0.1.2");
+  assert.equal(args.pre, true);
+  assert.equal(args.repo, "axoletlabs/ordo");
+  assert.equal(args.requireAsset, true);
+  assert.equal(args.fromGit, false);
+  assert.equal(parseArgs(["--from-git"]).fromGit, true);
+  assert.equal(parseArgs(["--release=0.1.0"]).release, "0.1.0");
+  assert.throws(() => parseArgs(["--release", "v0.1.0", "--from-git"]), /--from-git/);
+  assert.throws(() => parseArgs(["--release", "v0.1.0", "--no-release"]), /--no-release/);
+  assert.throws(() => parseArgs(["--repo", "not a repo"]), /owner\/name/);
 });
 
 test("parseArgs rejects unknown flags and bad values", () => {
@@ -225,6 +258,7 @@ test("deploy --yes --dry-run writes a plan and skips migrate deploy on a legacy 
     argv: ["--yes", "--dry-run", "--skip-install", "--skip-build", "--port", "8080"],
     repoRoot: root,
     env: { ...process.env, CI: "1" },
+    releases: [publishedRelease()],
     log: (line) => lines.push(String(line)),
   });
   const log = lines.join("\n");
@@ -236,13 +270,17 @@ test("deploy --yes --dry-run writes a plan and skips migrate deploy on a legacy 
   assert.equal(result.envDecision.write, true);
   assert.equal(result.backup, true);
   assert.equal(result.pull, false);
+  assert.equal(result.release.tag, "v0.1.0");
+  assert.equal(result.release.mode, "asset");
+  assert.match(log, /ordo-server-v0\.1\.0\.tar\.gz/);
+  assert.doesNotMatch(log, /git pull/);
   assert.match(log, /adopting it/i);
   assert.match(log, /\$ node dist\/prisma\/upgrade-cli\.js/);
   assert.match(log, /Backing up SQLite/);
   assert.doesNotMatch(log, /\$ pnpm exec prisma migrate deploy/);
 });
 
-test("update --yes --dry-run keeps .env, pulls, and runs the upgrade CLI", async () => {
+test("update --yes --dry-run keeps .env, installs the latest stable release, and runs the upgrade CLI", async () => {
   const { DatabaseSync } = require("node:sqlite");
   const root = tempRepo();
   mkdirSync(join(root, ".git"));
@@ -258,31 +296,55 @@ test("update --yes --dry-run keeps .env, pulls, and runs the upgrade CLI", async
     argv: ["update", "--yes", "--dry-run", "--skip-install", "--skip-build"],
     repoRoot: root,
     env: { ...process.env, CI: "1" },
+    releases: [
+      publishedRelease("v0.2.0-beta.1", { prerelease: true, published_at: "2026-09-20T00:00:00Z" }),
+      publishedRelease("v0.1.1", { published_at: "2026-09-02T00:00:00Z" }),
+    ],
     log: (line) => lines.push(String(line)),
   });
   const log = lines.join("\n");
   assert.equal(result.command, "update");
   assert.equal(result.envDecision.write, false);
   assert.equal(result.migrate.action, "deploy");
-  assert.equal(result.pull, true);
+  assert.equal(result.pull, false);
+  assert.equal(result.release.tag, "v0.1.1");
   assert.equal(result.backup, true);
   assert.match(log, /Updating the existing backend/);
   assert.match(log, /Leaving existing apps\/server\/\.env/);
-  assert.match(log, /\$ git pull --ff-only/);
+  assert.match(log, /Release: v0\.1\.1/);
+  assert.match(log, /not the tip of the current branch/);
+  assert.doesNotMatch(log, /git pull/);
   assert.match(log, /\$ node dist\/prisma\/upgrade-cli\.js/);
   assert.doesNotMatch(log, /\$ pnpm exec prisma migrate deploy/);
   assert.doesNotMatch(log, /Wrote /);
 });
 
+test("update --from-git still plans a fast-forward pull", async () => {
+  const root = tempRepo();
+  mkdirSync(join(root, ".git"));
+  writeFileSync(join(root, "apps", "server", ".env"), "PORT=3000\n");
+  const lines = [];
+  const result = await deploy({
+    argv: ["update", "--yes", "--dry-run", "--from-git", "--skip-install", "--skip-build", "--skip-migrate"],
+    repoRoot: root,
+    env: { ...process.env, CI: "1" },
+    log: (line) => lines.push(String(line)),
+  });
+  assert.equal(result.pull, true);
+  assert.equal(result.release, null);
+  assert.match(lines.join("\n"), /\$ git pull --ff-only/);
+});
+
 test("interactive dry-run uses prompt answers", async () => {
   const root = tempRepo();
-  const answers = ["8080", "n", "n", "", "y", "1", "n"];
+  const answers = ["8080", "n", "n", "", "y", "1", "1", "n"];
   let i = 0;
   const result = await deploy({
     argv: ["install", "--dry-run", "--skip-install", "--skip-build", "--skip-migrate"],
     repoRoot: root,
     env: { ...process.env, CI: "" },
     interactive: true,
+    releases: [publishedRelease()],
     ask: async () => answers[i++] ?? "",
     log: () => {},
   });
@@ -294,17 +356,20 @@ test("interactive dry-run uses prompt answers", async () => {
   assert.equal(result.settings.trustProxy, 1);
   assert.equal(result.start, false);
   assert.equal(result.pull, false);
+  assert.equal(result.release.tag, "v0.1.0");
   assert.equal(i, answers.length);
 });
 
 test("dirty worktree blocks pull, and a new HEAD re-execs once", () => {
   assert.equal(dirtyWorktreeMessage("?? scripts/notes.txt\n"), null);
-  assert.match(dirtyWorktreeMessage(" M scripts/deploy-server.js\n"), /--no-pull/);
+  assert.match(dirtyWorktreeMessage(" M scripts/deploy-server.js\n"), /--no-release/);
+  assert.match(dirtyWorktreeMessage(" M scripts/deploy-server.js\n", "--no-pull"), /--no-pull/);
   assert.equal(shouldReexec("aaa", "bbb", undefined), true);
   assert.equal(shouldReexec("aaa", "aaa", undefined), false);
   assert.equal(shouldReexec("aaa", "bbb", "bbb"), false);
   assert.deepEqual(reexecArgs(["update", "--yes"]), ["update", "--yes", "--no-pull"]);
   assert.deepEqual(reexecArgs(["update", "--no-pull"]), ["update", "--no-pull"]);
+  assert.deepEqual(reexecArgs(["update", "--yes"], "release"), ["update", "--yes", "--no-release"]);
 });
 
 test("matching lockfiles skip install", () => {
@@ -382,6 +447,8 @@ test("--help prints usage and exits cleanly", () => {
   assert.match(result.stdout, /--trust-proxy/);
   assert.match(result.stdout, /--public/);
   assert.match(result.stdout, /update/);
+  assert.match(result.stdout, /--release/);
+  assert.match(result.stdout, /--from-git/);
   assert.equal(HELP.includes("migrate deploy"), true);
   assert.equal(HELP.includes("upgrade"), true);
 });

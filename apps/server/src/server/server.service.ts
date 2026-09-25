@@ -10,8 +10,7 @@ import {
   instanceDisplayName,
   userCanRenameInstance,
 } from "./instance-admin.js";
-
-const VERSION = "0.1.0";
+import { readServerVersion } from "./release-version.js";
 
 @Injectable()
 export class ServerService {
@@ -63,7 +62,7 @@ export class ServerService {
   async info(): Promise<ServerInfoDto> {
     return {
       name: await this.displayName(),
-      version: VERSION,
+      version: readServerVersion(),
       registrationEnabled: await isRegistrationOpen(this.prisma, this.cfg.registrationEnabled),
       emailVerificationRequired: this.cfg.emailVerificationRequired,
       smtpConfigured: this.mail.isConfigured,
