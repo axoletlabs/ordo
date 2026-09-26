@@ -78,8 +78,9 @@ rebuild, and migrate without touching `apps/server/.env`. This does not pull
 ./scripts/deploy-server update --yes --release latest --pre
 ```
 
-On a terminal the script lists recent releases and asks which one to install.
-`--yes` with no `--release` installs the latest stable release. That fails
+On a terminal, move through recent releases with the arrow keys and press
+enter. Type a version to jump to a specific tag. `--yes` with no `--release`
+installs the latest stable release. That fails
 with a clear error until the first `vX.Y.Z` GitHub Release exists; `--from-git`
 or `--no-release` still update the tree you already have. `--pre` lets
 "latest" be a pre-release. `--release` takes `latest` or a tag (`v0.1.0` or

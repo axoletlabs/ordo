@@ -46,6 +46,7 @@ const {
   resolveReleaseChoice,
   visibleReleases,
 } = require("./server-release.js");
+const { hiddenPreCount, promptReleaseMenu, releaseMenuRows } = require("./release-menu.js");
 
 const HELP = `Usage: deploy-server [install|update] [options]
 
@@ -59,12 +60,14 @@ If you omit the command and this already looks like an install (.env or a
 database), update is assumed. Otherwise install is assumed.
 
 A release is a published GitHub Release, not the tip of main or whatever
-branch is checked out. Interactive runs list recent releases and ask which
-one to install. --yes with no --release installs the latest stable release.
+branch is checked out. On a terminal, move with the arrow keys and press
+enter. Type a version to jump to a specific tag. --yes with no --release
+installs the latest stable release.
 
 Modes
   Interactive (default on a terminal): install asks port, sign-ups, mail, proxy.
-  Both commands ask which release to install, then whether to start.
+  Both commands let you move through releases with the arrow keys, then ask
+  whether to start. Type a version and press enter to pick a specific tag.
   Non-interactive: --yes, CI=true, or piped stdin. Uses flags and defaults.
 
 Options
@@ -981,6 +984,9 @@ async function resolveDeployRelease({
   releases,
   fetchImpl,
   token,
+  arrows = false,
+  stdin: menuIn,
+  stdout: menuOut,
 }) {
   const repo = args.repo ?? DEFAULT_REPO;
   const installed = readInstalledRelease(repoRoot);
@@ -995,17 +1001,32 @@ async function resolveDeployRelease({
           : `No stable GitHub releases were found on ${repo}. Pass --pre to include pre-releases, or pass --from-git to update the current branch.`,
       );
     }
-    log("");
-    log(`Published releases of ${repo}`);
-    const menu = formatReleaseMenu(catalog, { installedTag: installed?.tag ?? null, pre: args.pre });
-    if (menu) log(menu);
-    log("");
-    const raw = await ask("Release to install [latest]: ");
-    try {
-      release = chooseListedRelease(catalog, raw, { pre: args.pre });
-    } catch (error) {
-      if (!error.fetchTag || Array.isArray(releases)) throw error;
-      release = await releaseByTag(repo, error.fetchTag, { fetchImpl, token });
+    if (arrows) {
+      log("");
+      try {
+        release = await promptReleaseMenu({
+          rows: releaseMenuRows(catalog, { installedTag: installed?.tag ?? null, pre: args.pre }),
+          hiddenPre: hiddenPreCount(catalog, { pre: args.pre }),
+          input: menuIn,
+          output: menuOut,
+        });
+      } catch (error) {
+        if (!error.fetchTag || Array.isArray(releases)) throw error;
+        release = await releaseByTag(repo, error.fetchTag, { fetchImpl, token });
+      }
+    } else {
+      log("");
+      log(`Published releases of ${repo}`);
+      const menu = formatReleaseMenu(catalog, { installedTag: installed?.tag ?? null, pre: args.pre });
+      if (menu) log(menu);
+      log("");
+      const raw = await ask("Release to install [latest]: ");
+      try {
+        release = chooseListedRelease(catalog, raw, { pre: args.pre });
+      } catch (error) {
+        if (!error.fetchTag || Array.isArray(releases)) throw error;
+        release = await releaseByTag(repo, error.fetchTag, { fetchImpl, token });
+      }
     }
   } else {
     const spec = normalizeReleaseSpec(args.release ?? "latest", { pre: args.pre });
@@ -1033,14 +1054,16 @@ async function deploy(options = {}) {
   const serverDir = join(repoRoot, "apps", "server");
   const envPath = join(serverDir, ".env");
   const secretPath = join(serverDir, ".ordo-secret");
-  const interactive = options.interactive ?? isInteractive(args, env, options.stdin ?? stdin);
+  const streamIn = options.stdin ?? stdin;
+  const streamOut = options.stdout ?? stdout;
+  const interactive = options.interactive ?? isInteractive(args, env, streamIn);
   const existingEnv = loadExistingEnv(envPath);
   let settings = settingsFromSources(args, existingEnv);
   const command = inferCommand(
     args.command,
     looksInstalled(envPath, sqlitePathFromUrl(settings.databaseUrl, serverDir), secretPath),
   );
-  const ask = () => options.ask ?? createAsk(options.stdin ?? stdin, options.stdout ?? stdout);
+  const ask = () => options.ask ?? createAsk(streamIn, streamOut);
 
   if (interactive && command === "install") {
     log("Ordo backend install\n");
@@ -1077,6 +1100,9 @@ async function deploy(options = {}) {
       releases: options.releases,
       fetchImpl: options.fetch ?? globalThis.fetch,
       token: githubToken(env),
+      arrows: interactive && options.ask == null && Boolean(streamIn.isTTY),
+      stdin: streamIn,
+      stdout: streamOut,
     });
   }
 
