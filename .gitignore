@@ -72,5 +72,5 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# machine-local agent rules (per-VPS setup; global rules live in AGENTS.md)
+# machine-local agent rules (per-VPS setup, not committed; each machine keeps its own)
 .cursor/rules/*.local.mdc
