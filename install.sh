@@ -126,9 +126,26 @@ ordo_ensure_pnpm() {
     return 0
   fi
   command -v corepack >/dev/null 2>&1 || ordo_die "pnpm is required. https://pnpm.io/installation"
-  corepack enable
+  # Ubuntu's node package symlinks pnpm into /usr/bin. A normal account
+  # cannot write there, so the shim goes in the user's own bin directory.
+  [[ -n "${HOME:-}" ]] || ordo_die "HOME is not set, so pnpm cannot be installed."
+  local bindir="${HOME}/.local/bin" err
+  mkdir -p "$bindir"
+  err=$(mktemp)
+  if ! corepack enable pnpm --install-directory "$bindir" >"$err" 2>&1; then
+    cat "$err" >&2
+    rm -f "$err"
+    ordo_die "Could not install pnpm into ${bindir}."
+  fi
+  rm -f "$err"
+  case ":${PATH}:" in
+    *":${bindir}:"*) ;;
+    *) export PATH="${bindir}:${PATH}" ;;
+  esac
+  export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
   corepack prepare pnpm@11.10.0 --activate
   command -v pnpm >/dev/null 2>&1 || ordo_die "pnpm is required. https://pnpm.io/installation"
+  printf 'pnpm is in %s\n' "$bindir"
 }
 
 ordo_latest_tag() {

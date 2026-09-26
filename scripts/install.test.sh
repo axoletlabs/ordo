@@ -58,5 +58,67 @@ if ordo_is_ordo_tree "$tmp/foreign"; then fail "foreign is not ordo"; fi
 help_text=$(ordo_print_help)
 [[ "$help_text" == *"ordo.axolet.com/install | bash"* ]] || fail "help should show the curl command"
 
+mkdir -p "$tmp/bin" "$tmp/with-pnpm" "$tmp/home"
+printf '#!/bin/sh\nprintf 11.10.0\n' >"$tmp/with-pnpm/pnpm"
+chmod +x "$tmp/with-pnpm/pnpm"
+# Keep the normal PATH so mkdir and mktemp exist, but hide any real pnpm.
+clean_path=""
+IFS=:
+for dir in $PATH; do
+  [[ -n "$dir" && ! -x "$dir/pnpm" ]] || continue
+  clean_path="${clean_path:+$clean_path:}$dir"
+done
+unset IFS
+cat >"$tmp/bin/corepack" <<'EOF'
+#!/bin/bash
+printf '%s\n' "$*" >> "${ORDO_COREPACK_LOG}"
+if [[ "$1" == enable ]]; then
+  dir=""
+  prev=""
+  for arg in "$@"; do
+    if [[ "$prev" == "--install-directory" ]]; then
+      dir=$arg
+    fi
+    prev=$arg
+  done
+  mkdir -p "$dir"
+  printf '#!/bin/sh\nprintf 11.10.0\n' >"$dir/pnpm"
+  chmod +x "$dir/pnpm"
+fi
+exit 0
+EOF
+chmod +x "$tmp/bin/corepack"
+export ORDO_COREPACK_LOG="$tmp/corepack.log"
+: >"$ORDO_COREPACK_LOG"
+(
+  export HOME="$tmp/home"
+  export PATH="$tmp/with-pnpm:$tmp/bin:$clean_path"
+  ordo_ensure_pnpm
+)
+[[ ! -s "$ORDO_COREPACK_LOG" ]] || fail "corepack should not run when pnpm exists"
+
+out=$(
+  export HOME="$tmp/home"
+  export PATH="$tmp/bin:$clean_path"
+  ordo_ensure_pnpm
+)
+[[ "$out" == *"pnpm is in ${tmp}/home/.local/bin"* ]] || fail "pnpm location, got $out"
+[[ -x "${tmp}/home/.local/bin/pnpm" ]] || fail "pnpm shim was not created"
+grep -q -F -- "--install-directory ${tmp}/home/.local/bin" "$ORDO_COREPACK_LOG" || fail "install directory"
+grep -q -F -- "prepare pnpm@11.10.0 --activate" "$ORDO_COREPACK_LOG" || fail "prepare"
+
+cat >"$tmp/bin/corepack" <<'EOF'
+#!/bin/bash
+printf 'EACCES: permission denied\n' >&2
+exit 1
+EOF
+msg=$(
+  export HOME="$tmp/home-fail"
+  export PATH="$tmp/bin:$clean_path"
+  ordo_ensure_pnpm 2>&1
+) || status=$?
+[[ "${status:-0}" -ne 0 ]] || fail "a failed corepack enable should stop the install"
+[[ "$msg" == *"Could not install pnpm"* ]] || fail "enable error, got $msg"
+
 rm -rf "$tmp"
 printf 'ok\n'
