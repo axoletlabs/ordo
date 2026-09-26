@@ -20,16 +20,17 @@ on:
 #   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD. Missing secrets fail
 #   assembleRelease instead of minting a new debug key each run.
 # EAS Update channels (baked into the APK, not switched in-app):
-#   production  — GitHub Latest / `main` while apps/mobile version is stable X.Y.Z
-#             (release/x.y hotfix branches cut from that tag also publish here)
-#   development — GitHub pre-release / `main` while version is alpha|beta|rc
-#   preview     — `preview` git branch dogfood APKs only (not feature branches)
-# JS-only updates on main, preview, or release/x.y of axoletlabs/ordo go to
-# that stream's channel when the Android fingerprint matches the last (or
-# in-flight) APK on the same branch. Forks never OTA. Release branches exist so
-# a post-release hotfix cannot be blocked by
-# newer native work on main: cut release/x.y at the tag commit, cherry-pick JS
-# fixes onto it, tag hotfixes vX.Y.Z from it, merge back to main after each fix.
+#   development — `main` and every branch that is not release/x.y
+#   production  — a stable tag published from release/x.y
+#   development — an alpha/beta/rc tag published from that same release/x.y
+# main never publishes a version. Each version is its own branch (release/x.y)
+# and its own tags (vX.Y.Z). Push a fix to that branch to change that version.
+# Publishing a release does not create the branch or merge it into main.
+# CI refuses a release whose target is not release/x.y, or whose commit is not
+# already on that branch. JS-only pushes on main or release/x.y of
+# axoletlabs/ordo OTA when the Android fingerprint matches the last (or
+# in-flight) APK on the same branch. Other branches, including a leftover
+# preview branch, do not OTA. Forks never OTA.
 # Detect ignores packageJson:scripts and extra.ordo so a test-file list edit
 # does not mint a new APK. When those sources still change the raw hash, the
 # OTA job publishes to the last compatible APK runtime instead of --auto
@@ -77,7 +78,8 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           BRANCH="${GITHUB_REF_NAME}"
           if [ "${{ github.event_name }}" = "release" ]; then
-            # Tag names must not select the preview stream.
+            # A published tag takes its channel from the version, then the
+            # validate step requires it was published from release/x.y.
             BRANCH=""
           fi
           CHANNEL=$(node "$GITHUB_WORKSPACE/.github/scripts/validate-release-tag.js" --channel "$VERSION" --branch "$BRANCH")
@@ -95,11 +97,11 @@ jobs:
           fi
 
       - name: Setup pnpm for OTA eligibility check
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preview' || startsWith(github.ref, 'refs/heads/release/'))
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
         uses: pnpm/action-setup@v5
 
       - name: Setup Node.js for OTA eligibility check
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preview' || startsWith(github.ref, 'refs/heads/release/'))
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
         uses: actions/setup-node@v5
         with:
           node-version: '22'
@@ -107,7 +109,7 @@ jobs:
 
       - name: Check Android native fingerprint
         id: eligibility
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/preview' || startsWith(github.ref, 'refs/heads/release/'))
+        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
         continue-on-error: true
         # Last-resort cap if createFingerprintAsync never resolves.
         timeout-minutes: 8
@@ -125,10 +127,10 @@ jobs:
             exit 0
           fi
 
-          # Compare against an in-flight CI run on this stream (main or
-          # preview) when one exists (an APK still building, or detect still
+          # Compare against an in-flight CI run on this branch (main or
+          # release/*) when one exists (an APK still building, or detect still
           # running), else the last shipped APK on the same branch. Never
-          # compare preview to a production APK — the baked channel differs.
+          # compare one branch's APK to another's — the baked channel differs.
           # Parent-commit comparison is wrong: a cancelled native bump would
           # make later JS look unchanged vs parent and OTA a runtime that
           # never got a binary. An in-flight APK *will* produce that binary,
@@ -288,7 +290,7 @@ jobs:
           EVENT="${{ github.event_name }}"
           stream=false
           case "$REF" in
-            refs/heads/main|refs/heads/preview|refs/heads/release/*) stream=true ;;
+            refs/heads/main|refs/heads/release/*) stream=true ;;
           esac
           # release/* is included on purpose. A native change on a maintenance
           # branch has to mint an APK. An OTA there would target a runtime
@@ -312,6 +314,17 @@ jobs:
             "${{ github.event.release.tag_name }}" \
             "${{ steps.info.outputs.version }}" \
             "${{ github.event.release.prerelease }}"
+          TAG="${{ github.event.release.tag_name }}"
+          TARGET="${{ github.event.release.target_commitish }}"
+          BRANCH=$(node "$GITHUB_WORKSPACE/.github/scripts/validate-release-tag.js" --release-branch "$TAG" "$TARGET")
+          if ! git fetch origin "$BRANCH"; then
+            echo "::error::Branch $BRANCH does not exist. Push the release commit there before publishing $TAG."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/$BRANCH"; then
+            echo "::error::$GITHUB_SHA is not on $BRANCH. Push that commit to $BRANCH, then publish the tag."
+            exit 1
+          fi
 
   analyze:
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
@@ -386,9 +399,8 @@ jobs:
   ota:
     needs: [detect, supply-chain]
     # Publishes a JS-only update to this stream's channel:
-    #   main       → production (stable version) or development (alpha/beta/rc)
-    #   preview    → preview
-    #   release/*  → production (hotfix line for the shipped stable)
+    #   main       → development (never a version release)
+    #   release/*  → production for a stable version, development for alpha/beta/rc
     # Native fingerprint changes and commits marked -apk build an APK.
     # Feature branches never OTA (last-write-wins would clobber the stream).
     # Forks never OTA even if they have a main branch.
@@ -396,7 +408,6 @@ jobs:
       github.repository == 'axoletlabs/ordo' &&
       github.event_name == 'push' &&
         (github.ref == 'refs/heads/main' ||
-         github.ref == 'refs/heads/preview' ||
          startsWith(github.ref, 'refs/heads/release/')) &&
         needs.detect.outputs.should_build != 'true'
     concurrency:

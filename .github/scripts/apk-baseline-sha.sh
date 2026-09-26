@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Print the commit SHA whose Android fingerprint is the OTA/APK routing
-# baseline for the current stream branch (main or preview).
+# baseline for the current stream branch (main or release/*).
 #
 # Prefer a newer in-flight ci.yml run that might still produce an APK (detect
 # still running, or build_apk pending/succeeded) so a JS-only follow-up OTAs

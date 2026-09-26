@@ -98,10 +98,7 @@ export function classifyReleaseVersion(value: string): ClassifiedReleaseVersion 
 
 export type EasUpdateChannel = "production" | "development" | "preview";
 
-/** Git branch that bakes and publishes the `preview` EAS channel. */
-export const PREVIEW_UPDATE_BRANCH = "preview";
-
-/** EAS Update channel baked into GitHub Release APKs (`main` stream). */
+/** EAS channel for a version tag: stable → production, alpha/beta/rc → development. */
 export function easUpdatesChannel(
   appVersion: string,
 ): "production" | "development" | null {
@@ -110,16 +107,36 @@ export function easUpdatesChannel(
   return classified.kind === "prerelease" ? "development" : "production";
 }
 
+/** `v0.2.0` and `v0.2.0-beta.1` both belong to `release/0.2`. */
+export function releaseLineBranch(tagOrVersion: string): string | null {
+  const match = tagOrVersion.trim().match(/^v?(\d+)\.(\d+)\.\d+/);
+  if (!match) return null;
+  return `release/${match[1]}.${match[2]}`;
+}
+
 /**
- * Channel for this CI ref: `preview` git branch → preview; otherwise the
- * version mapping (`production` / `development`). Feature branches do not OTA.
+ * `main` and every other non-release branch stay on development.
+ * `release/x.y` follows the version tag. A published tag (no branch) does too.
  */
 export function resolveUpdatesChannel(
   appVersion: string,
   gitBranch?: string | null,
 ): EasUpdateChannel | null {
-  if (gitBranch === PREVIEW_UPDATE_BRANCH) return "preview";
+  if (gitBranch && !gitBranch.startsWith("release/")) return "development";
   return easUpdatesChannel(appVersion);
+}
+
+/** Version tags are published from `release/x.y`, never from main. */
+export function validateReleaseBranch(tag: string, targetBranch: string): string | null {
+  const expected = releaseLineBranch(tag);
+  if (!expected) {
+    return `Tag '${tag}' is not vX.Y.Z. Version releases use a release/x.y branch.`;
+  }
+  const branch = targetBranch.trim().replace(/^refs\/heads\//, "");
+  if (branch !== expected) {
+    return `Publish ${tag} from ${expected}. main does not publish version releases. Push the commit to ${expected}, then tag it there.`;
+  }
+  return null;
 }
 
 /** GitHub tag `vX.Y.Z` / `vX.Y.Z-beta.N` must match app.config version and the pre-release checkbox. */

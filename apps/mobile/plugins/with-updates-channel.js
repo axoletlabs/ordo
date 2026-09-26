@@ -3,9 +3,8 @@ const { withAndroidManifest } = require('expo/config-plugins');
 const CHANNEL = process.env.EXPO_UPDATES_CHANNEL || 'production';
 
 // Channels (baked into the APK; EAS Update publishes to the same name):
-//   production  — GitHub Latest / `main` while version is stable X.Y.Z
-//   development — GitHub pre-release / `main` while version is alpha|beta|rc
-//   preview     — `preview` git branch dogfood APKs
+//   production  — stable tag published from release/x.y
+//   development — main, any other non-release branch, and alpha/beta/rc tags
 // The runtime reads the channel from `expo-channel-name` in the request-headers
 // map (meta-data UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY). A request without
 // it is rejected by EAS ("channel-name: Required"). EAS Build injects this

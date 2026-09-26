@@ -5,7 +5,9 @@ import {
   compareVersions,
   easUpdatesChannel,
   isNewerVersion,
+  releaseLineBranch,
   resolveUpdatesChannel,
+  validateReleaseBranch,
   validateReleaseTag,
 } from "./app-version.ts";
 
@@ -54,13 +56,22 @@ test("easUpdatesChannel maps stable to production and early tags to development"
   assert.equal(easUpdatesChannel("dev"), null);
 });
 
-test("resolveUpdatesChannel sends only the preview git branch to preview", () => {
-  assert.equal(resolveUpdatesChannel("0.1.0", "preview"), "preview");
-  assert.equal(resolveUpdatesChannel("0.3.0-beta.1", "preview"), "preview");
-  assert.equal(resolveUpdatesChannel("0.1.0", "main"), "production");
+test("resolveUpdatesChannel keeps everyday branches on development", () => {
+  assert.equal(resolveUpdatesChannel("0.1.0", "main"), "development");
   assert.equal(resolveUpdatesChannel("0.3.0-beta.1", "main"), "development");
-  assert.equal(resolveUpdatesChannel("0.1.0", "feat/foo"), "production");
-  assert.equal(resolveUpdatesChannel("0.1.0", "v0.1.0"), "production");
+  assert.equal(resolveUpdatesChannel("0.1.0", "preview"), "development");
+  assert.equal(resolveUpdatesChannel("0.1.0", "feat/foo"), "development");
+  assert.equal(resolveUpdatesChannel("0.1.0", "release/0.1"), "production");
+  assert.equal(resolveUpdatesChannel("0.3.0-beta.1", "release/0.3"), "development");
+  assert.equal(resolveUpdatesChannel("0.1.0"), "production");
+});
+
+test("validateReleaseBranch only accepts the matching release line", () => {
+  assert.equal(releaseLineBranch("v0.2.0-beta.1"), "release/0.2");
+  assert.equal(validateReleaseBranch("v0.2.0", "release/0.2"), null);
+  assert.equal(validateReleaseBranch("v0.2.0-beta.1", "refs/heads/release/0.2"), null);
+  assert.match(validateReleaseBranch("v0.2.0", "main") ?? "", /release\/0\.2/);
+  assert.match(validateReleaseBranch("v0.2.1", "release/0.3") ?? "", /release\/0\.2/);
 });
 
 test("validateReleaseTag keeps the GitHub pre-release checkbox aligned with the tag", () => {

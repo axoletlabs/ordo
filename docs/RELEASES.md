@@ -5,67 +5,67 @@ Two independent layers. Keep them separate in your head and everything else foll
 - **Binary (native) layer:** GitHub Releases + the in-app updater. Users sideload APKs from `api.github.com/repos/axoletlabs/ordo/releases`. Any native change needs a new APK. There is no way around this, for anyone.
 - **JS layer:** EAS Update. Ships in minutes over the air. Only lands on APKs whose native fingerprint matches. Updates ship unsigned (EAS code signing needs a paid plan); distribution is protected by https only. From a machine: `eas update …` or `eas update:republish --group <id>`.
 
-Branches decide where commits live. Tags decide what ships as a binary. Channels decide which installed APK hears an OTA. You never set a channel by hand; it is derived from the version string in `apps/mobile/app.config.js`.
+A version is a branch plus tags. `main` is not a version.
 
 ## Branch map
 
-| Branch | Purpose | OTAs to | APKs |
+| Branch | What a push does | OTAs to | APKs |
 | --- | --- | --- | --- |
-| `main` | next version, all new work | production (stable version) or development (alpha/beta/rc) | when fingerprint changes |
-| `release/x.y` | maintenance of shipped v`x.y` | production | when fingerprint changes |
-| `preview` | dogfood | preview | when fingerprint changes |
-| feature branches | PRs | never (CI analysis only) | never |
+| `main` | everyday work. no version release | development | development, when the fingerprint changes |
+| `release/x.y` | that version only | production when the version is stable, development for alpha/beta/rc | when the fingerprint changes, on that line |
+| anything else | CI checks | never | never, unless you dispatch a build by hand |
 
-Rule: after you tag a stable release, `main` belongs to the NEXT version. Do not chase main back to the released one. Hotfixes live on `release/x.y`.
+There is no `preview` branch. A leftover `preview` push does not publish an update or an APK.
 
-## The one habit that makes it all work
+To change version 0.2, push to `release/0.2`. That push does not land on `main`. If you also want the fix on `main`, cherry-pick or merge it yourself.
 
-Nothing. Publishing a GitHub Release automatically creates `release/x.y` at the tag (see "What is automated for you" below). The manual equivalent, if you ever want it:
+Publishing a GitHub Release does not create the branch, move it, or merge it into `main`. CI attaches APKs and the server archive only when both of these are true:
+
+- the release target is `release/x.y` for that tag (`v0.2.0` and `v0.2.0-beta.1` both belong to `release/0.2`)
+- the tagged commit is already on that branch
+
+A release targeted at `main` is refused, even if that commit also sits on the release branch.
+
+## Ship a version
+
+1. Keep landing work on `main`. JS-only pushes update development installs. A native change builds a development APK. Nothing here is a version release.
+2. When the version is ready, cut its branch and set `apps/mobile/app.config.js` on that branch:
 
 ```bash
-git checkout -b release/0.1 v0.1.0
-git push origin release/0.1
+git checkout -b release/0.2
+# set version to 0.2.0 (or 0.2.0-beta.1 for early access)
+git push -u origin release/0.2
 ```
 
-## Scenario 1: routine stable release (mostly JS changes)
+3. Tag that commit and publish the GitHub Release with target `release/0.2`, not `main`.
+   - Stable: tag `v0.2.0`, "Set as the latest release", pre-release unchecked.
+   - Early access: tag `v0.2.0-beta.1`, "This is a pre-release" checked.
+4. CI builds signed per-ABI APKs and the server archive onto that release. The in-app updater offers the APK (early builds only reach users with "include prereleases" on).
 
-1. Land work on `main` (PRs or direct). JS-only pushes OTA automatically to production or development based on the version in `app.config.js`. Native drift mints a dev APK on main. You do nothing.
-2. Bump `version` in `apps/mobile/app.config.js` to the release version (CI rejects a tag that does not match it).
-3. Tag and publish the GitHub release:
-   - Stable: tag `v0.2.0`, "Set as the latest release", pre-release UNCHECKED.
-   - Early access: tag `v0.2.0-beta.1`, "This is a pre-release" CHECKED.
-4. CI builds signed per-ABI APKs + universal, uploads them to the release. The in-app updater offers the APK to users (early builds only reach users with "include prereleases" on).
-5. If you forgot the maintenance branch, cut `release/0.2` from the tag now.
+## Fix a version that already shipped
 
-## Scenario 2: your exact accident (native change on main, then a JS fix for the shipped version)
+Push the fix to that version's branch and nowhere else.
 
-Native commit landed on main after v0.1.0 shipped. The JS fix is supposed to reach v0.1.0 users.
+```bash
+git checkout release/0.2
+# commit the fix
+git push origin release/0.2
+```
 
-1. Do NOT force-push, do not revert main. Main already belongs to v0.2.0; the native change rides the next APK normally.
-2. Ship the fix from the release line:
-   ```bash
-   git checkout release/0.1
-   git cherry-pick <fix-commit>        # or re-implement the JS fix without the native part
-   git push origin release/0.1
-   ```
-3. CI on `release/0.1`: fingerprint unchanged vs the v0.1.0 APK, so it publishes an OTA straight to the production channel, onto exactly the runtime shipped users have. Done in minutes.
-4. If the fix can't be separated from the native change, it waits for v0.1.1: cherry-pick everything, push, then commit with `-apk` in the message (or let fingerprint drift trigger it) to mint the v0.1.1 APK, tag `v0.1.1` on the branch, publish the release.
-5. Merge the branch back so v0.2.0 inherits the fix:
-   ```bash
-   git checkout main
-   git merge release/0.1
-   git push origin main
-   ```
+- JS only: CI publishes an OTA onto the APKs of that line. A stable line goes to production. An alpha/beta/rc line stays on development, so it does not reach stable users.
+- Native change: CI builds an APK on that branch. Tag `v0.2.1` on that same commit and publish it with target `release/0.2`.
 
-## Scenario 3: JS hotfix while nothing is wrong (the common case)
+`main` stays where it was until you bring the fix across yourself:
 
-Fix on `release/x.y`, push. OTA to production users within minutes. Tag only when you also want the binary updated; an OTA alone is a complete release for JS fixes.
+```bash
+git checkout main
+git cherry-pick <fix>
+git push origin main
+```
 
-## Scenario 4: early access (beta/RC) track
+## Early access
 
-- Keep landing on `main` with the version set to `0.3.0-beta.N`.
-- Tag `v0.3.0-beta.N` as a pre-release. CI builds its APKs; the OTA channel resolves to `development` because of the version suffix, so beta APKs and beta OTAs never touch stable users.
-- Promote by finishing the cycle: set version to `0.3.0`, tag `v0.3.0` as latest. Same commits, new audience.
+Early access is still a version branch. Put `0.3.0-beta.1` on `release/0.3`, push the branch, and tag `v0.3.0-beta.1` there. Those APKs and OTAs use development, so they never touch stable users. Promote by setting the version to `0.3.0` on `release/0.3` and tagging `v0.3.0` with target `release/0.3`.
 
 ## Escapes (rare, all non-destructive)
 
@@ -73,20 +73,18 @@ Fix on `release/x.y`, push. OTA to production users within minutes. Tag only whe
 - **Bad APK release:** delete the bad tag/release, fix on `release/x.y`, tag `vX.Y.(Z+1)`. Version codes only move forward, never rewrite.
 - **Bad source either way:** `git revert` on the right branch. History stays intact, which is what keeps the fingerprint baselines and embedded commitTime checks in CI working.
 
-## What is automated for you (release.yml)
-
-When you publish a GitHub Release, a second workflow runs alongside the APK build:
-
-1. `release/x.y` does not exist yet? It is created at the tag commit automatically. You never run the branch-cut command by hand.
-2. Hotfix tag `vX.Y.(Z+1)` published later? The branch is fast-forwarded to the new tag.
-3. The branch is merged back into `main` (no-ff) so the next version inherits every hotfix. If that merge conflicts, it opens a PR for you to resolve instead of failing silently.
-
 ## What you never have to think about
 
-- Channel selection: derived from version string + branch.
+- Channel selection: `main` is always development. `release/x.y` follows the version string (stable → production, alpha/beta/rc → development).
 - Fingerprint baselines, in-flight APK waits, embedded-runtime pinning: `detect` handles it per branch automatically.
-- The in-app updater: reads releases, compares semver, picks the right ABI APK. Branch-agnostic.
+- The in-app updater: reads releases, compares semver, picks the right ABI APK.
 - versionCode ordering: global run number, monotonic.
+
+## What is not automatic
+
+- Cutting `release/x.y`. You create the branch and push it.
+- Publishing a version from `main`. CI rejects it.
+- Copying a fix from a version branch back onto `main`.
 
 ## Server
 
@@ -97,10 +95,10 @@ The backend ships on the same GitHub Release as the APKs. Publishing the release
 
 The host still runs `pnpm install` and compiles native modules. The archive is not a prebuilt `node_modules`.
 
-Self-hosted updates install that release. They do not fast-forward the checked-out branch:
+Self-hosted updates install that release. They do not fast-forward the checked-out branch. On a terminal, move with the arrow keys and press enter. Type a version to jump to a specific tag.
 
 ```bash
-./scripts/deploy-server update                         # pick from a menu
+./scripts/deploy-server update                         # arrow keys, enter to select
 ./scripts/deploy-server update --yes                   # latest stable
 ./scripts/deploy-server update --yes --release v0.1.1  # that tag
 ./scripts/deploy-server update --yes --pre             # latest, including pre-releases
@@ -113,24 +111,32 @@ Self-hosted updates install that release. They do not fast-forward the checked-o
 ## Cheat sheet
 
 ```bash
-# release
-bump version in apps/mobile/app.config.js -> vX.Y.Z tag as latest, pre-release unchecked
-# (release.yml auto-creates release/x.y at the tag and merges it back to main)
+# everyday work on main — development updates only, no version release
+git push origin main
 
-# early access
-version X.Y.Z-alpha.N / -beta.N / -rc.N -> tag as pre-release (checked)
+# cut version 0.2
+git checkout -b release/0.2
+# set apps/mobile/app.config.js to 0.2.0
+git push -u origin release/0.2
+git tag v0.2.0 && git push origin v0.2.0
+# publish the GitHub Release with target release/0.2, not main
 
-# JS hotfix
-git checkout release/x.y; cherry-pick fix; git push   # OTA goes out on its own
-# merge-back to main happens automatically when you tag the next vX.Y.* release
+# early access on its own line
+# version 0.3.0-beta.1 on release/0.3, tag v0.3.0-beta.1, target release/0.3
 
-# native hotfix (rare)
-same, but expect an APK build on the release branch; tag vX.Y.(Z+1) and publish
+# fix that version
+git checkout release/0.2
+# commit, then:
+git push origin release/0.2
+# native fix: tag v0.2.1 on this branch and publish with target release/0.2
+
+# bring the fix onto main yourself, when you want it there
+git checkout main && git cherry-pick <fix> && git push origin main
 
 # OTA rollback (from your machine)
 eas update:republish --group <old-good-group-id>
 
 # self-hosted backend (GitHub Release, not the branch tip)
-./scripts/deploy-server update --yes
+./scripts/deploy-server update
 ./scripts/deploy-server update --yes --release vX.Y.Z
 ```
