@@ -20,14 +20,14 @@ on:
 #   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD. Missing secrets fail
 #   assembleRelease instead of minting a new debug key each run.
 # EAS Update channels (baked into the APK, not switched in-app):
-#   development — `main` and every branch that is not release/x.y
-#   production  — a stable tag published from release/x.y
-#   development — an alpha/beta/rc tag published from that same release/x.y
-# main never publishes a version. Each version is its own branch (release/x.y)
-# and its own tags (vX.Y.Z). Push a fix to that branch to change that version.
+#   development — `main` and every branch that is not release/x.y.z
+#   production  — a stable tag published from release/x.y.z
+#   development — an alpha/beta/rc tag published from that same release/x.y.z
+# main never publishes a version. Each version is its own branch (release/x.y.z)
+# and its own tag (vX.Y.Z). Push a fix to that branch to change that version.
 # Publishing a release does not create the branch or merge it into main.
-# CI refuses a release whose target is not release/x.y, or whose commit is not
-# already on that branch. JS-only pushes on main or release/x.y of
+# CI refuses a release whose target is not release/x.y.z, or whose commit is not
+# already on that branch. JS-only pushes on main or release/x.y.z of
 # axoletlabs/ordo OTA when the Android fingerprint matches the last (or
 # in-flight) APK on the same branch. Other branches, including a leftover
 # preview branch, do not OTA. Forks never OTA.
@@ -79,7 +79,7 @@ jobs:
           BRANCH="${GITHUB_REF_NAME}"
           if [ "${{ github.event_name }}" = "release" ]; then
             # A published tag takes its channel from the version, then the
-            # validate step requires it was published from release/x.y.
+            # validate step requires it was published from release/x.y.z.
             BRANCH=""
           fi
           CHANNEL=$(node "$GITHUB_WORKSPACE/.github/scripts/validate-release-tag.js" --channel "$VERSION" --branch "$BRANCH")
@@ -400,7 +400,7 @@ jobs:
     needs: [detect, supply-chain]
     # Publishes a JS-only update to this stream's channel:
     #   main       → development (never a version release)
-    #   release/*  → production for a stable version, development for alpha/beta/rc
+    #   release/x.y.z → production for a stable version, development for alpha/beta/rc
     # Native fingerprint changes and commits marked -apk build an APK.
     # Feature branches never OTA (last-write-wins would clobber the stream).
     # Forks never OTA even if they have a main branch.

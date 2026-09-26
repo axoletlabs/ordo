@@ -33,9 +33,9 @@ function easUpdatesChannel(appVersion) {
 }
 
 function releaseLineBranch(tagOrVersion) {
-  const match = String(tagOrVersion).trim().match(/^v?(\d+)\.(\d+)\.\d+/);
+  const match = String(tagOrVersion).trim().match(/^v?(\d+)\.(\d+)\.(\d+)/);
   if (!match) return null;
-  return `release/${match[1]}.${match[2]}`;
+  return `release/${match[1]}.${match[2]}.${match[3]}`;
 }
 
 function resolveUpdatesChannel(appVersion, gitBranch) {
@@ -46,7 +46,7 @@ function resolveUpdatesChannel(appVersion, gitBranch) {
 function validateReleaseBranch(tag, targetBranch) {
   const expected = releaseLineBranch(tag);
   if (!expected) {
-    return `Tag '${tag}' is not vX.Y.Z. Version releases use a release/x.y branch.`;
+    return `Tag '${tag}' is not vX.Y.Z. Version releases use a release/x.y.z branch.`;
   }
   const branch = String(targetBranch ?? "")
     .trim()

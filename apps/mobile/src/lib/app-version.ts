@@ -107,16 +107,16 @@ export function easUpdatesChannel(
   return classified.kind === "prerelease" ? "development" : "production";
 }
 
-/** `v0.2.0` and `v0.2.0-beta.1` both belong to `release/0.2`. */
+/** `v0.1.0` and `v0.1.0-beta.1` both belong to `release/0.1.0`. A later patch is its own branch. */
 export function releaseLineBranch(tagOrVersion: string): string | null {
-  const match = tagOrVersion.trim().match(/^v?(\d+)\.(\d+)\.\d+/);
+  const match = tagOrVersion.trim().match(/^v?(\d+)\.(\d+)\.(\d+)/);
   if (!match) return null;
-  return `release/${match[1]}.${match[2]}`;
+  return `release/${match[1]}.${match[2]}.${match[3]}`;
 }
 
 /**
  * `main` and every other non-release branch stay on development.
- * `release/x.y` follows the version tag. A published tag (no branch) does too.
+ * `release/x.y.z` follows the version tag. A published tag (no branch) does too.
  */
 export function resolveUpdatesChannel(
   appVersion: string,
@@ -126,11 +126,11 @@ export function resolveUpdatesChannel(
   return easUpdatesChannel(appVersion);
 }
 
-/** Version tags are published from `release/x.y`, never from main. */
+/** Version tags are published from `release/x.y.z`, never from main. */
 export function validateReleaseBranch(tag: string, targetBranch: string): string | null {
   const expected = releaseLineBranch(tag);
   if (!expected) {
-    return `Tag '${tag}' is not vX.Y.Z. Version releases use a release/x.y branch.`;
+    return `Tag '${tag}' is not vX.Y.Z. Version releases use a release/x.y.z branch.`;
   }
   const branch = targetBranch.trim().replace(/^refs\/heads\//, "");
   if (branch !== expected) {

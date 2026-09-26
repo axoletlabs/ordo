@@ -1,6 +1,6 @@
 name: Release branch
 
-# A published version must already live on its release/x.y branch.
+# A published version must already live on its release/x.y.z branch.
 # This workflow only checks that. It does not create the branch, move it,
 # or merge anything into main. main never publishes a version release.
 # ci.yml runs the same check before it will attach APKs or the server archive.
