@@ -98,10 +98,8 @@ The host still runs `pnpm install` and compiles native modules. The archive is n
 Self-hosted updates install that release. They do not fast-forward the checked-out branch. On a terminal, move with the arrow keys and press enter. Type a version to jump to a specific tag.
 
 ```bash
-./scripts/deploy-server update                         # arrow keys, enter to select
-./scripts/deploy-server update --yes                   # latest stable
-./scripts/deploy-server update --yes --release v0.1.1  # that tag
-./scripts/deploy-server update --yes --pre             # latest, including pre-releases
+curl -fsSL https://raw.githubusercontent.com/axoletlabs/ordo/main/install.sh | bash
+./scripts/deploy-server update --yes --release v0.1.1
 ```
 
 `.env`, secrets, the SQLite file, backups, and avatars stay put. `/api/server/info` reports the version in `apps/server/release.json`.
@@ -137,6 +135,6 @@ git checkout main && git cherry-pick <fix> && git push origin main
 eas update:republish --group <old-good-group-id>
 
 # self-hosted backend (GitHub Release, not the branch tip)
-./scripts/deploy-server update
+curl -fsSL https://raw.githubusercontent.com/axoletlabs/ordo/main/install.sh | bash
 ./scripts/deploy-server update --yes --release vX.Y.Z
 ```

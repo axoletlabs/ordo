@@ -20,15 +20,20 @@ pnpm --filter @ordo/mobile start
 
 ## Your own server
 
-Optional. You keep it online, updated, and backed up. Axolet does not operate a server you host.
+Optional. You keep it online, updated, and backed up. Axolet does not operate a server you host. You need Node.js 22.13 or newer.
 
 ```bash
-git clone https://github.com/axoletlabs/ordo.git
-cd ordo
-./scripts/deploy-server
+curl -fsSL https://raw.githubusercontent.com/axoletlabs/ordo/main/install.sh | bash
 ```
 
-On a terminal, pick a release with the arrow keys, answer a few questions, and the script installs, builds, and migrates SQLite. It listens on `127.0.0.1`. Put nginx or Caddy in front (`deploy/nginx.conf.example`) or pass `--public`.
+That installs the latest release into `~/ordo`. Set `ORDO_DIR` to use another folder. On a terminal, pick a release with the arrow keys and answer a few questions. The server listens on `127.0.0.1`. Put nginx or Caddy in front (`deploy/nginx.conf.example`) or pass `--public`.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/axoletlabs/ordo/main/install.sh | bash -s -- --yes
+curl -fsSL https://raw.githubusercontent.com/axoletlabs/ordo/main/install.sh | bash -s -- --yes --release v0.1.0
+```
+
+When it is up:
 
 ```bash
 curl http://localhost:3000/api/server/info
@@ -37,8 +42,8 @@ curl http://localhost:3000/api/server/info
 Update an existing server from a published release. `.env`, secrets, the database, backups, and avatars stay put.
 
 ```bash
-./scripts/deploy-server update          # arrow keys, enter to select
-./scripts/deploy-server update --yes    # latest stable
+cd ~/ordo
+./scripts/deploy-server update
 ./scripts/deploy-server update --yes --release v0.1.0
 ```
 

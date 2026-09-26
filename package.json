@@ -14,7 +14,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
-    "test:scripts": "node --test scripts/deploy-server.test.js scripts/server-release.test.js scripts/release-menu.test.js scripts/masked-view-fingerprint-hook.test.js",
+    "test:scripts": "node --test scripts/deploy-server.test.js scripts/server-release.test.js scripts/release-menu.test.js scripts/masked-view-fingerprint-hook.test.js && bash scripts/install.test.sh",
     "db:generate": "turbo run db:generate",
     "deploy:server": "node scripts/deploy-server.js",
     "deploy:server:update": "node scripts/deploy-server.js update",
