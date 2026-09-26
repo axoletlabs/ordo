@@ -891,11 +891,13 @@ function checkToolchain(repoRoot) {
   const pkg = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
   const engines = String(pkg.engines?.node ?? ">=22.13").replace(/^>=/, "");
   if (compareNodeVersion(process.versions.node, engines) < 0) {
-    throw new Error(`Node.js ${engines}+ is required (this is ${process.versions.node}).`);
+    throw new Error(
+      `This machine has Node.js ${process.versions.node}. Ordo needs ${engines} or newer.`,
+    );
   }
   const pnpm = spawnSync("pnpm", ["--version"], { encoding: "utf8" });
   if (pnpm.status !== 0) {
-    throw new Error("pnpm is required. Install it from https://pnpm.io");
+    throw new Error("pnpm is not installed. See https://pnpm.io/installation");
   }
 }
 

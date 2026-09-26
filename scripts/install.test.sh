@@ -58,10 +58,41 @@ if ordo_is_ordo_tree "$tmp/foreign"; then fail "foreign is not ordo"; fi
 help_text=$(ordo_print_help)
 [[ "$help_text" == *"ordo.axolet.com/install | bash"* ]] || fail "help should show the curl command"
 
-mkdir -p "$tmp/bin" "$tmp/with-pnpm" "$tmp/home"
+mkdir -p "$tmp/bin" "$tmp/with-pnpm"
 printf '#!/bin/sh\nprintf 11.10.0\n' >"$tmp/with-pnpm/pnpm"
 chmod +x "$tmp/with-pnpm/pnpm"
-# Keep the normal PATH so mkdir and mktemp exist, but hide any real pnpm.
+printf '#!/bin/sh\nprintf 18.19.1\n' >"$tmp/bin/node"
+chmod +x "$tmp/bin/node"
+node_free=""
+IFS=:
+for dir in $PATH; do
+  [[ -n "$dir" && ! -x "$dir/node" && ! -x "$dir/nodejs" ]] || continue
+  node_free="${node_free:+$node_free:}$dir"
+done
+unset IFS
+
+status=0
+msg=$(PATH="$node_free" ordo_ensure_node 2>&1) || status=$?
+[[ "$status" -ne 0 ]] || fail "missing node should stop"
+[[ "$msg" == *"Node.js is not installed."* ]] || fail "missing node message, got $msg"
+[[ "$msg" != *"This machine has"* ]] || fail "missing node should not look like an old version"
+
+status=0
+msg=$(PATH="$tmp/bin" ordo_ensure_node 2>&1) || status=$?
+[[ "$status" -ne 0 ]] || fail "old node should stop"
+[[ "$msg" == *"This machine has Node.js 18.19.1."* ]] || fail "old node message, got $msg"
+[[ "$msg" == *"Ordo needs Node.js 22.13 or newer."* ]] || fail "old node requirement, got $msg"
+
+printf '#!/bin/sh\nexit 1\n' >"$tmp/bin/node"
+status=0
+msg=$(PATH="$tmp/bin" ordo_ensure_node 2>&1) || status=$?
+[[ "$status" -ne 0 ]] || fail "broken node should stop"
+[[ "$msg" == *"Node.js is not installed."* ]] || fail "broken node message, got $msg"
+
+printf '#!/bin/sh\nprintf 22.14.0\n' >"$tmp/bin/node"
+PATH="$tmp/bin" ordo_ensure_node || fail "node 22.14 should pass"
+
+# Hide any real pnpm, but keep the tools the installer needs.
 clean_path=""
 IFS=:
 for dir in $PATH; do
@@ -69,56 +100,66 @@ for dir in $PATH; do
   clean_path="${clean_path:+$clean_path:}$dir"
 done
 unset IFS
-cat >"$tmp/bin/corepack" <<'EOF'
-#!/bin/bash
-printf '%s\n' "$*" >> "${ORDO_COREPACK_LOG}"
-if [[ "$1" == enable ]]; then
-  dir=""
-  prev=""
-  for arg in "$@"; do
-    if [[ "$prev" == "--install-directory" ]]; then
-      dir=$arg
-    fi
-    prev=$arg
-  done
-  mkdir -p "$dir"
-  printf '#!/bin/sh\nprintf 11.10.0\n' >"$dir/pnpm"
-  chmod +x "$dir/pnpm"
-fi
-exit 0
-EOF
-chmod +x "$tmp/bin/corepack"
-export ORDO_COREPACK_LOG="$tmp/corepack.log"
-: >"$ORDO_COREPACK_LOG"
+
+export ORDO_PNPM_LOG="$tmp/pnpm.log"
+export ORDO_CHOICE_LOG="$tmp/choice.log"
+: >"$ORDO_PNPM_LOG"
+: >"$ORDO_CHOICE_LOG"
+eval "$(declare -f ordo_pnpm_choice | sed '1s/ordo_pnpm_choice/ordo_pnpm_choice_real/')"
+ordo_install_pnpm() {
+  printf 'official %s\n' "$ORDO_PNPM_VERSION" >>"$ORDO_PNPM_LOG"
+  mkdir -p "${HOME}/.local/share/pnpm"
+  printf '#!/bin/sh\nprintf 11.10.0\n' >"${HOME}/.local/share/pnpm/pnpm"
+  chmod +x "${HOME}/.local/share/pnpm/pnpm"
+}
+ordo_pnpm_choice() {
+  printf 'asked\n' >>"$ORDO_CHOICE_LOG"
+  printf '%s\n' "$ORDO_PNPM_ANSWER"
+}
+
 (
-  export HOME="$tmp/home"
-  export PATH="$tmp/with-pnpm:$tmp/bin:$clean_path"
+  export HOME="$tmp/home" PNPM_HOME="" XDG_DATA_HOME="" ORDO_PNPM_ANSWER="1"
+  export PATH="$tmp/with-pnpm:$clean_path"
   ordo_ensure_pnpm
 )
-[[ ! -s "$ORDO_COREPACK_LOG" ]] || fail "corepack should not run when pnpm exists"
+[[ ! -s "$ORDO_CHOICE_LOG" ]] || fail "should not ask when pnpm exists"
+[[ ! -s "$ORDO_PNPM_LOG" ]] || fail "should not install pnpm when it exists"
 
-out=$(
-  export HOME="$tmp/home"
-  export PATH="$tmp/bin:$clean_path"
-  ordo_ensure_pnpm
-)
-[[ "$out" == *"pnpm is in ${tmp}/home/.local/bin"* ]] || fail "pnpm location, got $out"
-[[ -x "${tmp}/home/.local/bin/pnpm" ]] || fail "pnpm shim was not created"
-grep -q -F -- "--install-directory ${tmp}/home/.local/bin" "$ORDO_COREPACK_LOG" || fail "install directory"
-grep -q -F -- "prepare pnpm@11.10.0 --activate" "$ORDO_COREPACK_LOG" || fail "prepare"
-
-cat >"$tmp/bin/corepack" <<'EOF'
-#!/bin/bash
-printf 'EACCES: permission denied\n' >&2
-exit 1
-EOF
+: >"$ORDO_CHOICE_LOG"
+status=0
 msg=$(
-  export HOME="$tmp/home-fail"
-  export PATH="$tmp/bin:$clean_path"
+  export HOME="$tmp/home" PNPM_HOME="" XDG_DATA_HOME="" ORDO_PNPM_ANSWER="2"
+  export PATH="$clean_path"
   ordo_ensure_pnpm 2>&1
 ) || status=$?
-[[ "${status:-0}" -ne 0 ]] || fail "a failed corepack enable should stop the install"
-[[ "$msg" == *"Could not install pnpm"* ]] || fail "enable error, got $msg"
+[[ "$status" -ne 0 ]] || fail "declining pnpm should stop"
+[[ ! -s "$ORDO_PNPM_LOG" ]] || fail "declining should not install pnpm"
+[[ "$msg" == *"pnpm is not installed."* ]] || fail "decline should say pnpm is missing, got $msg"
+[[ "$msg" == *"PNPM_VERSION=11.10.0"* ]] || fail "decline should show the official command, got $msg"
+[[ "$msg" != *"This machine has"* ]] || fail "decline should not look like a node version error"
+
+: >"$ORDO_PNPM_LOG"
+(
+  export HOME="$tmp/home" PNPM_HOME="" XDG_DATA_HOME="" ORDO_PNPM_ANSWER="1"
+  export PATH="$clean_path"
+  ordo_ensure_pnpm
+)
+grep -q -F "official 11.10.0" "$ORDO_PNPM_LOG" || fail "yes should use the official installer pin"
+[[ -x "${tmp}/home/.local/share/pnpm/pnpm" ]] || fail "pnpm was not installed into PNPM_HOME"
+
+ordo_have_tty() { return 1; }
+[[ "$(ordo_pnpm_choice_real)" == "2" ]] || fail "no terminal should not install pnpm"
+
+ordo_install_pnpm() { return 1; }
+status=0
+msg=$(
+  export HOME="$tmp/home-fail" PNPM_HOME="" XDG_DATA_HOME="" ORDO_PNPM_ANSWER="1"
+  export PATH="$clean_path"
+  ordo_ensure_pnpm 2>&1
+) || status=$?
+[[ "$status" -ne 0 ]] || fail "a failed pnpm install should stop"
+[[ "$msg" == *"Could not install pnpm."* ]] || fail "install failure, got $msg"
+[[ "$msg" == *"https://pnpm.io/installation"* ]] || fail "pnpm help link, got $msg"
 
 rm -rf "$tmp"
 printf 'ok\n'
