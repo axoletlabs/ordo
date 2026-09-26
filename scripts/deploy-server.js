@@ -6,7 +6,7 @@
  * pick). They do not pull the current branch. Interactive on a TTY. Non-interactive
  * with --yes, CI=true, or a non-TTY stdin.
  *
- *   curl -fsSL https://raw.githubusercontent.com/axoletlabs/ordo/main/install.sh | bash
+ *   curl -fsSL https://ordo.axolet.com/install | bash
  *   ./scripts/deploy-server
  *   ./scripts/deploy-server update
  *   ./scripts/deploy-server update --yes --release v0.1.0
@@ -55,7 +55,7 @@ Install, update, and migrate the Ordo backend from a GitHub Release.
 
 From a fresh machine:
 
-  curl -fsSL https://raw.githubusercontent.com/axoletlabs/ordo/main/install.sh | bash
+  curl -fsSL https://ordo.axolet.com/install | bash
 
 Commands
   install   First-time setup: prompts (on a TTY), writes .env, install, migrate, build

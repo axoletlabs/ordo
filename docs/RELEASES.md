@@ -98,7 +98,7 @@ The host still runs `pnpm install` and compiles native modules. The archive is n
 Self-hosted updates install that release. They do not fast-forward the checked-out branch. On a terminal, move with the arrow keys and press enter. Type a version to jump to a specific tag.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/axoletlabs/ordo/main/install.sh | bash
+curl -fsSL https://ordo.axolet.com/install | bash
 ./scripts/deploy-server update --yes --release v0.1.1
 ```
 
@@ -135,6 +135,6 @@ git checkout main && git cherry-pick <fix> && git push origin main
 eas update:republish --group <old-good-group-id>
 
 # self-hosted backend (GitHub Release, not the branch tip)
-curl -fsSL https://raw.githubusercontent.com/axoletlabs/ordo/main/install.sh | bash
+curl -fsSL https://ordo.axolet.com/install | bash
 ./scripts/deploy-server update --yes --release vX.Y.Z
 ```

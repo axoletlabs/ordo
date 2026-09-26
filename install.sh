@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # Install the Ordo server from a published GitHub Release.
 #
-#   curl -fsSL https://raw.githubusercontent.com/axoletlabs/ordo/main/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/axoletlabs/ordo/main/install.sh | bash -s -- --yes
-#   ORDO_DIR=/opt/ordo curl -fsSL https://raw.githubusercontent.com/axoletlabs/ordo/main/install.sh | bash
+#   curl -fsSL https://ordo.axolet.com/install | bash
+#   curl -fsSL https://ordo.axolet.com/install | bash -s -- --yes
+#   ORDO_DIR=/opt/ordo curl -fsSL https://ordo.axolet.com/install | bash
 set -euo pipefail
 
 ORDO_REPO_DEFAULT="axoletlabs/ordo"
@@ -104,9 +104,9 @@ ordo_print_help() {
   cat <<'EOF'
 Usage: install.sh [deploy-server flags]
 
-  curl -fsSL https://raw.githubusercontent.com/axoletlabs/ordo/main/install.sh | bash
-  curl -fsSL https://raw.githubusercontent.com/axoletlabs/ordo/main/install.sh | bash -s -- --yes
-  curl -fsSL https://raw.githubusercontent.com/axoletlabs/ordo/main/install.sh | bash -s -- --yes --release v0.1.0
+  curl -fsSL https://ordo.axolet.com/install | bash
+  curl -fsSL https://ordo.axolet.com/install | bash -s -- --yes
+  curl -fsSL https://ordo.axolet.com/install | bash -s -- --yes --release v0.1.0
 
 Installs a published GitHub Release into ~/ordo. Set ORDO_DIR to use another
 folder. Node.js 22.13 or newer is required. Flags are passed through to

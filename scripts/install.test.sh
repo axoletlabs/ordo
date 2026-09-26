@@ -56,7 +56,7 @@ ordo_is_ordo_tree "$tmp/ordo" || fail "ordo tree"
 if ordo_is_ordo_tree "$tmp/foreign"; then fail "foreign is not ordo"; fi
 
 help_text=$(ordo_print_help)
-[[ "$help_text" == *"install.sh | bash"* ]] || fail "help should show the curl command"
+[[ "$help_text" == *"ordo.axolet.com/install | bash"* ]] || fail "help should show the curl command"
 
 rm -rf "$tmp"
 printf 'ok\n'

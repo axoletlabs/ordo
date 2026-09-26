@@ -23,14 +23,14 @@ pnpm --filter @ordo/mobile start
 Optional. You keep it online, updated, and backed up. Axolet does not operate a server you host. You need Node.js 22.13 or newer.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/axoletlabs/ordo/main/install.sh | bash
+curl -fsSL https://ordo.axolet.com/install | bash
 ```
 
 That installs the latest release into `~/ordo`. Set `ORDO_DIR` to use another folder. On a terminal, pick a release with the arrow keys and answer a few questions. The server listens on `127.0.0.1`. Put nginx or Caddy in front (`deploy/nginx.conf.example`) or pass `--public`.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/axoletlabs/ordo/main/install.sh | bash -s -- --yes
-curl -fsSL https://raw.githubusercontent.com/axoletlabs/ordo/main/install.sh | bash -s -- --yes --release v0.1.0
+curl -fsSL https://ordo.axolet.com/install | bash -s -- --yes
+curl -fsSL https://ordo.axolet.com/install | bash -s -- --yes --release v0.1.0
 ```
 
 When it is up:
