@@ -8,9 +8,11 @@
  * does not already clear it. Never add the safe area on top of the rail;
  * that is how the header and the body drift apart.
  *
- * Title line — the back button and trailing header icons center on the
- * title. A subtitle hangs below and must not move them, so the arrow sits
- * on the same line on every screen.
+ * Title line — the title starts on the icon column, top-left, on every
+ * screen. The back chevron sits in the gutter to the left of that column,
+ * on the same row, so opening a screen does not move the title. Trailing
+ * header icons stay on the right of that row. A subtitle hangs below the
+ * title and must not move the row.
  *
  * Row inset — `layout.rowInset`, the leading icon inside a list row,
  * measured from the row edge. Bookmark, folder, tag, and settings rows

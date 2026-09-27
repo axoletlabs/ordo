@@ -31,7 +31,7 @@ export default function SettingsScreen() {
           paddingBottom: floatingNavigation ? floatingBottomClearance : spacing[40],
         }}
       >
-        <SettingsGroup label="Preferences" compact>
+        <SettingsGroup>
           <SettingRow
             icon="person-circle-outline"
             label="Account"

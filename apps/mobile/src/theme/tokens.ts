@@ -181,8 +181,12 @@ export const layout = {
    * too, so they start on the icon well rather than the hairline.
    */
   rowInset: ROW_INSET,
-  /** Clearance under the status bar before the header controls. */
-  headerTopGap: 12,
+  /**
+   * Clearance under the status bar before the header row. The row is as
+   * tall as a header control, so the back arrow clears the status bar
+   * without a tall gap above a centered title.
+   */
+  headerTopGap: 4,
   /** Space under the header block before the first screen element. */
   headerContentGap: 12,
   touchTargetMin: 44,

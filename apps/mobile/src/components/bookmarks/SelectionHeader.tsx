@@ -1,6 +1,7 @@
 /**
- * Compact header shown while multi-select is active: Cancel, count, Select All.
- * Uses the same title slot as `Header` so entering selection does not jump the label.
+ * Compact header shown while multi-select is active.
+ * The count sits where the screen title sits, so entering selection does
+ * not jump the label. Cancel and Select All trail on the right.
  */
 import React from "react";
 import { StyleSheet, View, type TextStyle } from "react-native";
@@ -8,16 +9,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColumnPadding } from "../../hooks/use-scene-column-insets";
 import { PressableScale } from "../ui/PressableScale";
 import { Text } from "../ui/Text";
-import {
-  HEADER_CONTROL_SIZE,
-  headerSideStyle,
-  headerTitleTextStyle,
-} from "../ui/Header";
+import { HEADER_CONTROL_SIZE, headerTitleTextStyle } from "../ui/Header";
 import { useTheme } from "../../theme/ThemeProvider";
 import { fontSize, layout, lineHeight } from "../../theme/tokens";
-
-/** Clears "SELECT ALL" / "DESELECT" while keeping the title on the same center as `Header`. */
-const TITLE_SLOT_INSET = 112;
 
 const headerActionTextStyle: TextStyle = {
   includeFontPadding: false,
@@ -60,38 +54,33 @@ export function SelectionHeader({
       ]}
     >
       <View style={styles.row}>
-        <View style={[headerSideStyle, styles.left]} pointerEvents="box-none">
+        <View style={styles.gutter} />
+        <Text variant="header" numberOfLines={1} style={[headerTitleTextStyle, styles.count]}>
+          {title}
+        </Text>
+        <PressableScale
+          accessibilityRole="button"
+          accessibilityLabel="Cancel selection"
+          onPress={onCancel}
+          hitSlop={8}
+          style={styles.sideHit}
+        >
+          <Text variant="header" color="accent" style={headerActionTextStyle}>
+            Cancel
+          </Text>
+        </PressableScale>
+        {selectableCount > 0 ? (
           <PressableScale
             accessibilityRole="button"
-            accessibilityLabel="Cancel selection"
-            onPress={onCancel}
+            accessibilityLabel={allSelected ? "Deselect all" : "Select all"}
+            onPress={onToggleSelectAll}
             hitSlop={8}
-            style={styles.sideHit}
+            style={[styles.sideHit, styles.beside]}
           >
-            <Text variant="header" color="accent" style={headerActionTextStyle}>
-              Cancel
+            <Text variant="header" color="accent" numberOfLines={1} style={headerActionTextStyle}>
+              {allSelected ? "Deselect" : "Select All"}
             </Text>
           </PressableScale>
-        </View>
-        <View pointerEvents="none" style={styles.titleSlot}>
-          <Text variant="header" align="center" numberOfLines={1} style={headerTitleTextStyle}>
-            {title}
-          </Text>
-        </View>
-        {selectableCount > 0 ? (
-          <View style={[headerSideStyle, styles.right]} pointerEvents="box-none">
-            <PressableScale
-              accessibilityRole="button"
-              accessibilityLabel={allSelected ? "Deselect all" : "Select all"}
-              onPress={onToggleSelectAll}
-              hitSlop={8}
-              style={styles.sideHit}
-            >
-              <Text variant="header" color="accent" numberOfLines={1} style={headerActionTextStyle}>
-                {allSelected ? "Deselect" : "Select All"}
-              </Text>
-            </PressableScale>
-          </View>
         ) : null}
       </View>
     </View>
@@ -106,16 +95,11 @@ const styles = StyleSheet.create({
   },
   row: {
     height: HEADER_CONTROL_SIZE,
-    justifyContent: "center",
-  },
-  titleSlot: {
-    ...StyleSheet.absoluteFill,
-    left: TITLE_SLOT_INSET,
-    right: TITLE_SLOT_INSET,
+    flexDirection: "row",
     alignItems: "center",
-    justifyContent: "center",
   },
-  left: { left: 0 },
-  right: { right: 0, justifyContent: "flex-end" },
+  gutter: { width: layout.rowInset },
+  count: { flex: 1, minWidth: 0, width: "auto", marginRight: layout.rowInset },
   sideHit: { height: HEADER_CONTROL_SIZE, justifyContent: "center" },
+  beside: { marginLeft: layout.rowInset },
 });
