@@ -187,8 +187,12 @@ export const layout = {
    * without a tall gap above a centered title.
    */
   headerTopGap: 4,
-  /** Space under the header block before the first screen element. */
-  headerContentGap: 12,
+  /**
+   * Space under the header row before the first screen element. Every
+   * screen header shares this, so lists, search, and settings stay aligned.
+   * Shrinking it pulls content up; it does not move the title.
+   */
+  headerContentGap: 4,
   touchTargetMin: 44,
   tabBarHeight: 60,
   maxContentWidth: 640,

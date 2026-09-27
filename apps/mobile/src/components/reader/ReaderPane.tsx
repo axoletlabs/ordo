@@ -1061,7 +1061,9 @@ function ReaderPaneInner({
             onScroll={onScroll}
             scrollEventThrottle={16}
             contentContainerStyle={{
-              paddingTop: layout.headerContentGap,
+              // Inset under the progress rule. The header row gap is separate,
+              // so tightening that chrome does not pull the title into the rule.
+              paddingTop: spacing[12],
               paddingBottom: spacing[16] + (safeBottom ? insets.bottom : 0),
             }}
           >
