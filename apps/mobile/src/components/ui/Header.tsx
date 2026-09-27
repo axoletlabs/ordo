@@ -2,8 +2,9 @@
  * Screen header with optional back button, title, and trailing action.
  * The title is top-left on the icon column, so a tab and the screen it
  * opens share one left edge. The back chevron sits in the gutter to the
- * left of that column and does not push the title. Trailing icons stay on
- * the right of the same row. A subtitle hangs below and does not move them.
+ * left of that column and does not push the title. A short subtitle follows
+ * the title on the same row, after the list dot. Trailing icons stay on
+ * the right.
  */
 import React from "react";
 import {
@@ -28,7 +29,7 @@ import {
   CHEVRON_BACK_ICON_SIZE,
   CHEVRON_BACK_TIP_INSET,
 } from "../../theme/alignment";
-import { layout, spacing } from "../../theme/tokens";
+import { layout, radius, spacing } from "../../theme/tokens";
 import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
 
 /** Matches `Text` variant "header" line height (14px × 1.5). */
@@ -120,7 +121,7 @@ export function Header({
   };
 
   const titleEl = (
-    <Text variant="header" align="left" numberOfLines={1} style={headerTitleTextStyle}>
+    <Text variant="header" align="left" numberOfLines={1} style={[headerTitleTextStyle, styles.titleText]}>
       {title}
     </Text>
   );
@@ -178,20 +179,17 @@ export function Header({
           ) : null}
           <View pointerEvents={onTitleLongPress ? "auto" : "none"} style={styles.titleSlot}>
             {titleBlock}
+            {subtitle ? (
+              <>
+                <View style={[styles.metaDot, { backgroundColor: palette.textFaint }]} />
+                <Text variant="footnote" color="tertiary" numberOfLines={1} style={styles.meta}>
+                  {subtitle}
+                </Text>
+              </>
+            ) : null}
           </View>
           {right ? <View style={styles.trailing}>{right}</View> : null}
         </View>
-        {subtitle ? (
-          <Text
-            variant="footnote"
-            color="secondary"
-            align="left"
-            numberOfLines={1}
-            style={styles.subtitle}
-          >
-            {subtitle}
-          </Text>
-        ) : null}
       </View>
     </View>
   );
@@ -266,15 +264,20 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     minHeight: HEADER_LINE_HEIGHT,
-    justifyContent: "center",
+    flexDirection: "row",
+    alignItems: "center",
   },
-  titleHit: { alignSelf: "stretch", justifyContent: "center" },
-  subtitle: {
-    marginTop: spacing[2],
-    paddingLeft: layout.rowInset,
-    includeFontPadding: false,
-    textAlignVertical: "center",
+  titleText: { flexShrink: 1, minWidth: 0, width: "auto" },
+  titleHit: { flexShrink: 1, minWidth: 0, justifyContent: "center" },
+  // Same 3px mark as a bookmark row's meta separator.
+  metaDot: {
+    width: 3,
+    height: 3,
+    borderRadius: radius.full,
+    marginHorizontal: spacing[8],
+    flexShrink: 0,
   },
+  meta: { flexShrink: 0, includeFontPadding: false, textAlignVertical: "center" },
   trailing: {
     flexDirection: "row",
     alignItems: "center",
