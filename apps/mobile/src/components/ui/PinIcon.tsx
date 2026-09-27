@@ -6,6 +6,7 @@ import React from "react";
 import { type StyleProp, type ViewStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import Svg, { Path } from "react-native-svg";
+import { iconGlyphStyle } from "../../theme/icon-glyph";
 
 /** Lucide pin body — T-bar head with flared collar. Used filled in menus. */
 const BODY =
@@ -76,5 +77,5 @@ export function AppIcon({
   if (name === "pin" || name === "pin-outline") {
     return <PinIcon size={size} color={color} filled={name === "pin"} />;
   }
-  return <Ionicons name={name} size={size} color={color} />;
+  return <Ionicons name={name} size={size} color={color} style={iconGlyphStyle(size)} />;
 }

@@ -6,6 +6,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { iconGlyphStyle } from "../../src/theme/icon-glyph";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { EMAIL_OTP } from "@ordo/shared";
 import { AuthShell } from "../../src/components/auth/AuthShell";
@@ -132,7 +133,12 @@ export default function VerifyEmailScreen() {
             onPress={editEmail}
             style={styles.edit}
           >
-            <Ionicons name="pencil-outline" size={18} color={palette.textTertiary} />
+            <Ionicons
+              name="pencil-outline"
+              size={18}
+              color={palette.textTertiary}
+              style={iconGlyphStyle(18)}
+            />
           </Pressable>
         }
       />

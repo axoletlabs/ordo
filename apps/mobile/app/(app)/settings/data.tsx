@@ -24,6 +24,7 @@ import {
 import { errorMessage } from "../../../src/lib/error-message";
 import { haptics } from "../../../src/lib/haptics";
 import { useTheme } from "../../../src/theme/ThemeProvider";
+import { iconGlyphStyle } from "../../../src/theme/icon-glyph";
 import { layout } from "../../../src/theme/tokens";
 
 const FORMAT_OPTIONS: ReadonlyArray<{ value: ExportFormat; label: string }> = [
@@ -60,6 +61,7 @@ export default function DataScreen() {
       name={selected ? "checkmark-circle" : "ellipse-outline"}
       size={22}
       color={selected ? palette.accent : palette.textFaint}
+      style={iconGlyphStyle(22)}
     />
   );
 
@@ -68,6 +70,7 @@ export default function DataScreen() {
       name={selected ? "checkbox" : "square-outline"}
       size={22}
       color={selected ? palette.accent : palette.textFaint}
+      style={iconGlyphStyle(22)}
     />
   );
 

@@ -5,6 +5,7 @@ import { Text } from "../ui/Text";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
 import { haptics } from "../../lib/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
+import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { layout, radius, spacing } from "../../theme/tokens";
 import type { MenuAnchorRect } from "../../lib/menu-anchor";
 
@@ -62,12 +63,22 @@ export function SettingsSelect<T extends string>({
           ]}
         >
           {selected?.icon ? (
-            <Ionicons name={selected.icon} size={16} color={palette.textTertiary} style={styles.triggerIcon} />
+            <Ionicons
+              name={selected.icon}
+              size={16}
+              color={palette.textTertiary}
+              style={[styles.triggerIcon, iconGlyphStyle(16)]}
+            />
           ) : null}
           <Text variant="footnote" numberOfLines={1} ellipsizeMode="tail" style={styles.triggerLabel}>
             {selected?.shortLabel ?? selected?.label ?? value}
           </Text>
-          <Ionicons name="chevron-down" size={14} color={palette.textTertiary} style={styles.triggerChevron} />
+          <Ionicons
+            name="chevron-down"
+            size={14}
+            color={palette.textTertiary}
+            style={[styles.triggerChevron, iconGlyphStyle(14)]}
+          />
         </Pressable>
       </View>
 
@@ -108,6 +119,12 @@ const styles = StyleSheet.create({
   },
   triggerIcon: { flexShrink: 0 },
   triggerChevron: { flexShrink: 0 },
-  triggerLabel: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0 },
+  triggerLabel: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 0,
+    includeFontPadding: false,
+  },
   pressed: { opacity: 0.72 },
 });

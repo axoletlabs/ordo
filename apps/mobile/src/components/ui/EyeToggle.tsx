@@ -15,6 +15,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../theme/ThemeProvider";
 import { springs } from "../../theme/tokens";
 import { haptics } from "../../lib/haptics";
+import { iconGlyphStyle } from "../../theme/icon-glyph";
 
 export interface EyeToggleProps {
   /** Whether the secret is currently shown. */
@@ -54,10 +55,10 @@ export function EyeToggle({ visible, onPress, size = 18 }: EyeToggleProps) {
       accessibilityLabel={visible ? "Hide password" : "Show password"}
     >
       <Animated.View style={[styles.icon, eyeStyle]} pointerEvents="none">
-        <Ionicons name="eye-outline" size={size} color={palette.textTertiary} />
+        <Ionicons name="eye-outline" size={size} color={palette.textTertiary} style={iconGlyphStyle(size)} />
       </Animated.View>
       <Animated.View style={[styles.icon, eyeOffStyle]} pointerEvents="none">
-        <Ionicons name="eye-off-outline" size={size} color={palette.textTertiary} />
+        <Ionicons name="eye-off-outline" size={size} color={palette.textTertiary} style={iconGlyphStyle(size)} />
       </Animated.View>
     </Pressable>
   );

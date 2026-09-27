@@ -14,6 +14,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { tagColorValue } from "../../lib/tag-colors";
 import { haptics } from "../../lib/haptics";
 import { menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
+import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { spacing } from "../../theme/tokens";
 import { useFolderUnlocked } from "../../hooks/use-folders";
 import { useServerInfo } from "../../hooks/queries";
@@ -371,7 +372,7 @@ function Trailing({ label }: { label: string }) {
       <Text variant="footnote" color="tertiary" numberOfLines={1} style={styles.trailingLabel}>
         {label}
       </Text>
-      <Ionicons name="chevron-forward" size={16} color={palette.textFaint} />
+      <Ionicons name="chevron-forward" size={16} color={palette.textFaint} style={iconGlyphStyle(16)} />
     </View>
   );
 }
@@ -413,12 +414,19 @@ function FolderFilterRow({
         (pressed || hovered) ? { backgroundColor: highlight } : null,
       ]}
     >
-      <Ionicons name={icon as keyof typeof Ionicons.glyphMap} size={16} color={palette.text} />
+      <Ionicons
+        name={icon as keyof typeof Ionicons.glyphMap}
+        size={16}
+        color={palette.text}
+        style={iconGlyphStyle(16)}
+      />
       <Text variant="body" numberOfLines={1} style={styles.tagName}>
         {name}
       </Text>
       {locked ? <FolderLockIcon unlocked={unlocked} size={14} outline /> : null}
-      {selected ? <Ionicons name="checkmark" size={16} color={palette.accent} /> : null}
+      {selected ? (
+        <Ionicons name="checkmark" size={16} color={palette.accent} style={iconGlyphStyle(16)} />
+      ) : null}
     </Pressable>
   );
 }
@@ -455,18 +463,22 @@ function TagFilterRow({
         (pressed || hovered) ? { backgroundColor: highlight } : null,
       ]}
     >
-      <View style={[styles.dot, { backgroundColor: tagColorValue(color).dot }]} />
+      <View style={styles.iconSlot}>
+        <View style={[styles.dot, { backgroundColor: tagColorValue(color).dot }]} />
+      </View>
       <Text variant="body" numberOfLines={1} style={styles.tagName}>
         {name}
       </Text>
-      {selected ? <Ionicons name="checkmark" size={16} color={palette.accent} /> : null}
+      {selected ? (
+        <Ionicons name="checkmark" size={16} color={palette.accent} style={iconGlyphStyle(16)} />
+      ) : null}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   trailing: { flexDirection: "row", alignItems: "center", gap: spacing[4], flexShrink: 0, maxWidth: 120 },
-  trailingLabel: { flexShrink: 1 },
+  trailingLabel: { flexShrink: 1, includeFontPadding: false },
   tagSearch: { paddingHorizontal: spacing[12], paddingTop: spacing[4], paddingBottom: spacing[6] },
   empty: { paddingHorizontal: spacing[12], paddingVertical: spacing[12] },
   tagRow: {
@@ -482,6 +494,12 @@ const styles = StyleSheet.create({
     transitionProperty: "background-color",
     transitionDuration: "120ms",
   } as ViewStyle,
+  iconSlot: {
+    width: 16,
+    height: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   dot: { width: 7, height: 7, borderRadius: 9999 },
-  tagName: { flex: 1, minWidth: 0 },
+  tagName: { flex: 1, minWidth: 0, includeFontPadding: false },
 });

@@ -4,6 +4,7 @@
 import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
@@ -255,7 +256,7 @@ export function AddBookmarkSheet({
                   },
                 ]}
               >
-                <Ionicons name="link-outline" size={18} color={palette.textTertiary} />
+                <Ionicons name="link-outline" size={18} color={palette.textTertiary} style={iconGlyphStyle(18)} />
                 <View style={styles.urlPreviewText}>
                   <Text variant="bodyStrong" numberOfLines={1}>
                     {domainFromUrl(url) || url}
@@ -264,7 +265,7 @@ export function AddBookmarkSheet({
                     {url}
                   </Text>
                 </View>
-                <Ionicons name="pencil-outline" size={16} color={palette.textTertiary} />
+                <Ionicons name="pencil-outline" size={16} color={palette.textTertiary} style={iconGlyphStyle(16)} />
               </PressableScale>
             ) : (
               <Input
@@ -276,7 +277,7 @@ export function AddBookmarkSheet({
                 autoCorrect={false}
                 autoFocus={!shareIntake || urlEditing}
                 error={error || undefined}
-                icon={<Ionicons name="link-outline" size={18} color={palette.textTertiary} />}
+                icon={<Ionicons name="link-outline" size={18} color={palette.textTertiary} style={iconGlyphStyle(18)} />}
                 onSubmitEditing={() => void submit()}
                 returnKeyType="done"
               />
@@ -299,6 +300,7 @@ export function AddBookmarkSheet({
                   name={showTagPicker ? "chevron-up" : "chevron-down"}
                   size={16}
                   color={palette.textTertiary}
+                  style={iconGlyphStyle(16)}
                 />
               </PressableScale>
             </View>

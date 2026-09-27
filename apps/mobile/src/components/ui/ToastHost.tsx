@@ -5,7 +5,7 @@
  * enter/exit and swipe animations never fight.
  */
 import React, { useCallback, useEffect, useRef } from "react";
-import { StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -21,6 +21,8 @@ import { Text } from "./Text";
 import { PressableScale } from "./PressableScale";
 import { useTheme } from "../../theme/ThemeProvider";
 import { SCREEN_RAIL, contentInset } from "../../theme/alignment";
+import { iconGlyphStyle } from "../../theme/icon-glyph";
+import { FOOTNOTE_LINE_BOX } from "../../theme/type-metrics";
 import { useSceneColumnInsets } from "../../hooks/use-scene-column-insets";
 import { radius, springs, spacing } from "../../theme/tokens";
 import { useFloatingDockMetrics } from "../../hooks/use-floating-dock-metrics";
@@ -96,23 +98,27 @@ function ToastItem({ toast }: { toast: Toast }) {
           animStyle,
         ]}
       >
-        <Ionicons name={iconName as any} size={16} color={iconColor} />
-        <Text variant="footnote" style={{ flex: 1, color: palette.text }}>
+        <View style={styles.icon}>
+          <Ionicons name={iconName as any} size={16} color={iconColor} style={iconGlyphStyle(16)} />
+        </View>
+        <Text variant="footnote" style={[styles.message, { color: palette.text }]}>
           {toast.message}
         </Text>
         {toast.action ? (
-          <PressableScale
-            scaleTo={0.92}
-            hitSlop={6}
-            onPress={() => {
-              toast.action!.onPress();
-              animateOut();
-            }}
-          >
-            <Text variant="label" color="accent">
-              {toast.action.label}
-            </Text>
-          </PressableScale>
+          <View style={styles.icon}>
+            <PressableScale
+              scaleTo={0.92}
+              hitSlop={6}
+              onPress={() => {
+                toast.action!.onPress();
+                animateOut();
+              }}
+            >
+              <Text variant="label" color="accent" style={styles.action}>
+                {toast.action.label}
+              </Text>
+            </PressableScale>
+          </View>
         ) : null}
       </Animated.View>
     </GestureDetector>
@@ -150,11 +156,19 @@ const styles = StyleSheet.create({
     maxWidth: 560,
     alignSelf: "center",
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: spacing[8],
     paddingHorizontal: spacing[14],
     paddingVertical: spacing[12],
     marginTop: spacing[8],
     borderWidth: StyleSheet.hairlineWidth,
   },
+  icon: {
+    width: 16,
+    height: FOOTNOTE_LINE_BOX,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  message: { flex: 1, includeFontPadding: false },
+  action: { includeFontPadding: false },
 });

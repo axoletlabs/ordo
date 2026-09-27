@@ -9,6 +9,7 @@ import type { BookmarkListSort } from "@ordo/shared";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
 import { Text } from "../ui/Text";
 import { useTheme } from "../../theme/ThemeProvider";
+import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { spacing } from "../../theme/tokens";
 import type { MenuAnchorRect } from "../../lib/menu-anchor";
 import {
@@ -130,7 +131,7 @@ function Trailing({ label }: { label: string }) {
       <Text variant="footnote" color="tertiary" numberOfLines={1} style={styles.trailingLabel}>
         {label}
       </Text>
-      <Ionicons name="chevron-forward" size={16} color={palette.textFaint} />
+      <Ionicons name="chevron-forward" size={16} color={palette.textFaint} style={iconGlyphStyle(16)} />
     </View>
   );
 }
@@ -143,5 +144,5 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     maxWidth: 120,
   },
-  trailingLabel: { flexShrink: 1 },
+  trailingLabel: { flexShrink: 1, includeFontPadding: false },
 });

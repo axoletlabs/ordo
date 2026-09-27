@@ -2,12 +2,12 @@
  * Register screen. Respects server registration status (info.registrationEnabled).
  */
 import React, { useCallback, useRef, useState } from "react";
-import { BackHandler, Linking, Pressable, StyleSheet, View, type TextInput } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { BackHandler, Linking, StyleSheet, View, type TextInput } from "react-native";
 import { Link, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { AuthShell } from "../../src/components/auth/AuthShell";
 import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
+import { CheckLine } from "../../src/components/ui/CheckLine";
 import { Text } from "../../src/components/ui/Text";
 import { EyeToggle } from "../../src/components/ui/EyeToggle";
 import { useRegister } from "../../src/hooks/use-auth-actions";
@@ -17,7 +17,7 @@ import { CLOUD_PRIVACY_URL, CLOUD_TERMS_URL, isCloudServerUrl } from "../../src/
 import { errorMessage } from "../../src/lib/error-message";
 import { haptics } from "../../src/lib/haptics";
 import { useTheme } from "../../src/theme/ThemeProvider";
-import { fontSize, lineHeight, radius, spacing } from "../../src/theme/tokens";
+import { radius, spacing } from "../../src/theme/tokens";
 import { RegisterSchema, isPendingEmailVerificationResponse } from "@ordo/shared";
 import { readSignupDraft, saveSignupDraft } from "../../src/lib/signup-draft";
 
@@ -28,7 +28,6 @@ function routeParam(value: string | string[] | undefined): string {
 
 const AGE_CONFIRM_LABEL = "I am 13 or older and agree to the Terms and Privacy Policy.";
 const AGE_CONFIRM_ERROR = "Please confirm you are 13 or older.";
-const CHECK_ICON_SIZE = Math.round(fontSize.sm * lineHeight.normal);
 
 export default function RegisterScreen() {
   const { palette } = useTheme();
@@ -194,10 +193,9 @@ export default function RegisterScreen() {
           {isCloud ? (
             <>
               <View style={{ height: spacing[16] }} />
-              <Pressable
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: atLeast13 }}
-                accessibilityLabel={AGE_CONFIRM_LABEL}
+              <CheckLine
+                checked={atLeast13}
+                label={AGE_CONFIRM_LABEL}
                 onPress={() => {
                   if (skipAgeToggle.current) {
                     skipAgeToggle.current = false;
@@ -206,25 +204,13 @@ export default function RegisterScreen() {
                   setAtLeast13((v) => !v);
                   setFormError("");
                 }}
-                hitSlop={8}
-                style={styles.check}
               >
-                <View style={styles.checkIcon} pointerEvents="none">
-                  <Ionicons
-                    name={atLeast13 ? "checkbox" : "square-outline"}
-                    size={16}
-                    color={atLeast13 ? palette.accent : palette.textTertiary}
-                    style={styles.checkGlyph}
-                  />
-                </View>
-                <Text variant="footnote" style={styles.checkLabel}>
-                  I am 13 or older and agree to the{" "}
-                  <LegalLink label="Terms" url={CLOUD_TERMS_URL} onOpen={markLegalOpen} />
-                  {" "}and{" "}
-                  <LegalLink label="Privacy Policy" url={CLOUD_PRIVACY_URL} onOpen={markLegalOpen} />
-                  .
-                </Text>
-              </Pressable>
+                I am 13 or older and agree to the{" "}
+                <LegalLink label="Terms" url={CLOUD_TERMS_URL} onOpen={markLegalOpen} />
+                {" "}and{" "}
+                <LegalLink label="Privacy Policy" url={CLOUD_PRIVACY_URL} onOpen={markLegalOpen} />
+                .
+              </CheckLine>
               {formError === AGE_CONFIRM_ERROR ? (
                 <Text variant="footnote" color="danger" style={{ marginTop: spacing[6] }}>
                   {formError}
@@ -271,25 +257,6 @@ function LegalLink({
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", justifyContent: "center" },
-  link: { textDecorationLine: "underline" },
+  link: { textDecorationLine: "underline", includeFontPadding: false },
   disabledCard: { padding: spacing[16], borderRadius: radius.lg, borderWidth: 1 },
-  check: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing[8],
-    alignSelf: "stretch",
-  },
-  checkIcon: {
-    width: CHECK_ICON_SIZE,
-    height: CHECK_ICON_SIZE,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  checkGlyph: {
-    width: 16,
-    height: 16,
-    lineHeight: 16,
-    includeFontPadding: false,
-  },
-  checkLabel: { flex: 1 },
 });

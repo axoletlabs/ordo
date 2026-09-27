@@ -2,6 +2,7 @@
 import type { ComponentProps } from "react";
 import { Ionicons } from "@expo/vector-icons";
 import { useTheme } from "../../theme/ThemeProvider";
+import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { ROW_STATUS_ICON_SIZE } from "./RowStatusIcon";
 
 export function FolderLockIcon({
@@ -29,7 +30,7 @@ export function FolderLockIcon({
       }
       size={size}
       color={palette.textTertiary}
-      style={style}
+      style={[iconGlyphStyle(size), style]}
       accessible={false}
     />
   );

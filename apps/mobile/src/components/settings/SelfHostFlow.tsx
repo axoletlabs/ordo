@@ -5,19 +5,20 @@
  * verified address. The URL store is only written after the last step.
  */
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Keyboard, Pressable, StyleSheet, View, type TextInput } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Keyboard, StyleSheet, View, type TextInput } from "react-native";
 import { APP_NAME } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
+import { CheckLine } from "../ui/CheckLine";
 import { Text } from "../ui/Text";
 import { PressableScale } from "../ui/PressableScale";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { useTheme } from "../../theme/ThemeProvider";
 import { radius, spacing } from "../../theme/tokens";
+import { FOOTNOTE_LINE_BOX } from "../../theme/type-metrics";
 import { haptics } from "../../lib/haptics";
 import { useSettingsStore } from "../../store/settings";
 import { useAuthStore } from "../../store/auth";
@@ -160,10 +161,10 @@ export function SelfHostFlow({
                   "SMTP if you want verification and password-reset email.",
                 ]}
               />
-              <CheckRow
+              <CheckLine
                 label="I understand Axolet is not responsible for my server or my data."
                 checked={acceptedResponsibility}
-                onToggle={() => {
+                onPress={() => {
                   haptics.selection();
                   setAcceptedResponsibility((value) => !value);
                 }}
@@ -239,9 +240,11 @@ function CopyList({ items }: { items: readonly string[] }) {
     <View style={styles.list}>
       {items.map((item) => (
         <View key={item} style={styles.listRow}>
-          <Text variant="footnote" color="secondary">
-            ·
-          </Text>
+          <View style={styles.mark}>
+            <Text variant="footnote" color="secondary" style={styles.markGlyph}>
+              ·
+            </Text>
+          </View>
           <Text variant="footnote" color="secondary" style={styles.listCopy}>
             {item}
           </Text>
@@ -281,7 +284,10 @@ function ContinueButton({
       <Text
         variant="header"
         numberOfLines={1}
-        style={{ color: ready ? palette.onAccent : palette.textTertiary }}
+        style={{
+          color: ready ? palette.onAccent : palette.textTertiary,
+          includeFontPadding: false,
+        }}
       >
         Continue
       </Text>
@@ -289,49 +295,21 @@ function ContinueButton({
   );
 }
 
-function CheckRow({
-  label,
-  checked,
-  onToggle,
-}: {
-  label: string;
-  checked: boolean;
-  onToggle: () => void;
-}) {
-  const { palette } = useTheme();
-  return (
-    <Pressable
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked }}
-      accessibilityLabel={label}
-      onPress={onToggle}
-      hitSlop={8}
-      style={styles.check}
-    >
-      <Ionicons
-        name={checked ? "checkbox" : "square-outline"}
-        size={20}
-        color={checked ? palette.accent : palette.textTertiary}
-      />
-      <Text variant="footnote" style={styles.checkLabel}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
   stack: { gap: spacing[12] },
   list: { gap: spacing[6] },
   listRow: { flexDirection: "row", gap: spacing[8], alignItems: "flex-start" },
-  listCopy: { flex: 1 },
-  check: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing[8],
-    alignSelf: "stretch",
+  mark: {
+    width: FOOTNOTE_LINE_BOX,
+    height: FOOTNOTE_LINE_BOX,
+    alignItems: "center",
   },
-  checkLabel: { flex: 1 },
+  markGlyph: {
+    lineHeight: FOOTNOTE_LINE_BOX,
+    textAlign: "center",
+    includeFontPadding: false,
+  },
+  listCopy: { flex: 1, includeFontPadding: false },
   actions: {
     flexDirection: "row",
     alignItems: "stretch",

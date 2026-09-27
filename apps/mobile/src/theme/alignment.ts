@@ -25,6 +25,10 @@
  * because that padding is not the screen rail. Menu rows pad inside the
  * panel, not against the screen.
  *
+ * First line — a mark beside wrapping copy (checkbox, list bullet) locks
+ * to the first line of that copy. It uses the line box, not a taller icon,
+ * and it does not center on the whole paragraph.
+ *
  * Landscape — the side rail takes a strip of the window. Measure the
  * scene beside that rail (`sceneLeadingChrome`), and treat the leading
  * cutout as already cleared. A column nested inside that scene (the

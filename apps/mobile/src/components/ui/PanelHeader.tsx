@@ -7,6 +7,7 @@ import React from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { Text, type TextVariant } from "./Text";
+import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { radius, spacing } from "../../theme/tokens";
 
 const ICON_SIZE = 36;
@@ -43,7 +44,13 @@ export function PanelHeader({
             iconBackground ? { backgroundColor: iconBackground } : null,
           ]}
         >
-          <Ionicons name={icon} size={18} color={iconColor} accessible={false} />
+          <Ionicons
+            name={icon}
+            size={18}
+            color={iconColor}
+            accessible={false}
+            style={iconGlyphStyle(18)}
+          />
         </View>
       ) : null}
       <View style={styles.copy}>

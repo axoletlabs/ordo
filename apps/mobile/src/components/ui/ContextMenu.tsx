@@ -32,6 +32,7 @@ import {
   type MenuAnchorRect,
   type MenuPlacement,
 } from "../../lib/menu-anchor";
+import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { layout, radius, spacing } from "../../theme/tokens";
 
 export type { MenuAnchorRect };
@@ -271,18 +272,25 @@ export function ContextMenuItem({
         (pressed || hovered) && !inactive ? { backgroundColor: highlight } : null,
       ]}
     >
-      {icon ? <AppIcon name={icon} size={16} color={color} /> : <View style={styles.iconSlot} />}
+      <View style={styles.iconSlot}>
+        {icon ? <AppIcon name={icon} size={16} color={color} /> : null}
+      </View>
       <Text variant="body" style={[styles.itemLabel, { color }]} numberOfLines={1}>
         {label}
       </Text>
       {busy ? (
         <Spinner size="sm" color={color} style={styles.itemSide} />
       ) : selected ? (
-        <Ionicons name="checkmark" size={16} color={palette.accent} style={styles.itemSide} />
+        <Ionicons
+          name="checkmark"
+          size={16}
+          color={palette.accent}
+          style={[styles.itemSide, iconGlyphStyle(16)]}
+        />
       ) : trailing ? (
         <View style={[styles.trailing, styles.itemSide]}>{trailing}</View>
       ) : detail ? (
-        <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.itemSide}>
+        <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={[styles.itemSide, styles.itemDetail]}>
           {detail}
         </Text>
       ) : null}
@@ -318,8 +326,14 @@ const styles = StyleSheet.create({
     transitionDuration: "120ms",
   } as ViewStyle,
   itemDisabled: { opacity: 0.45 },
-  iconSlot: { width: 16, height: 16 },
-  itemLabel: { flex: 1, minWidth: 0 },
+  iconSlot: {
+    width: 16,
+    height: 16,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  itemLabel: { flex: 1, minWidth: 0, includeFontPadding: false },
+  itemDetail: { includeFontPadding: false },
   trailing: {
     flexDirection: "row",
     alignItems: "center",

@@ -12,6 +12,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { useSettingsStore } from "../../store/settings";
 import { radius, spacing } from "../../theme/tokens";
 import { haptics } from "../../lib/haptics";
+import { iconGlyphStyle } from "../../theme/icon-glyph";
 
 export function OtpDeliveryHint({
   smtpConfigured,
@@ -41,7 +42,7 @@ export function OtpDeliveryHint({
       accessibilityLabel="One-time codes are printed in the server console"
     >
       <View style={[styles.icon, { backgroundColor: palette.accentSoft }]}>
-        <Ionicons name="terminal-outline" size={15} color={palette.accent} />
+        <Ionicons name="terminal-outline" size={15} color={palette.accent} style={iconGlyphStyle(15)} />
       </View>
       <View style={styles.body}>
         <View style={styles.header}>

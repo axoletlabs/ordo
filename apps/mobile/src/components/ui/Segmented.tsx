@@ -92,5 +92,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     letterSpacing: 1.2,
     textTransform: "uppercase",
+    includeFontPadding: false,
+    textAlignVertical: "center",
   },
 });

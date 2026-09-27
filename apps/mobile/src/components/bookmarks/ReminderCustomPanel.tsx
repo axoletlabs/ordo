@@ -11,6 +11,7 @@ import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { Text } from "../ui/Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
+import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { layout, radius, spacing } from "../../theme/tokens";
 import {
   MINUTE_STEPS,
@@ -113,9 +114,11 @@ export function ReminderCustomPanel({
         </View>
         <View style={styles.weekdays}>
           {weekdays.map((label, index) => (
-            <Text key={`${label}-${index}`} variant="caption" color="tertiary" align="center" style={styles.weekday}>
+            <View key={`${label}-${index}`} style={styles.weekday}>
+            <Text variant="caption" color="tertiary" align="center" style={styles.cellLabel}>
               {label}
             </Text>
+          </View>
           ))}
         </View>
         <View style={styles.days}>
@@ -147,6 +150,7 @@ export function ReminderCustomPanel({
                     variant="caption"
                     color={cell.selected ? "onAccent" : cell.isPast ? "faint" : cell.isToday ? "accent" : "primary"}
                     align="center"
+                    style={styles.cellLabel}
                   >
                     {cell.day}
                   </Text>
@@ -243,6 +247,7 @@ function PadCell({
         variant={mono ? "monoSmall" : "caption"}
         color={selected ? "accent" : "secondary"}
         align="center"
+        style={styles.cellLabel}
       >
         {label}
       </Text>
@@ -276,7 +281,7 @@ function MonthChevrons({
       }}
       style={[styles.monthHit, { opacity: disabled ? 0.28 : 1 }]}
     >
-      <Ionicons name={icon} size={18} color={palette.text} />
+      <Ionicons name={icon} size={18} color={palette.text} style={iconGlyphStyle(18)} />
     </Pressable>
   );
 }
@@ -296,7 +301,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   weekdays: { flexDirection: "row" },
-  weekday: { flex: 1, paddingVertical: spacing[4] },
+  weekday: {
+    width: "14.2857%",
+    alignItems: "center",
+    paddingVertical: spacing[4],
+  },
+  cellLabel: { includeFontPadding: false },
   days: { flexDirection: "row", flexWrap: "wrap" },
   dayCell: {
     width: "14.2857%",

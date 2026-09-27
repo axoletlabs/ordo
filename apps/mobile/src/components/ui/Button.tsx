@@ -126,6 +126,6 @@ const styles = StyleSheet.create({
     minWidth: 0,
     maxWidth: "100%",
   },
-  label: { flexShrink: 1 },
+  label: { flexShrink: 1, includeFontPadding: false },
   iconWrap: { marginRight: spacing[8], flexShrink: 0 },
 });
