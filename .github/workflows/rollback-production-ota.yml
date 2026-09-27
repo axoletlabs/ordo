@@ -1,0 +1,25 @@
+name: Roll back production OTA
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Roll production back to the embedded bundle
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: |
+          eas update:roll-back-to-embedded \
+            --channel production \
+            --runtime-version c8f53bc9e0b919bb19a9acbfd8a16aa4ef9c251e \
+            --platform android \
+            --non-interactive \
+            --message "Keep release APKs on their embedded bundle"
