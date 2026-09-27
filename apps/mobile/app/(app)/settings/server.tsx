@@ -437,5 +437,10 @@ const styles = StyleSheet.create({
   },
   fields: { gap: spacing[16] },
   hostChange: { width: "100%", gap: spacing[6], alignItems: "center" },
-  switchHost: { marginTop: spacing[16] },
+  switchHost: {
+    marginTop: spacing[20],
+    marginHorizontal: layout.rowInset,
+    width: "auto",
+    alignSelf: "stretch",
+  },
 });

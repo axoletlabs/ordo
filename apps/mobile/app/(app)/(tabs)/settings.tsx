@@ -103,5 +103,10 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  signout: { marginTop: spacing[16] },
+  signout: {
+    marginTop: spacing[20],
+    marginHorizontal: layout.rowInset,
+    width: "auto",
+    alignSelf: "stretch",
+  },
 });

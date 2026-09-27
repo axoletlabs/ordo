@@ -173,15 +173,18 @@ export const fontAssets = {
  * area on top of `screenHorizontalPad`.
  */
 export const layout = {
-  /** Page edge: section labels, list hairlines, header actions. */
+  /** Page edge: list hairlines and header actions. */
   screenHorizontalPad: SCREEN_RAIL,
   /**
    * Leading and trailing inset inside a list row, measured from that row's
-   * edge (the screen rail), not from the screen.
+   * edge (the screen rail), not from the screen. Section labels use this
+   * too, so they start on the icon well rather than the hairline.
    */
   rowInset: ROW_INSET,
+  /** Clearance under the status bar before the header controls. */
+  headerTopGap: 12,
   /** Space under the header block before the first screen element. */
-  headerContentGap: 8,
+  headerContentGap: 12,
   touchTargetMin: 44,
   tabBarHeight: 60,
   maxContentWidth: 640,

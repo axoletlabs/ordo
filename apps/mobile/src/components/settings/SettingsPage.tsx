@@ -174,8 +174,9 @@ const styles = StyleSheet.create({
   sectionLabel: {
     paddingTop: spacing[16],
     paddingBottom: spacing[6],
+    paddingHorizontal: layout.rowInset,
   },
   compactSectionLabel: { paddingTop: spacing[0] },
   group: { width: "100%" },
-  groupFooter: { paddingTop: spacing[6] },
+  groupFooter: { paddingTop: spacing[6], paddingHorizontal: layout.rowInset },
 });

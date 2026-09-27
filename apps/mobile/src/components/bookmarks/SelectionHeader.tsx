@@ -10,12 +10,11 @@ import { PressableScale } from "../ui/PressableScale";
 import { Text } from "../ui/Text";
 import {
   HEADER_CONTROL_SIZE,
-  HEADER_LINE_HEIGHT,
   headerSideStyle,
   headerTitleTextStyle,
 } from "../ui/Header";
 import { useTheme } from "../../theme/ThemeProvider";
-import { fontSize, layout, lineHeight, spacing } from "../../theme/tokens";
+import { fontSize, layout, lineHeight } from "../../theme/tokens";
 
 /** Clears "SELECT ALL" / "DESELECT" while keeping the title on the same center as `Header`. */
 const TITLE_SLOT_INSET = 112;
@@ -52,7 +51,7 @@ export function SelectionHeader({
         styles.wrap,
         {
           maxWidth,
-          paddingTop: insets.top + spacing[4],
+          paddingTop: insets.top + layout.headerTopGap,
           paddingBottom: layout.headerContentGap,
           paddingLeft: column.left,
           paddingRight: column.right,
@@ -106,7 +105,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   row: {
-    height: HEADER_LINE_HEIGHT,
+    height: HEADER_CONTROL_SIZE,
     justifyContent: "center",
   },
   titleSlot: {

@@ -148,7 +148,7 @@ export function Header({
         styles.wrap,
         {
           maxWidth,
-          paddingTop: topInset + spacing[4],
+          paddingTop: topInset + layout.headerTopGap,
           paddingBottom: layout.headerContentGap,
           paddingLeft: sidePad,
           paddingRight: endPad,
@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
   // pull them down.
   titleBand: {
     position: "relative",
-    minHeight: HEADER_LINE_HEIGHT,
+    minHeight: HEADER_CONTROL_SIZE,
     justifyContent: "center",
     overflow: "visible",
   },

@@ -1,8 +1,9 @@
 /**
  * One set of edges for the whole app.
  *
- * Screen rail — section labels, list hairlines, header text
- * actions, and the back chevron's tip. Pad a centered column with
+ * Screen rail — list hairlines, header text actions, and the back
+ * chevron's tip. Section labels sit one row inset in, on the icon well.
+ * Pad a centered column with
  * `columnContentInset`. A cutout replaces the rail only where the column
  * does not already clear it. Never add the safe area on top of the rail;
  * that is how the header and the body drift apart.
@@ -37,7 +38,7 @@
  * `layout.screenHorizontalPad` and `layout.rowInset` are these constants.
  */
 
-/** Page edge. Section labels, list hairlines, header actions. */
+/** Page edge. List hairlines and header actions. Section labels use the row inset. */
 export const SCREEN_RAIL = 16;
 /** Leading icon inside a list row, from that row's edge. */
 export const ROW_INSET = 16;
