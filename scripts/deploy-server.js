@@ -48,6 +48,7 @@ const {
   visibleReleases,
 } = require("./server-release.js");
 const { hiddenPreCount, promptReleaseMenu, releaseMenuRows } = require("./release-menu.js");
+const { promptChoiceMenu } = require("./choice-menu.js");
 
 const HELP = `Usage: deploy-server [install|update] [options]
 
@@ -70,9 +71,10 @@ enter. Type a version to jump to a specific tag. --yes with no --release
 installs the latest stable release.
 
 Modes
-  Interactive (default on a terminal): install asks port, sign-ups, mail, proxy.
-  Both commands let you move through releases with the arrow keys, then ask
-  whether to start. Type a version and press enter to pick a specific tag.
+  Interactive (default on a terminal): move with the arrow keys and press
+  enter. Install asks for a port and an SMTP URL; enter keeps the default.
+  Yes and no questions, and the release list, use the same arrow keys.
+  Type a version and press enter to pick a specific tag.
   Non-interactive: --yes, CI=true, or piped stdin. Uses flags and defaults.
 
 Options
@@ -901,8 +903,22 @@ function checkToolchain(repoRoot) {
   }
 }
 
-async function promptSettings(ask, current) {
+function promptYesNo(question, fallback, io) {
+  return promptChoiceMenu({
+    title: question,
+    options: [
+      { label: "Yes", value: true },
+      { label: "No", value: false },
+    ],
+    selected: fallback ? 0 : 1,
+    input: io.input,
+    output: io.output,
+  });
+}
+
+async function promptSettings(ask, current, choose) {
   const yn = async (question, fallback) => {
+    if (choose) return choose(question, fallback);
     const hint = fallback ? "Y/n" : "y/N";
     const raw = (await ask(`${question} [${hint}] `)).trim().toLowerCase();
     if (!raw) return fallback;
@@ -1071,10 +1087,14 @@ async function deploy(options = {}) {
     looksInstalled(envPath, sqlitePathFromUrl(settings.databaseUrl, serverDir), secretPath),
   );
   const ask = () => options.ask ?? createAsk(streamIn, streamOut);
+  const useArrows = interactive && options.ask == null && Boolean(streamIn.isTTY);
+  const choose = useArrows
+    ? (question, fallback) => promptYesNo(question, fallback, { input: streamIn, output: streamOut })
+    : null;
 
   if (interactive && command === "install") {
     log("Ordo backend install\n");
-    settings = await promptSettings(ask(), settings);
+    settings = await promptSettings(ask(), settings, choose);
   } else if (command === "update") {
     log("Ordo backend update\n");
   }
@@ -1087,8 +1107,12 @@ async function deploy(options = {}) {
   const envExists = existsSync(envPath);
   let envDecision = decideWriteEnv(args, envExists);
   if (interactive && command === "install" && envExists && !args.forceEnv && args.writeEnv !== false) {
-    const raw = (await ask()("apps/server/.env already exists. Overwrite it? [y/N] ")).trim().toLowerCase();
-    envDecision = ["y", "yes"].includes(raw)
+    const overwrite = choose
+      ? await choose("apps/server/.env already exists. Overwrite it?", false)
+      : ["y", "yes"].includes(
+          (await ask()("apps/server/.env already exists. Overwrite it? [y/N] ")).trim().toLowerCase(),
+        );
+    envDecision = overwrite
       ? { write: true, reason: "Overwriting apps/server/.env." }
       : { write: false, reason: "Leaving existing apps/server/.env in place." };
   }
@@ -1107,7 +1131,7 @@ async function deploy(options = {}) {
       releases: options.releases,
       fetchImpl: options.fetch ?? globalThis.fetch,
       token: githubToken(env),
-      arrows: interactive && options.ask == null && Boolean(streamIn.isTTY),
+      arrows: useArrows,
       stdin: streamIn,
       stdout: streamOut,
     });
@@ -1127,14 +1151,21 @@ async function deploy(options = {}) {
 
   let start = args.start;
   if (start == null && interactive && listener?.kind === "ordo") {
-    const raw = (await ask()(`Restart the running server on port ${settings.port} when done? [Y/n] `))
-      .trim()
-      .toLowerCase();
-    if (["n", "no"].includes(raw)) start = false;
+    const restart = choose
+      ? await choose(`Restart the running server on port ${settings.port} when done?`, true)
+      : !["n", "no"].includes(
+          (await ask()(`Restart the running server on port ${settings.port} when done? [Y/n] `))
+            .trim()
+            .toLowerCase(),
+        );
+    if (!restart) start = false;
   } else if (start == null && interactive) {
-    start = ["y", "yes"].includes(
-      (await ask()("Start the server in the foreground when done? [y/N] ")).trim().toLowerCase(),
-    );
+    const foreground = choose
+      ? await choose("Start the server in the foreground when done?", false)
+      : ["y", "yes"].includes(
+          (await ask()("Start the server in the foreground when done? [y/N] ")).trim().toLowerCase(),
+        );
+    if (foreground) start = true;
   }
   if (start == null && listener?.kind !== "ordo") start = false;
 

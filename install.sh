@@ -122,8 +122,9 @@ Usage: install.sh [flags for the server installer]
 Installs the latest Ordo server release into ~/ordo.
 Set ORDO_DIR to use another folder.
 Needs Node.js 22.13 or newer.
-If pnpm is missing, you choose whether to install it.
-On a terminal, the arrow keys pick the release.
+If pnpm is missing, the arrow keys choose whether to install it.
+On a terminal, move with the arrow keys and press enter.
+Enter keeps a default port or SMTP URL.
 EOF
 }
 
@@ -172,25 +173,19 @@ ordo_have_tty() {
 
 # Prints 1 to install, 2 to leave it. Never installs on its own.
 ordo_pnpm_choice() {
-  local answer=""
+  local index=""
   if ! ordo_have_tty; then
     printf '2\n'
     return 0
   fi
-  printf '%s\n' \
-    "pnpm is not installed." \
-    "" \
-    "  1  Install pnpm ${ORDO_PNPM_VERSION}" \
-    "  2  I'll install it myself" \
-    "" >/dev/tty
-  printf 'Choice: ' >/dev/tty
-  IFS= read -r answer </dev/tty || answer=""
-  answer="${answer#"${answer%%[![:space:]]*}"}"
-  answer="${answer%"${answer##*[![:space:]]}"}"
-  case "$answer" in
-    1 | y | Y | yes | YES) printf '1\n' ;;
-    *) printf '2\n' ;;
-  esac
+  index=$(ordo_choose 0 "pnpm is not installed." \
+    "Install pnpm ${ORDO_PNPM_VERSION}" \
+    "I'll install it myself")
+  if [[ "$index" == 0 ]]; then
+    printf '1\n'
+  else
+    printf '2\n'
+  fi
 }
 
 ordo_pnpm_how() {
@@ -202,15 +197,36 @@ ordo_pnpm_how() {
     "https://pnpm.io/installation"
 }
 
+ordo_fetch_pnpm_script() {
+  curl -fsSL --retry 3 --retry-delay 2 -o "$1" https://get.pnpm.io/install.sh
+}
+
+# The official installer prints its own --force warning and update notice.
+# Keep that log for failures only.
+ordo_run_pnpm_script() {
+  local script="$1" log="" status=0
+  log=$(mktemp)
+  env PNPM_VERSION="$ORDO_PNPM_VERSION" \
+    NO_UPDATE_NOTIFIER=1 \
+    npm_config_update_notifier=false \
+    sh "$script" </dev/null >"$log" 2>&1 || status=$?
+  if [[ "$status" -ne 0 ]]; then
+    cat "$log" >&2
+    rm -f "$log"
+    return "$status"
+  fi
+  rm -f "$log"
+}
+
 ordo_install_pnpm() {
   local script
   script=$(mktemp)
-  if ! curl -fsSL --retry 3 --retry-delay 2 -o "$script" https://get.pnpm.io/install.sh; then
+  if ! ordo_fetch_pnpm_script "$script"; then
     rm -f "$script"
     return 1
   fi
   # stdin is /dev/null so a curl | bash install does not lose the rest of this script.
-  if ! env PNPM_VERSION="$ORDO_PNPM_VERSION" sh "$script" </dev/null; then
+  if ! ordo_run_pnpm_script "$script"; then
     rm -f "$script"
     return 1
   fi
@@ -232,6 +248,7 @@ ordo_ensure_pnpm() {
   if ! ordo_install_pnpm; then
     ordo_die "$(printf '%s\n\n%s\n' "Could not install pnpm." "$(ordo_pnpm_how)")"
   fi
+  printf 'Installed pnpm %s\n' "$ORDO_PNPM_VERSION"
   ordo_prepend_path "$home"
   ordo_prepend_path "${home}/bin"
   hash -r 2>/dev/null || true
@@ -269,7 +286,282 @@ ordo_download_release() {
     ordo_die "The download for ${tag} did not match its checksum."
   mkdir -p "$dest"
   tar -xzf "${tmp}/${asset}" -C "$dest" --strip-components=1
-  ordo_is_ordo_tree "$dest" || ordo_die "The ${tag} download is not an Ordo server."
+  if ! ordo_is_ordo_tree "$dest"; then
+    rm -rf "$tmp"
+    trap - RETURN
+    ordo_die "The ${tag} download is not an Ordo server."
+  fi
+  rm -rf "$tmp"
+  trap - RETURN
+}
+
+ordo_paint() {
+  local code="$1" text="$2"
+  if [[ "${ORDO_MENU_COLOR:-0}" == 1 && -n "$code" ]]; then
+    printf '\033[%sm%s\033[0m' "$code" "$text"
+  else
+    printf '%s' "$text"
+  fi
+}
+
+# Title, blank line, one row per option, blank line, hint.
+ordo_menu_lines() {
+  printf '%s\n' "$(( $1 + 4 ))"
+}
+
+ordo_menu_frame() {
+  local title="$1" selected="$2" index=0
+  shift 2
+  ordo_paint "1" "$title"
+  printf '\n\n'
+  while [[ $# -gt 0 ]]; do
+    if [[ "$index" -eq "$selected" ]]; then
+      printf '  '
+      ordo_paint "36" "›"
+      printf ' '
+      ordo_paint "1" "$1"
+      printf '\n'
+    else
+      printf '    '
+      ordo_paint "2" "$1"
+      printf '\n'
+    fi
+    index=$((index + 1))
+    shift
+  done
+  printf '\n  '
+  ordo_paint "2" "↑↓ move    enter select"
+  printf '\n'
+}
+
+ordo_choice_step() {
+  local index="$1" count="$2" dir="$3"
+  if [[ "$dir" == "up" ]]; then
+    if [[ "$index" -le 0 ]]; then
+      printf '%s\n' "$((count - 1))"
+    else
+      printf '%s\n' "$((index - 1))"
+    fi
+  else
+    printf '%s\n' "$(( (index + 1) % count ))"
+  fi
+}
+
+ordo_menu_stop() {
+  printf '\033[?25h' >/dev/tty 2>/dev/null || true
+  if [[ -n "${ORDO_STTY_SAVED:-}" ]]; then
+    stty "$ORDO_STTY_SAVED" </dev/tty 2>/dev/null || true
+    ORDO_STTY_SAVED=""
+  fi
+}
+
+ordo_menu_on_int() {
+  ordo_menu_stop
+  trap - INT TERM EXIT
+  exit 130
+}
+
+# Prints the selected index. Draws on /dev/tty so the caller can capture stdout.
+ordo_choose() {
+  local selected="$1" title="$2" key="" rest="" drawn=0 count=0
+  local options
+  shift 2
+  options=("$@")
+  count=${#options[@]}
+  [[ "$count" -gt 0 ]] || return 1
+  if [[ -z "${NO_COLOR:-}" ]]; then
+    ORDO_MENU_COLOR=1
+  else
+    ORDO_MENU_COLOR=0
+  fi
+  ORDO_STTY_SAVED=$(stty -g </dev/tty)
+  trap ordo_menu_on_int INT TERM
+  trap ordo_menu_stop EXIT
+  stty -echo -icanon min 1 time 0 </dev/tty
+  printf '\033[?25l' >/dev/tty
+  while true; do
+    if [[ "$drawn" -gt 0 ]]; then
+      printf '\033[%sA\033[J' "$drawn" >/dev/tty
+    fi
+    ordo_menu_frame "$title" "$selected" "${options[@]}" >/dev/tty
+    drawn=$(ordo_menu_lines "$count")
+    key=""
+    IFS= read -rsn1 key </dev/tty || key=""
+    if [[ "$key" == $'\033' ]]; then
+      stty min 0 time 1 </dev/tty
+      rest=""
+      IFS= read -rsn2 rest </dev/tty || true
+      stty min 1 time 0 </dev/tty
+      key="${key}${rest}"
+    fi
+    case "$key" in
+      $'\033[A' | $'\033OA') selected=$(ordo_choice_step "$selected" "$count" up) ;;
+      $'\033[B' | $'\033OB') selected=$(ordo_choice_step "$selected" "$count" down) ;;
+      "" | $'\n' | $'\r') break ;;
+    esac
+  done
+  trap - INT TERM EXIT
+  ordo_menu_stop
+  printf '%s\n' "$selected"
+}
+
+ordo_read_default() {
+  local prompt="$1" fallback="$2" answer=""
+  printf '%s' "$prompt" >/dev/tty
+  IFS= read -r answer </dev/tty || answer=""
+  answer="${answer#"${answer%%[![:space:]]*}"}"
+  answer="${answer%"${answer##*[![:space:]]}"}"
+  if [[ -z "$answer" ]]; then
+    printf '%s\n' "$fallback"
+  else
+    printf '%s\n' "$answer"
+  fi
+}
+
+ordo_valid_port() {
+  [[ "$1" =~ ^[0-9]+$ ]] || return 1
+  [[ "$((10#$1))" -ge 1 && "$((10#$1))" -le 65535 ]]
+}
+
+ordo_valid_hops() {
+  [[ "$1" =~ ^[0-9]+$ ]] || return 1
+  [[ "$((10#$1))" -ge 0 && "$((10#$1))" -le 32 ]]
+}
+
+ordo_ask_yes_no() {
+  local title="$1" selected="$2" index=""
+  index=$(ordo_choose "$selected" "$title" "Yes" "No")
+  if [[ "$index" == 0 ]]; then
+    printf 'true\n'
+  else
+    printf 'false\n'
+  fi
+}
+
+ordo_arg_present() {
+  local name="$1" arg
+  shift
+  for arg in "$@"; do
+    case "$arg" in
+      "$name" | "${name}="*) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+ordo_setup_skipped() {
+  local arg
+  if ! ordo_have_tty; then
+    return 0
+  fi
+  if [[ "${CI:-}" == "true" || "${CI:-}" == "1" ]]; then
+    return 0
+  fi
+  for arg in "$@"; do
+    case "$arg" in
+      -y | --yes | --non-interactive | --from-git | --pull) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+ordo_wants_from_git() {
+  ordo_arg_present --from-git "$@" || ordo_arg_present --pull "$@"
+}
+
+ordo_without_release_args() {
+  local skip=0 arg
+  ORDO_FORWARDED=()
+  for arg in "$@"; do
+    if [[ "$skip" == 1 ]]; then
+      skip=0
+      continue
+    fi
+    case "$arg" in
+      --release) skip=1 ;;
+      --release=*) ;;
+      *) ORDO_FORWARDED+=("$arg") ;;
+    esac
+  done
+}
+
+ordo_bind_setup_flags() {
+  local port="$1" registration="$2" email="$3" smtp="$4" smtp_from="$5"
+  local trust="$6" public="$7" start="$8"
+  shift 8
+  ORDO_SETUP_FLAGS=(--yes)
+  ordo_arg_present --port "$@" || ORDO_SETUP_FLAGS+=(--port "$port")
+  ordo_arg_present --registration "$@" || ORDO_SETUP_FLAGS+=(--registration "$registration")
+  ordo_arg_present --email-verification "$@" || ORDO_SETUP_FLAGS+=(--email-verification "$email")
+  if [[ -n "$smtp" ]] && ! ordo_arg_present --smtp-url "$@"; then
+    ORDO_SETUP_FLAGS+=(--smtp-url "$smtp")
+    if [[ -n "$smtp_from" ]] && ! ordo_arg_present --smtp-from "$@"; then
+      ORDO_SETUP_FLAGS+=(--smtp-from "$smtp_from")
+    fi
+  fi
+  ordo_arg_present --trust-proxy "$@" || ORDO_SETUP_FLAGS+=(--trust-proxy "$trust")
+  if [[ "$public" == 1 ]] && ! ordo_arg_present --public "$@"; then
+    ORDO_SETUP_FLAGS+=(--public)
+  fi
+  if ! ordo_arg_present --start "$@" && ! ordo_arg_present --no-start "$@"; then
+    if [[ "$start" == 1 ]]; then
+      ORDO_SETUP_FLAGS+=(--start)
+    else
+      ORDO_SETUP_FLAGS+=(--no-start)
+    fi
+  fi
+}
+
+ordo_ask_setup() {
+  local port="3000" registration="false" email="false" smtp="" smtp_from=""
+  local trust="0" public="0" start="0" answer=""
+  printf '\n' >/dev/tty
+  if ! ordo_arg_present --port "$@"; then
+    port=$(ordo_read_default "HTTP port [3000] " "3000")
+    ordo_valid_port "$port" || ordo_die "The HTTP port needs to be a number from 1 to 65535."
+  fi
+  if ! ordo_arg_present --registration "$@"; then
+    registration=$(ordo_ask_yes_no "Allow new sign-ups after the first account?" 1)
+  fi
+  if ! ordo_arg_present --email-verification "$@"; then
+    email=$(ordo_ask_yes_no "Require email verification?" 1)
+  fi
+  if ! ordo_arg_present --smtp-url "$@"; then
+    smtp=$(ordo_read_default "SMTP URL (empty = print one-time codes in the console) " "")
+    if [[ -n "$smtp" ]] && ! ordo_arg_present --smtp-from "$@"; then
+      smtp_from=$(ordo_read_default "SMTP from address [ordo <noreply@ordo.local>] " "ordo <noreply@ordo.local>")
+    fi
+  fi
+  if ! ordo_arg_present --trust-proxy "$@" && ! ordo_arg_present --public "$@"; then
+    answer=$(ordo_ask_yes_no "Behind nginx, Caddy, or Cloudflare?" 1)
+    if [[ "$answer" == true ]]; then
+      trust=$(ordo_read_default "Reverse-proxy hops to trust [1] " "1")
+      ordo_valid_hops "$trust" || ordo_die "Reverse-proxy hops need to be a number from 0 to 32."
+    else
+      answer=$(ordo_ask_yes_no "Listen on the LAN without a reverse proxy (0.0.0.0)?" 1)
+      if [[ "$answer" == true ]]; then
+        public=1
+      fi
+    fi
+  fi
+  if ! ordo_arg_present --start "$@" && ! ordo_arg_present --no-start "$@"; then
+    answer=$(ordo_ask_yes_no "Start the server in the foreground when done?" 1)
+    if [[ "$answer" == true ]]; then
+      start=1
+    fi
+  fi
+  ordo_bind_setup_flags "$port" "$registration" "$email" "$smtp" "$smtp_from" "$trust" "$public" "$start" "$@"
+}
+
+ordo_looks_installed() {
+  local dest="$1"
+  [[ -f "$dest/apps/server/.env" || -f "$dest/apps/server/.ordo-secret" || -f "$dest/apps/server/prisma/ordo.db" ]]
+}
+
+# A deploy script that names promptChoiceMenu already asks with the arrow keys.
+ordo_delegate_setup() {
+  local file="$1/scripts/deploy-server.js"
+  [[ -f "$file" ]] && grep -q "promptChoiceMenu" "$file"
 }
 
 ordo_run_deploy() {
@@ -280,6 +572,43 @@ ordo_run_deploy() {
     exec node ./scripts/deploy-server.js "$@" </dev/tty
   fi
   exec node ./scripts/deploy-server.js "$@"
+}
+
+ordo_run_deploy_args() {
+  local dest="$1"
+  shift
+  if [[ $# -eq 0 ]]; then
+    ordo_run_deploy "$dest"
+  else
+    ordo_run_deploy "$dest" "$@"
+  fi
+}
+
+# fresh=1 means this script just unpacked the release, so do not download it again.
+ordo_exec_server() {
+  local dest="$1" fresh="$2"
+  shift 2
+
+  if ordo_wants_from_git "$@"; then
+    ordo_run_deploy_args "$dest" "$@"
+  fi
+
+  if [[ "$fresh" == 1 ]]; then
+    ordo_without_release_args "$@"
+    if ordo_delegate_setup "$dest" || ordo_setup_skipped "$@" || ordo_looks_installed "$dest"; then
+      ordo_run_deploy_args "$dest" --no-release ${ORDO_FORWARDED[@]+"${ORDO_FORWARDED[@]}"}
+    fi
+    ordo_ask_setup "$@"
+    ordo_run_deploy_args "$dest" "${ORDO_SETUP_FLAGS[@]}" --no-release ${ORDO_FORWARDED[@]+"${ORDO_FORWARDED[@]}"}
+  fi
+
+  if ordo_delegate_setup "$dest" || ordo_setup_skipped "$@" || ordo_looks_installed "$dest"; then
+    ordo_run_deploy_args "$dest" "$@"
+  fi
+
+  ordo_without_release_args "$@"
+  ordo_ask_setup "$@"
+  ordo_run_deploy_args "$dest" "${ORDO_SETUP_FLAGS[@]}" --no-release ${ORDO_FORWARDED[@]+"${ORDO_FORWARDED[@]}"}
 }
 
 ordo_install_main() {
@@ -297,7 +626,7 @@ ordo_install_main() {
 
   if ordo_is_ordo_tree "$dest"; then
     printf 'Using %s\n' "$dest"
-    ordo_run_deploy "$dest" "$@"
+    ordo_exec_server "$dest" 0 "$@"
   fi
   if [[ -e "$dest" ]] && ! ordo_dir_empty "$dest"; then
     ordo_die "$(printf '%s\n' \
@@ -326,7 +655,7 @@ ordo_install_main() {
 
   printf 'Installing Ordo %s into %s\n' "$tag" "$dest"
   ordo_download_release "$dest" "$tag" "$repo"
-  ordo_run_deploy "$dest" "$@"
+  ordo_exec_server "$dest" 1 "$@"
 }
 
 if [[ -z "${BASH_SOURCE[0]:-}" || "${BASH_SOURCE[0]}" == "$0" ]]; then

@@ -161,5 +161,136 @@ msg=$(
 [[ "$msg" == *"Could not install pnpm."* ]] || fail "install failure, got $msg"
 [[ "$msg" == *"https://pnpm.io/installation"* ]] || fail "pnpm help link, got $msg"
 
+ORDO_MENU_COLOR=0
+frame=$(ordo_menu_frame "pnpm is not installed." 0 "Install pnpm 11.10.0" "I'll install it myself")
+[[ "$frame" == *"› Install pnpm 11.10.0"* ]] || fail "menu highlight, got $frame"
+[[ "$frame" != *"› I'll install it myself"* ]] || fail "second row should not be highlighted"
+[[ "$frame" == *"↑↓ move    enter select"* ]] || fail "menu hint, got $frame"
+[[ "$(ordo_choice_step 0 2 up)" == 1 ]] || fail "up should wrap"
+[[ "$(ordo_choice_step 1 2 down)" == 0 ]] || fail "down should wrap"
+[[ "$(ordo_menu_lines 2)" == 6 ]] || fail "menu line count"
+
+ordo_valid_port 3000 || fail "port 3000"
+ordo_valid_port 080 || fail "port 080"
+if ordo_valid_port 0; then fail "port 0"; fi
+if ordo_valid_port 65536; then fail "port 65536"; fi
+if ordo_valid_port abc; then fail "port abc"; fi
+ordo_valid_hops 0 || fail "hops 0"
+if ordo_valid_hops 33; then fail "hops 33"; fi
+
+ordo_bind_setup_flags 8080 true false "" "" 0 0 0
+[[ "${ORDO_SETUP_FLAGS[*]}" == "--yes --port 8080 --registration true --email-verification false --trust-proxy 0 --no-start" ]] ||
+  fail "setup flags, got ${ORDO_SETUP_FLAGS[*]}"
+ordo_bind_setup_flags 3000 false false "smtp://mail" "ordo <noreply@ordo.local>" 1 1 1 --port 9 --public
+[[ "${ORDO_SETUP_FLAGS[*]}" == "--yes --registration false --email-verification false --smtp-url smtp://mail --smtp-from ordo <noreply@ordo.local> --trust-proxy 1 --start" ]] ||
+  fail "setup flags with user args, got ${ORDO_SETUP_FLAGS[*]}"
+
+ordo_without_release_args --yes --release v0.1.0 --port 1
+[[ "${ORDO_FORWARDED[*]}" == "--yes --port 1" ]] || fail "strip --release, got ${ORDO_FORWARDED[*]}"
+ordo_without_release_args --release=v0.1.0 --dry-run
+[[ "${ORDO_FORWARDED[*]}" == "--dry-run" ]] || fail "strip --release=, got ${ORDO_FORWARDED[*]}"
+
+if ordo_setup_skipped --yes; then
+  :
+else
+  fail "--yes should skip setup questions"
+fi
+(
+  CI=1
+  ordo_setup_skipped
+) || fail "CI should skip setup questions"
+
+menu_tree=$(mktemp -d)
+mkdir -p "$menu_tree/scripts"
+printf 'promptChoiceMenu\n' >"$menu_tree/scripts/deploy-server.js"
+ordo_delegate_setup "$menu_tree" || fail "a new deploy script should ask itself"
+printf 'typed\n' >"$menu_tree/scripts/deploy-server.js"
+if ordo_delegate_setup "$menu_tree"; then fail "an old deploy script should be asked here"; fi
+rm -rf "$menu_tree"
+
+script=$(mktemp)
+printf '#!/bin/sh\necho WARN using --force\necho Update available\n' >"$script"
+msg=$(ordo_run_pnpm_script "$script" 2>&1) || fail "a successful pnpm install should stay quiet, got $msg"
+[[ -z "$msg" ]] || fail "pnpm installer noise leaked: $msg"
+printf '#!/bin/sh\necho boom\nexit 1\n' >"$script"
+status=0
+msg=$(ordo_run_pnpm_script "$script" 2>&1) || status=$?
+[[ "$status" -ne 0 ]] || fail "a failed pnpm install script should fail"
+[[ "$msg" == *boom* ]] || fail "failure should show the installer log, got $msg"
+rm -f "$script"
+
+if ! command -v python3 >/dev/null 2>&1; then
+  fail "python3 is required to test the arrow menu"
+fi
+python3 - "$root/install.sh" <<'PY' || fail "arrow keys should move the highlight"
+import os, pty, select, sys
+
+script = sys.argv[1]
+
+def pick(keys):
+    pid, fd = pty.fork()
+    if pid == 0:
+        os.execv(
+            "/bin/bash",
+            ["bash", "-c", f'source "{script}"; result=$(ordo_choose 0 Pick Alpha Beta); printf "RESULT:%s\\n" "$result"'],
+        )
+    buf = b""
+    while b"Pick" not in buf:
+        ready, _, _ = select.select([fd], [], [], 5)
+        if not ready:
+            os.kill(pid, 9)
+            raise SystemExit("menu did not draw:\n" + buf.decode("utf8", "replace"))
+        try:
+            buf += os.read(fd, 4096)
+        except OSError:
+            break
+    os.write(fd, keys)
+    while True:
+        ready, _, _ = select.select([fd], [], [], 5)
+        if not ready:
+            break
+        try:
+            chunk = os.read(fd, 4096)
+        except OSError:
+            break
+        if not chunk:
+            break
+        buf += chunk
+    _, status = os.waitpid(pid, 0)
+    os.close(fd)
+    code = os.waitstatus_to_exitcode(status)
+    if code != 0:
+        raise SystemExit(f"chooser exited {code}:\n" + buf.decode("utf8", "replace"))
+    text = buf.decode("utf8", "replace")
+    marker = "RESULT:"
+    if marker not in text:
+        raise SystemExit("chooser printed no result:\n" + text)
+    return text.rsplit(marker, 1)[1].splitlines()[0].strip()
+
+if pick(b"\r") != "0":
+    raise SystemExit("enter should keep the first row")
+if pick(b"\x1b[B\r") != "1":
+    raise SystemExit("down should select the second row")
+if pick(b"\x1b[A\r") != "1":
+    raise SystemExit("up should wrap to the last row")
+PY
+
+(
+  ordo_run_deploy() { printf '%s\n' "$*"; exit 0; }
+  server=$(mktemp -d)
+  mkdir -p "$server/scripts" "$server/apps/server"
+  printf 'old\n' >"$server/scripts/deploy-server.js"
+  got=$(ordo_exec_server "$server" 1 --yes)
+  [[ "$got" == "$server --no-release --yes" ]] || fail "old release should skip its typed prompts, got $got"
+  printf 'promptChoiceMenu\n' >"$server/scripts/deploy-server.js"
+  got=$(ordo_exec_server "$server" 1 --port 8080)
+  [[ "$got" == "$server --no-release --port 8080" ]] || fail "new release should ask itself, got $got"
+  touch "$server/apps/server/.env"
+  printf 'old\n' >"$server/scripts/deploy-server.js"
+  got=$(ordo_exec_server "$server" 0)
+  [[ "$got" == "$server" ]] || fail "an install that already exists should keep its own prompts, got $got"
+  rm -rf "$server"
+)
+
 rm -rf "$tmp"
 printf 'ok\n'
