@@ -3,6 +3,10 @@
  * that long-presses into multi-select. A finger on the row body scrolls
  * the list. Once the mark's pan is active, the range follows the pointer
  * and the list auto-scrolls at the edges.
+ *
+ * The list does not wait on those pans. Waiting made pull-to-refresh keep
+ * the spinner up after the finger lifted, until the next touch. Scrolling
+ * is turned off only while a drag is actually active.
  */
 import React, { useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import {
@@ -15,10 +19,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import {
-  PanGestureHandler,
-  type PanGestureHandlerProps,
-} from "react-native-gesture-handler";
+import { PanGestureHandler } from "react-native-gesture-handler";
 import { haptics } from "../../lib/haptics";
 import {
   autoScrollStep,
@@ -37,12 +38,8 @@ type Measurable = {
   measureInWindow?: (callback: (x: number, y: number, width: number, height: number) => void) => void;
 };
 
-type HandleRef = React.Component<PanGestureHandlerProps>;
-
 type DragContextValue = {
   register: (key: string, node: Measurable | null) => void;
-  registerHandle: (ref: React.RefObject<HandleRef | null>) => void;
-  unregisterHandle: (ref: React.RefObject<HandleRef | null>) => void;
   consumePress: () => boolean;
   beginFromKey: (key: string, y: number) => void;
   moveTo: (y: number) => void;
@@ -123,15 +120,6 @@ export function SelectionDragHandle({
     if (!fingerDown.current) setArmed(selectionMode);
   }, [selectionMode]);
 
-  const handleRef = useRef<HandleRef>(null);
-
-  useEffect(() => {
-    const current = ctxRef.current;
-    if (!current) return;
-    current.registerHandle(handleRef);
-    return () => current.unregisterHandle(handleRef);
-  }, [ctx]);
-
   const finish = useCallback(() => {
     fingerDown.current = false;
     setArmed(modeRef.current);
@@ -140,7 +128,6 @@ export function SelectionDragHandle({
 
   return (
     <PanGestureHandler
-      ref={handleRef}
       enabled
       activateAfterLongPress={armed ? 0 : SELECTION_LONG_PRESS_MS}
       activeOffsetY={armed ? [-MARK_ACTIVATE_PX, MARK_ACTIVATE_PX] : [-10000, 10000]}
@@ -189,8 +176,8 @@ export function useSelectionDrag({
   const onChangeRef = useRef(onSelectedChange);
   onChangeRef.current = onSelectedChange;
 
-  const handles = useRef(new Set<React.RefObject<HandleRef | null>>());
-  const [scrollWaitFor, setScrollWaitFor] = React.useState<React.RefObject<HandleRef | null>[]>([]);
+  const [scrollEnabled, setScrollEnabled] = React.useState(true);
+  const scrollEnabledRef = useRef(true);
   const dragRef = useRef<DragSession | null>(null);
   const suppressRef = useRef(false);
   const offsetRef = useRef(0);
@@ -304,8 +291,16 @@ export function useSelectionDrag({
   }, [applyAt]);
 
   const detachPointer = useRef<(() => void) | null>(null);
-  const waitFrame = useRef(0);
-  const publishHandlesRef = useRef<() => void>(() => {});
+
+  const setListScrollEnabled = useCallback((enabled: boolean) => {
+    if (scrollEnabledRef.current === enabled) return;
+    scrollEnabledRef.current = enabled;
+    setScrollEnabled(enabled);
+    const list = listRef.current as {
+      getNativeScrollRef?: () => { setNativeProps?: (props: { scrollEnabled: boolean }) => void } | null;
+    } | null;
+    list?.getNativeScrollRef?.()?.setNativeProps?.({ scrollEnabled: enabled });
+  }, []);
 
   const endDrag = useCallback(() => {
     detachPointer.current?.();
@@ -314,14 +309,14 @@ export function useSelectionDrag({
     dragRef.current = null;
     replaceFrames.current = true;
     stopLoop();
-    publishHandlesRef.current();
+    setListScrollEnabled(true);
     if (!hadSession) return;
     suppressRef.current = true;
     if (clearSuppressRef.current) clearTimeout(clearSuppressRef.current);
     clearSuppressRef.current = setTimeout(() => {
       suppressRef.current = false;
     }, 120);
-  }, [stopLoop]);
+  }, [setListScrollEnabled, stopLoop]);
 
   const beginFromKey = useCallback(
     (key: string, y: number) => {
@@ -340,6 +335,8 @@ export function useSelectionDrag({
         pointerY: y,
         lastIndex: anchorIndex,
       };
+      // Stop the list from also scrolling or arming pull-to-refresh under this finger.
+      setListScrollEnabled(false);
       measureHost(() => {
         remeasureAll(() => {
           if (!dragRef.current) return;
@@ -367,7 +364,7 @@ export function useSelectionDrag({
         };
       }
     },
-    [applyAt, endDrag, measureHost, remeasureAll, stopLoop, tick],
+    [applyAt, endDrag, measureHost, remeasureAll, setListScrollEnabled, stopLoop, tick],
   );
 
   const moveTo = useCallback(
@@ -386,7 +383,6 @@ export function useSelectionDrag({
       detachPointer.current = null;
       stopLoop();
       if (clearSuppressRef.current) clearTimeout(clearSuppressRef.current);
-      if (waitFrame.current) cancelAnimationFrame(waitFrame.current);
     },
     [stopLoop],
   );
@@ -395,38 +391,15 @@ export function useSelectionDrag({
     if (!enabled) endDrag();
   }, [enabled, endDrag]);
 
-  const publishHandles = useCallback(() => {
-    if (dragRef.current) return;
-    if (waitFrame.current) cancelAnimationFrame(waitFrame.current);
-    waitFrame.current = requestAnimationFrame(() => {
-      waitFrame.current = 0;
-      if (dragRef.current) return;
-      setScrollWaitFor([...handles.current]);
-    });
-  }, []);
-  publishHandlesRef.current = publishHandles;
-
-  const registerHandle = useCallback((ref: React.RefObject<HandleRef | null>) => {
-    handles.current.add(ref);
-    publishHandles();
-  }, [publishHandles]);
-
-  const unregisterHandle = useCallback((ref: React.RefObject<HandleRef | null>) => {
-    handles.current.delete(ref);
-    publishHandles();
-  }, [publishHandles]);
-
   const context = useMemo<DragContextValue>(
     () => ({
       register,
-      registerHandle,
-      unregisterHandle,
       consumePress: () => suppressRef.current,
       beginFromKey,
       moveTo,
       end: endDrag,
     }),
-    [beginFromKey, endDrag, moveTo, register, registerHandle, unregisterHandle],
+    [beginFromKey, endDrag, moveTo, register],
   );
 
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -459,7 +432,7 @@ export function useSelectionDrag({
     onScroll,
     onContentSizeChange,
     scrollEventThrottle: 16 as const,
-    scrollWaitFor,
+    scrollEnabled,
   };
 }
 

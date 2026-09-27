@@ -196,7 +196,7 @@ export default function TagDetailScreen() {
       }}
       refreshing={refreshing}
       onRefresh={onRefresh}
-      waitFor={drag.scrollWaitFor}
+      scrollEnabled={drag.scrollEnabled}
       onEndReached={onEndReached}
       ListFooterComponent={loadingMore ? <ListLoadingFooter /> : null}
     />

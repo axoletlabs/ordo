@@ -224,7 +224,7 @@ export default function FolderDetailScreen() {
       contentContainerStyle={{ paddingBottom: listContentPadding }}
       refreshing={refreshing}
       onRefresh={onRefresh}
-      waitFor={drag.scrollWaitFor}
+      scrollEnabled={drag.scrollEnabled}
       onEndReached={onEndReached}
       ListFooterComponent={loadingMore ? <ListLoadingFooter /> : null}
     />

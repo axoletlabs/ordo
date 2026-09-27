@@ -388,7 +388,7 @@ export default function BookmarksScreen() {
             contentContainerStyle={listContentStyle}
             refreshing={refreshing}
             onRefresh={onRefresh}
-            waitFor={drag.scrollWaitFor}
+            scrollEnabled={drag.scrollEnabled}
             onEndReached={onEndReached}
           />
           </SelectionDragFrame>

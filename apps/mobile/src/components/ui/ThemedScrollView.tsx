@@ -55,14 +55,10 @@ export type ThemedScrollViewProps = ScrollViewProps & {
 
 export type ThemedFlashListProps<T> = FlashListProps<T> & {
   scrollBarInsets?: ScrollBarInsets;
-  /** Gesture the list scroller waits on, so a selection drag can win over scroll and pull-to-refresh. */
-  waitFor?: unknown;
 };
 
 export type ThemedFlatListProps<T> = FlatListProps<T> & {
   scrollBarInsets?: ScrollBarInsets;
-  /** Gesture the list scroller waits on, so a selection drag can win over scroll and pull-to-refresh. */
-  waitFor?: unknown;
 };
 
 const nativeScrollBarProps = {
@@ -201,7 +197,6 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
     refreshing,
     onRefresh,
     refreshControl,
-    waitFor,
     scrollBarInsets,
     contentContainerStyle,
     data,
@@ -222,7 +217,6 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
         ref={ref as never}
         data={data}
         {...rest}
-        waitFor={waitFor as never}
         {...nativeScrollBarProps}
         showsVerticalScrollIndicator={
           Platform.OS === "web" ? (showsVerticalScrollIndicator ?? true) : false
