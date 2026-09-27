@@ -12,7 +12,6 @@ import { Header } from "../ui/Header";
 import { ThemedScrollView, type ThemedScrollViewProps } from "../ui/ThemedScrollView";
 import { useScrollBarInsets } from "../ui/ScrollBar";
 import { Text } from "../ui/Text";
-import { Card } from "../ui/Card";
 import { useTheme } from "../../theme/ThemeProvider";
 import { columnContentInset } from "../../theme/alignment";
 import { layout, spacing } from "../../theme/tokens";
@@ -148,9 +147,7 @@ export function SettingsGroup({
   return (
     <View style={style}>
       {label ? <SettingsSectionLabel compact={compact}>{label}</SettingsSectionLabel> : null}
-      <Card pad={0} radiusKey="2xl" style={styles.group}>
-        {children}
-      </Card>
+      <View style={styles.group}>{children}</View>
       {footer ? (
         <Text variant="footnote" color="tertiary" style={styles.groupFooter}>
           {footer}
@@ -168,12 +165,18 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: spacing[40] },
   contentFrame: { width: "100%" },
   contentColumn: { width: "100%", alignSelf: "center" },
-  formColumn: { width: "100%", alignSelf: "center" },
+  // Matches the list-row well: fields start one row inset in from the rail.
+  formColumn: {
+    width: "100%",
+    alignSelf: "center",
+    padding: layout.rowInset,
+    gap: spacing[12],
+  },
   sectionLabel: {
     paddingTop: spacing[16],
     paddingBottom: spacing[6],
   },
   compactSectionLabel: { paddingTop: spacing[0] },
-  group: { overflow: "hidden" },
+  group: { width: "100%" },
   groupFooter: { paddingTop: spacing[6] },
 });

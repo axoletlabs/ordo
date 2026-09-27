@@ -17,6 +17,7 @@ import { Button } from "../../../src/components/ui/Button";
 import { Skeleton } from "../../../src/components/ui/Skeleton";
 import { EmptyState } from "../../../src/components/ui/EmptyState";
 import { PressableScale } from "../../../src/components/ui/PressableScale";
+import { RowIconWell } from "../../../src/components/ui/RowIconWell";
 import { ConfirmDialog } from "../../../src/components/ui/ConfirmDialog";
 import { ThemedFlatList } from "../../../src/components/ui/ThemedScrollView";
 import { useSessions } from "../../../src/hooks/queries";
@@ -26,8 +27,8 @@ import { timeAgo } from "../../../src/lib/format";
 import { errorMessage } from "../../../src/lib/error-message";
 import { haptics } from "../../../src/lib/haptics";
 import { toast } from "../../../src/components/ui/toast-store";
-import { columnContentInset } from "../../../src/theme/alignment";
-import { layout, radius, spacing } from "../../../src/theme/tokens";
+import { columnContentInset, ROW_ICON_FRAME, ROW_ICON_GLYPH } from "../../../src/theme/alignment";
+import { layout, spacing } from "../../../src/theme/tokens";
 import type { SessionDto } from "@ordo/shared";
 
 function deviceLabel(s: SessionDto): string {
@@ -99,8 +100,15 @@ export default function SessionsScreen() {
         </SettingsContent>
       ) : isLoading ? (
         <SettingsContent>
+          <SettingsSectionLabel compact>Signed-in devices</SettingsSectionLabel>
           {Array.from({ length: 3 }).map((_, i) => (
-            <Skeleton key={i} height={72} radiusKey="lg" style={styles.skeleton} />
+            <View key={i} style={[styles.row, { borderBottomColor: palette.border }]}>
+              <Skeleton width={ROW_ICON_FRAME} height={ROW_ICON_FRAME} radiusKey="sm" />
+              <View style={styles.skeletonCopy}>
+                <Skeleton width="56%" height={15} />
+                <Skeleton width="36%" height={11} />
+              </View>
+            </View>
           ))}
         </SettingsContent>
       ) : (
@@ -116,35 +124,34 @@ export default function SessionsScreen() {
             },
             !(sessions?.length ?? 0) && styles.listContentEmpty,
           ]}
-          ItemSeparatorComponent={() => <View style={{ height: spacing[10] }} />}
           ListHeaderComponent={<SettingsSectionLabel compact>Signed-in devices</SettingsSectionLabel>}
           renderItem={({ item }) => (
-            <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-              <View style={styles.cardHead}>
-                <View style={[styles.iconWrap, { backgroundColor: palette.surfaceSecondary }]}>
-                  <Ionicons name={deviceIcon(item)} size={18} color={palette.accent} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <View style={styles.titleRow}>
-                    <Text variant="bodyStrong" numberOfLines={1}>{deviceLabel(item)}</Text>
-                    {item.current ? <Badge tone="accent">This device</Badge> : null}
-                  </View>
-                  {deviceDescription(item) ? (
-                    <Text variant="footnote" color="tertiary" numberOfLines={1}>
-                      {deviceDescription(item)}
-                    </Text>
-                  ) : null}
-                  <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
-                    Active {timeAgo(item.lastSeenAt)}
-                    {item.ip ? ` · ${item.ip}` : ""}
+            <View style={[styles.row, { borderBottomColor: palette.border }]}>
+              <RowIconWell>
+                <Ionicons name={deviceIcon(item)} size={ROW_ICON_GLYPH} color={palette.accent} />
+              </RowIconWell>
+              <View style={styles.body}>
+                <View style={styles.titleRow}>
+                  <Text variant="headline" numberOfLines={1} style={styles.title}>
+                    {deviceLabel(item)}
                   </Text>
+                  {item.current ? <Badge tone="accent">This device</Badge> : null}
                 </View>
+                {deviceDescription(item) ? (
+                  <Text variant="footnote" color="tertiary" numberOfLines={1} style={styles.meta}>
+                    {deviceDescription(item)}
+                  </Text>
+                ) : null}
+                <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.meta}>
+                  Active {timeAgo(item.lastSeenAt)}
+                  {item.ip ? ` · ${item.ip}` : ""}
+                </Text>
               </View>
               {item.current ? null : (
                 <PressableScale
                   accessibilityRole="button"
                   accessibilityLabel={`Revoke session on ${deviceLabel(item)}`}
-                  style={[styles.revokeBtn, { borderColor: palette.danger }]}
+                  style={styles.revoke}
                   onPress={() => setPendingRevoke(item)}
                 >
                   {revoke.isPending && revoke.variables === item.id ? (
@@ -193,15 +200,23 @@ export default function SessionsScreen() {
 }
 
 const styles = StyleSheet.create({
-  skeleton: { width: "100%", marginBottom: spacing[10] },
   list: { width: "100%", maxWidth: layout.maxSettingsWidth, alignSelf: "center" },
   // Matches SettingsPage so loading, error, and loaded states do not jump.
   listContent: { paddingBottom: spacing[40] },
   listContentEmpty: { flexGrow: 1, justifyContent: "center" },
-  card: { width: "100%", borderWidth: StyleSheet.hairlineWidth, borderRadius: radius["2xl"], padding: layout.rowInset },
-  cardHead: { flexDirection: "row", gap: spacing[12], alignItems: "center" },
-  iconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[8], marginBottom: 2 },
-  revokeBtn: { alignSelf: "flex-start", marginTop: spacing[12], paddingHorizontal: spacing[14], paddingVertical: spacing[8], borderRadius: 10, borderWidth: 1 },
+  row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[12],
+    paddingHorizontal: layout.rowInset,
+    paddingVertical: spacing[8],
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  body: { flex: 1, minWidth: 0 },
+  skeletonCopy: { flex: 1, minWidth: 0, gap: spacing[6] },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
+  title: { flexShrink: 1 },
+  meta: { marginTop: spacing[2] },
+  revoke: { flexShrink: 0, paddingVertical: spacing[8], paddingLeft: spacing[8] },
   emptyState: { width: "100%", maxWidth: layout.maxSettingsWidth },
 });

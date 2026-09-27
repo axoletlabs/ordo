@@ -20,8 +20,6 @@ import { useDeleteAccount } from "../../../src/hooks/use-auth-actions";
 import { lockedSecretDisplay, passwordAutofillProps } from "../../../src/lib/password-autofill";
 import { errorMessage, isMfaRequiredError } from "../../../src/lib/error-message";
 import { haptics } from "../../../src/lib/haptics";
-import { spacing } from "../../../src/theme/tokens";
-
 export default function DeleteAccountScreen() {
   const deleteAccount = useDeleteAccount();
   const [currentPassword, setCurrentPassword] = useState("");
@@ -86,7 +84,7 @@ export default function DeleteAccountScreen() {
       >
         <SettingsScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           <SettingsGroup compact>
-            <SettingsForm key={mfaOpen ? "mfa-locked" : "editable"} style={styles.form}>
+            <SettingsForm key={mfaOpen ? "mfa-locked" : "editable"}>
               <Input
                 label="Password"
                 value={passwordField.value}
@@ -145,7 +143,3 @@ export default function DeleteAccountScreen() {
     </SettingsPage>
   );
 }
-
-const styles = {
-  form: { padding: spacing[16], gap: spacing[12] },
-};

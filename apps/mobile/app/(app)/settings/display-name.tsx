@@ -15,8 +15,6 @@ import { useChangeDisplayName } from "../../../src/hooks/use-auth-actions";
 import { errorMessage } from "../../../src/lib/error-message";
 import { haptics } from "../../../src/lib/haptics";
 import { useAuthStore } from "../../../src/store/auth";
-import { spacing } from "../../../src/theme/tokens";
-
 export default function ChangeDisplayNameScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
@@ -53,7 +51,7 @@ export default function ChangeDisplayNameScreen() {
       >
         <SettingsScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           <SettingsGroup compact>
-            <SettingsForm style={styles.form}>
+            <SettingsForm>
               <Input
                 label="Display name"
                 value={displayName}
@@ -79,7 +77,3 @@ export default function ChangeDisplayNameScreen() {
     </SettingsPage>
   );
 }
-
-const styles = {
-  form: { padding: spacing[16], gap: spacing[12] },
-};

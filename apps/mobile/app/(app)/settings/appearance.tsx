@@ -64,7 +64,6 @@ export default function AppearanceScreen() {
                 onChange={setThemeMode}
               />
             }
-            divider={false}
           />
         </SettingsGroup>
 
@@ -81,7 +80,6 @@ export default function AppearanceScreen() {
               />
             }
             rightFit="content"
-            divider={false}
           />
         </SettingsGroup>
 
@@ -91,7 +89,6 @@ export default function AppearanceScreen() {
             label="Haptic feedback"
             right={<Toggle value={hapticsEnabled} onValueChange={setHapticsEnabled} />}
             rightFit="content"
-            divider={false}
           />
         </SettingsGroup>
 
@@ -125,7 +122,6 @@ export default function AppearanceScreen() {
             label="Show labels"
             right={<Toggle value={showNavigationLabels} onValueChange={setShowNavigationLabels} />}
             rightFit="content"
-            divider={false}
           />
         </SettingsGroup>
       </SettingsScrollView>

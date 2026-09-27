@@ -8,9 +8,9 @@
  * Roles:
  *  wordmark          App name
  *  display / title*  Page and empty-state titles (sentence case)
- *  headline          Bookmark, folder, and tag names in lists
+ *  headline          Names on list rows: bookmark, folder, tag, setting, session
  *  header            Screen titles, buttons, overlay titles (uppercase)
- *  body / bodyStrong Prose and setting-row names
+ *  body / bodyStrong Prose. bodyStrong is emphasis, not a second row title
  *  callout / subhead Rare emphasis; prefer body / bodyStrong
  *  footnote          Supporting copy, errors, descriptions
  *  caption           Compact Tight chrome that is not uppercase

@@ -1,7 +1,7 @@
 /**
  * One set of edges for the whole app.
  *
- * Screen rail — section labels, card edges, list hairlines, header text
+ * Screen rail — section labels, list hairlines, header text
  * actions, and the back chevron's tip. Pad a centered column with
  * `columnContentInset`. A cutout replaces the rail only where the column
  * does not already clear it. Never add the safe area on top of the rail;
@@ -11,9 +11,11 @@
  * title. A subtitle hangs below and must not move them, so the arrow sits
  * on the same line on every screen.
  *
- * Row inset — `layout.rowInset`, the leading icon inside a list row or a
- * settings card. It is measured from the container edge. It is not the
- * same x as the back chevron; the chevron is page chrome on the rail.
+ * Row inset — `layout.rowInset`, the leading icon inside a list row,
+ * measured from the row edge. Bookmark, folder, tag, and settings rows
+ * share one well (`ROW_ICON_FRAME`) and a hairline. They sit on the page,
+ * not in a card. The well is not the same x as the back chevron; the
+ * chevron is page chrome on the rail.
  *
  * Ordinary header icons stay centered in one shared hit target whose outer
  * edge is the rail. The back chevron is the exception: it points at the
@@ -26,10 +28,14 @@
  * `layout.screenHorizontalPad` and `layout.rowInset` are these constants.
  */
 
-/** Page edge. Section labels, cards, list hairlines, header actions. */
+/** Page edge. Section labels, list hairlines, header actions. */
 export const SCREEN_RAIL = 16;
-/** Leading icon inside a list row or settings card, from that container's edge. */
+/** Leading icon inside a list row, from that row's edge. */
 export const ROW_INSET = 16;
+/** Shared leading well for bookmark, folder, tag, and settings rows. */
+export const ROW_ICON_FRAME = 36;
+/** Glyph drawn inside {@link ROW_ICON_FRAME}. */
+export const ROW_ICON_GLYPH = 18;
 
 /**
  * Horizontal padding for a column of at most `columnMax` centered in

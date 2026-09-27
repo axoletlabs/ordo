@@ -26,7 +26,6 @@ import { errorMessage, isMfaRequiredError } from "../../../src/lib/error-message
 import { otpRequestFooter, otpSentToast } from "../../../src/lib/otp-copy";
 import { haptics } from "../../../src/lib/haptics";
 import { toast } from "../../../src/components/ui/toast-store";
-import { spacing } from "../../../src/theme/tokens";
 import { ChangeEmailSchema } from "@ordo/shared";
 import { OtpDeliveryHint } from "../../../src/components/auth/OtpDeliveryHint";
 import { MfaStepUpPanel } from "../../../src/components/auth/MfaStepUpPanel";
@@ -108,7 +107,7 @@ function ChangeEmailForm() {
       >
         <SettingsScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           <SettingsGroup compact footer={otpRequestFooter(smtpConfigured, "email-change")}>
-            <SettingsForm key={mfaOpen ? "mfa-locked" : "editable"} style={styles.form}>
+            <SettingsForm key={mfaOpen ? "mfa-locked" : "editable"}>
               <OtpDeliveryHint smtpConfigured={smtpConfigured} compact />
               <Input
                 label="Current email"
@@ -172,7 +171,3 @@ function ChangeEmailForm() {
     </SettingsPage>
   );
 }
-
-const styles = {
-  form: { padding: spacing[16], gap: spacing[12] },
-};

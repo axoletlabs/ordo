@@ -13,7 +13,9 @@ import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/men
 import { SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
 import { prefetchTaggedBookmarks } from "../../hooks/use-tags";
 import { tagColorValue } from "../../lib/tag-colors";
-import { layout, radius, spacing } from "../../theme/tokens";
+import { RowIconWell } from "../ui/RowIconWell";
+import { ROW_ICON_GLYPH } from "../../theme/alignment";
+import { layout, spacing } from "../../theme/tokens";
 import { RowHighlight } from "../bookmarks/RowHighlight";
 import type { TagDto } from "@ordo/shared";
 
@@ -94,14 +96,9 @@ export const TagRow = React.memo(function TagRow({
         onLongPress={onMore ? (event) => openMore(event) : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
-        <View
-          style={[
-            styles.iconFrame,
-            { backgroundColor: palette.surfaceSecondary, borderColor: palette.border },
-          ]}
-        >
-          <Ionicons name="pricetag-outline" size={18} color={palette.accent} />
-        </View>
+        <RowIconWell>
+          <Ionicons name="pricetag-outline" size={ROW_ICON_GLYPH} color={palette.accent} />
+        </RowIconWell>
         <View style={styles.content}>
           <View style={styles.titleRow}>
             <View style={[styles.dot, { backgroundColor: tagColorValue(tag.color).dot }]} />
@@ -130,15 +127,6 @@ const styles = StyleSheet.create({
     paddingLeft: layout.rowInset,
     paddingRight: layout.rowInset,
     ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
-  },
-  iconFrame: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
   },
   content: { flex: 1, minWidth: 0 },
   titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[8] },

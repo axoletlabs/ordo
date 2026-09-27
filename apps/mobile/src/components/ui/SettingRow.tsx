@@ -1,12 +1,14 @@
-/** A setting list row: icon chip + label + value/chevron, or trailing control. */
+/** A setting list row: same well, title, and hairline as a library row. */
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { PressableScale } from "./PressableScale";
+import { RowIconWell } from "./RowIconWell";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
-import { layout, radius, spacing } from "../../theme/tokens";
+import { ROW_ICON_GLYPH } from "../../theme/alignment";
+import { layout, spacing } from "../../theme/tokens";
 
 export interface SettingRowProps {
   icon?: keyof typeof Ionicons.glyphMap;
@@ -44,16 +46,12 @@ export function SettingRow({
   const content = (
     <View style={[styles.row, { borderBottomColor: palette.border }, !divider && styles.noDivider]}>
       {icon ? (
-        <View style={[styles.iconWrap, { backgroundColor: palette.surfaceSecondary, borderRadius: radius.sm }]}>
-          <Ionicons name={icon} size={16} color={tint} />
-        </View>
+        <RowIconWell>
+          <Ionicons name={icon} size={ROW_ICON_GLYPH} color={tint} />
+        </RowIconWell>
       ) : null}
       <View style={styles.body}>
-        <Text
-          variant="bodyStrong"
-          numberOfLines={1}
-          style={{ color: destructive ? palette.danger : palette.text }}
-        >
+        <Text variant="headline" numberOfLines={1} color={destructive ? "danger" : "primary"}>
           {label}
         </Text>
         {description ? (
@@ -70,44 +68,36 @@ export function SettingRow({
       {right ? (
         <View style={rightFit === "content" ? styles.trailingHug : styles.trailing}>{right}</View>
       ) : null}
-      {showChevron ? <Ionicons name="chevron-forward" size={16} color={palette.textFaint} /> : null}
+      {showChevron ? (
+        <Ionicons name="chevron-forward" size={ROW_ICON_GLYPH} color={palette.textFaint} />
+      ) : null}
     </View>
   );
 
-  if (!onPress) return <View style={styles.pad}>{content}</View>;
+  if (!onPress) return content;
   return (
-    <View style={styles.pad}>
-      <PressableScale
-        style={styles.press}
-        onPress={() => {
-          haptics.light();
-          onPress();
-        }}
-      >
-        {content}
-      </PressableScale>
-    </View>
+    <PressableScale
+      onPress={() => {
+        haptics.light();
+        onPress();
+      }}
+    >
+      {content}
+    </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
-  pad: { width: "100%" },
-  press: { borderRadius: radius.sm },
   row: {
     flexDirection: "row",
     flexWrap: "nowrap",
     alignItems: "center",
     gap: spacing[12],
-    minHeight: 52,
     paddingHorizontal: layout.rowInset,
-    paddingVertical: spacing[10],
+    paddingVertical: spacing[8],
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   noDivider: { borderBottomWidth: 0 },
-  iconWrap: {
-    width: 28, height: 28, alignItems: "center", justifyContent: "center",
-    flexShrink: 0, overflow: "hidden",
-  },
   body: { flex: 1, flexBasis: 0, minWidth: 0 },
   description: { marginTop: spacing[2] },
   value: { maxWidth: layout.settingsControlWidth, flexShrink: 0, textAlign: "right" },

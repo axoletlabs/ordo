@@ -177,7 +177,6 @@ export default function AccountScreen() {
             icon="calendar-outline"
             label="Member since"
             value={user ? formatDate(user.createdAt) : "—"}
-            divider={false}
           />
         </SettingsGroup>
 
@@ -188,7 +187,6 @@ export default function AccountScreen() {
             destructive
             onPress={() => router.push("/settings/delete-account")}
             showChevron
-            divider={false}
           />
         </SettingsGroup>
       </SettingsScrollView>

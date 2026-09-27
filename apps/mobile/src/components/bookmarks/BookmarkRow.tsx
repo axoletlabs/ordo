@@ -25,6 +25,7 @@ import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/men
 import { prefetchBookmarkDetail } from "../../hooks/use-bookmarks";
 import { prefetchTaggedBookmarks } from "../../hooks/use-tags";
 import { firstSearchHighlight } from "../../lib/search-bookmarks";
+import { ROW_ICON_FRAME, ROW_ICON_GLYPH } from "../../theme/alignment";
 import { layout, radius, spacing } from "../../theme/tokens";
 import { bookmarkKey, SELECTION_LONG_PRESS_MS, useSelectionHoldGuard } from "../../hooks/use-selection";
 import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
@@ -264,7 +265,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
             {failedFavicon === faviconUrl ? (
               <Ionicons
                 name="globe-outline"
-                size={18}
+                size={ROW_ICON_GLYPH}
                 color={palette.textTertiary}
                 accessible={false}
               />
@@ -492,8 +493,8 @@ const styles = StyleSheet.create({
     paddingRight: spacing[8],
   },
   faviconFrame: {
-    width: 36,
-    height: 36,
+    width: ROW_ICON_FRAME,
+    height: ROW_ICON_FRAME,
     borderRadius: radius.sm,
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: "center",

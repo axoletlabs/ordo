@@ -83,7 +83,6 @@ export default function AboutScreen() {
             label="Commit"
             value={commit}
             onPress={commitRef ? () => openURL(`${REPO_URL}/commit/${commitRef}`) : undefined}
-            divider={false}
           />
         </SettingsGroup>
 
@@ -106,7 +105,6 @@ export default function AboutScreen() {
             label="Build fingerprint"
             value={fingerprint ?? "—"}
             onPress={fingerprint ? () => setFingerprintOpen(true) : undefined}
-            divider={false}
           />
         </SettingsGroup>
 
@@ -123,7 +121,6 @@ export default function AboutScreen() {
               />
             }
             rightFit="content"
-            divider={false}
           />
         </SettingsGroup>
 
@@ -144,19 +141,17 @@ export default function AboutScreen() {
             icon="ribbon-outline"
             label="License"
             value="AGPL-3.0"
-            divider={false}
           />
         </SettingsGroup>
 
         <SettingsGroup label="Legal" footer={TELEMETRY_FOOTER}>
-          {LEGAL_LINKS.map((link, index) => (
+          {LEGAL_LINKS.map((link) => (
             <SettingRow
               key={link.path}
               icon={link.icon}
               label={link.label}
               onPress={() => openURL(`${LEGAL_URL}${link.path}`)}
               showChevron
-              divider={index < LEGAL_LINKS.length - 1}
             />
           ))}
         </SettingsGroup>

@@ -73,7 +73,6 @@ export default function SettingsScreen() {
             label="About"
             onPress={() => router.push("/settings/about")}
             showChevron
-            divider={false}
           />
         </SettingsGroup>
 

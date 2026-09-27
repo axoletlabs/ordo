@@ -23,7 +23,6 @@ import { errorMessage } from "../../../src/lib/error-message";
 import { otpEnterHelper, otpSentToast } from "../../../src/lib/otp-copy";
 import { haptics } from "../../../src/lib/haptics";
 import { toast } from "../../../src/components/ui/toast-store";
-import { spacing } from "../../../src/theme/tokens";
 import { OtpDeliveryHint } from "../../../src/components/auth/OtpDeliveryHint";
 
 function routeParam(value: string | string[] | undefined): string {
@@ -103,7 +102,7 @@ function VerifyEmailChangeForm({ email }: { email: string }) {
       >
         <SettingsScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           <SettingsGroup compact footer={otpEnterHelper(smtpConfigured, email || undefined)}>
-            <SettingsForm style={styles.form}>
+            <SettingsForm>
               <OtpDeliveryHint smtpConfigured={smtpConfigured} compact />
               <OtpInput
                 label="Verification code"
@@ -139,7 +138,3 @@ function VerifyEmailChangeForm({ email }: { email: string }) {
     </SettingsPage>
   );
 }
-
-const styles = {
-  form: { padding: spacing[16], gap: spacing[12] },
-};

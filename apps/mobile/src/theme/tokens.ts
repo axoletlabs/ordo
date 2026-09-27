@@ -173,11 +173,11 @@ export const fontAssets = {
  * area on top of `screenHorizontalPad`.
  */
 export const layout = {
-  /** Page edge: section labels, cards, list hairlines, header actions. */
+  /** Page edge: section labels, list hairlines, header actions. */
   screenHorizontalPad: SCREEN_RAIL,
   /**
-   * Leading and trailing inset inside a list row or settings card, measured
-   * from that container's edge (the screen rail), not from the screen.
+   * Leading and trailing inset inside a list row, measured from that row's
+   * edge (the screen rail), not from the screen.
    */
   rowInset: ROW_INSET,
   /** Space under the header block before the first screen element. */

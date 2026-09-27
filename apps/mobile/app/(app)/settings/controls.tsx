@@ -78,7 +78,6 @@ export default function ControlsScreen() {
                 onChange={setHoldAction}
               />
             }
-            divider={false}
           />
         </SettingsGroup>
         {Platform.OS === "android" ? (
@@ -90,7 +89,6 @@ export default function ControlsScreen() {
                 <Toggle value={shareQuickBookmark} onValueChange={setShareQuickBookmark} />
               }
               rightFit="content"
-              divider={shareQuickBookmark}
             />
             {shareQuickBookmark ? (
               <SettingRow
@@ -100,7 +98,6 @@ export default function ControlsScreen() {
                   <Toggle value={shareShowQuickAction} onValueChange={setShareShowQuickAction} />
                 }
                 rightFit="content"
-                divider={false}
               />
             ) : null}
           </SettingsGroup>
@@ -125,7 +122,6 @@ export default function ControlsScreen() {
               <Toggle value={forceWebsiteDark} onValueChange={setForceWebsiteDark} />
             }
             rightFit="content"
-            divider={false}
           />
         </SettingsGroup>
       </SettingsScrollView>

@@ -4,6 +4,7 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Skeleton } from "./Skeleton";
+import { ROW_ICON_FRAME } from "../../theme/alignment";
 import { layout, spacing } from "../../theme/tokens";
 
 export function BookmarkListSkeleton({ count = 6 }: { count?: number }) {
@@ -11,7 +12,7 @@ export function BookmarkListSkeleton({ count = 6 }: { count?: number }) {
     <View style={styles.wrap}>
       {Array.from({ length: count }).map((_, i) => (
         <View key={i} style={styles.row}>
-          <Skeleton width={36} height={36} radiusKey="sm" />
+          <Skeleton width={ROW_ICON_FRAME} height={ROW_ICON_FRAME} radiusKey="sm" />
           <View style={styles.copy}>
             <Skeleton width="72%" height={15} />
             <Skeleton width="48%" height={11} style={{ marginTop: spacing[6] }} />

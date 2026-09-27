@@ -14,7 +14,6 @@ import { toast } from "../../../src/components/ui/toast-store";
 import { useAuthStore } from "../../../src/store/auth";
 import { authApi } from "../../../src/lib/api/auth";
 import { haptics } from "../../../src/lib/haptics";
-import { spacing } from "../../../src/theme/tokens";
 
 type StepUp = "regenerate" | "disable" | null;
 
@@ -39,7 +38,6 @@ export default function SecurityScreen() {
                   label="New backup codes"
                   onPress={() => setStepUp("regenerate")}
                   showChevron
-                  divider={false}
                 />
               </SettingsGroup>
               <SettingsGroup label="Danger zone">
@@ -49,13 +47,12 @@ export default function SecurityScreen() {
                   destructive
                   onPress={() => setStepUp("disable")}
                   showChevron
-                  divider={false}
                 />
               </SettingsGroup>
             </>
           ) : (
             <SettingsGroup label="Authenticator" compact>
-              <SettingsForm style={styles.form}>
+              <SettingsForm>
                 <MfaSetupPanel
                   onEnabled={(updated, codes) => {
                     setUser(updated);
@@ -100,7 +97,3 @@ export default function SecurityScreen() {
     </SettingsPage>
   );
 }
-
-const styles = {
-  form: { padding: spacing[16], gap: spacing[12] },
-};

@@ -15,7 +15,6 @@ import { useChangePassword } from "../../../src/hooks/use-auth-actions";
 import { errorMessage, isMfaRequiredError } from "../../../src/lib/error-message";
 import { haptics } from "../../../src/lib/haptics";
 import { toast } from "../../../src/components/ui/toast-store";
-import { spacing } from "../../../src/theme/tokens";
 import { ChangePasswordSchema } from "@ordo/shared";
 import { MfaStepUpPanel } from "../../../src/components/auth/MfaStepUpPanel";
 import { lockedSecretDisplay, passwordAutofillProps } from "../../../src/lib/password-autofill";
@@ -88,7 +87,7 @@ export default function ChangePasswordScreen() {
       >
         <SettingsScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           <SettingsGroup compact>
-            <SettingsForm key={mfaOpen ? "mfa-locked" : "editable"} style={styles.form}>
+            <SettingsForm key={mfaOpen ? "mfa-locked" : "editable"}>
               <Input
                 label="Current password"
                 value={currentField.value}
@@ -153,6 +152,5 @@ export default function ChangePasswordScreen() {
 }
 
 const styles = {
-  form: { padding: spacing[16], gap: spacing[12] },
   formError: { textAlign: "center" as const },
 };

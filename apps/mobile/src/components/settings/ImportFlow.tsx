@@ -194,7 +194,6 @@ export function ImportFlow({
           label="Import from file"
           onPress={pickFile}
           showChevron
-          divider={false}
         />
       </SettingsGroup>
 
@@ -430,7 +429,6 @@ function PreviewState({
                 label={folder.name}
                 onPress={() => onUnlock(folder)}
                 value={unlocked ? "Unlocked" : "Unlock"}
-                divider={false}
               />
             );
           })}
@@ -458,7 +456,6 @@ function PreviewState({
             label="Advanced"
             onPress={onAdvanced}
             value={advanced ? "Hide" : "Show"}
-            divider={false}
           />
           {advanced ? (
             <View style={styles.advancedBody}>
@@ -472,7 +469,6 @@ function PreviewState({
                 description={atomic ? "Everything or nothing" : "Keep rows that succeed"}
                 right={<Toggle value={atomic} onValueChange={onAtomic} />}
                 rightFit="content"
-                divider={false}
               />
             </View>
           ) : null}

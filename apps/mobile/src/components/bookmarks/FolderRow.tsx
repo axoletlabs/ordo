@@ -15,7 +15,9 @@ import { SelectionDragHandle, useSelectionDragRow } from "./SelectionDrag";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
 import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
-import { layout, radius, spacing } from "../../theme/tokens";
+import { RowIconWell } from "../ui/RowIconWell";
+import { ROW_ICON_GLYPH } from "../../theme/alignment";
+import { layout, spacing } from "../../theme/tokens";
 import { folderKey, SELECTION_LONG_PRESS_MS, useSelectionHoldGuard } from "../../hooks/use-selection";
 import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
 import { prefetchFolderBookmarks } from "../../hooks/use-bookmarks";
@@ -155,14 +157,9 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
         {selectionMode ? (
           <SelectionMark selected={!!selected} />
         ) : (
-          <View
-            style={[
-              styles.iconFrame,
-              { backgroundColor: palette.surfaceSecondary, borderColor: palette.border },
-            ]}
-          >
-            <Ionicons name={folder.icon ?? DEFAULT_FOLDER_ICON} size={18} color={palette.accent} />
-          </View>
+          <RowIconWell>
+            <Ionicons name={folder.icon ?? DEFAULT_FOLDER_ICON} size={ROW_ICON_GLYPH} color={palette.accent} />
+          </RowIconWell>
         )}
         </View>
       </ListPressable>
@@ -270,14 +267,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[8],
     paddingLeft: spacing[12],
     paddingRight: spacing[8],
-  },
-  iconFrame: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: "center",
-    justifyContent: "center",
   },
   content: { flex: 1, minWidth: 0 },
   titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[6] },

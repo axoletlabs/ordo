@@ -20,6 +20,7 @@ import { PanelHeader } from "../../../src/components/ui/PanelHeader";
 import { Input } from "../../../src/components/ui/Input";
 import { PanelActions } from "../../../src/components/ui/SheetActionRow";
 import { PressableScale } from "../../../src/components/ui/PressableScale";
+import { RowIconWell } from "../../../src/components/ui/RowIconWell";
 import { Text } from "../../../src/components/ui/Text";
 import { Spinner } from "../../../src/components/ui/Spinner";
 import { toast } from "../../../src/components/ui/toast-store";
@@ -44,7 +45,8 @@ import { useAuthStore } from "../../../src/store/auth";
 import { useSettingsStore } from "../../../src/store/settings";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { haptics } from "../../../src/lib/haptics";
-import { radius, spacing } from "../../../src/theme/tokens";
+import { ROW_ICON_GLYPH } from "../../../src/theme/alignment";
+import { layout, spacing } from "../../../src/theme/tokens";
 
 export default function ServerScreen() {
   const { palette } = useTheme();
@@ -88,24 +90,18 @@ export default function ServerScreen() {
     <SettingsPage title="Hosting">
       <SettingsScrollView>
         <SettingsGroup compact>
-          <View
-            style={[
-              styles.current,
-              { borderBottomColor: palette.border },
-              !serverInfo.data && styles.noDivider,
-            ]}
-          >
+          <View style={[styles.current, { borderBottomColor: palette.border }]}>
             {cloud ? (
               <View
                 accessible
                 accessibilityLabel={`${displayName}, ${hostOf(currentUrl)}. ${statusLabel}`}
                 style={styles.currentMain}
               >
-                <View style={[styles.iconWrap, { backgroundColor: palette.surfaceSecondary }]}>
-                  <Ionicons name={statusIcon} size={16} color={palette.accent} />
-                </View>
+                <RowIconWell>
+                  <Ionicons name={statusIcon} size={ROW_ICON_GLYPH} color={palette.accent} />
+                </RowIconWell>
                 <View style={styles.currentBody}>
-                  <Text variant="bodyStrong" numberOfLines={1}>
+                  <Text variant="headline" numberOfLines={1}>
                     {displayName}
                   </Text>
                   <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.currentUrl}>
@@ -125,11 +121,11 @@ export default function ServerScreen() {
                 onPress={() => openEditor(currentUrl)}
                 style={styles.currentMain}
               >
-                <View style={[styles.iconWrap, { backgroundColor: palette.surfaceSecondary }]}>
-                  <Ionicons name={statusIcon} size={16} color={palette.accent} />
-                </View>
+                <RowIconWell>
+                  <Ionicons name={statusIcon} size={ROW_ICON_GLYPH} color={palette.accent} />
+                </RowIconWell>
                 <View style={styles.currentBody}>
-                  <Text variant="bodyStrong" numberOfLines={1}>
+                  <Text variant="headline" numberOfLines={1}>
                     {displayName}
                   </Text>
                   <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.currentUrl}>
@@ -140,7 +136,7 @@ export default function ServerScreen() {
                   <Badge tone={statusTone}>{statusLabel}</Badge>
                   {serverInfo.isFetching ? <Spinner size="sm" color={palette.accent} /> : null}
                 </View>
-                <Ionicons name="chevron-forward" size={16} color={palette.textFaint} />
+                <Ionicons name="chevron-forward" size={ROW_ICON_GLYPH} color={palette.textFaint} />
               </PressableScale>
             )}
           </View>
@@ -149,7 +145,6 @@ export default function ServerScreen() {
               icon="pricetag-outline"
               label="Version"
               value={`v${serverInfo.data.version}`}
-              divider={false}
             />
           ) : null}
         </SettingsGroup>
@@ -423,25 +418,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  noDivider: { borderBottomWidth: 0 },
   currentMain: {
     flex: 1,
     minWidth: 0,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[12],
-    minHeight: 52,
-    paddingHorizontal: spacing[16],
-    paddingVertical: spacing[10],
-    borderRadius: radius.sm,
-  },
-  iconWrap: {
-    width: 28,
-    height: 28,
-    borderRadius: radius.sm,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
+    paddingHorizontal: layout.rowInset,
+    paddingVertical: spacing[8],
   },
   currentBody: { flex: 1, minWidth: 0 },
   currentUrl: { marginTop: spacing[2] },

@@ -24,7 +24,7 @@ import {
 import { errorMessage } from "../../../src/lib/error-message";
 import { haptics } from "../../../src/lib/haptics";
 import { useTheme } from "../../../src/theme/ThemeProvider";
-import { spacing } from "../../../src/theme/tokens";
+import { layout } from "../../../src/theme/tokens";
 
 const FORMAT_OPTIONS: ReadonlyArray<{ value: ExportFormat; label: string }> = [
   { value: "json", label: "JSON" },
@@ -128,7 +128,6 @@ export default function DataScreen() {
             label="More options"
             onPress={() => setMore((open) => !open)}
             value={more ? "Hide" : "Show"}
-            divider={more}
           />
           {more ? (
             <>
@@ -139,9 +138,8 @@ export default function DataScreen() {
                 rightFit="content"
                 onPress={() => setSelectedFolderIds([])}
               />
-              {folders.map((folder, index) => {
+              {folders.map((folder) => {
                 const unlocked = !folder.protected || Boolean(tokenFor(folder.id));
-                const last = index === folders.length - 1;
                 if (!unlocked) {
                   return (
                     <SettingRow
@@ -150,7 +148,6 @@ export default function DataScreen() {
                       label={folder.name}
                       value="Unlock"
                       onPress={() => setUnlockTarget({ folder, source: "export" })}
-                      divider={!last}
                     />
                   );
                 }
@@ -164,7 +161,6 @@ export default function DataScreen() {
                     right={check(selectedFolderIds.includes(folder.id))}
                     rightFit="content"
                     onPress={() => toggleFolder(folder.id)}
-                    divider={!last}
                   />
                 );
               })}
@@ -205,5 +201,5 @@ export default function DataScreen() {
 }
 
 const styles = StyleSheet.create({
-  pad: { padding: spacing[16] },
+  pad: { padding: layout.rowInset },
 });

@@ -19,6 +19,7 @@ import { useTags } from "../../../src/hooks/use-tags";
 import { usePullToRefresh } from "../../../src/hooks/use-list-controls";
 import { errorMessage } from "../../../src/lib/error-message";
 import { useTheme } from "../../../src/theme/ThemeProvider";
+import { ROW_ICON_FRAME } from "../../../src/theme/alignment";
 import { layout, spacing } from "../../../src/theme/tokens";
 import { FAB_LIST_CLEARANCE } from "../../../src/lib/list-pagination";
 import type { TagDto } from "@ordo/shared";
@@ -142,7 +143,7 @@ function TagListSkeleton({ count = 6 }: { count?: number }) {
     <View>
       {Array.from({ length: count }).map((_, i) => (
         <View key={i} style={styles.skeletonRow}>
-          <Skeleton width={36} height={36} radiusKey="sm" />
+          <Skeleton width={ROW_ICON_FRAME} height={ROW_ICON_FRAME} radiusKey="sm" />
           <View style={styles.skeletonCopy}>
             <Skeleton width="42%" height={15} />
             <Skeleton width="28%" height={11} style={{ marginTop: spacing[8] }} />
