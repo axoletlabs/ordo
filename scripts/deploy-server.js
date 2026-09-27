@@ -10,6 +10,7 @@
  *   ./scripts/deploy-server
  *   ./scripts/deploy-server update
  *   ./scripts/deploy-server update --yes --release v0.1.0
+ *   ./scripts/deploy-server uninstall
  *   ./scripts/deploy-server --help
  */
 "use strict";
@@ -24,10 +25,11 @@ const {
   readFileSync,
   readlinkSync,
   readSync,
+  rmSync,
   statSync,
   writeFileSync,
 } = require("node:fs");
-const { dirname, join, resolve } = require("node:path");
+const { dirname, isAbsolute, join, relative, resolve } = require("node:path");
 const readline = require("node:readline/promises");
 const { stdin, stdout } = require("node:process");
 const { createHash } = require("node:crypto");
@@ -50,7 +52,7 @@ const {
 const { hiddenPreCount, promptReleaseMenu, releaseMenuRows } = require("./release-menu.js");
 const { promptChoiceMenu } = require("./choice-menu.js");
 
-const HELP = `Usage: deploy-server [install|update] [options]
+const HELP = `Usage: deploy-server [install|update|uninstall] [options]
 
 Install, update, and migrate the Ordo backend from a GitHub Release.
 
@@ -59,8 +61,9 @@ From a fresh machine:
   curl -fsSL https://ordo.axolet.com/install | bash
 
 Commands
-  install   First-time setup: prompts (on a TTY), writes .env, install, migrate, build
-  update    Keep .env, install a release, backup SQLite, rebuild, apply pending migrations
+  install    First-time setup: prompts (on a TTY), writes .env, install, migrate, build
+  update     Keep .env, install a release, backup SQLite, rebuild, apply pending migrations
+  uninstall  Stop the server and remove this install, including the database
 
 If you omit the command and this already looks like an install (.env or a
 database), update is assumed. Otherwise install is assumed.
@@ -142,6 +145,8 @@ Examples
   ./scripts/deploy-server update --from-git
   ./scripts/deploy-server --yes --port 8080 --trust-proxy 1 --start
   ./scripts/deploy-server --yes --public --registration true
+  ./scripts/deploy-server uninstall
+  ./scripts/deploy-server uninstall --yes
 `;
 
 const DEFAULTS = {
@@ -345,8 +350,8 @@ function parseArgs(argv) {
         args.jwtSecret = consume();
         break;
       default:
-        if (!flag.startsWith("-") && (flag === "install" || flag === "update")) {
-          if (args.command) throw new Error("Specify only one of install or update.");
+        if (!flag.startsWith("-") && (flag === "install" || flag === "update" || flag === "uninstall")) {
+          if (args.command) throw new Error("Specify only one of install, update, or uninstall.");
           args.command = flag;
           break;
         }
@@ -586,8 +591,120 @@ function looksInstalled(envPath, dbPath, secretPath) {
 }
 
 function inferCommand(explicit, installed) {
-  if (explicit === "install" || explicit === "update") return explicit;
+  if (explicit === "install" || explicit === "update" || explicit === "uninstall") return explicit;
   return installed ? "update" : "install";
+}
+
+function isInsideDir(parent, child) {
+  const root = resolve(parent);
+  const target = resolve(child);
+  const rel = relative(root, target);
+  return rel === "" || (!rel.startsWith("..") && !isAbsolute(rel));
+}
+
+function assertSafeUninstallRoot(repoRoot, home) {
+  const root = resolve(repoRoot);
+  if (root === "/" || root === resolve(home || "")) {
+    throw new Error(`Refusing to remove ${root}.`);
+  }
+}
+
+/** True when this pid is the server or the pnpm process that started it. */
+function installProcess(details, serverDir) {
+  if (!details?.cwd || !details.cmdline) return false;
+  if (resolve(details.cwd) !== resolve(serverDir)) return false;
+  return details.cmdline.includes("dist/main.js") || details.cmdline.includes("pnpm");
+}
+
+function stopProcessGroup(pid, log) {
+  log(`Stopping ordo (pid ${pid}).`);
+  const signal = (sig) => {
+    try {
+      process.kill(-pid, sig);
+    } catch (error) {
+      if (error.code === "ESRCH") return;
+      try {
+        process.kill(pid, sig);
+      } catch (inner) {
+        if (inner.code !== "ESRCH") throw inner;
+      }
+    }
+  };
+  signal("SIGTERM");
+  const deadline = Date.now() + 15000;
+  while (Date.now() < deadline) {
+    if (!pidAlive(pid)) return;
+    sleepMs(200);
+  }
+  log(`ordo (pid ${pid}) did not exit. Sending SIGKILL.`);
+  signal("SIGKILL");
+}
+
+function stopInstalledServer(serverDir, port, log) {
+  const pidPath = join(serverDir, ".ordo.pid");
+  const pids = new Set();
+  const filed = readPidFile(pidPath);
+  if (filed) pids.add(filed);
+  const listener = classifyPort(port, serverDir, pidPath, listenSnapshot(port));
+  if (listener?.kind === "ordo") pids.add(listener.pid);
+  for (const pid of pids) {
+    if (!pidAlive(pid)) continue;
+    if (!installProcess(processDetails(pid), serverDir)) continue;
+    stopProcessGroup(pid, log);
+  }
+  if (listener?.kind === "other") {
+    log(`Left ${listener.command} (pid ${listener.pid}) running. It is not ordo.`);
+  }
+}
+
+async function uninstallCommand({
+  repoRoot,
+  args,
+  interactive,
+  choose,
+  ask,
+  log,
+  home,
+  stopInstall,
+}) {
+  const root = resolve(repoRoot);
+  const serverDir = join(root, "apps", "server");
+  assertSafeUninstallRoot(root, home);
+  if (existsSync(join(root, ".git"))) {
+    throw new Error(
+      `${root} is a git checkout.\nUninstall removes an installed copy, not a source checkout.`,
+    );
+  }
+  const envText = existsSync(join(serverDir, ".env")) ? readFileSync(join(serverDir, ".env"), "utf8") : "";
+  const dbPath = sqlitePathFromUrl(parseDotEnv(envText).DATABASE_URL || "file:./ordo.db", serverDir);
+  const outside = isInsideDir(root, dbPath) ? null : dbPath;
+  if (args.dryRun) {
+    log(`Would stop ordo and remove ${root}`);
+    if (outside) log(`Would leave the database at ${outside}`);
+    return { ok: true, command: "uninstall", dryRun: true, removed: false, database: outside };
+  }
+
+  let proceed = args.yes === true;
+  if (!proceed) {
+    if (!interactive) throw new Error(`Pass --yes to remove ${root}.`);
+    const question = outside
+      ? `Remove ${root}? The database at ${outside} is left in place.`
+      : `Remove ${root}, including the database?`;
+    proceed = choose
+      ? await choose(question, false)
+      : ["y", "yes"].includes((await ask(`${question} [y/N] `)).trim().toLowerCase());
+  }
+  if (!proceed) {
+    log("Uninstall cancelled.");
+    return { ok: true, command: "uninstall", cancelled: true, removed: false, database: outside };
+  }
+
+  const port = Number(parseDotEnv(envText).PORT || DEFAULTS.port);
+  (stopInstall ?? stopInstalledServer)(serverDir, Number.isInteger(port) ? port : DEFAULTS.port, log);
+  rmSync(root, { recursive: true, force: true });
+  log(`Uninstalled Ordo from ${root}`);
+  if (outside) log(`Left the database at ${outside}`);
+  return { ok: true, command: "uninstall", removed: true, database: outside };
 }
 
 function sqlQuote(value) {
@@ -1092,6 +1209,19 @@ async function deploy(options = {}) {
     ? (question, fallback) => promptYesNo(question, fallback, { input: streamIn, output: streamOut })
     : null;
 
+  if (command === "uninstall") {
+    return uninstallCommand({
+      repoRoot,
+      args,
+      interactive,
+      choose,
+      ask: ask(),
+      log,
+      home: env.HOME,
+      stopInstall: options.stopInstall,
+    });
+  }
+
   if (interactive && command === "install") {
     log("Ordo backend install\n");
     settings = await promptSettings(ask(), settings, choose);
@@ -1398,6 +1528,10 @@ module.exports = {
   migratePlan,
   looksInstalled,
   inferCommand,
+  isInsideDir,
+  assertSafeUninstallRoot,
+  installProcess,
+  uninstallCommand,
   backupSqlite,
   gitPull,
   dirtyWorktreeMessage,

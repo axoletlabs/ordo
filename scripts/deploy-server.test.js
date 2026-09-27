@@ -1,6 +1,6 @@
 const assert = require("node:assert/strict");
 const { spawnSync } = require("node:child_process");
-const { mkdirSync, writeFileSync } = require("node:fs");
+const { existsSync, mkdirSync, rmSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join } = require("node:path");
 const { test } = require("node:test");
@@ -15,6 +15,7 @@ const {
   migratePlan,
   looksInstalled,
   inferCommand,
+  installProcess,
   backupSqlite,
   dirtyWorktreeMessage,
   shouldReexec,
@@ -116,6 +117,7 @@ test("parseArgs rejects unknown flags and bad values", () => {
 test("inferCommand treats an existing install as update", () => {
   assert.equal(inferCommand("install", true), "install");
   assert.equal(inferCommand("update", false), "update");
+  assert.equal(inferCommand("uninstall", false), "uninstall");
   assert.equal(inferCommand(null, true), "update");
   assert.equal(inferCommand(null, false), "install");
   const root = tempRepo();
@@ -435,6 +437,101 @@ test("a foreign process on the port aborts before install", async () => {
         log: () => {},
       }),
     /python -m http.server/,
+  );
+});
+
+test("installProcess matches this server and not another cwd", () => {
+  const server = "/opt/ordo/apps/server";
+  assert.equal(installProcess({ cwd: server, cmdline: "node dist/main.js" }, server), true);
+  assert.equal(installProcess({ cwd: server, cmdline: "/usr/bin/pnpm start" }, server), true);
+  assert.equal(installProcess({ cwd: "/tmp/other", cmdline: "pnpm start" }, server), false);
+  assert.equal(installProcess({ cwd: server, cmdline: "vim notes.txt" }, server), false);
+  assert.equal(installProcess(null, server), false);
+});
+
+test("uninstall --yes removes the folder and leaves an outside database", async () => {
+  const root = tempRepo();
+  const outside = join(tmpdir(), `ordo-db-${process.pid}-${Date.now()}.db`);
+  mkdirSync(join(root, "apps", "server", "prisma"), { recursive: true });
+  writeFileSync(join(root, "apps", "server", "prisma", "ordo.db"), "local");
+  writeFileSync(join(root, "apps", "server", ".env"), `DATABASE_URL=file:${outside}\n`);
+  writeFileSync(outside, "kept");
+  const lines = [];
+  const result = await deploy({
+    argv: ["uninstall", "--yes"],
+    repoRoot: root,
+    env: { ...process.env, CI: "1", HOME: tmpdir() },
+    stopInstall: () => lines.push("stop"),
+    log: (line) => lines.push(String(line)),
+  });
+  assert.equal(result.command, "uninstall");
+  assert.equal(result.removed, true);
+  assert.equal(existsSync(root), false);
+  assert.equal(existsSync(outside), true);
+  assert.match(lines.join("\n"), new RegExp(`Left the database at ${outside}`));
+  assert.equal(lines[0], "stop");
+  rmSync(outside, { force: true });
+});
+
+test("uninstall asks before deleting and refuses a git checkout", async () => {
+  const root = tempRepo();
+  writeFileSync(join(root, "apps", "server", ".env"), "PORT=3000\n");
+  const cancelled = await deploy({
+    argv: ["uninstall"],
+    repoRoot: root,
+    interactive: true,
+    env: { ...process.env, CI: "", HOME: tmpdir() },
+    ask: async () => "n",
+    log: () => {},
+  });
+  assert.equal(cancelled.cancelled, true);
+  assert.equal(existsSync(root), true);
+
+  await assert.rejects(
+    () =>
+      deploy({
+        argv: ["uninstall"],
+        repoRoot: root,
+        env: { ...process.env, CI: "1", HOME: tmpdir() },
+        log: () => {},
+      }),
+    /--yes/,
+  );
+  assert.equal(existsSync(root), true);
+
+  const lines = [];
+  const dry = await deploy({
+    argv: ["uninstall", "--yes", "--dry-run"],
+    repoRoot: root,
+    env: { ...process.env, CI: "1", HOME: tmpdir() },
+    log: (line) => lines.push(String(line)),
+  });
+  assert.equal(dry.dryRun, true);
+  assert.equal(existsSync(root), true);
+  assert.match(lines.join("\n"), /Would stop ordo and remove/);
+
+  mkdirSync(join(root, ".git"));
+  await assert.rejects(
+    () =>
+      deploy({
+        argv: ["uninstall", "--yes"],
+        repoRoot: root,
+        env: { ...process.env, CI: "1", HOME: tmpdir() },
+        log: () => {},
+      }),
+    /git checkout/,
+  );
+  assert.equal(existsSync(root), true);
+
+  await assert.rejects(
+    () =>
+      deploy({
+        argv: ["uninstall", "--yes"],
+        repoRoot: root,
+        env: { ...process.env, CI: "1", HOME: root },
+        log: () => {},
+      }),
+    /Refusing to remove/,
   );
 });
 

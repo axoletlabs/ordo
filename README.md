@@ -47,6 +47,13 @@ cd ~/ordo
 ./scripts/deploy-server update --yes --release v0.1.0
 ```
 
+Uninstall stops the server and removes `~/ordo`, including the database. It asks first.
+
+```bash
+curl -fsSL https://ordo.axolet.com/install | bash -s -- uninstall
+./scripts/deploy-server uninstall
+```
+
 Type a version in the menu to jump to that tag. If ordo is already running, the script restarts it. `./scripts/deploy-server --help` lists the rest. `--from-git` pulls the current branch instead of a release.
 
 Back up `apps/server/prisma/ordo.db` and `apps/server/.ordo-secret`. The script snapshots the database before a migration. Let it apply migrations. Don't run `prisma migrate deploy` yourself on a database that has no `_prisma_migrations` table. The first account can always register. Later sign-ups stay closed unless you turn them on. Without SMTP, one-time codes print in the server console.

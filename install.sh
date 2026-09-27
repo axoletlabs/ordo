@@ -118,6 +118,7 @@ Usage: install.sh [flags for the server installer]
   curl -fsSL https://ordo.axolet.com/install | bash
   curl -fsSL https://ordo.axolet.com/install | bash -s -- --yes
   curl -fsSL https://ordo.axolet.com/install | bash -s -- --yes --release v0.1.0
+  curl -fsSL https://ordo.axolet.com/install | bash -s -- uninstall
 
 Installs the latest Ordo server release into ~/ordo.
 Set ORDO_DIR to use another folder.
@@ -125,6 +126,9 @@ Needs Node.js 22.13 or newer.
 If pnpm is missing, the arrow keys choose whether to install it.
 On a terminal, move with the arrow keys and press enter.
 Enter keeps a default port or SMTP URL.
+
+uninstall stops the server and removes that folder, including the database.
+It asks first. --yes skips the question.
 EOF
 }
 
@@ -611,6 +615,179 @@ ordo_exec_server() {
   ordo_run_deploy_args "$dest" "${ORDO_SETUP_FLAGS[@]}" --no-release ${ORDO_FORWARDED[@]+"${ORDO_FORWARDED[@]}"}
 }
 
+ordo_is_uninstall() {
+  local arg
+  for arg in "$@"; do
+    [[ "$arg" == "uninstall" ]] && return 0
+  done
+  return 1
+}
+
+ordo_env_get() {
+  local file="$1" key="$2" line="" value=""
+  [[ -f "$file" ]] || return 0
+  line=$(awk -v k="$key" '
+    $0 ~ "^[[:space:]]*" k "=" {
+      sub(/^[^=]*=/, "")
+      print
+      exit
+    }
+  ' "$file")
+  value="${line#"${line%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  case "$value" in
+    \"*\") value="${value#\"}"; value="${value%\"}" ;;
+    \'*\') value="${value#\'}"; value="${value%\'}" ;;
+  esac
+  printf '%s\n' "$value"
+}
+
+ordo_realpath() {
+  if readlink -f / >/dev/null 2>&1; then
+    readlink -f "$1"
+    return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$1"
+    return 0
+  fi
+  printf '%s\n' "$1"
+}
+
+# Prints a database path that lives outside the install. Empty when it does not.
+ordo_outside_database() {
+  local dest="$1" url="" raw="" path="" root=""
+  url=$(ordo_env_get "$dest/apps/server/.env" DATABASE_URL)
+  [[ -n "$url" ]] || return 0
+  case "$url" in
+    file:*) raw="${url#file:}" ;;
+    *) raw="$url" ;;
+  esac
+  [[ -n "$raw" ]] || return 0
+  case "$raw" in
+    /* | [A-Za-z]:*) path="$raw" ;;
+    *) path="$dest/apps/server/prisma/$raw" ;;
+  esac
+  root=$(ordo_realpath "$dest")
+  path=$(ordo_realpath "$path")
+  case "$path" in
+    "$root" | "$root"/*) return 0 ;;
+    *) printf '%s\n' "$path" ;;
+  esac
+}
+
+ordo_pid_cwd() {
+  local pid="$1"
+  if [[ -d "/proc/$pid" ]]; then
+    readlink "/proc/$pid/cwd" 2>/dev/null || return 1
+    return 0
+  fi
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -a -p "$pid" -d cwd -Fn 2>/dev/null | awk 'substr($0,1,1)=="n" { print substr($0,2); exit }'
+    return 0
+  fi
+  return 1
+}
+
+ordo_pid_cmd() {
+  local pid="$1"
+  if [[ -r "/proc/$pid/cmdline" ]]; then
+    tr '\0' ' ' <"/proc/$pid/cmdline"
+    return 0
+  fi
+  ps -p "$pid" -o args= 2>/dev/null || true
+}
+
+ordo_stop_install() {
+  local dest="$1" server="$dest/apps/server" pid="" cwd="" cmd="" i=0
+  [[ -f "$server/.ordo.pid" ]] || return 0
+  pid=$(awk 'NR==1 && $1 ~ /^[0-9]+$/ { print $1; exit }' "$server/.ordo.pid")
+  [[ -n "$pid" ]] || return 0
+  kill -0 "$pid" 2>/dev/null || return 0
+  cwd=$(ordo_pid_cwd "$pid" || true)
+  cmd=$(ordo_pid_cmd "$pid" || true)
+  [[ "$cwd" == "$server" ]] || return 0
+  case "$cmd" in
+    *dist/main.js* | *pnpm*) ;;
+    *) return 0 ;;
+  esac
+  printf 'Stopping ordo (pid %s)\n' "$pid"
+  kill -TERM "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+  while kill -0 "$pid" 2>/dev/null; do
+    if [[ "$i" -ge 15 ]]; then
+      printf 'ordo (pid %s) did not exit. Sending SIGKILL.\n' "$pid"
+      kill -KILL "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+      return 0
+    fi
+    i=$((i + 1))
+    sleep 1
+  done
+}
+
+ordo_uninstall() {
+  local dest="${ORDO_DIR:-$HOME/ordo}" dry=0 yes=0 arg="" outside="" answer="" root=""
+  for arg in "$@"; do
+    case "$arg" in
+      uninstall) ;;
+      --yes | -y | --non-interactive) yes=1 ;;
+      --dry-run) dry=1 ;;
+      -h | --help)
+        ordo_print_help
+        exit 0
+        ;;
+      *) ordo_die "Unknown option ${arg}. See --help." ;;
+    esac
+  done
+  if [[ ! -d "$dest" ]]; then
+    printf 'Ordo is not installed in %s\n' "$dest"
+    exit 0
+  fi
+  root=$(ordo_realpath "$dest")
+  [[ "$root" != "/" ]] || ordo_die "Refusing to remove /."
+  if [[ -n "${HOME:-}" && "$root" == "$(ordo_realpath "$HOME")" ]]; then
+    ordo_die "Refusing to remove ${root}."
+  fi
+  if ! ordo_is_ordo_tree "$dest"; then
+    ordo_die "${dest} is not an Ordo install."
+  fi
+  if [[ -e "$dest/.git" ]]; then
+    ordo_die "$(printf '%s\n' \
+      "${dest} is a git checkout." \
+      "Uninstall removes an installed copy, not a source checkout.")"
+  fi
+  outside=$(ordo_outside_database "$dest")
+  if [[ "$dry" == 1 ]]; then
+    printf 'Would stop ordo and remove %s\n' "$dest"
+    if [[ -n "$outside" ]]; then
+      printf 'Would leave the database at %s\n' "$outside"
+    fi
+    exit 0
+  fi
+  if [[ "$yes" != 1 ]]; then
+    if ! ordo_have_tty; then
+      ordo_die "$(printf '%s\n' \
+        "Uninstall needs a terminal." \
+        "Re-run with --yes to remove ${dest}.")"
+    fi
+    if [[ -n "$outside" ]]; then
+      answer=$(ordo_ask_yes_no "Remove ${dest}? The database at ${outside} is left in place." 1)
+    else
+      answer=$(ordo_ask_yes_no "Remove ${dest}, including the database?" 1)
+    fi
+    if [[ "$answer" != true ]]; then
+      printf 'Uninstall cancelled.\n'
+      exit 0
+    fi
+  fi
+  ordo_stop_install "$dest"
+  rm -rf "$dest"
+  printf 'Uninstalled Ordo from %s\n' "$dest"
+  if [[ -n "$outside" ]]; then
+    printf 'Left the database at %s\n' "$outside"
+  fi
+  exit 0
+}
+
 ordo_install_main() {
   local repo="${ORDO_REPO:-$ORDO_REPO_DEFAULT}"
   local dest="${ORDO_DIR:-$HOME/ordo}"
@@ -619,6 +796,10 @@ ordo_install_main() {
   if ordo_wants_help "$@"; then
     ordo_print_help
     exit 0
+  fi
+
+  if ordo_is_uninstall "$@"; then
+    ordo_uninstall "$@"
   fi
 
   ordo_ensure_node

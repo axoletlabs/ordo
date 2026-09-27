@@ -57,6 +57,7 @@ if ordo_is_ordo_tree "$tmp/foreign"; then fail "foreign is not ordo"; fi
 
 help_text=$(ordo_print_help)
 [[ "$help_text" == *"ordo.axolet.com/install | bash"* ]] || fail "help should show the curl command"
+[[ "$help_text" == *"uninstall"* ]] || fail "help should show uninstall"
 
 mkdir -p "$tmp/bin" "$tmp/with-pnpm"
 printf '#!/bin/sh\nprintf 11.10.0\n' >"$tmp/with-pnpm/pnpm"
@@ -291,6 +292,76 @@ PY
   [[ "$got" == "$server" ]] || fail "an install that already exists should keep its own prompts, got $got"
   rm -rf "$server"
 )
+
+make_install() {
+  local dir="$1"
+  mkdir -p "$dir/scripts" "$dir/apps/server/prisma"
+  printf 'packages:\n' >"$dir/pnpm-workspace.yaml"
+  : >"$dir/scripts/deploy-server.js"
+  printf 'local\n' >"$dir/apps/server/prisma/ordo.db"
+}
+
+msg=$(ORDO_DIR="$tmp/missing-ordo" ordo_uninstall --yes)
+[[ "$msg" == *"Ordo is not installed"* ]] || fail "missing install, got $msg"
+
+make_install "$tmp/installed"
+msg=$(ORDO_DIR="$tmp/installed" ordo_uninstall --yes --dry-run)
+[[ "$msg" == *"Would stop ordo and remove $tmp/installed"* ]] || fail "dry-run, got $msg"
+[[ -f "$tmp/installed/apps/server/prisma/ordo.db" ]] || fail "dry-run removed the install"
+
+msg=$(ORDO_DIR="$tmp/installed" ordo_uninstall --yes)
+[[ "$msg" == *"Uninstalled Ordo from $tmp/installed"* ]] || fail "uninstall, got $msg"
+[[ ! -d "$tmp/installed" ]] || fail "uninstall left the folder"
+
+make_install "$tmp/foreign"
+printf 'notes\n' >"$tmp/foreign/keep.txt"
+rm -f "$tmp/foreign/pnpm-workspace.yaml"
+status=0
+msg=$(ORDO_DIR="$tmp/foreign" ordo_uninstall --yes 2>&1) || status=$?
+[[ "$status" -ne 0 ]] || fail "a foreign folder should not be removed"
+[[ -f "$tmp/foreign/keep.txt" ]] || fail "foreign folder was removed"
+[[ "$msg" == *"not an Ordo install"* ]] || fail "foreign message, got $msg"
+
+make_install "$tmp/checkout"
+mkdir -p "$tmp/checkout/.git"
+status=0
+msg=$(ORDO_DIR="$tmp/checkout" ordo_uninstall --yes 2>&1) || status=$?
+[[ "$status" -ne 0 ]] || fail "a git checkout should not be removed"
+[[ -d "$tmp/checkout" ]] || fail "git checkout was removed"
+[[ "$msg" == *"git checkout"* ]] || fail "git message, got $msg"
+
+make_install "$tmp/home-root"
+status=0
+msg=$(HOME="$tmp/home-root" ORDO_DIR="$tmp/home-root" ordo_uninstall --yes 2>&1) || status=$?
+[[ "$status" -ne 0 ]] || fail "HOME should not be removed"
+[[ -d "$tmp/home-root" ]] || fail "HOME was removed"
+
+make_install "$tmp/outside"
+mkdir -p "$tmp/data"
+printf 'secret\n' >"$tmp/data/ordo.db"
+printf 'DATABASE_URL=file:%s\n' "$tmp/data/ordo.db" >"$tmp/outside/apps/server/.env"
+msg=$(ORDO_DIR="$tmp/outside" ordo_uninstall --yes)
+[[ "$msg" == *"Left the database at $tmp/data/ordo.db"* ]] || fail "outside database, got $msg"
+[[ -f "$tmp/data/ordo.db" ]] || fail "outside database was removed"
+[[ ! -d "$tmp/outside" ]] || fail "install with an outside database was kept"
+
+make_install "$tmp/cancel"
+(
+  ordo_have_tty() { return 0; }
+  ordo_ask_yes_no() { printf 'false\n'; }
+  ORDO_DIR="$tmp/cancel" ordo_uninstall
+) >"$tmp/cancel.out"
+[[ -d "$tmp/cancel" ]] || fail "No should keep the install"
+[[ "$(cat "$tmp/cancel.out")" == *"Uninstall cancelled."* ]] || fail "cancel message, got $(cat "$tmp/cancel.out")"
+
+status=0
+msg=$(
+  ordo_have_tty() { return 1; }
+  ORDO_DIR="$tmp/cancel" ordo_uninstall 2>&1
+) || status=$?
+[[ "$status" -ne 0 ]] || fail "uninstall without a terminal should stop"
+[[ "$msg" == *"--yes"* ]] || fail "no-tty uninstall, got $msg"
+[[ -d "$tmp/cancel" ]] || fail "no-tty uninstall removed the folder"
 
 rm -rf "$tmp"
 printf 'ok\n'

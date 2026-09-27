@@ -137,4 +137,5 @@ eas update:republish --group <old-good-group-id>
 # self-hosted backend (GitHub Release, not the branch tip)
 curl -fsSL https://ordo.axolet.com/install | bash
 ./scripts/deploy-server update --yes --release vX.Y.Z
+curl -fsSL https://ordo.axolet.com/install | bash -s -- uninstall
 ```
