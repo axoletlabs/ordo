@@ -1,7 +1,7 @@
 /** About, build provenance, updates, and project links. */
 import React from "react";
 import { Linking, StyleSheet, View } from "react-native";
-import { useRouter } from "expo-router";
+import { ChangelogSheet } from "../../../src/components/settings/ChangelogList";
 import * as Clipboard from "expo-clipboard";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
 import { Text } from "../../../src/components/ui/Text";
@@ -58,11 +58,11 @@ function formatFingerprint(value: string): string {
 
 export default function AboutScreen() {
   const { palette } = useTheme();
-  const router = useRouter();
   const build = useBuildInfo();
   const ota = useOtaUpdate();
   const nativeUpdate = useNativeUpdateStore();
   const [fingerprintOpen, setFingerprintOpen] = React.useState(false);
+  const [changelogOpen, setChangelogOpen] = React.useState(false);
   const commit = build.gitHashShort ?? build.gitHash ?? "—";
   const commitRef = build.gitHash ?? build.gitHashShort;
   const fingerprint = ota.runtimeVersion;
@@ -128,7 +128,7 @@ export default function AboutScreen() {
             icon="newspaper-outline"
             label="Changelog"
             value={nativeUpdate.release ? `v${nativeUpdate.release.version}` : undefined}
-            onPress={() => router.push("/settings/changelog")}
+            onPress={() => setChangelogOpen(true)}
             showChevron
           />
         </SettingsGroup>
@@ -178,6 +178,8 @@ export default function AboutScreen() {
           </Text>
         </View>
       </SettingsScrollView>
+
+      <ChangelogSheet visible={changelogOpen} onDismiss={() => setChangelogOpen(false)} />
 
       <FloatingPanel visible={fingerprintOpen} onDismiss={() => setFingerprintOpen(false)}>
         <PanelHeader

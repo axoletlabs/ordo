@@ -70,10 +70,19 @@ test("lists, headings, and rules", () => {
     ),
   );
   assert.equal(blocks[0]?.type, "heading");
-  if (blocks[0]?.type === "heading") assert.equal(blocks[0].text, "Reading");
+  if (blocks[0]?.type === "heading") {
+    assert.equal(blocks[0].level, 2);
+    assert.deepEqual(blocks[0].inlines, [{ type: "text", text: "Reading" }]);
+  }
   assert.equal(blocks[1]?.type, "list");
-  if (blocks[1]?.type === "list") assert.equal(blocks[1].items.length, 3);
-  assert.equal(blocks[2]?.type, "paragraph");
+  if (blocks[1]?.type === "list") {
+    assert.equal(blocks[1].items.length, 3);
+    assert.equal(blocks[1].items[0]?.kind, "bullet");
+    assert.equal(blocks[1].items[2]?.kind, "number");
+    assert.equal(blocks[1].items[2]?.index, 1);
+  }
+  assert.equal(blocks[2]?.type, "rule");
+  assert.equal(blocks[3]?.type, "paragraph");
 });
 
 test("bold, markdown links, and bare https links", () => {
@@ -82,13 +91,124 @@ test("bold, markdown links, and bare https links", () => {
   );
   assert.deepEqual(inlines, [
     { type: "text", text: "See " },
-    { type: "strong", text: "rows" },
+    { type: "strong", inlines: [{ type: "text", text: "rows" }] },
     { type: "text", text: " and " },
-    { type: "link", text: "the site", href: "https://ordo.axolet.com/terms" },
+    {
+      type: "link",
+      href: "https://ordo.axolet.com/terms",
+      inlines: [{ type: "text", text: "the site" }],
+    },
     { type: "text", text: " or " },
-    { type: "link", text: "https://ordo.axolet.com/install", href: "https://ordo.axolet.com/install" },
+    {
+      type: "link",
+      href: "https://ordo.axolet.com/install",
+      inlines: [{ type: "text", text: "https://ordo.axolet.com/install" }],
+    },
     { type: "text", text: "." },
   ]);
+});
+
+test("emphasis, strike, and escapes", () => {
+  assert.deepEqual(parseChangelogInlines("a *lean* **bold** ***both*** ~~gone~~ snake_case \\*nope\\*"), [
+    { type: "text", text: "a " },
+    { type: "em", inlines: [{ type: "text", text: "lean" }] },
+    { type: "text", text: " " },
+    { type: "strong", inlines: [{ type: "text", text: "bold" }] },
+    { type: "text", text: " " },
+    {
+      type: "em",
+      inlines: [{ type: "strong", inlines: [{ type: "text", text: "both" }] }],
+    },
+    { type: "text", text: " " },
+    { type: "del", inlines: [{ type: "text", text: "gone" }] },
+    { type: "text", text: " snake_case *nope*" },
+  ]);
+});
+
+test("autolinks, reference links, and raw html stay plain", () => {
+  const blocks = parseChangelogBody(
+    ["See [rows] and <https://ordo.axolet.com/install>.", "", "<b>not html</b>", "", "[rows]: https://ordo.axolet.com/terms"].join(
+      "\n",
+    ),
+  );
+  assert.equal(blocks.length, 2);
+  if (blocks[0]?.type !== "paragraph" || blocks[1]?.type !== "paragraph") return;
+  assert.equal(blocks[0].inlines[1]?.type, "link");
+  if (blocks[0].inlines[1]?.type === "link") {
+    assert.equal(blocks[0].inlines[1].href, "https://ordo.axolet.com/terms");
+  }
+  assert.equal(blocks[0].inlines[3]?.type, "link");
+  assert.deepEqual(blocks[1].inlines, [{ type: "text", text: "<b>not html</b>" }]);
+});
+
+test("fenced code does not link urls, and quotes, tables, tasks, and images parse", () => {
+  const blocks = parseChangelogBody(
+    [
+      "```bash",
+      "curl https://ordo.axolet.com/install",
+      "```",
+      "",
+      "> A note",
+      "",
+      "| Name | Count |",
+      "| :--- | ---: |",
+      "| rows | 2 |",
+      "",
+      "- [x] Shipped",
+      "- [ ] Next",
+      "  - Nested",
+      "",
+      "![Shot](https://ordo.axolet.com/a.png)",
+      "",
+      "![Local](http://example.com/a.png)",
+      "",
+      "Title",
+      "=====",
+      "",
+      "Line one  ",
+      "line two",
+    ].join("\n"),
+  );
+  assert.equal(blocks[0]?.type, "code");
+  if (blocks[0]?.type === "code") {
+    assert.equal(blocks[0].lang, "bash");
+    assert.equal(blocks[0].text, "curl https://ordo.axolet.com/install");
+  }
+  assert.equal(blocks[1]?.type, "quote");
+  assert.equal(blocks[2]?.type, "table");
+  if (blocks[2]?.type === "table") {
+    assert.deepEqual(blocks[2].align, ["left", "right"]);
+    assert.equal(blocks[2].rows.length, 1);
+  }
+  assert.equal(blocks[3]?.type, "list");
+  if (blocks[3]?.type === "list") {
+    assert.equal(blocks[3].items[0]?.kind, "task");
+    assert.equal(blocks[3].items[0]?.checked, true);
+    assert.equal(blocks[3].items[1]?.checked, false);
+    const nested = blocks[3].items[1]?.blocks.find((block) => block.type === "list");
+    assert.equal(nested?.type, "list");
+  }
+  assert.equal(blocks[4]?.type, "paragraph");
+  if (blocks[4]?.type === "paragraph") {
+    assert.deepEqual(blocks[4].inlines[0], {
+      type: "image",
+      alt: "Shot",
+      href: "https://ordo.axolet.com/a.png",
+    });
+  }
+  assert.equal(blocks[5]?.type, "paragraph");
+  if (blocks[5]?.type === "paragraph") {
+    assert.deepEqual(blocks[5].inlines, [{ type: "text", text: "Local" }]);
+  }
+  assert.equal(blocks[6]?.type, "heading");
+  if (blocks[6]?.type === "heading") assert.equal(blocks[6].level, 1);
+  assert.equal(blocks[7]?.type, "paragraph");
+  if (blocks[7]?.type === "paragraph") {
+    assert.deepEqual(
+      blocks[7].inlines.map((part) => part.type),
+      ["text", "break", "text"],
+    );
+  }
 });
 
 test("rejects unsafe links and keeps the label", () => {
@@ -98,11 +218,7 @@ test("rejects unsafe links and keeps the label", () => {
   const inlines = parseChangelogInlines(
     "[click](http://ordo.axolet.com/terms) and [ok](https://user:pass@ordo.axolet.com/x)",
   );
-  assert.deepEqual(inlines, [
-    { type: "text", text: "click" },
-    { type: "text", text: " and " },
-    { type: "text", text: "ok" },
-  ]);
+  assert.deepEqual(inlines, [{ type: "text", text: "click and ok" }]);
 });
 
 test("blank notes produce no blocks", () => {
