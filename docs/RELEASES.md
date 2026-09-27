@@ -11,13 +11,11 @@ A version is a branch plus a tag. The branch is the full version: `release/0.1.0
 
 | Branch | What a push does | OTAs to | APKs |
 | --- | --- | --- | --- |
-| `main` | everyday work. no version release | development, then the same update on production | development, when the fingerprint changes |
+| `main` | everyday work. no version release | development | development, when the fingerprint changes |
 | `release/x.y.z` | that exact version | production when the version is stable, development for alpha/beta/rc | when the fingerprint changes, on that version |
 | anything else | CI checks | never | never, unless you dispatch a build by hand |
 
 There is no `preview` branch. A leftover `preview` push does not publish an update or an APK.
-
-A release APK only listens on production. A JS push on `main` is published to development, then republished onto production for that same runtime, so the APK from GitHub Releases gets it. A native change still needs a new APK. A push to `release/x.y.z` publishes only to that version's channel.
 
 `v0.1.0` and `v0.1.0-beta.1` both use `release/0.1.0`. The next patch, `v0.1.1`, is its own branch, `release/0.1.1`. To change 0.1.0, push to `release/0.1.0`. That push does not land on `main`. If you also want the fix on `main`, cherry-pick or merge it yourself.
 
@@ -54,7 +52,7 @@ git checkout release/0.1.0
 git push origin release/0.1.0
 ```
 
-- JS only: CI publishes an OTA onto the APKs of that version. A stable version goes to production. An alpha/beta/rc version stays on development, so it does not reach stable users. JS pushed to `main` is also republished onto production when the runtime matches, so the current release APK gets that too.
+- JS only: CI publishes an OTA onto the APKs of that version. A stable version goes to production. An alpha/beta/rc version stays on development, so it does not reach stable users.
 - Native change that needs a new version number: cut `release/0.1.1`, tag `v0.1.1` there, and publish with target `release/0.1.1`.
 
 `main` stays where it was until you bring the fix across yourself:
