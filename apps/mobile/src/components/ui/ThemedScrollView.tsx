@@ -17,7 +17,6 @@ import {
   type ViewStyle,
 } from "react-native";
 import { type FlashListProps } from "@shopify/flash-list";
-import { FlatList as GestureFlatList } from "react-native-gesture-handler";
 import {
   chainHandlers,
   splitScrollLayoutStyle,
@@ -213,8 +212,11 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
       style={[styles.host, fill ? styles.fill : null, wrapper]}
       onLayout={chainHandlers(bar.onLayout, onLayout)}
     >
-      <GestureFlatList
-        ref={ref as never}
+      {/* Native list. The gesture-handler list keeps the refresh gesture
+          open after the finger lifts, so the spinner sits there until the
+          next touch. */}
+      <FlatList
+        ref={ref}
         data={data}
         {...rest}
         {...nativeScrollBarProps}

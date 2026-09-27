@@ -4,9 +4,10 @@
  * the list. Once the mark's pan is active, the range follows the pointer
  * and the list auto-scrolls at the edges.
  *
- * The list does not wait on those pans. Waiting made pull-to-refresh keep
- * the spinner up after the finger lifted, until the next touch. Scrolling
- * is turned off only while a drag is actually active.
+ * A pull is measured in screen coordinates and given up before it can
+ * become a selection. The list itself is a normal scroller, so the refresh
+ * gesture ends when the finger lifts. Scrolling pauses only while a
+ * selection drag is actually active.
  */
 import React, { useCallback, useContext, useEffect, useMemo, useRef } from "react";
 import {
@@ -19,13 +20,14 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { PanGestureHandler } from "react-native-gesture-handler";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { haptics } from "../../lib/haptics";
 import {
   autoScrollStep,
   indexForDrag,
   keysAfterDrag,
   sameSelection,
+  SELECTION_DRAG_SLOP,
   type SelectionDragMode,
   type SelectionRowFrame,
 } from "../../lib/selection-drag";
@@ -126,29 +128,57 @@ export function SelectionDragHandle({
     ctxRef.current?.end();
   }, []);
 
-  return (
-    <PanGestureHandler
-      enabled
-      activateAfterLongPress={armed ? 0 : SELECTION_LONG_PRESS_MS}
-      activeOffsetY={armed ? [-MARK_ACTIVATE_PX, MARK_ACTIVATE_PX] : [-10000, 10000]}
-      shouldCancelWhenOutside={false}
-      onActivated={(event) => {
+  // Built once per arming state, and that state does not change while the
+  // finger is down. A pull fails on screen movement: the row slides with
+  // the finger, so the gesture's own translation stays near zero and would
+  // otherwise turn the pull into a selection after the long-press delay.
+  const pan = useMemo(() => {
+    const holding = armed;
+    let originX = 0;
+    let originY = 0;
+    let claimed = false;
+    return Gesture.Pan()
+      .runOnJS(true)
+      .cancelsTouchesInView(false)
+      .shouldCancelWhenOutside(false)
+      .activateAfterLongPress(holding ? 0 : SELECTION_LONG_PRESS_MS)
+      .activeOffsetY(holding ? [-MARK_ACTIVATE_PX, MARK_ACTIVATE_PX] : [-10000, 10000])
+      .onTouchesDown((event) => {
+        const touch = event.allTouches[0];
+        claimed = false;
+        if (!touch) return;
+        originX = touch.absoluteX;
+        originY = touch.absoluteY;
+      })
+      .onTouchesMove((event, manager) => {
+        if (claimed || holding) return;
+        const touch = event.allTouches[0] ?? event.changedTouches[0];
+        if (!touch) return;
+        const dx = touch.absoluteX - originX;
+        const dy = touch.absoluteY - originY;
+        if (dx * dx + dy * dy > SELECTION_DRAG_SLOP * SELECTION_DRAG_SLOP) manager.fail();
+      })
+      .onStart((event) => {
+        claimed = true;
         fingerDown.current = true;
-        const y = (event.nativeEvent as unknown as { absoluteY: number }).absoluteY;
         if (!modeRef.current) onEnterRef.current?.();
-        ctxRef.current?.beginFromKey(keyRef.current, y);
-      }}
-      onGestureEvent={(event) => {
-        ctxRef.current?.moveTo(event.nativeEvent.absoluteY);
-      }}
-      onEnded={finish}
-      onCancelled={finish}
-      onFailed={finish}
-    >
+        ctxRef.current?.beginFromKey(keyRef.current, event.absoluteY);
+      })
+      .onUpdate((event) => {
+        ctxRef.current?.moveTo(event.absoluteY);
+      })
+      .onFinalize(() => {
+        claimed = false;
+        finish();
+      });
+  }, [armed, finish]);
+
+  return (
+    <GestureDetector gesture={pan}>
       <View style={[style, handleStyle]} collapsable={false}>
         {children}
       </View>
-    </PanGestureHandler>
+    </GestureDetector>
   );
 }
 
