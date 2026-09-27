@@ -11,7 +11,7 @@ import { prefsGet, prefsSet, StorageKeys } from "../lib/storage";
 import type { ThemeMode } from "../theme/theme";
 
 export { DEFAULT_SERVER_URL } from "../lib/hosting";
-export type NavigationStyle = "docked" | "floating" | "compactFloating";
+export type NavigationStyle = "docked" | "floating";
 /** How pages enter and leave, including tab switches. */
 export type NavigationAnimation = "slide" | "fade" | "instant";
 export type CreateButtonAction = "menu" | "bookmark" | "folder";
@@ -87,15 +87,17 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   hydrated: false,
 
   hydrate: async () => {
-    const saved = await prefsGet<Partial<SettingsState>>(StorageKeys.SETTINGS);
+    const saved = await prefsGet<Partial<SettingsState> & { navigationStyle?: string }>(
+      StorageKeys.SETTINGS,
+    );
+    const savedStyle = saved?.navigationStyle;
+    const navigationStyle: NavigationStyle =
+      savedStyle === "floating" || savedStyle === "compactFloating" ? "floating" : "docked";
     set({
       serverUrl: resolvePersistedServerUrl(saved?.serverUrl),
       themeMode: saved?.themeMode ?? "system",
       amoled: saved?.amoled ?? false,
-      navigationStyle:
-        saved?.navigationStyle === "floating" || saved?.navigationStyle === "compactFloating"
-          ? saved.navigationStyle
-          : "docked",
+      navigationStyle,
       navigationAnimation: isNavigationAnimation(saved?.navigationAnimation)
         ? saved.navigationAnimation
         : "slide",
@@ -117,6 +119,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       hydrated: true,
     });
     applyHapticsEnabled(get().hapticsEnabled);
+    if (savedStyle === "compactFloating") {
+      void prefsSet(StorageKeys.SETTINGS, { ...get(), navigationStyle: "floating" });
+    }
     void syncQuickShareFlags({
       quickBookmark: get().shareQuickBookmark,
       showAlongside: get().shareShowQuickAction,

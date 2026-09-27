@@ -24,7 +24,6 @@ const themeOptions: readonly SettingsSelectOption<ThemeMode>[] = [
 const navigationOptions: readonly SettingsSelectOption<NavigationStyle>[] = [
   { value: "docked", label: "Docked", icon: "remove-outline" },
   { value: "floating", label: "Floating dock", shortLabel: "Floating", icon: "tablet-landscape-outline" },
-  { value: "compactFloating", label: "Compact floating dock", shortLabel: "Compact", icon: "ellipsis-horizontal-outline" },
 ];
 
 const pageAnimationOptions: readonly SettingsSelectOption<NavigationAnimation>[] = [

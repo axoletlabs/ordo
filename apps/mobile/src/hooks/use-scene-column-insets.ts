@@ -22,12 +22,8 @@ import { useResponsiveLayout } from "./use-responsive-layout";
 /** `scene` sits beside the rail. `window` is a full-window overlay. `parent` is already inside a padded column. */
 export type ColumnAlign = "scene" | "window" | "parent";
 
-export function navigationRailWidth(showLabels: boolean, compact: boolean): number {
-  return showLabels
-    ? compact
-      ? layout.compactNavigationRailWidth
-      : layout.navigationRailWidth
-    : spacing[56];
+export function navigationRailWidth(showLabels: boolean): number {
+  return showLabels ? layout.navigationRailWidth : spacing[56];
 }
 
 export function useSceneColumnInsets(alignTo: ColumnAlign = "scene") {
@@ -38,7 +34,6 @@ export function useSceneColumnInsets(alignTo: ColumnAlign = "scene") {
   const navigationStyle = useSettingsStore((s) => s.navigationStyle);
   const showLabels = useSettingsStore((s) => s.showNavigationLabels);
   const floating = navigationStyle !== "docked";
-  const compact = (navigationStyle as string) === "compactFloating";
   // The rail is mounted only on the authenticated app stack. Landscape auth
   // screens must not leave a gap for a rail that is not there.
   const railMounted = segments[0] === "(app)";
@@ -46,7 +41,7 @@ export function useSceneColumnInsets(alignTo: ColumnAlign = "scene") {
   const lead = sceneLeadingChrome({
     sideNavigation: respectRail,
     floating,
-    railWidth: navigationRailWidth(showLabels, compact),
+    railWidth: navigationRailWidth(showLabels),
     safeLeading: insets.left,
   });
   const sceneWidth = Math.max(0, width - lead);

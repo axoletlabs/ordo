@@ -202,11 +202,6 @@ export const layout = {
   overlayMaxWidth: 420,
   overlayConfirmWidth: 380,
   navigationRailWidth: 96,
-  compactNavigationRailWidth: 80,
-  compactNavigationRailHeight: 240,
-  compactNavigationRailIconHeight: 176,
-  compactFloatingDockWidth: 276,
-  compactFloatingDockIconWidth: 176,
 } as const;
 
 /**

@@ -3,7 +3,7 @@
  * settings detail screens keep the same chrome as the three primary tabs.
  */
 import React from "react";
-import { Pressable, StyleSheet, Text as NativeText, useWindowDimensions, View } from "react-native";
+import { Pressable, StyleSheet, Text as NativeText, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { usePathname, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -12,7 +12,7 @@ import { useFloatingDockMetrics } from "../../hooks/use-floating-dock-metrics";
 import { useSettingsStore } from "../../store/settings";
 import { navigationRailWidth } from "../../hooks/use-scene-column-insets";
 import { FLOATING_RAIL_EDGE, sceneLeadingChrome } from "../../theme/alignment";
-import { layout, radius, spacing } from "../../theme/tokens";
+import { radius, spacing } from "../../theme/tokens";
 import { requestSearchFieldFocus } from "../../lib/search-field-focus";
 import { NAV_CHROME_TEXT } from "../ui/Text";
 
@@ -41,18 +41,11 @@ export function NavigationRail() {
   const pathname = usePathname();
   const router = useRouter();
   const showLabels = useSettingsStore((s) => s.showNavigationLabels);
-  const navigationStyle = useSettingsStore((s) => s.navigationStyle);
-  const { height: windowHeight } = useWindowDimensions();
   const { floating } = useFloatingDockMetrics();
-  const compact = (navigationStyle as string) === "compactFloating";
   const active = sectionFromPath(pathname);
-  const railWidth = navigationRailWidth(showLabels, compact);
-  const compactRailHeight = showLabels
-    ? layout.compactNavigationRailHeight
-    : layout.compactNavigationRailIconHeight;
-  const compactRailTop = Math.max(0, (windowHeight - compactRailHeight) / 2);
+  const railWidth = navigationRailWidth(showLabels);
   const railInset = Math.max(insets.left, FLOATING_RAIL_EDGE);
-  const iconSize = compact ? 20 : 22;
+  const iconSize = 22;
 
   const go = (href: (typeof ITEMS)[number]["href"]) => {
     router.navigate(href);
@@ -76,9 +69,8 @@ export function NavigationRail() {
     : {
         position: "absolute" as const,
         left: railInset,
-        top: compact ? compactRailTop : Math.max(insets.top, spacing[12]),
-        bottom: compact ? undefined : Math.max(insets.bottom, spacing[12]),
-        height: compact ? compactRailHeight : undefined,
+        top: Math.max(insets.top, spacing[12]),
+        bottom: Math.max(insets.bottom, spacing[12]),
         width: railWidth,
         padding: spacing[4],
         backgroundColor: palette.surfaceElevated,
@@ -144,15 +136,13 @@ export function NavigationRail() {
 export function useRailSceneOffset() {
   const insets = useSafeAreaInsets();
   const showLabels = useSettingsStore((s) => s.showNavigationLabels);
-  const navigationStyle = useSettingsStore((s) => s.navigationStyle);
   const { floating, sideNavigation } = useFloatingDockMetrics();
-  const compact = (navigationStyle as string) === "compactFloating";
   if (!sideNavigation || !floating) return undefined;
   return {
     marginStart: sceneLeadingChrome({
       sideNavigation: true,
       floating: true,
-      railWidth: navigationRailWidth(showLabels, compact),
+      railWidth: navigationRailWidth(showLabels),
       safeLeading: insets.left,
     }),
   };

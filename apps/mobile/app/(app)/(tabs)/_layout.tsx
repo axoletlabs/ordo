@@ -98,24 +98,18 @@ export default function TabsLayout() {
   const detachInactiveScreens = useDetachInactiveTabScenes(navigationAnimation);
   const {
     floating,
-    compact,
     sideNavigation,
     hideBottomNav,
     hideForKeyboard,
     bottom: floatingBottom,
     height: floatingHeight,
-    windowWidth,
   } = useFloatingDockMetrics();
   const tabBarHeight = showNavigationLabels ? layout.tabBarHeight : layout.touchTargetMin;
-  const iconSize = compact ? 20 : 22;
-  const dockItemMargin = floating ? (compact ? spacing[2] : DOCK_PAD) : 0;
+  const iconSize = 22;
+  const dockItemMargin = floating ? DOCK_PAD : 0;
   // Outer radius minus the border and the gutter, so the selected pill's
   // curve stays parallel to the dock instead of crowding the corners.
   const floatingPillRadius = Math.max(0, radius["3xl"] - DOCK_BORDER - DOCK_PAD - dockItemMargin);
-  const compactDockWidth = showNavigationLabels
-    ? layout.compactFloatingDockWidth
-    : layout.compactFloatingDockIconWidth;
-  const compactDockLeft = Math.max(0, (windowWidth - compactDockWidth) / 2);
 
   const tabBarStyle = React.useMemo(() => {
     const reset = {
@@ -220,15 +214,14 @@ export default function TabsLayout() {
           !tabBarStyleIsHidden(props.descriptors[focused.key]?.options.tabBarStyle);
 
         return (
-          <View key={compact ? "compact-dock" : "full-dock"} pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+          <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
             <View
               collapsable={false}
               pointerEvents={showFloatingDock ? "auto" : "none"}
               style={{
                 position: "absolute",
-                left: compact ? compactDockLeft : spacing[16],
-                right: compact ? null : spacing[16],
-                width: compact ? compactDockWidth : ("auto" as const),
+                left: spacing[16],
+                right: spacing[16],
                 top: null,
                 bottom: floatingBottom,
                 height: floatingHeight,
@@ -256,9 +249,6 @@ export default function TabsLayout() {
       return <BottomTabBar key="bottom" {...props} />;
     },
     [
-      compact,
-      compactDockLeft,
-      compactDockWidth,
       floating,
       floatingBottom,
       floatingHeight,

@@ -12,13 +12,11 @@ const FLOATING_DOCK_PATHS = new Set(["/", "/search", "/settings"]);
 export function useFloatingDockMetrics() {
   const pathname = usePathname();
   const insets = useSafeAreaInsets();
-  const { useSideNavigation, width: windowWidth, height: windowHeight } =
-    useResponsiveLayout();
+  const { useSideNavigation } = useResponsiveLayout();
   const navigationStyle = useSettingsStore((s) => s.navigationStyle);
   const selectionActive = useSelectionUiStore((s) => s.active);
   const keyboardVisible = useKeyboardVisible();
   const floating = navigationStyle !== "docked";
-  const compact = navigationStyle === "compactFloating";
   const showLabels = useSettingsStore((s) => s.showNavigationLabels);
   const bottom = Math.max(insets.bottom, spacing[12]);
   const height = (showLabels ? layout.tabBarHeight : layout.touchTargetMin) + spacing[8];
@@ -36,10 +34,7 @@ export function useFloatingDockMetrics() {
 
   return {
     floating,
-    compact,
     sideNavigation: useSideNavigation,
-    windowWidth,
-    windowHeight,
     visible,
     hideBottomNav,
     hideForKeyboard,
