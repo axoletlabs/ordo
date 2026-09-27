@@ -118,7 +118,7 @@ export const authApi = {
   uploadAvatar: (formData: FormData) =>
     api.postForm<UserDto>(AuthRoutes.uploadAvatar.path, formData),
 
-  getAvatar: () => api.getBlob(AuthRoutes.getAvatar.path),
+  getAvatar: () => api.getBlob(AuthRoutes.getAvatar.path, { cache: "no-store" }),
 
   deleteAvatar: () => api.delete<UserDto>(AuthRoutes.deleteAvatar.path),
 };

@@ -4,7 +4,6 @@ import { Pressable, View } from "react-native";
 import { useRouter } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
-import * as FileSystem from "expo-file-system/legacy";
 import {
   SettingsGroup,
   SettingsPage,
@@ -17,6 +16,7 @@ import { toast } from "../../../src/components/ui/toast-store";
 import { useAuthStore } from "../../../src/store/auth";
 import { useServerInfo } from "../../../src/hooks/queries";
 import { authApi } from "../../../src/lib/api/auth";
+import { profilePicturePart } from "../../../src/lib/avatar-upload";
 import { errorMessage } from "../../../src/lib/error-message";
 import { formatDate } from "../../../src/lib/format";
 import { haptics } from "../../../src/lib/haptics";
@@ -47,17 +47,13 @@ export default function AccountScreen() {
         [{ resize: { width: 1024 } }],
         { compress: 0.9, format: ImageManipulator.SaveFormat.JPEG },
       );
-      const fileInfo = await FileSystem.getInfoAsync(square.uri);
-      if (fileInfo.exists && fileInfo.size > maxBytes) {
+      const picture = await profilePicturePart(square.uri);
+      if (picture.size > maxBytes) {
         toast.error("That image is too large.");
         return;
       }
       const form = new FormData();
-      form.append("file", {
-        uri: square.uri,
-        name: "avatar.jpg",
-        type: "image/jpeg",
-      } as unknown as Blob);
+      form.append("file", picture.body, "avatar.jpg");
       const updated = await authApi.uploadAvatar(form);
       setUser(updated);
       haptics.success();

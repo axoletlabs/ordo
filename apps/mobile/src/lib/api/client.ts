@@ -97,6 +97,8 @@ export interface RequestOptions<B = unknown> {
   headers?: Record<string, string>;
   /** Per-attempt timeout override in ms (large transfers). */
   timeoutMs?: number;
+  /** Skip the HTTP cache. Avatar GETs must not come back as 304. */
+  cache?: RequestCache;
   signal?: AbortSignal;
 }
 
@@ -319,6 +321,7 @@ async function request<T>(
     if (folderToken) headers[FOLDER_TOKEN_HEADER] = folderToken;
   }
   const init: RequestInit = { method: options.method ?? "GET", headers, signal: options.signal };
+  if (options.cache) init.cache = options.cache;
   if (options.formData) {
     init.body = options.formData;
   } else if (options.body !== undefined) {

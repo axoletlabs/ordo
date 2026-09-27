@@ -5,6 +5,7 @@ import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { authApi } from "../../lib/api/auth";
 import { avatarColor, displayInitials } from "../../lib/avatar";
+import { imageDataUri } from "../../lib/avatar-image";
 import type { UserDto } from "@ordo/shared";
 
 export function UserAvatar({
@@ -16,9 +17,11 @@ export function UserAvatar({
 }) {
   const { palette } = useTheme();
   const [uri, setUri] = useState<string | null>(null);
+  const [broken, setBroken] = useState(false);
   const stamp = user?.avatarUpdatedAt ?? "";
 
   useEffect(() => {
+    setBroken(false);
     if (!user?.hasAvatar) {
       setUri(null);
       return;
@@ -27,8 +30,8 @@ export function UserAvatar({
     void (async () => {
       try {
         const res = await authApi.getAvatar();
-        const dataUri = await responseToDataUri(res);
-        if (!cancelled) setUri(dataUri);
+        const next = imageDataUri(new Uint8Array(await res.arrayBuffer()), res.headers.get("content-type"));
+        if (!cancelled) setUri(next);
       } catch {
         if (!cancelled) setUri(null);
       }
@@ -39,13 +42,14 @@ export function UserAvatar({
   }, [user?.hasAvatar, stamp]);
 
   const radius = size / 2;
-  if (uri) {
+  if (uri && !broken) {
     return (
       <Image
         source={{ uri }}
         style={{ width: size, height: size, borderRadius: radius }}
         contentFit="cover"
         cachePolicy="memory-disk"
+        onError={() => setBroken(true)}
       />
     );
   }
@@ -63,19 +67,6 @@ export function UserAvatar({
       </Text>
     </View>
   );
-}
-
-function responseToDataUri(res: Response): Promise<string> {
-  const mime = res.headers.get("content-type") || "image/webp";
-  return res.arrayBuffer().then((buffer) => {
-    const bytes = new Uint8Array(buffer);
-    const chunk = 0x8000;
-    let binary = "";
-    for (let i = 0; i < bytes.length; i += chunk) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
-    }
-    return `data:${mime};base64,${btoa(binary)}`;
-  });
 }
 
 const styles = StyleSheet.create({
