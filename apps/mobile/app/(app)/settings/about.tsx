@@ -1,6 +1,7 @@
 /** About, build provenance, updates, and project links. */
 import React from "react";
 import { Linking, StyleSheet, View } from "react-native";
+import { useRouter } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
 import { Text } from "../../../src/components/ui/Text";
@@ -57,6 +58,7 @@ function formatFingerprint(value: string): string {
 
 export default function AboutScreen() {
   const { palette } = useTheme();
+  const router = useRouter();
   const build = useBuildInfo();
   const ota = useOtaUpdate();
   const nativeUpdate = useNativeUpdateStore();
@@ -121,6 +123,13 @@ export default function AboutScreen() {
               />
             }
             rightFit="content"
+          />
+          <SettingRow
+            icon="newspaper-outline"
+            label="Changelog"
+            value={nativeUpdate.release ? `v${nativeUpdate.release.version}` : undefined}
+            onPress={() => router.push("/settings/changelog")}
+            showChevron
           />
         </SettingsGroup>
 
