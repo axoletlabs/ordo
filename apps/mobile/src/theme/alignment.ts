@@ -11,8 +11,8 @@
  * Title line — the title starts on the icon column, top-left, on every
  * screen. The back chevron sits in the gutter to the left of that column,
  * on the same row, so opening a screen does not move the title. A short
- * subtitle follows the title on that row, split by the same dot the lists
- * use. Trailing header icons stay on the right.
+ * subtitle follows on that row in the same header face, only quieter,
+ * after a middle dot. Trailing header icons stay on the right.
  *
  * Row inset — `layout.rowInset`, the leading icon inside a list row,
  * measured from the row edge. Bookmark, folder, tag, and settings rows

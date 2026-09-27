@@ -3,8 +3,8 @@
  * The title is top-left on the icon column, so a tab and the screen it
  * opens share one left edge. The back chevron sits in the gutter to the
  * left of that column and does not push the title. A short subtitle follows
- * the title on the same row, after the list dot. Trailing icons stay on
- * the right.
+ * the title on the same row, in the same face, only quieter, after a
+ * middle dot. Trailing icons stay on the right.
  */
 import React from "react";
 import {
@@ -29,7 +29,7 @@ import {
   CHEVRON_BACK_ICON_SIZE,
   CHEVRON_BACK_TIP_INSET,
 } from "../../theme/alignment";
-import { layout, radius, spacing } from "../../theme/tokens";
+import { layout, spacing } from "../../theme/tokens";
 import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
 
 /** Matches `Text` variant "header" line height (14px × 1.5). */
@@ -181,8 +181,10 @@ export function Header({
             {titleBlock}
             {subtitle ? (
               <>
-                <View style={[styles.metaDot, { backgroundColor: palette.textFaint }]} />
-                <Text variant="footnote" color="tertiary" numberOfLines={1} style={styles.meta}>
+                <Text variant="header" color="tertiary" style={styles.metaSep} accessible={false}>
+                  ·
+                </Text>
+                <Text variant="header" color="tertiary" numberOfLines={1} style={styles.meta}>
                   {subtitle}
                 </Text>
               </>
@@ -269,13 +271,14 @@ const styles = StyleSheet.create({
   },
   titleText: { flexShrink: 1, minWidth: 0, width: "auto" },
   titleHit: { flexShrink: 1, minWidth: 0, justifyContent: "center" },
-  // Same 3px mark as a bookmark row's meta separator.
-  metaDot: {
-    width: 3,
-    height: 3,
-    borderRadius: radius.full,
-    marginHorizontal: spacing[8],
+  // Same face as the title. Tracking is cleared so the dot stays a mark, not a letter.
+  metaSep: {
+    letterSpacing: 0,
+    marginLeft: spacing[8],
+    marginRight: spacing[6],
     flexShrink: 0,
+    includeFontPadding: false,
+    textAlignVertical: "center",
   },
   meta: { flexShrink: 0, includeFontPadding: false, textAlignVertical: "center" },
   trailing: {
