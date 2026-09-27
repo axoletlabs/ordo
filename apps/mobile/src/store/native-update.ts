@@ -16,6 +16,7 @@ import {
   isTrustedGithubAssetUrl,
   isTrustedGithubReleasePageUrl,
 } from "../lib/github-asset-url";
+import { apkFileIsComplete, nativeDownloadRatio } from "../lib/native-download-progress";
 import { prefsGet, prefsSet, StorageKeys } from "../lib/storage";
 
 const GITHUB_REPO_API = "https://api.github.com/repos/axoletlabs/ordo";
@@ -28,6 +29,9 @@ const INSTALL_UNKNOWN_APPS_ACTION = "android.settings.MANAGE_UNKNOWN_APP_SOURCES
 
 /** Invalidate in-flight GitHub checks so they cannot overwrite a download or installer. */
 let checkEpoch = 0;
+/** Invalidate an in-flight download or installer result after cancel or dismiss. */
+let downloadEpoch = 0;
+let activeDownload: FileSystem.DownloadResumable | null = null;
 
 export interface NativeRelease {
   version: string;
@@ -80,6 +84,8 @@ interface NativeUpdateState {
   status: NativeUpdateStatus;
   release: NativeRelease | null;
   progress: number;
+  /** Bytes written for the in-flight APK. 0 until the first socket read. */
+  receivedBytes: number;
   downloadedUri: string | null;
   /** True while this process is fetching or presenting a just-downloaded APK. */
   showProgress: boolean;
@@ -94,6 +100,8 @@ interface NativeUpdateState {
   check: (force?: boolean) => Promise<NativeRelease | null>;
   downloadAndInstall: () => Promise<void>;
   install: () => Promise<void>;
+  /** Stop the transfer, drop the partial file, and close the dialog. */
+  cancelDownload: () => void;
   dismissDownload: () => void;
 }
 
@@ -206,7 +214,7 @@ async function apkIsReady(uri: string | null, apkSize: number): Promise<boolean>
   try {
     const info = await FileSystem.getInfoAsync(uri);
     if (!info.exists) return false;
-    return apkSize <= 0 || info.size === apkSize;
+    return apkFileIsComplete(info.size ?? 0, apkSize);
   } catch {
     return false;
   }
@@ -239,6 +247,7 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
   status: isSupported() ? "idle" : "disabled",
   release: null,
   progress: 0,
+  receivedBytes: 0,
   downloadedUri: null,
   showProgress: false,
   installing: false,
@@ -430,6 +439,7 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
   downloadAndInstall: async () => {
     if (get().status === "downloading" || get().installing) return;
     checkEpoch += 1;
+    const epoch = ++downloadEpoch;
     const release = get().release;
     if (!release) return;
     if (!isTrustedGithubAssetUrl(release.apkUrl)) {
@@ -438,9 +448,11 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
     const destination = apkDestination(release.version);
     if (!destination) return;
     if (await apkIsReady(destination, release.apkSize)) {
+      if (epoch !== downloadEpoch) return;
       set({
         status: "downloaded",
         progress: 1,
+        receivedBytes: release.apkSize,
         downloadedUri: destination,
         error: null,
         showProgress: true,
@@ -450,36 +462,65 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
       if (get().lastChecked == null && !get().error) void get().check(true).catch(() => {});
       return;
     }
+    if (epoch !== downloadEpoch) return;
+    // Open the dialog as the request starts. Deleting the previous partial first
+    // left the bar at 0% while the filesystem caught up.
     set({
       status: "downloading",
       progress: 0,
+      receivedBytes: 0,
       downloadedUri: null,
       error: null,
       showProgress: true,
       installPermissionLikely: false,
     });
+    const stillCurrent = () => epoch === downloadEpoch;
     try {
-      await FileSystem.deleteAsync(destination, { idempotent: true });
       const download = FileSystem.createDownloadResumable(
         release.apkUrl,
         destination,
-        {},
+        {
+          // Keep Content-Length. OkHttp otherwise asks for gzip and then
+          // reports an unknown size, which left this dialog at 0%.
+          headers: {
+            Accept: "application/octet-stream",
+            "Accept-Encoding": "identity",
+          },
+        },
         ({ totalBytesWritten, totalBytesExpectedToWrite }) => {
-          if (totalBytesExpectedToWrite > 0) {
-            set({ progress: totalBytesWritten / totalBytesExpectedToWrite });
-          }
+          if (!stillCurrent()) return;
+          const written = Number(totalBytesWritten) || 0;
+          set({
+            receivedBytes: written,
+            progress: nativeDownloadRatio(written, Number(totalBytesExpectedToWrite), release.apkSize),
+          });
         },
       );
+      activeDownload = download;
       const result = await download.downloadAsync();
+      if (activeDownload === download) activeDownload = null;
+      if (!stillCurrent()) return;
       if (!result?.uri) throw new Error("The update download did not finish");
+      if (result.status != null && (result.status < 200 || result.status >= 300)) {
+        await FileSystem.deleteAsync(result.uri, { idempotent: true });
+        throw new Error(`Couldn't download the update (HTTP ${result.status}).`);
+      }
       if (!(await apkIsReady(result.uri, release.apkSize))) {
         await FileSystem.deleteAsync(result.uri, { idempotent: true });
         throw new Error("The update download was incomplete");
       }
-      set({ status: "downloaded", progress: 1, downloadedUri: result.uri });
+      if (!stillCurrent()) return;
+      set({
+        status: "downloaded",
+        progress: 1,
+        receivedBytes: release.apkSize,
+        downloadedUri: result.uri,
+      });
       await get().install();
       if (get().lastChecked == null && !get().error) void get().check(true).catch(() => {});
     } catch (error) {
+      if (activeDownload) activeDownload = null;
+      if (!stillCurrent()) return;
       if (get().downloadedUri) {
         set({
           status: "downloaded",
@@ -487,8 +528,13 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
         });
         throw error;
       }
+      await deleteApk(release.version);
+      if (!stillCurrent()) return;
       set({
         status: "error",
+        progress: 0,
+        receivedBytes: 0,
+        downloadedUri: null,
         error: error instanceof Error ? error.message : "Couldn't download the update.",
       });
       throw error;
@@ -496,15 +542,18 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
   },
 
   install: async () => {
+    const epoch = downloadEpoch;
     const release = get().release;
     const currentUri = get().downloadedUri;
     const uri = (await apkIsReady(currentUri, release?.apkSize ?? 0))
       ? currentUri
       : await resolveLocalApk(release);
+    if (epoch !== downloadEpoch) return;
     if (!uri) {
       set({
         downloadedUri: null,
         progress: 0,
+        receivedBytes: 0,
         status: release ? "available" : "idle",
         installing: false,
       });
@@ -528,9 +577,13 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
         type: APK_MIME_TYPE,
         flags: READ_URI_PERMISSION,
       });
+      if (epoch !== downloadEpoch) return;
       const stillNeedsUpdate =
         !!release && isNewerVersion(release.version, currentVersion());
-      if (!stillNeedsUpdate) return;
+      if (!stillNeedsUpdate) {
+        set({ showProgress: false, error: null, installPermissionLikely: false });
+        return;
+      }
       const canceled = result.resultCode === IntentLauncher.ResultCode.Canceled;
       set({
         status: "downloaded",
@@ -539,10 +592,11 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
         showProgress: true,
         error: canceled
           ? "Install was cancelled. Your current version is unchanged."
-          : "The new version isn't installed yet. Finish the system installer, or allow Ordo to install unknown apps.",
+          : `The new version isn't installed yet. Finish the system installer, or allow ${APP_NAME} to install unknown apps.`,
         installPermissionLikely: !canceled,
       });
     } catch (error) {
+      if (epoch !== downloadEpoch) return;
       const message = error instanceof Error ? error.message : "Couldn't open the installer.";
       const permission = isInstallPermissionError(message);
       set({
@@ -551,17 +605,38 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
         progress: 1,
         showProgress: true,
         error: permission
-          ? "Android blocked the installer. Allow Ordo to install unknown apps, then try again."
+          ? `Android blocked the installer. Allow ${APP_NAME} to install unknown apps, then try again.`
           : message,
         installPermissionLikely: permission,
       });
       throw error;
     } finally {
-      set({ installing: false });
+      if (epoch === downloadEpoch) set({ installing: false });
     }
   },
 
+  cancelDownload: () => {
+    downloadEpoch += 1;
+    const task = activeDownload;
+    activeDownload = null;
+    const version = get().release?.version;
+    const release = get().release;
+    void task?.cancelAsync().catch(() => {});
+    set({
+      status: release ? "available" : "idle",
+      progress: 0,
+      receivedBytes: 0,
+      downloadedUri: null,
+      showProgress: false,
+      installing: false,
+      installPermissionLikely: false,
+      error: null,
+    });
+    if (task && version) void deleteApk(version);
+  },
+
   dismissDownload: () => {
+    downloadEpoch += 1;
     const release = get().release;
     const downloaded = !!get().downloadedUri;
     set({

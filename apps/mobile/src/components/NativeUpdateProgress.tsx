@@ -6,11 +6,17 @@ import { PanelHeader } from "./ui/PanelHeader";
 import { Text } from "./ui/Text";
 import { Button } from "./ui/Button";
 import { PanelActions } from "./ui/SheetActionRow";
+import { Spinner } from "./ui/Spinner";
 import { toast } from "./ui/toast-store";
 import {
   openInstallPermissionSettings,
   useNativeUpdateStore,
 } from "../store/native-update";
+import {
+  downloadPercentLabel,
+  downloadProgressLabel,
+  downloadTrackPercent,
+} from "../lib/native-download-progress";
 import { useTheme } from "../theme/ThemeProvider";
 import { layout, radius, spacing } from "../theme/tokens";
 
@@ -21,18 +27,29 @@ export function NativeUpdateProgress() {
     update.showProgress &&
     (update.status === "downloading" ||
       update.installing ||
-      (update.status === "downloaded" && !!update.downloadedUri) ||
-      (update.status === "error" && (!!update.downloadedUri || update.progress > 0)));
+      update.status === "error" ||
+      (update.status === "downloaded" && !!update.downloadedUri));
   const downloading = update.status === "downloading";
   const downloadFailed = update.status === "error" && !update.downloadedUri;
   const installUnfinished = !downloading && !downloadFailed && !!update.error;
-  const percent = Math.round(update.progress * 100);
+  const starting = downloading && update.receivedBytes <= 0;
+  const percentLabel = downloadPercentLabel(update.progress);
+  const trackPercent = downloadTrackPercent(update.progress, update.receivedBytes);
+  const amountLabel = downloadProgressLabel(
+    update.receivedBytes,
+    update.release?.apkSize ?? 0,
+  );
+
+  const close = () => {
+    if (update.status === "downloading") update.cancelDownload();
+    else update.dismissDownload();
+  };
 
   return (
     <FloatingPanel
       visible={visible}
-      onDismiss={update.dismissDownload}
-      dismissible={!downloading && !update.installing}
+      onDismiss={close}
+      dismissible
       maxWidth={layout.overlayConfirmWidth}
     >
       <PanelHeader
@@ -61,18 +78,43 @@ export function NativeUpdateProgress() {
 
       {downloading ? (
         <View style={styles.progressSection}>
-          <View style={[styles.progressTrack, { backgroundColor: palette.surfaceSecondary }]}>
-            <View
-              style={[
-                styles.progressFill,
-                { backgroundColor: palette.accent, width: `${percent}%` },
-              ]}
-            />
-          </View>
           <View style={styles.progressMeta}>
-            <Text variant="footnote" color="secondary">Downloading</Text>
-            <Text variant="monoSmall" color="accent">{percent}%</Text>
+            <Text
+              variant={starting ? "footnote" : "monoSmall"}
+              color="secondary"
+              numberOfLines={1}
+              style={styles.amount}
+            >
+              {amountLabel}
+            </Text>
+            {starting ? (
+              <Spinner size="sm" color={palette.accent} />
+            ) : (
+              <Text variant="monoSmall" color="accent">
+                {percentLabel}
+              </Text>
+            )}
           </View>
+          <View
+            accessibilityRole="progressbar"
+            accessibilityLabel={starting ? "Starting download" : amountLabel}
+            accessibilityValue={
+              starting ? undefined : { min: 0, max: 100, now: Math.round(update.progress * 100) }
+            }
+            style={[styles.progressTrack, { backgroundColor: palette.background }]}
+          >
+            {trackPercent > 0 ? (
+              <View style={[styles.progressFill, { flex: trackPercent, backgroundColor: palette.accent }]} />
+            ) : null}
+            <View style={{ flex: Math.max(0.001, 100 - trackPercent) }} />
+          </View>
+          <Button
+            label="Cancel"
+            variant="secondary"
+            block
+            onPress={update.cancelDownload}
+            style={styles.cancel}
+          />
         </View>
       ) : downloadFailed ? (
         <View style={styles.actions}>
@@ -127,16 +169,28 @@ export function NativeUpdateProgress() {
 
 const styles = StyleSheet.create({
   progressSection: {
-    marginTop: spacing[4],
+    width: "100%",
   },
-  progressTrack: { height: 8, borderRadius: radius.full, overflow: "hidden" },
-  progressFill: { height: "100%", borderRadius: radius.full },
   progressMeta: {
-    marginTop: spacing[8],
+    minHeight: 18,
     flexDirection: "row",
+    alignItems: "center",
     justifyContent: "space-between",
+    gap: spacing[12],
+    marginBottom: spacing[8],
   },
+  amount: { flex: 1 },
+  progressTrack: {
+    height: 3,
+    width: "100%",
+    borderRadius: radius.full,
+    overflow: "hidden",
+    flexDirection: "row",
+  },
+  progressFill: { height: 3 },
+  cancel: { marginTop: spacing[12] },
   actions: { gap: spacing[4] },
   error: { marginBottom: spacing[12] },
   permissionButton: { width: "100%", marginBottom: spacing[8] },
 });
+

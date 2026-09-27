@@ -74,7 +74,6 @@ export function OtaUpdateCard() {
       <SettingRow
         icon="cloud-download-outline"
         label="App updates"
-        description={!update.enabled ? "Available in production builds" : undefined}
         right={
           <Button
             label={busy ? "Checking…" : "Check"}
@@ -100,13 +99,11 @@ export function OtaUpdateCard() {
           (native.status === "downloading" || native.installing);
         const otaBusy = phase.kind === "ota" && ota.status === "downloading";
         const busy = nativeBusy || otaBusy;
-        const nativeVersion = native.release ? `v${native.release.version}` : "app";
         return (
           <SettingRow
             key={`${phase.kind}-${phase.action}`}
             icon={phase.kind === "native" ? "phone-portrait-outline" : "cloud-download-outline"}
             label={phase.kind === "native" ? "Install update" : "App update"}
-            description={phase.kind === "native" ? `${nativeVersion} APK` : undefined}
             right={
               <Button
                 label={phaseLabel(phase)}
