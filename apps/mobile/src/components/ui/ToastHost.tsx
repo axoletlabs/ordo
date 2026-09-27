@@ -105,20 +105,19 @@ function ToastItem({ toast }: { toast: Toast }) {
           {toast.message}
         </Text>
         {toast.action ? (
-          <View style={styles.icon}>
-            <PressableScale
-              scaleTo={0.92}
-              hitSlop={6}
-              onPress={() => {
-                toast.action!.onPress();
-                animateOut();
-              }}
-            >
-              <Text variant="label" color="accent" style={styles.action}>
-                {toast.action.label}
-              </Text>
-            </PressableScale>
-          </View>
+          <PressableScale
+            scaleTo={0.92}
+            hitSlop={6}
+            onPress={() => {
+              toast.action!.onPress();
+              animateOut();
+            }}
+            style={styles.actionHit}
+          >
+            <Text variant="label" color="accent" numberOfLines={1} style={styles.action}>
+              {toast.action.label}
+            </Text>
+          </PressableScale>
         ) : null}
       </Animated.View>
     </GestureDetector>
@@ -169,6 +168,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  message: { flex: 1, includeFontPadding: false },
+  message: { flex: 1, minWidth: 0, includeFontPadding: false },
+  // Same first-line box as the icon, but the label keeps its own width.
+  // The icon slot is 16px; putting Download / Restart in it clipped them.
+  actionHit: {
+    flexShrink: 0,
+    minHeight: FOOTNOTE_LINE_BOX,
+    justifyContent: "center",
+  },
   action: { includeFontPadding: false },
 });
