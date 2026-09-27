@@ -15,6 +15,8 @@ const {
   migratePlan,
   looksInstalled,
   inferCommand,
+  formatSetupSummary,
+  promptGuidedSettings,
   installProcess,
   backupSqlite,
   dirtyWorktreeMessage,
@@ -438,6 +440,33 @@ test("a foreign process on the port aborts before install", async () => {
       }),
     /python -m http.server/,
   );
+});
+
+test("guided setup keeps the usual choices and explains them", async () => {
+  const seen = [];
+  const pick = async (spec) => {
+    seen.push(`${spec.title}\n${spec.detail}`);
+    return spec.options[spec.selected].value;
+  };
+  const ask = async (question) => {
+    seen.push(question);
+    return "";
+  };
+  const { DEFAULTS } = require("./deploy-server.js");
+  const settings = await promptGuidedSettings(ask, DEFAULTS, pick, () => {});
+  assert.equal(settings.port, 3000);
+  assert.equal(settings.registration, false);
+  assert.equal(settings.emailVerification, false);
+  assert.equal(settings.smtpUrl, "");
+  assert.equal(settings.listenHost, "127.0.0.1");
+  assert.equal(settings.trustProxy, 0);
+  assert.match(seen.join("\n"), /The first sign-up becomes the owner either way/);
+  assert.match(seen.join("\n"), /Port \[3000\]/);
+  const summary = formatSetupSummary(settings, "/home/ubuntu/ordo");
+  assert.match(summary, /Only the first account/);
+  assert.match(summary, /http:\/\/127\.0\.0\.1:3000/);
+  assert.match(summary, /Codes in the server log/);
+  assert.match(summary, /Compiling the server can take a few minutes/);
 });
 
 test("installProcess matches this server and not another cwd", () => {

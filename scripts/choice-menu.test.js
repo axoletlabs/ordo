@@ -42,6 +42,18 @@ test("the highlight is the only marker", () => {
   );
   assert.match(colored, /\u001b\[36m›/);
   assert.match(colored, /\u001b\[1mNo/);
+
+  const explained = renderChoiceMenu(
+    {
+      title: "Who can create an account?",
+      detail: "The first sign-up becomes the owner either way.",
+      options: [{ label: "Only the first account" }, { label: "Anyone who can reach the server" }],
+      selected: 0,
+    },
+    { color: false },
+  );
+  assert.match(explained, /The first sign-up becomes the owner either way\./);
+  assert.match(explained, /› Only the first account/);
 });
 
 function keyStreams() {

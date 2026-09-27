@@ -124,8 +124,9 @@ Installs the latest Ordo server release into ~/ordo.
 Set ORDO_DIR to use another folder.
 Needs Node.js 22.13 or newer.
 If pnpm is missing, the arrow keys choose whether to install it.
-On a terminal, move with the arrow keys and press enter.
-Enter keeps a default port or SMTP URL.
+On a terminal, setup explains each question.
+Move with the arrow keys and press enter.
+Enter keeps a default port or mail setting.
 
 uninstall stops the server and removes that folder, including the database.
 It asks first. --yes skips the question.
@@ -183,6 +184,7 @@ ordo_pnpm_choice() {
     return 0
   fi
   index=$(ordo_choose 0 "pnpm is not installed." \
+    --detail "This release expects pnpm ${ORDO_PNPM_VERSION}." \
     "Install pnpm ${ORDO_PNPM_VERSION}" \
     "I'll install it myself")
   if [[ "$index" == 0 ]]; then
@@ -308,16 +310,24 @@ ordo_paint() {
   fi
 }
 
-# Title, blank line, one row per option, blank line, hint.
+# Title, optional explanation, blank line, one row per option, blank line, hint.
 ordo_menu_lines() {
-  printf '%s\n' "$(( $1 + 4 ))"
+  local extra=4
+  [[ -n "${ORDO_MENU_DETAIL:-}" ]] && extra=5
+  printf '%s\n' "$(( $1 + extra ))"
 }
 
 ordo_menu_frame() {
   local title="$1" selected="$2" index=0
+  local detail="${ORDO_MENU_DETAIL:-}"
   shift 2
   ordo_paint "1" "$title"
-  printf '\n\n'
+  printf '\n'
+  if [[ -n "$detail" ]]; then
+    ordo_paint "2" "$detail"
+    printf '\n'
+  fi
+  printf '\n'
   while [[ $# -gt 0 ]]; do
     if [[ "$index" -eq "$selected" ]]; then
       printf '  '
@@ -368,8 +378,13 @@ ordo_menu_on_int() {
 # Prints the selected index. Draws on /dev/tty so the caller can capture stdout.
 ordo_choose() {
   local selected="$1" title="$2" key="" rest="" drawn=0 count=0
-  local options
+  local detail="" options
   shift 2
+  if [[ "${1:-}" == "--detail" ]]; then
+    detail="${2:-}"
+    shift 2
+  fi
+  ORDO_MENU_DETAIL="$detail"
   options=("$@")
   count=${#options[@]}
   [[ "$count" -gt 0 ]] || return 1
@@ -406,6 +421,7 @@ ordo_choose() {
   done
   trap - INT TERM EXIT
   ordo_menu_stop
+  ORDO_MENU_DETAIL=""
   printf '%s\n' "$selected"
 }
 
@@ -433,8 +449,12 @@ ordo_valid_hops() {
 }
 
 ordo_ask_yes_no() {
-  local title="$1" selected="$2" index=""
-  index=$(ordo_choose "$selected" "$title" "Yes" "No")
+  local title="$1" selected="$2" detail="${3:-}" index=""
+  if [[ -n "$detail" ]]; then
+    index=$(ordo_choose "$selected" "$title" --detail "$detail" "Yes" "No")
+  else
+    index=$(ordo_choose "$selected" "$title" "Yes" "No")
+  fi
   if [[ "$index" == 0 ]]; then
     printf 'true\n'
   else
@@ -516,44 +536,186 @@ ordo_bind_setup_flags() {
   fi
 }
 
+ordo_setup_color() {
+  if [[ -z "${NO_COLOR:-}" ]]; then
+    ORDO_MENU_COLOR=1
+  else
+    ORDO_MENU_COLOR=0
+  fi
+}
+
+ordo_setup_intro() {
+  ordo_setup_color
+  {
+    printf '\n'
+    ordo_paint "1" "Set up this server"
+    printf '\n\n'
+    ordo_paint "2" "  A few questions. The highlighted row is the usual choice."
+    printf '\n'
+    ordo_paint "2" "  Arrow keys move. Enter selects. Enter on a blank line keeps the default."
+    printf '\n'
+  } >/dev/tty
+}
+
+ordo_kicker() {
+  ordo_setup_color
+  {
+    printf '\n  '
+    ordo_paint "2" "$1"
+    printf '\n'
+  } >/dev/tty
+}
+
+ordo_explain() {
+  local title="$1" detail="$2"
+  ordo_setup_color
+  {
+    printf '\n'
+    ordo_paint "1" "$title"
+    printf '\n'
+    ordo_paint "2" "$detail"
+    printf '\n\n'
+  } >/dev/tty
+}
+
+ordo_setup_summary() {
+  local folder="$1" port="$2" registration="$3" email="$4" smtp="$5" trust="$6" public="$7" start="$8"
+  local host="127.0.0.1" accounts="Only the first account" signup="No email code"
+  local mail="Codes in the server log" network="Only this machine" starting="Not yet"
+  [[ "$public" == 1 ]] && host="0.0.0.0"
+  [[ "$registration" == true ]] && accounts="Anyone who can reach the server"
+  [[ "$email" == true ]] && signup="Email code required"
+  if [[ -n "$smtp" ]]; then
+    mail="SMTP configured"
+  fi
+  if [[ "$trust" != 0 ]]; then
+    if [[ "$trust" == 1 ]]; then
+      network="Proxy in front, 1 hop"
+    else
+      network="Proxy in front, ${trust} hops"
+    fi
+  elif [[ "$public" == 1 ]]; then
+    network="This machine and the LAN"
+  fi
+  [[ "$start" == 1 ]] && starting="In this terminal"
+  ordo_setup_color
+  {
+    printf '\n'
+    ordo_paint "1" "Ready"
+    printf '\n\n'
+    printf '  %-12s %s\n' "Folder" "$folder"
+    printf '  %-12s %s\n' "Address" "http://${host}:${port}"
+    printf '  %-12s %s\n' "Accounts" "$accounts"
+    printf '  %-12s %s\n' "Sign-up" "$signup"
+    printf '  %-12s %s\n' "Mail" "$mail"
+    printf '  %-12s %s\n' "Network" "$network"
+    printf '  %-12s %s\n' "Start" "$starting"
+    printf '\n'
+    ordo_paint "2" "Installing. Compiling the server can take a few minutes."
+    printf '\n\n'
+  }
+}
+
+ordo_show_summary() {
+  local text
+  text=$(ordo_setup_summary "$@")
+  if [[ -w /dev/tty ]]; then
+    printf '%s\n' "$text" >/dev/tty
+  else
+    printf '%s\n' "$text"
+  fi
+}
+
 ordo_ask_setup() {
   local port="3000" registration="false" email="false" smtp="" smtp_from=""
-  local trust="0" public="0" start="0" answer=""
-  printf '\n' >/dev/tty
+  local trust="0" public="0" start="0" index="" asking=0
+  local folder="${ORDO_SETUP_DEST:-${ORDO_DIR:-$HOME/ordo}}"
+  if ! ordo_arg_present --port "$@"; then asking=1; fi
+  if ! ordo_arg_present --registration "$@"; then asking=1; fi
+  if ! ordo_arg_present --email-verification "$@"; then asking=1; fi
+  if ! ordo_arg_present --smtp-url "$@"; then asking=1; fi
+  if ! ordo_arg_present --trust-proxy "$@" && ! ordo_arg_present --public "$@"; then asking=1; fi
+  if ! ordo_arg_present --start "$@" && ! ordo_arg_present --no-start "$@"; then asking=1; fi
+  if [[ "$asking" == 1 ]]; then
+    ordo_setup_intro
+  fi
   if ! ordo_arg_present --port "$@"; then
-    port=$(ordo_read_default "HTTP port [3000] " "3000")
+    ordo_kicker "Port"
+    ordo_explain "Which port should the server use?" \
+      "Browsers and a reverse proxy connect here. 3000 is fine if it is free."
+    port=$(ordo_read_default "Port [3000] " "3000")
     ordo_valid_port "$port" || ordo_die "The HTTP port needs to be a number from 1 to 65535."
   fi
   if ! ordo_arg_present --registration "$@"; then
-    registration=$(ordo_ask_yes_no "Allow new sign-ups after the first account?" 1)
+    ordo_kicker "Accounts"
+    index=$(ordo_choose 0 "Who can create an account?" \
+      --detail "The first sign-up becomes the owner either way." \
+      "Only the first account" \
+      "Anyone who can reach the server")
+    if [[ "$index" == 0 ]]; then
+      registration=false
+    else
+      registration=true
+    fi
   fi
   if ! ordo_arg_present --email-verification "$@"; then
-    email=$(ordo_ask_yes_no "Require email verification?" 1)
+    ordo_kicker "Sign-up"
+    index=$(ordo_choose 0 "Require an email code for new accounts?" \
+      --detail "Without mail, that code is printed in the server log." \
+      "Sign in straight away" \
+      "Send a one-time code first")
+    if [[ "$index" == 0 ]]; then
+      email=false
+    else
+      email=true
+    fi
   fi
   if ! ordo_arg_present --smtp-url "$@"; then
-    smtp=$(ordo_read_default "SMTP URL (empty = print one-time codes in the console) " "")
+    ordo_kicker "Mail"
+    ordo_explain "Where should mail be sent from?" \
+      "Empty prints codes in the log. Or use smtp://user:pass@host:587."
+    smtp=$(ordo_read_default "SMTP URL [empty] " "")
     if [[ -n "$smtp" ]] && ! ordo_arg_present --smtp-from "$@"; then
-      smtp_from=$(ordo_read_default "SMTP from address [ordo <noreply@ordo.local>] " "ordo <noreply@ordo.local>")
+      ordo_kicker "Mail"
+      ordo_explain "Which address should people see?" \
+        "This is the From line in their inbox."
+      smtp_from=$(ordo_read_default "From [ordo <noreply@ordo.local>] " "ordo <noreply@ordo.local>")
     fi
   fi
   if ! ordo_arg_present --trust-proxy "$@" && ! ordo_arg_present --public "$@"; then
-    answer=$(ordo_ask_yes_no "Behind nginx, Caddy, or Cloudflare?" 1)
-    if [[ "$answer" == true ]]; then
-      trust=$(ordo_read_default "Reverse-proxy hops to trust [1] " "1")
-      ordo_valid_hops "$trust" || ordo_die "Reverse-proxy hops need to be a number from 0 to 32."
-    else
-      answer=$(ordo_ask_yes_no "Listen on the LAN without a reverse proxy (0.0.0.0)?" 1)
-      if [[ "$answer" == true ]]; then
+    ordo_kicker "Network"
+    index=$(ordo_choose 0 "Is a reverse proxy in front of this server?" \
+      --detail "nginx, Caddy, or Cloudflare. Then the server trusts their visitor address." \
+      "No proxy" \
+      "A proxy is in front")
+    if [[ "$index" == 0 ]]; then
+      ordo_kicker "Network"
+      index=$(ordo_choose 0 "Who can open that port?" \
+        --detail "Localhost is only this machine. LAN is for a phone on the same Wi-Fi." \
+        "Only this machine" \
+        "This machine and the LAN")
+      if [[ "$index" != 0 ]]; then
         public=1
       fi
+    else
+      ordo_kicker "Proxy"
+      ordo_explain "How many proxies sit in front?" \
+        "1 is a single nginx, Caddy, or Cloudflare. The server stays on localhost."
+      trust=$(ordo_read_default "Hops [1] " "1")
+      ordo_valid_hops "$trust" || ordo_die "Reverse-proxy hops need to be a number from 0 to 32."
     fi
   fi
   if ! ordo_arg_present --start "$@" && ! ordo_arg_present --no-start "$@"; then
-    answer=$(ordo_ask_yes_no "Start the server in the foreground when done?" 1)
-    if [[ "$answer" == true ]]; then
+    ordo_kicker "Start"
+    index=$(ordo_choose 0 "Start the server when this finishes?" \
+      --detail "In this terminal the log stays on screen. Otherwise you start it yourself." \
+      "Not yet" \
+      "In this terminal")
+    if [[ "$index" != 0 ]]; then
       start=1
     fi
   fi
+  ordo_show_summary "$folder" "$port" "$registration" "$email" "$smtp" "$trust" "$public" "$start"
   ordo_bind_setup_flags "$port" "$registration" "$email" "$smtp" "$smtp_from" "$trust" "$public" "$start" "$@"
 }
 
@@ -602,6 +764,7 @@ ordo_exec_server() {
     if ordo_delegate_setup "$dest" || ordo_setup_skipped "$@" || ordo_looks_installed "$dest"; then
       ordo_run_deploy_args "$dest" --no-release ${ORDO_FORWARDED[@]+"${ORDO_FORWARDED[@]}"}
     fi
+    ORDO_SETUP_DEST="$dest"
     ordo_ask_setup "$@"
     ordo_run_deploy_args "$dest" "${ORDO_SETUP_FLAGS[@]}" --no-release ${ORDO_FORWARDED[@]+"${ORDO_FORWARDED[@]}"}
   fi
@@ -611,6 +774,7 @@ ordo_exec_server() {
   fi
 
   ordo_without_release_args "$@"
+  ORDO_SETUP_DEST="$dest"
   ordo_ask_setup "$@"
   ordo_run_deploy_args "$dest" "${ORDO_SETUP_FLAGS[@]}" --no-release ${ORDO_FORWARDED[@]+"${ORDO_FORWARDED[@]}"}
 }
@@ -770,9 +934,11 @@ ordo_uninstall() {
         "Re-run with --yes to remove ${dest}.")"
     fi
     if [[ -n "$outside" ]]; then
-      answer=$(ordo_ask_yes_no "Remove ${dest}? The database at ${outside} is left in place." 1)
+      answer=$(ordo_ask_yes_no "Remove ${dest}? The database at ${outside} is left in place." 1 \
+        "This stops the server and deletes the folder.")
     else
-      answer=$(ordo_ask_yes_no "Remove ${dest}, including the database?" 1)
+      answer=$(ordo_ask_yes_no "Remove ${dest}, including the database?" 1 \
+        "This stops the server and deletes the folder.")
     fi
     if [[ "$answer" != true ]]; then
       printf 'Uninstall cancelled.\n'

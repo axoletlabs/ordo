@@ -1023,6 +1023,7 @@ function checkToolchain(repoRoot) {
 function promptYesNo(question, fallback, io) {
   return promptChoiceMenu({
     title: question,
+    detail: io.detail || "",
     options: [
       { label: "Yes", value: true },
       { label: "No", value: false },
@@ -1033,7 +1034,130 @@ function promptYesNo(question, fallback, io) {
   });
 }
 
-async function promptSettings(ask, current, choose) {
+function formatSetupSummary(settings, folder) {
+  const host = settings.listenHost === "0.0.0.0" ? "0.0.0.0" : "127.0.0.1";
+  const accounts = settings.registration
+    ? "Anyone who can reach the server"
+    : "Only the first account";
+  const signup = settings.emailVerification ? "Email code required" : "No email code";
+  const mail = settings.smtpUrl ? "SMTP configured" : "Codes in the server log";
+  let network = "Only this machine";
+  if (settings.trustProxy > 0) {
+    const hops = settings.trustProxy === 1 ? "1 hop" : `${settings.trustProxy} hops`;
+    network = `Proxy in front, ${hops}`;
+  } else if (settings.listenHost === "0.0.0.0") {
+    network = "This machine and the LAN";
+  }
+  const lines = ["", "Ready", ""];
+  if (folder) lines.push(`  Folder      ${folder}`);
+  lines.push(`  Address     http://${host}:${settings.port}`);
+  lines.push(`  Accounts    ${accounts}`);
+  lines.push(`  Sign-up     ${signup}`);
+  lines.push(`  Mail        ${mail}`);
+  lines.push(`  Network     ${network}`);
+  lines.push("");
+  lines.push("Installing. Compiling the server can take a few minutes.");
+  lines.push("");
+  return lines.join("\n");
+}
+
+async function promptGuidedSettings(ask, current, pick, log) {
+  const note = (kicker, title, detail) => {
+    log("");
+    log(`  ${kicker}`);
+    log(title);
+    log(detail);
+    log("");
+  };
+  note(
+    "Port",
+    "Which port should the server use?",
+    "Browsers and a reverse proxy connect here. 3000 is fine if it is free.",
+  );
+  const portText = (await ask(`Port [${current.port}] `)).trim();
+  const port = parsePort(portText === "" ? String(current.port) : portText);
+
+  const registration = await pick({
+    title: "Who can create an account?",
+    detail: "The first sign-up becomes the owner either way.",
+    options: [
+      { label: "Only the first account", value: false },
+      { label: "Anyone who can reach the server", value: true },
+    ],
+    selected: current.registration ? 1 : 0,
+  });
+  const emailVerification = await pick({
+    title: "Require an email code for new accounts?",
+    detail: "Without mail, that code is printed in the server log.",
+    options: [
+      { label: "Sign in straight away", value: false },
+      { label: "Send a one-time code first", value: true },
+    ],
+    selected: current.emailVerification ? 1 : 0,
+  });
+
+  note(
+    "Mail",
+    "Where should mail be sent from?",
+    "Empty prints codes in the log. Or use smtp://user:pass@host:587.",
+  );
+  const smtpRaw = (await ask("SMTP URL [empty] ")).trim();
+  const smtp = smtpRaw === "" || smtpRaw === "(empty)" ? "" : smtpRaw;
+  let smtpFrom = current.smtpFrom;
+  if (smtp) {
+    note("Mail", "Which address should people see?", "This is the From line in their inbox.");
+    const fallback = current.smtpFrom || "ordo <noreply@ordo.local>";
+    const fromRaw = (await ask(`From [${fallback}] `)).trim();
+    smtpFrom = fromRaw === "" ? fallback : fromRaw;
+  }
+
+  const behindProxy = await pick({
+    title: "Is a reverse proxy in front of this server?",
+    detail: "nginx, Caddy, or Cloudflare. Then the server trusts their visitor address.",
+    options: [
+      { label: "No proxy", value: false },
+      { label: "A proxy is in front", value: true },
+    ],
+    selected: current.trustProxy > 0 ? 1 : 0,
+  });
+  let trustProxy = 0;
+  let listenHost = "127.0.0.1";
+  if (behindProxy) {
+    note(
+      "Proxy",
+      "How many proxies sit in front?",
+      "1 is a single nginx, Caddy, or Cloudflare. The server stays on localhost.",
+    );
+    const fallback = String(current.trustProxy || 1);
+    const hopsRaw = (await ask(`Hops [${fallback}] `)).trim();
+    trustProxy = parseTrustProxy(hopsRaw === "" ? fallback : hopsRaw);
+  } else {
+    const exposeLan = await pick({
+      title: "Who can open that port?",
+      detail: "Localhost is only this machine. LAN is for a phone on the same Wi-Fi.",
+      options: [
+        { label: "Only this machine", value: false },
+        { label: "This machine and the LAN", value: true },
+      ],
+      selected: current.listenHost === "0.0.0.0" ? 1 : 0,
+    });
+    listenHost = exposeLan ? "0.0.0.0" : "127.0.0.1";
+  }
+
+  return {
+    ...current,
+    port,
+    registration,
+    emailVerification,
+    smtpUrl: smtp,
+    smtpFrom,
+    trustProxy,
+    listenHost,
+  };
+}
+
+async function promptSettings(ask, current, choose, pick, log) {
+  if (pick) return promptGuidedSettings(ask, current, pick, log ?? (() => {}));
   const yn = async (question, fallback) => {
     if (choose) return choose(question, fallback);
     const hint = fallback ? "Y/n" : "y/N";
@@ -1205,8 +1329,20 @@ async function deploy(options = {}) {
   );
   const ask = () => options.ask ?? createAsk(streamIn, streamOut);
   const useArrows = interactive && options.ask == null && Boolean(streamIn.isTTY);
-  const choose = useArrows
-    ? (question, fallback) => promptYesNo(question, fallback, { input: streamIn, output: streamOut })
+  const pick = useArrows
+    ? (spec) => promptChoiceMenu({ input: streamIn, output: streamOut, ...spec })
+    : null;
+  const choose = pick
+    ? (question, fallback, detail) =>
+        pick({
+          title: question,
+          detail,
+          options: [
+            { label: "Yes", value: true },
+            { label: "No", value: false },
+          ],
+          selected: fallback ? 0 : 1,
+        })
     : null;
 
   if (command === "uninstall") {
@@ -1223,8 +1359,17 @@ async function deploy(options = {}) {
   }
 
   if (interactive && command === "install") {
-    log("Ordo backend install\n");
-    settings = await promptSettings(ask(), settings, choose);
+    if (pick) {
+      log("");
+      log("Set up this server");
+      log("");
+      log("  A few questions. The highlighted row is the usual choice.");
+      log("  Arrow keys move. Enter selects. Enter on a blank line keeps the default.");
+    } else {
+      log("Ordo backend install\n");
+    }
+    settings = await promptSettings(ask(), settings, choose, pick, log);
+    if (pick) log(formatSetupSummary(settings, repoRoot));
   } else if (command === "update") {
     log("Ordo backend update\n");
   }
@@ -1237,8 +1382,16 @@ async function deploy(options = {}) {
   const envExists = existsSync(envPath);
   let envDecision = decideWriteEnv(args, envExists);
   if (interactive && command === "install" && envExists && !args.forceEnv && args.writeEnv !== false) {
-    const overwrite = choose
-      ? await choose("apps/server/.env already exists. Overwrite it?", false)
+    const overwrite = pick
+      ? await pick({
+          title: "A settings file is already here. Replace it?",
+          detail: "No keeps the port, accounts, and mail settings already in that file.",
+          options: [
+            { label: "Keep the existing file", value: false },
+            { label: "Replace it with these answers", value: true },
+          ],
+          selected: 0,
+        })
       : ["y", "yes"].includes(
           (await ask()("apps/server/.env already exists. Overwrite it? [y/N] ")).trim().toLowerCase(),
         );
@@ -1281,8 +1434,16 @@ async function deploy(options = {}) {
 
   let start = args.start;
   if (start == null && interactive && listener?.kind === "ordo") {
-    const restart = choose
-      ? await choose(`Restart the running server on port ${settings.port} when done?`, true)
+    const restart = pick
+      ? await pick({
+          title: `The server is already running on port ${settings.port}. Restart it?`,
+          detail: "Yes stops it so the database can update, then starts it again in the background.",
+          options: [
+            { label: "Restart it", value: true },
+            { label: "Leave it stopped", value: false },
+          ],
+          selected: 0,
+        })
       : !["n", "no"].includes(
           (await ask()(`Restart the running server on port ${settings.port} when done? [Y/n] `))
             .trim()
@@ -1290,8 +1451,16 @@ async function deploy(options = {}) {
         );
     if (!restart) start = false;
   } else if (start == null && interactive) {
-    const foreground = choose
-      ? await choose("Start the server in the foreground when done?", false)
+    const foreground = pick
+      ? await pick({
+          title: "Start the server when this finishes?",
+          detail: "In this terminal the log stays on screen. Otherwise you start it yourself.",
+          options: [
+            { label: "Not yet", value: false },
+            { label: "In this terminal", value: true },
+          ],
+          selected: 0,
+        })
       : ["y", "yes"].includes(
           (await ask()("Start the server in the foreground when done? [y/N] ")).trim().toLowerCase(),
         );
@@ -1466,14 +1635,16 @@ async function deploy(options = {}) {
   }
 
   log("");
-  log(`API will listen on http://${settings.listenHost}:${settings.port}`);
-  log(`Check: curl http://127.0.0.1:${settings.port}/api/server/info`);
+  log(`Address:  http://${settings.listenHost}:${settings.port}`);
+  log(`Check:    curl http://127.0.0.1:${settings.port}/api/server/info`);
   if (settings.listenHost === "127.0.0.1") {
-    log("Bound to localhost. Put nginx or Caddy in front (deploy/nginx.conf.example), or pass --public.");
+    log("Only this machine can open it. Put nginx or Caddy in front (deploy/nginx.conf.example), or re-run with --public.");
+  } else {
+    log("That port is open on this network. Put a proxy in front if the machine faces the internet.");
   }
-  log(`Data:  ${dbPath}`);
-  log("Secret: apps/server/.ordo-secret (created on first start if JWT_SECRET is unset)");
-  log("Keep a backup of the database and the secret file.");
+  log(`Database: ${dbPath}`);
+  log("Secret:   apps/server/.ordo-secret (created on first start if JWT_SECRET is unset)");
+  log("Keep a copy of the database and the secret file.");
   if (launch === "none") {
     log("");
     log("Start with:");
@@ -1528,6 +1699,8 @@ module.exports = {
   migratePlan,
   looksInstalled,
   inferCommand,
+  formatSetupSummary,
+  promptGuidedSettings,
   isInsideDir,
   assertSafeUninstallRoot,
   installProcess,

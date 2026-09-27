@@ -26,7 +26,7 @@ Optional. You keep it online, updated, and backed up. Axolet does not operate a 
 curl -fsSL https://ordo.axolet.com/install | bash
 ```
 
-That installs the latest release into `~/ordo`. Set `ORDO_DIR` to use another folder. On a terminal, pick a release with the arrow keys and answer a few questions. The server listens on `127.0.0.1`. Put nginx or Caddy in front (`deploy/nginx.conf.example`) or pass `--public`.
+That installs the latest release into `~/ordo`. Set `ORDO_DIR` to use another folder. On a terminal, setup walks through the port, who can create an account, mail, and how the server is reached. The highlighted choice is the usual one. The server listens on `127.0.0.1`. Put nginx or Caddy in front (`deploy/nginx.conf.example`) or pass `--public`.
 
 ```bash
 curl -fsSL https://ordo.axolet.com/install | bash -s -- --yes

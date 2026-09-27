@@ -170,6 +170,41 @@ frame=$(ordo_menu_frame "pnpm is not installed." 0 "Install pnpm 11.10.0" "I'll 
 [[ "$(ordo_choice_step 0 2 up)" == 1 ]] || fail "up should wrap"
 [[ "$(ordo_choice_step 1 2 down)" == 0 ]] || fail "down should wrap"
 [[ "$(ordo_menu_lines 2)" == 6 ]] || fail "menu line count"
+ORDO_MENU_DETAIL="The first sign-up becomes the owner either way."
+ORDO_MENU_COLOR=0
+frame=$(ordo_menu_frame "Who can create an account?" 0 "Only the first account" "Anyone who can reach the server")
+[[ "$frame" == *"The first sign-up becomes the owner either way."* ]] || fail "menu detail, got $frame"
+[[ "$frame" == *"› Only the first account"* ]] || fail "guided highlight, got $frame"
+[[ "$(ordo_menu_lines 2)" == 7 ]] || fail "detail line count"
+ORDO_MENU_DETAIL=""
+
+text=$(ordo_setup_summary /home/ubuntu/ordo 3000 false false "" 0 0 0)
+[[ "$text" == *"http://127.0.0.1:3000"* ]] || fail "summary address, got $text"
+[[ "$text" == *"Only the first account"* ]] || fail "summary accounts, got $text"
+[[ "$text" == *"Codes in the server log"* ]] || fail "summary mail, got $text"
+[[ "$text" == *"Not yet"* ]] || fail "summary start, got $text"
+[[ "$text" == *"Compiling the server can take a few minutes."* ]] || fail "summary next step, got $text"
+
+: >"$tmp/guide-choices"
+(
+  ordo_setup_intro() { :; }
+  ordo_kicker() { printf 'K %s\n' "$1"; }
+  ordo_explain() { printf 'E %s\n' "$2"; }
+  ordo_read_default() { printf '%s\n' "$2"; }
+  ordo_choose() {
+    printf '%s\n' "$*" >>"$tmp/guide-choices"
+    printf '%s\n' "$1"
+  }
+  ordo_show_summary() { :; }
+  ORDO_SETUP_DEST="/home/ubuntu/ordo"
+  ordo_ask_setup >"$tmp/guide.out"
+  [[ "${ORDO_SETUP_FLAGS[*]}" == "--yes --port 3000 --registration false --email-verification false --trust-proxy 0 --no-start" ]] ||
+    fail "guided defaults, got ${ORDO_SETUP_FLAGS[*]}"
+)
+[[ "$(cat "$tmp/guide.out")" == *"3000 is fine if it is free."* ]] ||
+  fail "port explanation missing, got $(cat "$tmp/guide.out")"
+[[ "$(cat "$tmp/guide-choices")" == *"The first sign-up becomes the owner either way."* ]] ||
+  fail "account explanation missing, got $(cat "$tmp/guide-choices")"
 
 ordo_valid_port 3000 || fail "port 3000"
 ordo_valid_port 080 || fail "port 080"

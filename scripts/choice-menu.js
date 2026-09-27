@@ -26,7 +26,9 @@ function reduceChoiceMenu(state, key, count) {
 
 function renderChoiceMenu(state, { color = false } = {}) {
   const options = state.options ?? [];
-  const lines = [paint(state.title ?? "", "1", color), ""];
+  const lines = [paint(state.title ?? "", "1", color)];
+  if (state.detail) lines.push(paint(state.detail, "2", color));
+  lines.push("");
   options.forEach((option, index) => {
     const on = index === state.selected;
     const marker = on ? paint("›", "36", color) : " ";
@@ -42,7 +44,7 @@ function frameText(frame) {
   return frame.endsWith("\n") ? frame : `${frame}\n`;
 }
 
-async function promptChoiceMenu({ title, options, selected = 0, input, output, color } = {}) {
+async function promptChoiceMenu({ title, detail, options, selected = 0, input, output, color } = {}) {
   if (!input || !output) throw new Error("promptChoiceMenu needs input and output streams.");
   if (!Array.isArray(options) || options.length === 0) {
     throw new Error("promptChoiceMenu needs at least one option.");
@@ -56,6 +58,7 @@ async function promptChoiceMenu({ title, options, selected = 0, input, output, c
   let drawn = 0;
   let view = {
     title,
+    detail: detail ?? "",
     options,
     selected: Math.min(Math.max(selected, 0), options.length - 1),
   };
@@ -109,6 +112,7 @@ async function promptChoiceMenu({ title, options, selected = 0, input, output, c
 function promptYesNo(question, fallback, io) {
   return promptChoiceMenu({
     title: question,
+    detail: io.detail || "",
     options: [
       { label: "Yes", value: true },
       { label: "No", value: false },
