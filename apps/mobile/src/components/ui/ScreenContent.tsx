@@ -1,13 +1,15 @@
 import React from "react";
-import { StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from "react-native";
+import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { columnContentInset } from "../../theme/alignment";
+import { useColumnPadding, type ColumnAlign } from "../../hooks/use-scene-column-insets";
 import { layout } from "../../theme/tokens";
 
 interface ScreenContentProps {
   children: React.ReactNode;
   maxWidth?: number;
   padded?: boolean;
+  /** See `Header` `alignTo`. Nested panes pass `parent`. */
+  alignTo?: ColumnAlign;
   style?: StyleProp<ViewStyle>;
 }
 
@@ -16,10 +18,11 @@ export function ScreenContent({
   children,
   maxWidth = layout.maxContentWidth,
   padded = true,
+  alignTo = "scene",
   style,
 }: ScreenContentProps) {
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const column = useColumnPadding(maxWidth, alignTo);
 
   return (
     <View
@@ -27,8 +30,8 @@ export function ScreenContent({
         styles.content,
         {
           maxWidth,
-          paddingLeft: padded ? columnContentInset(insets.left, width, maxWidth) : insets.left,
-          paddingRight: padded ? columnContentInset(insets.right, width, maxWidth) : insets.right,
+          paddingLeft: padded ? column.left : insets.left,
+          paddingRight: padded ? column.right : insets.right,
         },
         style,
       ]}

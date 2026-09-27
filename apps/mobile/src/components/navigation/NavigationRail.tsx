@@ -3,13 +3,15 @@
  * settings detail screens keep the same chrome as the three primary tabs.
  */
 import React from "react";
-import { Pressable, StyleSheet, Text as NativeText, View } from "react-native";
+import { Pressable, StyleSheet, Text as NativeText, useWindowDimensions, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { usePathname, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useFloatingDockMetrics } from "../../hooks/use-floating-dock-metrics";
 import { useSettingsStore } from "../../store/settings";
+import { navigationRailWidth } from "../../hooks/use-scene-column-insets";
+import { FLOATING_RAIL_EDGE, sceneLeadingChrome } from "../../theme/alignment";
 import { layout, radius, spacing } from "../../theme/tokens";
 import { requestSearchFieldFocus } from "../../lib/search-field-focus";
 import { NAV_CHROME_TEXT } from "../ui/Text";
@@ -39,22 +41,17 @@ export function NavigationRail() {
   const pathname = usePathname();
   const router = useRouter();
   const showLabels = useSettingsStore((s) => s.showNavigationLabels);
-  const {
-    floating,
-    compact,
-    windowHeight,
-  } = useFloatingDockMetrics();
+  const navigationStyle = useSettingsStore((s) => s.navigationStyle);
+  const { height: windowHeight } = useWindowDimensions();
+  const { floating } = useFloatingDockMetrics();
+  const compact = (navigationStyle as string) === "compactFloating";
   const active = sectionFromPath(pathname);
-  const railWidth = showLabels
-    ? compact
-      ? layout.compactNavigationRailWidth
-      : layout.navigationRailWidth
-    : spacing[56];
+  const railWidth = navigationRailWidth(showLabels, compact);
   const compactRailHeight = showLabels
     ? layout.compactNavigationRailHeight
     : layout.compactNavigationRailIconHeight;
   const compactRailTop = Math.max(0, (windowHeight - compactRailHeight) / 2);
-  const railInset = Math.max(insets.left, spacing[8]);
+  const railInset = Math.max(insets.left, FLOATING_RAIL_EDGE);
   const iconSize = compact ? 20 : 22;
 
   const go = (href: (typeof ITEMS)[number]["href"]) => {
@@ -64,7 +61,12 @@ export function NavigationRail() {
   const docked = !floating;
   const wrapStyle = docked
     ? {
-        width: railWidth + insets.left,
+        width: sceneLeadingChrome({
+          sideNavigation: true,
+          floating: false,
+          railWidth,
+          safeLeading: insets.left,
+        }),
         paddingLeft: insets.left + spacing[4],
         paddingRight: spacing[4],
         paddingTop: insets.top + spacing[6],
@@ -111,7 +113,7 @@ export function NavigationRail() {
             style={[
               styles.item,
               {
-                marginHorizontal: floating ? (compact ? spacing[2] : spacing[2]) : 0,
+                marginHorizontal: floating ? spacing[2] : 0,
                 marginTop: item.section === "bookmarks" ? ("auto" as const) : floating ? spacing[4] : 0,
                 marginBottom: item.section === "settings" ? ("auto" as const) : floating ? spacing[4] : 0,
                 borderRadius: floating ? radius.xl : 0,
@@ -142,15 +144,18 @@ export function NavigationRail() {
 export function useRailSceneOffset() {
   const insets = useSafeAreaInsets();
   const showLabels = useSettingsStore((s) => s.showNavigationLabels);
-  const { floating, compact, sideNavigation } = useFloatingDockMetrics();
-  const railWidth = showLabels
-    ? compact
-      ? layout.compactNavigationRailWidth
-      : layout.navigationRailWidth
-    : spacing[56];
-  const railInset = Math.max(insets.left, spacing[8]);
+  const navigationStyle = useSettingsStore((s) => s.navigationStyle);
+  const { floating, sideNavigation } = useFloatingDockMetrics();
+  const compact = (navigationStyle as string) === "compactFloating";
   if (!sideNavigation || !floating) return undefined;
-  return { marginStart: railInset + railWidth + spacing[12] };
+  return {
+    marginStart: sceneLeadingChrome({
+      sideNavigation: true,
+      floating: true,
+      railWidth: navigationRailWidth(showLabels, compact),
+      safeLeading: insets.left,
+    }),
+  };
 }
 
 const styles = StyleSheet.create({

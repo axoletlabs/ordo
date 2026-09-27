@@ -47,6 +47,7 @@ export default function TagDetailScreen() {
   const { palette } = useTheme();
   const router = useRouter();
   const { hasDetailPane } = useResponsiveLayout();
+  const pageMax = hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth;
   const { bottom: dockInset, selectionClearance } = useFloatingDockMetrics();
   const { id, bookmark } = useLocalSearchParams<{ id: string; bookmark?: string }>();
   const routeId = Array.isArray(id) ? id[0] : id;
@@ -215,7 +216,7 @@ export default function TagDetailScreen() {
             if (selection.count === selectableKeys.length) selection.replace([]);
             else selection.replace(selectableKeys);
           }}
-          maxWidth={hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth}
+          maxWidth={pageMax}
         />
       ) : (
       <Header
@@ -226,7 +227,7 @@ export default function TagDetailScreen() {
             : undefined
         }
         showBack
-        maxWidth={hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth}
+        maxWidth={pageMax}
         right={
           anchor ? (
             <HeaderActions>
@@ -245,10 +246,10 @@ export default function TagDetailScreen() {
       />
       )}
 
-      <ExtractionProgressLine maxWidth={hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth} />
+      <ExtractionProgressLine maxWidth={pageMax} />
 
       {list.error && !list.data ? (
-        <ScreenContent maxWidth={layout.maxContentWidth} style={styles.center}>
+        <ScreenContent maxWidth={pageMax} style={styles.center}>
           <EmptyState
             icon="cloud-offline-outline"
             title="Couldn't load bookmarks"
@@ -257,7 +258,7 @@ export default function TagDetailScreen() {
           />
         </ScreenContent>
       ) : items.length === 0 && !list.isLoading ? (
-        <ScreenContent maxWidth={layout.maxContentWidth} style={styles.center}>
+        <ScreenContent maxWidth={pageMax} style={styles.center}>
           <EmptyState
             icon="pricetag-outline"
             title="No bookmarks with this tag"
@@ -266,7 +267,7 @@ export default function TagDetailScreen() {
         </ScreenContent>
       ) : list.isLoading ? (
         <ScreenContent
-          maxWidth={hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth}
+          maxWidth={pageMax}
           style={styles.content}
         >
           <BookmarkListSkeleton />
@@ -290,18 +291,18 @@ export default function TagDetailScreen() {
           </View>
         </ScreenContent>
       ) : (
-        <ScreenContent maxWidth={layout.maxContentWidth} style={styles.content}>
+        <ScreenContent maxWidth={pageMax} style={styles.content}>
           <View style={styles.singlePane}>{listPane}</View>
         </ScreenContent>
       )}
 
       {selection.active ? null : (
-      <FABLayer maxWidth={layout.maxContentWidth}>
+      <FABLayer maxWidth={pageMax}>
         <FAB
           onPress={() => setAddOpen(true)}
           accessibilityLabel="Save bookmark"
           accessibilityHint="Tap to save a bookmark."
-          maxContentWidth={layout.maxContentWidth}
+          maxContentWidth={pageMax}
         />
       </FABLayer>
       )}
@@ -365,7 +366,7 @@ export default function TagDetailScreen() {
           selection.exit();
         }}
         bottom={dockInset}
-        maxWidth={hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth}
+        maxWidth={pageMax}
       />
     </View>
   );

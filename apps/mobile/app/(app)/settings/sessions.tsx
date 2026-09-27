@@ -2,9 +2,9 @@
  * Active sessions / devices list with per-session revoke (optimistic).
  */
 import React, { useState } from "react";
-import { StyleSheet, View, useWindowDimensions } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useColumnPadding } from "../../../src/hooks/use-scene-column-insets";
 import {
   SettingsContent,
   SettingsPage,
@@ -27,7 +27,7 @@ import { timeAgo } from "../../../src/lib/format";
 import { errorMessage } from "../../../src/lib/error-message";
 import { haptics } from "../../../src/lib/haptics";
 import { toast } from "../../../src/components/ui/toast-store";
-import { columnContentInset, ROW_ICON_FRAME, ROW_ICON_GLYPH } from "../../../src/theme/alignment";
+import { ROW_ICON_FRAME, ROW_ICON_GLYPH } from "../../../src/theme/alignment";
 import { layout, spacing } from "../../../src/theme/tokens";
 import type { SessionDto } from "@ordo/shared";
 
@@ -72,8 +72,7 @@ function deviceIcon(s: SessionDto): keyof typeof Ionicons.glyphMap {
 
 export default function SessionsScreen() {
   const { palette } = useTheme();
-  const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const column = useColumnPadding(layout.maxSettingsWidth);
   const { data: sessions, isLoading, error, refetch } = useSessions();
   const revoke = useRevokeSession();
   const [pendingRevoke, setPendingRevoke] = useState<SessionDto | null>(null);
@@ -119,8 +118,8 @@ export default function SessionsScreen() {
           contentContainerStyle={[
             styles.listContent,
             {
-              paddingLeft: columnContentInset(insets.left, width, layout.maxSettingsWidth),
-              paddingRight: columnContentInset(insets.right, width, layout.maxSettingsWidth),
+              paddingLeft: column.left,
+              paddingRight: column.right,
             },
             !(sessions?.length ?? 0) && styles.listContentEmpty,
           ]}

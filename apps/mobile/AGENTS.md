@@ -10,6 +10,7 @@ Similar things share one edge. Do not invent a new inset for a screen, row, or h
 - Row inset (`layout.rowInset`): the leading icon inside a list row, measured from that row’s edge. It is not the same x as the back chevron.
 - Header icon buttons share one hit target. Ordinary glyphs stay centered in it. Only the back chevron is shifted, so its tip meets the rail.
 - Forms add their own interior padding on top of the safe area. Menu rows pad inside the panel. Neither is the screen rail.
+- Landscape and wide web: measure the scene beside the side rail (`useColumnPadding` / `sceneLeadingChrome`), not the window. The rail already clears the leading cutout. A pane inside that column (`alignTo="parent"`, the embedded reader) uses the parent rail. A full-window overlay (`alignTo="window"`) ignores the rail.
 
 **Surfaces**
 Bookmark, folder, tag, settings, and session rows are one list. Do not invent a second row or wrap those rows in a card.

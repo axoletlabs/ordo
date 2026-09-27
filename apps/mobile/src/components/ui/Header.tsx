@@ -10,7 +10,6 @@ import React from "react";
 import {
   Pressable,
   StyleSheet,
-  useWindowDimensions,
   View,
   type StyleProp,
   type TextStyle,
@@ -20,6 +19,7 @@ import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useColumnPadding, type ColumnAlign } from "../../hooks/use-scene-column-insets";
 import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -28,7 +28,6 @@ import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
 import {
   CHEVRON_BACK_ICON_SIZE,
   chevronBackTipShift,
-  columnContentInset,
 } from "../../theme/alignment";
 import { layout, spacing } from "../../theme/tokens";
 import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
@@ -79,6 +78,12 @@ export interface HeaderProps {
   large?: boolean;
   safeTop?: boolean;
   maxWidth?: number;
+  /**
+   * `scene` aligns to the area beside the side rail. `window` is a
+   * full-window overlay. `parent` is a pane that already sits inside a
+   * padded column.
+   */
+  alignTo?: ColumnAlign;
   /** Hairline under the header so scrolling content does not collide with it. */
   divider?: boolean;
   onTitleLongPress?: () => void;
@@ -94,19 +99,19 @@ export function Header({
   large,
   safeTop = true,
   maxWidth = layout.maxContentWidth,
+  alignTo = "scene",
   divider = false,
   onTitleLongPress,
   titleAccessibilityHint,
 }: HeaderProps) {
   const { palette } = useTheme();
   const insets = useSafeAreaInsets();
-  const { width: windowWidth } = useWindowDimensions();
   const { isLandscape, isTablet } = useResponsiveLayout();
   const router = useRouter();
   const topInset = safeTop ? insets.top : 0;
-  // Same rail as section labels, cards, and list hairlines.
-  const sidePad = columnContentInset(insets.left, windowWidth, maxWidth);
-  const endPad = columnContentInset(insets.right, windowWidth, maxWidth);
+  const column = useColumnPadding(maxWidth, alignTo);
+  const sidePad = column.left;
+  const endPad = column.right;
   const showLarge = large && (!isLandscape || isTablet);
 
   const handleBack = () => {

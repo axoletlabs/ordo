@@ -20,6 +20,7 @@ import {
   type NativeSyntheticEvent,
 } from "react-native";
 import { useColorScheme, useWindowDimensions } from "react-native";
+import { useSceneColumnInsets } from "../../hooks/use-scene-column-insets";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { Ionicons } from "@expo/vector-icons";
 import { StatusBar, setStatusBarStyle } from "expo-status-bar";
@@ -198,7 +199,8 @@ function ReaderPaneInner({
   const settingsAmoled = useSettingsStore((s) => s.amoled);
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { height: windowHeight } = useWindowDimensions();
+  const { sceneWidth } = useSceneColumnInsets();
 
   const cached = bookmarkId ? findBookmarkInCache(queryClient, bookmarkId) : undefined;
   const skipWebsiteDetail =
@@ -869,7 +871,7 @@ function ReaderPaneInner({
 
   /* ---------------------------------- render ---------------------------------- */
 
-  const fallbackArticleWidth = Math.min(windowWidth, layout.maxContentWidth) - spacing[16] * 2;
+  const fallbackArticleWidth = Math.min(sceneWidth, layout.maxContentWidth) - spacing[16] * 2;
 
   const rightActions = bookmark ? (
     <HeaderActions>
@@ -954,7 +956,8 @@ function ReaderPaneInner({
         showBack={!embedded}
         onBack={!embedded ? handleBack : undefined}
         safeTop={!embedded}
-        maxWidth={layout.maxLibraryWidth}
+        alignTo={embedded ? "parent" : "scene"}
+        maxWidth={layout.maxContentWidth}
         divider
         right={rightActions}
         onTitleLongPress={bookmark ? handleCopyLink : undefined}
@@ -963,7 +966,14 @@ function ReaderPaneInner({
 
       {hasContent && !showWebsiteView ? (
         <View
-          style={[styles.progressTrack, { backgroundColor: scrollbarColors(palette).track }]}
+          style={[
+            styles.progressTrack,
+            {
+              backgroundColor: scrollbarColors(palette).track,
+              maxWidth: layout.maxContentWidth,
+              alignSelf: "center",
+            },
+          ]}
           accessibilityRole="progressbar"
           accessibilityLabel="Reading progress"
           accessibilityValue={{ min: 0, max: 100, now: Math.round(progress * 100) }}
@@ -982,14 +992,14 @@ function ReaderPaneInner({
       ) : null}
 
       {loading ? (
-        <ScreenContent style={styles.stateBody}>
+        <ScreenContent alignTo={embedded ? "parent" : "scene"} style={styles.stateBody}>
           <Skeleton width="80%" height={28} />
           <Skeleton width="100%" height={16} style={{ marginTop: spacing[16] }} />
           <Skeleton width="100%" height={16} style={{ marginTop: spacing[8] }} />
           <Skeleton width="65%" height={16} style={{ marginTop: spacing[8] }} />
         </ScreenContent>
       ) : protectedDetail ? (
-        <ScreenContent style={styles.stateCenter}>
+        <ScreenContent alignTo={embedded ? "parent" : "scene"} style={styles.stateCenter}>
           <EmptyState
             icon="lock-closed-outline"
             title="This folder is locked"
@@ -1002,7 +1012,7 @@ function ReaderPaneInner({
           />
         </ScreenContent>
       ) : !bookmark ? (
-        <ScreenContent style={styles.stateCenter}>
+        <ScreenContent alignTo={embedded ? "parent" : "scene"} style={styles.stateCenter}>
           <EmptyState
             icon="cloud-offline-outline"
             title="Couldn't load this bookmark"
@@ -1055,7 +1065,7 @@ function ReaderPaneInner({
               paddingBottom: spacing[16] + (safeBottom ? insets.bottom : 0),
             }}
           >
-            <ScreenContent style={styles.body}>
+            <ScreenContent alignTo={embedded ? "parent" : "scene"} style={styles.body}>
               <View
                 style={styles.articleColumn}
                 onLayout={(e) => setArticleWidth(e.nativeEvent.layout.width)}
@@ -1148,7 +1158,7 @@ function ReaderPaneInner({
       )}
 
       {contentsShortcutVisible && actionPanel === null && !controlsOpen && !showWebsiteView && !selectionMenu ? (
-        <FABLayer maxWidth={layout.maxLibraryWidth}>
+        <FABLayer maxWidth={layout.maxContentWidth}>
           <FAB
             icon="list-outline"
             accessibilityLabel="Table of contents"
@@ -1156,7 +1166,8 @@ function ReaderPaneInner({
             onPress={() => {
               setActionPanel("contents");
             }}
-            maxContentWidth={layout.maxLibraryWidth}
+            maxContentWidth={layout.maxContentWidth}
+            alignTo={embedded ? "parent" : "scene"}
             bottom={spacing[20] + (safeBottom ? insets.bottom : 0)}
           />
         </FABLayer>

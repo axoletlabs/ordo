@@ -20,7 +20,8 @@ import { useToastStore, type Toast } from "./toast-store";
 import { Text } from "./Text";
 import { PressableScale } from "./PressableScale";
 import { useTheme } from "../../theme/ThemeProvider";
-import { contentInset } from "../../theme/alignment";
+import { SCREEN_RAIL, contentInset } from "../../theme/alignment";
+import { useSceneColumnInsets } from "../../hooks/use-scene-column-insets";
 import { radius, springs, spacing } from "../../theme/tokens";
 import { useFloatingDockMetrics } from "../../hooks/use-floating-dock-metrics";
 
@@ -122,6 +123,7 @@ export function ToastHost() {
   const toasts = useToastStore((s) => s.toasts);
   const { overlayClearance } = useFloatingDockMetrics();
   const insets = useSafeAreaInsets();
+  const { lead } = useSceneColumnInsets();
   return (
     <Animated.View
       pointerEvents="box-none"
@@ -129,7 +131,7 @@ export function ToastHost() {
         styles.host,
         {
           paddingBottom: overlayClearance,
-          paddingLeft: contentInset(insets.left),
+          paddingLeft: lead > 0 ? lead + SCREEN_RAIL : contentInset(insets.left),
           paddingRight: contentInset(insets.right),
         },
       ]}

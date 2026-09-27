@@ -1,19 +1,17 @@
 import React from "react";
 import {
   StyleSheet,
-  useWindowDimensions,
   View,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useColumnPadding, type ColumnAlign } from "../../hooks/use-scene-column-insets";
 import { Header } from "../ui/Header";
 import { ThemedScrollView, type ThemedScrollViewProps } from "../ui/ThemedScrollView";
 import { useScrollBarInsets } from "../ui/ScrollBar";
 import { Text } from "../ui/Text";
 import { useTheme } from "../../theme/ThemeProvider";
-import { columnContentInset } from "../../theme/alignment";
 import { layout, spacing } from "../../theme/tokens";
 
 interface SettingsPageProps {
@@ -45,13 +43,13 @@ export function SettingsScrollView({
   contentContainerStyle,
   contentWidth = layout.maxSettingsWidth,
   scrollBarInsets: scrollBarInsetsOverride,
+  alignTo = "scene",
   ...props
-}: ThemedScrollViewProps & { contentWidth?: number }) {
-  const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+}: ThemedScrollViewProps & { contentWidth?: number; alignTo?: ColumnAlign }) {
   const chromeInsets = useScrollBarInsets();
-  const padLeft = columnContentInset(insets.left, width, contentWidth);
-  const padRight = columnContentInset(insets.right, width, contentWidth);
+  const column = useColumnPadding(contentWidth, alignTo);
+  const padLeft = column.left;
+  const padRight = column.right;
 
   return (
     <ThemedScrollView
@@ -76,13 +74,14 @@ export function SettingsContent({
   children,
   maxWidth = layout.maxSettingsWidth,
   style,
+  alignTo = "scene",
 }: {
   children: React.ReactNode;
   maxWidth?: number;
+  alignTo?: ColumnAlign;
   style?: StyleProp<ViewStyle>;
 }) {
-  const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const column = useColumnPadding(maxWidth, alignTo);
 
   return (
     <View style={styles.contentFrame}>
@@ -91,8 +90,8 @@ export function SettingsContent({
           styles.contentColumn,
           {
             maxWidth,
-            paddingLeft: columnContentInset(insets.left, width, maxWidth),
-            paddingRight: columnContentInset(insets.right, width, maxWidth),
+            paddingLeft: column.left,
+            paddingRight: column.right,
           },
           style,
         ]}

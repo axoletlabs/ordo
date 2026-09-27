@@ -25,6 +25,11 @@
  * because that padding is not the screen rail. Menu rows pad inside the
  * panel, not against the screen.
  *
+ * Landscape — the side rail takes a strip of the window. Measure the
+ * scene beside that rail (`sceneLeadingChrome`), and treat the leading
+ * cutout as already cleared. A column nested inside that scene (the
+ * embedded reader) uses the parent rail, not the window safe area.
+ *
  * `layout.screenHorizontalPad` and `layout.rowInset` are these constants.
  */
 
@@ -39,12 +44,49 @@ export const ROW_ICON_GLYPH = 18;
 
 /**
  * Horizontal padding for a column of at most `columnMax` centered in
- * `windowWidth`.
+ * `sceneWidth`. Pass the navigation scene, not the window, once a side
+ * rail has taken the leading strip.
  */
-export function columnContentInset(safeArea: number, windowWidth: number, columnMax: number): number {
-  const sideMargin = Math.max(0, (windowWidth - columnMax) / 2);
+export function columnContentInset(safeArea: number, sceneWidth: number, columnMax: number): number {
+  const sideMargin = Math.max(0, (sceneWidth - columnMax) / 2);
   const uncovered = Math.max(0, safeArea - sideMargin);
   return Math.max(uncovered, SCREEN_RAIL);
+}
+
+/** Minimum gap between a floating side rail and the screen edge. */
+export const FLOATING_RAIL_EDGE = 8;
+/** Gap between a floating side rail and the scene. */
+export const FLOATING_RAIL_GAP = 12;
+
+/**
+ * Pixels the side rail takes from the leading edge of the window.
+ * Docked rail width includes the leading cutout. Floating rail margin
+ * matches `useRailSceneOffset`.
+ */
+export function sceneLeadingChrome(options: {
+  sideNavigation: boolean;
+  floating: boolean;
+  railWidth: number;
+  safeLeading: number;
+}): number {
+  if (!options.sideNavigation) return 0;
+  if (!options.floating) return options.railWidth + options.safeLeading;
+  return Math.max(options.safeLeading, FLOATING_RAIL_EDGE) + options.railWidth + FLOATING_RAIL_GAP;
+}
+
+/**
+ * Safe-area insets the scene still has to clear. A side rail already
+ * covers the leading cutout.
+ */
+export function sceneEdgeInsets(
+  sideNavigation: boolean,
+  safeLeading: number,
+  safeTrailing: number,
+): { leading: number; trailing: number } {
+  return {
+    leading: sideNavigation ? 0 : safeLeading,
+    trailing: safeTrailing,
+  };
 }
 
 /** Full-bleed rail, when there is no centered column. */

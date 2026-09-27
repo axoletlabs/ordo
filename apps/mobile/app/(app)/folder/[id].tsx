@@ -57,6 +57,7 @@ export default function FolderDetailScreen() {
   const { palette } = useTheme();
   const router = useRouter();
   const { hasDetailPane } = useResponsiveLayout();
+  const pageMax = hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth;
   const { bottom: dockInset, selectionClearance } = useFloatingDockMetrics();
   const { id, bookmark } = useLocalSearchParams<{ id: string; bookmark?: string }>();
   const routeId = Array.isArray(id) ? id[0] : id;
@@ -241,14 +242,14 @@ export default function FolderDetailScreen() {
             if (selection.count === selectableKeys.length) selection.replace([]);
             else selection.replace(selectableKeys);
           }}
-          maxWidth={hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth}
+          maxWidth={pageMax}
         />
       ) : (
       <Header
         title={folder?.name ?? (isRoot ? "Bookmarks" : "Folder")}
         subtitle={folder ? `${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}` : undefined}
         showBack
-        maxWidth={hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth}
+        maxWidth={pageMax}
         right={
           <HeaderActions>
             {hasUnread && !showLocked && !loadFailed ? (
@@ -287,10 +288,10 @@ export default function FolderDetailScreen() {
       />
       )}
 
-      <ExtractionProgressLine maxWidth={hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth} />
+      <ExtractionProgressLine maxWidth={pageMax} />
 
       {showLocked && folderId ? (
-        <ScreenContent maxWidth={layout.maxContentWidth} style={styles.center}>
+        <ScreenContent maxWidth={pageMax} style={styles.center}>
           <EmptyState
             icon="lock-closed-outline"
             title="This folder is locked"
@@ -299,7 +300,7 @@ export default function FolderDetailScreen() {
           />
         </ScreenContent>
       ) : loadFailed ? (
-        <ScreenContent maxWidth={layout.maxContentWidth} style={styles.center}>
+        <ScreenContent maxWidth={pageMax} style={styles.center}>
           <EmptyState
             icon="cloud-offline-outline"
             title="Couldn't load bookmarks"
@@ -308,7 +309,7 @@ export default function FolderDetailScreen() {
           />
         </ScreenContent>
       ) : isEmpty ? (
-        <ScreenContent maxWidth={layout.maxContentWidth} style={styles.center}>
+        <ScreenContent maxWidth={pageMax} style={styles.center}>
           <EmptyState
             icon="bookmark-outline"
             title="No bookmarks here"
@@ -318,7 +319,7 @@ export default function FolderDetailScreen() {
         </ScreenContent>
       ) : bookmarks.isLoading || (Boolean(folderId) && foldersLoading) ? (
         <ScreenContent
-          maxWidth={hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth}
+          maxWidth={pageMax}
           style={styles.content}
         >
           {hasDetailPane ? (
@@ -365,19 +366,19 @@ export default function FolderDetailScreen() {
           </View>
         </ScreenContent>
       ) : (
-        <ScreenContent maxWidth={layout.maxContentWidth} style={styles.content}>
+        <ScreenContent maxWidth={pageMax} style={styles.content}>
           <View style={styles.singlePane}>{listPane}</View>
         </ScreenContent>
       )}
 
       {!showLocked && !loadFailed && !hasDetailPane && !selection.active ? (
-        <FABLayer maxWidth={layout.maxContentWidth}>
+        <FABLayer maxWidth={pageMax}>
           <FAB
             onPress={() => setAddOpen(true)}
             accessibilityLabel="Save bookmark"
             accessibilityHint="Tap to save a bookmark."
             testID="add-bookmark-fab"
-            maxContentWidth={layout.maxContentWidth}
+            maxContentWidth={pageMax}
           />
         </FABLayer>
       ) : null}
@@ -462,7 +463,7 @@ export default function FolderDetailScreen() {
           selection.exit();
         }}
         bottom={dockInset}
-        maxWidth={hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth}
+        maxWidth={pageMax}
       />
 
     </View>

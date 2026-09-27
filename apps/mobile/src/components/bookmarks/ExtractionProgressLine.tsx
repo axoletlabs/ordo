@@ -4,18 +4,16 @@
  * spinner already covers that.
  */
 import React from "react";
-import { StyleSheet, useWindowDimensions, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StyleSheet, View } from "react-native";
 import { Text } from "../ui/Text";
 import { useTheme } from "../../theme/ThemeProvider";
-import { columnContentInset } from "../../theme/alignment";
+import { useColumnPadding } from "../../hooks/use-scene-column-insets";
 import { layout, radius, spacing } from "../../theme/tokens";
 import { useExtractionProgress } from "../../hooks/use-extraction-progress";
 
 export function ExtractionProgressLine({ maxWidth = layout.maxContentWidth }: { maxWidth?: number }) {
   const { palette } = useTheme();
-  const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const column = useColumnPadding(maxWidth);
   const { data } = useExtractionProgress();
   if (!data || data.pending <= 0 || data.total < 2) return null;
 
@@ -29,8 +27,8 @@ export function ExtractionProgressLine({ maxWidth = layout.maxContentWidth }: { 
         styles.wrap,
         {
           maxWidth,
-          paddingLeft: columnContentInset(insets.left, width, maxWidth),
-          paddingRight: columnContentInset(insets.right, width, maxWidth),
+          paddingLeft: column.left,
+          paddingRight: column.right,
         },
       ]}
     >

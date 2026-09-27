@@ -2,14 +2,13 @@
  * Floating action button faithful to ordo-archive: 48px coral circle, white icon.
  */
 import React from "react";
-import { StyleSheet, View, useWindowDimensions } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PressableScale } from "./PressableScale";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
 import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
-import { columnContentInset } from "../../theme/alignment";
+import { useColumnPadding, type ColumnAlign } from "../../hooks/use-scene-column-insets";
 import { layout, spacing } from "../../theme/tokens";
 import { SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
 
@@ -23,6 +22,8 @@ export interface FABProps {
   bottom?: number;
   right?: number;
   maxContentWidth?: number;
+  /** See `Header` `alignTo`. The embedded reader passes `parent`. */
+  alignTo?: ColumnAlign;
 }
 
 interface FABLayerProps {
@@ -51,12 +52,12 @@ export function FAB({
   bottom = spacing[20],
   right: rightOverride,
   maxContentWidth = layout.maxLibraryWidth,
+  alignTo = "scene",
 }: FABProps) {
   const { palette, shadows } = useTheme();
-  const { width } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
+  const column = useColumnPadding(maxContentWidth, alignTo);
   const anchorRef = React.useRef<View>(null);
-  const right = rightOverride ?? columnContentInset(insets.right, width, maxContentWidth);
+  const right = rightOverride ?? column.right;
   const emit = (handler?: (anchor: MenuAnchorRect) => void, event?: { nativeEvent: { pageX: number; pageY: number } }) => {
     if (!handler) return;
     measureAnchor(anchorRef.current, handler, event);
