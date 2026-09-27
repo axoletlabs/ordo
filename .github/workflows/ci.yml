@@ -23,6 +23,9 @@ on:
 #   development — `main` and every branch that is not release/x.y.z
 #   production  — a stable tag published from release/x.y.z
 #   development — an alpha/beta/rc tag published from that same release/x.y.z
+# A release APK only asks for production. JS pushed to main is published to
+# development, then republished onto production for that same runtime, so the
+# installed release gets it. A native fingerprint change still needs a new APK.
 # main never publishes a version. Each version is its own branch (release/x.y.z)
 # and its own tag (vX.Y.Z). Push a fix to that branch to change that version.
 # Publishing a release does not create the branch or merge it into main.
@@ -399,7 +402,7 @@ jobs:
   ota:
     needs: [detect, supply-chain]
     # Publishes a JS-only update to this stream's channel:
-    #   main       → development (never a version release)
+    #   main       → development, then the same group on production
     #   release/x.y.z → production for a stable version, development for alpha/beta/rc
     # Native fingerprint changes and commits marked -apk build an APK.
     # Feature branches never OTA (last-write-wins would clobber the stream).
@@ -464,29 +467,62 @@ jobs:
           CHANNEL: ${{ needs.detect.outputs.updates_channel }}
           EXTRA_RUNTIMES: ${{ needs.detect.outputs.extra_runtime_versions }}
         run: |
+          set -euo pipefail
+          EXTRA_RUNTIMES="${EXTRA_RUNTIMES:-}"
           # Pin to a shipped APK runtime when detect's hash is not the
           # hash Gradle baked in, or when extra.ordo / scripts drifted.
           # --auto would publish detect's fingerprint — a runtime no
           # installed binary uses — and devices would never see it.
+          # Release APKs are production. main publishes to development, so
+          # mirror that group onto production or the installed release never
+          # sees it (same runtime, different channel).
+          publish() {
+            local runtime="$1" skip="$2" message="$3" outfile="$4"
+            local -a args
+            args=(eas update --channel "$CHANNEL" --platform android --non-interactive --json --message "$message")
+            if [[ -n "$skip" ]]; then
+              args+=(--skip-bundler)
+            fi
+            if [[ -n "$runtime" ]]; then
+              ORDO_OTA_RUNTIME_VERSION="$runtime" "${args[@]}" >"$outfile"
+            else
+              args+=(--auto)
+              "${args[@]}" >"$outfile"
+            fi
+          }
+          mirror_release_apks() {
+            local outfile="$1" group groups
+            [[ "${GITHUB_REF}" == "refs/heads/main" && "$CHANNEL" == "development" ]] || return 0
+            groups="$(node -e '
+              const rows = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+              const groups = [...new Set(rows.map((row) => row.group).filter(Boolean))];
+              process.stdout.write(groups.join("\n"));
+            ' "$outfile")"
+            [[ -n "$groups" ]] || return 0
+            while IFS= read -r group; do
+              [[ -n "$group" ]] || continue
+              echo "Republishing ${group} to production for release APKs"
+              eas update:republish --group "$group" --destination-channel production \
+                --platform android --non-interactive \
+                --message "Release APKs"
+            done <<<"$groups"
+          }
           if [[ -n "$EXTRA_RUNTIMES" ]]; then
             first=1
             for runtime in $EXTRA_RUNTIMES; do
               if [[ "$first" -eq 1 ]]; then
                 echo "Publishing JS to APK runtime ${runtime}"
-                ORDO_OTA_RUNTIME_VERSION="$runtime" eas update \
-                  --channel "$CHANNEL" --platform android --non-interactive \
-                  --message "JS for APK runtime ${runtime}"
+                publish "$runtime" "" "JS for APK runtime ${runtime}" "$RUNNER_TEMP/eas-update.json"
                 first=0
               else
                 echo "Reusing bundle for APK runtime ${runtime}"
-                ORDO_OTA_RUNTIME_VERSION="$runtime" eas update \
-                  --channel "$CHANNEL" --platform android --skip-bundler --non-interactive \
-                  --message "Same JS for APK runtime ${runtime}"
+                publish "$runtime" skip "Same JS for APK runtime ${runtime}" "$RUNNER_TEMP/eas-update.json"
               fi
+              mirror_release_apks "$RUNNER_TEMP/eas-update.json"
             done
           else
-            eas update \
-              --channel "$CHANNEL" --platform android --non-interactive --auto
+            publish "" "" "JS update" "$RUNNER_TEMP/eas-update.json"
+            mirror_release_apks "$RUNNER_TEMP/eas-update.json"
           fi
 
   build_apk:
