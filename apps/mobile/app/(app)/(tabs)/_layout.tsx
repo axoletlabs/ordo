@@ -21,8 +21,67 @@ import {
 import { requestSearchFieldFocus } from "../../../src/lib/search-field-focus";
 import { useSettingsStore } from "../../../src/store/settings";
 import { NAV_CHROME_TEXT } from "../../../src/components/ui/Text";
-import { StyleSheet, Text as NativeText, View, type ColorValue, type ViewStyle } from "react-native";
+import {
+  Pressable,
+  StyleSheet,
+  Text as NativeText,
+  View,
+  type ColorValue,
+  type PressableProps,
+  type ViewStyle,
+} from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+/** Stroke on the floating dock shell. The tab bar is laid out inside it. */
+const DOCK_BORDER = 1;
+/** Dock padding. Each tab uses the same inset as a margin, so the gutter matches on every side. */
+const DOCK_PAD = spacing[4];
+
+/**
+ * React Navigation's UIKit tab button is top-aligned with a fixed 28×31 icon
+ * slot. That leaves the glyph and label high in our bar, and a square active
+ * fill. Center the stack and clip the selected fill to the dock's gutter.
+ */
+function NavigationTabButton({
+  style,
+  pillRadius,
+  hoverEffect: _hoverEffect,
+  pressOpacity: _pressOpacity,
+  pressColor: _pressColor,
+  href: _href,
+  ...rest
+}: PressableProps & {
+  pillRadius: number;
+  href?: string;
+  hoverEffect?: unknown;
+  pressOpacity?: number;
+  pressColor?: string;
+}) {
+  return (
+    <Pressable
+      {...rest}
+      style={[
+        style,
+        {
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          flexDirection: "column",
+          gap: spacing[2],
+          padding: 0,
+          paddingVertical: 0,
+          paddingHorizontal: 0,
+          paddingTop: 0,
+          paddingBottom: 0,
+          paddingLeft: 0,
+          paddingRight: 0,
+          borderRadius: pillRadius,
+          overflow: "hidden",
+        },
+      ]}
+    />
+  );
+}
 
 function tabBarStyleIsHidden(
   style: BottomTabBarProps["descriptors"][string]["options"]["tabBarStyle"],
@@ -48,6 +107,11 @@ export default function TabsLayout() {
     windowWidth,
   } = useFloatingDockMetrics();
   const tabBarHeight = showNavigationLabels ? layout.tabBarHeight : layout.touchTargetMin;
+  const iconSize = compact ? 20 : 22;
+  const dockItemMargin = floating ? (compact ? spacing[2] : DOCK_PAD) : 0;
+  // Outer radius minus the border and the gutter, so the selected pill's
+  // curve stays parallel to the dock instead of crowding the corners.
+  const floatingPillRadius = Math.max(0, radius["3xl"] - DOCK_BORDER - DOCK_PAD - dockItemMargin);
   const compactDockWidth = showNavigationLabels
     ? layout.compactFloatingDockWidth
     : layout.compactFloatingDockIconWidth;
@@ -91,22 +155,26 @@ export default function TabsLayout() {
     return {
       ...reset,
       position: "absolute" as const,
-      top: null,
+      top: 0,
       left: 0,
       right: 0,
       start: 0,
       end: 0,
       bottom: 0,
-      width: "auto" as const,
-      height: floatingHeight,
+      width: "100%" as const,
+      // Same number as the shell's outer height overflows the border and the
+      // clip shaves the top of the selected pill.
+      height: floatingHeight - DOCK_BORDER * 2,
       marginLeft: 0,
       marginRight: 0,
       marginTop: 0,
       marginBottom: 0,
-      paddingLeft: spacing[4],
-      paddingRight: spacing[4],
-      paddingTop: spacing[4],
-      paddingBottom: spacing[4],
+      paddingLeft: DOCK_PAD,
+      paddingRight: DOCK_PAD,
+      paddingHorizontal: DOCK_PAD,
+      paddingTop: DOCK_PAD,
+      paddingBottom: DOCK_PAD,
+      paddingVertical: DOCK_PAD,
       backgroundColor: "transparent",
       borderWidth: 0,
       shadowOpacity: 0,
@@ -129,12 +197,18 @@ export default function TabsLayout() {
 
   const tabItemStyle = {
     flex: 1,
-    marginHorizontal: floating ? (compact ? spacing[2] : spacing[4]) : 0,
-    marginTop: floating ? spacing[4] : 0,
-    marginBottom: floating ? spacing[4] : 0,
-    borderRadius: floating ? radius.xl : 0,
+    marginHorizontal: dockItemMargin,
+    marginVertical: dockItemMargin,
+    borderRadius: floating ? floatingPillRadius : 0,
     overflow: "hidden" as const,
   };
+
+  const renderTabButton = React.useCallback(
+    (props: Omit<React.ComponentProps<typeof NavigationTabButton>, "pillRadius">) => (
+      <NavigationTabButton {...props} pillRadius={floating ? floatingPillRadius : 0} />
+    ),
+    [floating, floatingPillRadius],
+  );
 
   const renderTabBar = React.useCallback(
     (props: BottomTabBarProps) => {
@@ -202,6 +276,8 @@ export default function TabsLayout() {
       ellipsizeMode="tail"
       style={{
         color,
+        textAlign: "center",
+        includeFontPadding: false,
         ...NAV_CHROME_TEXT,
       }}
     >
@@ -234,6 +310,8 @@ export default function TabsLayout() {
           tabBarShowLabel: showNavigationLabels,
           tabBarActiveBackgroundColor: floating ? palette.accentSoft : "transparent",
           tabBarStyle: visibleTabBarStyle,
+          tabBarButton: renderTabButton,
+          tabBarIconStyle: { width: iconSize, height: iconSize },
         }}
       >
         <Tabs.Screen
@@ -242,7 +320,7 @@ export default function TabsLayout() {
             title: "Bookmarks",
             tabBarItemStyle: tabItemStyle,
             tabBarIcon: ({ color }) => (
-              <Ionicons name="bookmark-outline" size={compact ? 20 : 22} color={color} />
+              <Ionicons name="bookmark-outline" size={iconSize} color={color} />
             ),
             tabBarLabel: ({ color }) => tabLabel("Bookmarks", color),
           }}
@@ -253,7 +331,7 @@ export default function TabsLayout() {
             title: "Search",
             tabBarItemStyle: tabItemStyle,
             tabBarIcon: ({ color }) => (
-              <Ionicons name="search-outline" size={compact ? 20 : 22} color={color} />
+              <Ionicons name="search-outline" size={iconSize} color={color} />
             ),
             tabBarLabel: ({ color }) => tabLabel("Search", color),
           }}
@@ -272,7 +350,7 @@ export default function TabsLayout() {
             title: "Settings",
             tabBarItemStyle: tabItemStyle,
             tabBarIcon: ({ color }) => (
-              <Ionicons name="settings-outline" size={compact ? 20 : 22} color={color} />
+              <Ionicons name="settings-outline" size={iconSize} color={color} />
             ),
             tabBarLabel: ({ color }) => tabLabel("Settings", color),
           }}
