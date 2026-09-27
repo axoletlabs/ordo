@@ -87,10 +87,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   hydrated: false,
 
   hydrate: async () => {
-    const saved = await prefsGet<Partial<SettingsState> & { navigationStyle?: string }>(
-      StorageKeys.SETTINGS,
-    );
-    const savedStyle = saved?.navigationStyle;
+    const saved = await prefsGet<Partial<SettingsState>>(StorageKeys.SETTINGS);
+    const savedStyle: string | undefined = saved?.navigationStyle;
     const navigationStyle: NavigationStyle =
       savedStyle === "floating" || savedStyle === "compactFloating" ? "floating" : "docked";
     set({

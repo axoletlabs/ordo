@@ -28,6 +28,7 @@ import {
   View,
   type ColorValue,
   type PressableProps,
+  type PressableStateCallbackType,
   type ViewStyle,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -50,18 +51,19 @@ function NavigationTabButton({
   pressColor: _pressColor,
   href: _href,
   ...rest
-}: PressableProps & {
+}: Omit<PressableProps, "style"> & {
   pillRadius: number;
+  style?: PressableProps["style"];
   href?: string;
   hoverEffect?: unknown;
   pressOpacity?: number;
-  pressColor?: string;
+  pressColor?: ColorValue;
 }) {
   return (
     <Pressable
       {...rest}
-      style={[
-        style,
+      style={(state: PressableStateCallbackType) => [
+        typeof style === "function" ? style(state) : style,
         {
           flex: 1,
           justifyContent: "center",
