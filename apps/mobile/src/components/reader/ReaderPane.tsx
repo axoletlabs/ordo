@@ -1156,7 +1156,7 @@ function ReaderPaneInner({
             onPress={() => {
               setActionPanel("contents");
             }}
-            right={spacing[20]}
+            maxContentWidth={layout.maxLibraryWidth}
             bottom={spacing[20] + (safeBottom ? insets.bottom : 0)}
           />
         </FABLayer>

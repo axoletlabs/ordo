@@ -1,11 +1,13 @@
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, useWindowDimensions, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { AppIcon } from "../ui/PinIcon";
 import { PressableScale } from "../ui/PressableScale";
 import { Text } from "../ui/Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
+import { columnContentInset } from "../../theme/alignment";
 import { layout, radius, spacing } from "../../theme/tokens";
 import { SELECTION_BAR_HEIGHT } from "../../hooks/use-selection";
 
@@ -28,11 +30,24 @@ export function SelectionActionBar({
   maxWidth?: number;
 }) {
   const { palette, shadows } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   if (actions.length === 0) return null;
 
   return (
     <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
-      <View pointerEvents="box-none" style={[styles.layer, { maxWidth, paddingBottom: bottom }]}>
+      <View
+        pointerEvents="box-none"
+        style={[
+          styles.layer,
+          {
+            maxWidth,
+            paddingBottom: bottom,
+            paddingLeft: columnContentInset(insets.left, width, maxWidth),
+            paddingRight: columnContentInset(insets.right, width, maxWidth),
+          },
+        ]}
+      >
         <View
           style={[
             styles.bar,
@@ -78,7 +93,6 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "center",
     justifyContent: "flex-end",
-    paddingHorizontal: spacing[16],
   },
   bar: {
     minHeight: SELECTION_BAR_HEIGHT,

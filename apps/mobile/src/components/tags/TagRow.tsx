@@ -13,7 +13,7 @@ import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/men
 import { SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
 import { prefetchTaggedBookmarks } from "../../hooks/use-tags";
 import { tagColorValue } from "../../lib/tag-colors";
-import { radius, spacing } from "../../theme/tokens";
+import { layout, radius, spacing } from "../../theme/tokens";
 import { RowHighlight } from "../bookmarks/RowHighlight";
 import type { TagDto } from "@ordo/shared";
 
@@ -127,8 +127,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing[12],
     paddingVertical: spacing[8],
-    paddingLeft: spacing[16],
-    paddingRight: spacing[16],
+    paddingLeft: layout.rowInset,
+    paddingRight: layout.rowInset,
     ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
   },
   iconFrame: {

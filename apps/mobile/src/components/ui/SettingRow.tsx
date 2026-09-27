@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing[12],
     minHeight: 52,
-    paddingHorizontal: spacing[16],
+    paddingHorizontal: layout.rowInset,
     paddingVertical: spacing[10],
     borderBottomWidth: StyleSheet.hairlineWidth,
   },

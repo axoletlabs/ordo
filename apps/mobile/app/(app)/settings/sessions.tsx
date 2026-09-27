@@ -26,6 +26,7 @@ import { timeAgo } from "../../../src/lib/format";
 import { errorMessage } from "../../../src/lib/error-message";
 import { haptics } from "../../../src/lib/haptics";
 import { toast } from "../../../src/components/ui/toast-store";
+import { columnContentInset } from "../../../src/theme/alignment";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
 import type { SessionDto } from "@ordo/shared";
 
@@ -110,8 +111,8 @@ export default function SessionsScreen() {
           contentContainerStyle={[
             styles.listContent,
             {
-              paddingLeft: width > layout.maxSettingsWidth + spacing[32] ? 0 : insets.left + spacing[16],
-              paddingRight: width > layout.maxSettingsWidth + spacing[32] ? 0 : insets.right + spacing[16],
+              paddingLeft: columnContentInset(insets.left, width, layout.maxSettingsWidth),
+              paddingRight: columnContentInset(insets.right, width, layout.maxSettingsWidth),
             },
             !(sessions?.length ?? 0) && styles.listContentEmpty,
           ]}
@@ -197,7 +198,7 @@ const styles = StyleSheet.create({
   // Matches SettingsPage so loading, error, and loaded states do not jump.
   listContent: { paddingBottom: spacing[40] },
   listContentEmpty: { flexGrow: 1, justifyContent: "center" },
-  card: { width: "100%", borderWidth: StyleSheet.hairlineWidth, borderRadius: radius["2xl"], padding: spacing[14] },
+  card: { width: "100%", borderWidth: StyleSheet.hairlineWidth, borderRadius: radius["2xl"], padding: layout.rowInset },
   cardHead: { flexDirection: "row", gap: spacing[12], alignItems: "center" },
   iconWrap: { width: 36, height: 36, borderRadius: 10, alignItems: "center", justifyContent: "center" },
   titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[8], marginBottom: 2 },

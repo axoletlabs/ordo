@@ -20,6 +20,7 @@ import { useToastStore, type Toast } from "./toast-store";
 import { Text } from "./Text";
 import { PressableScale } from "./PressableScale";
 import { useTheme } from "../../theme/ThemeProvider";
+import { contentInset } from "../../theme/alignment";
 import { radius, springs, spacing } from "../../theme/tokens";
 import { useFloatingDockMetrics } from "../../hooks/use-floating-dock-metrics";
 
@@ -128,8 +129,8 @@ export function ToastHost() {
         styles.host,
         {
           paddingBottom: overlayClearance,
-          paddingLeft: Math.max(insets.left, spacing[16]),
-          paddingRight: Math.max(insets.right, spacing[16]),
+          paddingLeft: contentInset(insets.left),
+          paddingRight: contentInset(insets.right),
         },
       ]}
     >

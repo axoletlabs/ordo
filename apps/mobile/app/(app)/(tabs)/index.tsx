@@ -411,7 +411,7 @@ export default function BookmarksScreen() {
           }
           testID="add-bookmark-fab"
           bottom={floatingNavigation ? bottomClearance : spacing[20]}
-          right={spacing[20]}
+          maxContentWidth={layout.maxContentWidth}
         />
       </FABLayer>
       ) : null}

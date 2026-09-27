@@ -25,7 +25,7 @@ import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/men
 import { prefetchBookmarkDetail } from "../../hooks/use-bookmarks";
 import { prefetchTaggedBookmarks } from "../../hooks/use-tags";
 import { firstSearchHighlight } from "../../lib/search-bookmarks";
-import { radius, spacing } from "../../theme/tokens";
+import { layout, radius, spacing } from "../../theme/tokens";
 import { bookmarkKey, SELECTION_LONG_PRESS_MS, useSelectionHoldGuard } from "../../hooks/use-selection";
 import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
 import type { BookmarkDto } from "@ordo/shared";
@@ -470,7 +470,7 @@ const styles = StyleSheet.create({
     width: "100%",
     flexGrow: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingRight: spacing[16],
+    paddingRight: layout.rowInset,
   },
   leadingHit: {
     alignSelf: "stretch",
@@ -480,7 +480,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     paddingVertical: spacing[8],
-    paddingLeft: spacing[16],
+    paddingLeft: layout.rowInset,
     ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
   },
   body: {

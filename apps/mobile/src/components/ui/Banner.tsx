@@ -12,6 +12,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
+import { contentInset } from "../../theme/alignment";
 import { radius, springs, spacing } from "../../theme/tokens";
 
 export interface BannerProps {
@@ -46,8 +47,8 @@ export function Banner({ message, visible, tone = "warning", icon }: BannerProps
         styles.wrap,
         {
           paddingTop: insets.top,
-          paddingLeft: Math.max(insets.left, spacing[12]),
-          paddingRight: Math.max(insets.right, spacing[12]),
+          paddingLeft: contentInset(insets.left),
+          paddingRight: contentInset(insets.right),
         },
         style,
       ]}

@@ -118,7 +118,7 @@ export default function TagsScreen() {
           <FAB
             onPress={() => setCreateOpen(true)}
             accessibilityLabel="New tag"
-            right={spacing[20]}
+            maxContentWidth={layout.maxContentWidth}
           />
         </FABLayer>
       ) : null}
@@ -161,7 +161,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing[12],
     paddingVertical: spacing[8],
-    paddingHorizontal: spacing[16],
+    paddingHorizontal: layout.rowInset,
   },
   skeletonCopy: { flex: 1, minWidth: 0 },
 });

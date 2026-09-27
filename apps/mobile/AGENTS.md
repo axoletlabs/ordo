@@ -2,6 +2,15 @@
 
 Don’t invent type or overlay chrome. Use `Text` variants and the overlay primitives.
 
+**Alignment**
+Similar things share one edge. Do not invent a new inset for a screen, row, or header control.
+
+- Screen rail (`columnContentInset` / `layout.screenHorizontalPad`): section labels, card edges, list hairlines, header text actions, and the back chevron’s tip. A cutout replaces the rail where the column does not already clear it. Never add the safe area on top of the rail.
+- Title line: the back button and trailing header icons center on the title. A subtitle does not move them.
+- Row inset (`layout.rowInset`): the leading icon inside a list row or settings card, measured from that container’s edge. It is not the same x as the back chevron.
+- Header icon buttons share one hit target. Ordinary glyphs stay centered in it. Only the back chevron is shifted, so its tip meets the rail.
+- Forms add their own interior padding on top of the safe area. Menu rows pad inside the panel. Neither is the screen rail.
+
 **Type**
 - `header` — screen titles, buttons, overlay titles
 - `label` — field labels, section labels, compact actions

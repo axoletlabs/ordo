@@ -1,7 +1,8 @@
 import React from "react";
-import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
+import { StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { layout, spacing } from "../../theme/tokens";
+import { columnContentInset } from "../../theme/alignment";
+import { layout } from "../../theme/tokens";
 
 interface ScreenContentProps {
   children: React.ReactNode;
@@ -18,6 +19,7 @@ export function ScreenContent({
   style,
 }: ScreenContentProps) {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
 
   return (
     <View
@@ -25,8 +27,8 @@ export function ScreenContent({
         styles.content,
         {
           maxWidth,
-          paddingLeft: padded ? Math.max(insets.left, spacing[16]) : insets.left,
-          paddingRight: padded ? Math.max(insets.right, spacing[16]) : insets.right,
+          paddingLeft: padded ? columnContentInset(insets.left, width, maxWidth) : insets.left,
+          paddingRight: padded ? columnContentInset(insets.right, width, maxWidth) : insets.right,
         },
         style,
       ]}

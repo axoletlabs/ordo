@@ -301,7 +301,7 @@ export default function TagDetailScreen() {
           onPress={() => setAddOpen(true)}
           accessibilityLabel="Save bookmark"
           accessibilityHint="Tap to save a bookmark."
-          right={spacing[20]}
+          maxContentWidth={layout.maxContentWidth}
         />
       </FABLayer>
       )}

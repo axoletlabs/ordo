@@ -3,7 +3,7 @@
  * Uses the same title slot as `Header` so entering selection does not jump the label.
  */
 import React from "react";
-import { StyleSheet, View, type TextStyle } from "react-native";
+import { StyleSheet, useWindowDimensions, View, type TextStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { PressableScale } from "../ui/PressableScale";
 import { Text } from "../ui/Text";
@@ -14,6 +14,7 @@ import {
   headerTitleTextStyle,
 } from "../ui/Header";
 import { useTheme } from "../../theme/ThemeProvider";
+import { columnContentInset } from "../../theme/alignment";
 import { fontSize, layout, lineHeight, spacing } from "../../theme/tokens";
 
 /** Clears "SELECT ALL" / "DESELECT" while keeping the title on the same center as `Header`. */
@@ -41,6 +42,7 @@ export function SelectionHeader({
 }) {
   const { palette } = useTheme();
   const insets = useSafeAreaInsets();
+  const { width: windowWidth } = useWindowDimensions();
   const allSelected = selectableCount > 0 && count === selectableCount;
   const title = count === 0 ? "Select items" : count === 1 ? "1 selected" : `${count} selected`;
 
@@ -52,8 +54,8 @@ export function SelectionHeader({
           maxWidth,
           paddingTop: insets.top + spacing[4],
           paddingBottom: layout.headerContentGap,
-          paddingLeft: Math.max(insets.left, spacing[16]),
-          paddingRight: Math.max(insets.right, spacing[16]),
+          paddingLeft: columnContentInset(insets.left, windowWidth, maxWidth),
+          paddingRight: columnContentInset(insets.right, windowWidth, maxWidth),
           borderBottomColor: palette.border,
         },
       ]}

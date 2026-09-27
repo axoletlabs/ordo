@@ -1,6 +1,7 @@
 import React from "react";
 import {
   StyleSheet,
+  useWindowDimensions,
   View,
   type StyleProp,
   type ViewStyle,
@@ -13,6 +14,7 @@ import { useScrollBarInsets } from "../ui/ScrollBar";
 import { Text } from "../ui/Text";
 import { Card } from "../ui/Card";
 import { useTheme } from "../../theme/ThemeProvider";
+import { columnContentInset } from "../../theme/alignment";
 import { layout, spacing } from "../../theme/tokens";
 
 interface SettingsPageProps {
@@ -47,23 +49,26 @@ export function SettingsScrollView({
   ...props
 }: ThemedScrollViewProps & { contentWidth?: number }) {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const chromeInsets = useScrollBarInsets();
+  const padLeft = columnContentInset(insets.left, width, contentWidth);
+  const padRight = columnContentInset(insets.right, width, contentWidth);
 
   return (
     <ThemedScrollView
       style={styles.scroll}
-      contentContainerStyle={[
-        styles.scrollContent,
-        {
-          paddingLeft: insets.left + spacing[16],
-          paddingRight: insets.right + spacing[16],
-        },
-        contentContainerStyle,
-      ]}
+      contentContainerStyle={[styles.scrollContent, contentContainerStyle]}
       scrollBarInsets={scrollBarInsetsOverride ?? chromeInsets}
       {...props}
     >
-      <View style={[styles.contentColumn, { maxWidth: contentWidth }]}>{children}</View>
+      <View
+        style={[
+          styles.contentColumn,
+          { maxWidth: contentWidth, paddingLeft: padLeft, paddingRight: padRight },
+        ]}
+      >
+        {children}
+      </View>
     </ThemedScrollView>
   );
 }
@@ -78,18 +83,23 @@ export function SettingsContent({
   style?: StyleProp<ViewStyle>;
 }) {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
 
   return (
-    <View
-      style={[
-        styles.contentFrame,
-        {
-          paddingLeft: insets.left + spacing[16],
-          paddingRight: insets.right + spacing[16],
-        },
-      ]}
-    >
-      <View style={[styles.contentColumn, { maxWidth }, style]}>{children}</View>
+    <View style={styles.contentFrame}>
+      <View
+        style={[
+          styles.contentColumn,
+          {
+            maxWidth,
+            paddingLeft: columnContentInset(insets.left, width, maxWidth),
+            paddingRight: columnContentInset(insets.right, width, maxWidth),
+          },
+          style,
+        ]}
+      >
+        {children}
+      </View>
     </View>
   );
 }
@@ -165,5 +175,5 @@ const styles = StyleSheet.create({
   },
   compactSectionLabel: { paddingTop: spacing[0] },
   group: { overflow: "hidden" },
-  groupFooter: { paddingHorizontal: spacing[4], paddingTop: spacing[6] },
+  groupFooter: { paddingTop: spacing[6] },
 });

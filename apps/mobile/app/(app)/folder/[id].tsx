@@ -346,7 +346,7 @@ export default function FolderDetailScreen() {
                 onPress={() => setAddOpen(true)}
                 accessibilityLabel="Save bookmark"
                 testID="add-bookmark-fab"
-                right={spacing[20]}
+                right={layout.screenHorizontalPad}
               />
               )}
             </View>
@@ -377,7 +377,7 @@ export default function FolderDetailScreen() {
             accessibilityLabel="Save bookmark"
             accessibilityHint="Tap to save a bookmark."
             testID="add-bookmark-fab"
-            right={spacing[20]}
+            maxContentWidth={layout.maxContentWidth}
           />
         </FABLayer>
       ) : null}

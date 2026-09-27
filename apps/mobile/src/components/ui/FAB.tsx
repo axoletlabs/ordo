@@ -9,6 +9,7 @@ import { PressableScale } from "./PressableScale";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
 import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
+import { columnContentInset } from "../../theme/alignment";
 import { layout, spacing } from "../../theme/tokens";
 import { SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
 
@@ -55,10 +56,7 @@ export function FAB({
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const anchorRef = React.useRef<View>(null);
-  const right = Math.max(
-    insets.right + spacing[20],
-    rightOverride ?? (width - Math.min(width, maxContentWidth)) / 2 + spacing[20],
-  );
+  const right = rightOverride ?? columnContentInset(insets.right, width, maxContentWidth);
   const emit = (handler?: (anchor: MenuAnchorRect) => void, event?: { nativeEvent: { pageX: number; pageY: number } }) => {
     if (!handler) return;
     measureAnchor(anchorRef.current, handler, event);

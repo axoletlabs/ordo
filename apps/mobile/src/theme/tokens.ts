@@ -146,6 +146,7 @@ import {
   PlayfairDisplay_700Bold,
   PlayfairDisplay_400Regular_Italic,
 } from "@expo-google-fonts/playfair-display";
+import { ROW_INSET, SCREEN_RAIL } from "./alignment";
 
 export const fontAssets = {
   Inter_400Regular,
@@ -165,9 +166,20 @@ export const fontAssets = {
   PlayfairDisplay_400Regular_Italic,
 };
 
-/** Layout constants. */
+/**
+ * Layout constants.
+ * Screen columns, the back chevron, and row icons share the rails in
+ * `src/theme/alignment.ts`. Use those helpers instead of adding the safe
+ * area on top of `screenHorizontalPad`.
+ */
 export const layout = {
-  screenHorizontalPad: 16,
+  /** Page edge: section labels, cards, list hairlines, header actions. */
+  screenHorizontalPad: SCREEN_RAIL,
+  /**
+   * Leading and trailing inset inside a list row or settings card, measured
+   * from that container's edge (the screen rail), not from the screen.
+   */
+  rowInset: ROW_INSET,
   /** Space under the header block before the first screen element. */
   headerContentGap: 8,
   touchTargetMin: 44,

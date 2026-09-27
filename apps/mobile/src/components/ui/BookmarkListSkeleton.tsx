@@ -4,16 +4,18 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { Skeleton } from "./Skeleton";
-import { spacing } from "../../theme/tokens";
+import { layout, spacing } from "../../theme/tokens";
 
 export function BookmarkListSkeleton({ count = 6 }: { count?: number }) {
   return (
     <View style={styles.wrap}>
       {Array.from({ length: count }).map((_, i) => (
         <View key={i} style={styles.row}>
-          <Skeleton width="40%" height={12} />
-          <Skeleton width="90%" height={16} style={{ marginTop: spacing[8] }} />
-          <Skeleton width="70%" height={12} style={{ marginTop: spacing[8] }} />
+          <Skeleton width={36} height={36} radiusKey="sm" />
+          <View style={styles.copy}>
+            <Skeleton width="72%" height={15} />
+            <Skeleton width="48%" height={11} style={{ marginTop: spacing[6] }} />
+          </View>
         </View>
       ))}
     </View>
@@ -23,9 +25,14 @@ export function BookmarkListSkeleton({ count = 6 }: { count?: number }) {
 const styles = StyleSheet.create({
   wrap: { width: "100%", alignSelf: "center" },
   row: {
-    paddingHorizontal: spacing[16],
-    paddingVertical: spacing[14],
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[12],
+    paddingLeft: layout.rowInset,
+    paddingRight: layout.rowInset,
+    paddingVertical: spacing[8],
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: "transparent",
   },
+  copy: { flex: 1, minWidth: 0 },
 });
