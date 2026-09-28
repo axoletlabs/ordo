@@ -78,9 +78,6 @@ export function otpEmail(
   <title>${escapeHtml(subject)}</title>
 </head>
 <body style="margin:0;padding:0;background:${PAPER};">
-  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">
-    ${escapeHtml(code)} is your ${previewKind(kind)} code. It expires in ${expiresMinutes} minutes.
-  </div>
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${PAPER};">
     <tr>
       <td align="center" style="padding:48px 16px;">
@@ -207,12 +204,6 @@ function noticeEmail(copy: { subject: string; kicker: string; body: string }): {
 </body>
 </html>`;
   return { subject, text, html };
-}
-
-function previewKind(kind: OtpEmailKind): string {
-  if (kind === "password_reset") return "password reset";
-  if (kind === "mfa_recovery") return "sign-in";
-  return "verification";
 }
 
 function escapeHtml(value: string): string {

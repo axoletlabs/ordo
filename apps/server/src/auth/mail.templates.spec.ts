@@ -19,6 +19,13 @@ describe("verificationEmail", () => {
     expect(mail.html).toContain("border-radius:24px");
   });
 
+  it("shows the code exactly once so notification previews don't double it", () => {
+    const mail = verificationEmail("482193", 10);
+    expect(mail.html.match(/482193/g)).toHaveLength(1);
+    expect(mail.html).not.toContain("display:none");
+    expect(mail.html).not.toContain("is your verification code");
+  });
+
   it("strips non-digits from the displayed code", () => {
     const mail = verificationEmail("12 34-56", 10);
     expect(mail.text).toContain("123456");

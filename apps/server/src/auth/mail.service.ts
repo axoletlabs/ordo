@@ -132,19 +132,22 @@ export class MailService {
 }
 
 function logoAttachment(): Array<{
-  filename: string;
   path: string;
   cid: string;
+  contentType: "image/png";
   contentDisposition: "inline";
+  filename: false;
 }> {
   const path = emailLogoPath();
   if (!existsSync(path)) return [];
   return [
     {
-      filename: "ordo-logo.png",
       path,
       cid: VERIFICATION_LOGO_CID,
+      contentType: "image/png",
       contentDisposition: "inline",
+      // No filename: Gmail lists named inline image parts as attachments.
+      filename: false,
     },
   ];
 }

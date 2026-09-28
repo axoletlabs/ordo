@@ -57,6 +57,24 @@ describe("MailService", () => {
     expect(log).not.toHaveBeenCalled();
   });
 
+  it("attaches the logo inline with no filename so Gmail doesn't list it as an attachment", async () => {
+    const mail = new MailService({ ...baseCfg, smtpUrl: "smtp://127.0.0.1:1025" });
+    const sendMail = jest.fn().mockResolvedValue({});
+    (
+      mail as unknown as { transporter: { sendMail: unknown } }
+    ).transporter = { sendMail };
+
+    await mail.sendVerification("dev@ordo.app", "482193");
+    const opts = sendMail.mock.calls[0][0];
+    expect(opts.attachments).toHaveLength(1);
+    expect(opts.attachments[0]).toMatchObject({
+      cid: "ordo-logo",
+      contentType: "image/png",
+      contentDisposition: "inline",
+      filename: false,
+    });
+  });
+
   it("does not print the OTP when a configured SMTP send fails", async () => {
     const mail = new MailService({ ...baseCfg, smtpUrl: "smtp://127.0.0.1:1025" });
     (
