@@ -168,8 +168,7 @@ describe("CORS, cookies, CSRF (e2e)", () => {
         .post("/api/telemetry/heartbeat")
         .send({
           installId: "11111111-1111-4111-8111-111111111111",
-          appVersion: "0.1.0",
-          ts: Math.floor(Date.now() / 1000),
+          day: new Date().toISOString().slice(0, 10),
         })
         .expect(200);
     });

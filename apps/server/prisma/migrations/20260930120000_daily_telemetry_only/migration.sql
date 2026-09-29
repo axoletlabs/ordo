@@ -1,10 +1,9 @@
-/* Only daily presence and the four dashboard counters are useful.
-   Old clients may still send versions/timestamps; they are no longer stored. */
+/* Only daily presence and the four dashboard counters are collected. */
 ALTER TABLE "AppInstall" DROP COLUMN "appVersion";
 ALTER TABLE "AppInstallDay" DROP COLUMN "appVersion";
 ALTER TABLE "AppInstallDay" DROP COLUMN "lastPingAt";
 
-/* Keep first/last seen for install counts and retention, at day precision. */
+/* Keep first/last seen for install counts, at day precision. */
 UPDATE "AppInstall" SET
   "firstSeenAt" = COALESCE(CASE WHEN typeof("firstSeenAt") IN ('integer', 'real')
     THEN CAST("firstSeenAt" / 86400000 AS INTEGER) * 86400000

@@ -1,5 +1,5 @@
 import request from "supertest";
-import { TelemetryHeartbeatSchema, TelemetryRoutes } from "@ordo/shared";
+import { TelemetryRoutes } from "@ordo/shared";
 import { addUtcDays, utcDay } from "../src/telemetry/utc-day.js";
 import { createTestApp, teardownApp, type TestCtx } from "./utils.js";
 
@@ -64,9 +64,6 @@ describe("Telemetry (e2e)", () => {
         hosting: "cloud",
         email: "nope@example.com",
         serverUrl: "https://evil.example",
-        appVersion: "old-release",
-        ts: Math.floor(Date.now() / 1000),
-        startupFast: 10,
       })
       .expect(200);
 
@@ -104,19 +101,6 @@ describe("Telemetry (e2e)", () => {
     expect(installs).toHaveLength(2);
   });
 
-  it("accepts old native payloads but retains only their day and useful counters", async () => {
-    const legacy = {
-      installId: INSTALL_A, appVersion: "0.1.0", ts: Math.floor(Date.now() / 1000),
-      opens: 2, startupSlow: 10, hosting: "cloud", loggedIn: true,
-    };
-    expect(TelemetryHeartbeatSchema.parse(legacy)).toEqual({
-      installId: INSTALL_A, day: utcDay(new Date()), opens: 2,
-      timeouts: 0, serverErrors: 0, signInFailures: 0,
-    });
-    await request(ctx.app.getHttpServer()).post(TelemetryRoutes.heartbeat.path).send(legacy).expect(200);
-    expect(await ctx.prisma.appInstallDay.findFirst()).toMatchObject({ opens: 2, day: ping().day });
-  });
-
   it("keeps yesterday's flush on yesterday rather than recording activity today", async () => {
     const yesterday = addUtcDays(utcDay(new Date()), -1);
     await request(ctx.app.getHttpServer()).post(TelemetryRoutes.heartbeat.path)
@@ -138,10 +122,15 @@ describe("Telemetry (e2e)", () => {
     expect(await ctx.prisma.appInstallDay.count()).toBe(0);
   });
 
-  it("rejects invalid dates and malformed legacy timestamps", async () => {
-    for (const payload of [ping({ day: "2026-02-30" }), { installId: INSTALL_A, ts: 1.5 }]) {
-      await request(ctx.app.getHttpServer()).post(TelemetryRoutes.heartbeat.path).send(payload).expect(400);
-    }
+  it("rejects reports without a real calendar day", async () => {
+    await request(ctx.app.getHttpServer())
+      .post(TelemetryRoutes.heartbeat.path)
+      .send(ping({ day: "2026-02-30" }))
+      .expect(400);
+    await request(ctx.app.getHttpServer())
+      .post(TelemetryRoutes.heartbeat.path)
+      .send({ installId: INSTALL_A })
+      .expect(400);
     expect(await ctx.prisma.appInstall.count()).toBe(0);
   });
 

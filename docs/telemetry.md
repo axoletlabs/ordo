@@ -25,31 +25,18 @@ Repeated notifications of the same foreground state do not count another open.
 No app version, exact event/ping timestamp, startup bucket, platform, hosting
 mode, account/login flag, bookmark content, account ID, email, device name or
 server URL is sent in telemetry. Account and sign-in summaries come from the
-server's existing `User`/`Session` records instead of duplicate client events.
-The HTTP peer IP is used by the existing rate limiter, not stored in telemetry
-tables. Local flush timestamps remain on the device to throttle requests.
+server's own `User`/`Session` records instead of duplicate client events.
+The HTTP peer IP is used by the rate limiter, not stored in telemetry tables.
+Local flush timestamps remain on the device to throttle requests.
 
-## Storage and retention
+## Storage
 
 - `AppInstall` keeps only the anonymous ID and first/last-seen dates at UTC-day
-  precision, for install totals and retention.
+  precision, for install totals.
 - `AppInstallDay` keeps only the ID, UTC day and the four counters.
 - Today and yesterday are accepted, allowing a midnight/offline flush. Older or
   future reports are acknowledged but discarded; they do not invent activity
   or a healthy report for today.
-- Daily rows and inactive install records older than the 365-day window are
-  purged on boot and once a day. The cleanup timer stops on server shutdown.
+- The data is anonymous daily counters, so there is no retention job.
 - The private telemetry dashboard reads aggregate counts; the public API has
   no telemetry stats endpoint.
-
-## Updating existing installations
-
-Deploy the server before the updated mobile client. The server accepts older
-native payloads with `ts`/`appVersion`, converts `ts` to a UTC day, and strips
-unused fields before persistence. New clients send only the daily payload.
-
-The versioned `20260930120000_daily_telemetry_only` migration runs through the
-normal server database upgrade path. It drops stored version/last-ping columns
-and rounds existing first/last-seen dates while preserving daily counters.
-Previous migrations already remove platform, hosting, startup buckets, client
-account flags and the unused snapshot table.

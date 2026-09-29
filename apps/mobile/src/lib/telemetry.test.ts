@@ -38,10 +38,9 @@ test("opens bump, later notes never shrink a count", () => {
   assert.equal(counted.serverErrors, 1);
 });
 
-test("normalizes legacy storage and sends only the daily counter allowlist", () => {
+test("stored counters keep only the daily fields and the request sends only the allowlist", () => {
   const counters = normalizeTelemetryCounters({
-    day: "2026-09-23", opens: 3, timeouts: 1,
-    startupFast: 4, platform: "android", hosting: "cloud", appVersion: "old", ts: 123,
+    day: "2026-09-23", opens: 3, timeouts: 1, note: "junk", extra: true,
   }, "2026-09-23");
   assert.deepEqual(counters, {
     day: "2026-09-23", opens: 3, timeouts: 1, serverErrors: 0, signInFailures: 0,
