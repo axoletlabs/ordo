@@ -18,7 +18,8 @@ def verify(apk, *, aapt, apksigner, version, base, runtime, channel, certificate
     signatures = output(apksigner, "verify", "--print-certs", str(apk))
     digests = re.findall(r"Signer #\d+ certificate SHA-256 digest:\s*([a-fA-F0-9]{64})", signatures)
     if len(digests) != 1 or digests[0].lower() != certificate.lower():
-        raise ValueError(f"{apk.name}: signer does not match the stored upload key")
+        raise ValueError(f"{apk.name}: signer does not match the stored upload key "
+                         f"(expected {certificate}, found {[d.lower() for d in digests] or 'none'})")
     badging = output(aapt, "dump", "badging", str(apk))
     package = re.search(r"package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'", badging)
     offsets = {"armeabi-v7a": 1, "arm64-v8a": 2, "x86": 3, "x86_64": 4}

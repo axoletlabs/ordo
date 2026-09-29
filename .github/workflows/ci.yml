@@ -667,6 +667,7 @@ jobs:
           overwrite: true
 
       - name: Upload APK artifact
+        if: always()
         uses: actions/upload-artifact@v6
         with:
           name: ordo-apk-${{ needs.detect.outputs.updates_channel }}
