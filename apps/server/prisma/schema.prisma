@@ -308,9 +308,9 @@ model InstanceSettings {
 }
 
 /// Anonymous app install. No account, email, IP, or server URL.
+/// First/last seen are stored at UTC-day precision, not exact event times.
 model AppInstall {
   id          String          @id
-  appVersion  String
   firstSeenAt DateTime
   lastSeenAt  DateTime
   days        AppInstallDay[]
@@ -326,14 +326,11 @@ model AppInstall {
 model AppInstallDay {
   installId      String
   day            String
-  appVersion     String
   /// Times the app came to the foreground this day.
   opens          Int        @default(0)
   timeouts       Int        @default(0)
   serverErrors   Int        @default(0)
   signInFailures Int        @default(0)
-  /// Unix seconds of the ping that last wrote this row. Not a timezone.
-  lastPingAt     Int        @default(0)
   install        AppInstall @relation(fields: [installId], references: [id], onDelete: Cascade)
 
   @@id([installId, day])

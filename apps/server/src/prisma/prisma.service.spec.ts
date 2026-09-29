@@ -453,6 +453,40 @@ describe("PrismaService legacy schema migration", () => {
     await service.onModuleDestroy();
   });
 
+  it("removes unused telemetry columns and rounds existing dates without losing daily counters", async () => {
+    const db = rawClient(tempDbPath());
+    try {
+      await db.$executeRawUnsafe(`CREATE TABLE AppInstall (
+        id TEXT PRIMARY KEY, appVersion TEXT NOT NULL, firstSeenAt DATETIME NOT NULL, lastSeenAt DATETIME NOT NULL
+      )`);
+      await db.$executeRawUnsafe(`CREATE TABLE AppInstallDay (
+        installId TEXT, day TEXT, appVersion TEXT NOT NULL, lastPingAt INTEGER NOT NULL,
+        opens INTEGER, timeouts INTEGER, serverErrors INTEGER, signInFailures INTEGER,
+        PRIMARY KEY (installId, day), FOREIGN KEY (installId) REFERENCES AppInstall(id)
+      )`);
+      await db.$executeRawUnsafe(`INSERT INTO AppInstall VALUES
+        ('numeric', 'old', 1790076896123, 1790159696456),
+        ('text', 'old', '2026-09-22T12:34:56.123Z', '2026-09-23T12:34:56.456Z')`);
+      await db.$executeRawUnsafe(`INSERT INTO AppInstallDay VALUES
+        ('numeric', '2026-09-22', 'old', 1790076896, 4, 2, 1, 0)`);
+      const migration = listMigrations(join(__dirname, "../../prisma/migrations"))
+        .find((row) => row.name === "20260930120000_daily_telemetry_only");
+      if (!migration) throw new Error("missing daily telemetry migration");
+      for (const statement of splitSqlStatements(migration.sql)) await db.$executeRawUnsafe(statement);
+      const rows = await db.$queryRawUnsafe<Array<{ id: string; first: number | bigint; last: number | bigint }>>(
+        `SELECT id, CAST(firstSeenAt AS INTEGER) AS first, CAST(lastSeenAt AS INTEGER) AS last FROM AppInstall ORDER BY id`,
+      );
+      expect(rows.map((row) => ({ id: row.id, first: Number(row.first), last: Number(row.last) }))).toEqual([
+        { id: "numeric", first: Date.parse("2026-09-22T00:00:00Z"), last: Date.parse("2026-09-23T00:00:00Z") },
+        { id: "text", first: Date.parse("2026-09-22T00:00:00Z"), last: Date.parse("2026-09-23T00:00:00Z") },
+      ]);
+      const daily = await db.$queryRawUnsafe<Array<Record<string, unknown>>>("SELECT * FROM AppInstallDay");
+      expect(daily).toEqual([{
+        installId: "numeric", day: "2026-09-22", opens: 4, timeouts: 2, serverErrors: 1, signInFailures: 0,
+      }]);
+    } finally { await db.$disconnect(); }
+  });
+
   it("is a no-op when the database already has the init migration recorded", async () => {
     const path = tempDbPath();
     const first = await boot(path);

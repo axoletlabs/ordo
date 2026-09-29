@@ -6,10 +6,11 @@ import {
   emptyTelemetryCounters,
   existingOrNewInstallId,
   needsTelemetryRegistration,
+  normalizeTelemetryCounters,
   shouldFlushTelemetry,
-  shouldPing,
   telemetryDirty,
   telemetryEnabled,
+  telemetryHeartbeat,
 } from "./telemetry-policy.ts";
 
 test("pings only on the production channel outside development", () => {
@@ -27,15 +28,6 @@ test("re-registers an existing install when telemetry changes", () => {
   assert.equal(needsTelemetryRegistration(1, 2), true);
 });
 
-test("pings when never seen, after a day, or if the clock jumped back", () => {
-  const now = 1_700_000_000_000;
-  const day = 24 * 60 * 60 * 1000;
-  assert.equal(shouldPing(null, now), true);
-  assert.equal(shouldPing(now - day, now), true);
-  assert.equal(shouldPing(now - day + 1, now), false);
-  assert.equal(shouldPing(now + day, now), true);
-});
-
 test("opens bump, later notes never shrink a count", () => {
   const day = emptyTelemetryCounters("2026-09-23");
   const opened = applyTelemetryNote(day, "open");
@@ -44,6 +36,20 @@ test("opens bump, later notes never shrink a count", () => {
   const counted = applyTelemetryNote(applyTelemetryNote(day, "timeout"), "serverError");
   assert.equal(counted.timeouts, 1);
   assert.equal(counted.serverErrors, 1);
+});
+
+test("normalizes legacy storage and sends only the daily counter allowlist", () => {
+  const counters = normalizeTelemetryCounters({
+    day: "2026-09-23", opens: 3, timeouts: 1,
+    startupFast: 4, platform: "android", hosting: "cloud", appVersion: "old", ts: 123,
+  }, "2026-09-23");
+  assert.deepEqual(counters, {
+    day: "2026-09-23", opens: 3, timeouts: 1, serverErrors: 0, signInFailures: 0,
+  });
+  assert.deepEqual(telemetryHeartbeat("install-id", counters), {
+    installId: "install-id", day: "2026-09-23", opens: 3,
+    timeouts: 1, serverErrors: 0, signInFailures: 0,
+  });
 });
 
 test("treats only HTTP 4xx as a sign-in failure", () => {

@@ -41,7 +41,7 @@ function onAppStateChange(state: AppStateStatus) {
   const wasActive = lastState === "active";
   lastState = state;
   if (state === "active") {
-    void onBecameActive();
+    if (!wasActive) void onBecameActive();
     return;
   }
   if (wasActive) onLeftActive();

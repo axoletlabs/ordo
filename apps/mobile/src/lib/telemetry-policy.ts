@@ -1,4 +1,3 @@
-export const TELEMETRY_PING_INTERVAL_MS = 24 * 60 * 60 * 1000;
 export const TELEMETRY_FLUSH_GAP_MS = 15 * 60 * 1000;
 export const TELEMETRY_COUNTER_MAX = 500;
 
@@ -19,6 +18,18 @@ export function emptyTelemetryCounters(day: string): TelemetryCounters {
     timeouts: 0,
     serverErrors: 0,
     signInFailures: 0,
+  };
+}
+
+/** Explicit allowlist: never spread stored/legacy metadata into a request. */
+export function telemetryHeartbeat(installId: string, counters: TelemetryCounters) {
+  return {
+    installId,
+    day: counters.day,
+    opens: counters.opens,
+    timeouts: counters.timeouts,
+    serverErrors: counters.serverErrors,
+    signInFailures: counters.signInFailures,
   };
 }
 
@@ -106,15 +117,6 @@ export function shouldFlushTelemetry(input: {
   if (!input.dirty) return false;
   if (lastPingAt > input.now) return true;
   return input.now - lastPingAt >= gap;
-}
-
-export function shouldPing(
-  lastPingAt: number | null,
-  now: number,
-  intervalMs = TELEMETRY_PING_INTERVAL_MS,
-): boolean {
-  if (lastPingAt == null || lastPingAt > now) return true;
-  return now - lastPingAt >= intervalMs;
 }
 
 /**

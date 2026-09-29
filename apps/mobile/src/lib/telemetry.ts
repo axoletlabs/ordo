@@ -4,13 +4,11 @@
  * sign-in failures). Accounts and sign-ins are server-side truth.
  * No account, email, IP, device name, or server URL.
  */
-import Constants from "expo-constants";
 import * as Crypto from "expo-crypto";
 import * as Updates from "expo-updates";
 import { TelemetryRoutes, type TelemetryHeartbeatInput } from "@ordo/shared";
 import { CLOUD_SERVER_URL } from "./hosting";
 import { prefsGet, prefsSet, StorageKeys } from "./storage";
-import { useSettingsStore } from "../store/settings";
 import { useOnlineStore } from "./online";
 import {
   REQUEST_HARD_TIMEOUT_MS,
@@ -28,12 +26,12 @@ import {
   shouldFlushTelemetry,
   telemetryDirty,
   telemetryEnabled,
+  telemetryHeartbeat,
   TELEMETRY_FLUSH_GAP_MS,
   type TelemetryCounters,
-  type TelemetryNote,
 } from "./telemetry-policy";
 
-const TELEMETRY_REVISION = 4;
+const TELEMETRY_REVISION = 5;
 
 interface StoredTelemetry {
   installId: string;
@@ -68,11 +66,6 @@ function reportingEnabled(): boolean {
 }
 
 export { shouldFlushTelemetry } from "./telemetry-policy";
-
-export function telemetryAppVersion(): string {
-  const version = Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? "unknown";
-  return version.trim().slice(0, 32) || "unknown";
-}
 
 export function recordColdStart(now = Date.now()): Promise<void> {
   if (!reportingEnabled()) return Promise.resolve();
@@ -207,15 +200,7 @@ async function preparePing(now: number): Promise<{
     return null;
   }
 
-  const payload: TelemetryHeartbeatInput = {
-    installId,
-    appVersion: telemetryAppVersion(),
-    ts: reportTs(counters.day, now),
-    opens: counters.opens,
-    timeouts: counters.timeouts,
-    serverErrors: counters.serverErrors,
-    signInFailures: counters.signInFailures,
-  };
+  const payload: TelemetryHeartbeatInput = telemetryHeartbeat(installId, counters);
   return { installId, counters, payload, immediate };
 }
 
@@ -247,12 +232,4 @@ function resolveInstallId(savedId: string | undefined): string {
 
 function utcDay(now: number): string {
   return new Date(now).toISOString().slice(0, 10);
-}
-
-/** Unix seconds on the counter's UTC day, so a flush just after midnight still lands there. */
-function reportTs(day: string, nowMs: number): number {
-  const nowSec = Math.floor(nowMs / 1000);
-  const start = Math.floor(Date.parse(`${day}T00:00:00.000Z`) / 1000);
-  if (!Number.isFinite(start)) return nowSec;
-  return Math.min(start + 86_400 - 1, Math.max(start, nowSec));
 }
