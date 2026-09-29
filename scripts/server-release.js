@@ -24,6 +24,7 @@ const { tmpdir } = require("node:os");
 const { dirname, join } = require("node:path");
 const { Readable } = require("node:stream");
 const { pipeline } = require("node:stream/promises");
+const { classifyReleaseVersion, compareVersions } = require("./release-policy.js");
 
 const DEFAULT_REPO = "axoletlabs/ordo";
 const TAG_RE = /^v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)(?:\.\d+)?)?$/;
@@ -41,7 +42,7 @@ function normalizeReleaseSpec(raw, { pre = false } = {}) {
   if (!text || text.toLowerCase() === "latest") return { kind: "latest", pre: Boolean(pre) };
   if (text.toLowerCase() === "latest-pre") return { kind: "latest", pre: true };
   const tag = text.startsWith("v") ? text : `v${text}`;
-  if (!TAG_RE.test(tag)) {
+  if (!TAG_RE.test(tag) || !classifyReleaseVersion(tag)) {
     throw new Error(
       `--release expects latest or vX.Y.Z (optional -alpha, -beta, or -rc), got ${JSON.stringify(raw)}`,
     );
@@ -51,6 +52,8 @@ function normalizeReleaseSpec(raw, { pre = false } = {}) {
 
 function byNewest(releases) {
   return [...releases].sort((a, b) => {
+    const versionOrder = compareVersions(b.tag_name, a.tag_name);
+    if (versionOrder) return versionOrder;
     const at = Date.parse(a.published_at ?? a.created_at ?? 0);
     const bt = Date.parse(b.published_at ?? b.created_at ?? 0);
     return bt - at;
@@ -58,10 +61,14 @@ function byNewest(releases) {
 }
 
 function visibleReleases(releases, { pre = false } = {}) {
-  const list = (releases ?? []).filter((release) => release && !release.draft);
+  const list = (releases ?? []).filter((release) => release && !release.draft && classifyReleaseVersion(release.tag_name));
   const newest = byNewest(list);
   if (pre) return newest;
-  return newest.filter((release) => !release.prerelease);
+  return newest.filter((release) => !isPrerelease(release));
+}
+
+function isPrerelease(release) {
+  return !!release.prerelease || classifyReleaseVersion(release.tag_name)?.kind === "prerelease";
 }
 
 function selectRelease(releases, spec) {
@@ -87,7 +94,7 @@ function serverAssetName(tag) {
 
 function pickServerAsset(release) {
   const assets = release?.assets ?? [];
-  const tarball = assets.find((asset) => /^ordo-server-v.+\.tar\.gz$/.test(asset?.name ?? ""));
+  const tarball = assets.find((asset) => asset?.name === serverAssetName(release.tag_name) && (!asset.state || asset.state === "uploaded"));
   if (!tarball?.browser_download_url) return null;
   const checksum = assets.find((asset) => asset?.name === `${tarball.name}.sha256`) ?? null;
   return { tarball, checksum };
@@ -95,10 +102,10 @@ function pickServerAsset(release) {
 
 function formatReleaseMenu(releases, { installedTag, pre = false } = {}) {
   const shown = visibleReleases(releases, { pre });
-  const hidden = (releases ?? []).filter((release) => release && !release.draft && release.prerelease).length;
+  const hidden = visibleReleases(releases, { pre: true }).filter(isPrerelease).length;
   const lines = shown.map((release, index) => {
     const date = String(release.published_at ?? "").slice(0, 10);
-    const channel = release.prerelease ? "pre-release" : "stable";
+    const channel = isPrerelease(release) ? "pre-release" : "stable";
     const marks = [];
     if (index === 0) marks.push(pre ? "newest" : "latest");
     if (installedTag && release.tag_name === installedTag) marks.push("installed");
@@ -123,6 +130,7 @@ function chooseListedRelease(releases, raw, { pre = false } = {}) {
     return hit;
   }
   const spec = normalizeReleaseSpec(text, { pre: true });
+  if (spec.kind === "latest") return selectRelease(releases, spec);
   const found = (releases ?? []).find((release) => !release.draft && release.tag_name === spec.tag);
   if (!found) {
     const error = new Error(`Release ${spec.tag} is not in the recent list.`);
@@ -150,7 +158,7 @@ function planLines({ release, mode, installed }) {
   const lines = [];
   const from = installed?.tag && installed.tag !== release.tag_name ? `${installed.tag} → ` : "";
   const same = installed?.tag === release.tag_name ? " (reinstall)" : "";
-  const channel = release.prerelease ? "pre-release" : "stable";
+  const channel = isPrerelease(release) ? "pre-release" : "stable";
   lines.push(`Release: ${from}${release.tag_name}${same} (${channel}).`);
   if (mode === "asset") {
     lines.push(`Archive: ${pickServerAsset(release).tarball.name}`);
@@ -202,8 +210,10 @@ function isLocalTree(rel) {
 /** User data that a release tree must never overwrite or delete. */
 function isPreserved(rel) {
   const path = String(rel).replaceAll("\\", "/");
+  if (path === "apps/server/.env.example") return false;
   if (path === "apps/server/.env" || path.startsWith("apps/server/.env.")) return true;
   if (path === "apps/server/.ordo-secret" || path === "apps/server/.ordo-library-key") return true;
+  if (path === ".ordo-secret" || path === ".ordo-library-key") return true;
   if (path === "apps/server/.ordo.pid" || path === "apps/server/ordo.log") return true;
   const prisma = "apps/server/prisma/";
   if (!path.startsWith(prisma)) return false;
@@ -285,7 +295,7 @@ function githubHeaders(token, { download = false } = {}) {
 async function githubJson(url, { fetchImpl, token }) {
   let response;
   try {
-    response = await fetchImpl(url, { headers: githubHeaders(token) });
+    response = await fetchImpl(url, { headers: githubHeaders(token), signal: AbortSignal.timeout(30_000) });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Could not reach GitHub (${message}).`);
@@ -319,7 +329,7 @@ async function releaseByTag(repo, tag, options) {
 
 async function latestStable(repo, options) {
   const release = await githubJson(`https://api.github.com/repos/${repo}/releases/latest`, options);
-  if (!release || release.draft) {
+  if (!release || release.draft || !classifyReleaseVersion(release.tag_name) || isPrerelease(release)) {
     throw new Error(
       `No stable release was found on ${repo}. Publish a vX.Y.Z GitHub Release, pass --pre to include pre-releases, or pass --from-git to update the current branch.`,
     );
@@ -387,14 +397,6 @@ function checkoutReleaseTag(repoRoot, remote, tag, log) {
   return sha;
 }
 
-function resetGitToSha(repoRoot, sha, log) {
-  log?.(`$ git reset --mixed ${sha}`);
-  const reset = git(repoRoot, ["reset", "--mixed", sha], { inherit: true });
-  if (reset.status !== 0) {
-    throw new Error(`Installed the release files, but git reset to ${sha} failed.`);
-  }
-}
-
 function trackedFiles(repoRoot) {
   const result = git(repoRoot, ["ls-files", "-z"]);
   if (result.status !== 0) return [];
@@ -420,7 +422,7 @@ function extractTarball(archivePath, destDir) {
 async function downloadToFile(url, dest, { fetchImpl, token }) {
   let response;
   try {
-    response = await fetchImpl(url, { headers: githubHeaders(token, { download: true }), redirect: "follow" });
+    response = await fetchImpl(url, { headers: githubHeaders(token, { download: true }), redirect: "follow", signal: AbortSignal.timeout(10 * 60_000) });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new Error(`Could not download ${url} (${message}).`);
@@ -490,17 +492,32 @@ async function applySelectedRelease({
       }
       log("Checksum matches.");
     } else if (asset) {
-      log("This server archive has no checksum file. Continuing without verifying it.");
+      throw new Error(`Server archive ${asset.tarball.name} has no checksum file. The release was not installed.`);
     }
     const extractDir = join(tmp, "extract");
     extractTarball(archivePath, extractDir);
     const tree = findTreeRoot(extractDir);
-    const tracked = hasGit ? trackedFiles(repoRoot) : [];
+    if (!existsSync(join(tree, "apps", "server")) || !existsSync(join(tree, "scripts", "deploy-server.js"))) {
+      throw new Error("The release archive is not an Ordo server tree.");
+    }
+    const recorded = readInstalledRelease(repoRoot)?.files;
+    const safeRecorded = Array.isArray(recorded) ? recorded.filter((path) =>
+      typeof path === "string" && !path.startsWith("/") && !path.includes("\\") && !path.split("/").includes(".."),
+    ) : [];
+    const tracked = [...new Set([...(hasGit ? trackedFiles(repoRoot) : []), ...safeRecorded])];
+    // Detach before applying the archive. Resetting a checked-out branch to a
+    // tag silently moved the operator's main/release branch backwards.
+    if (hasGit && commit) {
+      const checkout = git(repoRoot, ["checkout", "--detach", commit], { inherit: true });
+      if (checkout.status !== 0) throw new Error(`Could not detach at ${release.tag_name}.`);
+    }
     syncReleaseTree(repoRoot, tree, { tracked, log });
     if (!commit) commit = await remoteCommitSha(repo, release.tag_name, { fetchImpl, token });
-    if (hasGit && commit) resetGitToSha(repoRoot, commit, log);
     const assetName = asset?.tarball?.name ?? null;
-    writeReleaseManifest(repoRoot, releaseManifest(release, { commit, asset: assetName }), { log });
+    writeReleaseManifest(repoRoot, {
+      ...releaseManifest(release, { commit, asset: assetName }),
+      files: listFiles(tree).filter((path) => !isPreserved(path)),
+    }, { log });
     return { mode, tag: release.tag_name, asset: assetName, commit };
   } finally {
     rmSync(tmp, { recursive: true, force: true });
@@ -512,6 +529,7 @@ module.exports = {
   normalizeRepo,
   normalizeReleaseSpec,
   visibleReleases,
+  isPrerelease,
   selectRelease,
   serverAssetName,
   pickServerAsset,

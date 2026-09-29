@@ -16,7 +16,7 @@ nodeLinker: hoisted
 overrides:
   js-yaml: 4.3.2
   "@xmldom/xmldom": 0.9.12
-  fast-uri: 3.1.6
+  fast-uri: 3.1.8
   mysql2: 3.22.0
   nanoid@3: 3.3.18
   brace-expansion@5: 5.0.9

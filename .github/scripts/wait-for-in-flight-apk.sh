@@ -8,35 +8,37 @@ set -euo pipefail
 REPO="${GITHUB_REPOSITORY:?}"
 CURRENT_RUN="${GITHUB_RUN_ID:-0}"
 BRANCH="${1:-${GITHUB_REF_NAME:-main}}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # APK jobs are ~8 minutes; leave headroom if the queue is slow.
 TIMEOUT_S="${WAIT_FOR_APK_TIMEOUT_S:-2700}"
 SLEEP_S="${WAIT_FOR_APK_SLEEP_S:-20}"
 
 list_runs() {
   local status="$1"
-  gh api "repos/${REPO}/actions/workflows/ci.yml/runs?branch=${BRANCH}&status=${status}&per_page=20" \
-    --jq '.workflow_runs' || echo '[]'
+  bash "$SCRIPT_DIR/ci-stream-runs.sh" "$BRANCH" "$status"
 }
 
 # Runs that started before this one and are still going. Newer runs cancel us
 # via the ota concurrency group; waiting on them would deadlock.
 older_in_flight_ids() {
+  local progress queued waiting
+  progress="$(list_runs in_progress)" || return 1
+  queued="$(list_runs queued)" || return 1
+  waiting="$(list_runs waiting)" || return 1
   jq -s --argjson current "${CURRENT_RUN}" \
     '
       add
       | map(select(.id < $current))
       | .[].id
     ' \
-    <(list_runs in_progress) \
-    <(list_runs queued) \
-    <(list_runs waiting)
+    <<<"$progress $queued $waiting"
 }
 
 # True when this run might still produce a binary we must out-timestamp.
 run_has_pending_apk() {
   local run_id="$1"
   local jobs detect_status apk_status apk_conclusion
-  jobs="$(gh api "repos/${REPO}/actions/runs/${run_id}/jobs" --jq '[.jobs[] | {name,status,conclusion}]')"
+  jobs="$(gh api "repos/${REPO}/actions/runs/${run_id}/jobs" --jq '[.jobs[] | {name,status,conclusion}]')" || exit 1
   detect_status="$(jq -r '.[] | select(.name == "detect") | .status' <<<"$jobs")"
   apk_status="$(jq -r '.[] | select(.name == "build_apk") | .status' <<<"$jobs")"
   apk_conclusion="$(jq -r '.[] | select(.name == "build_apk") | .conclusion // empty' <<<"$jobs")"
@@ -68,7 +70,7 @@ started="$(date +%s)"
 pending=0
 while true; do
   pending=0
-  ids="$(older_in_flight_ids || true)"
+  ids="$(older_in_flight_ids)"
   if [[ -z "$ids" ]]; then
     echo "No older in-flight CI runs on ${BRANCH}"
     exit 0

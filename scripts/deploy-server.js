@@ -49,6 +49,7 @@ const {
   resolveReleaseChoice,
   visibleReleases,
 } = require("./server-release.js");
+const { compareVersions } = require("./release-policy.js");
 const { hiddenPreCount, promptReleaseMenu, releaseMenuRows } = require("./release-menu.js");
 const { promptChoiceMenu } = require("./choice-menu.js");
 
@@ -1295,6 +1296,10 @@ async function resolveDeployRelease({
   } else {
     const spec = normalizeReleaseSpec(args.release ?? "latest", { pre: args.pre });
     release = await resolveReleaseChoice(spec, { repo, releases, fetchImpl, token });
+  }
+  if (installed?.tag && (args.release == null || /^latest(?:-pre)?$/i.test(args.release)) &&
+      compareVersions(release.tag_name, installed.tag) < 0) {
+    throw new Error(`Latest release ${release.tag_name} is older than installed ${installed.tag}. Choose an explicit --release tag to downgrade.`);
   }
   const mode = releaseApplyMode(release, {
     hasGit,

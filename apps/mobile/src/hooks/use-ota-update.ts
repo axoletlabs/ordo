@@ -10,16 +10,9 @@ import { useCallback, useEffect } from "react";
 import { AppState } from "react-native";
 import * as Updates from "expo-updates";
 import { restartForUpdate } from "../store/update-restart";
+import { resolveOtaStatus, type OtaStatus } from "../lib/ota-update-state";
 
-export type OtaStatus =
-  | "disabled"
-  | "idle"
-  | "checking"
-  | "up-to-date"
-  | "available"
-  | "downloading"
-  | "ready"
-  | "error";
+export type { OtaStatus } from "../lib/ota-update-state";
 
 export interface UseOtaUpdate {
   enabled: boolean;
@@ -92,23 +85,14 @@ export function useOtaUpdate(): UseOtaUpdate {
   const pendingId = downloadedUpdate?.updateId ?? null;
   // A pending bundle that's older than the one just advertised should Download,
   // not Restart into the stale copy. Same-id available+pending is Restart.
-  const newerThanPending =
-    isUpdateAvailable &&
-    availableId != null &&
-    availableId !== runningId &&
-    availableId !== pendingId;
-
-  const status: OtaStatus = (() => {
-    if (!enabled) return "disabled";
-    if (isDownloading) return "downloading";
-    if (newerThanPending) return "available";
-    if (isUpdatePending) return "ready";
-    if (isChecking) return "checking";
-    if (isUpdateAvailable) return "available";
-    if (checkError || downloadError) return "error";
-    if (lastCheckForUpdateTimeSinceRestart) return "up-to-date";
-    return "idle";
-  })();
+  const status = resolveOtaStatus({
+    enabled, isChecking, isDownloading, isUpdateAvailable, isUpdatePending,
+    runningId, availableId, pendingId,
+    availableAt: availableUpdate?.createdAt ?? null,
+    pendingAt: downloadedUpdate?.createdAt ?? null,
+    hasError: !!(checkError || downloadError),
+    hasChecked: !!lastCheckForUpdateTimeSinceRestart,
+  });
 
   const message =
     checkError?.message ?? downloadError?.message ?? null;

@@ -9,6 +9,7 @@
  * is no artifact; consumers treat a null hash as "—".
  */
 const { execSync } = require("node:child_process");
+const { resolveUpdatesChannel } = require("../../scripts/release-policy.js");
 
 /** Run a git subcommand, returning "" when git or the repo is unavailable. */
 function git(args) {
@@ -32,12 +33,16 @@ const gitDirty = git("status --porcelain").length > 0;
 // CI extra-publishes the same JS onto older APK fingerprints. eas update has
 // no --runtime-version flag, so the job sets this to that APK's raw hash.
 const otaRuntime = process.env.ORDO_OTA_RUNTIME_VERSION;
+const version = "0.1.0";
+const branch = process.env.ORDO_BUILD_BRANCH || git("branch --show-current") || "main";
+const updatesChannel = process.env.EXPO_UPDATES_CHANNEL || resolveUpdatesChannel(version, branch);
+if (!updatesChannel) throw new Error(`Version ${version} does not match branch ${branch}`);
 
 /** @type {import('expo/config').ExpoConfig} */
 module.exports = {
   name: "ordo",
   slug: "ordo",
-  version: "0.1.0",
+  version,
   orientation: "default",
   userInterfaceStyle: "automatic",
   icon: "./assets/icon.png",
@@ -52,6 +57,7 @@ module.exports = {
   },
   newArchEnabled: true,
   updates: {
+    requestHeaders: { "expo-channel-name": updatesChannel },
     url: "https://u.expo.dev/c044b586-2816-42c7-b564-bef8556e21da",
     // Custom Check / Download / Restart UI owns the fetch. Native ON_LOAD
     // would race that JS path (pending bundle vs advertised update).

@@ -5,12 +5,14 @@ set -euo pipefail
 
 REPO="${GITHUB_REPOSITORY:?}"
 BRANCH="${1:-main}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 LIMIT="${2:-3}"
 count=0
 declare -A seen=()
 
 for page in 1 2 3 4 5; do
-  ids="$(gh api "repos/${REPO}/actions/workflows/ci.yml/runs?branch=${BRANCH}&status=completed&per_page=20&page=${page}" --jq '.workflow_runs[].id')"
+  runs="$(bash "$SCRIPT_DIR/ci-stream-runs.sh" "$BRANCH" completed "$page")"
+  ids="$(jq -r '.[].id' <<<"$runs")"
   if [[ -z "$ids" ]]; then
     break
   fi

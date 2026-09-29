@@ -1,26 +1,25 @@
 {
   "cli": {
-    "version": ">= 5.0.0",
-    "appVersionSource": "remote"
+    "version": "24.8.0",
+    "appVersionSource": "local"
   },
   "build": {
     "development": {
-      "developmentClient": true,
       "distribution": "internal",
       "channel": "development"
     },
-    "preview": {
+    "early-access": {
+      "extends": "production",
       "distribution": "internal",
-      "android": {
-        "buildType": "apk"
-      },
-      "channel": "preview"
+      "channel": "early-access",
+      "env": { "EXPO_UPDATES_CHANNEL": "early-access" }
     },
     "production": {
       "android": {
         "buildType": "apk"
       },
-      "channel": "production"
+      "channel": "production",
+      "env": { "EXPO_UPDATES_CHANNEL": "production" }
     }
   }
 }

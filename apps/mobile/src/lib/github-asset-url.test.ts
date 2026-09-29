@@ -58,3 +58,11 @@ test("release pages must be https github.com/axoletlabs/ordo", () => {
     false,
   );
 });
+
+test("asset links reject credentials, alternate ports, and repository pages", () => {
+  for (const url of ["https://user:pass@github.com/axoletlabs/ordo/releases/download/v0.1.0/app.apk",
+    "https://github.com:8443/axoletlabs/ordo/releases/download/v0.1.0/app.apk",
+    "https://github.com/axoletlabs/ordo/issues/1"]) {
+    assert.equal(isTrustedGithubAssetUrl(url), false);
+  }
+});

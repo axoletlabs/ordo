@@ -1,122 +1,23 @@
 #!/usr/bin/env node
-/**
- * Keep in sync with apps/mobile/src/lib/app-version.ts
- * (`validateReleaseTag`, `easUpdatesChannel`, `resolveUpdatesChannel`,
- * `releaseLineBranch`, `validateReleaseBranch`).
- *
- * Usage:
- *   validate-release-tag.js <tag> <appVersion> <githubPrerelease>
- *   validate-release-tag.js --channel <appVersion> [--branch <gitBranch>]
- *   validate-release-tag.js --release-branch <tag> <targetBranch>
- * githubPrerelease is "true" or "false".
- */
 "use strict";
+const {
+  resolveUpdatesChannel, releaseLineBranch, validateReleaseBranch, validateReleaseTag,
+} = require("../../scripts/release-policy.js");
 
-const RELEASE_VERSION_RE =
-  /^v?(\d+\.\d+\.\d+)(?:-(alpha|beta|rc)(?:\.(\d+))?)?(?:\+[0-9A-Za-z.-]+)?$/;
-
-function classify(value) {
-  const match = String(value).trim().match(RELEASE_VERSION_RE);
-  if (!match) return null;
-  const core = match[1];
-  const channel = match[2] ?? null;
-  const numberToken = match[3];
-  if (!channel) return { version: core, kind: "stable" };
-  const suffix = numberToken != null ? `${channel}.${numberToken}` : channel;
-  return { version: `${core}-${suffix}`, kind: "prerelease" };
+const [command, ...args] = process.argv.slice(2);
+let error;
+if (command === "--release-branch") {
+  error = validateReleaseBranch(args[0], args[1]);
+  if (!error) console.log(releaseLineBranch(args[0]));
+} else if (command === "--channel") {
+  const channel = resolveUpdatesChannel(args[0], args[1] === "--branch" ? args[2] : null);
+  if (channel) console.log(channel);
+  else error = `Cannot map app version '${args[0] ?? ""}' and branch '${args[2] ?? ""}' to an EAS channel`;
+} else if (command && args.length === 2 && ["true", "false"].includes(args[1])) {
+  error = validateReleaseTag(command, args[0], args[1] === "true");
+} else {
+  error = "Usage: validate-release-tag.js <tag> <appVersion> <true|false> | --channel <appVersion> [--branch <branch>] | --release-branch <tag> <targetBranch>";
 }
-
-function easUpdatesChannel(appVersion) {
-  const classified = classify(appVersion);
-  if (!classified) return null;
-  return classified.kind === "prerelease" ? "development" : "production";
-}
-
-function releaseLineBranch(tagOrVersion) {
-  const match = String(tagOrVersion).trim().match(/^v?(\d+)\.(\d+)\.(\d+)/);
-  if (!match) return null;
-  return `release/${match[1]}.${match[2]}.${match[3]}`;
-}
-
-function resolveUpdatesChannel(appVersion, gitBranch) {
-  if (gitBranch && !String(gitBranch).startsWith("release/")) return "development";
-  return easUpdatesChannel(appVersion);
-}
-
-function validateReleaseBranch(tag, targetBranch) {
-  const expected = releaseLineBranch(tag);
-  if (!expected) {
-    return `Tag '${tag}' is not vX.Y.Z. Version releases use a release/x.y.z branch.`;
-  }
-  const branch = String(targetBranch ?? "")
-    .trim()
-    .replace(/^refs\/heads\//, "");
-  if (branch !== expected) {
-    return `Publish ${tag} from ${expected}. main does not publish version releases. Push the commit to ${expected}, then tag it there.`;
-  }
-  return null;
-}
-
-function validateReleaseTag(tag, appVersion, githubPrerelease) {
-  if (tag !== `v${appVersion}`) {
-    return `Release tag '${tag}' does not match app version 'v${appVersion}'`;
-  }
-  const classified = classify(appVersion);
-  if (!classified || classified.version !== appVersion) {
-    return `App version '${appVersion}' must be X.Y.Z or X.Y.Z-(alpha|beta|rc)[.N]`;
-  }
-  if (githubPrerelease && classified.kind !== "prerelease") {
-    return `GitHub pre-releases must use an alpha, beta, or RC tag (got '${appVersion}')`;
-  }
-  if (!githubPrerelease && classified.kind !== "stable") {
-    return `Stable GitHub releases must use a plain X.Y.Z tag (got '${appVersion}')`;
-  }
-  return null;
-}
-
-if (process.argv[2] === "--release-branch") {
-  const [tag, target] = process.argv.slice(3);
-  const error = validateReleaseBranch(tag ?? "", target ?? "");
-  if (error) {
-    console.error(`::error::${error}`);
-    process.exit(1);
-  }
-  process.stdout.write(`${releaseLineBranch(tag)}\n`);
-  process.exit(0);
-}
-
-if (process.argv[2] === "--channel") {
-  const args = process.argv.slice(3);
-  let version;
-  let branch;
-  for (let index = 0; index < args.length; index += 1) {
-    if (args[index] === "--branch") {
-      branch = args[index + 1];
-      index += 1;
-      continue;
-    }
-    if (version == null) version = args[index];
-  }
-  const channel = version ? resolveUpdatesChannel(version, branch) : null;
-  if (!channel) {
-    console.error(`::error::Cannot map app version '${version ?? ""}' to an EAS channel`);
-    process.exit(1);
-  }
-  process.stdout.write(`${channel}\n`);
-  process.exit(0);
-}
-
-const [tag, appVersion, prereleaseArg] = process.argv.slice(2);
-if (!tag || appVersion == null || prereleaseArg == null) {
-  console.error(
-    "Usage: validate-release-tag.js <tag> <appVersion> <true|false>\n" +
-      "       validate-release-tag.js --channel <appVersion> [--branch <gitBranch>]\n" +
-      "       validate-release-tag.js --release-branch <tag> <targetBranch>",
-  );
-  process.exit(2);
-}
-
-const error = validateReleaseTag(tag, appVersion, prereleaseArg === "true");
 if (error) {
   console.error(`::error::${error}`);
   process.exit(1);

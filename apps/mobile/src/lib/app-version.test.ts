@@ -47,23 +47,33 @@ test("classifyReleaseVersion accepts only stable and alpha/beta/rc tags", () => 
   assert.equal(classifyReleaseVersion("0.2.0-preview.1"), null);
 });
 
-test("easUpdatesChannel maps stable to production and early tags to development", () => {
+test("easUpdatesChannel isolates early access from development", () => {
   assert.equal(easUpdatesChannel("0.2.0"), "production");
   assert.equal(easUpdatesChannel("v0.2.0"), "production");
-  assert.equal(easUpdatesChannel("0.3.0-alpha.1"), "development");
-  assert.equal(easUpdatesChannel("0.3.0-beta.3"), "development");
-  assert.equal(easUpdatesChannel("0.3.0-rc.1"), "development");
+  assert.equal(easUpdatesChannel("0.3.0-alpha.1"), "early-access");
+  assert.equal(easUpdatesChannel("0.3.0-beta.3"), "early-access");
+  assert.equal(easUpdatesChannel("0.3.0-rc.1"), "early-access");
   assert.equal(easUpdatesChannel("dev"), null);
 });
 
 test("resolveUpdatesChannel keeps everyday branches on development", () => {
   assert.equal(resolveUpdatesChannel("0.1.0", "main"), "development");
   assert.equal(resolveUpdatesChannel("0.3.0-beta.1", "main"), "development");
-  assert.equal(resolveUpdatesChannel("0.1.0", "preview"), "development");
-  assert.equal(resolveUpdatesChannel("0.1.0", "feat/foo"), "development");
+  assert.equal(resolveUpdatesChannel("0.1.0", "preview"), "development-preview");
+  assert.equal(resolveUpdatesChannel("0.1.0", "feat/foo"), "development-feat-2Ffoo");
   assert.equal(resolveUpdatesChannel("0.1.0", "release/0.1.0"), "production");
-  assert.equal(resolveUpdatesChannel("0.3.0-beta.1", "release/0.3.0"), "development");
+  assert.equal(resolveUpdatesChannel("0.3.0-beta.1", "release/0.3.0"), "early-access");
   assert.equal(resolveUpdatesChannel("0.1.0"), "production");
+});
+
+test("release routing rejects malformed and mismatched version branches", () => {
+  for (const value of ["0.01.0", "0.1.0-beta.01", "0.1.0garbage", "0.1.0-", "9007199254740992.0.0"]) {
+    assert.equal(classifyReleaseVersion(value), null, value);
+    assert.equal(releaseLineBranch(value), null, value);
+  }
+  assert.equal(resolveUpdatesChannel("0.1.0", "release/0.2.0"), null);
+  assert.equal(resolveUpdatesChannel("0.1.0", "release/foo"), null);
+  assert.notEqual(resolveUpdatesChannel("0.1.0", "feat/foo"), resolveUpdatesChannel("0.1.0", "feat-2Ffoo"));
 });
 
 test("validateReleaseBranch only accepts the matching release line", () => {

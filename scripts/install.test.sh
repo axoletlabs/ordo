@@ -21,6 +21,7 @@ got=$(ordo_release_from_args --yes --release v0.1.0 --port 8080)
 got=$(ordo_release_from_args --release=0.2.0)
 [[ "$got" == "0.2.0" ]] || fail "equals --release, got $got"
 if ordo_release_from_args --yes --port 1; then fail "missing --release should fail"; fi
+if (ordo_release_from_args --release); then fail "--release without a value should fail"; fi
 
 got=$(ordo_normalize_tag "0.1.0")
 [[ "$got" == "v0.1.0" ]] || fail "normalize plain, got $got"
@@ -397,6 +398,21 @@ msg=$(
 [[ "$status" -ne 0 ]] || fail "uninstall without a terminal should stop"
 [[ "$msg" == *"--yes"* ]] || fail "no-tty uninstall, got $msg"
 [[ -d "$tmp/cancel" ]] || fail "no-tty uninstall removed the folder"
+
+(
+  ordo_ensure_node() { :; }
+  ordo_ensure_pnpm() { :; }
+  ordo_latest_tag() { printf 'v0.2.0\n'; }
+  ordo_latest_pre_tag() { printf 'v0.3.0-beta.1\n'; }
+  ordo_download_release() { fail "dry-run must not download"; }
+  for flags in '--pre' '--release latest-pre'; do
+    msg=$(ORDO_DIR="$tmp/fresh-dry" ordo_install_main --dry-run $flags)
+    [[ "$msg" == *"v0.3.0-beta.1"* ]] || fail "fresh early-access selection: $msg"
+    [[ ! -e "$tmp/fresh-dry" ]] || fail "dry-run created an install"
+  done
+  msg=$(ORDO_DIR="$tmp/fresh-dry" ordo_install_main --dry-run --release latest)
+  [[ "$msg" == *"v0.2.0"* ]] || fail "fresh stable selection: $msg"
+)
 
 rm -rf "$tmp"
 printf 'ok\n'

@@ -12,9 +12,10 @@ export function isTrustedGithubAssetUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== "https:") return false;
+    if (parsed.username || parsed.password || parsed.port) return false;
     const host = parsed.hostname.toLowerCase();
     if (host === "github.com") {
-      return parsed.pathname.startsWith(ORDO_GITHUB_PREFIX);
+      return parsed.pathname.startsWith(`${ORDO_GITHUB_PREFIX}releases/download/`);
     }
     return GITHUB_RELEASE_ASSET_HOSTS.has(host);
   } catch {
@@ -27,8 +28,9 @@ export function isTrustedGithubReleasePageUrl(url: string): boolean {
     const parsed = new URL(url);
     return (
       parsed.protocol === "https:" &&
+      !parsed.username && !parsed.password && !parsed.port &&
       parsed.hostname.toLowerCase() === "github.com" &&
-      parsed.pathname.startsWith(ORDO_GITHUB_PREFIX)
+      (parsed.pathname === `${ORDO_GITHUB_PREFIX}releases` || parsed.pathname.startsWith(`${ORDO_GITHUB_PREFIX}releases/`))
     );
   } catch {
     return false;

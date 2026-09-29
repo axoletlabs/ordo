@@ -14,16 +14,23 @@ set -euo pipefail
 REPO="${GITHUB_REPOSITORY:?}"
 RUN_ID=""
 SHA=""
+BRANCH=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --run-id) RUN_ID="${2:-}"; shift 2 ;;
     --sha) SHA="${2:-}"; shift 2 ;;
+    --branch) BRANCH="${2:-}"; shift 2 ;;
     *) echo "Usage: $0 --run-id <id> | --sha <commit>" >&2; exit 2 ;;
   esac
 done
 
 if [[ -z "$RUN_ID" && -n "$SHA" ]]; then
+  runs="$(gh api "repos/${REPO}/actions/workflows/ci.yml/runs?head_sha=${SHA}&status=completed&per_page=100" --jq '.workflow_runs')"
+  tag=""
+  [[ "$BRANCH" == release/* ]] && tag="v${APP_VERSION:-${BRANCH#release/}}"
+  IDS="$(jq -r --arg branch "$BRANCH" --arg tag "$tag" --arg sha "$SHA" \
+    '.[] | select(.head_sha == $sha and ($branch == "" or .head_branch == $branch or ($tag != "" and .event == "release" and .head_branch == $tag))) | .id' <<<"$runs")"
   while read -r id; do
     [[ -z "$id" ]] && continue
     conclusion="$(gh api "repos/${REPO}/actions/runs/${id}/jobs" \
@@ -32,8 +39,7 @@ if [[ -z "$RUN_ID" && -n "$SHA" ]]; then
       RUN_ID="$id"
       break
     fi
-  done < <(gh api "repos/${REPO}/actions/runs?head_sha=${SHA}&status=completed&per_page=20" \
-    --jq '.workflow_runs[].id')
+    done <<<"$IDS"
 fi
 
 if [[ -z "$RUN_ID" ]]; then
@@ -48,9 +54,11 @@ trap cleanup EXIT
 # over scraping a 100MB log.
 if gh run download "$RUN_ID" -n android-runtime-version -D "$tmpdir" -R "$REPO" >/dev/null 2>&1; then
   if [[ -f "$tmpdir/android-runtime-version.txt" ]]; then
-    tr -d '[:space:]' <"$tmpdir/android-runtime-version.txt"
-    echo
-    exit 0
+    runtime="$(tr -d '[:space:]' <"$tmpdir/android-runtime-version.txt")"
+    if [[ "$runtime" =~ ^[a-f0-9]{40}$ ]]; then
+      echo "$runtime"
+      exit 0
+    fi
   fi
 fi
 

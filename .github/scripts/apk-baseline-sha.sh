@@ -31,8 +31,7 @@ usable_baseline() {
 
 list_runs() {
   local status="$1"
-  gh api "repos/${REPO}/actions/workflows/ci.yml/runs?branch=${BRANCH}&status=${status}&per_page=20" \
-    --jq '.workflow_runs' || echo '[]'
+  bash "$SCRIPT_DIR/ci-stream-runs.sh" "$BRANCH" "$status"
 }
 
 # True when this run is building an APK, already built one, or detect has not
@@ -40,7 +39,7 @@ list_runs() {
 might_produce_apk() {
   local run_id="$1"
   local jobs detect_status apk_status apk_conclusion
-  jobs="$(gh api "repos/${REPO}/actions/runs/${run_id}/jobs" --jq '[.jobs[] | {name,status,conclusion}]')"
+  jobs="$(gh api "repos/${REPO}/actions/runs/${run_id}/jobs" --jq '[.jobs[] | {name,status,conclusion}]')" || exit 1
   detect_status="$(jq -r '.[] | select(.name == "detect") | .status' <<<"$jobs")"
   apk_status="$(jq -r '.[] | select(.name == "build_apk") | .status' <<<"$jobs")"
   apk_conclusion="$(jq -r '.[] | select(.name == "build_apk") | .conclusion // empty' <<<"$jobs")"
@@ -61,12 +60,13 @@ might_produce_apk() {
   return 1
 }
 
+progress="$(list_runs in_progress)"
+queued="$(list_runs queued)"
+waiting="$(list_runs waiting)"
 in_flight="$(
   jq -s --argjson current "${CURRENT_RUN}" \
     'add | map(select(.id != $current)) | sort_by(.created_at) | reverse' \
-    <(list_runs in_progress) \
-    <(list_runs queued) \
-    <(list_runs waiting)
+    <<<"$progress $queued $waiting"
 )"
 
 if [[ -n "$in_flight" && "$in_flight" != "null" && "$in_flight" != "[]" ]]; then

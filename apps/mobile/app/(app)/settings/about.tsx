@@ -110,7 +110,12 @@ export default function AboutScreen() {
           />
         </SettingsGroup>
 
-        <SettingsGroup label="Updates">
+        <SettingsGroup
+          label="Updates"
+          footer={ota.channel?.startsWith("development") && !build.version.includes("-")
+            ? "Development APKs use branch updates. Install a published APK separately to switch to a release; Android may require uninstalling the development build first."
+            : undefined}
+        >
           <OtaUpdateCard />
           <SettingRow
             icon="flask-outline"
@@ -118,7 +123,7 @@ export default function AboutScreen() {
             right={
               <Toggle
                 value={nativeUpdate.includePrereleases}
-                disabled={nativeUpdate.status === "checking" || nativeUpdate.status === "downloading" || nativeUpdate.installing}
+                disabled={nativeUpdate.status === "disabled" || nativeUpdate.status === "checking" || nativeUpdate.status === "downloading" || nativeUpdate.installing}
                 onValueChange={(enabled) => void nativeUpdate.setIncludePrereleases(enabled)}
               />
             }

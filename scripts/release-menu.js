@@ -1,7 +1,7 @@
 "use strict";
 
 const readline = require("node:readline");
-const { normalizeReleaseSpec, visibleReleases } = require("./server-release.js");
+const { normalizeReleaseSpec, visibleReleases, isPrerelease } = require("./server-release.js");
 
 function releaseMenuRows(releases, { installedTag = null, pre = false } = {}) {
   return visibleReleases(releases, { pre }).map((release, index) => {
@@ -11,7 +11,7 @@ function releaseMenuRows(releases, { installedTag = null, pre = false } = {}) {
     return {
       release,
       tag: release.tag_name,
-      channel: release.prerelease ? "pre-release" : "stable",
+      channel: isPrerelease(release) ? "pre-release" : "stable",
       date: String(release.published_at ?? release.created_at ?? "").slice(0, 10),
       marks,
     };
@@ -20,7 +20,7 @@ function releaseMenuRows(releases, { installedTag = null, pre = false } = {}) {
 
 function hiddenPreCount(releases, { pre = false } = {}) {
   if (pre) return 0;
-  return (releases ?? []).filter((release) => release && !release.draft && release.prerelease).length;
+  return visibleReleases(releases, { pre: true }).filter(isPrerelease).length;
 }
 
 function filterReleaseRows(rows, query) {

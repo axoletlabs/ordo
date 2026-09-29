@@ -3,6 +3,7 @@ import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as FileSystem from "expo-file-system/legacy";
 import * as IntentLauncher from "expo-intent-launcher";
+import * as Updates from "expo-updates";
 import { create } from "zustand";
 import { APP_NAME } from "@ordo/shared";
 import {
@@ -17,6 +18,7 @@ import {
   isTrustedGithubReleasePageUrl,
 } from "../lib/github-asset-url";
 import { apkFileIsComplete, nativeDownloadRatio } from "../lib/native-download-progress";
+import { selectReleaseApk, type GithubApkAsset } from "../lib/native-apk";
 import { prefsGet, prefsSet, StorageKeys } from "../lib/storage";
 
 const GITHUB_REPO_API = "https://api.github.com/repos/axoletlabs/ordo";
@@ -32,6 +34,9 @@ let checkEpoch = 0;
 /** Invalidate an in-flight download or installer result after cancel or dismiss. */
 let downloadEpoch = 0;
 let activeDownload: FileSystem.DownloadResumable | null = null;
+let hydration: Promise<void> | null = null;
+let cancellation: Promise<void> = Promise.resolve();
+let checkInFlight: Promise<NativeRelease | null> | null = null;
 
 export interface NativeRelease {
   version: string;
@@ -45,13 +50,6 @@ export interface NativeRelease {
   apkSize: number;
 }
 
-interface GithubAsset {
-  name?: string;
-  state?: string;
-  size?: number;
-  browser_download_url?: string;
-}
-
 interface GithubRelease {
   tag_name?: string;
   name?: string;
@@ -60,7 +58,7 @@ interface GithubRelease {
   prerelease?: boolean;
   published_at?: string;
   html_url?: string;
-  assets?: GithubAsset[];
+  assets?: GithubApkAsset[];
 }
 
 interface CachedUpdate {
@@ -125,41 +123,9 @@ function releaseVersion(tagName: string): string | null {
   return classifyReleaseVersion(tagName)?.version ?? null;
 }
 
-function selectApk(assets: GithubAsset[]): GithubAsset | null {
-  const uploaded = assets.filter(
-    (asset) =>
-      asset.state === "uploaded" &&
-      asset.name?.toLowerCase().endsWith(".apk") &&
-      asset.browser_download_url &&
-      isTrustedGithubAssetUrl(asset.browser_download_url),
-  );
-  const architectures = (Device.supportedCpuArchitectures ?? [])
-    .map((value): string | null => {
-      const architecture = value.toLowerCase();
-      if (architecture.includes("arm64")) return "arm64-v8a";
-      if (architecture.includes("armeabi")) return "armeabi-v7a";
-      if (architecture.includes("x86_64") || architecture.includes("x86-64")) return "x86_64";
-      if (architecture.includes("x86")) return "x86";
-      return null;
-    })
-    .filter((architecture): architecture is string => architecture != null);
-  const abiTokens = ["arm64-v8a", "armeabi-v7a", "x86_64", "x86"];
-  const hasAbi = (name: string, abi: string) => {
-    const escaped = abi.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    return new RegExp(`(?:^|[-_])${escaped}(?:[-.]|$)`).test(name.toLowerCase());
-  };
-  const exact = architectures
-    .map((architecture) => uploaded.find((asset) => hasAbi(asset.name!, architecture)))
-    .find((asset) => asset != null);
-  const universal = uploaded.find((asset) =>
-    !abiTokens.some((abi) => hasAbi(asset.name!, abi)),
-  );
-  return exact ?? universal ?? null;
-}
-
 function normalizeRelease(release: GithubRelease): NativeRelease | null {
   const version = releaseVersion(release.tag_name ?? "");
-  const apk = selectApk(release.assets ?? []);
+  const apk = version ? selectReleaseApk(release.assets ?? [], version, Device.supportedCpuArchitectures ?? []) : null;
   if (!version || !apk?.browser_download_url || !release.published_at) return null;
   return {
     version,
@@ -181,13 +147,18 @@ function currentVersion(): string {
 }
 
 function isSupported(): boolean {
-  return Platform.OS === "android" && !__DEV__;
+  // Dev/feature APKs can have a higher versionCode than an already published
+  // stable APK. Offering that APK would end in Android's downgrade rejection.
+  const channel = Updates.channel;
+  return Platform.OS === "android" && !__DEV__ &&
+    (channel === "production" || channel === "early-access" ||
+      (channel === "development" && classifyReleaseVersion(currentVersion())?.kind === "prerelease"));
 }
 
 async function fetchGithubReleases(signal: AbortSignal): Promise<GithubRelease[]> {
   const [listResponse, latestResponse] = await Promise.all([
     fetch(`${GITHUB_REPO_API}/releases?per_page=100`, { headers: GITHUB_HEADERS, signal }),
-    fetch(`${GITHUB_REPO_API}/releases/latest`, { headers: GITHUB_HEADERS, signal }),
+    fetch(`${GITHUB_REPO_API}/releases/latest`, { headers: GITHUB_HEADERS, signal }).catch(() => null),
   ]);
   if (!listResponse.ok) throw new Error(`GitHub returned ${listResponse.status}`);
   const listed = (await listResponse.json()) as GithubRelease[];
@@ -195,11 +166,9 @@ async function fetchGithubReleases(signal: AbortSignal): Promise<GithubRelease[]
   for (const release of listed) {
     if (release.tag_name) byTag.set(release.tag_name, release);
   }
-  if (latestResponse.ok) {
+  if (latestResponse?.ok) {
     const latest = (await latestResponse.json()) as GithubRelease;
     if (latest.tag_name) byTag.set(latest.tag_name, latest);
-  } else if (latestResponse.status !== 404) {
-    throw new Error(`GitHub returned ${latestResponse.status}`);
   }
   return [...byTag.values()];
 }
@@ -228,14 +197,14 @@ async function resolveLocalApk(release: NativeRelease | null): Promise<string | 
 }
 
 async function deleteApk(version: string | undefined): Promise<void> {
-  if (!version) return;
+  if (!version || !classifyReleaseVersion(version)) return;
   const path = apkDestination(version);
   if (path) await FileSystem.deleteAsync(path, { idempotent: true }).catch(() => {});
 }
 
 async function saveCache(state: NativeUpdateState): Promise<void> {
   await prefsSet(StorageKeys.NATIVE_UPDATE, {
-    checkedAt: state.lastChecked ?? Date.now(),
+    checkedAt: state.lastChecked ?? 0,
     includePrereleases: state.includePrereleases,
     release: state.release,
   } satisfies CachedUpdate);
@@ -257,10 +226,19 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
 
   hydrate: async () => {
     if (get().hydrated) return;
+    if (hydration) return hydration;
+    hydration = (async () => {
     const cached = await prefsGet<CachedUpdate>(StorageKeys.NATIVE_UPDATE);
-    const includePrereleases = cached?.includePrereleases ?? false;
+    const includePrereleases = typeof cached?.includePrereleases === "boolean"
+      ? cached.includePrereleases : classifyReleaseVersion(currentVersion())?.kind === "prerelease";
+    const lastChecked = typeof cached?.checkedAt === "number" && Number.isFinite(cached.checkedAt) &&
+      cached.checkedAt >= 0 && cached.checkedAt <= Date.now() ? cached.checkedAt : null;
     let release =
-      cached?.release && isNewerVersion(cached.release.version, currentVersion())
+      cached?.release && typeof cached.release.version === "string" &&
+      typeof cached.release.apkUrl === "string" &&
+      classifyReleaseVersion(cached.release.version) &&
+      Number.isSafeInteger(cached.release.apkSize) && cached.release.apkSize > 0 &&
+      isNewerVersion(cached.release.version, currentVersion())
         ? cached.release
         : null;
     if (release && !includePrereleases && isEarlyRelease(release)) {
@@ -277,7 +255,7 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
         hydrated: true,
         includePrereleases,
         release: null,
-        lastChecked: cached?.checkedAt ?? null,
+        lastChecked,
         downloadedUri: null,
         showProgress: false,
         installing: false,
@@ -291,7 +269,7 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
       hydrated: true,
       includePrereleases,
       release,
-      lastChecked: cached?.checkedAt ?? null,
+      lastChecked,
       downloadedUri,
       progress: downloadedUri ? 1 : 0,
       showProgress: false,
@@ -299,12 +277,17 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
       installPermissionLikely: false,
       status: release ? (downloadedUri ? "downloaded" : "available") : "idle",
     });
+    })().finally(() => { hydration = null; });
+    return hydration;
   },
 
   setIncludePrereleases: async (enabled) => {
     await get().hydrate();
+    checkEpoch += 1;
     const current = get().release;
     if (!enabled && current && isEarlyRelease(current)) {
+      get().cancelDownload();
+      await cancellation;
       await deleteApk(current.version);
       set({
         includePrereleases: false,
@@ -315,7 +298,10 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
         status: isSupported() ? "idle" : "disabled",
       });
     } else {
-      set({ includePrereleases: enabled, lastChecked: null });
+      set({
+        includePrereleases: enabled, lastChecked: null,
+        status: get().status === "checking" ? (current ? "available" : "idle") : get().status,
+      });
     }
     await saveCache(get());
     await get().check(true).catch(() => {});
@@ -325,6 +311,7 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
     await get().hydrate();
     if (!isSupported()) return null;
     const state = get();
+    if (state.status === "checking" && checkInFlight) return checkInFlight;
     if (
       state.status === "checking" ||
       state.status === "downloading" ||
@@ -357,6 +344,7 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
       );
     };
     set({ status: "checking", error: null });
+    const request = (async () => {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
@@ -420,7 +408,8 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
     } catch (error) {
       if (!mayCommit()) throw error;
       const downloadedUri =
-        (await resolveLocalApk(previous.release)) ?? previous.downloadedUri;
+        await resolveLocalApk(previous.release);
+      if (!mayCommit()) throw error;
       set({
         release: previous.release,
         downloadedUri,
@@ -434,9 +423,15 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
       });
       throw error;
     }
+    })().finally(() => {
+      if (checkInFlight === request) checkInFlight = null;
+    });
+    checkInFlight = request;
+    return request;
   },
 
   downloadAndInstall: async () => {
+    await cancellation;
     if (get().status === "downloading" || get().installing) return;
     checkEpoch += 1;
     const epoch = ++downloadEpoch;
@@ -519,8 +514,8 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
       await get().install();
       if (get().lastChecked == null && !get().error) void get().check(true).catch(() => {});
     } catch (error) {
-      if (activeDownload) activeDownload = null;
       if (!stillCurrent()) return;
+      activeDownload = null;
       if (get().downloadedUri) {
         set({
           status: "downloaded",
@@ -543,6 +538,8 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
 
   install: async () => {
     const epoch = downloadEpoch;
+    if (get().installing || !isSupported()) return;
+    set({ installing: true });
     const release = get().release;
     const currentUri = get().downloadedUri;
     const uri = (await apkIsReady(currentUri, release?.apkSize ?? 0))
@@ -572,6 +569,7 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
     });
     try {
       const contentUri = await FileSystem.getContentUriAsync(uri);
+      if (epoch !== downloadEpoch) return;
       const result = await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
         data: contentUri,
         type: APK_MIME_TYPE,
@@ -621,7 +619,11 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
     activeDownload = null;
     const version = get().release?.version;
     const release = get().release;
-    void task?.cancelAsync().catch(() => {});
+    if (task) {
+      cancellation = task.cancelAsync().catch(() => {}).then(async () => {
+        await deleteApk(version);
+      });
+    }
     set({
       status: release ? "available" : "idle",
       progress: 0,
@@ -632,7 +634,6 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
       installPermissionLikely: false,
       error: null,
     });
-    if (task && version) void deleteApk(version);
   },
 
   dismissDownload: () => {

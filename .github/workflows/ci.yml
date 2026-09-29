@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: ['**']
+  pull_request:
   release:
     types: [published]
   workflow_dispatch:
@@ -20,9 +21,10 @@ on:
 #   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD. Missing secrets fail
 #   assembleRelease instead of minting a new debug key each run.
 # EAS Update channels (baked into the APK, not switched in-app):
-#   development — `main` and every branch that is not release/x.y.z
+#   development — `main`
 #   production  — a stable tag published from release/x.y.z
-#   development — an alpha/beta/rc tag published from that same release/x.y.z
+#   early-access — alpha/beta/rc releases, separate from main
+#   development-<escaped branch> — manually built feature APKs, isolated from main
 # main never publishes a version. Each version is its own branch (release/x.y.z)
 # and its own tag (vX.Y.Z). Push a fix to that branch to change that version.
 # Publishing a release does not create the branch or merge it into main.
@@ -54,6 +56,7 @@ on:
 #   scripts/deploy-server installs that release instead of pulling a branch.
 jobs:
   detect:
+    if: github.event_name != 'pull_request' && !github.event.deleted
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -66,6 +69,7 @@ jobs:
       build_ref: ${{ steps.info.outputs.build_ref }}
       updates_channel: ${{ steps.info.outputs.updates_channel }}
       extra_runtime_versions: ${{ steps.eligibility.outputs.extra_runtime_versions }}
+      baseline_sha: ${{ steps.eligibility.outputs.baseline_sha }}
     steps:
       - uses: actions/checkout@v5
         with:
@@ -85,9 +89,9 @@ jobs:
           CHANNEL=$(node "$GITHUB_WORKSPACE/.github/scripts/validate-release-tag.js" --channel "$VERSION" --branch "$BRANCH")
           echo "updates_channel=$CHANNEL" >> "$GITHUB_OUTPUT"
           echo "EAS Update channel: $CHANNEL (branch=${BRANCH:-none})"
-          # Base versionCode is the workflow run number. Gradle multiplies by
-          # 10 and adds a per-ABI offset (0-4) so split APKs stay ordered.
-          echo "version_code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          # Reserve two digits for run attempts. Gradle multiplies by 10 and
+          # adds ABI offsets (0-4); retries and later runs outrank older splits.
+          echo "version_code=$(( ${{ github.run_number }} * 100 + ${{ github.run_attempt }} ))" >> "$GITHUB_OUTPUT"
           echo "build_ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
           if [ "${{ github.event_name }}" = "release" ]; then
@@ -120,6 +124,9 @@ jobs:
           # Don't wait on a leftover .git/index.lock from a fingerprint child
           # that is still running git status via app.config.js.
           GIT_OPTIONAL_LOCKS: '0'
+          ORDO_BUILD_BRANCH: ${{ github.ref_name }}
+          EXPO_UPDATES_CHANNEL: ${{ steps.info.outputs.updates_channel }}
+          APP_VERSION: ${{ steps.info.outputs.version }}
         run: |
           if [[ "${{ github.event.before }}" =~ ^0+$ ]]; then
             echo "native_changed=true" >> "$GITHUB_OUTPUT"
@@ -144,6 +151,7 @@ jobs:
             exit 0
           fi
           echo "Fingerprint baseline SHA: $BASELINE_SHA"
+          echo "baseline_sha=$BASELINE_SHA" >> "$GITHUB_OUTPUT"
           if [[ "$BASELINE_SHA" == "$CURRENT_SHA" ]]; then
             echo "This commit is the fingerprint baseline"
             echo "native_changed=false" >> "$GITHUB_OUTPUT"
@@ -151,8 +159,8 @@ jobs:
             exit 0
           fi
           if ! git cat-file -e "${BASELINE_SHA}^{commit}" 2>/dev/null; then
-            echo "Baseline ${BASELINE_SHA} is not in this clone; skipping fingerprint compare"
-            echo "native_changed=false" >> "$GITHUB_OUTPUT"
+            echo "Baseline ${BASELINE_SHA} is not in this clone; requiring an APK"
+            echo "native_changed=true" >> "$GITHUB_OUTPUT"
             echo "extra_runtime_versions=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -163,8 +171,8 @@ jobs:
           PREV_DIR="${RUNNER_TEMP}/fp-prev"
           rm -rf "$PREV_DIR"
           if ! git worktree add --detach "$PREV_DIR" "$BASELINE_SHA"; then
-            echo "Could not check out baseline ${BASELINE_SHA}; skipping fingerprint compare"
-            echo "native_changed=false" >> "$GITHUB_OUTPUT"
+            echo "Could not check out baseline ${BASELINE_SHA}; requiring an APK"
+            echo "native_changed=true" >> "$GITHUB_OUTPUT"
             echo "extra_runtime_versions=" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -225,7 +233,7 @@ jobs:
             # Detect hash matching is not enough: the APK may have baked
             # Gradle's post-compile fingerprint. Pin to that when it differs.
             if [[ "$hash" == "$current_hash" ]]; then
-              embedded="$(bash "$GITHUB_WORKSPACE/.github/scripts/apk-embedded-runtime.sh" --sha "$sha" || true)"
+              embedded="$(bash "$GITHUB_WORKSPACE/.github/scripts/apk-embedded-runtime.sh" --sha "$sha" --branch "$GITHUB_REF_NAME" || true)"
               if [[ -n "$embedded" && "$embedded" != "$current_hash" ]]; then
                 add_extra_runtime "$embedded" "$sha"
               fi
@@ -233,8 +241,8 @@ jobs:
             fi
             normalize_fingerprint "$fp"
             if cmp -s /tmp/fingerprint-current.json.normalized "$fp.normalized"; then
-              embedded="$(bash "$GITHUB_WORKSPACE/.github/scripts/apk-embedded-runtime.sh" --sha "$sha" || true)"
-              add_extra_runtime "${embedded:-$hash}" "$sha"
+              embedded="$(bash "$GITHUB_WORKSPACE/.github/scripts/apk-embedded-runtime.sh" --sha "$sha" --branch "$GITHUB_REF_NAME" || true)"
+              add_extra_runtime "$embedded" "$sha"
             else
               echo "Skipping APK ${sha}: native fingerprint differs"
             fi
@@ -285,9 +293,9 @@ jobs:
           # Treat an inconclusive fingerprint check as native-incompatible.
           NATIVE_CHANGED: ${{ steps.eligibility.outputs.native_changed || 'true' }}
         run: |
-          MSG=$(echo "$COMMIT_MSG" | head -1)
-          REF="${{ github.ref }}"
-          EVENT="${{ github.event_name }}"
+          MSG="${COMMIT_MSG%%$'\n'*}"
+          REF="$GITHUB_REF"
+          EVENT="$GITHUB_EVENT_NAME"
           stream=false
           case "$REF" in
             refs/heads/main|refs/heads/release/*) stream=true ;;
@@ -309,13 +317,14 @@ jobs:
 
       - name: Validate release tag
         if: github.event_name == 'release'
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          TARGET: ${{ github.event.release.target_commitish }}
+          VERSION: ${{ steps.info.outputs.version }}
+          PRERELEASE: ${{ github.event.release.prerelease }}
         run: |
           node "$GITHUB_WORKSPACE/.github/scripts/validate-release-tag.js" \
-            "${{ github.event.release.tag_name }}" \
-            "${{ steps.info.outputs.version }}" \
-            "${{ github.event.release.prerelease }}"
-          TAG="${{ github.event.release.tag_name }}"
-          TARGET="${{ github.event.release.target_commitish }}"
+            "$TAG" "$VERSION" "$PRERELEASE"
           BRANCH=$(node "$GITHUB_WORKSPACE/.github/scripts/validate-release-tag.js" --release-branch "$TAG" "$TARGET")
           if ! git fetch origin "$BRANCH"; then
             echo "::error::Branch $BRANCH does not exist. Push the release commit there before publishing $TAG."
@@ -327,10 +336,10 @@ jobs:
           fi
 
   analyze:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: '!github.event.deleted'
     concurrency:
-      group: ci-analyze-${{ github.ref }}
-      cancel-in-progress: true
+      group: ci-analyze-${{ github.ref }}-${{ github.run_id }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -360,13 +369,13 @@ jobs:
         run: pnpm -r lint
 
       - name: Test
-        run: pnpm -r test && pnpm test:scripts
+        run: pnpm -r test && pnpm --filter @ordo/mobile test:updates && pnpm test:scripts
 
   supply-chain:
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || github.event_name == 'release'
+    if: '!github.event.deleted'
     concurrency:
-      group: ci-supply-chain-${{ github.ref }}
-      cancel-in-progress: true
+      group: ci-supply-chain-${{ github.ref }}-${{ github.run_id }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -397,10 +406,10 @@ jobs:
           /tmp/gitleaks git --redact --no-banner --max-decode-depth 0 --max-target-megabytes 2 --log-opts="-n 200"
 
   ota:
-    needs: [detect, supply-chain]
+    needs: [detect, analyze, supply-chain]
     # Publishes a JS-only update to this stream's channel:
     #   main       → development (never a version release)
-    #   release/x.y.z → production for a stable version, development for alpha/beta/rc
+    #   release/x.y.z → production for stable, early-access for alpha/beta/rc
     # Native fingerprint changes and commits marked -apk build an APK.
     # Feature branches never OTA (last-write-wins would clobber the stream).
     # Forks never OTA even if they have a main branch.
@@ -414,6 +423,10 @@ jobs:
       group: ci-ota-${{ github.ref }}-publish
       cancel-in-progress: true
     runs-on: ubuntu-latest
+    env:
+      EXPO_UPDATES_CHANNEL: ${{ needs.detect.outputs.updates_channel }}
+      ORDO_BUILD_BRANCH: ${{ github.ref_name }}
+      APP_VERSION: ${{ needs.detect.outputs.version }}
     permissions:
       contents: read
       actions: read
@@ -427,6 +440,20 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: bash "$GITHUB_WORKSPACE/.github/scripts/wait-for-in-flight-apk.sh" "$GITHUB_REF_NAME"
+
+      - name: Resolve the actual APK runtime after the build finishes
+        id: runtime
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          BASELINE_SHA: ${{ needs.detect.outputs.baseline_sha }}
+          EXTRA_RUNTIMES: ${{ needs.detect.outputs.extra_runtime_versions }}
+        run: |
+          RUNTIME=$(bash "$GITHUB_WORKSPACE/.github/scripts/apk-embedded-runtime.sh" --sha "$BASELINE_SHA" --branch "$GITHUB_REF_NAME")
+          if [[ ! "$RUNTIME" =~ ^[a-f0-9]{40}$ ]]; then
+            echo "::error::No successful APK runtime for the fingerprint baseline; refusing an unreachable OTA"
+            exit 1
+          fi
+          echo "versions=$RUNTIME $EXTRA_RUNTIMES" >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v5
@@ -455,47 +482,65 @@ jobs:
       # Install eas-cli via npm to avoid pnpm's unapproved-build-script gate
       # (eas-cli pulls dtrace-provider, whose build script pnpm would reject).
       - name: Install EAS CLI
-        run: npm install -g eas-cli
+        run: npm install -g eas-cli@24.8.0
+
+      - name: Ensure the updates channel exists
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/ensure-updates-channel.sh"
 
       - name: Publish update
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           CHANNEL: ${{ needs.detect.outputs.updates_channel }}
-          EXTRA_RUNTIMES: ${{ needs.detect.outputs.extra_runtime_versions }}
+          EXPO_UPDATES_CHANNEL: ${{ needs.detect.outputs.updates_channel }}
+          EXTRA_RUNTIMES: ${{ steps.runtime.outputs.versions }}
         run: |
+          ENVIRONMENT=development
+          if [[ "$CHANNEL" == "production" ]]; then ENVIRONMENT=production; fi
+          if [[ "$CHANNEL" == "early-access" ]]; then ENVIRONMENT=preview; fi
           # Pin to a shipped APK runtime when detect's hash is not the
           # hash Gradle baked in, or when extra.ordo / scripts drifted.
           # --auto would publish detect's fingerprint — a runtime no
           # installed binary uses — and devices would never see it.
           if [[ -n "$EXTRA_RUNTIMES" ]]; then
             first=1
+            declare -A published=()
             for runtime in $EXTRA_RUNTIMES; do
+              [[ -n "${published[$runtime]+x}" ]] && continue
+              [[ "$runtime" =~ ^[a-f0-9]{40}$ ]] || exit 1
+              published[$runtime]=1
               if [[ "$first" -eq 1 ]]; then
                 echo "Publishing JS to APK runtime ${runtime}"
                 ORDO_OTA_RUNTIME_VERSION="$runtime" eas update \
                   --channel "$CHANNEL" --platform android --non-interactive \
+                  --environment "$ENVIRONMENT" \
                   --message "JS for APK runtime ${runtime}"
                 first=0
               else
                 echo "Reusing bundle for APK runtime ${runtime}"
                 ORDO_OTA_RUNTIME_VERSION="$runtime" eas update \
                   --channel "$CHANNEL" --platform android --skip-bundler --non-interactive \
+                  --environment "$ENVIRONMENT" \
                   --message "Same JS for APK runtime ${runtime}"
               fi
             done
           else
             eas update \
-              --channel "$CHANNEL" --platform android --non-interactive --auto
+              --channel "$CHANNEL" --platform android --non-interactive --auto --environment "$ENVIRONMENT"
           fi
 
   build_apk:
-    needs: [detect, supply-chain]
+    needs: [detect, analyze, supply-chain]
     if: github.repository == 'axoletlabs/ordo' && needs.detect.outputs.should_build == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     env:
+      EXPO_UPDATES_CHANNEL: ${{ needs.detect.outputs.updates_channel }}
+      ORDO_BUILD_BRANCH: ${{ github.ref_name }}
       ORDO_UPLOAD_STORE_TYPE: PKCS12
       ORDO_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ORDO_UPLOAD_KEY_ALIAS: ordo
@@ -540,6 +585,15 @@ jobs:
       - name: Build shared package
         run: pnpm --filter @ordo/shared build
 
+      - name: Install EAS CLI
+        run: npm install -g eas-cli@24.8.0
+
+      - name: Ensure the updates channel exists
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/ensure-updates-channel.sh"
+
       - name: Prebuild (generate native Android project)
         working-directory: apps/mobile
         env:
@@ -565,13 +619,6 @@ jobs:
           echo "$HASH" > "$RUNNER_TEMP/android-runtime-version.txt"
           echo "EXPO_UPDATES_FINGERPRINT_OVERRIDE=$HASH" >> "$GITHUB_ENV"
           echo "Android runtime (pre-Gradle): $HASH"
-
-      - name: Upload Android runtime version
-        uses: actions/upload-artifact@v6
-        with:
-          name: android-runtime-version
-          path: ${{ runner.temp }}/android-runtime-version.txt
-          retention-days: 90
 
       - name: Restore upload keystore
         env:
@@ -599,14 +646,35 @@ jobs:
         working-directory: apps/mobile/android
         run: ./gradlew assembleRelease -Pandroid.buildAbiSplits=true -Pandroid.versionCode=${{ needs.detect.outputs.version_code }}
 
+      - name: Verify packaged APK signing, versions, runtime and channel
+        env:
+          VERSION: ${{ needs.detect.outputs.version }}
+          BASE_CODE: ${{ needs.detect.outputs.version_code }}
+          IS_RELEASE: ${{ needs.detect.outputs.is_release }}
+        run: |
+          args=()
+          [[ "$IS_RELEASE" == "true" ]] && args+=(--release)
+          python3 .github/scripts/verify-apks.py apps/mobile/android/app/build/outputs/apk/release \
+            --version "$VERSION" --base-code "$BASE_CODE" \
+            --runtime "$EXPO_UPDATES_FINGERPRINT_OVERRIDE" --channel "$EXPO_UPDATES_CHANNEL" "${args[@]}"
+
+      - name: Upload verified Android runtime version
+        uses: actions/upload-artifact@v6
+        with:
+          name: android-runtime-version
+          path: ${{ runner.temp }}/android-runtime-version.txt
+          retention-days: 90
+          overwrite: true
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v6
         with:
           name: ordo-apk-${{ needs.detect.outputs.updates_channel }}
           path: apps/mobile/android/app/build/outputs/apk/release/*.apk
+          overwrite: true
 
   package_server:
-    needs: [detect, supply-chain]
+    needs: [detect, analyze, supply-chain]
     if: github.repository == 'axoletlabs/ordo' && needs.detect.outputs.is_release == 'true'
     runs-on: ubuntu-latest
     permissions:
@@ -654,7 +722,7 @@ jobs:
           DIR="$RUNNER_TEMP/server-release"
           ok=0
           for attempt in 1 2 3; do
-            if gh release upload "$TAG" "$DIR"/ordo-server-v*.tar.gz "$DIR"/ordo-server-v*.tar.gz.sha256 --clobber -R "$GITHUB_REPOSITORY"; then
+            if bash .github/scripts/upload-release-assets.sh "$TAG" "$DIR"/ordo-server-v*.tar.gz "$DIR"/ordo-server-v*.tar.gz.sha256; then
               ok=1
               break
             fi
@@ -671,7 +739,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   release:
-    needs: [detect, build_apk]
+    needs: [detect, build_apk, package_server]
     # Attaches APKs to the GitHub Release that triggered this run.
     # Stable (Latest): tag vX.Y.Z, pre-release unchecked.
     # Early (pre-release): tag vX.Y.Z-(alpha|beta|rc)[.N], pre-release checked.
@@ -704,6 +772,11 @@ jobs:
               mv "app-${abi}-release.apk" "ordo-v${VERSION}-${abi}.apk"
             fi
           done
+          # A partial split build must not silently become a published release.
+          test -s "ordo-v${VERSION}.apk"
+          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
+            test -s "ordo-v${VERSION}-${abi}.apk"
+          done
           echo "## APKs to publish:" >> "$GITHUB_STEP_SUMMARY"
           ls -1 ordo-v*.apk | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY"
 
@@ -712,4 +785,4 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.event.release.tag_name }}"
-          gh release upload "$TAG" apk/ordo-v*.apk --clobber -R "$GITHUB_REPOSITORY"
+          bash .github/scripts/upload-release-assets.sh "$TAG" apk/ordo-v*.apk

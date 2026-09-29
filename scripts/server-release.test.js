@@ -9,6 +9,7 @@ const { test } = require("node:test");
 const {
   normalizeReleaseSpec,
   selectRelease,
+  visibleReleases,
   pickServerAsset,
   formatReleaseMenu,
   chooseListedRelease,
@@ -81,6 +82,20 @@ test("selectRelease prefers the newest stable release", () => {
     () => selectRelease([catalog[0]], { kind: "latest", pre: false }),
     /--pre/,
   );
+});
+
+test("release ordering is semver-based and suffix-only prereleases stay hidden", () => {
+  const catalog = [
+    release("v0.1.9", { published_at: "2026-09-30T00:00:00Z" }),
+    release("v0.2.0", { published_at: "2026-09-01T00:00:00Z" }),
+    release("v0.3.0-beta.1", { prerelease: false }),
+    release("dev"),
+  ];
+  assert.equal(selectRelease(catalog, { kind: "latest", pre: false }).tag_name, "v0.2.0");
+  assert.equal(selectRelease(catalog, { kind: "latest", pre: true }).tag_name, "v0.3.0-beta.1");
+  assert.equal(visibleReleases(catalog).length, 2);
+  assert.equal(chooseListedRelease(catalog, "latest-pre").tag_name, "v0.3.0-beta.1");
+  assert.equal(pickServerAsset(release("v0.2.0", { assets: [{ name: "ordo-server-v0.1.0.tar.gz", browser_download_url: "https://example.test/wrong.tar.gz" }] })), null);
 });
 
 test("the menu numbers stable releases and can select one", () => {
@@ -173,6 +188,7 @@ test("applySelectedRelease installs the archive and keeps the database", async (
   const packed = tempDir();
   const tree = join(packed, "ordo-server");
   write(join(tree, "apps/server/src/main.js"), "from-release\n");
+  write(join(tree, "scripts/deploy-server.js"), "// installer\n");
   write(join(tree, "apps/server/prisma/schema.prisma"), "model Shipped\n");
   write(join(root, "apps/server/prisma/ordo.db"), "live\n");
   write(join(root, "apps/server/.env"), "PORT=3000\n");
@@ -215,6 +231,36 @@ test("applySelectedRelease installs the archive and keeps the database", async (
   assert.equal(installed.tag, "v0.1.0");
   assert.equal(installed.version, "0.1.0");
   assert.equal(installed.asset, "ordo-server-v0.1.0.tar.gz");
+  assert.ok(installed.files.includes("apps/server/src/main.js"));
+  assert.ok(!installed.files.includes("apps/server/prisma/ordo.db"));
+  // Archive installs have no git index. Their recorded ownership list removes
+  // deleted source files on the next update without touching local data.
+  write(join(root, "apps/server/src/removed.js"), "obsolete\n");
+  write(join(root, "notes.txt"), "operator notes\n");
+  write(join(root, "apps/server/release.json"), JSON.stringify({ ...installed,
+    files: [...installed.files, "apps/server/src/removed.js", "../outside.txt"] }));
+  await applySelectedRelease({ repoRoot: root, release: published, fetchImpl });
+  assert.equal(require("node:fs").existsSync(join(root, "apps/server/src/removed.js")), false);
+  assert.equal(readFileSync(join(root, "notes.txt"), "utf8"), "operator notes\n");
+});
+
+test("missing archive checksums and non-Ordo archives do not change an install", async () => {
+  const root = tempDir();
+  write(join(root, "apps/server/src/main.js"), "original\n");
+  const packed = tempDir();
+  write(join(packed, "ordo-server/unrelated.txt"), "not ordo\n");
+  const archive = join(packed, "server.tar.gz");
+  assert.equal(spawnSync("tar", ["-czf", archive, "-C", packed, "ordo-server"]).status, 0);
+  const hash = createHash("sha256").update(readFileSync(archive)).digest("hex");
+  const published = release("v0.1.0", { assets: [
+    { name: "ordo-server-v0.1.0.tar.gz", browser_download_url: "https://example.test/server.tar.gz" },
+  ] });
+  const fetchImpl = async (url) => ({ ok: true, status: 200, body: url.endsWith(".sha256")
+    ? Readable.toWeb(Readable.from(Buffer.from(hash))) : Readable.toWeb(createReadStream(archive)) });
+  await assert.rejects(applySelectedRelease({ repoRoot: root, release: published, fetchImpl }), /no checksum/);
+  published.assets.push({ name: "ordo-server-v0.1.0.tar.gz.sha256", browser_download_url: "https://example.test/server.sha256" });
+  await assert.rejects(applySelectedRelease({ repoRoot: root, release: published, fetchImpl }), /not an Ordo/);
+  assert.equal(readFileSync(join(root, "apps/server/src/main.js"), "utf8"), "original\n");
 });
 
 test("a checksum mismatch does not change the install", async () => {
@@ -222,6 +268,7 @@ test("a checksum mismatch does not change the install", async () => {
   write(join(root, "apps/server/src/main.js"), "original\n");
   const packed = tempDir();
   write(join(packed, "ordo-server/apps/server/src/main.js"), "replaced\n");
+  write(join(packed, "ordo-server/scripts/deploy-server.js"), "// installer\n");
   const archive = join(packed, "ordo-server-v0.1.0.tar.gz");
   assert.equal(spawnSync("tar", ["-czf", archive, "-C", packed, "ordo-server"]).status, 0);
   const published = release("v0.1.0", {

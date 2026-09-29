@@ -1,141 +1,180 @@
-# Ordo release process: stable, early access, APKs, and OTA
+# Ordo releases: development, early access, APKs and OTA
 
-Two independent layers. Keep them separate in your head and everything else follows.
+## Version sources
 
-- **Binary (native) layer:** GitHub Releases + the in-app updater. Users sideload APKs from `api.github.com/repos/axoletlabs/ordo/releases`. Any native change needs a new APK. There is no way around this, for anyone.
-- **JS layer:** EAS Update. Ships in minutes over the air. Only lands on APKs whose native fingerprint matches. Updates ship unsigned (EAS code signing needs a paid plan); distribution is protected by https only. From a machine: `eas update …` or `eas update:republish --group <id>`.
+- `apps/mobile/app.config.js`'s `version` is the native app version. A release
+  tag must be exactly `v<version>`. Versions are `X.Y.Z` or
+  `X.Y.Z-(alpha|beta|rc)[.N]`, without leading zeroes or build metadata.
+- `apps/server/release.json` records the installed server's version, tag,
+  commit and archive. CI creates it; the installer retains its source-file
+  ownership list to remove stale files on later archive installs.
+- Private workspace package versions and the server's development fallback
+  are package metadata, not the installed release version. `main` can keep
+  a base app version while builds are identified by their commit and channel.
+- `scripts/release-policy.js` is shared by Expo config, CI, the mobile updater
+  and server installer. There are no separate CI/mobile semver rules.
 
-A version is a branch plus a tag. The branch is the full version: `release/0.1.0` for tag `v0.1.0`. `main` is not a version.
+## Streams and channels
 
-## Branch map
+| Branch/version | Update channel | Automatic distribution |
+| --- | --- | --- |
+| `main` | `development` | OTA for JS-only changes; APK artifact for native changes |
+| `release/x.y.z`, stable version | `production` | OTA for compatible JS changes; APK artifact for native changes |
+| `release/x.y.z`, alpha/beta/rc | `early-access` | Same behavior, isolated from main and stable |
+| Feature branch | `development-<escaped branch>` | Checks only; APK via dispatch or a commit headline ending in `-apk` |
 
-| Branch | What a push does | OTAs to | APKs |
-| --- | --- | --- | --- |
-| `main` | everyday work. no version release | development | development, when the fingerprint changes |
-| `release/x.y.z` | that exact version | production when the version is stable, development for alpha/beta/rc | when the fingerprint changes, on that version |
-| anything else | CI checks | never | never, unless you dispatch a build by hand |
+Feature channels escape branch punctuation without collisions. For example,
+`t3code/material-three-redesign` uses
+`development-t3code-2Fmaterial-2Dthree-2Dredesign`. A feature APK cannot be
+overwritten by main's OTA even when their native dependencies match. Feature
+pushes do not publish OTA; publish manually to their own channel if needed.
 
-There is no `preview` branch. A leftover `preview` push does not publish an update or an APK.
+Channels are baked into APKs. The early-access toggle controls **GitHub APK
+selection**, not the OTA channel. Beta installs default that toggle on when no
+preference exists; an explicit saved preference is retained. Taking the matching
+stable APK moves a beta install onto production. Existing APKs with old channel
+headers need a new APK to adopt the new stream layout.
 
-`v0.1.0` and `v0.1.0-beta.1` both use `release/0.1.0`. The next patch, `v0.1.1`, is its own branch, `release/0.1.1`. To change 0.1.0, push to `release/0.1.0`. That push does not land on `main`. If you also want the fix on `main`, cherry-pick or merge it yourself.
+Local prebuilds infer the channel from the git branch and version. Detached local
+checkouts default to development. `ORDO_BUILD_BRANCH` and `EXPO_UPDATES_CHANNEL`
+can set the build context explicitly. A release branch/version mismatch fails.
+The manifest plugin preserves other update headers, including signing headers.
 
-Publishing a GitHub Release does not create the branch, move it, or merge it into `main`. CI attaches APKs and the server archive only when both of these are true:
+## CI gates and native compatibility
 
-- the release target is `release/x.y.z` for that tag (`v0.1.0` and `v0.1.0-beta.1` both belong to `release/0.1.0`)
-- the tagged commit is already on that branch
+Pushes, pull requests, dispatches and published releases run typecheck, lint,
+workspace tests, updater tests, script/installer tests and the production
+dependency audit. APKs, server archives and OTA all depend on those gates.
+Forks and pull requests do not distribute artifacts or receive publish secrets.
+Branch deletion events do not run builds.
 
-A release targeted at `main` is refused, even if that commit also sits on the release branch.
+The fingerprint detector compares with an APK-producing ancestor or a shipped
+APK on the same branch. JS-only runs are not binary baselines. An unknown or
+failed comparison requires an APK. Git metadata and test-script lists are
+excluded; native plugins and native dependencies are included.
+
+Before OTA publication, CI waits for older in-flight APK jobs and resolves the
+**actual successful APK runtime** from its artifact. A failed APK or unavailable
+runtime cannot turn into an unreachable OTA. Compatible older runtimes are
+also targeted when available. GitHub API failures fail closed.
+
+EAS CLI is pinned to 24.8.0. Channels are created and linked before first use.
+SDK 57 requires `--environment` on every OTA publication: production uses the
+`production` EAS environment, early access uses `preview`, and development uses
+`development`. Native prebuild, fingerprinting and publication all receive the
+same channel. EAS build profiles use local version sources; the GitHub/Gradle
+pipeline is the canonical release APK builder and signing authority.
+
+Android codes are `(CI run number * 100 + run attempt) * 10 + ABI offset`.
+Universal/unsplit APKs use offset 0; armeabi-v7a, arm64-v8a, x86 and x86_64 use
+1–4. Retries and later builds outrank every split of an earlier build. A rerun
+of an older workflow is still an older build than a newer workflow.
+
+Development APKs do not offer published-release APK updates: their code can
+already exceed a published release, which Android rejects as a downgrade.
+They receive OTA on their own channel and native APKs as CI artifacts. Switching
+to an older published APK may require removing the development install first;
+export your library before removing local app data.
 
 ## Ship a version
 
-1. Keep landing work on `main`. JS-only pushes update development installs. A native change builds a development APK. Nothing here is a version release.
-2. When the version is ready, cut its branch and set `apps/mobile/app.config.js` on that branch:
+1. Cut `release/x.y.z` from the intended source and set `version` in
+   `apps/mobile/app.config.js` to that exact version (or its prerelease).
+2. Commit and push the release branch before creating the tag.
+3. Tag that commit, push the tag, and publish its GitHub Release with target
+   **`release/x.y.z`**. Stable tags use the stable release marker; alpha/beta/rc
+   tags use the prerelease marker. Publishing from main is rejected, even if
+   the commit also exists on a release branch.
+4. Wait for CI. It compiles the server, uploads its source archive and checksum,
+   and attaches a universal APK plus all four signed ABI splits. Missing gates
+   or a missing ABI fail the release job. Clients ignore incomplete APK assets
+   and retry discovery when a newer release is still waiting for its APKs.
 
-```bash
+```sh
 git checkout -b release/0.2.0
-# set version to 0.2.0 (or 0.2.0-beta.1 for early access)
+# Set const version = "0.2.0" in apps/mobile/app.config.js
+git add apps/mobile/app.config.js
+git commit -m "Set the release version to 0.2.0."
 git push -u origin release/0.2.0
+git tag v0.2.0
+git push origin v0.2.0
+gh release create v0.2.0 --target release/0.2.0 --title "0.2.0" --generate-notes --latest
 ```
 
-3. Tag that commit and publish the GitHub Release with target `release/0.2.0`, not `main`.
-   - Stable: tag `v0.2.0`, "Set as the latest release", pre-release unchecked.
-   - Early access: tag `v0.2.0-beta.1`, "This is a pre-release" checked.
-4. CI builds signed per-ABI APKs and the server archive onto that release. The in-app updater offers the APK (early builds only reach users with "include prereleases" on).
+`v0.2.0-beta.1` uses `release/0.2.0` too; publish with `--prerelease` and without
+`--latest`. Promotion sets the branch's version to `0.2.0` and publishes a new
+`v0.2.0` tag. The changed native version/channel requires a new APK.
 
-## Fix a version that already shipped
+Published assets are immutable. Upload retries reuse identical digest-matching
+bytes; different bytes fail instead of clobbering a user's in-flight download
+or cached APK. Server archives are deterministic for the same commit/version.
+Publish a new version for a changed binary.
 
-Push the fix to that version's branch and nowhere else.
+## Maintain and roll back
 
-```bash
-git checkout release/0.1.0
-# commit the fix
-git push origin release/0.1.0
-```
+- Push JS fixes to the exact shipped version's branch to OTA onto that version.
+  A native fix produces a CI artifact; publish a **new version** for users to
+  receive it through the in-app updater. It compares versions, not commit hashes.
+- Copy fixes back to main explicitly with merge or cherry-pick. CI does not
+  create release branches or merge them into main.
+- For a bad OTA, republish an older compatible update group to the same branch
+  with EAS's rollback tools. Rollback publications have a fresh timestamp; the
+  app also handles rollback-to-embedded directives. Never republish across
+  incompatible runtimes or redirect stable installs onto development.
+- For a bad APK, publish the next patch from its matching release branch.
+  Keep existing tags/assets intact and revert source as appropriate.
 
-- JS only: CI publishes an OTA onto the APKs of that version. A stable version goes to production. An alpha/beta/rc version stays on development, so it does not reach stable users.
-- Native change that needs a new version number: cut `release/0.1.1`, tag `v0.1.1` there, and publish with target `release/0.1.1`.
+## Self-hosted server
 
-`main` stays where it was until you bring the fix across yourself:
+Each GitHub Release contains `ordo-server-vX.Y.Z.tar.gz` and its `.sha256` file.
+The archive is tagged source, including the release manifest. Hosts install
+dependencies and compile native modules with Node.js 22.13+ and the pinned pnpm.
 
-```bash
-git checkout main
-git cherry-pick <fix>
-git push origin main
-```
-
-## Early access
-
-Early access is the same version branch. Put `0.3.0-beta.1` on `release/0.3.0`, push the branch, and tag `v0.3.0-beta.1` there. Those APKs and OTAs use development, so they never touch stable users. Promote by setting the version to `0.3.0` on `release/0.3.0` and tagging `v0.3.0` with target `release/0.3.0`.
-
-## Escapes (rare, all non-destructive)
-
-- **Bad JS shipped via OTA:** roll back with one command from your machine: `eas update:republish --group <old-good-group-id>` (find group ids in the EAS dashboard under the update's channel, or `eas update:list`). It re-publishes the previous bundle with a fresh timestamp and every device rewinds at next launch. No force-push involved.
-- **Bad APK release:** delete the bad tag/release, fix on that version's branch, and tag the next patch from `release/x.y.z` for the new version. Version codes only move forward, never rewrite.
-- **Bad source either way:** `git revert` on the right branch. History stays intact, which is what keeps the fingerprint baselines and embedded commitTime checks in CI working.
-
-## What you never have to think about
-
-- Channel selection: `main` is always development. `release/x.y.z` follows the version string (stable → production, alpha/beta/rc → development).
-- Fingerprint baselines, in-flight APK waits, embedded-runtime pinning: `detect` handles it per branch automatically.
-- The in-app updater: reads releases, compares semver, picks the right ABI APK.
-- versionCode ordering: global run number, monotonic.
-
-## What is not automatic
-
-- Cutting `release/x.y.z`. You create the branch and push it.
-- Publishing a version from `main`. CI rejects it.
-- Copying a fix from a version branch back onto `main`.
-
-## Server
-
-The backend ships on the same GitHub Release as the APKs. Publishing the release runs `package_server`, which compiles `@ordo/server` and, only if that build succeeds, uploads:
-
-- `ordo-server-vX.Y.Z.tar.gz` — source at the tag, plus `apps/server/release.json`
-- `ordo-server-vX.Y.Z.tar.gz.sha256`
-
-The host still runs `pnpm install` and compiles native modules. The archive is not a prebuilt `node_modules`.
-
-Self-hosted updates install that release. They do not fast-forward the checked-out branch. On a terminal, move with the arrow keys and press enter. Type a version to jump to a specific tag.
-
-```bash
+```sh
 curl -fsSL https://ordo.axolet.com/install | bash
-./scripts/deploy-server update --yes --release v0.1.1
+curl -fsSL https://ordo.axolet.com/install | ORDO_DIR=/opt/ordo bash
+curl -fsSL https://ordo.axolet.com/install | bash -s -- --pre
+./scripts/deploy-server update --yes --release v0.2.0
 ```
 
-`.env`, secrets, the SQLite file, backups, and avatars stay put. `/api/server/info` reports the version in `apps/server/release.json`.
+The release menu sorts by version, hides both marked and suffix-only prereleases
+unless requested, and allows explicit older tags. Automatic latest selection
+does not downgrade an installed newer version. Downloads have deadlines;
+official archives require checksums and a valid Ordo tree before applying.
 
-`--from-git` still pulls the current branch. That is the escape hatch, not the normal update. `--no-release` rebuilds whatever is already on disk. `--require-asset` refuses a tag whose release has no server archive (older releases, or a package job that failed).
+`.env`, secrets, SQLite, backups, avatars and unowned operator files remain.
+Archive installs record owned source files so deleted source is removed on the
+next update. Git installs detach at the tag without moving the operator's
+branch. `/api/server/info` reports the installed manifest's version.
 
-## Cheat sheet
+`--from-git` pulls an existing checkout; `--no-release` builds the on-disk copy.
+`--require-asset` disallows fallback to an older release's source archive/tag.
+`--release latest-pre` and `--pre` work on fresh installs too. `--dry-run` never
+downloads or creates a fresh install.
 
-```bash
-# everyday work on main — development updates only, no version release
-git push origin main
+## Verification
 
-# cut version 0.1.0
-git checkout -b release/0.1.0
-# set apps/mobile/app.config.js to 0.1.0
-git push -u origin release/0.1.0
-git tag v0.1.0 && git push origin v0.1.0
-# publish the GitHub Release with target release/0.1.0, not main
+Run heavy checks on the builder. From a clean checkout:
 
-# early access of that same version
-# version 0.3.0-beta.1 on release/0.3.0, tag v0.3.0-beta.1, target release/0.3.0
-
-# fix 0.1.0
-git checkout release/0.1.0
-# commit, then:
-git push origin release/0.1.0
-# a new patch version is a new branch: release/0.1.1, tag v0.1.1, target release/0.1.1
-
-# bring the fix onto main yourself, when you want it there
-git checkout main && git cherry-pick <fix> && git push origin main
-
-# OTA rollback (from your machine)
-eas update:republish --group <old-good-group-id>
-
-# self-hosted backend (GitHub Release, not the branch tip)
-curl -fsSL https://ordo.axolet.com/install | bash
-./scripts/deploy-server update --yes --release vX.Y.Z
-curl -fsSL https://ordo.axolet.com/install | bash -s -- uninstall
+```sh
+pnpm install --frozen-lockfile
+pnpm db:generate
+pnpm --filter @ordo/shared build
+pnpm -r typecheck
+pnpm -r lint
+pnpm -r test
+pnpm --filter @ordo/mobile test:updates
+pnpm test:scripts
+pnpm audit --prod --audit-level=high
+pnpm --filter @ordo/server build
+pnpm test:release-runtime
 ```
+
+The runtime smoke test prebuilds four channel manifests, checks deterministic
+fingerprints, runtime pinning and JS/native routing, then exports Android JS and
+Hermes bytecode. Use `--no-bytecode` only for a host whose x86 Hermes compiler
+cannot run correctly; that verifies JS export, not bytecode or an APK. A full
+signed APK build and device installation still require the Android toolchain,
+the stored upload key and a device. Script tests exercise routing, GitHub waits,
+runtime lookup, APK download/cancel/install state, archive integrity and data
+preservation with deterministic fixtures without publishing updates.

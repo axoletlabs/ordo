@@ -3,7 +3,7 @@
 #
 #   curl -fsSL https://ordo.axolet.com/install | bash
 #   curl -fsSL https://ordo.axolet.com/install | bash -s -- --yes
-#   ORDO_DIR=/opt/ordo curl -fsSL https://ordo.axolet.com/install | bash
+#   curl -fsSL https://ordo.axolet.com/install | ORDO_DIR=/opt/ordo bash
 set -euo pipefail
 
 ORDO_REPO_DEFAULT="axoletlabs/ordo"
@@ -68,6 +68,7 @@ ordo_release_from_args() {
         ;;
     esac
   done
+  [[ "$prev" != 1 ]] || ordo_die "--release needs a value."
   return 1
 }
 
@@ -274,6 +275,21 @@ ordo_latest_tag() {
   tag="${url##*/}"
   [[ "$tag" == v* ]] || ordo_die "There is no stable Ordo release yet."
   printf '%s\n' "$tag"
+}
+
+ordo_latest_pre_tag() {
+  curl -fsSL --retry 3 "https://api.github.com/repos/$1/releases?per_page=100" | node -e '
+    let text = "";
+    process.stdin.on("data", (chunk) => { text += chunk; });
+    process.stdin.on("end", () => {
+      const re = /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-(alpha|beta|rc)(?:\.(0|[1-9][0-9]*))?)?$/;
+      const rows = JSON.parse(text).filter((r) => !r.draft && r.published_at && re.test(r.tag_name));
+      const rank = (r) => { const m = r.tag_name.match(re); return [Number(m[1]), Number(m[2]), Number(m[3]), m[4] ? ["alpha", "beta", "rc"].indexOf(m[4]) : 3, m[5] == null ? -1 : Number(m[5])]; };
+      rows.sort((a,b) => { const x=rank(a), y=rank(b); for(let i=0;i<x.length;i++) { if(x[i]!==y[i]) return y[i]-x[i]; } return 0; });
+      if (!rows.length) { console.error("No published Ordo releases found."); process.exit(1); }
+      console.log(rows[0].tag_name);
+    });
+  '
 }
 
 ordo_download_release() {
@@ -982,6 +998,13 @@ ordo_install_main() {
       "Set ORDO_DIR to an empty folder and run this again.")"
   fi
 
+  if ordo_wants_from_git "$@"; then
+    ordo_die "--from-git requires an existing git checkout. Clone Ordo first."
+  fi
+  if ordo_arg_present --release "$@" && ! raw=$(ordo_release_from_args "$@"); then
+    ordo_die "--release needs a value."
+  fi
+
   if raw=$(ordo_release_from_args "$@"); then
     set +e
     tag=$(ordo_normalize_tag "$raw")
@@ -990,16 +1013,20 @@ ordo_install_main() {
     if [[ "$status" == 0 ]]; then
       :
     elif [[ "$status" == 1 ]]; then
-      tag=$(ordo_latest_tag "$repo")
+      if ordo_arg_present --pre "$@"; then tag=$(ordo_latest_pre_tag "$repo"); else tag=$(ordo_latest_tag "$repo"); fi
     elif [[ "$status" == 2 ]]; then
-      ordo_die "--release needs a pre-release like v0.1.0-beta.1."
+      tag=$(ordo_latest_pre_tag "$repo")
     else
       ordo_die "--release needs a version like v0.1.0."
     fi
   else
-    tag=$(ordo_latest_tag "$repo")
+    if ordo_arg_present --pre "$@"; then tag=$(ordo_latest_pre_tag "$repo"); else tag=$(ordo_latest_tag "$repo"); fi
   fi
 
+  if ordo_arg_present --dry-run "$@"; then
+    printf 'Would download Ordo %s into %s and run the server installer.\n' "$tag" "$dest"
+    return 0
+  fi
   printf 'Installing Ordo %s into %s\n' "$tag" "$dest"
   ordo_download_release "$dest" "$tag" "$repo"
   ordo_exec_server "$dest" 1 "$@"
