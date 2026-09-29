@@ -97,6 +97,20 @@ test("CLI and app policy reject malformed tags, release targets and marker drift
 function apkFixture(t, dataset) {
   const temp = mkdtempSync(join(tmpdir(), "ordo-apk-ci-"));
   t.after(() => rmSync(temp, { recursive: true, force: true }));
+  // Hermetic git history: CI checkouts can be shallow, so ancestry checks
+  // must never resolve real repository commits.
+  const repo = join(temp, "repo");
+  mkdirSync(repo);
+  const git = (args) => spawnSync("git", ["-c", "user.email=ordo-test@example.com", "-c", "user.name=ordo-test", ...args], { cwd: repo, encoding: "utf8" });
+  git(["init", "-q", "-b", "main"]);
+  for (const name of ["one.txt", "two.txt", "three.txt"]) {
+    writeFileSync(join(repo, name), name);
+    git(["add", "."]);
+    git(["commit", "-m", name]);
+  }
+  const head = git(["rev-parse", "HEAD"]).stdout.trim();
+  const parent = git(["rev-parse", "HEAD~1"]).stdout.trim();
+  assert.ok(/^[0-9a-f]{40}$/.test(head) && /^[0-9a-f]{40}$/.test(parent), "fixture history must resolve");
   const bin = join(temp, "bin");
   mkdirSync(bin);
   const data = join(temp, "data.json");
@@ -121,11 +135,9 @@ if(a[0]==='run'&&a[1]==='download'&&d.runtime) {
 }
 process.exit(1);
 `, { mode: 0o755 });
-  const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
-  const parent = spawnSync("git", ["rev-parse", "HEAD^"], { cwd: root, encoding: "utf8" }).stdout.trim();
   function run(script, args = [], moreEnv = {}) {
     return spawnSync("bash", [join(root, ".github/scripts", script), ...args], {
-      cwd: root, encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}`,
+      cwd: repo, encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}`,
         APK_TEST_DATA: data, GITHUB_REPOSITORY: "test/ordo", GITHUB_RUN_ID: "20", CURRENT_SHA: head,
         WAIT_FOR_APK_TIMEOUT_S: "0", WAIT_FOR_APK_SLEEP_S: "0", ...moreEnv },
     });
