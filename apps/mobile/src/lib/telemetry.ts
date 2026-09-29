@@ -1,15 +1,14 @@
 /**
  * Anonymous install ping to ordo Cloud.
- * Counts installs, opens, sign-ins, registrations, and coarse health.
- * Sign-in and registration are separate. No account, email, IP, device name,
- * or server URL.
+ * Counts installs, opens, and coarse health (timeouts, server errors,
+ * sign-in failures). Accounts and sign-ins are server-side truth.
+ * No account, email, IP, device name, or server URL.
  */
-import { Platform } from "react-native";
 import Constants from "expo-constants";
 import * as Crypto from "expo-crypto";
 import * as Updates from "expo-updates";
 import { TelemetryRoutes, type TelemetryHeartbeatInput } from "@ordo/shared";
-import { CLOUD_SERVER_URL, resolvePersistedServerUrl, telemetryHosting } from "./hosting";
+import { CLOUD_SERVER_URL } from "./hosting";
 import { prefsGet, prefsSet, StorageKeys } from "./storage";
 import { useSettingsStore } from "../store/settings";
 import { useOnlineStore } from "./online";
@@ -27,17 +26,14 @@ import {
   needsTelemetryRegistration,
   normalizeTelemetryCounters,
   shouldFlushTelemetry,
-  startupBucket,
   telemetryDirty,
   telemetryEnabled,
-  telemetryPlatform,
   TELEMETRY_FLUSH_GAP_MS,
   type TelemetryCounters,
   type TelemetryNote,
-  type TelemetryWebHints,
 } from "./telemetry-policy";
 
-const TELEMETRY_REVISION = 3;
+const TELEMETRY_REVISION = 4;
 
 interface StoredTelemetry {
   installId: string;
@@ -71,35 +67,23 @@ function reportingEnabled(): boolean {
   return telemetryEnabled(__DEV__, readBuildChannel());
 }
 
-export { shouldFlushTelemetry, startupBucket, telemetryPlatform } from "./telemetry-policy";
+export { shouldFlushTelemetry } from "./telemetry-policy";
 
 export function telemetryAppVersion(): string {
   const version = Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? "unknown";
   return version.trim().slice(0, 32) || "unknown";
 }
 
-export function recordColdStart(elapsedMs: number, now = Date.now()): Promise<void> {
+export function recordColdStart(now = Date.now()): Promise<void> {
   if (!reportingEnabled()) return Promise.resolve();
   if (coldStartRecorded) return pingCloudTelemetry(now);
   coldStartRecorded = true;
-  const bucket = startupBucket(elapsedMs);
-  const startup: TelemetryNote = bucket === "fast" ? "startupFast" : bucket === "ok" ? "startupOk" : "startupSlow";
-  return record((counters) => applyTelemetryNote(applyTelemetryNote(counters, "open"), startup), now);
+  return record((counters) => applyTelemetryNote(counters, "open"), now);
 }
 
 export function recordForeground(now = Date.now()): Promise<void> {
   if (!reportingEnabled()) return Promise.resolve();
   return record((counters) => applyTelemetryNote(counters, "open"), now);
-}
-
-export function noteLoggedIn(now = Date.now()): void {
-  if (!reportingEnabled()) return;
-  void record((counters) => applyTelemetryNote(counters, "loggedIn"), now);
-}
-
-export function noteRegistered(now = Date.now()): void {
-  if (!reportingEnabled()) return;
-  void record((counters) => applyTelemetryNote(counters, "registered"), now);
 }
 
 export function noteTimeout(now = Date.now()): void {
@@ -208,7 +192,7 @@ async function preparePing(now: number): Promise<{
   const ack = saved.ack?.day === counters.day ? saved.ack : null;
   const force = needsTelemetryRegistration(saved.telemetryRevision, TELEMETRY_REVISION);
   const dirty = telemetryDirty(counters, ack);
-  const immediate = previousDay || authPending(counters, ack);
+  const immediate = previousDay;
   if (
     !shouldFlushTelemetry({
       lastPingAt: saved.lastPingAt,
@@ -225,29 +209,18 @@ async function preparePing(now: number): Promise<{
 
   const payload: TelemetryHeartbeatInput = {
     installId,
-    platform: telemetryPlatform(Platform.OS, webHints()),
-    hosting: telemetryHosting(await resolveServerUrl()),
     appVersion: telemetryAppVersion(),
     ts: reportTs(counters.day, now),
     opens: counters.opens,
-    loggedIn: counters.loggedIn,
-    registered: counters.registered,
     timeouts: counters.timeouts,
     serverErrors: counters.serverErrors,
     signInFailures: counters.signInFailures,
-    startupFast: counters.startupFast,
-    startupOk: counters.startupOk,
-    startupSlow: counters.startupSlow,
   };
   return { installId, counters, payload, immediate };
 }
 
 function pendingPreviousDay(saved: StoredTelemetry & { counters: TelemetryCounters }, today: string): boolean {
   return saved.counters.day !== today && telemetryDirty(saved.counters, saved.ack?.day === saved.counters.day ? saved.ack : null);
-}
-
-function authPending(counters: TelemetryCounters, ack: TelemetryCounters | null): boolean {
-  return (counters.loggedIn && !ack?.loggedIn) || (counters.registered && !ack?.registered);
 }
 
 async function loadStored(now: number): Promise<StoredTelemetry & { counters: TelemetryCounters }> {
@@ -270,21 +243,6 @@ function resolveInstallId(savedId: string | undefined): string {
   const id = existingOrNewInstallId(savedId, () => Crypto.randomUUID());
   cachedInstallId = id;
   return id;
-}
-
-function webHints(): TelemetryWebHints {
-  if (Platform.OS !== "web" || typeof navigator === "undefined") return {};
-  return {
-    userAgent: navigator.userAgent,
-    maxTouchPoints: navigator.maxTouchPoints,
-  };
-}
-
-async function resolveServerUrl(): Promise<string> {
-  const settings = useSettingsStore.getState();
-  if (settings.hydrated) return settings.serverUrl;
-  const saved = await prefsGet<{ serverUrl?: string }>(StorageKeys.SETTINGS);
-  return resolvePersistedServerUrl(saved?.serverUrl);
 }
 
 function utcDay(now: number): string {

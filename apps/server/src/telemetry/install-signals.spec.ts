@@ -4,30 +4,22 @@ const NOW = new Date("2026-09-23T15:00:00.000Z");
 const sec = (iso: string) => Math.floor(Date.parse(iso) / 1000);
 
 describe("install signals", () => {
-  it("keeps sign-in and registration independent and never shrinks a count", () => {
-    const registered = mergeInstallSignals(null, {
+  it("never shrinks a counter", () => {
+    const first = mergeInstallSignals(null, {
       ...emptyInstallSignals(),
       opens: 2,
-      registered: true,
       timeouts: 1,
     });
-    expect(registered.loggedIn).toBe(false);
-    expect(registered.registered).toBe(true);
+    expect(first.timeouts).toBe(1);
 
-    const merged = mergeInstallSignals(registered, {
+    const merged = mergeInstallSignals(first, {
       ...emptyInstallSignals(),
       opens: 1,
-      loggedIn: true,
-      registered: false,
       timeouts: 0,
-      startupSlow: 1,
     });
     expect(merged).toMatchObject({
       opens: 2,
-      loggedIn: true,
-      registered: true,
       timeouts: 1,
-      startupSlow: 1,
     });
   });
 

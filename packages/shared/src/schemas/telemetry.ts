@@ -1,25 +1,11 @@
 import { z } from "zod";
 
-export const TELEMETRY_PLATFORMS = [
-  "android",
-  "ios",
-  "web",
-  "web-android",
-  "web-ios",
-  "web-desktop",
-  "desktop",
-  "other",
-] as const;
-export const TELEMETRY_HOSTING = ["cloud", "selfhosted"] as const;
-
-export const TelemetryPlatformSchema = z.enum(TELEMETRY_PLATFORMS);
-export const TelemetryHostingSchema = z.enum(TELEMETRY_HOSTING);
-
 const telemetryCount = z.number().int().min(0).max(500).default(0);
 
 /**
  * Anonymous install ping. No account, email, IP, device name, or server URL.
- * Sign-in and registration are separate flags. Health fields are coarse counts.
+ * Health fields are coarse counts; accounts and sign-ins come from the
+ * server's own User/Session tables, not from this ping.
  */
 export const TelemetryHeartbeatSchema = z.object({
   installId: z
@@ -28,8 +14,6 @@ export const TelemetryHeartbeatSchema = z.object({
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
       { message: "installId must be a UUID." },
     ),
-  platform: TelemetryPlatformSchema,
-  hosting: TelemetryHostingSchema,
   appVersion: z
     .string()
     .trim()
@@ -37,17 +21,11 @@ export const TelemetryHeartbeatSchema = z.object({
     .max(32, { message: "App version must be 32 characters or fewer." }),
   /** Unix time of this ping, in seconds. The server derives the UTC day from it. */
   ts: z.number().int(),
+  /** Times the app came to the foreground this day. */
   opens: telemetryCount,
-  loggedIn: z.boolean().default(false),
-  registered: z.boolean().default(false),
   timeouts: telemetryCount,
   serverErrors: telemetryCount,
   signInFailures: telemetryCount,
-  startupFast: telemetryCount,
-  startupOk: telemetryCount,
-  startupSlow: telemetryCount,
 });
 
 export type TelemetryHeartbeatInput = z.infer<typeof TelemetryHeartbeatSchema>;
-export type TelemetryPlatform = z.infer<typeof TelemetryPlatformSchema>;
-export type TelemetryHosting = z.infer<typeof TelemetryHostingSchema>;

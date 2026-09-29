@@ -8,10 +8,8 @@ import {
   needsTelemetryRegistration,
   shouldFlushTelemetry,
   shouldPing,
-  startupBucket,
   telemetryDirty,
   telemetryEnabled,
-  telemetryPlatform,
 } from "./telemetry-policy.ts";
 
 test("pings only on the production channel outside development", () => {
@@ -38,91 +36,27 @@ test("pings when never seen, after a day, or if the clock jumped back", () => {
   assert.equal(shouldPing(now + day, now), true);
 });
 
-test("keeps a native app as the app even if the UA looks like a phone browser", () => {
-  const androidChrome =
-    "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/128.0.0.0 Mobile Safari/537.36";
-  assert.equal(telemetryPlatform("android", { userAgent: androidChrome }), "android");
-  assert.equal(telemetryPlatform("ios"), "ios");
-  assert.equal(telemetryPlatform("macos"), "other");
-});
-
-test("splits browsers so a phone site visit is not an Android install", () => {
-  assert.equal(telemetryPlatform("web"), "web");
-  assert.equal(
-    telemetryPlatform("web", {
-      userAgent:
-        "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/128.0.0.0 Mobile Safari/537.36",
-    }),
-    "web-android",
-  );
-  assert.equal(
-    telemetryPlatform("web", {
-      userAgent:
-        "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 Version/17.0 Mobile/15E148 Safari/604.1",
-    }),
-    "web-ios",
-  );
-  assert.equal(
-    telemetryPlatform("web", {
-      userAgent:
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/128.0.0.0 Safari/537.36",
-    }),
-    "web-desktop",
-  );
-  assert.equal(
-    telemetryPlatform("web", {
-      userAgent:
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15",
-      maxTouchPoints: 5,
-    }),
-    "web-ios",
-  );
-  assert.equal(
-    telemetryPlatform("web", {
-      userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Electron/28.0.0",
-    }),
-    "desktop",
-  );
-});
-
-test("counts a sign-in and a registration as different events", () => {
+test("opens bump, later notes never shrink a count", () => {
   const day = emptyTelemetryCounters("2026-09-23");
-  const signedIn = applyTelemetryNote(day, "loggedIn");
-  const registered = applyTelemetryNote(day, "registered");
-  assert.equal(signedIn.loggedIn, true);
-  assert.equal(signedIn.registered, false);
-  assert.equal(registered.registered, true);
-  assert.equal(registered.loggedIn, false);
-  assert.equal(applyTelemetryNote(signedIn, "registered").loggedIn, true);
-  assert.equal(applyTelemetryNote(signedIn, "registered").registered, true);
+  const opened = applyTelemetryNote(day, "open");
+  assert.equal(opened.opens, 1);
+  assert.equal(applyTelemetryNote(opened, "open").opens, 2);
+  const counted = applyTelemetryNote(applyTelemetryNote(day, "timeout"), "serverError");
+  assert.equal(counted.timeouts, 1);
+  assert.equal(counted.serverErrors, 1);
 });
 
-test("buckets startup and treats only HTTP 4xx as a sign-in failure", () => {
-  assert.equal(startupBucket(400), "fast");
-  assert.equal(startupBucket(1000), "ok");
-  assert.equal(startupBucket(3000), "slow");
+test("treats only HTTP 4xx as a sign-in failure", () => {
   assert.equal(countsAsSignInFailure(401), true);
   assert.equal(countsAsSignInFailure(500), false);
   assert.equal(countsAsSignInFailure(0), false);
 });
 
-test("flushes a later sign-in the same day without waiting for the gap", () => {
+test("a raised counter is dirty and flushes after the gap", () => {
   const now = 1_700_000_000_000;
-  const counters = applyTelemetryNote(emptyTelemetryCounters("2026-09-23"), "loggedIn");
+  const counters = applyTelemetryNote(emptyTelemetryCounters("2026-09-23"), "timeout");
   const ack = emptyTelemetryCounters("2026-09-23");
   assert.equal(telemetryDirty(counters, ack), true);
-  assert.equal(
-    shouldFlushTelemetry({
-      lastPingAt: now - 60_000,
-      ackDay: "2026-09-23",
-      today: "2026-09-23",
-      now,
-      dirty: true,
-      force: false,
-      immediate: true,
-    }),
-    true,
-  );
   assert.equal(
     shouldFlushTelemetry({
       lastPingAt: now - 60_000,
@@ -134,6 +68,18 @@ test("flushes a later sign-in the same day without waiting for the gap", () => {
       immediate: false,
     }),
     false,
+  );
+  assert.equal(
+    shouldFlushTelemetry({
+      lastPingAt: now - 20 * 60_000,
+      ackDay: "2026-09-23",
+      today: "2026-09-23",
+      now,
+      dirty: true,
+      force: false,
+      immediate: false,
+    }),
+    true,
   );
 });
 

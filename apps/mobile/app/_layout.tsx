@@ -7,7 +7,6 @@
  * is dismissed only after the correct route is ready and a minimum brand beat
  * has elapsed, so the native logo remains the same size for the whole launch.
  */
-import { launchStartedAt } from "../src/lib/launch-clock";
 import React, { useEffect } from "react";
 import { Stack, useRouter, useSegments } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
@@ -221,7 +220,7 @@ export default function RootLayout() {
         console.warn("Launch library prepare failed", error);
       } finally {
         setBooted(true);
-        void recordColdStart(Date.now() - launchStartedAt);
+        void recordColdStart();
       }
     })();
   }, []);

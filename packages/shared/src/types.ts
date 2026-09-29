@@ -264,32 +264,6 @@ export interface HealthDto {
   status: "ok";
 }
 
-export interface TelemetryCounts {
-  total: number;
-  /** First ping on this UTC calendar day. */
-  newCount: number;
-  dau: number;
-  wau: number;
-  mau: number;
-}
-
-export type TelemetryBreakdown = Record<string, number>;
-
-export interface TelemetryDayDto extends TelemetryCounts {
-  /** UTC calendar day `YYYY-MM-DD`. */
-  day: string;
-  hosting: TelemetryBreakdown;
-  platform: TelemetryBreakdown;
-  version: TelemetryBreakdown;
-}
-
-/** Anonymous install totals. Operator dashboard only — not an API route. */
-export interface TelemetryStatsDto {
-  generatedAt: string;
-  current: Omit<TelemetryDayDto, "day">;
-  history: TelemetryDayDto[];
-}
-
 export interface TelemetryHeartbeatResponse {
   ok: true;
 }

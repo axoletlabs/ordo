@@ -11,41 +11,41 @@ datasource db {
 }
 
 model User {
-  id              String                   @id @default(uuid())
-  displayName     String
-  email           String                   @unique
-  passwordHash    String
-  emailVerifiedAt DateTime?
-  pendingEmail    String?
+  id                    String    @id @default(uuid())
+  displayName           String
+  email                 String    @unique
+  passwordHash          String
+  emailVerifiedAt       DateTime?
+  pendingEmail          String?
   /// JSON-encoded synced reader preferences (see ReaderPreferences in @ordo/shared).
-  preferences     String?
-  totpSecretEnc   String?
-  totpEnabledAt   DateTime?
-  avatarMime      String?
-  avatarUpdatedAt DateTime?
+  preferences           String?
+  totpSecretEnc         String?
+  totpEnabledAt         DateTime?
+  avatarMime            String?
+  avatarUpdatedAt       DateTime?
   /// Used only when AVATAR_STORAGE=database.
-  avatarBytes     Bytes?
+  avatarBytes           Bytes?
   /// scrypt salt for the password-wrapped data-encryption key.
-  dekKdfSalt      String?
+  dekKdfSalt            String?
   /// AES-GCM wrap of the library DEK using the account password.
-  dekPasswordWrapped String?
+  dekPasswordWrapped    String?
   /// AES-GCM wrap of the library DEK using the server library key (email reset).
-  dekServerWrapped String?
+  dekServerWrapped      String?
   /// Unused leftover from recovery-key wraps; kept so existing DBs still load.
-  dekRecoveryWrapped String?
+  dekRecoveryWrapped    String?
   /// 0 = plaintext legacy library; 1 = fields encrypted with the account DEK.
-  dataEncryptionVersion Int                @default(0)
-  createdAt       DateTime                 @default(now())
-  updatedAt       DateTime                 @updatedAt
+  dataEncryptionVersion Int       @default(0)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
-  sessions    Session[]
-  folders     Folder[]
-  bookmarks   Bookmark[]
-  tags        Tag[]
-  emailTokens EmailVerificationToken[]
-  backupCodes MfaBackupCode[]
+  sessions      Session[]
+  folders       Folder[]
+  bookmarks     Bookmark[]
+  tags          Tag[]
+  emailTokens   EmailVerificationToken[]
+  backupCodes   MfaBackupCode[]
   mfaChallenges MfaChallenge[]
-  importJobs  ImportJob[]
+  importJobs    ImportJob[]
 }
 
 model EmailVerificationToken {
@@ -95,25 +95,25 @@ model MfaChallenge {
 }
 
 model Session {
-  id                    String   @id @default(cuid())
-  userId                String
-  accessTokenHash       String   @unique
-  accessTokenExpiresAt  DateTime
-  refreshTokenHash      String   @unique
-  refreshTokenExpiresAt DateTime
-  deviceInfo            String?
-  deviceName            String?
-  deviceType            String?
-  ip                    String?
-  lastSeenAt            DateTime @default(now())
+  id                       String   @id @default(cuid())
+  userId                   String
+  accessTokenHash          String   @unique
+  accessTokenExpiresAt     DateTime
+  refreshTokenHash         String   @unique
+  refreshTokenExpiresAt    DateTime
+  deviceInfo               String?
+  deviceName               String?
+  deviceType               String?
+  ip                       String?
+  lastSeenAt               DateTime @default(now())
   /// Library DEK wrapped with HKDF(access token). Null for plaintext users.
-  dekWrapped            String?
+  dekWrapped               String?
   /// Library DEK wrapped with HKDF(refresh token).
-  dekRefreshWrapped     String?
+  dekRefreshWrapped        String?
   /// Previous refresh hash, kept so a reused (stolen) token can kill this session.
-  previousRefreshTokenHash String? @unique
-  createdAt             DateTime @default(now())
-  updatedAt             DateTime @updatedAt
+  previousRefreshTokenHash String?  @unique
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -121,25 +121,25 @@ model Session {
 }
 
 model Folder {
-  id           String       @id @default(cuid())
+  id           String   @id @default(cuid())
   userId       String
   name         String
-  icon         String       @default("folder-outline")
-  pinned       Boolean      @default(false)
+  icon         String   @default("folder-outline")
+  pinned       Boolean  @default(false)
   passwordHash String?
   /// device | pattern | pin | password; null for unlocked folders.
   lockType     String?
   /// 4 or 6 when lockType is pin.
   pinLength    Int?
-  position     Int          @default(0)
+  position     Int      @default(0)
   // Retained only so legacy default folders can be migrated safely on startup.
-  isDefault    Boolean      @default(false)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  isDefault    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bookmarks  Bookmark[]
-  tokens     FolderToken[]
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookmarks Bookmark[]
+  tokens    FolderToken[]
 
   @@index([userId])
 }
@@ -157,37 +157,49 @@ model FolderToken {
 }
 
 model Bookmark {
-  id              String   @id @default(cuid())
-  userId          String
-  /** Owning folder; null means the bookmark is unfiled. */
-  folderId        String?
-  url             String
-  title           String
-  description     String?
-  domain          String
-  contentHtml     String?
-  fetchStatus     String   @default("ok")
-  /** Why extraction ended in `unsupported`/`failed` (ExtractionReason in @ordo/shared). */
-  extractionReason String?
-  /** Pipeline version that produced the stored content; null = pre-versioning. */
-  extractionVersion Int?
-  /** User-forced article/website classification (`article` | `web`); null = automatic. */
+  id                  String    @id @default(cuid())
+  userId              String
+  /**
+   * Owning folder; null means the bookmark is unfiled.
+   */
+  folderId            String?
+  url                 String
+  title               String
+  description         String?
+  domain              String
+  contentHtml         String?
+  fetchStatus         String    @default("ok")
+  /**
+   * Why extraction ended in `unsupported`/`failed` (ExtractionReason in @ordo/shared).
+   */
+  extractionReason    String?
+  /**
+   * Pipeline version that produced the stored content; null = pre-versioning.
+   */
+  extractionVersion   Int?
+  /**
+   * User-forced article/website classification (`article` | `web`); null = automatic.
+   */
   contentKindOverride String?
-  /** JSON snapshot of the pre-article row, restored when the user unmarks a forced extract. */
+  /**
+   * JSON snapshot of the pre-article row, restored when the user unmarks a forced extract.
+   */
   articleUndoSnapshot String?
-  author          String?
-  publishedAt     DateTime?
-  readingTimeMinutes Int?
-  readProgress    Float    @default(0)
-  completedAt     DateTime?
-  isRead          Boolean  @default(false)
-  /** Unix seconds. Null means no reminder; a past value stays due until cleared. */
-  remindAt        Int?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  author              String?
+  publishedAt         DateTime?
+  readingTimeMinutes  Int?
+  readProgress        Float     @default(0)
+  completedAt         DateTime?
+  isRead              Boolean   @default(false)
+  /**
+   * Unix seconds. Null means no reminder; a past value stays due until cleared.
+   */
+  remindAt            Int?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  folder Folder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  user        User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folder      Folder?                 @relation(fields: [folderId], references: [id], onDelete: Cascade)
   tags        BookmarkTag[]
   suggestions BookmarkTagSuggestion[]
   highlights  BookmarkHighlight[]
@@ -261,10 +273,10 @@ model BookmarkHighlight {
 
 /// Staged import job: uploaded file → parsed preview → confirmed commit.
 model ImportJob {
-  id           String    @id @default(cuid())
+  id           String   @id @default(cuid())
   userId       String
   /// parsing | ready | committing | completed | failed
-  status       String    @default("parsing")
+  status       String   @default("parsing")
   /// ordo-json | netscape-html | csv
   sourceFormat String?
   fileName     String?
@@ -276,8 +288,8 @@ model ImportJob {
   failure      String?
   /// JSON-encoded ImportResultDto once committed.
   result       String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
   expiresAt    DateTime
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -298,8 +310,6 @@ model InstanceSettings {
 /// Anonymous app install. No account, email, IP, or server URL.
 model AppInstall {
   id          String          @id
-  platform    String
-  hosting     String
   appVersion  String
   firstSeenAt DateTime
   lastSeenAt  DateTime
@@ -310,44 +320,22 @@ model AppInstall {
 }
 
 /// Calendar-day presence for an install (UTC `YYYY-MM-DD`).
-/// Counters stay on the install id. Sign-in and registration are separate.
+/// Counters stay on the install id. Accounts and sign-ins come from the
+/// server's own User/Session tables, not from this ping.
 /// No account, email, IP, or server URL.
 model AppInstallDay {
-  installId       String
-  day             String
-  platform        String
-  hosting         String
-  appVersion      String
+  installId      String
+  day            String
+  appVersion     String
   /// Times the app came to the foreground this day.
-  opens           Int     @default(0)
-  /// This install completed a sign-in (not a new account) this day.
-  loggedIn        Boolean @default(false)
-  /// This install created an account this day.
-  registered      Boolean @default(false)
-  timeouts        Int     @default(0)
-  serverErrors    Int     @default(0)
-  signInFailures  Int     @default(0)
-  startupFast     Int     @default(0)
-  startupOk       Int     @default(0)
-  startupSlow     Int     @default(0)
+  opens          Int        @default(0)
+  timeouts       Int        @default(0)
+  serverErrors   Int        @default(0)
+  signInFailures Int        @default(0)
   /// Unix seconds of the ping that last wrote this row. Not a timezone.
-  lastPingAt      Int     @default(0)
-  install         AppInstall @relation(fields: [installId], references: [id], onDelete: Cascade)
+  lastPingAt     Int        @default(0)
+  install        AppInstall @relation(fields: [installId], references: [id], onDelete: Cascade)
 
   @@id([installId, day])
   @@index([day])
-}
-
-/// Frozen daily totals so history survives as lastSeenAt moves forward.
-model AppInstallSnapshot {
-  day      String   @id
-  total    Int
-  newCount Int
-  dau      Int
-  wau      Int
-  mau      Int
-  hosting  String
-  platform String
-  version  String
-  takenAt  DateTime
 }

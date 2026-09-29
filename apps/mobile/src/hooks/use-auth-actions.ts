@@ -19,7 +19,7 @@ import { useFolderTokenStore } from "../store/folder-tokens";
 import { qk } from "../lib/api/query-keys";
 import { ApiClientError, cancelProactiveRefresh, scheduleProactiveRefresh } from "../lib/api/client";
 import { countsAsSignInFailure } from "../lib/telemetry-policy";
-import { noteLoggedIn, noteRegistered, noteSignInFailure } from "../lib/telemetry";
+import { noteSignInFailure } from "../lib/telemetry";
 
 export function useLogin() {
   const setSession = useAuthStore((s) => s.setSession);
@@ -27,7 +27,6 @@ export function useLogin() {
     mutationFn: authApi.login,
     onSuccess: (data) => {
       if (isMfaRequiredResponse(data)) return;
-      noteLoggedIn();
       setSession(data);
       scheduleProactiveRefresh(data.tokens.expiresIn);
     },
@@ -40,7 +39,6 @@ export function useRegister() {
   return useMutation({
     mutationFn: authApi.register,
     onSuccess: (data) => {
-      noteRegistered();
       if (isPendingEmailVerificationResponse(data)) return;
       setSession(data);
       scheduleProactiveRefresh(data.tokens.expiresIn);
@@ -174,7 +172,6 @@ export function useLoginMfa() {
   return useMutation({
     mutationFn: authApi.loginMfa,
     onSuccess: (data) => {
-      noteLoggedIn();
       setSession(data);
       scheduleProactiveRefresh(data.tokens.expiresIn);
     },
@@ -187,7 +184,6 @@ export function useLoginMfaEmailVerify() {
   return useMutation({
     mutationFn: authApi.loginMfaEmailVerify,
     onSuccess: (data) => {
-      noteLoggedIn();
       setSession(data);
       scheduleProactiveRefresh(data.tokens.expiresIn);
     },

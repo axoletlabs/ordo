@@ -11,7 +11,6 @@ import {
   isCloudServerUrl,
   isSelfHostDestination,
   resolvePersistedServerUrl,
-  telemetryHosting,
 } from "./hosting.ts";
 
 test("new installs default to ordo Cloud", () => {
@@ -40,8 +39,8 @@ test("hosting mode and display name follow the origin", () => {
   assert.equal(hostingModeOf("http://localhost:3000"), "selfHosted");
   assert.equal(hostingDisplayName(CLOUD_SERVER_URL), "ordo Cloud");
   assert.equal(hostingDisplayName("https://ordo.example"), "Your server");
-  assert.equal(telemetryHosting(CLOUD_SERVER_URL), "cloud");
-  assert.equal(telemetryHosting("http://localhost:3000"), "selfhosted");
+  assert.equal(hostingModeOf(CLOUD_SERVER_URL), "cloud");
+  assert.equal(hostingModeOf("http://localhost:3000"), "selfHosted");
 });
 
 test("saved self-host URLs are kept; Cloud HTTP is upgraded", () => {

@@ -425,7 +425,6 @@ describe("PrismaService legacy schema migration", () => {
     expect(tables.map((row) => row.name).sort()).toEqual([
       "AppInstall",
       "AppInstallDay",
-      "AppInstallSnapshot",
       "Bookmark",
       "BookmarkFts",
       "BookmarkHighlight",
