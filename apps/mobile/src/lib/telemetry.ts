@@ -31,7 +31,7 @@ import {
   type TelemetryCounters,
 } from "./telemetry-policy";
 
-const TELEMETRY_REVISION = 5;
+const TELEMETRY_REVISION = 1;
 
 interface StoredTelemetry {
   installId: string;
