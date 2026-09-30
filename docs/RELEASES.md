@@ -70,9 +70,9 @@ one `versionCode`: the CI run number. Android treats an equal-code install as a
 replace, so switching splits of the same build is a reinstall, and any later
 build outranks every earlier one because the run counter only grows. A workflow
 re-run reuses its run's code, and the immutability check refuses replacing
-published assets with different bytes. The history rewrite at v0.1.2 retired
-every APK with a larger code, so the run counter is the only ordering that
-remains.
+published assets with different bytes. The single published release (v0.1.0)
+is the only APK generation under this scheme, so the run counter is the only
+ordering that remains.
 
 Development APKs do not offer published-release APK updates: their code can
 already exceed a published release, which Android rejects as a downgrade.
