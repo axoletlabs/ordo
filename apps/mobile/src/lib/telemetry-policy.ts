@@ -21,7 +21,7 @@ export function emptyTelemetryCounters(day: string): TelemetryCounters {
   };
 }
 
-/** Explicit allowlist: never spread stored/legacy metadata into a request. */
+/** Explicit allowlist so stored metadata never leaks into a request. */
 export function telemetryHeartbeat(installId: string, counters: TelemetryCounters) {
   return {
     installId,
