@@ -89,9 +89,10 @@ jobs:
           CHANNEL=$(node "$GITHUB_WORKSPACE/.github/scripts/validate-release-tag.js" --channel "$VERSION" --branch "$BRANCH")
           echo "updates_channel=$CHANNEL" >> "$GITHUB_OUTPUT"
           echo "EAS Update channel: $CHANNEL (branch=${BRANCH:-none})"
-          # Reserve two digits for run attempts. Gradle multiplies by 10 and
-          # adds ABI offsets (0-4); retries and later runs outrank older splits.
-          echo "version_code=$(( ${{ github.run_number }} * 100 + ${{ github.run_attempt }} ))" >> "$GITHUB_OUTPUT"
+          # One digit of headroom for ABI offsets (Gradle adds 0-4). The run
+          # counter is already above every shipped release's code, and a
+          # workflow re-run reuses its own code (same-code reinstall).
+          echo "version_code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
           echo "build_ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
           if [ "${{ github.event_name }}" = "release" ]; then
