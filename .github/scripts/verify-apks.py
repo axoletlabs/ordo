@@ -23,11 +23,9 @@ def verify(apk, *, aapt, apksigner, version, base, runtime, channel, certificate
                          f"apksigner said: {signatures[:600]!r}")
     badging = output(aapt, "dump", "badging", str(apk))
     package = re.search(r"package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'", badging)
-    offsets = {"armeabi-v7a": 1, "arm64-v8a": 2, "x86": 3, "x86_64": 4}
-    abi = next((name for name in offsets if apk.name == f"app-{name}-release.apk"), None)
-    expected_code = base * 10 + offsets.get(abi, 0)
-    if not package or package.groups() != ("com.axolet.ordo", str(expected_code), version):
-        raise ValueError(f"{apk.name}: wrong package, native version or ABI versionCode")
+    # Every APK of the build — universal and all splits — shares the run number.
+    if not package or package.groups() != ("com.axolet.ordo", str(base), version):
+        raise ValueError(f"{apk.name}: wrong package, native version or versionCode")
     resources = output(aapt, "dump", "--values", "resources", str(apk))
     value = re.search(r'\bstring/expo_runtime_version\b(?:(?!\bresource\b).)*?\(string(?:8|16)\)\s+"([^"]+)"', resources, re.S)
     embedded_runtime = value.group(1) if value else None
@@ -44,7 +42,7 @@ def verify(apk, *, aapt, apksigner, version, base, runtime, channel, certificate
     header_value = re.search(r'android:value[^\n]*=("(?:\\.|[^"\\])*")', header_block or "")
     if not header_value or json.loads(json.loads(header_value.group(1))).get("expo-channel-name") != channel:
         raise ValueError(f"{apk.name}: embedded update channel does not match the selected stream")
-    print(f"Verified {apk.name}: version={version}, code={expected_code}, channel={channel}, runtime={runtime}")
+    print(f"Verified {apk.name}: version={version}, code={base}, channel={channel}, runtime={runtime}")
 
 
 def main():

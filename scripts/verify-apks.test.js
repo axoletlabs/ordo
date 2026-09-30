@@ -20,17 +20,17 @@ with zipfile.ZipFile(apk, 'w') as z:
     z.writestr('assets/fingerprint', runtime)
 outputs = {
     'verify': 'Signer #1 certificate SHA-256 digest: ' + 'b' * 64,
-    'badging': "package: name='com.axolet.ordo' versionCode='400012' versionName='0.2.0'",
+    'badging': "package: name='com.axolet.ordo' versionCode='400' versionName='0.2.0'",
     'resources': 'resource 0x7f01 com.axolet.ordo:string/expo_runtime_version: t=0x03\\n  (string8) "file:fingerprint"',
     'xmltree': '\\n  E: meta-data (line=1)\\n    A: android:name="expo.modules.updates.UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY"\\n    A: android:value=' + json.dumps(json.dumps({'expo-channel-name': 'production'})),
 }
 def output(*args):
     return outputs['verify' if args[1] == 'verify' else args[-2] if args[-2] == 'resources' else args[2]]
 verify.__globals__['output'] = output
-settings = dict(aapt='aapt', apksigner='apksigner', version='0.2.0', base=40001, runtime=runtime, channel='production', certificate='b' * 64)
+settings = dict(aapt='aapt', apksigner='apksigner', version='0.2.0', base=400, runtime=runtime, channel='production', certificate='b' * 64)
 with contextlib.redirect_stdout(io.StringIO()):
     verify(apk, **settings)
-for field, wrong in [('version','0.1.0'),('base',40002),('runtime','c'*40),('channel','development'),('certificate','d'*64)]:
+for field, wrong in [('version','0.1.0'),('base',401),('runtime','c'*40),('channel','development'),('certificate','d'*64)]:
     try:
         verify(apk, **{**settings, field: wrong})
     except ValueError:

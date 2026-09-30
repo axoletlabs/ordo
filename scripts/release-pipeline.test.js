@@ -62,7 +62,7 @@ test("routing matrix covers pushes, branches, forced builds and release events",
   }
 });
 
-test("CI version codes track the run number; retries keep one code and splits never invert", () => {
+test("CI version codes are the raw run number; retries keep one code and splits share it", () => {
   const codes = [];
   for (const [run, attempt] of [[400, 1], [400, 2], [401, 1]]) {
     const result = runStep("Gather trigger info", {
@@ -76,10 +76,9 @@ test("CI version codes track the run number; retries keep one code and splits ne
   // A re-run keeps its run's code: same-code reinstalls are Android-legal and
   // published assets are never silently replaced with different bytes.
   assert.equal(codes[1], codes[0]);
-  // CI passes the raw run number; Gradle owns the stride. The next run's
-  // universal APK outranks the previous run's highest split.
+  // CI passes the raw run number; every APK of a build shares it, so any later
+  // build outranks every earlier one because the run counter only grows.
   assert.deepEqual(codes, [400, 400, 401]);
-  assert.ok(codes[2] * 10 > codes[1] * 10 + 4);
 });
 
 test("CLI and app policy reject malformed tags, release targets and marker drift", () => {

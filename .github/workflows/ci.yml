@@ -89,9 +89,10 @@ jobs:
           CHANNEL=$(node "$GITHUB_WORKSPACE/.github/scripts/validate-release-tag.js" --channel "$VERSION" --branch "$BRANCH")
           echo "updates_channel=$CHANNEL" >> "$GITHUB_OUTPUT"
           echo "EAS Update channel: $CHANNEL (branch=${BRANCH:-none})"
-          # One digit of headroom for ABI offsets (Gradle adds 0-4). The run
-          # counter is already above every shipped release's code, and a
-          # workflow re-run reuses its own code (same-code reinstall).
+          # Every APK of the build — universal and all ABI splits — shares the
+          # raw run number. Android treats an equal-code install as a replace,
+          # and later runs outrank earlier builds because the counter only
+          # grows. A workflow re-run reuses its own code.
           echo "version_code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
           echo "build_ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
 

@@ -1,7 +1,6 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const {
-  ABI_VERSION_BLOCK_MARKER,
   APP_JNI_CMAKE,
   APP_WINDOW_CHROME_API27_ITEMS,
   APP_WINDOW_CHROME_API29_ITEMS,
@@ -25,7 +24,6 @@ const {
   SECURITY_CRYPTO,
   SHARE_RECEIVER_DEFAULT_ALIAS,
   SHARE_RECEIVER_SAVE_ALIAS,
-  VERSION_CODE_ABI_STRIDE,
   applyCmakePath,
   applyReleaseSigning,
   applySecurityCrypto,
@@ -45,7 +43,6 @@ const {
   shareReceiverKotlin,
   shareSessionStoreKotlin,
   shortcutsXml,
-  versionCodeForAbi,
 } = require('./with-android-build.js');
 
 test("points the app CMake at a jni CMakeLists that can override autolinked flags", () => {
@@ -68,12 +65,23 @@ test("suppresses dollar-in-identifier on autolinked codegen targets", () => {
   assert.match(APP_JNI_CMAKE, /target_compile_options\(\$\{autolinked_library\} PRIVATE/);
 });
 
-test("normalises versionCode to run number * 10 plus a one-digit ABI offset", () => {
-  assert.equal(VERSION_CODE_ABI_STRIDE, 10);
-  assert.equal(versionCodeForAbi(353, null), 3530);
-  assert.equal(versionCodeForAbi(353, 'arm64-v8a'), 3532);
-  assert.equal(versionCodeForAbi(353, 'x86_64'), 3534);
-  assert.ok(versionCodeForAbi(6, null) > versionCodeForAbi(5, 'x86_64'));
+test("every APK of a build shares the workflow run number as its versionCode", () => {
+  const gradle = [
+    'android {',
+    '    defaultConfig {',
+    '        versionCode 1',
+    '        versionName "0.1.0"',
+    '    }',
+    '}',
+  ].join('\n');
+  const patched = applyVersionCode(gradle);
+  assert.match(
+    patched,
+    /versionCode \(\(rootProject\.findProperty\('android\.versionCode'\) \?: '1'\) as int\)/,
+  );
+  assert.doesNotMatch(patched, /androidComponents/);
+  assert.doesNotMatch(patched, /\* 10/);
+  assert.equal(applyVersionCode(patched), patched);
 });
 
 test("keeps system bars transparent or splash-colored so reloads cannot flash light chrome", () => {
@@ -92,26 +100,6 @@ test("keeps system bars transparent or splash-colored so reloads cannot flash li
     ['android:enforceNavigationBarContrast', 'false'],
     ['android:forceDarkAllowed', 'false'],
   ]);
-});
-
-test("wires CI versionCode through a * 10 default and per-output ABI offsets", () => {
-  const gradle = [
-    'android {',
-    '    defaultConfig {',
-    '        versionCode 1',
-    '        versionName "0.1.0"',
-    '    }',
-    '}',
-  ].join('\n');
-  const patched = applyVersionCode(gradle);
-  assert.match(
-    patched,
-    /versionCode \(\(\(rootProject\.findProperty\('android\.versionCode'\) \?: '1'\) as int\) \* 10\)/,
-  );
-  assert.match(patched, new RegExp(ABI_VERSION_BLOCK_MARKER));
-  assert.match(patched, /output\.filters\.find \{ it\.filterType\.name\(\) == 'ABI' \}/);
-  assert.match(patched, /output\.versionCode\.set\(base \+ offset\)/);
-  assert.equal(applyVersionCode(patched), patched);
 });
 
 const KOTLIN_ACTIVITY = `package com.axolet.ordo

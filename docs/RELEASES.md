@@ -65,12 +65,14 @@ SDK 57 requires `--environment` on every OTA publication: production uses the
 same channel. EAS build profiles use local version sources; the GitHub/Gradle
 pipeline is the canonical release APK builder and signing authority.
 
-Android codes are `(CI run number * 10) + ABI offset`. Universal/unsplit APKs
-use offset 0; armeabi-v7a, arm64-v8a, x86 and x86_64 use 1-4. The run counter
-is already above every shipped release's code (v0.1.1 shipped 6342), so codes
-stay monotonically increasing without extra digits. A workflow re-run reuses
-its run's code; Android treats that as a same-version reinstall, and the
-immutability check refuses replacing published assets with different bytes.
+Every APK of a build — the universal package and all four ABI splits — shares
+one `versionCode`: the CI run number. Android treats an equal-code install as a
+replace, so switching splits of the same build is a reinstall, and any later
+build outranks every earlier one because the run counter only grows. A workflow
+re-run reuses its run's code, and the immutability check refuses replacing
+published assets with different bytes. The history rewrite at v0.1.2 retired
+every APK with a larger code, so the run counter is the only ordering that
+remains.
 
 Development APKs do not offer published-release APK updates: their code can
 already exceed a published release, which Android rejects as a downgrade.

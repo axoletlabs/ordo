@@ -705,18 +705,11 @@ function applyCmakePath(code) {
 }
 
 /**
- * Room for a universal APK (offset 0) plus the four ABI splits (1-4).
- * CI passes the raw workflow run number; Gradle multiplies by this stride
- * so a later build always outranks every ABI from an earlier one.
+ * Every APK of one build — universal and all ABI splits — shares the workflow
+ * run number as its versionCode. Android treats an equal-code install as a
+ * replace, so switching splits of the same build is a reinstall, and any later
+ * build outranks every earlier one because the run counter only grows.
  */
-const VERSION_CODE_ABI_STRIDE = 10;
-const VERSION_CODE_ABI_OFFSETS = {
-  'armeabi-v7a': 1,
-  'arm64-v8a': 2,
-  x86: 3,
-  x86_64: 4,
-};
-
 const ABI_VERSION_BLOCK_MARKER = 'ordoAbiVersionOffsets';
 
 /** Night-aware window chrome so JS reloads do not restore a light status bar. */
@@ -739,40 +732,12 @@ const APP_WINDOW_CHROME_API29_ITEMS = [
   ['android:forceDarkAllowed', 'false'],
 ];
 
-function versionCodeForAbi(base, abi) {
-  const offset = abi == null ? 0 : (VERSION_CODE_ABI_OFFSETS[abi] ?? 0);
-  return base * VERSION_CODE_ABI_STRIDE + offset;
-}
-
-function groovyAbiOffsetMap() {
-  return `[${Object.entries(VERSION_CODE_ABI_OFFSETS)
-    .map(([abi, offset]) => `'${abi}': ${offset}`)
-    .join(', ')}]`;
-}
-
-const ABI_VERSION_BLOCK = [
-  'androidComponents {',
-  '    onVariants(selector().all()) { variant ->',
-  `        def ${ABI_VERSION_BLOCK_MARKER} = ${groovyAbiOffsetMap()}`,
-  '        variant.outputs.each { output ->',
-  "            def abi = output.filters.find { it.filterType.name() == 'ABI' }?.identifier",
-  `            def offset = abi == null ? 0 : (${ABI_VERSION_BLOCK_MARKER}.get(abi) ?: 0)`,
-  `            def base = ((rootProject.findProperty('android.versionCode') ?: '1') as int) * ${VERSION_CODE_ABI_STRIDE}`,
-  '            output.versionCode.set(base + offset)',
-  '        }',
-  '    }',
-  '}',
-].join('\n');
-
 function applyVersionCode(code) {
-  if (!/\bversionCode\s+\(\(\(rootProject\.findProperty\('android\.versionCode'\)/.test(code)) {
+  if (!/\bversionCode\s+\(\(rootProject\.findProperty\('android\.versionCode'\)/.test(code)) {
     code = code.replace(
       /(\bversionCode\s+)\d+/,
-      `$1(((rootProject.findProperty('android.versionCode') ?: '1') as int) * ${VERSION_CODE_ABI_STRIDE})`
+      `$1((rootProject.findProperty('android.versionCode') ?: '1') as int)`
     );
-  }
-  if (!code.includes(ABI_VERSION_BLOCK_MARKER)) {
-    code = `${code.replace(/\s*$/, '')}\n\n${ABI_VERSION_BLOCK}\n`;
   }
   return code;
 }
@@ -794,9 +759,7 @@ function isSendFilter(filter) {
  *
  * app/build.gradle:
  *   - `versionCode` is read from `-Pandroid.versionCode` (default 1) so CI
- *     can pass the workflow run number. Gradle multiplies by 10 and adds a
- *     per-ABI offset (0-4) so split APKs stay ordered without four unused
- *     digits of headroom.
+ *     can pass the workflow run number. All splits of a build share it.
  *   - a `splits { abi { ... } }` block gated on `-Pandroid.buildAbiSplits=true`
  *     emits one APK per ABI plus a universal APK during release builds. Dev
  *     builds instead pass `-PreactNativeArchitectures=arm64-v8a` and skip
@@ -1084,7 +1047,7 @@ const withAndroidBuild = (config) => {
     // parenthesized `as int` cast so Groovy parses it as a single versionCode(int)
     // argument — the bare `... ).toInteger()` form was parsed as
     // `versionCode(arg).toInteger()` and threw IllegalArgumentException: Value is null.
-    // Multiply by VERSION_CODE_ABI_STRIDE so ABI offsets cannot invert builds.
+    // Every ABI split of the build shares this one code.
     code = applyVersionCode(code);
 
     // Inject ABI splits inside the android { } block. Disabled unless
@@ -1120,13 +1083,10 @@ const withAndroidBuild = (config) => {
 module.exports = withAndroidBuild;
 module.exports.APP_JNI_CMAKE = APP_JNI_CMAKE;
 module.exports.ABI_VERSION_BLOCK_MARKER = ABI_VERSION_BLOCK_MARKER;
-module.exports.VERSION_CODE_ABI_OFFSETS = VERSION_CODE_ABI_OFFSETS;
-module.exports.VERSION_CODE_ABI_STRIDE = VERSION_CODE_ABI_STRIDE;
 module.exports.applyCmakePath = applyCmakePath;
 module.exports.applyVersionCode = applyVersionCode;
 module.exports.applyReleaseSigning = applyReleaseSigning;
 module.exports.RELEASE_SIGNING_MARKER = RELEASE_SIGNING_MARKER;
-module.exports.versionCodeForAbi = versionCodeForAbi;
 module.exports.APP_WINDOW_CHROME_ITEMS = APP_WINDOW_CHROME_ITEMS;
 module.exports.APP_WINDOW_CHROME_API27_ITEMS = APP_WINDOW_CHROME_API27_ITEMS;
 module.exports.APP_WINDOW_CHROME_API29_ITEMS = APP_WINDOW_CHROME_API29_ITEMS;
