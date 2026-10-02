@@ -45,6 +45,10 @@ async function main() {
   }
   assert.equal(new Set(hashes).size, channels.length, "channel changes must mint an isolated native runtime");
   const env = { EXPO_UPDATES_CHANNEL: channels[3], ORDO_BUILD_BRANCH: "main" };
+  run("node", [resolve(root, "node_modules/expo/bin/cli"), "prebuild", "--clean", "--platform", "android", "--no-install"], { ...env, ORDO_ENABLE_CCACHE: "1" });
+  const gradle = readFileSync(resolve(mobile, "android/app/build.gradle"), "utf8");
+  assert.match(gradle, /ordoCcacheLaunchers/);
+  assert.match(gradle, /-DCMAKE_C_COMPILER_LAUNCHER=ccache/);
   const baseline = fingerprint(env).hash;
   const packagePath = resolve(mobile, "package.json");
   const original = readFileSync(packagePath, "utf8");

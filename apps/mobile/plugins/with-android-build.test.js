@@ -24,6 +24,7 @@ const {
   SECURITY_CRYPTO,
   SHARE_RECEIVER_DEFAULT_ALIAS,
   SHARE_RECEIVER_SAVE_ALIAS,
+  applyCcacheLaunchers,
   applyCmakePath,
   applyReleaseSigning,
   applySecurityCrypto,
@@ -56,6 +57,21 @@ test("points the app CMake at a jni CMakeLists that can override autolinked flag
   const patched = applyCmakePath(gradle);
   assert.match(patched, /path "src\/main\/jni\/CMakeLists\.txt"/);
   assert.equal(applyCmakePath(patched), patched);
+});
+
+test("CI ccache launchers land inside defaultConfig and stay idempotent", () => {
+  const gradle = [
+    'android {',
+    '    defaultConfig {',
+    '        applicationId "com.axolet.ordo"',
+    '    }',
+    '}',
+  ].join('\n');
+  const patched = applyCcacheLaunchers(gradle);
+  assert.match(patched, /-DCMAKE_C_COMPILER_LAUNCHER=ccache/);
+  assert.match(patched, /-DCMAKE_CXX_COMPILER_LAUNCHER=ccache/);
+  assert.ok(patched.indexOf('defaultConfig {') < patched.indexOf('ordoCcacheLaunchers'));
+  assert.equal(applyCcacheLaunchers(patched), patched);
 });
 
 test("suppresses dollar-in-identifier on autolinked codegen targets", () => {

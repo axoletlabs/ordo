@@ -704,6 +704,25 @@ function applyCmakePath(code) {
   return code.replace(/android\s*\{/, `android {\n${CMAKE_EXTERNAL_BUILD}`);
 }
 
+// CI wraps clang with ccache so the C++ layer survives fresh checkouts and
+// prebuilds. Local builds never set the env and need no ccache install.
+const CCACHE_LAUNCHERS_MARKER = 'ordoCcacheLaunchers';
+
+const CCACHE_LAUNCHERS_BLOCK = [
+  '        // ' + CCACHE_LAUNCHERS_MARKER,
+  '        externalNativeBuild {',
+  '            cmake {',
+  '                arguments "-DCMAKE_C_COMPILER_LAUNCHER=ccache", "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache"',
+  '            }',
+  '        }',
+].join('\n');
+
+function applyCcacheLaunchers(code) {
+  if (code.includes(CCACHE_LAUNCHERS_MARKER)) return code;
+  if (!/defaultConfig\s*\{/.test(code)) return code;
+  return code.replace(/defaultConfig\s*\{/, `defaultConfig {\n${CCACHE_LAUNCHERS_BLOCK}`);
+}
+
 /**
  * Every APK of one build — universal and all ABI splits — shares the workflow
  * run number as its versionCode. Android treats an equal-code install as a
@@ -1070,6 +1089,9 @@ const withAndroidBuild = (config) => {
 
     code = applyHermesFlags(code);
     code = applyCmakePath(code);
+    if (process.env.ORDO_ENABLE_CCACHE === '1') {
+      code = applyCcacheLaunchers(code);
+    }
     code = applySecurityCrypto(code);
     code = applyReleaseSigning(code);
 
@@ -1084,6 +1106,7 @@ module.exports = withAndroidBuild;
 module.exports.APP_JNI_CMAKE = APP_JNI_CMAKE;
 module.exports.ABI_VERSION_BLOCK_MARKER = ABI_VERSION_BLOCK_MARKER;
 module.exports.applyCmakePath = applyCmakePath;
+module.exports.applyCcacheLaunchers = applyCcacheLaunchers;
 module.exports.applyVersionCode = applyVersionCode;
 module.exports.applyReleaseSigning = applyReleaseSigning;
 module.exports.RELEASE_SIGNING_MARKER = RELEASE_SIGNING_MARKER;

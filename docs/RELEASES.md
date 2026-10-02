@@ -65,6 +65,11 @@ SDK 57 requires `--environment` on every OTA publication: production uses the
 same channel. EAS build profiles use local version sources; the GitHub/Gradle
 pipeline is the canonical release APK builder and signing authority.
 
+The C++ layer dominates APK build time and would recompile from scratch on
+every fresh checkout, so CI wraps clang with ccache (`ORDO_ENABLE_CCACHE`) and
+carries `~/.ccache` across runs. Fresh runners get new compiler timestamps, so
+the compiler is verified by content. Kotlin/Java reuse Gradle's build cache.
+
 Every APK of a build — the universal package and all four ABI splits — shares
 one `versionCode`: the CI run number. Android treats an equal-code install as a
 replace, so switching splits of the same build is a reinstall, and any later
