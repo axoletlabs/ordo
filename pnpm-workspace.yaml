@@ -35,14 +35,6 @@ overrides:
   brace-expansion@5: 5.0.12
   deepmerge-ts: 8.0.1
 
-# GHSA-86w9-cpqp-85rv (node-forge PKCS#1 v1.5 verification) ships only through
-# @expo/cli's code-signing tooling at build time; no patched release exists on
-# npm yet (needs >=1.4.1, latest is 1.4.0). Drop this once 1.4.1 is published
-# and reachable via overrides.
-auditConfig:
-  ignoreGhsas:
-    - GHSA-86w9-cpqp-85rv
-
 # Only these packages may run install/postinstall scripts. Do not pass
 # --config.dangerouslyAllowAllBuilds=true; add a package here instead.
 allowBuilds:
