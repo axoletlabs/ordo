@@ -115,6 +115,7 @@ export function ReaderControlsSheet({
           )}
         </View>
         <Toggle
+          accessibilityLabel="Reader AMOLED black"
           value={preferences.amoled && effectiveDark}
           onValueChange={(amoled) => onUpdate({ amoled })}
           disabled={!effectiveDark}
@@ -127,13 +128,13 @@ export function ReaderControlsSheet({
 
 const styles = StyleSheet.create({
   body: {},
-  group: { marginBottom: spacing[10] },
-  groupControl: { marginTop: spacing[4] },
+  group: { marginBottom: spacing[24] },
+  groupControl: { marginTop: spacing[8] },
   amoledRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[12],
-    minHeight: 44,
+    minHeight: 48,
   },
   amoledCopy: { flex: 1, minWidth: 0 },
 });

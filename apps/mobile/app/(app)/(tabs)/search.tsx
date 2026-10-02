@@ -6,8 +6,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Keyboard, Pressable, StyleSheet, TextInput, View } from "react-native";
 import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
-import { Ionicons } from "@expo/vector-icons";
-import { Header } from "../../../src/components/ui/Header";
+import { MaterialIcon as Ionicons } from "../../../src/components/ui/MaterialIcon";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Spinner } from "../../../src/components/ui/Spinner";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
@@ -71,14 +71,15 @@ const SEARCH_FIELD_TAIL_PAD = 118;
 const SearchField = React.memo(function SearchField({
   routeQuery,
   onQueryChange,
+  onClose,
 }: {
   routeQuery: string;
   onQueryChange: (query: string) => void;
+  onClose: () => void;
 }) {
   const { palette } = useTheme();
   const inputRef = useRef<TextInput>(null);
   const [input, setInput] = useState(routeQuery);
-  const [focused, setFocused] = useState(false);
   const focusedRef = useRef(false);
   const queryFrame = useRef<ReturnType<typeof requestAnimationFrame> | null>(null);
 
@@ -91,7 +92,9 @@ const SearchField = React.memo(function SearchField({
 
   useFocusEffect(
     useCallback(() => {
-      return registerSearchFieldFocus(() => inputRef.current?.focus());
+      const unregister = registerSearchFieldFocus(() => inputRef.current?.focus());
+      const timer = setTimeout(() => inputRef.current?.focus(), 250);
+      return () => { clearTimeout(timer); unregister(); inputRef.current?.blur(); };
     }, []),
   );
 
@@ -118,20 +121,20 @@ const SearchField = React.memo(function SearchField({
     haptics.light();
     inputRef.current?.blur();
     Keyboard.dismiss();
+    onClose();
   };
 
   return (
     <Input
+      variant="search"
       ref={inputRef}
       value={input}
       onChangeText={commit}
       onFocus={() => {
         focusedRef.current = true;
-        setFocused(true);
       }}
       onBlur={() => {
         focusedRef.current = false;
-        setFocused(false);
       }}
       placeholder="Search bookmarks…"
       autoFocus={false}
@@ -145,23 +148,14 @@ const SearchField = React.memo(function SearchField({
       overlayRightAccessory
       overlayPaddingRight={SEARCH_FIELD_TAIL_PAD}
       icon={
-        focused ? (
+        (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Close search"
-            hitSlop={6}
+            style={{ width: 32, minHeight: 48, alignItems: "center", justifyContent: "center" }}
             onPress={closeSearch}
           >
-            <Ionicons name="chevron-back" size={18} color={palette.text} />
-          </Pressable>
-        ) : (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Search bookmarks"
-            hitSlop={6}
-            onPress={() => inputRef.current?.focus()}
-          >
-            <Ionicons name="search-outline" size={18} color={palette.textTertiary} />
+            <Ionicons name="arrow-back" size={24} color={palette.onSurface} />
           </Pressable>
         )
       }
@@ -170,14 +164,14 @@ const SearchField = React.memo(function SearchField({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Clear search"
-            hitSlop={8}
+            style={{ width: 40, minHeight: 48, alignItems: "center", justifyContent: "center" }}
             onPress={() => {
               haptics.light();
               commit("");
               inputRef.current?.focus();
             }}
           >
-            <Ionicons name="close-circle" size={18} color={palette.textFaint} />
+            <Ionicons name="close" size={24} color={palette.onSurfaceVariant} />
           </Pressable>
         ) : null
       }
@@ -188,6 +182,7 @@ const SearchField = React.memo(function SearchField({
 export default function SearchScreen() {
   const { palette } = useTheme();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const queryClient = useQueryClient();
   const params = useLocalSearchParams<{ query?: string; bookmark?: string }>();
   const { hasDetailPane } = useResponsiveLayout();
@@ -436,7 +431,7 @@ export default function SearchScreen() {
     <EmptyState
       icon="search-outline"
       title="Search your library"
-      message="Type the start of a title, site, or URL. Every word is required first; looser matches follow. Article text after five letters."
+      message="Find a saved title, website, or article. Use filters to narrow your library."
     />
   ) : search.error && items.length === 0 ? (
     <EmptyState
@@ -490,42 +485,32 @@ export default function SearchScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.background }}>
-      {selection.active ? (
-        <SelectionHeader
-          count={selection.count}
-          selectableCount={selectableKeys.length}
-          onCancel={selection.exit}
-          onToggleSelectAll={() => {
-            if (selection.count === selectableKeys.length) selection.replace([]);
-            else selection.replace(selectableKeys);
-          }}
-          maxWidth={hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth}
-        />
-      ) : (
-        <Header
-          title="Search"
-          large
-          maxWidth={hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth}
-        />
-      )}
       <ExtractionProgressLine maxWidth={hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth} />
       <ScreenContent
         maxWidth={hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth}
         style={styles.content}
       >
-        <View style={styles.searchWrap}>
+        <View style={[styles.searchWrap, { paddingTop: insets.top + spacing[8] }]}>
           <View style={styles.searchRow}>
             <View style={styles.searchFieldWrap}>
+              {selection.active ? <SelectionHeader embedded count={selection.count} selectableCount={selectableKeys.length}
+                onCancel={selection.exit} onToggleSelectAll={() => {
+                  if (selection.count === selectableKeys.length) selection.replace([]);
+                  else selection.replace(selectableKeys);
+                }} /> : null}
+              <View style={{ display: selection.active ? "none" : "flex" }}>
               <SearchField
                 routeQuery={routeQuery}
                 onQueryChange={setLiveQuery}
+                onClose={() => router.navigate("/")}
               />
-              {resultMeta || (search.isFetching && browsing && !trimmed) ? (
+              </View>
+              {!selection.active && (resultMeta || (search.isFetching && browsing && !trimmed)) ? (
                 <View
                   pointerEvents="none"
                   style={[
                     styles.fieldOverlay,
-                    { right: trimmed ? spacing[12] + 18 + spacing[8] : spacing[12] },
+                    { right: trimmed ? spacing[16] + 40 + spacing[8] : spacing[16] },
                   ]}
                 >
                   {resultMeta ? (
@@ -538,7 +523,7 @@ export default function SearchScreen() {
                 </View>
               ) : null}
             </View>
-            <View ref={filterRef} collapsable={false}>
+            <View ref={filterRef} collapsable={false} style={{ display: selection.active ? "none" : "flex" }}>
               <PressableScale
                 accessibilityRole="button"
                 accessibilityLabel="Search filters"
@@ -551,7 +536,7 @@ export default function SearchScreen() {
                   styles.filterBtn,
                   {
                     borderColor: filtersOn || filterOpen ? palette.accent : palette.border,
-                    backgroundColor: palette.background,
+                    backgroundColor: filtersOn ? palette.secondaryContainer : palette.surfaceContainerHigh,
                   },
                 ]}
               >
@@ -743,7 +728,7 @@ export default function SearchScreen() {
 
 const styles = StyleSheet.create({
   content: { flex: 1, width: "100%" },
-  searchWrap: { width: "100%", paddingBottom: spacing[6] },
+  searchWrap: { width: "100%", paddingBottom: spacing[16] },
   searchRow: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
   searchFieldWrap: { flex: 1, minWidth: 0 },
   searchField: { flex: 1, minWidth: 0 },
@@ -755,12 +740,12 @@ const styles = StyleSheet.create({
   },
   resultLabel: { flexShrink: 1, maxWidth: 92 },
   filterBtn: {
-    width: 46,
-    height: 46,
+    width: 56,
+    height: 56,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderRadius: radius.sm,
+    borderWidth: 0,
+    borderRadius: radius.full,
   },
   filterDot: {
     position: "absolute",
@@ -780,7 +765,7 @@ const styles = StyleSheet.create({
   emptyList: { flexGrow: 1, alignItems: "center", justifyContent: "center", minHeight: 280 },
   singlePane: { flex: 1, width: "100%" },
   splitPane: { flex: 1, width: "100%", flexDirection: "row", gap: spacing[16], paddingBottom: spacing[8] },
-  listPane: { width: 380, flexShrink: 0 },
+  listPane: { width: "40%", minWidth: 320, flexShrink: 0 },
   readerPane: {
     flex: 1,
     minWidth: 0,

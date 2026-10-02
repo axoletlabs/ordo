@@ -2,7 +2,7 @@
  * Register screen. Respects server registration status (info.registrationEnabled).
  */
 import React, { useCallback, useRef, useState } from "react";
-import { BackHandler, Linking, StyleSheet, View, type TextInput } from "react-native";
+import { BackHandler, Linking, Platform, StyleSheet, View, type TextInput } from "react-native";
 import { Link, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { AuthShell } from "../../src/components/auth/AuthShell";
 import { Input } from "../../src/components/ui/Input";
@@ -59,6 +59,7 @@ export default function RegisterScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      if (Platform.OS !== "android") return;
       const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
         router.replace("/(auth)/login");
         return true;

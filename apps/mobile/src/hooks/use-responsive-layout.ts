@@ -1,8 +1,8 @@
 import { Platform, useWindowDimensions } from "react-native";
 
 const TABLET_SHORTEST_SIDE = 600;
-const WIDE_BREAKPOINT = 768;
-const DETAIL_PANE_BREAKPOINT = 960;
+const WIDE_BREAKPOINT = 600;
+const DETAIL_PANE_BREAKPOINT = 840;
 
 /** Reactive layout traits shared by native rotation and web resizing. */
 export function useResponsiveLayout() {
@@ -22,6 +22,6 @@ export function useResponsiveLayout() {
     isWide,
     isDesktop,
     hasDetailPane: width >= DETAIL_PANE_BREAKPOINT,
-    useSideNavigation: isLandscape || (Platform.OS === "web" && isWide),
+    useSideNavigation: false,
   };
 }

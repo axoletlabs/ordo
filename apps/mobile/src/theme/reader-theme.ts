@@ -11,6 +11,7 @@ import { resolvePalette, type Palette, type SystemColorScheme } from "./theme";
 
 /** Sepia: aged-paper surfaces with deep umber ink and a terracotta accent. */
 const sepia: Palette = {
+  ...resolvePalette("light", false, "light", "#8B6500"),
   mode: "light",
   amoled: false,
   background: "#F2E8D5",
@@ -18,23 +19,14 @@ const sepia: Palette = {
   surfaceSecondary: "#E9DEC6",
   surfaceElevated: "#FAF4E6",
   text: "#43351F",
+  onSurface: "#43351F",
+  onSurfaceVariant: "#57452B",
   textSecondary: "#57452B",
-  textTertiary: "#7C6A4E",
-  textFaint: "#A69474",
+  textTertiary: "#57452B",
+  textFaint: "#57452B",
   border: "rgba(67,53,31,0.12)",
   borderStrong: "rgba(67,53,31,0.20)",
   outline: "rgba(67,53,31,0.28)",
-  accent: "#C0653F",
-  onAccent: "#FFFFFF",
-  accentSoft: "rgba(192,101,63,0.14)",
-  coral: "#C0653F",
-  green: "#6C8F3A",
-  blue: "#4F7DA6",
-  mustard: "#C7952E",
-  success: "#6C8F3A",
-  warning: "#C7952E",
-  danger: "#B84A35",
-  dangerSoft: "rgba(184,74,53,0.12)",
   overlay: "rgba(58,46,30,0.5)",
 };
 
@@ -43,7 +35,13 @@ export function resolveReaderPalette(
   theme: ReaderTheme,
   amoled: boolean,
   systemColorScheme: SystemColorScheme,
+  appearance?: { seed: string; expressive: boolean; contrast: 0 | 0.5 | 1 },
 ): Palette {
-  if (theme === "sepia") return sepia;
-  return resolvePalette(theme, amoled, systemColorScheme);
+  if (theme === "sepia") {
+    const generated = resolvePalette("light", false, "light", "#8B6500", appearance?.expressive, appearance?.contrast);
+    return { ...generated, background: sepia.background, surface: sepia.surface, onSurface: sepia.onSurface,
+      onSurfaceVariant: sepia.onSurfaceVariant, text: sepia.text, textSecondary: sepia.textSecondary,
+      textTertiary: sepia.textTertiary, textFaint: sepia.textFaint };
+  }
+  return resolvePalette(theme, amoled, systemColorScheme, appearance?.seed, appearance?.expressive, appearance?.contrast);
 }

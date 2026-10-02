@@ -1,90 +1,65 @@
-/**
- * Pressable with a snappy scale-down on press. Release eases back quickly so
- * navigation can start on the same tap without waiting on the spring.
- */
-import React, { useCallback } from "react";
-import {
-  Pressable,
-  type GestureResponderEvent,
-  type PressableProps,
-  type StyleProp,
-  type ViewStyle,
-} from "react-native";
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  cancelAnimation,
-  withSpring,
-  withTiming,
-  interpolate,
-} from "react-native-reanimated";
-import { springs } from "../../theme/tokens";
+/** Shared Material state layer and interruptible Expressive shape morph. */
+import React, { useEffect, useState } from "react";
+import { Pressable, StyleSheet, View, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import { useTheme } from "../../theme/ThemeProvider";
+import { useMaterialMotion } from "../../theme/material-motion";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
-export type PressableScaleProps = Omit<PressableProps, "onPressIn" | "onPressOut"> & {
-  /** Max press depth (0–1). Default 0.97. */
+export type PressableScaleProps = Omit<PressableProps, "style"> & {
   scaleTo?: number;
-  /** Dim opacity while pressed. Default false — scale is enough feedback. */
   dim?: boolean;
-  onPressIn?: (e: GestureResponderEvent) => void;
-  onPressOut?: (e: GestureResponderEvent) => void;
   style?: StyleProp<ViewStyle>;
+  /** Explicit shape mapping prevents arbitrary components from morphing. */
+  shape?: { rest: number; pressed: number };
+  stateLayerColor?: string;
 };
-
 export function PressableScale({
-  scaleTo = 0.97,
-  dim = false,
-  onPressIn,
-  onPressOut,
-  disabled,
-  style,
-  children,
-  ...rest
+  scaleTo = 1, dim = false, style, children, disabled, onPressIn, onPressOut,
+  onHoverIn, onHoverOut, onFocus, onBlur, shape, stateLayerColor, ...rest
 }: PressableScaleProps) {
-  const pressed = useSharedValue(0);
+  const { palette } = useTheme();
+  const motion = useMaterialMotion();
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [down, setDown] = useState(false);
+  const progress = useSharedValue(0);
+  const layer = useSharedValue(0);
+  const flat = StyleSheet.flatten(style);
+  const restCorner = shape?.rest ?? (typeof flat?.borderRadius === "number" ? flat.borderRadius : 0);
+  const pressedCorner = shape?.pressed ?? restCorner;
 
-  React.useEffect(
-    () => () => {
-      cancelAnimation(pressed);
-    },
-    [pressed],
-  );
-
-  const handleIn = useCallback(
-    (e: GestureResponderEvent) => {
-      if (disabled) return;
-      pressed.value = withSpring(1, springs.snappy);
-      onPressIn?.(e);
-    },
-    [disabled, onPressIn, pressed],
-  );
-
-  const handleOut = useCallback(
-    (e: GestureResponderEvent) => {
-      pressed.value = withTiming(0, { duration: 80 });
-      onPressOut?.(e);
-    },
-    [onPressOut, pressed],
-  );
-
-  const animatedStyle = useAnimatedStyle(() => {
-    const s = interpolate(pressed.value, [0, 1], [1, scaleTo]);
-    return {
-      transform: [{ scale: s }],
-      opacity: dim ? interpolate(pressed.value, [0, 1], [1, 0.7]) : 1,
-    };
-  });
-
+  useEffect(() => {
+    progress.value = motion.reducedMotion ? (down ? 1 : 0) : withSpring(down ? 1 : 0, motion.fast);
+    layer.value = withTiming(disabled ? 0 : down || focused ? 0.12 : hovered ? 0.08 : 0, { duration: motion.reducedMotion ? 0 : 150 });
+  }, [down, hovered, focused, disabled, progress, layer, motion.fast, motion.reducedMotion]);
+  const feedback = useAnimatedStyle(() => ({
+    ...(shape ? { borderRadius: restCorner + (pressedCorner - restCorner) * Math.max(0, Math.min(1, progress.value)) } : {}),
+    transform: [{ scale: motion.reducedMotion ? 1 : 1 + (scaleTo - 1) * progress.value }],
+    opacity: dim ? 1 - Math.max(0, Math.min(1, progress.value)) * 0.12 : flat?.opacity ?? 1,
+  }));
+  const layerStyle = useAnimatedStyle(() => ({ opacity: layer.value }));
   return (
     <AnimatedPressable
-      onPressIn={handleIn}
-      onPressOut={handleOut}
-      disabled={disabled}
-      style={[style as StyleProp<ViewStyle>, animatedStyle]}
       {...rest}
+      aria-checked={rest.accessibilityState?.checked}
+      aria-selected={rest.accessibilityState?.selected}
+      aria-expanded={rest.accessibilityState?.expanded}
+      aria-busy={rest.accessibilityState?.busy}
+      aria-disabled={disabled || rest.accessibilityState?.disabled}
+      disabled={disabled}
+      onPressIn={(event) => { setDown(true); onPressIn?.(event); }}
+      onPressOut={(event) => { setDown(false); onPressOut?.(event); }}
+      onHoverIn={(event) => { setHovered(true); onHoverIn?.(event); }}
+      onHoverOut={(event) => { setHovered(false); onHoverOut?.(event); }}
+      onFocus={(event) => { setFocused(true); onFocus?.(event); }}
+      onBlur={(event) => { setFocused(false); setDown(false); onBlur?.(event); }}
+      style={[style, { position: flat?.position ?? "relative" }, focused && !disabled ? { outlineColor: palette.primary, outlineWidth: 3, outlineOffset: 2 } : null, feedback]}
     >
-      {children}
+      <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderRadius: restCorner, overflow: "hidden" }]}>
+        <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: stateLayerColor ?? palette.onSurface }, layerStyle]} />
+      </View>
+      {typeof children === "function" ? children({ pressed: down }) : children}
     </AnimatedPressable>
   );
 }

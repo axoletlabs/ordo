@@ -1,8 +1,9 @@
 import React from "react";
-import { Keyboard, Pressable, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Keyboard, StyleSheet, View } from "react-native";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { Text } from "../ui/Text";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
+import { PressableScale } from "../ui/PressableScale";
 import { haptics } from "../../lib/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
@@ -50,16 +51,15 @@ export function SettingsSelect<T extends string>({
   return (
     <>
       <View ref={anchorRef} collapsable={false} style={styles.anchor}>
-        <Pressable
+        <PressableScale
           accessibilityRole="button"
           accessibilityLabel={`${title}, ${selected?.label ?? value}`}
           accessibilityState={{ expanded: open }}
           onPress={show}
           hitSlop={{ top: 4, bottom: 4 }}
-          style={({ pressed }) => [
+          style={[
             styles.trigger,
-            { borderColor: palette.borderStrong, backgroundColor: palette.surfaceSecondary },
-            pressed && styles.pressed,
+            { borderColor: palette.outlineVariant, backgroundColor: palette.surfaceContainerHigh },
           ]}
         >
           {selected?.icon ? (
@@ -79,7 +79,7 @@ export function SettingsSelect<T extends string>({
             color={palette.textTertiary}
             style={[styles.triggerChevron, iconGlyphStyle(14)]}
           />
-        </Pressable>
+        </PressableScale>
       </View>
 
       <ContextMenu visible={open} onDismiss={() => setOpen(false)} anchor={anchor} width={300}>
@@ -107,7 +107,7 @@ const styles = StyleSheet.create({
   },
   trigger: {
     width: layout.settingsControlWidth,
-    minHeight: 36,
+    minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "stretch",

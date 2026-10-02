@@ -122,7 +122,7 @@ export function SettingsSectionLabel({
   return (
     <Text
       variant="label"
-      color="secondary"
+      color="accent"
       style={[styles.sectionLabel, compact && styles.compactSectionLabel]}
     >
       {children}
@@ -169,11 +169,11 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "center",
     padding: layout.rowInset,
-    gap: spacing[12],
+    gap: spacing[24],
   },
   sectionLabel: {
-    paddingTop: spacing[16],
-    paddingBottom: spacing[6],
+    paddingTop: spacing[24],
+    paddingBottom: spacing[8],
     paddingHorizontal: layout.rowInset,
   },
   compactSectionLabel: { paddingTop: spacing[0] },

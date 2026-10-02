@@ -6,7 +6,7 @@
  */
 import React from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
@@ -56,6 +56,8 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
     gap: spacing[8],
     alignSelf: "stretch",
+    minHeight: 48,
+    paddingVertical: spacing[12],
   },
   box: {
     width: FOOTNOTE_LINE_BOX,

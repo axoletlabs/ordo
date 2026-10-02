@@ -1,5 +1,5 @@
 /** Data: export the library to a file, import from Ordo/HTML/CSV exports. */
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "../../../src/components/ui/MaterialIcon";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useMutation } from "@tanstack/react-query";

@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { useTheme } from "../../theme/ThemeProvider";
 import { ROW_ICON_FRAME, ROW_ICON_GLYPH } from "../../theme/alignment";
 import { radius } from "../../theme/tokens";

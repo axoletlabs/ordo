@@ -6,12 +6,15 @@ import { StyleSheet, View } from "react-native";
 import { Skeleton } from "./Skeleton";
 import { ROW_ICON_FRAME } from "../../theme/alignment";
 import { layout, spacing } from "../../theme/tokens";
+import { useTheme } from "../../theme/ThemeProvider";
+import { radius } from "../../theme/tokens";
 
 export function BookmarkListSkeleton({ count = 6 }: { count?: number }) {
+  const { palette, expressive } = useTheme();
   return (
     <View style={styles.wrap}>
       {Array.from({ length: count }).map((_, i) => (
-        <View key={i} style={styles.row}>
+        <View key={i} style={[styles.row, { backgroundColor: expressive ? palette.surfaceContainerLow : "transparent", borderRadius: expressive ? radius.xl : 0, marginBottom: expressive ? spacing[4] : 0 }]}>
           <Skeleton width={ROW_ICON_FRAME} height={ROW_ICON_FRAME} radiusKey="sm" />
           <View style={styles.copy}>
             <Skeleton width="72%" height={15} />
@@ -28,10 +31,11 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing[12],
+    gap: spacing[16],
     paddingLeft: layout.rowInset,
     paddingRight: layout.rowInset,
-    paddingVertical: spacing[8],
+    paddingVertical: spacing[16],
+    minHeight: 72,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderColor: "transparent",
   },

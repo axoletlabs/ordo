@@ -22,7 +22,7 @@ import {
 import { useColorScheme, useWindowDimensions } from "react-native";
 import { useSceneColumnInsets } from "../../hooks/use-scene-column-insets";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { StatusBar, setStatusBarStyle } from "expo-status-bar";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -153,9 +153,12 @@ const EMPTY_HIGHLIGHTS: HighlightDto[] = [];
 export function ReaderPane(props: ReaderPaneProps) {
   const systemScheme = useColorScheme();
   const { preferences, setPreferences } = useReaderPreferences();
+  const seed = useSettingsStore((s) => s.themeSeed);
+  const expressive = useSettingsStore((s) => s.expressive);
+  const contrast = useSettingsStore((s) => s.themeContrast);
   const readerPalette = useMemo(
-    () => resolveReaderPalette(preferences.theme, preferences.amoled, systemScheme),
-    [preferences.theme, preferences.amoled, systemScheme],
+    () => resolveReaderPalette(preferences.theme, preferences.amoled, systemScheme, { seed, expressive, contrast }),
+    [preferences.theme, preferences.amoled, systemScheme, seed, expressive, contrast],
   );
 
   // The reader surface owns the status bar (full-screen stack usage only);
@@ -871,7 +874,7 @@ function ReaderPaneInner({
 
   /* ---------------------------------- render ---------------------------------- */
 
-  const fallbackArticleWidth = Math.min(sceneWidth, layout.maxContentWidth) - spacing[16] * 2;
+  const fallbackArticleWidth = Math.min(sceneWidth, layout.maxReaderWidth) - spacing[16] * 2;
 
   const rightActions = bookmark ? (
     <HeaderActions>
@@ -957,7 +960,7 @@ function ReaderPaneInner({
         onBack={!embedded ? handleBack : undefined}
         safeTop={!embedded}
         alignTo={embedded ? "parent" : "scene"}
-        maxWidth={layout.maxContentWidth}
+        maxWidth={layout.maxReaderWidth}
         divider
         right={rightActions}
         onTitleLongPress={bookmark ? handleCopyLink : undefined}
@@ -970,7 +973,7 @@ function ReaderPaneInner({
             styles.progressTrack,
             {
               backgroundColor: scrollbarColors(palette).track,
-              maxWidth: layout.maxContentWidth,
+              maxWidth: layout.maxReaderWidth,
               alignSelf: "center",
             },
           ]}
@@ -1160,7 +1163,7 @@ function ReaderPaneInner({
       )}
 
       {contentsShortcutVisible && actionPanel === null && !controlsOpen && !showWebsiteView && !selectionMenu ? (
-        <FABLayer maxWidth={layout.maxContentWidth}>
+        <FABLayer maxWidth={layout.maxReaderWidth}>
           <FAB
             icon="list-outline"
             accessibilityLabel="Table of contents"

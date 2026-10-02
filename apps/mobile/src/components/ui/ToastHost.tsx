@@ -6,7 +6,7 @@
  */
 import React, { useCallback, useEffect, useRef } from "react";
 import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -26,12 +26,14 @@ import { FOOTNOTE_LINE_BOX } from "../../theme/type-metrics";
 import { useSceneColumnInsets } from "../../hooks/use-scene-column-insets";
 import { radius, springs, spacing } from "../../theme/tokens";
 import { useFloatingDockMetrics } from "../../hooks/use-floating-dock-metrics";
+import { useMaterialMotion } from "../../theme/material-motion";
 
 const SWIPE_THRESHOLD = 80;
 const SWIPE_VELOCITY = 600;
 
 function ToastItem({ toast }: { toast: Toast }) {
   const { palette, shadows } = useTheme();
+  const motion = useMaterialMotion();
   const dismiss = useToastStore((s) => s.dismiss);
   const dismissed = useRef(false);
 
@@ -47,10 +49,10 @@ function ToastItem({ toast }: { toast: Toast }) {
 
   // Enter, then schedule an auto-dismiss.
   useEffect(() => {
-    enter.value = withSpring(1, springs.gentle);
+    enter.value = motion.reducedMotion ? 1 : withSpring(1, motion.spatial);
     const timer = setTimeout(animateOut, toast.duration);
     return () => clearTimeout(timer);
-  }, [toast.id, toast.duration, enter, animateOut]);
+  }, [toast.id, toast.duration, enter, animateOut, motion.spatial, motion.reducedMotion]);
 
   const pan = Gesture.Pan()
     .enabled(toast.swipeable)
@@ -78,8 +80,7 @@ function ToastItem({ toast }: { toast: Toast }) {
       : toast.tone === "danger"
         ? "alert-circle"
         : "information-circle";
-  const iconColor =
-    toast.tone === "success" ? palette.green : toast.tone === "danger" ? palette.coral : palette.blue;
+  const iconColor = palette.inversePrimary;
 
   return (
     <GestureDetector gesture={pan}>
@@ -87,12 +88,8 @@ function ToastItem({ toast }: { toast: Toast }) {
         style={[
           styles.toast,
           {
-            backgroundColor:
-              toast.tone === "danger"
-                ? palette.dangerSoft
-                : palette.surfaceElevated,
-            borderColor: palette.borderStrong,
-            borderRadius: radius.xl,
+            backgroundColor: palette.inverseSurface,
+            borderRadius: radius.xs,
           },
           shadows.level2,
           animStyle,
@@ -101,7 +98,7 @@ function ToastItem({ toast }: { toast: Toast }) {
         <View style={styles.icon}>
           <Ionicons name={iconName as any} size={16} color={iconColor} style={iconGlyphStyle(16)} />
         </View>
-        <Text variant="footnote" style={[styles.message, { color: palette.text }]}>
+        <Text variant="bodyMedium" style={[styles.message, { color: palette.inverseOnSurface }]}>
           {toast.message}
         </Text>
         {toast.action ? (
@@ -114,7 +111,7 @@ function ToastItem({ toast }: { toast: Toast }) {
             }}
             style={styles.actionHit}
           >
-            <Text variant="label" color="accent" numberOfLines={1} style={styles.action}>
+            <Text variant="labelLarge" numberOfLines={1} style={[styles.action, { color: palette.inversePrimary }]}>
               {toast.action.label}
             </Text>
           </PressableScale>
@@ -160,7 +157,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[14],
     paddingVertical: spacing[12],
     marginTop: spacing[8],
-    borderWidth: StyleSheet.hairlineWidth,
+    minHeight: 48,
   },
   icon: {
     width: 16,
@@ -173,7 +170,7 @@ const styles = StyleSheet.create({
   // The icon slot is 16px; putting Download / Restart in it clipped them.
   actionHit: {
     flexShrink: 0,
-    minHeight: FOOTNOTE_LINE_BOX,
+    minHeight: 48,
     justifyContent: "center",
   },
   action: { includeFontPadding: false },

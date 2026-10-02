@@ -100,13 +100,11 @@ function failureMessage(status: number | null): string {
 
 function MarkChip({ mark }: { mark: ChangelogMark }) {
   const { palette } = useTheme();
-  // Old-design soft tints, matching the OtpInput status rgba pattern.
-  const blueSoft = palette.mode === "dark" ? "rgba(125,174,163,0.16)" : "rgba(79,125,166,0.12)";
   const tone =
     mark === "installed"
-      ? { bg: palette.accentSoft, fg: palette.accent }
+      ? { bg: palette.primaryContainer, fg: palette.onPrimaryContainer }
       : mark === "available"
-        ? { bg: blueSoft, fg: palette.blue }
+        ? { bg: palette.secondaryContainer, fg: palette.onSecondaryContainer }
         : { bg: palette.surfaceSecondary, fg: palette.textSecondary };
 
   return (
@@ -496,7 +494,7 @@ function VersionPill({
   onPress: () => void;
 }) {
   const { palette } = useTheme();
-  const fg = selected ? palette.accent : palette.text;
+  const fg = selected ? palette.onPrimaryContainer : palette.onSurface;
   return (
     <PressableScale
       accessibilityRole="button"
@@ -511,7 +509,7 @@ function VersionPill({
         },
       ]}
     >
-      {marked ? <View style={[styles.dot, { backgroundColor: palette.accent }]} /> : null}
+      {marked ? <View style={[styles.dot, { backgroundColor: selected ? fg : palette.primary }]} /> : null}
       <Text variant="label" style={{ color: fg }}>
         {label}
       </Text>

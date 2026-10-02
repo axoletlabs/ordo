@@ -3,7 +3,7 @@
  */
 import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "../../../src/components/ui/MaterialIcon";
 import { useColumnPadding } from "../../../src/hooks/use-scene-column-insets";
 import {
   SettingsContent,
@@ -28,7 +28,7 @@ import { errorMessage } from "../../../src/lib/error-message";
 import { haptics } from "../../../src/lib/haptics";
 import { toast } from "../../../src/components/ui/toast-store";
 import { ROW_ICON_FRAME, ROW_ICON_GLYPH } from "../../../src/theme/alignment";
-import { layout, spacing } from "../../../src/theme/tokens";
+import { layout, radius, spacing } from "../../../src/theme/tokens";
 import type { SessionDto } from "@ordo/shared";
 
 function deviceLabel(s: SessionDto): string {
@@ -71,7 +71,7 @@ function deviceIcon(s: SessionDto): keyof typeof Ionicons.glyphMap {
 }
 
 export default function SessionsScreen() {
-  const { palette } = useTheme();
+  const { palette, expressive } = useTheme();
   const column = useColumnPadding(layout.maxSettingsWidth);
   const { data: sessions, isLoading, error, refetch } = useSessions();
   const revoke = useRevokeSession();
@@ -125,9 +125,11 @@ export default function SessionsScreen() {
           ]}
           ListHeaderComponent={<SettingsSectionLabel compact>Signed-in devices</SettingsSectionLabel>}
           renderItem={({ item }) => (
-            <View style={[styles.row, { borderBottomColor: palette.border }]}>
+            <View style={[styles.row, { borderBottomColor: palette.outlineVariant, borderBottomWidth: expressive ? 0 : StyleSheet.hairlineWidth,
+              borderRadius: expressive ? radius.xl : 0, marginBottom: expressive ? spacing[4] : 0,
+              backgroundColor: expressive ? palette.surfaceContainerLow : "transparent" }]}>
               <RowIconWell>
-                <Ionicons name={deviceIcon(item)} size={ROW_ICON_GLYPH} color={palette.accent} />
+                <Ionicons name={deviceIcon(item)} size={ROW_ICON_GLYPH} color={palette.onSecondaryContainer} />
               </RowIconWell>
               <View style={styles.body}>
                 <View style={styles.titleRow}>
@@ -208,7 +210,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing[12],
     paddingHorizontal: layout.rowInset,
-    paddingVertical: spacing[8],
+    paddingVertical: spacing[12],
+    minHeight: 72,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   body: { flex: 1, minWidth: 0 },
@@ -216,6 +219,6 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
   title: { flexShrink: 1 },
   meta: { marginTop: spacing[2] },
-  revoke: { flexShrink: 0, paddingVertical: spacing[8], paddingLeft: spacing[8] },
+  revoke: { flexShrink: 0, minHeight: 48, justifyContent: "center", paddingHorizontal: spacing[12], borderRadius: radius.full },
   emptyState: { width: "100%", maxWidth: layout.maxSettingsWidth },
 });

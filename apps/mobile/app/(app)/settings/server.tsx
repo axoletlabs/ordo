@@ -2,7 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { StyleSheet, View, type TextInput } from "react-native";
 import { useMutation } from "@tanstack/react-query";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "../../../src/components/ui/MaterialIcon";
 import { APP_NAME, ChangeServerNameSchema, type ServerInfoDto } from "@ordo/shared";
 import {
   SettingsGroup,

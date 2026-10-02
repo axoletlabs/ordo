@@ -10,9 +10,11 @@ import {
   shouldDetachInactiveTabScenes,
 } from "../lib/navigation-animation-policy";
 import { useSettingsStore, type NavigationAnimation } from "../store/settings";
+import { useReducedMotion } from "react-native-reanimated";
 
 export function useAppliedNavigationAnimation() {
   const preference = useSettingsStore((s) => s.navigationAnimation);
+  const reducedMotion = useReducedMotion();
   const segments = useSegments();
   const tabNavigatorFocused = isTabNavigatorFocused(segments);
   const [held, setHeld] = React.useState(preference);
@@ -21,7 +23,7 @@ export function useAppliedNavigationAnimation() {
     setHeld(preference);
   }
 
-  return resolveAppliedNavigationAnimation(preference, tabNavigatorFocused, held);
+  return reducedMotion ? "instant" : resolveAppliedNavigationAnimation(preference, tabNavigatorFocused, held);
 }
 
 /** One frame of detach so frozen tab scenes remount without leftover shift. */

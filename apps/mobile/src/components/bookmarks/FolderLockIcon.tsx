@@ -1,6 +1,6 @@
 /** Lock / session-unlock glyph for folder lists and pickers. Unlocked folders show a key. */
 import type { ComponentProps } from "react";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { useTheme } from "../../theme/ThemeProvider";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { ROW_STATUS_ICON_SIZE } from "./RowStatusIcon";

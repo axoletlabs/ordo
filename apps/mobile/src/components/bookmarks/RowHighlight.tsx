@@ -6,15 +6,17 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { radius, spacing } from "../../theme/tokens";
+import { useTheme } from "../../theme/ThemeProvider";
 
 export function RowHighlight({ color }: { color: string }) {
+  const { expressive } = useTheme();
   if (color === "transparent") return null;
   return (
     <View
       pointerEvents="none"
       style={[
         styles.fill,
-        { backgroundColor: color },
+        { backgroundColor: color, borderRadius: expressive ? radius.xl : 0 },
       ]}
     />
   );
@@ -23,10 +25,10 @@ export function RowHighlight({ color }: { color: string }) {
 const styles = StyleSheet.create({
   fill: {
     position: "absolute",
-    left: spacing[8],
-    right: spacing[8],
-    top: spacing[4],
-    bottom: spacing[4],
+    left: spacing[0],
+    right: spacing[0],
+    top: spacing[0],
+    bottom: spacing[0],
     borderRadius: radius.sm,
   },
 });

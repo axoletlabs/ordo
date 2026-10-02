@@ -15,12 +15,12 @@ export function RowIconWell({
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
-  const { palette } = useTheme();
+  const { palette, expressive } = useTheme();
   return (
     <View
       style={[
         styles.well,
-        { backgroundColor: palette.surfaceSecondary, borderColor: palette.border },
+        { backgroundColor: palette.secondaryContainer, borderRadius: expressive ? radius.md : radius.full },
         style,
       ]}
     >
@@ -34,7 +34,6 @@ const styles = StyleSheet.create({
     width: ROW_ICON_FRAME,
     height: ROW_ICON_FRAME,
     borderRadius: radius.sm,
-    borderWidth: StyleSheet.hairlineWidth,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,

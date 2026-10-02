@@ -13,7 +13,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { AppIcon } from "./PinIcon";
 import { Spinner } from "./Spinner";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -22,12 +22,12 @@ import { OverlayPortal } from "./overlay-host";
 import { ThemedScrollView } from "./ThemedScrollView";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
+import { useOverlayFocus } from "../../hooks/use-overlay-focus";
 import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
 import { haptics } from "../../lib/haptics";
 import {
   CONTEXT_MENU_WIDTH,
   isMenuAnchorRect,
-  menuHoverFill,
   placeMenu,
   type MenuAnchorRect,
   type MenuPlacement,
@@ -63,16 +63,17 @@ export function ContextMenu({
    */
   sessionKey?: string | number | null;
 }) {
-  const { palette, shadows } = useTheme();
+  const { palette, shadows, expressive } = useTheme();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const hideAndDismiss = React.useCallback(() => {
     if (backdrop) dismissKeyboard();
     onDismiss();
   }, [backdrop, onDismiss]);
-  const { rendered, progress } = useOverlayPresence(visible, hideAndDismiss, {
+  const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, {
     dismissKeyboard: backdrop,
   });
+  const menuRef = useOverlayFocus(visible && rendered && backdrop, hideAndDismiss, "menu");
   const [contentHeight, setContentHeight] = React.useState(0);
   const contentHeightRef = React.useRef(0);
   const lastPlacement = React.useRef<MenuPlacement | null>(null);
@@ -105,6 +106,7 @@ export function ContextMenu({
   wasVisibleRef.current = visible;
 
   const menuWidth = Math.min(width, Math.max(160, windowWidth - spacing[32]));
+  const menuPadding = expressive ? spacing[4] : spacing[8];
   const layoutKey = [
     windowWidth,
     windowHeight,
@@ -128,7 +130,7 @@ export function ContextMenu({
       lastPlacement.current = placeMenu({
         anchor,
         menuWidth,
-        menuHeight: measuredHeight || estimatedHeight,
+        menuHeight: (measuredHeight || estimatedHeight) + menuPadding * 2,
         windowWidth,
         windowHeight,
         insets,
@@ -146,7 +148,7 @@ export function ContextMenu({
 
   const menuStyle = useAnimatedStyle(() => ({
     opacity: awaitingMeasure ? 0 : progress.value,
-    transform: [{ translateY: interpolate(progress.value, [0, 1], [fromY, 0]) }],
+    transform: [{ translateY: interpolate(spatial.value, [0, 1], [fromY * 2, 0]) }],
   }));
 
   if (!rendered || !placed) return null;
@@ -169,7 +171,10 @@ export function ContextMenu({
           />
         ) : null}
         <Animated.View
+          ref={menuRef}
           accessibilityRole="menu"
+          aria-hidden={!visible}
+          {...(Platform.OS === "web" ? { tabIndex: -1, dataSet: { materialOverlay: visible ? "true" : "false" } } : {})}
           pointerEvents="auto"
           style={[
             styles.menu,
@@ -178,9 +183,10 @@ export function ContextMenu({
               top: placed.top,
               width: menuWidth,
               maxHeight: placed.maxHeight,
-              backgroundColor: palette.mode === "dark" ? palette.surfaceSecondary : palette.surfaceElevated,
-              borderColor: palette.outline,
-              ...shadows.level3,
+              backgroundColor: palette.surfaceContainerHigh,
+              borderRadius: expressive ? radius.xl : radius.xs,
+              paddingVertical: menuPadding,
+              ...shadows.level2,
             },
             menuStyle,
           ]}
@@ -188,7 +194,7 @@ export function ContextMenu({
           <ThemedScrollView
             bounces={false}
             keyboardShouldPersistTaps="handled"
-            style={{ maxHeight: placed.maxHeight }}
+            style={{ maxHeight: Math.max(48, placed.maxHeight - menuPadding * 2) }}
           >
             <View
               collapsable={false}
@@ -246,10 +252,11 @@ export function ContextMenuItem({
   busy?: boolean;
   onPress: () => void;
 }) {
-  const { palette } = useTheme();
+  const { palette, expressive } = useTheme();
   const [hovered, setHovered] = React.useState(false);
-  const color = tone === "danger" ? palette.danger : palette.text;
-  const highlight = menuHoverFill(palette.mode, true);
+  const [focused, setFocused] = React.useState(false);
+  const color = tone === "danger" ? palette.error : selected ? palette.onSecondaryContainer : palette.onSurface;
+  const highlight = `${palette.onSurface}14`;
   const inactive = disabled || busy;
 
   return (
@@ -257,9 +264,13 @@ export function ContextMenuItem({
       accessibilityRole="menuitem"
       accessibilityLabel={detail ? `${label}, ${detail}` : label}
       accessibilityState={{ disabled: !!inactive, selected: !!selected, busy: !!busy }}
+      aria-disabled={!!inactive}
+      aria-busy={!!busy}
       disabled={inactive}
       onHoverIn={() => setHovered(true)}
       onHoverOut={() => setHovered(false)}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
       onPress={() => {
         if (inactive) return;
         haptics.light();
@@ -269,13 +280,16 @@ export function ContextMenuItem({
         styles.item,
         Platform.OS === "web" ? styles.itemWeb : null,
         inactive && styles.itemDisabled,
-        (pressed || hovered) && !inactive ? { backgroundColor: highlight } : null,
+        selected ? { backgroundColor: palette.secondaryContainer } : null,
+        expressive ? { borderRadius: selected ? radius.md : radius.sm, marginHorizontal: spacing[4] } : null,
+        (pressed || hovered || focused) && !inactive ? { backgroundColor: selected ? palette.secondaryContainer : highlight } : null,
+        focused ? { outlineColor: palette.primary, outlineWidth: 2, outlineOffset: -2 } : null,
       ]}
     >
       <View style={styles.iconSlot}>
-        {icon ? <AppIcon name={icon} size={16} color={color} /> : null}
+        {icon ? <AppIcon name={icon} size={24} color={color} /> : null}
       </View>
-      <Text variant="body" style={[styles.itemLabel, { color }]} numberOfLines={1}>
+      <Text variant="bodyLarge" style={[styles.itemLabel, { color }]} numberOfLines={2}>
         {label}
       </Text>
       {busy ? (
@@ -304,7 +318,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     overflow: "hidden",
     padding: layout.overlayMenuPadding,
-    borderWidth: 1,
+    borderWidth: 0,
     borderRadius: radius["3xl"],
   },
   note: {
@@ -312,11 +326,11 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[8],
   },
   item: {
-    minHeight: 40,
+    minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing[10],
-    paddingHorizontal: spacing[12],
+    gap: spacing[12],
+    paddingHorizontal: spacing[16],
     paddingVertical: spacing[8],
   },
   itemSide: { alignSelf: "center", flexShrink: 0 },
@@ -327,8 +341,8 @@ const styles = StyleSheet.create({
   } as ViewStyle,
   itemDisabled: { opacity: 0.45 },
   iconSlot: {
-    width: 16,
-    height: 16,
+    width: 24,
+    height: 24,
     alignItems: "center",
     justifyContent: "center",
   },

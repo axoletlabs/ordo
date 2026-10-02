@@ -10,31 +10,19 @@
  */
 import React, { useEffect, useRef, useState } from "react";
 import { StyleSheet, View, type TextInput } from "react-native";
-import Animated, {
-  interpolateColor,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
 import { FloatingPanel } from "../ui/FloatingPanel";
-import { Spinner } from "../ui/Spinner";
 import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
 import { Button } from "../ui/Button";
-import { PressableScale } from "../ui/PressableScale";
-import { useTheme } from "../../theme/ThemeProvider";
-import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
-import { haptics } from "../../lib/haptics";
+import { spacing } from "../../theme/tokens";
 import { useSettingsStore } from "../../store/settings";
 import { useServerProbe } from "../../hooks/use-server-probe";
 import { probeServer } from "../../lib/server-probe";
 import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
 
 /**
- * Change button that sits greyed-out (neutral fill + muted label) until the
- * probe reports the server is up, then cross-fades to the coral accent fill.
- * Opt-in via the `animateReadyColor` prop (auth flow only).
+ * Material Change action stays disabled until the server probe is ready.
  */
 function AnimatedChangeButton({
   ready,
@@ -47,66 +35,7 @@ function AnimatedChangeButton({
   disabled: boolean;
   onPress: () => void;
 }) {
-  const { palette } = useTheme();
-  const progress = useSharedValue(0);
-
-  useEffect(() => {
-    progress.value = withTiming(ready ? 1 : 0, { duration: 420 });
-  }, [ready, progress]);
-
-  const bg = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(progress.value, [0, 1], [
-      palette.surfaceSecondary,
-      palette.accent,
-    ]),
-    borderColor: interpolateColor(progress.value, [0, 1], [
-      palette.surfaceSecondary,
-      palette.accent,
-    ]),
-  }));
-
-  const fg = useAnimatedStyle(() => ({
-    color: interpolateColor(progress.value, [0, 1], [
-      palette.textTertiary,
-      palette.onAccent,
-    ]),
-  }));
-
-  return (
-    <PressableScale
-      disabled={disabled || loading}
-      onPress={() => {
-        haptics.light();
-        onPress();
-      }}
-      style={styles.changeBtn}
-    >
-      <Animated.View
-        style={[StyleSheet.absoluteFill, { borderRadius: radius.sm, borderWidth: 1 }, bg]}
-        pointerEvents="none"
-      />
-      <View style={styles.changeContent}>
-        {loading ? (
-          <Spinner size="sm" color={palette.onAccent} />
-        ) : (
-          <Animated.Text
-            style={[
-              {
-                fontFamily: resolveFont("display", "600"),
-                fontSize: fontSize.lg,
-                fontWeight: "600",
-                letterSpacing: 1.4,
-                textTransform: "uppercase",
-              },
-              fg,
-            ]}
-          >
-            Change
-          </Animated.Text>
-        )}
-      </View>
-    </PressableScale>
-  );
+  return <Button label="Change" block disabled={disabled || !ready} loading={loading} onPress={onPress} />;
 }
 
 export interface ServerConnectSheetProps {
@@ -224,7 +153,7 @@ export function ServerConnectSheet({
             </View>
           ) : (
             <Button
-              label={confirming ? "" : "Change"}
+              label="Change"
               variant="primary"
               onPress={onChange}
               disabled={!submitEnabled}
@@ -247,15 +176,4 @@ const styles = StyleSheet.create({
     marginTop: spacing[12],
   },
   action: { flex: 1, minWidth: 0 },
-  changeBtn: {
-    height: 42,
-    borderRadius: radius.sm,
-    overflow: "hidden",
-    paddingHorizontal: spacing[16],
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    alignSelf: "stretch",
-  },
-  changeContent: { flexDirection: "row", alignItems: "center", justifyContent: "center" },
 });

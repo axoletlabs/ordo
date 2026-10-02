@@ -6,8 +6,9 @@ import React from "react";
 import { Platform, Pressable, StyleSheet, View } from "react-native";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { ListPressable } from "../ui/ListPressable";
+import { PressableScale } from "../ui/PressableScale";
 import { Spinner } from "../ui/Spinner";
 import { Text } from "../ui/Text";
 import { TagChip } from "../tags/TagChip";
@@ -15,7 +16,7 @@ import { RowHighlight } from "./RowHighlight";
 import { SelectionMark } from "./SelectionMark";
 import { SelectionDragHandle, useSelectionDragRow } from "./SelectionDrag";
 import { RowStatusSlot, ROW_STATUS_ICON_SIZE } from "./RowStatusIcon";
-import { useTheme } from "../../theme/ThemeProvider";
+import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 import { domainFromUrl, relativeTime } from "../../lib/format";
 import { bookmarkReminderStatus, formatReminderWhen } from "../../lib/bookmark-reminders";
 import { bookmarkIsArticle, bookmarkOpensAsWebsite } from "../../lib/bookmark-reader";
@@ -34,13 +35,13 @@ import type { BookmarkDto } from "@ordo/shared";
 /** Compact tags shown inline on a row before overflow. */
 const MAX_ROW_TAGS = 3;
 
-function highlightTitle(title: string, query?: string, fuzzy = false) {
+function highlightTitle(title: string, query?: string, fuzzy = false, onSelectedSurface = false) {
   const span = query ? firstSearchHighlight(title, query, fuzzy) : null;
   if (!span) return title;
   return (
     <>
       {title.slice(0, span.start)}
-      <Text variant="headline" color="accent">
+      <Text variant="headline" color={onSelectedSurface ? "primary" : "accent"}>
         {title.slice(span.start, span.end)}
       </Text>
       {title.slice(span.end)}
@@ -80,7 +81,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   searchQuery,
   searchFuzzy,
 }: BookmarkRowProps) {
-  const { palette } = useTheme();
+  const { palette: basePalette, expressive } = useTheme();
   const router = useRouter();
   const rowRef = React.useRef<View>(null);
   const dragRow = useSelectionDragRow(bookmarkKey(bookmark.id));
@@ -108,6 +109,11 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   const menuKey = bookmarkKey(bookmark.id);
   const highlightedFromMenu = useMenuHighlightStore((s) => s.key === menuKey);
   const highlighted = highlightedProp ?? highlightedFromMenu;
+  const palette = React.useMemo(() => selected || highlighted ? {
+    ...basePalette, onSurface: basePalette.onSecondaryContainer, onSurfaceVariant: basePalette.onSecondaryContainer,
+    text: basePalette.onSecondaryContainer, textSecondary: basePalette.onSecondaryContainer,
+    textTertiary: basePalette.onSecondaryContainer, textFaint: basePalette.onSecondaryContainer,
+  } : basePalette, [basePalette, selected, highlighted]);
   const titleColor = bookmark.isRead ? "secondary" : "primary";
   const domain = bookmark.domain || domainFromUrl(bookmark.url);
   const title = bookmark.title || domain;
@@ -185,19 +191,22 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   };
 
   const rowFill = selected || highlighted
-    ? palette.surfaceSecondary
+    ? palette.secondaryContainer
     : hovered
       ? menuHoverFill(palette.mode)
       : "transparent";
 
   return (
+    <ThemeOverrideProvider palette={palette}>
     <View
       ref={setRowRef}
       collapsable={false}
       onLayout={() => dragRow.bind(rowRef.current)}
       style={[
         styles.wrap,
-        { borderBottomColor: palette.border },
+        { borderBottomColor: palette.outlineVariant, borderBottomWidth: expressive ? 0 : StyleSheet.hairlineWidth,
+          backgroundColor: expressive ? palette.surfaceContainerLow : "transparent",
+          borderRadius: expressive ? radius.xl : 0, marginBottom: expressive ? spacing[4] : 0 },
       ]}
       {...(Platform.OS === "web"
         ? {
@@ -259,7 +268,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
           <View
             style={[
               styles.faviconFrame,
-              { backgroundColor: palette.surfaceSecondary, borderColor: palette.border },
+               { backgroundColor: selected || highlighted ? palette.secondaryContainer : palette.surfaceContainerHighest, borderColor: "transparent", borderRadius: expressive ? radius.md : radius.full },
             ]}
           >
             {failedFavicon === faviconUrl ? (
@@ -335,8 +344,8 @@ export const BookmarkRow = React.memo(function BookmarkRow({
         <View style={styles.content}>
           <View style={styles.titleRow}>
             <View style={styles.titleWrap}>
-              <Text variant="headline" color={titleColor} numberOfLines={1}>
-                {highlightTitle(title, searchQuery, searchFuzzy)}
+              <Text variant="headline" color={titleColor} numberOfLines={2}>
+                {highlightTitle(title, searchQuery, searchFuzzy, !!selected || !!highlighted)}
               </Text>
             </View>
             {bookmark.remindAt != null ? (
@@ -432,10 +441,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
             <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.domain}>
               {domain}
             </Text>
-            <View style={[styles.separator, { backgroundColor: palette.textFaint }]} />
-            <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
-              {createdLabel}
-            </Text>
+            {!showReadingTime ? <Text variant="bodySmall" color="tertiary" numberOfLines={1}>{createdLabel}</Text> : null}
             {reminderLabel ? (
               <>
                 <View style={[styles.separator, { backgroundColor: palette.textFaint }]} />
@@ -452,14 +458,19 @@ export const BookmarkRow = React.memo(function BookmarkRow({
               <>
                 <View style={[styles.separator, { backgroundColor: palette.textFaint }]} />
                 <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
-                  {bookmark.readingTimeMinutes} min read
+                  {bookmark.readingTimeMinutes} min
                 </Text>
               </>
             ) : null}
           </View>
         </View>
       </ListPressable>
+      {onMore && !selectionMode ? <PressableScale accessibilityRole="button" accessibilityLabel={`More actions for ${title}`}
+        onPress={(event) => openMore(event)} style={{ width: 48, height: 48, borderRadius: radius.full, alignItems: "center", justifyContent: "center" }}>
+        <Ionicons name="ellipsis-vertical" size={24} color={palette.onSurfaceVariant} />
+      </PressableScale> : onMore ? <View style={{ width: 48, height: 48 }} /> : null}
     </View>
+    </ThemeOverrideProvider>
   );
 });
 
@@ -480,7 +491,7 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: spacing[8],
+     paddingVertical: spacing[16],
     paddingLeft: layout.rowInset,
     ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
   },
@@ -488,8 +499,8 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: spacing[8],
-    paddingLeft: spacing[12],
+     paddingVertical: spacing[16],
+     paddingLeft: spacing[16],
     paddingRight: spacing[8],
   },
   faviconFrame: {
@@ -510,7 +521,7 @@ const styles = StyleSheet.create({
     borderRadius: radius.full,
   },
   content: { flex: 1, minWidth: 0 },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[6] },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
   titleWrap: { flexShrink: 1, minWidth: 0 },
   description: { marginTop: spacing[4] },
   tagRow: {
@@ -518,7 +529,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexWrap: "wrap",
     gap: spacing[4],
-    marginTop: spacing[6],
+    marginTop: spacing[8],
   },
   overflow: { marginLeft: spacing[2] },
   suggestionRow: {
@@ -527,8 +538,8 @@ const styles = StyleSheet.create({
     gap: spacing[4],
     marginTop: spacing[4],
   },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[6], marginTop: spacing[6] },
-  domain: { flexShrink: 1 },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[8], marginTop: spacing[8] },
+  domain: { flex: 1, minWidth: 0 },
   separator: { width: 3, height: 3, borderRadius: radius.full },
   openExternal: {
     ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),

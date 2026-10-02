@@ -3,16 +3,16 @@ import { test } from "node:test";
 import { systemChromeForPalette } from "./system-chrome.ts";
 
 test("dark chrome keeps a dark status bar so reload cannot restore the light splash", () => {
-  assert.deepEqual(systemChromeForPalette({ mode: "dark", background: "#1A1A16" }), {
-    backgroundColor: "#1A1A16",
+  assert.deepEqual(systemChromeForPalette({ mode: "dark", background: "#0C1515" }), {
+    backgroundColor: "#0C1515",
     barStyle: "light-content",
     translucent: true,
   });
 });
 
-test("light chrome matches the parchment splash", () => {
-  assert.deepEqual(systemChromeForPalette({ mode: "light", background: "#EFE7D2" }), {
-    backgroundColor: "#EFE7D2",
+test("light chrome matches the generated Material launch surface", () => {
+  assert.deepEqual(systemChromeForPalette({ mode: "light", background: "#F1FBFB" }), {
+    backgroundColor: "#F1FBFB",
     barStyle: "dark-content",
     translucent: true,
   });

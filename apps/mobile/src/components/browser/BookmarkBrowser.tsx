@@ -139,7 +139,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     }, [url, forceWebsiteDark, beginLoad]);
 
     useEffect(() => {
-      if (!active) return;
+      if (!active || Platform.OS !== "android") return;
       const sub = BackHandler.addEventListener("hardwareBackPress", () => {
         if (!canGoBackRef.current) return false;
         webRef.current?.goBack();

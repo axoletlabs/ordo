@@ -56,6 +56,8 @@ type DragSession = {
   baseline: ReadonlySet<string>;
   applied: Set<string>;
   pointerY: number;
+  originY: number;
+  moved: boolean;
   lastIndex: number;
 };
 
@@ -308,6 +310,10 @@ export function useSelectionDrag({
   const tick = useCallback(() => {
     const session = dragRef.current;
     if (!session) return;
+    if (!session.moved) {
+      rafRef.current = requestAnimationFrame(tick);
+      return;
+    }
     const { top, bottom } = viewportRef.current;
     const step = autoScrollStep(session.pointerY, top, bottom);
     if (step !== 0 && maxOffsetRef.current > 0) {
@@ -363,6 +369,8 @@ export function useSelectionDrag({
         baseline,
         applied: new Set(baseline),
         pointerY: y,
+        originY: y,
+        moved: false,
         lastIndex: anchorIndex,
       };
       // Stop the list from also scrolling or arming pull-to-refresh under this finger.
@@ -371,7 +379,12 @@ export function useSelectionDrag({
         remeasureAll(() => {
           if (!dragRef.current) return;
           replaceFrames.current = false;
-          applyAt(y);
+          const session = dragRef.current;
+          const next = keysAfterDrag(keysRef.current, session.baseline, session.anchorKey, anchorIndex, session.mode);
+          if (next && !sameSelection(session.applied, next)) {
+            session.applied = new Set(next);
+            onChangeRef.current(next as SelectionKey[]);
+          }
           stopLoop();
           rafRef.current = requestAnimationFrame(tick);
         });
@@ -381,7 +394,8 @@ export function useSelectionDrag({
           const session = dragRef.current;
           if (!session) return;
           session.pointerY = event.clientY;
-          applyAt(event.clientY);
+          session.moved ||= Math.abs(event.clientY - session.originY) > MARK_ACTIVATE_PX;
+          if (session.moved) applyAt(event.clientY);
         };
         const up = () => endDrag();
         window.addEventListener("pointermove", move);
@@ -402,7 +416,8 @@ export function useSelectionDrag({
       const session = dragRef.current;
       if (!session) return;
       session.pointerY = y;
-      applyAt(y);
+      session.moved ||= Math.abs(y - session.originY) > MARK_ACTIVATE_PX;
+      if (session.moved) applyAt(y);
     },
     [applyAt],
   );
@@ -442,7 +457,7 @@ export function useSelectionDrag({
       frame.bottom -= delta;
     }
     const session = dragRef.current;
-    if (session) applyAt(session.pointerY);
+    if (session?.moved) applyAt(session.pointerY);
   }, [applyAt]);
 
   const onContentSizeChange = useCallback((_width: number, height: number) => {

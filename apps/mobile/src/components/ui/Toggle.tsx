@@ -1,109 +1,42 @@
-/**
- * Animated toggle switch faithful to ordo: coral track when on, surface knob.
- */
-import React, { useCallback } from "react";
-import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import Animated, {
-  interpolateColor,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
+/** Material switch: 52×32 track, 16/24dp handle, selected checkmark. */
+import React, { useEffect } from "react";
+import { StyleSheet } from "react-native";
+import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import { MaterialIcon } from "./MaterialIcon";
 import { PressableScale } from "./PressableScale";
 import { useTheme } from "../../theme/ThemeProvider";
+import { useMaterialMotion } from "../../theme/material-motion";
 import { haptics } from "../../lib/haptics";
-import { springs } from "../../theme/tokens";
-
-const TRACK_W = 52;
-const TRACK_H = 30;
-const KNOB = 22;
-const PADDING = (TRACK_H - KNOB) / 2;
-const TRAVEL = TRACK_W - KNOB - PADDING * 2;
-
-export interface ToggleProps {
-  value: boolean;
-  onValueChange: (v: boolean) => void;
-  disabled?: boolean;
-}
-
-export function Toggle({ value, onValueChange, disabled }: ToggleProps) {
+export interface ToggleProps { value: boolean; onValueChange: (value: boolean) => void; disabled?: boolean; accessibilityLabel?: string }
+export function Toggle({ value, onValueChange, disabled, accessibilityLabel }: ToggleProps) {
   const { palette } = useTheme();
-  const pressed = useSharedValue(value ? 1 : 0);
-  const offFill = useSharedValue(palette.surfaceSecondary);
-  const onFill = useSharedValue(palette.accent);
-  const offBorder = useSharedValue(palette.borderStrong);
-  offFill.value = palette.surfaceSecondary;
-  onFill.value = palette.accent;
-  offBorder.value = palette.borderStrong;
-
-  React.useEffect(() => {
-    pressed.value = withSpring(value ? 1 : 0, springs.snappy);
-  }, [value, pressed]);
-
-  const onToggle = useCallback(() => {
-    if (disabled) return;
-    haptics.selection();
-    onValueChange(!value);
-  }, [disabled, onValueChange, value]);
-
-  const trackStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(pressed.value, [0, 1], [offFill.value, onFill.value]),
-    borderColor: interpolateColor(pressed.value, [0, 1], [offBorder.value, onFill.value]),
+  const motion = useMaterialMotion();
+  const position = useSharedValue(value ? 1 : 0);
+  const effect = useSharedValue(value ? 1 : 0);
+  useEffect(() => {
+    position.value = motion.reducedMotion ? +value : withSpring(+value, motion.fast);
+    effect.value = withTiming(+value, { duration: motion.reducedMotion ? 0 : 150 });
+  }, [value, motion.fast, motion.reducedMotion, position, effect]);
+  const track = useAnimatedStyle(() => ({
+    backgroundColor: interpolateColor(effect.value, [0, 1], [palette.surfaceContainerHighest, palette.primary]),
+    borderColor: interpolateColor(effect.value, [0, 1], [palette.outline, palette.primary]),
   }));
-
-  const knobStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: pressed.value * TRAVEL }],
+  const handle = useAnimatedStyle(() => ({
+    left: 6 + position.value * 20, width: 16 + effect.value * 8, height: 16 + effect.value * 8,
+    backgroundColor: interpolateColor(effect.value, [0, 1], [palette.outline, palette.onPrimary]),
   }));
-
-  return (
-    <PressableScale
-      scaleTo={0.92}
-      dim={false}
-      disabled={disabled}
-      onPress={onToggle}
-      accessibilityRole="switch"
-      accessibilityState={{ checked: value, disabled: !!disabled }}
-      hitSlop={6}
-    >
-      <Animated.View
-        style={[styles.track, { opacity: disabled ? 0.55 : 1 }, trackStyle]}
-        pointerEvents="none"
-      >
-        <View style={[styles.stateIcon, value ? styles.stateIconLeft : styles.stateIconRight]}>
-          <Ionicons
-            name={disabled ? "lock-closed" : value ? "checkmark" : "close"}
-            size={12}
-            color={value ? palette.onAccent : palette.textTertiary}
-          />
-        </View>
-        <Animated.View style={[styles.knob, { backgroundColor: palette.onAccent }, knobStyle]} />
+  return <PressableScale accessibilityRole="switch" accessibilityLabel={accessibilityLabel}
+    accessibilityState={{ checked: value, disabled: !!disabled }} disabled={disabled}
+    style={styles.target} onPress={() => { haptics.selection(); onValueChange(!value); }}>
+    <Animated.View pointerEvents="none" style={[styles.track, { opacity: disabled ? 0.38 : 1 }, track]}>
+      <Animated.View style={[styles.handle, handle]}>
+        {value ? <MaterialIcon name="checkmark" size={16} color={palette.onPrimaryContainer} /> : null}
       </Animated.View>
-    </PressableScale>
-  );
+    </Animated.View>
+  </PressableScale>;
 }
-
 const styles = StyleSheet.create({
-  track: {
-    width: TRACK_W,
-    height: TRACK_H,
-    borderRadius: TRACK_H / 2,
-    borderWidth: 1,
-    justifyContent: "center",
-  },
-  stateIcon: { position: "absolute", width: TRACK_W / 2, alignItems: "center" },
-  stateIconLeft: { left: 0 },
-  stateIconRight: { right: 0 },
-  knob: {
-    position: "absolute",
-    left: PADDING,
-    width: KNOB,
-    height: KNOB,
-    borderRadius: KNOB / 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 2,
-  },
+  target: { width: 56, minHeight: 48, alignItems: "center", justifyContent: "center", borderRadius: 28 },
+  track: { width: 52, height: 32, borderRadius: 16, borderWidth: 2, justifyContent: "center" },
+  handle: { position: "absolute", borderRadius: 12, alignItems: "center", justifyContent: "center" },
 });

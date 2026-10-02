@@ -3,17 +3,20 @@
  */
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { PressableScale } from "./PressableScale";
+import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
 import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { useColumnPadding, type ColumnAlign } from "../../hooks/use-scene-column-insets";
-import { layout, spacing } from "../../theme/tokens";
+import { layout, radius, spacing } from "../../theme/tokens";
 import { SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export interface FABProps {
   icon?: keyof typeof Ionicons.glyphMap;
+  label?: string;
   onPress: (anchor: MenuAnchorRect) => void;
   onLongPress?: (anchor: MenuAnchorRect) => void;
   accessibilityLabel?: string;
@@ -44,6 +47,7 @@ export function FABLayer({ children, maxWidth }: FABLayerProps) {
 
 export function FAB({
   icon = "add",
+  label,
   onPress,
   onLongPress,
   accessibilityLabel = "Create",
@@ -54,7 +58,8 @@ export function FAB({
   maxContentWidth = layout.maxLibraryWidth,
   alignTo = "scene",
 }: FABProps) {
-  const { palette, shadows } = useTheme();
+  const { palette, shadows, expressive } = useTheme();
+  const insets = useSafeAreaInsets();
   const column = useColumnPadding(maxContentWidth, alignTo);
   const anchorRef = React.useRef<View>(null);
   const right = rightOverride ?? column.right;
@@ -66,15 +71,16 @@ export function FAB({
     <View
       ref={anchorRef}
       collapsable={false}
-      style={[styles.fab, { backgroundColor: palette.accent, bottom, right }, shadows.level2]}
+      style={[styles.fab, { bottom: Math.max(bottom, insets.bottom + spacing[16]), right, borderRadius: expressive ? radius.xl : radius.lg }, shadows.level3]}
     >
       <PressableScale
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         accessibilityHint={accessibilityHint}
         testID={testID}
-        style={styles.fabHit}
-        scaleTo={0.9}
+        style={[styles.fabHit, { backgroundColor: palette.primaryContainer, borderRadius: expressive ? radius.xl : radius.lg, paddingHorizontal: label ? spacing[16] : 0 }]}
+        stateLayerColor={palette.onPrimaryContainer}
+        shape={{ rest: expressive ? radius.xl : radius.lg, pressed: expressive ? radius.md : radius.lg }}
         onPress={(event) => {
           haptics.light();
           emit(onPress, event);
@@ -82,7 +88,8 @@ export function FAB({
         onLongPress={onLongPress ? (event) => emit(onLongPress, event) : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
-        <Ionicons name={icon} size={24} color={palette.onAccent} />
+        <Ionicons name={icon} size={24} color={palette.onPrimaryContainer} />
+        {label ? <Text variant="labelLarge" style={{ color: palette.onPrimaryContainer }}>{label}</Text> : null}
       </PressableScale>
     </View>
   );
@@ -92,15 +99,16 @@ const styles = StyleSheet.create({
   layer: { flex: 1, width: "100%", alignSelf: "center" },
   fab: {
     position: "absolute",
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    minWidth: 56,
+    height: 56,
     alignItems: "center",
     justifyContent: "center",
   },
   fabHit: {
-    width: 48,
-    height: 48,
+    minWidth: 56,
+    height: 56,
+    flexDirection: "row",
+    gap: spacing[8],
     alignItems: "center",
     justifyContent: "center",
   },

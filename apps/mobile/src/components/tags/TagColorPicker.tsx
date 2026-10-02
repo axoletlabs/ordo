@@ -1,6 +1,8 @@
 /** Grid of curated tag colors (semantic keys from @ordo/shared). */
 import React from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { PressableScale } from "../ui/PressableScale";
+import { MaterialIcon } from "../ui/MaterialIcon";
 import { TAG_COLORS, type TagColor } from "@ordo/shared";
 import { haptics } from "../../lib/haptics";
 import { tagColorValue } from "../../lib/tag-colors";
@@ -14,14 +16,14 @@ export function TagColorPicker({
   value: TagColor;
   onChange: (color: TagColor) => void;
 }) {
-  const { palette } = useTheme();
+  const { palette, expressive } = useTheme();
 
   return (
     <View style={styles.grid}>
       {TAG_COLORS.map((color) => {
         const selected = color === value;
         return (
-          <Pressable
+          <PressableScale
             key={color}
             accessibilityRole="button"
             accessibilityLabel={color}
@@ -30,12 +32,12 @@ export function TagColorPicker({
               haptics.selection();
               onChange(color);
             }}
-            style={({ pressed }) => [
+            shape={{ rest: selected && expressive ? radius.md : 24, pressed: expressive ? radius.sm : 24 }}
+            style={[
               styles.swatch,
               {
-                borderColor: selected ? tagColorValue(color).dot : palette.border,
-                backgroundColor: selected ? tagColorValue(color).fill : palette.surfaceSecondary,
-                opacity: pressed ? 0.7 : 1,
+                borderColor: selected ? palette.primary : "transparent",
+                backgroundColor: palette.surfaceContainerHigh,
               },
             ]}
           >
@@ -44,11 +46,12 @@ export function TagColorPicker({
                 styles.dot,
                 {
                   backgroundColor: tagColorValue(color).dot,
-                  borderColor: selected ? "#FFFFFF" : "transparent",
+                  borderColor: "transparent",
                 },
               ]}
             />
-          </Pressable>
+            {selected ? <MaterialIcon name="checkmark" size={16} color={palette.onSurface} style={{ position: "absolute", bottom: 2, right: 2 }} /> : null}
+          </PressableScale>
         );
       })}
     </View>
@@ -56,10 +59,10 @@ export function TagColorPicker({
 }
 
 const styles = StyleSheet.create({
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing[10] },
+  grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing[8] },
   swatch: {
-    width: 40,
-    height: 40,
+    width: 48,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 2,

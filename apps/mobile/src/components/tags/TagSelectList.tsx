@@ -4,7 +4,7 @@
  */
 import React, { useMemo, useState } from "react";
 import { FlatList, Keyboard, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { type TagColor } from "@ordo/shared";
 import { Text } from "../ui/Text";
 import { Input } from "../ui/Input";

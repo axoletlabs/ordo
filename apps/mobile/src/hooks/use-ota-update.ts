@@ -113,12 +113,16 @@ export function useOtaUpdate(): UseOtaUpdate {
     await restartForUpdate();
   }, [enabled]);
 
+  // Web config can expose an unresolved fingerprint policy object despite
+  // expo-updates' string type. Only resolved strings are displayable metadata.
+  const runtime = currentlyRunning.runtimeVersion ?? Updates.runtimeVersion;
+  const channel = currentlyRunning.channel ?? Updates.channel;
   return {
     enabled,
     status,
     message,
-    channel: currentlyRunning.channel ?? Updates.channel ?? null,
-    runtimeVersion: currentlyRunning.runtimeVersion ?? Updates.runtimeVersion ?? null,
+    channel: typeof channel === "string" && channel.length > 0 ? channel : null,
+    runtimeVersion: typeof runtime === "string" && runtime.length > 0 ? runtime : null,
     isEmbeddedLaunch: currentlyRunning.isEmbeddedLaunch,
     runningUpdateId: currentlyRunning.updateId ?? null,
     runningUpdateCreatedAt: currentlyRunning.createdAt ?? null,

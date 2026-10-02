@@ -208,7 +208,7 @@ export default function FolderDetailScreen() {
     });
   };
 
-  const listContentPadding = selection.active ? selectionClearance : FAB_LIST_CLEARANCE;
+  const listContentPadding = selection.active ? selectionClearance : FAB_LIST_CLEARANCE + dockInset;
   const listPane = (
     <SelectionDragFrame drag={drag}>
     <ThemedFlashList

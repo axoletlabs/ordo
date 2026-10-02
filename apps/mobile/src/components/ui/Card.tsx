@@ -1,7 +1,4 @@
-/**
- * Surface card faithful to ordo-archive: surface fill, 1px line border, no
- * elevation. Shadows are reserved for floating elements.
- */
+/** Material outlined and elevated cards. */
 import React from "react";
 import { StyleSheet, View, type ViewProps } from "react-native";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -13,18 +10,18 @@ export interface CardProps extends ViewProps {
   elevated?: boolean;
 }
 
-export function Card({ pad = 14, radiusKey = "sm", elevated, style, children, ...rest }: CardProps) {
+export function Card({ pad = 16, radiusKey = "md", elevated, style, children, ...rest }: CardProps) {
   const { palette, shadows } = useTheme();
   return (
     <View
       style={[
         styles.card,
         {
-          backgroundColor: palette.surface,
-          borderColor: palette.border,
+          backgroundColor: elevated ? palette.surfaceContainerLow : palette.surface,
+          borderColor: palette.outlineVariant,
           borderRadius: radius[radiusKey],
           padding: spacing[pad],
-          ...(elevated ? shadows.level2 : {}),
+          ...(elevated ? shadows.level1 : {}),
         },
         style,
       ]}

@@ -4,7 +4,7 @@
  */
 import React, { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import type { BookmarkListSort } from "@ordo/shared";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
 import { Text } from "../ui/Text";

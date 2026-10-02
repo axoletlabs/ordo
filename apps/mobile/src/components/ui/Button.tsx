@@ -1,10 +1,4 @@
-/**
- * Button — spring press feedback, four variants faithful to ordo-archive:
- *  - primary:   coral fill, white label
- *  - secondary: transparent, 1px line border
- *  - ghost:     transparent fill
- *  - danger:    coral outline (coral border + coral label)
- */
+/** Material filled, tonal, elevated, outlined, text, and error actions. */
 import React from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { PressableScale } from "./PressableScale";
@@ -14,8 +8,8 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { radius, spacing } from "../../theme/tokens";
 import { haptics } from "../../lib/haptics";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
-export type ButtonSize = "md" | "lg";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "tonal" | "elevated";
+export type ButtonSize = "xs" | "sm" | "md" | "lg" | "xl";
 
 export interface ButtonProps {
   label: string;
@@ -42,25 +36,20 @@ export function Button({
   style,
   testID,
 }: ButtonProps) {
-  const { palette } = useTheme();
+  const { palette, expressive, shadows } = useTheme();
   const isDisabled = disabled || loading;
-  const height = size === "lg" ? 48 : 42;
+  const height = { xs: 32, sm: 40, md: 48, lg: 56, xl: 64 }[size];
 
-  const surface =
-    variant === "primary"
-      ? palette.accent
-      : variant === "secondary"
-        ? "transparent"
-        : variant === "ghost"
-          ? "transparent"
-          : "transparent"; // danger → outline
+  const surface = isDisabled ? `${palette.onSurface}1f` : variant === "primary" ? palette.primary
+    : variant === "tonal" ? palette.secondaryContainer : variant === "elevated" ? palette.surfaceContainerLow : "transparent";
 
   const fg =
-    variant === "primary"
-      ? palette.onAccent
+    isDisabled ? `${palette.onSurface}61` : variant === "primary"
+      ? palette.onPrimary
+      : variant === "tonal" ? palette.onSecondaryContainer
       : variant === "danger"
         ? palette.danger
-        : palette.text;
+        : variant === "secondary" ? palette.onSurfaceVariant : palette.primary;
 
   // Keep a 1px border on every variant so filled and outlined buttons share a box.
   const borderWidth = 1;
@@ -71,12 +60,17 @@ export function Button({
         ? "transparent"
         : variant === "danger"
           ? palette.danger
-          : palette.borderStrong;
+           : variant === "secondary" ? palette.outlineVariant : "transparent";
 
   return (
     <PressableScale
       testID={testID}
       disabled={isDisabled}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled: isDisabled, busy: loading }}
+      stateLayerColor={fg}
+      shape={{ rest: height / 2, pressed: expressive ? (height >= 56 ? radius.lg : height >= 48 ? radius.md : radius.sm) : height / 2 }}
       onPress={() => {
         haptics.light();
         onPress?.();
@@ -86,13 +80,14 @@ export function Button({
         {
           height,
           backgroundColor: surface,
-          borderRadius: radius.sm,
+           borderRadius: radius.full,
           borderWidth,
           borderColor,
-          opacity: disabled ? 0.45 : 1,
+           minHeight: 48,
           ...(block ? { width: "100%" as const } : {}),
-        },
-        style,
+         },
+         variant === "elevated" && !isDisabled ? shadows.level1 : null,
+         style,
       ]}
     >
       <View style={styles.content}>
@@ -101,7 +96,7 @@ export function Button({
         ) : (
           <>
             {icon ? <View style={styles.iconWrap}>{icon}</View> : null}
-            <Text variant="header" numberOfLines={1} style={[styles.label, { color: fg }]}>
+             <Text variant="labelLarge" numberOfLines={1} style={[styles.label, { color: fg }]}>
               {label}
             </Text>
           </>

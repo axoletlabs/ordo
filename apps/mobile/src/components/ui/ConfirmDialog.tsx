@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { type ButtonVariant } from "./Button";
 import { PanelHeader } from "./PanelHeader";
 import { FloatingPanel } from "./FloatingPanel";

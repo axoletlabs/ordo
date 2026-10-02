@@ -1,14 +1,15 @@
 /**
  * Present/dismiss animation for overlays rendered through OverlayHost.
  * Keeps the tree mounted through the close animation, and owns Android back.
- * Menus snap open so choosing a control is not waiting on a spring.
+ * Spatial springs and non-overshooting effects are kept separate.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { AppState, BackHandler } from "react-native";
-import { cancelAnimation, runOnJS, useSharedValue, withTiming } from "react-native-reanimated";
+import { AppState, BackHandler, Platform } from "react-native";
+import { cancelAnimation, runOnJS, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import { useMaterialMotion } from "../theme/material-motion";
 import { dismissKeyboard, keyboardIsOpen } from "./use-keyboard-visible";
 
-const CLOSE_MS = 90;
+const CLOSE_MS = 200;
 const CLOSE_FALLBACK_MS = CLOSE_MS + 70;
 
 export function useOverlayPresence(
@@ -17,8 +18,11 @@ export function useOverlayPresence(
   options?: { dismissKeyboard?: boolean },
 ) {
   const progress = useSharedValue(visible ? 1 : 0);
+  const spatial = useSharedValue(visible ? 1 : 0);
+  const motion = useMaterialMotion();
   const [rendered, setRendered] = useState(visible);
   const generation = useRef(0);
+  const wasVisible = useRef(false);
   const hideKeyboard = options?.dismissKeyboard !== false;
 
   const hide = useCallback((token: number) => {
@@ -28,24 +32,32 @@ export function useOverlayPresence(
 
   useLayoutEffect(() => {
     if (visible) {
-      generation.current += 1;
-      if (hideKeyboard) dismissKeyboard();
+      const opening = !wasVisible.current;
+      wasVisible.current = true;
       setRendered(true);
-      cancelAnimation(progress);
-      progress.value = 1;
+      if (opening) {
+        generation.current += 1;
+        if (hideKeyboard) dismissKeyboard();
+        cancelAnimation(progress);
+        cancelAnimation(spatial);
+        progress.value = withTiming(1, { duration: motion.reducedMotion ? 0 : 200 });
+        spatial.value = motion.reducedMotion ? 1 : withSpring(1, motion.spatial);
+      }
       return;
     }
+    wasVisible.current = false;
     if (!rendered) return;
     // Hide IME while the overlay tree is still mounted. Android leaves the
     // keyboard up if a focused TextInput is removed without a blur.
     if (hideKeyboard) dismissKeyboard();
     const token = generation.current;
-    progress.value = withTiming(0, { duration: CLOSE_MS }, (finished) => {
+    spatial.value = motion.reducedMotion ? 0 : withSpring(0, motion.spatial);
+    progress.value = withTiming(0, { duration: motion.reducedMotion ? 0 : CLOSE_MS }, (finished) => {
       if (finished) runOnJS(hide)(token);
     });
     const fallback = setTimeout(() => hide(token), CLOSE_FALLBACK_MS);
     return () => clearTimeout(fallback);
-  }, [hide, hideKeyboard, progress, rendered, visible]);
+  }, [hide, hideKeyboard, progress, spatial, rendered, visible, motion.spatial, motion.reducedMotion]);
 
   useEffect(() => {
     if (visible || !rendered) return;
@@ -57,7 +69,7 @@ export function useOverlayPresence(
   }, [hide, rendered, visible]);
 
   useEffect(() => {
-    if (!rendered || !visible) return;
+    if (!rendered || !visible || Platform.OS !== "android") return;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       if (keyboardIsOpen()) {
         dismissKeyboard();
@@ -69,5 +81,5 @@ export function useOverlayPresence(
     return () => sub.remove();
   }, [onDismiss, rendered, visible]);
 
-  return { rendered, progress };
+  return { rendered, progress, spatial };
 }

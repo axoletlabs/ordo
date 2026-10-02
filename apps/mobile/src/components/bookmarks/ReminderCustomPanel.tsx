@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { unixSeconds } from "@ordo/shared";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FloatingPanel } from "../ui/FloatingPanel";
@@ -238,16 +238,16 @@ function PadCell({
       style={({ pressed }) => [
         styles.padCell,
         {
-          backgroundColor: selected ? palette.accentSoft : "transparent",
+          backgroundColor: selected ? palette.secondaryContainer : "transparent",
           opacity: pressed ? 0.7 : 1,
         },
       ]}
     >
       <Text
         variant={mono ? "monoSmall" : "caption"}
-        color={selected ? "accent" : "secondary"}
+        color="secondary"
         align="center"
-        style={styles.cellLabel}
+        style={[styles.cellLabel, { color: selected ? palette.onSecondaryContainer : palette.onSurfaceVariant }]}
       >
         {label}
       </Text>
@@ -295,8 +295,8 @@ const styles = StyleSheet.create({
   },
   monthTitle: { flex: 1, minWidth: 0 },
   monthHit: {
-    width: 36,
-    height: 36,
+    width: 48,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -310,13 +310,13 @@ const styles = StyleSheet.create({
   days: { flexDirection: "row", flexWrap: "wrap" },
   dayCell: {
     width: "14.2857%",
-    height: 36,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
   },
   dayHit: {
-    width: 32,
-    height: 32,
+    width: 40,
+    height: 40,
     borderRadius: radius.full,
     alignItems: "center",
     justifyContent: "center",
@@ -337,7 +337,7 @@ const styles = StyleSheet.create({
   },
   padCell: {
     width: "25%",
-    height: 36,
+    height: 48,
     borderRadius: radius.sm,
     alignItems: "center",
     justifyContent: "center",

@@ -33,7 +33,8 @@ export function Banner({ message, visible, tone = "warning", icon }: BannerProps
       : withTiming(0, { duration: 220, easing: Easing.inOut(Easing.ease) });
   }, [visible, h]);
 
-  const bg = tone === "danger" ? palette.danger : palette.mustard;
+  const bg = tone === "danger" ? palette.errorContainer : palette.tertiaryContainer;
+  const fg = tone === "danger" ? palette.onErrorContainer : palette.onTertiaryContainer;
 
   const style = useAnimatedStyle(() => ({
     transform: [{ translateY: interpolate(h.value, [0, 1], [-60, 0]) }],
@@ -55,7 +56,7 @@ export function Banner({ message, visible, tone = "warning", icon }: BannerProps
     >
       <View style={[styles.inner, { backgroundColor: bg, borderRadius: radius.lg }]}>
         {icon}
-        <Text variant="footnote" style={{ color: "#1A1A16", flex: 1 }}>
+        <Text variant="bodyMedium" style={{ color: fg, flex: 1 }}>
           {message}
         </Text>
       </View>

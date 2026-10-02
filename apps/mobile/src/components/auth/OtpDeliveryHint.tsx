@@ -5,7 +5,7 @@
  */
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { Text } from "../ui/Text";
 import { PressableScale } from "../ui/PressableScale";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -42,7 +42,7 @@ export function OtpDeliveryHint({
       accessibilityLabel="One-time codes are printed in the server console"
     >
       <View style={[styles.icon, { backgroundColor: palette.accentSoft }]}>
-        <Ionicons name="terminal-outline" size={15} color={palette.accent} style={iconGlyphStyle(15)} />
+        <Ionicons name="terminal-outline" size={24} color={palette.onPrimaryContainer} style={iconGlyphStyle(24)} />
       </View>
       <View style={styles.body}>
         <View style={styles.header}>
@@ -76,19 +76,18 @@ const styles = StyleSheet.create({
   tip: {
     flexDirection: "row",
     alignItems: "flex-start",
-    gap: spacing[10],
+    gap: spacing[8],
     borderWidth: 1,
     borderRadius: radius.md,
-    padding: spacing[12],
+    padding: spacing[16],
   },
   spaced: { marginBottom: spacing[16] },
   icon: {
-    width: 28,
-    height: 28,
-    borderRadius: radius.xs,
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 1,
   },
   body: { flex: 1, gap: spacing[4] },
   header: {
@@ -96,5 +95,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing[8],
   },
-  dismiss: { paddingVertical: spacing[2], paddingHorizontal: spacing[4] },
+  dismiss: { minHeight: 48, justifyContent: "center", paddingHorizontal: spacing[8] },
 });

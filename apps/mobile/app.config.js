@@ -37,6 +37,9 @@ const version = "0.1.0";
 const branch = process.env.ORDO_BUILD_BRANCH || git("branch --show-current") || "main";
 const updatesChannel = process.env.EXPO_UPDATES_CHANNEL || resolveUpdatesChannel(version, branch);
 if (!updatesChannel) throw new Error(`Version ${version} does not match branch ${branch}`);
+// Native resources must be static. These are the generated surface roles for
+// the default Material Expressive source (#006A60); JS restores saved theming.
+const materialLaunch = { light: "#F1FBFB", dark: "#0C1515", primary: "#885209" };
 
 /** @type {import('expo/config').ExpoConfig} */
 module.exports = {
@@ -46,13 +49,13 @@ module.exports = {
   orientation: "default",
   userInterfaceStyle: "automatic",
   icon: "./assets/icon.png",
-  backgroundColor: "#EFE7D2",
+  backgroundColor: materialLaunch.light,
   // Translucent so a JS reload cannot restore an opaque light status bar
   // over a dark window. Color matches the light splash; night uses the
   // splashscreen_background resource from the Android config plugin.
   androidStatusBar: {
     barStyle: "dark-content",
-    backgroundColor: "#EFE7D2",
+    backgroundColor: materialLaunch.light,
     translucent: true,
   },
   newArchEnabled: true,
@@ -77,7 +80,7 @@ module.exports = {
       "expo-notifications",
       {
         icon: "./assets/logo-mark.png",
-        color: "#1A1A16",
+        color: materialLaunch.primary,
         defaultChannel: "reminders",
       },
     ],
@@ -101,10 +104,10 @@ module.exports = {
         image: "./assets/logo-mark.png",
         imageWidth: 120,
         resizeMode: "contain",
-        backgroundColor: "#EFE7D2",
+        backgroundColor: materialLaunch.light,
         dark: {
           image: "./assets/logo-mark.png",
-          backgroundColor: "#1A1A16",
+          backgroundColor: materialLaunch.dark,
         },
       },
     ],
@@ -136,7 +139,7 @@ module.exports = {
     usesCleartextTraffic: true,
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon-foreground.png",
-      backgroundColor: "#EFE7D2",
+      backgroundColor: materialLaunch.light,
     },
   },
   ios: {

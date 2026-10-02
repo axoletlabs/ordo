@@ -1,15 +1,17 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readerColorSchemeOverride } from "./reader-color-scheme.ts";
+import { materialColorRoles } from "./material-colors.ts";
 
 /**
  * Contrast contract for reader light/sepia. Keep these hex values in sync with
- * `theme.ts` (light) and `reader-theme.ts` (sepia). The reader must keep dark
- * ink on parchment even when the rest of the app is in night mode.
+ * `reader-theme.ts` (sepia). Light uses the actual generated Material roles.
+ * Reader ink stays dark on light surfaces even when the app is in night mode.
  */
-const LIGHT_BG = "#EFE7D2";
-const LIGHT_INK = "#15140F";
-const LIGHT_BODY = "#2A2620";
+const light = materialColorRoles("#006A60", false, false, 0);
+const LIGHT_BG = light.surface;
+const LIGHT_INK = light.onSurface;
+const LIGHT_BODY = light.onSurfaceVariant;
 const SEPIA_BG = "#F2E8D5";
 const SEPIA_SURFACE = "#F7EFDF";
 const SEPIA_INK = "#43351F";
@@ -24,7 +26,7 @@ function luminance(hex: string): number {
   return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
 }
 
-test("light reader uses dark ink on parchment", () => {
+test("light reader uses dark ink on a Material surface", () => {
   assert.ok(luminance(LIGHT_BG) > 0.7);
   assert.ok(luminance(LIGHT_INK) < 0.15);
   assert.ok(luminance(LIGHT_BODY) < 0.2);

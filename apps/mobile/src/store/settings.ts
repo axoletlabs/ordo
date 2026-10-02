@@ -35,6 +35,9 @@ export interface SettingsState {
   serverUrl: string;
   themeMode: ThemeMode;
   amoled: boolean;
+  expressive: boolean;
+  themeSeed: string;
+  themeContrast: 0 | 0.5 | 1;
   navigationStyle: NavigationStyle;
   navigationAnimation: NavigationAnimation;
   showNavigationLabels: boolean;
@@ -56,6 +59,9 @@ export interface SettingsState {
   setServerUrl: (url: string) => Promise<void>;
   setThemeMode: (mode: ThemeMode) => void;
   setAmoled: (on: boolean) => void;
+  setExpressive: (on: boolean) => void;
+  setThemeSeed: (seed: string) => void;
+  setThemeContrast: (contrast: 0 | 0.5 | 1) => void;
   setNavigationStyle: (style: NavigationStyle) => void;
   setNavigationAnimation: (animation: NavigationAnimation) => void;
   setShowNavigationLabels: (show: boolean) => void;
@@ -73,11 +79,14 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   serverUrl: DEFAULT_SERVER_URL,
   themeMode: "system",
   amoled: false,
+  expressive: true,
+  themeSeed: "#006A60",
+  themeContrast: 0,
   navigationStyle: "docked",
   navigationAnimation: "slide",
   showNavigationLabels: true,
-  createButtonTapAction: "menu",
-  createButtonHoldAction: "bookmark",
+  createButtonTapAction: "bookmark",
+  createButtonHoldAction: "menu",
   websiteBrowser: "ordo",
   forceWebsiteDark: false,
   shareQuickBookmark: false,
@@ -95,6 +104,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       serverUrl: resolvePersistedServerUrl(saved?.serverUrl),
       themeMode: saved?.themeMode ?? "system",
       amoled: saved?.amoled ?? false,
+      expressive: saved?.expressive !== false,
+      themeSeed: /^#[0-9a-f]{6}$/i.test(saved?.themeSeed ?? "") ? saved!.themeSeed! : "#006A60",
+      themeContrast: saved?.themeContrast === 0.5 || saved?.themeContrast === 1 ? saved.themeContrast : 0,
       navigationStyle,
       navigationAnimation: isNavigationAnimation(saved?.navigationAnimation)
         ? saved.navigationAnimation
@@ -102,11 +114,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       showNavigationLabels: saved?.showNavigationLabels !== false,
       createButtonTapAction: isCreateButtonAction(saved?.createButtonTapAction)
         ? saved.createButtonTapAction
-        : "menu",
+        : "bookmark",
       createButtonHoldAction:
         saved?.createButtonHoldAction === "none" || isCreateButtonAction(saved?.createButtonHoldAction)
           ? saved.createButtonHoldAction
-          : "bookmark",
+          : "menu",
       websiteBrowser: isWebsiteBrowser(saved?.websiteBrowser) ? saved.websiteBrowser : "ordo",
       forceWebsiteDark: saved?.forceWebsiteDark === true,
       shareQuickBookmark: saved?.shareQuickBookmark === true,
@@ -139,6 +151,19 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setAmoled: (on) => {
     set({ amoled: on });
     void prefsSet(StorageKeys.SETTINGS, { ...get(), amoled: on });
+  },
+  setExpressive: (expressive) => {
+    set({ expressive });
+    void prefsSet(StorageKeys.SETTINGS, { ...get(), expressive });
+  },
+  setThemeSeed: (themeSeed) => {
+    if (!/^#[0-9a-f]{6}$/i.test(themeSeed)) return;
+    set({ themeSeed });
+    void prefsSet(StorageKeys.SETTINGS, { ...get(), themeSeed });
+  },
+  setThemeContrast: (themeContrast) => {
+    set({ themeContrast });
+    void prefsSet(StorageKeys.SETTINGS, { ...get(), themeContrast });
   },
   setNavigationStyle: (navigationStyle) => {
     set({ navigationStyle });

@@ -4,20 +4,21 @@
  */
 import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { ListPressable } from "../ui/ListPressable";
+import { PressableScale } from "../ui/PressableScale";
 import { PinIcon } from "../ui/PinIcon";
 import { Text } from "../ui/Text";
 import { Badge } from "../ui/Badge";
 import { RowHighlight } from "./RowHighlight";
 import { SelectionMark } from "./SelectionMark";
 import { SelectionDragHandle, useSelectionDragRow } from "./SelectionDrag";
-import { useTheme } from "../../theme/ThemeProvider";
+import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
 import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { RowIconWell } from "../ui/RowIconWell";
 import { ROW_ICON_GLYPH } from "../../theme/alignment";
-import { layout, spacing } from "../../theme/tokens";
+import { layout, radius, spacing } from "../../theme/tokens";
 import { folderKey, SELECTION_LONG_PRESS_MS, useSelectionHoldGuard } from "../../hooks/use-selection";
 import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
 import { prefetchFolderBookmarks } from "../../hooks/use-bookmarks";
@@ -38,7 +39,7 @@ export interface FolderRowProps {
 }
 
 export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore, onEnterSelection, selected, selectionMode, highlighted: highlightedProp }: FolderRowProps) {
-  const { palette } = useTheme();
+  const { palette: basePalette, expressive } = useTheme();
   const rowRef = React.useRef<View>(null);
   const dragRow = useSelectionDragRow(folderKey(folder.id));
   const bodyStartY = React.useRef(0);
@@ -65,6 +66,11 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
   const menuKey = folderKey(folder.id);
   const highlightedFromMenu = useMenuHighlightStore((s) => s.key === menuKey);
   const highlighted = highlightedProp ?? highlightedFromMenu;
+  const palette = React.useMemo(() => selected || highlighted ? {
+    ...basePalette, onSurface: basePalette.onSecondaryContainer, onSurfaceVariant: basePalette.onSecondaryContainer,
+    text: basePalette.onSecondaryContainer, textSecondary: basePalette.onSecondaryContainer,
+    textTertiary: basePalette.onSecondaryContainer, textFaint: basePalette.onSecondaryContainer,
+  } : basePalette, [basePalette, selected, highlighted]);
   const unread = folder.unreadCount > 0;
   const sessionUnlocked = useFolderUnlocked(folder.protected ? folder.id : null);
   const countLabel = `${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}`;
@@ -89,17 +95,20 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
     measureAnchor(rowRef.current, (anchor) => onMore?.(folder, anchor), event);
   };
   const rowFill = selected || highlighted
-    ? palette.surfaceSecondary
+    ? palette.secondaryContainer
     : hovered
       ? menuHoverFill(palette.mode)
       : "transparent";
 
   return (
+    <ThemeOverrideProvider palette={palette}>
     <View
       ref={setRowRef}
       collapsable={false}
       onLayout={() => dragRow.bind(rowRef.current)}
-      style={[styles.wrap, { borderBottomColor: palette.border }]}
+      style={[styles.wrap, { borderBottomColor: palette.outlineVariant, borderBottomWidth: expressive ? 0 : StyleSheet.hairlineWidth,
+        backgroundColor: expressive ? palette.surfaceContainerLow : "transparent", borderRadius: expressive ? radius.xl : 0,
+        marginBottom: expressive ? spacing[4] : 0, minHeight: 72 }]}
       {...(Platform.OS === "web"
         ? {
             onMouseEnter: () => setHovered(true),
@@ -158,7 +167,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
           <SelectionMark selected={!!selected} />
         ) : (
           <RowIconWell>
-            <Ionicons name={folder.icon ?? DEFAULT_FOLDER_ICON} size={ROW_ICON_GLYPH} color={palette.accent} />
+            <Ionicons name={folder.icon ?? DEFAULT_FOLDER_ICON} size={ROW_ICON_GLYPH} color={palette.onSecondaryContainer} />
           </RowIconWell>
         )}
         </View>
@@ -227,14 +236,19 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
             ) : null}
           </View>
           <View style={styles.metaRow}>
-            <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.count}>
+            <Text variant="bodyMedium" color="tertiary" numberOfLines={1} style={styles.count}>
               {countLabel}
             </Text>
           </View>
         </View>
         {unread && !selectionMode ? <Badge tone="accent">{folder.unreadCount}</Badge> : null}
       </ListPressable>
+      {onMore && !selectionMode ? <PressableScale accessibilityRole="button" accessibilityLabel={`More actions for ${folder.name}`}
+        onPress={(event) => openMore(event)} style={{ width: 48, height: 48, borderRadius: radius.full, alignItems: "center", justifyContent: "center" }}>
+        <Ionicons name="ellipsis-vertical" size={24} color={palette.onSurfaceVariant} />
+      </PressableScale> : onMore ? <View style={{ width: 48, height: 48 }} /> : null}
     </View>
+    </ThemeOverrideProvider>
   );
 });
 
@@ -255,7 +269,7 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: spacing[8],
+    paddingVertical: spacing[16],
     paddingLeft: layout.rowInset,
     ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
   },
@@ -264,13 +278,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[12],
-    paddingVertical: spacing[8],
-    paddingLeft: spacing[12],
+    paddingVertical: spacing[12],
+    paddingLeft: spacing[16],
     paddingRight: spacing[8],
   },
   content: { flex: 1, minWidth: 0 },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[6] },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
   titleWrap: { flexShrink: 1, minWidth: 0 },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[6], marginTop: spacing[6] },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[8], marginTop: spacing[4] },
   count: { flexShrink: 1 },
 });

@@ -1,14 +1,15 @@
 /**
  * Title block for floating panels and dialogs. Centered, using the same
- * uppercase Inter Tight as screen headers so overlays sit in the same type
- * system as the rest of the app. An optional icon stacks above the title.
+ * Material headline-small role. An optional icon stacks above the title.
  */
 import React from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { Text, type TextVariant } from "./Text";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { radius, spacing } from "../../theme/tokens";
+import { useTheme } from "../../theme/ThemeProvider";
+import { PanelTitleContext } from "./panel-title";
 
 const ICON_SIZE = 36;
 
@@ -18,7 +19,7 @@ export function PanelHeader({
   icon,
   iconColor,
   iconBackground,
-  titleVariant = "header",
+   titleVariant = "headlineSmall",
   subtitleVariant = "footnote",
   numberOfLines = 3,
   accessory,
@@ -35,6 +36,11 @@ export function PanelHeader({
   accessory?: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { palette } = useTheme();
+  const titleId = React.useContext(PanelTitleContext);
+  const resolvedIconColor = iconBackground === palette.primaryContainer && (!iconColor || iconColor === palette.primary)
+    ? palette.onPrimaryContainer : iconBackground === palette.errorContainer && (!iconColor || iconColor === palette.error)
+      ? palette.onErrorContainer : iconColor ?? palette.secondary;
   return (
     <View style={[styles.wrap, style]}>
       {icon ? (
@@ -46,16 +52,18 @@ export function PanelHeader({
         >
           <Ionicons
             name={icon}
-            size={18}
-            color={iconColor}
+            size={24}
+            color={resolvedIconColor}
             accessible={false}
-            style={iconGlyphStyle(18)}
+            style={iconGlyphStyle(24)}
           />
         </View>
       ) : null}
       <View style={styles.copy}>
         <Text
           variant={titleVariant}
+          nativeID={titleId}
+          accessibilityRole="header"
           align="center"
           numberOfLines={numberOfLines}
           style={styles.title}
@@ -82,7 +90,7 @@ export function PanelHeader({
 const styles = StyleSheet.create({
   wrap: {
     alignItems: "center",
-    marginBottom: spacing[12],
+    marginBottom: spacing[24],
   },
   icon: {
     width: ICON_SIZE,

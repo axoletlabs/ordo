@@ -3,9 +3,9 @@ import React, { useCallback, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
-import { Header, HeaderActions, HeaderIconButton } from "../../../src/components/ui/Header";
+import { HeaderActions, HeaderIconButton } from "../../../src/components/ui/Header";
+import { LibraryHeader } from "../../../src/components/bookmarks/LibraryHeader";
 import { ListLoadingFooter } from "../../../src/components/ui/ListLoadingFooter";
-import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
 import { FAB, FABLayer } from "../../../src/components/ui/FAB";
 import { ContextMenu, ContextMenuItem } from "../../../src/components/ui/ContextMenu";
@@ -265,12 +265,12 @@ export default function BookmarksScreen() {
   const listContentStyle = useMemo(
     () => ({
       paddingBottom: selection.active
-        ? selectionClearance
+        ? Math.max(selectionClearance, FAB_LIST_CLEARANCE + dockInset)
         : floatingNavigation
           ? bottomClearance
-          : FAB_LIST_CLEARANCE,
+          : FAB_LIST_CLEARANCE + dockInset,
     }),
-    [bottomClearance, floatingNavigation, selection.active, selectionClearance],
+    [bottomClearance, floatingNavigation, selection.active, selectionClearance, dockInset],
   );
 
   const runCreateAction = (action: CreateButtonHoldAction, anchor?: MenuAnchorRect) => {
@@ -296,6 +296,8 @@ export default function BookmarksScreen() {
 
   const headerRight = (
     <HeaderActions>
+      <HeaderIconButton name="folder-open" color={palette.onSurface}
+        onPress={() => setCreateOpen(true)} accessibilityLabel="New folder" />
       {hasUnread ? (
         <HeaderIconButton
           name="checkmark-done"
@@ -326,25 +328,15 @@ export default function BookmarksScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.background }}>
-      {selection.active ? (
-        <SelectionHeader
-          count={selection.count}
-          selectableCount={selectableKeys.length}
-          onCancel={selection.exit}
-          onToggleSelectAll={() => {
+      <LibraryHeader tools={headerRight} selection={selection.active ? {
+          count: selection.count,
+          selectableCount: selectableKeys.length,
+          onCancel: selection.exit,
+          onToggleSelectAll: () => {
             if (selection.count === selectableKeys.length) selection.replace([]);
             else selection.replace(selectableKeys);
-          }}
-          maxWidth={layout.maxContentWidth}
-        />
-      ) : (
-      <Header
-        title="Bookmarks"
-        large
-        maxWidth={layout.maxContentWidth}
-        right={headerRight}
-      />
-      )}
+          },
+        } : undefined} />
 
       <ExtractionProgressLine />
 
@@ -410,6 +402,7 @@ export default function BookmarksScreen() {
               : `Tap to ${createActionDescription(createButtonTapAction)}. Press and hold to ${createActionDescription(createButtonHoldAction)}.`
           }
           testID="add-bookmark-fab"
+          label={createActionLabel(createButtonTapAction)}
           bottom={floatingNavigation ? bottomClearance : spacing[20]}
           maxContentWidth={layout.maxContentWidth}
         />

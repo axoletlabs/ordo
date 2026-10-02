@@ -4,7 +4,7 @@
  */
 import React, { useEffect, useMemo, useState } from "react";
 import { Platform, Pressable, StyleSheet, View, type ViewStyle } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import type { FolderDto, TagDto } from "@ordo/shared";
 import { DEFAULT_FOLDER_ICON } from "@ordo/shared";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";

@@ -192,7 +192,7 @@ export default function TagDetailScreen() {
       keyExtractor={(b: BookmarkDto) => b.id}
       renderItem={renderBookmark}
       contentContainerStyle={{
-        paddingBottom: selection.active ? selectionClearance : FAB_LIST_CLEARANCE,
+        paddingBottom: selection.active ? selectionClearance : FAB_LIST_CLEARANCE + dockInset,
       }}
       refreshing={refreshing}
       onRefresh={onRefresh}

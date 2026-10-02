@@ -4,7 +4,7 @@
  * exits without acting.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BackHandler } from "react-native";
+import { BackHandler, Platform } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { create } from "zustand";
 import { haptics } from "../lib/haptics";
@@ -94,14 +94,19 @@ export function useSelectionMode() {
     useCallback(() => {
       focusedRef.current = true;
       useSelectionUiStore.setState({ active: activeRef.current });
-      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      const subscription = Platform.OS === "android" ? BackHandler.addEventListener("hardwareBackPress", () => {
         if (!activeRef.current) return false;
         exit();
         return true;
-      });
+      }) : null;
+      const onKey = (event: KeyboardEvent) => {
+        if (event.key === "Escape" && !event.defaultPrevented && activeRef.current) exit();
+      };
+      if (Platform.OS === "web") document.addEventListener("keydown", onKey);
       return () => {
         focusedRef.current = false;
-        subscription.remove();
+        subscription?.remove();
+        if (Platform.OS === "web") document.removeEventListener("keydown", onKey);
         useSelectionUiStore.setState({ active: false });
       };
     }, [exit]),

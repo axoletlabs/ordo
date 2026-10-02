@@ -214,8 +214,8 @@ function buildTagsStyles(
       marginVertical: spacing[20],
     },
     mark: {
-      backgroundColor: palette.mode === "dark" ? "rgba(217,168,58,0.32)" : "rgba(217,168,58,0.48)",
-      color: palette.text,
+      backgroundColor: palette.tertiaryContainer,
+      color: palette.onTertiaryContainer,
     },
     small: { fontSize: Math.max(11, base - 3) },
   };

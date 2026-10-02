@@ -3,6 +3,10 @@ import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Header } from "../../../src/components/ui/Header";
+import { UserAvatar } from "../../../src/components/ui/UserAvatar";
+import { PressableScale } from "../../../src/components/ui/PressableScale";
+import { Text } from "../../../src/components/ui/Text";
+import { useAuthStore } from "../../../src/store/auth";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
 import { Button } from "../../../src/components/ui/Button";
 import { ConfirmDialog } from "../../../src/components/ui/ConfirmDialog";
@@ -12,7 +16,7 @@ import { useFloatingDockMetrics } from "../../../src/hooks/use-floating-dock-met
 import { hostingModeOf } from "../../../src/lib/hosting";
 import { useSettingsStore } from "../../../src/store/settings";
 import { useTheme } from "../../../src/theme/ThemeProvider";
-import { layout, spacing } from "../../../src/theme/tokens";
+import { layout, radius, spacing } from "../../../src/theme/tokens";
 
 export default function SettingsScreen() {
   const { palette } = useTheme();
@@ -22,22 +26,27 @@ export default function SettingsScreen() {
   const logout = useLogout();
   const [confirmingLogout, setConfirmingLogout] = useState(false);
   const serverUrl = useSettingsStore((s) => s.serverUrl);
+  const user = useAuthStore((s) => s.user);
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.background }}>
-      <Header title="Settings" large maxWidth={layout.maxSettingsWidth} />
+      <Header title="Settings" large showBack onBack={() => router.navigate("/")} maxWidth={layout.maxSettingsWidth} />
       <SettingsScrollView
         contentContainerStyle={{
           paddingBottom: floatingNavigation ? floatingBottomClearance : spacing[40],
         }}
       >
-        <SettingsGroup>
-          <SettingRow
-            icon="person-circle-outline"
-            label="Account"
-            onPress={() => router.push("/settings/account")}
-            showChevron
-          />
+        <PressableScale accessibilityRole="button" accessibilityLabel="Manage your account"
+          onPress={() => router.push("/settings/account")} stateLayerColor={palette.onPrimaryContainer}
+          style={{ flexDirection: "row", alignItems: "center", gap: spacing[16], padding: spacing[24],
+            backgroundColor: palette.primaryContainer, borderRadius: radius["2xl"], marginBottom: spacing[8] }}>
+          <UserAvatar user={user} size={56} />
+          <View style={{ flex: 1, minWidth: 0, gap: spacing[4] }}>
+            <Text variant="titleLarge" numberOfLines={1} style={{ color: palette.onPrimaryContainer }}>{user?.displayName ?? "Your account"}</Text>
+            <Text variant="bodyMedium" numberOfLines={1} style={{ color: palette.onPrimaryContainer }}>{user?.email ?? "Manage account"}</Text>
+          </View>
+        </PressableScale>
+        <SettingsGroup label="Preferences">
           <SettingRow
             icon="color-palette-outline"
             label="Appearance"
@@ -50,6 +59,8 @@ export default function SettingsScreen() {
             onPress={() => router.push("/settings/controls")}
             showChevron
           />
+        </SettingsGroup>
+        <SettingsGroup label="Account and storage">
           <SettingRow
             icon="phone-portrait-outline"
             label="Active sessions"

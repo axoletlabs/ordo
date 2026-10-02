@@ -1,6 +1,7 @@
 import React from "react";
-import { Pressable, StyleSheet } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { StyleSheet } from "react-native";
+import { PressableScale } from "../ui/PressableScale";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { FOLDER_ICONS, type FolderIcon } from "@ordo/shared";
 import { haptics } from "../../lib/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -14,7 +15,7 @@ export function FolderIconPicker({
   value: FolderIcon;
   onChange: (icon: FolderIcon) => void;
 }) {
-  const { palette } = useTheme();
+  const { palette, expressive } = useTheme();
 
   return (
     <ThemedScrollView
@@ -25,7 +26,7 @@ export function FolderIconPicker({
       {FOLDER_ICONS.map((icon) => {
         const selected = icon === value;
         return (
-          <Pressable
+          <PressableScale
             key={icon}
             accessibilityRole="button"
             accessibilityLabel={icon.replace(/-outline$/, "").replace(/-/g, " ")}
@@ -34,17 +35,17 @@ export function FolderIconPicker({
               haptics.selection();
               onChange(icon);
             }}
-            style={({ pressed }) => [
+            shape={{ rest: selected && expressive ? radius.md : 24, pressed: expressive ? radius.sm : 24 }}
+            style={[
               styles.icon,
               {
-                backgroundColor: selected ? palette.accentSoft : palette.surfaceSecondary,
-                borderColor: selected ? palette.accent : palette.border,
-                opacity: pressed ? 0.7 : 1,
+                backgroundColor: selected ? palette.secondaryContainer : palette.surfaceContainerHigh,
+                borderColor: "transparent",
               },
             ]}
           >
-            <Ionicons name={icon} size={21} color={selected ? palette.accent : palette.textSecondary} />
-          </Pressable>
+            <Ionicons name={icon} size={24} color={selected ? palette.onSecondaryContainer : palette.onSurfaceVariant} />
+          </PressableScale>
         );
       })}
     </ThemedScrollView>
@@ -53,11 +54,11 @@ export function FolderIconPicker({
 
 const styles = StyleSheet.create({
   // Three 42px rows with two 8px gaps; remaining icons scroll vertically.
-  scroll: { maxHeight: 142 },
+  scroll: { maxHeight: 160 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing[8] },
   icon: {
-    width: 42,
-    height: 42,
+    width: 48,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: StyleSheet.hairlineWidth,

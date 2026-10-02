@@ -175,10 +175,10 @@ export function OtpInput({
     accent: palette.accent,
     background: palette.background,
     surface: palette.surfaceElevated,
-    danger: palette.danger,
+    danger: palette.onErrorContainer,
     dangerSoft: palette.dangerSoft,
-    success: palette.success,
-    successSoft: palette.mode === "dark" ? "rgba(138,170,90,0.16)" : "rgba(108,143,58,0.12)",
+    success: palette.onPrimaryContainer,
+    successSoft: palette.primaryContainer,
   };
 
   const renderBox = (i: number) => (
@@ -372,7 +372,7 @@ const DigitBox = React.memo(function DigitBox({
       borderWidth: interpolate(
         Math.max(focusAmt.value, mood.value === 0 ? 0 : 1),
         [0, 1],
-        [1, 1.5],
+        [1, 2],
         Extrapolation.CLAMP,
       ),
       transform: [
@@ -449,7 +449,7 @@ const styles = StyleSheet.create({
   box: {
     flex: 1,
     maxWidth: 48,
-    height: 48,
+    height: 56,
     alignItems: "center",
     justifyContent: "center",
   },

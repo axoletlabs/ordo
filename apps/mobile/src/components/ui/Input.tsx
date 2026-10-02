@@ -1,9 +1,6 @@
-/**
- * Themed text input faithful to ordo-archive: tiny uppercase label, 1px line
- * border, coral 1.5px focus ring, radius 8. URLs/mono handled by the caller via
- * a `mono` flag (JetBrains Mono).
- */
-import React, { useLayoutEffect, useRef, useState } from "react";
+/** Material outlined / contained-search fields, preserving native editing and autofill behavior. */
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import {
   Platform,
   StyleSheet,
@@ -17,6 +14,7 @@ import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
 import { caretAfterKey, shouldCorrectWebCaret } from "../../lib/web-input-caret";
+const AnimatedLabel = Animated.createAnimatedComponent(Text);
 
 type WebCaretNode = TextInput & {
   selectionStart?: number | null;
@@ -50,6 +48,7 @@ export interface InputProps extends Omit<TextInputProps, "style"> {
   /** Skip measuring the overlay; avoids TextInput padding jumps while typing. */
   overlayPaddingRight?: number;
   mono?: boolean;
+  variant?: "outlined" | "search";
   containerStyle?: ViewStyle;
 }
 
@@ -62,6 +61,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   overlayRightAccessory,
   overlayPaddingRight,
   mono,
+  variant = "outlined",
   containerStyle,
   onFocus,
   onBlur,
@@ -76,6 +76,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
 }, ref) {
   const { palette } = useTheme();
   const [focused, setFocused] = useState(false);
+  const [hasText, setHasText] = useState(!!value);
   const [overlayWidth, setOverlayWidth] = useState(0);
   const inputRef = useRef<TextInput>(null);
   const pendingCaret = useRef<number | null>(null);
@@ -109,8 +110,16 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
     setAndroidEpoch((n) => n + 1);
   }, [androidUncontrolled, value]);
 
-  const borderColor = error ? palette.danger : focused ? palette.accent : palette.border;
-  const borderWidth = error ? 1 : focused ? 1.5 : 1;
+  const search = variant === "search";
+  const borderColor = search ? "transparent" : error ? palette.error : focused ? palette.primary : palette.outline;
+  const borderWidth = search ? 0 : focused ? 2 : 1;
+  const floating = focused || hasText || !!value;
+  const floatProgress = useSharedValue(floating ? 1 : 0);
+  useEffect(() => {
+    floatProgress.value = withTiming(floating ? 1 : 0, { duration: 150 });
+  }, [floating, floatProgress]);
+  const labelPosition = useAnimatedStyle(() => ({ top: 16 - 26 * floatProgress.value }));
+  const labelType = useAnimatedStyle(() => ({ fontSize: 16 - 4 * floatProgress.value, lineHeight: 24 - 8 * floatProgress.value }));
   // iOS Password AutoFill silently ignores secure fields that use a custom
   // font. Use the system face while the value is masked.
   const fontFamily = secureTextEntry
@@ -140,22 +149,23 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
 
   return (
     <View style={containerStyle}>
-      {label ? (
-        <Text variant="label" color={error ? "danger" : "tertiary"} style={styles.label}>
-          {label}
-        </Text>
-      ) : null}
       <View
         style={[
           styles.box,
           {
-            backgroundColor: palette.background,
+            backgroundColor: search ? palette.surfaceContainerHigh : palette.surface,
             borderColor,
             borderWidth,
-            borderRadius: radius.sm,
+            borderRadius: search ? radius.full : radius.xs,
           },
         ]}
       >
+        {label ? <Animated.View pointerEvents="none" style={[styles.floatingLabel, {
+          left: icon ? 48 : 12,
+          backgroundColor: palette.surface,
+        }, labelPosition]}>
+          <AnimatedLabel variant="bodyLarge" style={[{ color: error ? palette.error : focused ? palette.primary : palette.onSurfaceVariant }, labelType]}>{label}</AnimatedLabel>
+        </Animated.View> : null}
         {icon ? <View style={styles.icon}>{icon}</View> : null}
         <TextInput
           ref={setInputRef}
@@ -167,7 +177,11 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
           keyboardType={resolvedKeyboardType}
           underlineColorAndroid="transparent"
           editable={editable}
+          accessibilityLabel={rest.accessibilityLabel ?? label ?? rest.placeholder}
+          selectionColor={palette.primary}
+          cursorColor={palette.primary}
           {...rest}
+          placeholder={label && !floating ? undefined : rest.placeholder}
           {...(Platform.OS === "web" ? { dir: "ltr" as const } : null)}
           {...(androidUncontrolled
             ? { defaultValue: typeof value === "string" ? value : undefined }
@@ -215,7 +229,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
             }
             restoreWebCaret(webCaretNode(target), pendingCaret.current);
           }}
-          onChangeText={editable ? onChangeText : undefined}
+          onChangeText={editable ? (text) => { setHasText(text.length > 0); onChangeText?.(text); } : undefined}
           style={[
             styles.input,
             {
@@ -224,6 +238,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
               writingDirection: "ltr",
             },
             webCaretFix,
+            Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0, boxShadow: "none" } as unknown as TextStyle : null,
             padRight != null ? { paddingRight: padRight } : null,
           ]}
         />
@@ -258,17 +273,19 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
 });
 
 const styles = StyleSheet.create({
-  label: { marginBottom: spacing[6] },
+  floatingLabel: { position: "absolute", paddingHorizontal: spacing[4], zIndex: 1 },
   box: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: spacing[12],
-    minHeight: 46,
+    paddingHorizontal: spacing[16],
+    minHeight: 56,
   },
-  icon: { marginRight: spacing[8] },
+  icon: { marginRight: spacing[16] },
   input: {
     flex: 1,
-    paddingVertical: spacing[10],
+    minWidth: 0,
+    borderWidth: 0,
+    paddingVertical: spacing[16],
     fontSize: fontSize.md,
     ...Platform.select({
       android: { includeFontPadding: false, textAlignVertical: "center" as const },
@@ -283,5 +300,5 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: "center",
   },
-  msg: { marginTop: spacing[6] },
+  msg: { marginTop: spacing[4], paddingHorizontal: spacing[16] },
 });

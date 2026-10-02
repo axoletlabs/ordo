@@ -5,7 +5,7 @@
  */
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "../../src/components/ui/MaterialIcon";
 import { iconGlyphStyle } from "../../src/theme/icon-glyph";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { EMAIL_OTP } from "@ordo/shared";

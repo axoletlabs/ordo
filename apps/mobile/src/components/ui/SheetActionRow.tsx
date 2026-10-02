@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { Button, type ButtonVariant } from "./Button";
 import { ContextMenuItem } from "./ContextMenu";
 import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
@@ -11,11 +11,12 @@ export const sheetMenuStyles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "stretch",
+    justifyContent: "flex-end",
     gap: spacing[8],
-    marginTop: spacing[12],
+    marginTop: spacing[24],
   },
   action: {
-    flex: 1,
+    flexShrink: 1,
     minWidth: 0,
   },
   cancel: { marginTop: spacing[8] },
@@ -45,7 +46,7 @@ export function PanelActions({
     <View style={sheetMenuStyles.row}>
       <Button
         label={cancelLabel}
-        variant="secondary"
+        variant="ghost"
         onPress={() => {
           dismissKeyboard();
           onCancel();

@@ -45,9 +45,9 @@ export const SCREEN_RAIL = 16;
 /** Leading icon inside a list row, from that row's edge. */
 export const ROW_INSET = 16;
 /** Shared leading well for bookmark, folder, tag, and settings rows. */
-export const ROW_ICON_FRAME = 36;
+export const ROW_ICON_FRAME = 40;
 /** Glyph drawn inside {@link ROW_ICON_FRAME}. */
-export const ROW_ICON_GLYPH = 18;
+export const ROW_ICON_GLYPH = 24;
 
 /**
  * Horizontal padding for a column of at most `columnMax` centered in

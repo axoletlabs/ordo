@@ -11,7 +11,7 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { useTheme } from "../../theme/ThemeProvider";
 import { springs } from "../../theme/tokens";
 import { haptics } from "../../lib/haptics";
@@ -24,7 +24,7 @@ export interface EyeToggleProps {
   size?: number;
 }
 
-export function EyeToggle({ visible, onPress, size = 18 }: EyeToggleProps) {
+export function EyeToggle({ visible, onPress, size = 24 }: EyeToggleProps) {
   const { palette } = useTheme();
   // 0 = masked (eye shown), 1 = visible (eye-off shown)
   const v = useSharedValue(visible ? 1 : 0);
@@ -65,6 +65,6 @@ export function EyeToggle({ visible, onPress, size = 18 }: EyeToggleProps) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
+  wrap: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
   icon: { position: "absolute" },
 });

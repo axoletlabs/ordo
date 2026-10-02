@@ -7,15 +7,14 @@ import React from "react";
 import { View } from "react-native";
 import { Stack } from "expo-router";
 import { enableFreeze } from "react-native-screens";
+import { useReducedMotion } from "react-native-reanimated";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { useServerInfo, useValidateSession } from "../../src/hooks/queries";
-import { useFloatingDockMetrics } from "../../src/hooks/use-floating-dock-metrics";
 import { useAuthStore } from "../../src/store/auth";
 import { screenAnimationDuration, stackScreenAnimation } from "../../src/lib/navigation-animation";
 import { resolveStackNavigationAnimation } from "../../src/lib/navigation-animation-policy";
 import { useSettingsStore } from "../../src/store/settings";
 import { MfaEnrollmentScreen } from "../../src/components/auth/MfaEnrollmentScreen";
-import { NavigationRail, useRailSceneOffset } from "../../src/components/navigation/NavigationRail";
 import { ReminderNotificationHost } from "../../src/components/bookmarks/ReminderNotificationHost";
 
 enableFreeze(true);
@@ -27,12 +26,11 @@ export const unstable_settings = {
 export default function AppLayout() {
   const { palette } = useTheme();
   const user = useAuthStore((s) => s.user);
+  const reducedMotion = useReducedMotion();
   const navigationAnimation = resolveStackNavigationAnimation(
     useSettingsStore((s) => s.navigationAnimation),
   );
   const { data: serverInfo } = useServerInfo();
-  const { floating, sideNavigation } = useFloatingDockMetrics();
-  const sceneOffset = useRailSceneOffset();
   useValidateSession();
 
   const needsMfaEnrollment = Boolean(serverInfo?.mfaRequired && user && !user.mfaEnabled);
@@ -41,10 +39,10 @@ export default function AppLayout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        animation: stackScreenAnimation(navigationAnimation),
+        animation: reducedMotion ? "none" : stackScreenAnimation(navigationAnimation),
         animationDuration: screenAnimationDuration(navigationAnimation),
         freezeOnBlur: true,
-        contentStyle: { backgroundColor: palette.background, ...sceneOffset },
+        contentStyle: { backgroundColor: palette.background },
         fullScreenGestureEnabled: true,
       }}
     >
@@ -71,16 +69,8 @@ export default function AppLayout() {
   );
 
   return (
-    <View
-      style={
-        sideNavigation && !floating
-          ? { flex: 1, flexDirection: "row", backgroundColor: palette.background }
-          : { flex: 1, backgroundColor: palette.background }
-      }
-    >
-      {sideNavigation && !floating ? <NavigationRail /> : null}
+    <View style={{ flex: 1, backgroundColor: palette.background }}>
       <View style={{ flex: 1 }}>{stack}</View>
-      {sideNavigation && floating ? <NavigationRail /> : null}
       <ReminderNotificationHost />
       {needsMfaEnrollment ? (
         <View

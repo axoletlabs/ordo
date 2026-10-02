@@ -5,7 +5,7 @@
  */
 import React, { useEffect, useMemo, useState, type ComponentProps } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { type BookmarkDto, type TagSummaryDto } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
