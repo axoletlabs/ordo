@@ -117,7 +117,7 @@ export default function ChangePasswordScreen() {
               <Button
                 label="Change password"
                 block
-                size="lg"
+                size="md"
                 onPress={submit}
                 loading={changePassword.isPending && !mfaOpen}
               />

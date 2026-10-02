@@ -10,6 +10,7 @@ import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
 import { Text } from "../ui/Text";
 import { PressableScale } from "../ui/PressableScale";
+import { IconButton } from "../ui/IconButton";
 import { PanelActions } from "../ui/SheetActionRow";
 import { UnlockForm } from "./LockPrompt";
 import { CreateFolderPanel } from "./CreateFolderPanel";
@@ -290,19 +291,11 @@ export function AddBookmarkSheet({
 
             <View style={styles.tagsRow}>
               <Text variant="label" color="tertiary">Tags</Text>
-              <PressableScale
-                accessibilityRole="button"
+              <IconButton
+                name={showTagPicker ? "chevron-up" : "chevron-down"} variant="standard"
                 accessibilityLabel={showTagPicker ? "Hide tag picker" : "Show tag picker"}
                 onPress={() => setShowTagPicker((v) => !v)}
-                hitSlop={8}
-              >
-                <Ionicons
-                  name={showTagPicker ? "chevron-up" : "chevron-down"}
-                  size={16}
-                  color={palette.textTertiary}
-                  style={iconGlyphStyle(16)}
-                />
-              </PressableScale>
+              />
             </View>
             {selectedTagIds.length > 0 ? (
               <View style={styles.selectedTagWrap}>

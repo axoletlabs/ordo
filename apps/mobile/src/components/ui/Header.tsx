@@ -12,6 +12,8 @@ import { haptics } from "../../lib/haptics";
 import { Text } from "./Text";
 import { PressableScale } from "./PressableScale";
 import { PlainTooltip } from "./PlainTooltip";
+import { ButtonGroup, useButtonGroupInteraction } from "./ButtonGroup";
+import { IconButton } from "./IconButton";
 import { useTheme } from "../../theme/ThemeProvider";
 import { layout, radius, spacing } from "../../theme/tokens";
 
@@ -47,7 +49,7 @@ export function Header({ title, subtitle, showBack, onBack, right, large, safeTo
       borderBottomColor: palette.outlineVariant, borderBottomWidth: divider ? StyleSheet.hairlineWidth : 0,
     }}>
       <View style={styles.bar}>
-        {showBack ? <HeaderIconButton name="arrow-back" color={palette.onSurface} onPress={back} accessibilityLabel="Back" /> : null}
+         {showBack ? <HeaderIconButton name="arrow-back" variant="standard" color={palette.onSurface} onPress={back} accessibilityLabel="Back" /> : null}
         {!expanded ? <View style={styles.title}>
           {onTitleLongPress ? <PressableScale onLongPress={onTitleLongPress} accessibilityRole="button"
             accessibilityLabel={title} accessibilityHint={titleAccessibilityHint}>{titleText}</PressableScale> : titleText}
@@ -64,12 +66,13 @@ export function Header({ title, subtitle, showBack, onBack, right, large, safeTo
   );
 }
 export function HeaderActions({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
-  return <View style={[styles.actions, style]}>{children}</View>;
+  return <ButtonGroup style={style}>{children}</ButtonGroup>;
 }
-export function HeaderIconButton({ name, color, onPress, accessibilityLabel, accessibilityHint }: {
+export function HeaderIconButton({ name, color, variant = "tonal", onPress, accessibilityLabel, accessibilityHint }: {
   name: keyof typeof Ionicons.glyphMap; color: string; onPress: (anchor: MenuAnchorRect) => void;
-  accessibilityLabel: string; accessibilityHint?: string;
+  accessibilityLabel: string; accessibilityHint?: string; variant?: "standard" | "filled" | "tonal" | "outlined";
 }) {
+  const grouped = useButtonGroupInteraction() != null;
   const ref = React.useRef<View>(null);
   const [tooltip, setTooltip] = React.useState<MenuAnchorRect | null>(null);
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -93,13 +96,11 @@ export function HeaderIconButton({ name, color, onPress, accessibilityLabel, acc
     timer.current = setTimeout(showTooltip, 500);
   };
   React.useEffect(() => () => { generation.current += 1; if (timer.current) clearTimeout(timer.current); }, []);
-  return <><View ref={ref} collapsable={false}>
-    <PressableScale style={styles.icon} accessibilityRole="button" accessibilityLabel={accessibilityLabel}
+  return <><View ref={ref} collapsable={false} style={grouped ? { width: "100%" } : undefined}>
+    <IconButton name={name} variant={variant} color={color} accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint} onHoverIn={scheduleTooltip} onFocus={scheduleTooltip}
       onHoverOut={dismissTooltip} onBlur={dismissTooltip} onLongPress={showTooltip}
-      onPress={(event) => { dismissTooltip(); haptics.light(); measureAnchor(ref.current, onPress, event); }}>
-      <Ionicons name={name} size={24} color={color} />
-    </PressableScale>
+      onPress={(event) => { dismissTooltip(); haptics.light(); measureAnchor(ref.current, onPress, event); }} />
   </View><PlainTooltip visible={!!tooltip} anchor={tooltip} label={accessibilityLabel} onDismiss={dismissTooltip} /></>;
 }
 const styles = StyleSheet.create({

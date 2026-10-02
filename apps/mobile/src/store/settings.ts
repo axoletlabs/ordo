@@ -36,7 +36,7 @@ export interface SettingsState {
   themeMode: ThemeMode;
   amoled: boolean;
   expressive: boolean;
-  themeSeed: string;
+  materialYouColors: boolean;
   themeContrast: 0 | 0.5 | 1;
   navigationStyle: NavigationStyle;
   navigationAnimation: NavigationAnimation;
@@ -60,7 +60,7 @@ export interface SettingsState {
   setThemeMode: (mode: ThemeMode) => void;
   setAmoled: (on: boolean) => void;
   setExpressive: (on: boolean) => void;
-  setThemeSeed: (seed: string) => void;
+  setMaterialYouColors: (on: boolean) => void;
   setThemeContrast: (contrast: 0 | 0.5 | 1) => void;
   setNavigationStyle: (style: NavigationStyle) => void;
   setNavigationAnimation: (animation: NavigationAnimation) => void;
@@ -80,7 +80,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   themeMode: "system",
   amoled: false,
   expressive: true,
-  themeSeed: "#006A60",
+  materialYouColors: false,
   themeContrast: 0,
   navigationStyle: "docked",
   navigationAnimation: "slide",
@@ -105,7 +105,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       themeMode: saved?.themeMode ?? "system",
       amoled: saved?.amoled ?? false,
       expressive: saved?.expressive !== false,
-      themeSeed: /^#[0-9a-f]{6}$/i.test(saved?.themeSeed ?? "") ? saved!.themeSeed! : "#006A60",
+      materialYouColors: saved?.materialYouColors === true,
       themeContrast: saved?.themeContrast === 0.5 || saved?.themeContrast === 1 ? saved.themeContrast : 0,
       navigationStyle,
       navigationAnimation: isNavigationAnimation(saved?.navigationAnimation)
@@ -156,10 +156,9 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ expressive });
     void prefsSet(StorageKeys.SETTINGS, { ...get(), expressive });
   },
-  setThemeSeed: (themeSeed) => {
-    if (!/^#[0-9a-f]{6}$/i.test(themeSeed)) return;
-    set({ themeSeed });
-    void prefsSet(StorageKeys.SETTINGS, { ...get(), themeSeed });
+  setMaterialYouColors: (materialYouColors) => {
+    set({ materialYouColors });
+    void prefsSet(StorageKeys.SETTINGS, { ...get(), materialYouColors });
   },
   setThemeContrast: (themeContrast) => {
     set({ themeContrast });

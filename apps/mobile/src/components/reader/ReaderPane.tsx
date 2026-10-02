@@ -69,6 +69,7 @@ import { readerColorSchemeOverride } from "../../theme/reader-color-scheme";
 import { resolveReaderPalette } from "../../theme/reader-theme";
 import { pinSystemChrome } from "../../theme/pin-system-chrome";
 import { appearanceOverride, resolvePalette, type Palette } from "../../theme/theme";
+import { useDeviceColors } from "../../theme/device-colors";
 import { scrollbarColors } from "../../theme/scrollbar";
 import { queryClient } from "../../lib/query-client";
 import { bookmarksApi } from "../../lib/api/bookmarks";
@@ -153,12 +154,13 @@ const EMPTY_HIGHLIGHTS: HighlightDto[] = [];
 export function ReaderPane(props: ReaderPaneProps) {
   const systemScheme = useColorScheme();
   const { preferences, setPreferences } = useReaderPreferences();
-  const seed = useSettingsStore((s) => s.themeSeed);
+  const materialYouColors = useSettingsStore((s) => s.materialYouColors);
+  const deviceColors = useDeviceColors();
   const expressive = useSettingsStore((s) => s.expressive);
   const contrast = useSettingsStore((s) => s.themeContrast);
   const readerPalette = useMemo(
-    () => resolveReaderPalette(preferences.theme, preferences.amoled, systemScheme, { seed, expressive, contrast }),
-    [preferences.theme, preferences.amoled, systemScheme, seed, expressive, contrast],
+    () => resolveReaderPalette(preferences.theme, preferences.amoled, systemScheme, { expressive, contrast, deviceColors: materialYouColors ? deviceColors : null }),
+    [preferences.theme, preferences.amoled, systemScheme, deviceColors, materialYouColors, expressive, contrast],
   );
 
   // The reader surface owns the status bar (full-screen stack usage only);

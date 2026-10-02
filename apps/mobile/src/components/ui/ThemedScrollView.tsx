@@ -17,6 +17,8 @@ import {
   type ViewStyle,
 } from "react-native";
 import { type FlashListProps } from "@shopify/flash-list";
+import Animated, { LinearTransition } from "react-native-reanimated";
+import { useMaterialMotion } from "../../theme/material-motion";
 import {
   chainHandlers,
   splitScrollLayoutStyle,
@@ -54,10 +56,12 @@ export type ThemedScrollViewProps = ScrollViewProps & {
 
 export type ThemedFlashListProps<T> = FlashListProps<T> & {
   scrollBarInsets?: ScrollBarInsets;
+  animateChanges?: boolean;
 };
 
 export type ThemedFlatListProps<T> = FlatListProps<T> & {
   scrollBarInsets?: ScrollBarInsets;
+  animateChanges?: boolean;
 };
 
 const nativeScrollBarProps = {
@@ -169,6 +173,7 @@ export const ThemedFlashList = React.forwardRef(function ThemedFlashList<T>(
   return (
     <ThemedFlatList
       ref={ref}
+      animateChanges
       removeClippedSubviews={false}
       initialNumToRender={12}
       maxToRenderPerBatch={8}
@@ -199,6 +204,7 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
     scrollBarInsets,
     contentContainerStyle,
     data,
+    animateChanges = false,
     ...rest
   } = props;
   const bar = useVerticalScrollBar(scrollBarInsets);
@@ -206,6 +212,10 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
   const themedRefresh = useThemedRefreshControl(refreshing, onRefresh, refreshControl);
   const fill = wrapper?.flex == null && wrapper?.maxHeight == null && wrapper?.height == null;
   const itemCount = Array.isArray(data) ? data.length : data == null ? 0 : 1;
+  const motion = useMaterialMotion();
+  const transition = React.useMemo(() => LinearTransition.springify().mass(motion.spatial.mass)
+    .stiffness(motion.spatial.stiffness).damping(motion.spatial.damping), [motion.spatial]);
+  const List = (animateChanges ? Animated.FlatList : FlatList) as typeof FlatList;
 
   return (
     <View
@@ -215,10 +225,11 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
       {/* Native list. The gesture-handler list keeps the refresh gesture
           open after the finger lifts, so the spinner sits there until the
           next touch. */}
-      <FlatList
+      <List
         ref={ref}
         data={data}
         {...rest}
+        {...(animateChanges && !motion.reducedMotion ? { itemLayoutAnimation: transition } : {})}
         {...nativeScrollBarProps}
         showsVerticalScrollIndicator={
           Platform.OS === "web" ? (showsVerticalScrollIndicator ?? true) : false

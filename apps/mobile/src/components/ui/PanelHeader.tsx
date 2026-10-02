@@ -7,11 +7,11 @@ import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { Text, type TextVariant } from "./Text";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
-import { radius, spacing } from "../../theme/tokens";
+import { spacing } from "../../theme/tokens";
 import { useTheme } from "../../theme/ThemeProvider";
 import { PanelTitleContext } from "./panel-title";
 
-const ICON_SIZE = 36;
+const ICON_SIZE = 24;
 
 export function PanelHeader({
   title,
@@ -20,7 +20,7 @@ export function PanelHeader({
   iconColor,
   iconBackground,
    titleVariant = "headlineSmall",
-  subtitleVariant = "footnote",
+  subtitleVariant = "bodyMedium",
   numberOfLines = 3,
   accessory,
   style,
@@ -39,15 +39,14 @@ export function PanelHeader({
   const { palette } = useTheme();
   const titleId = React.useContext(PanelTitleContext);
   const resolvedIconColor = iconBackground === palette.primaryContainer && (!iconColor || iconColor === palette.primary)
-    ? palette.onPrimaryContainer : iconBackground === palette.errorContainer && (!iconColor || iconColor === palette.error)
-      ? palette.onErrorContainer : iconColor ?? palette.secondary;
+    ? palette.primary : iconBackground === palette.errorContainer && (!iconColor || iconColor === palette.error)
+      ? palette.error : iconColor ?? palette.secondary;
   return (
     <View style={[styles.wrap, style]}>
       {icon ? (
         <View
           style={[
             styles.icon,
-            iconBackground ? { backgroundColor: iconBackground } : null,
           ]}
         >
           <Ionicons
@@ -64,7 +63,7 @@ export function PanelHeader({
           variant={titleVariant}
           nativeID={titleId}
           accessibilityRole="header"
-          align="center"
+          align={icon ? "center" : "left"}
           numberOfLines={numberOfLines}
           style={styles.title}
         >
@@ -75,7 +74,7 @@ export function PanelHeader({
           <Text
             variant={subtitleVariant}
             color="secondary"
-            align="center"
+            align="left"
             numberOfLines={4}
             style={styles.subtitle}
           >
@@ -95,11 +94,10 @@ const styles = StyleSheet.create({
   icon: {
     width: ICON_SIZE,
     height: ICON_SIZE,
-    borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-    marginBottom: spacing[12],
+    marginBottom: spacing[16],
   },
   copy: {
     width: "100%",
@@ -115,7 +113,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   subtitle: {
-    marginTop: spacing[6],
+    marginTop: spacing[16],
     width: "100%",
     includeFontPadding: false,
   },

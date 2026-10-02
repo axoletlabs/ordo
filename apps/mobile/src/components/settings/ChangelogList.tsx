@@ -650,7 +650,7 @@ function ChangelogSheetBody({
   return (
     <FloatingPanel visible={visible} onDismiss={onDismiss} maxWidth={480}>
       {body}
-      <Button label="Done" block size="lg" onPress={onDismiss} style={styles.done} />
+      <Button label="Done" block size="md" onPress={onDismiss} style={styles.done} />
     </FloatingPanel>
   );
 }

@@ -160,7 +160,7 @@ export default function VerifyEmailScreen() {
       <Button
         label="Verify"
         block
-        size="lg"
+        size="md"
         onPress={() => void submit()}
         loading={otpStatus === "loading" || otpStatus === "success"}
       />

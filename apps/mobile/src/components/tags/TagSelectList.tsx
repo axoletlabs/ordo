@@ -11,7 +11,7 @@ import { Input } from "../ui/Input";
 import { PressableScale } from "../ui/PressableScale";
 import { useTags, useCreateTag } from "../../hooks/use-tags";
 import { useTheme } from "../../theme/ThemeProvider";
-import { spacing } from "../../theme/tokens";
+import { radius, spacing } from "../../theme/tokens";
 import { tagColorValue } from "../../lib/tag-colors";
 import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
 
@@ -77,17 +77,18 @@ export function TagSelectList({
   const renderRow = (tag: { id: string; name: string; color: TagColor }, selected: boolean) => (
     <PressableScale
       key={tag.id}
-      accessibilityRole="button"
+      accessibilityRole="checkbox"
       accessibilityLabel={`${tag.name}${selected ? ", selected" : ""}`}
-      accessibilityState={{ selected }}
-      style={styles.row}
+      accessibilityState={{ checked: selected }}
+      stateLayerColor={selected ? palette.onSecondaryContainer : palette.onSurface}
+      style={[styles.row, { backgroundColor: selected ? palette.secondaryContainer : "transparent" }]}
       onPress={() => onToggle(tag.id)}
     >
       <View style={[styles.dot, { backgroundColor: tagColorValue(tag.color).dot }]} />
-      <Text variant="body" numberOfLines={1} style={{ flex: 1 }}>
+      <Text variant="bodyLarge" numberOfLines={1} style={{ flex: 1, color: selected ? palette.onSecondaryContainer : palette.onSurface }}>
         {tag.name}
       </Text>
-      {selected ? <Ionicons name="checkmark" size={18} color={palette.accent} /> : null}
+      {selected ? <Ionicons name="checkmark" size={24} color={palette.onSecondaryContainer} /> : null}
     </PressableScale>
   );
 
@@ -156,7 +157,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[12],
-    minHeight: 44,
+    minHeight: 48,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing[8],
     paddingVertical: spacing[8],
   },
   dot: { width: 7, height: 7, borderRadius: 9999 },

@@ -30,7 +30,8 @@ import Animated, {
 import { EMAIL_OTP, MFA } from "@ordo/shared";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
-import { fontSize, radius, resolveFont, spacing, springs } from "../../theme/tokens";
+import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
+import { useMaterialMotion } from "../../theme/material-motion";
 import { haptics } from "../../lib/haptics";
 
 export type OtpStatus = "idle" | "loading" | "success" | "error";
@@ -76,6 +77,7 @@ export function OtpInput({
   style,
 }: OtpInputProps) {
   const { palette } = useTheme();
+  const motion = useMaterialMotion();
   const inputRef = useRef<TextInput>(null);
   const completedRef = useRef<string | null>(null);
   const prevLen = useRef(0);
@@ -123,7 +125,7 @@ export function OtpInput({
   }, [chars, length, onComplete, status]);
 
   useEffect(() => {
-    if (status !== "error") return;
+    if (status !== "error" || motion.reducedMotion) return;
     shake.value = 0;
     shake.value = withSequence(
       withTiming(1, { duration: 42, easing: Easing.out(Easing.quad) }),
@@ -133,10 +135,10 @@ export function OtpInput({
       withTiming(0.36, { duration: 38 }),
       withTiming(0, { duration: 90, easing: Easing.out(Easing.cubic) }),
     );
-  }, [status, shake]);
+  }, [status, shake, motion.reducedMotion]);
 
   useEffect(() => {
-    if (status === "loading") {
+    if (status === "loading" && !motion.reducedMotion) {
       pulse.value = withRepeat(
         withSequence(
           withTiming(0.7, { duration: 540, easing: Easing.inOut(Easing.ease) }),
@@ -150,7 +152,7 @@ export function OtpInput({
     cancelAnimation(pulse);
     pulse.value = withTiming(1, { duration: 160 });
     return undefined;
-  }, [status, pulse]);
+  }, [status, pulse, motion.reducedMotion]);
 
   const rowMotion = useAnimatedStyle(() => ({
     opacity: pulse.value,
@@ -296,6 +298,7 @@ const DigitBox = React.memo(function DigitBox({
   compact?: boolean;
   palette: BoxPalette;
 }) {
+  const motion = useMaterialMotion();
   const mood = useSharedValue(status === "error" ? 1 : status === "success" ? 2 : 0);
   const focusAmt = useSharedValue(focused ? 1 : 0);
   const appear = useSharedValue(filled ? 1 : 0);
@@ -304,32 +307,33 @@ const DigitBox = React.memo(function DigitBox({
 
   useEffect(() => {
     mood.value = withTiming(status === "error" ? 1 : status === "success" ? 2 : 0, {
-      duration: 220,
+      duration: motion.reducedMotion ? 0 : 200,
     });
-  }, [status, mood]);
+  }, [status, mood, motion.reducedMotion]);
 
   useEffect(() => {
-    focusAmt.value = withSpring(focused ? 1 : 0, springs.snappy);
-  }, [focused, focusAmt]);
+    focusAmt.value = motion.reducedMotion ? +focused : withSpring(+focused, motion.fast);
+  }, [focused, focusAmt, motion.fast, motion.reducedMotion]);
 
   useEffect(() => {
+    if (motion.reducedMotion) { appear.value = +filled; pop.value = 1; return; }
     if (filled) {
-      appear.value = withSpring(1, springs.snappy);
+      appear.value = withSpring(1, motion.fast);
       pop.value = 0.62;
-      pop.value = withSpring(1, springs.snappy);
+      pop.value = withSpring(1, motion.fast);
     } else {
       appear.value = withTiming(0, { duration: 90 });
       pop.value = withTiming(1, { duration: 90 });
     }
-  }, [filled, appear, pop]);
+  }, [filled, appear, pop, motion.fast, motion.reducedMotion]);
 
   useEffect(() => {
-    if (status !== "success") return;
+    if (status !== "success" || motion.reducedMotion) return;
     pop.value = withDelay(
       index * 48,
-      withSequence(withSpring(1.14, springs.bouncy), withSpring(1, springs.snappy)),
+      withSequence(withSpring(1.14, motion.spatial), withSpring(1, motion.fast)),
     );
-  }, [status, index, pop]);
+  }, [status, index, pop, motion.spatial, motion.fast, motion.reducedMotion]);
 
   useEffect(() => {
     if (!active) {

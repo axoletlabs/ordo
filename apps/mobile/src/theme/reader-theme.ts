@@ -8,6 +8,7 @@
  */
 import type { ReaderTheme } from "@ordo/shared";
 import { resolvePalette, type Palette, type SystemColorScheme } from "./theme";
+import type { DeviceTonalPalettes } from "./material-colors";
 
 /** Sepia: aged-paper surfaces with deep umber ink and a terracotta accent. */
 const sepia: Palette = {
@@ -35,7 +36,7 @@ export function resolveReaderPalette(
   theme: ReaderTheme,
   amoled: boolean,
   systemColorScheme: SystemColorScheme,
-  appearance?: { seed: string; expressive: boolean; contrast: 0 | 0.5 | 1 },
+  appearance?: { seed?: string; expressive: boolean; contrast: 0 | 0.5 | 1; deviceColors?: DeviceTonalPalettes | null },
 ): Palette {
   if (theme === "sepia") {
     const generated = resolvePalette("light", false, "light", "#8B6500", appearance?.expressive, appearance?.contrast);
@@ -43,5 +44,5 @@ export function resolveReaderPalette(
       onSurfaceVariant: sepia.onSurfaceVariant, text: sepia.text, textSecondary: sepia.textSecondary,
       textTertiary: sepia.textTertiary, textFaint: sepia.textFaint };
   }
-  return resolvePalette(theme, amoled, systemColorScheme, appearance?.seed, appearance?.expressive, appearance?.contrast);
+  return resolvePalette(theme, amoled, systemColorScheme, appearance?.seed, appearance?.expressive, appearance?.contrast, appearance?.deviceColors);
 }

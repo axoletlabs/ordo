@@ -140,7 +140,7 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
         </View>
 
         <View style={{ height: spacing[24] }} />
-        <Button label="Sign in" block size="lg" onPress={submit} loading={login.isPending} />
+        <Button label="Sign in" block size="md" onPress={submit} loading={login.isPending} />
 
         {selfHosted ? (
           <View style={styles.hosting}>

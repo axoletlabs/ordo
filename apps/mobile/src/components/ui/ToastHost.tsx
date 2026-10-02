@@ -44,8 +44,8 @@ function ToastItem({ toast }: { toast: Toast }) {
   const animateOut = useCallback(() => {
     if (dismissed.current) return;
     dismissed.current = true;
-    enter.value = withTiming(0, { duration: 220 }, () => runOnJS(dismiss)(toast.id));
-  }, [dismiss, enter, toast.id]);
+    enter.value = withTiming(0, { duration: motion.reducedMotion ? 0 : 200 }, () => runOnJS(dismiss)(toast.id));
+  }, [dismiss, enter, toast.id, motion.reducedMotion]);
 
   // Enter, then schedule an auto-dismiss.
   useEffect(() => {
@@ -103,7 +103,9 @@ function ToastItem({ toast }: { toast: Toast }) {
         </Text>
         {toast.action ? (
           <PressableScale
-            scaleTo={0.92}
+            accessibilityRole="button"
+            accessibilityLabel={toast.action.label}
+            stateLayerColor={palette.inversePrimary}
             hitSlop={6}
             onPress={() => {
               toast.action!.onPress();
@@ -152,7 +154,7 @@ const styles = StyleSheet.create({
     maxWidth: 560,
     alignSelf: "center",
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: spacing[8],
     paddingHorizontal: spacing[14],
     paddingVertical: spacing[12],

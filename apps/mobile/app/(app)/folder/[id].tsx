@@ -218,7 +218,7 @@ export default function FolderDetailScreen() {
       scrollEventThrottle={drag.scrollEventThrottle}
       data={items}
       extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}:${bookmarkSort}`}
-      key={`folder:${folderId ?? "root"}:${bookmarkSort}`}
+      key={`folder:${folderId ?? "root"}`}
       keyExtractor={(b: BookmarkDto) => b.id}
       renderItem={renderBookmark}
       contentContainerStyle={{ paddingBottom: listContentPadding }}

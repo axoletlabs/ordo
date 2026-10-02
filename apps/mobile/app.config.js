@@ -38,8 +38,8 @@ const branch = process.env.ORDO_BUILD_BRANCH || git("branch --show-current") || 
 const updatesChannel = process.env.EXPO_UPDATES_CHANNEL || resolveUpdatesChannel(version, branch);
 if (!updatesChannel) throw new Error(`Version ${version} does not match branch ${branch}`);
 // Native resources must be static. These are the generated surface roles for
-// the default Material Expressive source (#006A60); JS restores saved theming.
-const materialLaunch = { light: "#F1FBFB", dark: "#0C1515", primary: "#885209" };
+// the app's default source (#006A60); JS restores saved/device theming.
+const materialLaunch = { light: "#F4FBF8", dark: "#0E1513", primary: "#006A60" };
 
 /** @type {import('expo/config').ExpoConfig} */
 module.exports = {

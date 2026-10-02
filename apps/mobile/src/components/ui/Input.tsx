@@ -14,6 +14,7 @@ import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
 import { caretAfterKey, shouldCorrectWebCaret } from "../../lib/web-input-caret";
+import { useMaterialMotion } from "../../theme/material-motion";
 const AnimatedLabel = Animated.createAnimatedComponent(Text);
 
 type WebCaretNode = TextInput & {
@@ -75,6 +76,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   ...rest
 }, ref) {
   const { palette } = useTheme();
+  const motion = useMaterialMotion();
   const [focused, setFocused] = useState(false);
   const [hasText, setHasText] = useState(!!value);
   const [overlayWidth, setOverlayWidth] = useState(0);
@@ -116,8 +118,8 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   const floating = focused || hasText || !!value;
   const floatProgress = useSharedValue(floating ? 1 : 0);
   useEffect(() => {
-    floatProgress.value = withTiming(floating ? 1 : 0, { duration: 150 });
-  }, [floating, floatProgress]);
+    floatProgress.value = withTiming(floating ? 1 : 0, { duration: motion.reducedMotion ? 0 : 150 });
+  }, [floating, floatProgress, motion.reducedMotion]);
   const labelPosition = useAnimatedStyle(() => ({ top: 16 - 26 * floatProgress.value }));
   const labelType = useAnimatedStyle(() => ({ fontSize: 16 - 4 * floatProgress.value, lineHeight: 24 - 8 * floatProgress.value }));
   // iOS Password AutoFill silently ignores secure fields that use a custom
@@ -156,7 +158,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
             backgroundColor: search ? palette.surfaceContainerHigh : palette.surface,
             borderColor,
             borderWidth,
-            borderRadius: search ? radius.full : radius.xs,
+             borderRadius: search ? radius.full : radius.sm,
           },
         ]}
       >
@@ -274,13 +276,13 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
 
 const styles = StyleSheet.create({
   floatingLabel: { position: "absolute", paddingHorizontal: spacing[4], zIndex: 1 },
-  box: {
+   box: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: spacing[16],
-    minHeight: 56,
+     minHeight: 56,
   },
-  icon: { marginRight: spacing[16] },
+   icon: { marginRight: spacing[16], alignItems: "center", justifyContent: "center" },
   input: {
     flex: 1,
     minWidth: 0,

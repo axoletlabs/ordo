@@ -15,7 +15,7 @@ import { SelectionMark } from "./SelectionMark";
 import { SelectionDragHandle, useSelectionDragRow } from "./SelectionDrag";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
-import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
+import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { RowIconWell } from "../ui/RowIconWell";
 import { ROW_ICON_GLYPH } from "../../theme/alignment";
 import { layout, radius, spacing } from "../../theme/tokens";
@@ -63,6 +63,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
     hold.reset();
   }
   const [hovered, setHovered] = React.useState(false);
+  const [pressed, setPressed] = React.useState(false);
   const menuKey = folderKey(folder.id);
   const highlightedFromMenu = useMenuHighlightStore((s) => s.key === menuKey);
   const highlighted = highlightedProp ?? highlightedFromMenu;
@@ -96,8 +97,8 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
   };
   const rowFill = selected || highlighted
     ? palette.secondaryContainer
-    : hovered
-      ? menuHoverFill(palette.mode)
+    : pressed || hovered
+      ? `${palette.onSurface}${pressed ? "1f" : "14"}`
       : "transparent";
 
   return (
@@ -139,6 +140,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
         style={styles.leadingHit}
       >
       <ListPressable
+        feedback={false}
         accessibilityRole="button"
         accessibilityLabel={`Select ${folder.name}`}
         accessibilityHint="Press and hold to select"
@@ -153,10 +155,11 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
           if (Math.abs(event.nativeEvent.pageY - leadStartY.current) > 10) leadMoved.current = true;
         }}
         onPressIn={() => {
+          setPressed(true);
           hold.pressIn();
           warmFolder();
         }}
-        onPressOut={() => hold.pressOut()}
+        onPressOut={() => { setPressed(false); hold.pressOut(); }}
         onPress={() => {
           if (leadMoved.current) return;
           openFolder();
@@ -175,6 +178,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
       </SelectionDragHandle>
 
       <ListPressable
+        feedback={false}
         accessibilityRole={selectionMode ? "checkbox" : "button"}
         accessibilityLabel={`${folder.name}, ${countLabel}${folder.pinned ? ", pinned" : ""}${lockLabel}${unread ? `, ${folder.unreadCount} unread` : ""}`}
         accessibilityState={selectionMode ? { checked: !!selected } : undefined}
@@ -206,10 +210,11 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
           if (Math.abs(event.nativeEvent.pageY - bodyStartY.current) > 10) bodyMoved.current = true;
         }}
         onPressIn={() => {
+          setPressed(true);
           hold.pressIn();
           warmFolder();
         }}
-        onPressOut={() => hold.pressOut()}
+        onPressOut={() => { setPressed(false); hold.pressOut(); }}
         onPress={() => {
           if (bodyMoved.current) return;
           openFolder();
@@ -261,6 +266,7 @@ const styles = StyleSheet.create({
     flexGrow: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
     paddingRight: layout.rowInset,
+    overflow: "hidden",
   },
   leadingHit: {
     alignSelf: "stretch",
@@ -269,7 +275,7 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: spacing[16],
+    paddingVertical: spacing[12],
     paddingLeft: layout.rowInset,
     ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
   },
@@ -284,7 +290,7 @@ const styles = StyleSheet.create({
   },
   content: { flex: 1, minWidth: 0 },
   titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
-  titleWrap: { flexShrink: 1, minWidth: 0 },
+  titleWrap: { flex: 1, minWidth: 0 },
   metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[8], marginTop: spacing[4] },
   count: { flexShrink: 1 },
 });

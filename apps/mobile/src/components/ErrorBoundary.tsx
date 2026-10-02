@@ -20,6 +20,7 @@ import { Text } from "./ui/Text";
 import { Button } from "./ui/Button";
 import { ThemeOverrideProvider } from "../theme/ThemeProvider";
 import { resolvePalette } from "../theme/theme";
+import { useDeviceColors } from "../theme/device-colors";
 import { useSettingsStore } from "../store/settings";
 import { reloadRuntime } from "../store/update-restart";
 
@@ -35,8 +36,9 @@ interface State {
 
 function Fallback({ error, onReset }: { error: Error; onReset: () => void }) {
   const scheme = useColorScheme();
-  const { themeMode, amoled, themeSeed, expressive, themeContrast } = useSettingsStore();
-  const palette = resolvePalette(themeMode, amoled, scheme, themeSeed, expressive, themeContrast);
+  const { themeMode, amoled, materialYouColors, expressive, themeContrast } = useSettingsStore();
+  const deviceColors = useDeviceColors();
+  const palette = resolvePalette(themeMode, amoled, scheme, undefined, expressive, themeContrast, materialYouColors ? deviceColors : null);
   const updates = Updates.useUpdates();
   const pendingId = updates.downloadedUpdate?.updateId;
   const runningId = updates.currentlyRunning.updateId;

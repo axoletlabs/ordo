@@ -283,7 +283,7 @@ export function ContextMenuItem({
         selected ? { backgroundColor: palette.secondaryContainer } : null,
         expressive ? { borderRadius: selected ? radius.md : radius.sm, marginHorizontal: spacing[4] } : null,
         (pressed || hovered || focused) && !inactive ? { backgroundColor: selected ? palette.secondaryContainer : highlight } : null,
-        focused ? { outlineColor: palette.primary, outlineWidth: 2, outlineOffset: -2 } : null,
+        focused && Platform.OS === "web" ? { outlineColor: palette.primary, outlineWidth: 2, outlineOffset: -2, outlineStyle: "solid" } : null,
       ]}
     >
       <View style={styles.iconSlot}>

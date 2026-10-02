@@ -11,13 +11,11 @@ import { FloatingPanel } from "../ui/FloatingPanel";
 import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
-import { Button } from "../ui/Button";
+import { PanelActions } from "../ui/SheetActionRow";
 import { CheckLine } from "../ui/CheckLine";
 import { Text } from "../ui/Text";
-import { PressableScale } from "../ui/PressableScale";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
-import { useTheme } from "../../theme/ThemeProvider";
-import { radius, spacing } from "../../theme/tokens";
+import { spacing } from "../../theme/tokens";
 import { FOOTNOTE_LINE_BOX } from "../../theme/type-metrics";
 import { haptics } from "../../lib/haptics";
 import { useSettingsStore } from "../../store/settings";
@@ -193,27 +191,11 @@ export function SelfHostFlow({
             </View>
           )}
 
-          <View style={styles.actions}>
-            <Button
-              label={step === "intro" ? "Cancel" : "Back"}
-              variant="secondary"
-              onPress={goBack}
-              disabled={switching}
-              style={styles.action}
-            />
-            {step === "address" ? (
-              <Button
-                label="Connect"
-                variant="primary"
-                onPress={() => void connect()}
-                disabled={!canConnect}
-                loading={confirming || busy}
-                style={styles.action}
-              />
-            ) : (
-              <ContinueButton ready={acceptedResponsibility} onPress={goNext} />
-            )}
-          </View>
+          <PanelActions confirmLabel={step === "address" ? "Connect" : "Continue"}
+            cancelLabel={step === "intro" ? "Cancel" : "Back"} onCancel={goBack}
+            onConfirm={step === "address" ? () => void connect() : goNext}
+            confirmDisabled={step === "address" ? !canConnect : !acceptedResponsibility}
+            loading={step === "address" && (confirming || busy)} cancelDisabled={switching} />
         </ThemedScrollView>
       </FloatingPanel>
       ) : null}
@@ -254,47 +236,6 @@ function CopyList({ items }: { items: readonly string[] }) {
   );
 }
 
-function ContinueButton({
-  ready,
-  onPress,
-}: {
-  ready: boolean;
-  onPress: () => void;
-}) {
-  const { palette } = useTheme();
-  return (
-    <PressableScale
-      accessibilityRole="button"
-      accessibilityLabel="Continue"
-      accessibilityState={{ disabled: !ready }}
-      disabled={!ready}
-      onPress={() => {
-        haptics.light();
-        onPress();
-      }}
-      style={[
-        styles.action,
-        styles.continue,
-        {
-          backgroundColor: ready ? palette.accent : palette.surfaceSecondary,
-          borderColor: ready ? palette.accent : palette.surfaceSecondary,
-        },
-      ]}
-    >
-      <Text
-        variant="header"
-        numberOfLines={1}
-        style={{
-          color: ready ? palette.onAccent : palette.textTertiary,
-          includeFontPadding: false,
-        }}
-      >
-        Continue
-      </Text>
-    </PressableScale>
-  );
-}
-
 const styles = StyleSheet.create({
   stack: { gap: spacing[12] },
   list: { gap: spacing[6] },
@@ -310,19 +251,4 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   listCopy: { flex: 1, includeFontPadding: false },
-  actions: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    gap: spacing[8],
-    marginTop: spacing[12],
-  },
-  action: { flex: 1, minWidth: 0 },
-  continue: {
-    height: 42,
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: radius.sm,
-    borderWidth: 1,
-    paddingHorizontal: spacing[16],
-  },
 });

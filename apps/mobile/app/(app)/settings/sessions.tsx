@@ -11,12 +11,10 @@ import {
   SettingsSectionLabel,
 } from "../../../src/components/settings/SettingsPage";
 import { Text } from "../../../src/components/ui/Text";
-import { Spinner } from "../../../src/components/ui/Spinner";
 import { Badge } from "../../../src/components/ui/Badge";
 import { Button } from "../../../src/components/ui/Button";
 import { Skeleton } from "../../../src/components/ui/Skeleton";
 import { EmptyState } from "../../../src/components/ui/EmptyState";
-import { PressableScale } from "../../../src/components/ui/PressableScale";
 import { RowIconWell } from "../../../src/components/ui/RowIconWell";
 import { ConfirmDialog } from "../../../src/components/ui/ConfirmDialog";
 import { ThemedFlatList } from "../../../src/components/ui/ThemedScrollView";
@@ -41,25 +39,6 @@ function deviceLabel(s: SessionDto): string {
   if (/windows/i.test(ua)) return "Windows";
   if (/linux/i.test(ua)) return "Linux";
   return s.deviceInfo || "This device";
-}
-
-function deviceDescription(s: SessionDto): string {
-  const ua = s.deviceInfo ?? "";
-  const os = /android/i.test(ua)
-    ? "Android"
-    : /iphone|ipad|ios/i.test(ua)
-      ? "iOS"
-      : /windows/i.test(ua)
-        ? "Windows"
-        : /mac/i.test(ua)
-          ? "macOS"
-          : /linux/i.test(ua)
-            ? "Linux"
-            : null;
-  const type = s.deviceType === "unknown"
-    ? null
-    : `${s.deviceType[0].toUpperCase()}${s.deviceType.slice(1)}`;
-  return [os, type].filter(Boolean).join(" · ");
 }
 
 function deviceIcon(s: SessionDto): keyof typeof Ionicons.glyphMap {
@@ -138,29 +117,15 @@ export default function SessionsScreen() {
                   </Text>
                   {item.current ? <Badge tone="accent">This device</Badge> : null}
                 </View>
-                {deviceDescription(item) ? (
-                  <Text variant="footnote" color="tertiary" numberOfLines={1} style={styles.meta}>
-                    {deviceDescription(item)}
-                  </Text>
-                ) : null}
-                <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.meta}>
+                <Text variant="bodySmall" color="secondary" numberOfLines={2} style={styles.meta}>
                   Active {timeAgo(item.lastSeenAt)}
                   {item.ip ? ` · ${item.ip}` : ""}
                 </Text>
               </View>
               {item.current ? null : (
-                <PressableScale
-                  accessibilityRole="button"
-                  accessibilityLabel={`Revoke session on ${deviceLabel(item)}`}
-                  style={styles.revoke}
-                  onPress={() => setPendingRevoke(item)}
-                >
-                  {revoke.isPending && revoke.variables === item.id ? (
-                    <Spinner size="sm" color={palette.danger} />
-                  ) : (
-                    <Text variant="label" color="danger">Revoke</Text>
-                  )}
-                </PressableScale>
+                <Button label="Revoke" variant="danger" size="sm"
+                  loading={revoke.isPending && revoke.variables === item.id}
+                  onPress={() => setPendingRevoke(item)} />
               )}
             </View>
           )}
@@ -219,6 +184,5 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
   title: { flexShrink: 1 },
   meta: { marginTop: spacing[2] },
-  revoke: { flexShrink: 0, minHeight: 48, justifyContent: "center", paddingHorizontal: spacing[12], borderRadius: radius.full },
   emptyState: { width: "100%", maxWidth: layout.maxSettingsWidth },
 });

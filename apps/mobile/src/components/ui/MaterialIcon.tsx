@@ -2,8 +2,9 @@
 import React from "react";
 import type LegacyIcons from "@expo/vector-icons/Ionicons";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-import { SymbolView } from "expo-symbols";
 import { View, type StyleProp, type ViewStyle } from "react-native";
+import { iconGlyphStyle } from "../../theme/icon-glyph";
+import { useTheme } from "../../theme/ThemeProvider";
 type Name = keyof typeof LegacyIcons.glyphMap;
 type MaterialName = keyof typeof MaterialIcons.glyphMap;
 const names: Record<string, MaterialName> = {
@@ -46,18 +47,19 @@ const names: Record<string, MaterialName> = {
   "tablet-portrait": "tablet-android", "cloud-done": "cloud-done", "arrow-down-circle": "download-for-offline",
   "color-wand": "auto-fix-high", scan: "qr-code-scanner", "return-up-back": "reply",
   "ellipsis-horizontal-circle": "more-horiz", "chatbubble-ellipses": "chat",
+  tv: "tv", play: "play-arrow", pause: "pause", stop: "stop", "play-skip-back": "skip-previous", "play-skip-forward": "skip-next",
+  "hand-left": "touch-app", "hand-right": "touch-app", "remove-circle": "remove-circle", ellipse: "radio-button-unchecked",
+  "mail-unread": "markunread", "mail-open": "drafts",
 };
 export function materialIconName(name: string): MaterialName {
   const base = name.replace(/-outline$|-sharp$/, "");
   return names[name] ?? names[base] ?? (base in MaterialIcons.glyphMap ? base as MaterialName : "folder");
 }
 export function MaterialIcon({ name, size = 24, color, style, accessible = false, ...props }: Omit<React.ComponentProps<typeof LegacyIcons>, "name"> & { name: Name }) {
+  const { palette } = useTheme();
   const material = materialIconName(name);
-  const symbol = material.replaceAll("-", "_") as NonNullable<Exclude<React.ComponentProps<typeof SymbolView>["name"], string>>["android"];
   return <View {...props} accessible={accessible} aria-hidden={!accessible} style={[{ width: size, height: size, alignItems: "center", justifyContent: "center", flexShrink: 0 }, style as StyleProp<ViewStyle>]}>
-    <SymbolView name={{ android: symbol, web: symbol }} size={size} tintColor={color}
-      style={{ width: size, height: size }}
-      fallback={<MaterialIcons name={material} size={size} color={color} />} />
+    <MaterialIcons name={material} size={size} color={color ?? palette.onSurfaceVariant} accessible={false} style={iconGlyphStyle(size)} />
   </View>;
 }
 // The adapter preserves the public type accepted by stored folder DTOs.

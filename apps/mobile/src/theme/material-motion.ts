@@ -19,7 +19,7 @@ export const materialMotion = {
     spatial: spring(380, 0.8),
     slow: spring(200, 0.8),
   },
-  effects: { fast: spring(1600, 1), spatial: spring(380, 1), slow: spring(200, 1) },
+  effects: { fast: spring(3800, 1), spatial: spring(1600, 1), slow: spring(800, 1) },
 } as const;
 
 export function useMaterialMotion() {

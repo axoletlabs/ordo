@@ -143,7 +143,7 @@ export default function ResetPasswordScreen() {
           <Button
             label="Continue"
             block
-            size="lg"
+            size="md"
             onPress={() => goToPassword(token)}
             disabled={!codeReady}
           />
@@ -196,7 +196,7 @@ export default function ResetPasswordScreen() {
           <Button
             label="Reset password"
             block
-            size="lg"
+            size="md"
             onPress={() => void submit()}
             loading={busy}
           />

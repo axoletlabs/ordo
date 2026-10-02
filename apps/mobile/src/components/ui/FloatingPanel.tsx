@@ -22,7 +22,7 @@ import { ThemedScrollView } from "./ThemedScrollView";
 
 function panelChildren(children: React.ReactNode): React.ReactNode[] {
   return React.Children.toArray(children).flatMap((child) =>
-    React.isValidElement<{ children?: React.ReactNode }>(child) && child.type === React.Fragment
+    React.isValidElement<{ children?: React.ReactNode }>(child) && (child.type === React.Fragment || child.type === ThemedScrollView)
       ? panelChildren(child.props.children) : [child]);
 }
 import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
@@ -53,6 +53,8 @@ export function FloatingPanel({
 }: FloatingPanelProps) {
   const { palette, expressive } = useTheme();
   const titleId = React.useId();
+  const onShowRef = React.useRef(onShow);
+  onShowRef.current = onShow;
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const hideAndDismiss = React.useCallback(() => {
@@ -69,25 +71,27 @@ export function FloatingPanel({
   const actions = nodes.filter((node) => React.isValidElement(node) && node.type === PanelActions);
   const body = nodes.filter((node) => !headers.includes(node) && !actions.includes(node));
   const heightLimit = height - insets.top - insets.bottom - spacing[48];
-  const bodyLimit = Math.max(0, heightLimit - layout.overlayPadding * 2 - (headers.length ? 56 : 0) - (actions.length ? 72 : 0));
-  const scrollingBody = body.length === 1 && React.isValidElement<{ style?: StyleProp<ViewStyle> }>(body[0]) && body[0].type === ThemedScrollView
-    ? React.cloneElement(body[0], { style: [body[0].props.style, { flexShrink: 1, maxHeight: bodyLimit }] })
-    : body.length ? <ThemedScrollView keyboardShouldPersistTaps="handled" style={{ flexShrink: 1, maxHeight: bodyLimit }}>{body}</ThemedScrollView> : null;
+  // In short windows/above the IME, let the title scroll with the content so
+  // long confirmations cannot push their actions out of the visible panel.
+  const scrollHeader = heightLimit < 360;
+  const bodyLimit = Math.max(0, heightLimit - layout.overlayPadding * 2 - (!scrollHeader && headers.length ? 56 : 0) - (actions.length ? 72 : 0));
+  const scrollNodes = scrollHeader ? [...headers.map((header) => React.isValidElement<{ style?: StyleProp<ViewStyle> }>(header)
+    ? React.cloneElement(header, { style: [header.props.style, { marginBottom: body.length ? spacing[24] : 0 }] }) : header), ...body] : body;
+  const scrollingBody = scrollNodes.length ? <ThemedScrollView keyboardShouldPersistTaps="handled" style={{ flexShrink: 1, maxHeight: bodyLimit }}>{scrollNodes}</ThemedScrollView> : null;
 
   React.useEffect(() => {
-    if (visible) onShow?.();
-  }, [onShow, visible]);
+    if (visible) onShowRef.current?.();
+  }, [visible]);
 
   const scrimStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
   }));
-  // Opacity only: a transform on this card (even translateY(0)) puts every
-  // nested <input> in a containing transform, and browsers then walk the
-  // caret one character off on Backspace. ThemedScrollView strips RN-web's
-  // translateZ(0) for the same reason.
-  const panelStyle = useAnimatedStyle(() => ({
+  // Web keeps its input ancestors untransformed/unclipped. Fade a separate
+  // clipped surface and the contents, rather than compositing the entire
+  // rounded panel (which leaves a square backing in Chromium).
+  const panelStyle = useAnimatedStyle(() => Platform.OS === "web" ? {} : ({
     opacity: progress.value,
-    ...(Platform.OS === "web" ? {} : { transform: [{ translateY: (1 - spatial.value) * 24 }, { scale: 0.94 + spatial.value * 0.06 }] }),
+    transform: [{ translateY: (1 - spatial.value) * 24 }, { scale: 0.94 + spatial.value * 0.06 }],
   }));
 
   if (!rendered) return null;
@@ -120,7 +124,8 @@ export function FloatingPanel({
             aria-modal={visible}
             aria-hidden={!visible}
             aria-labelledby={titleId}
-            accessibilityLabel={React.Children.toArray(children).map((child) => React.isValidElement(child) ? (child.props as { title?: string }).title : undefined).find(Boolean)}
+            accessibilityLabel={headers.map((child) => React.isValidElement(child) ? (child.props as { title?: string }).title : undefined).find(Boolean)}
+            accessibilityLabelledBy={titleId}
             accessibilityViewIsModal
             {...(Platform.OS === "web" ? { tabIndex: -1, dataSet: { materialOverlay: visible ? "true" : "false" } } : {})}
             style={[
@@ -131,14 +136,29 @@ export function FloatingPanel({
                 padding: layout.overlayPadding,
                 minWidth: fitContent ? 220 : undefined,
                 maxHeight: heightLimit,
-                backgroundColor: palette.surfaceContainerHigh,
+                backgroundColor: Platform.OS === "web" ? "transparent" : palette.surfaceContainerHigh,
                 borderRadius: expressive ? radius["3xl"] : radius["2xl"],
               },
               panelStyle,
               style,
             ]}
           >
-            <PanelTitleContext.Provider value={titleId}>{headers}{scrollingBody}{actions}</PanelTitleContext.Provider>
+            {/* A separate web surface avoids the square compositing fringe on
+                opacity-animated rounded cards without clipping input carets. */}
+            {Platform.OS === "web" ? <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, {
+              backgroundColor: palette.surfaceContainerHigh,
+              borderRadius: expressive ? radius["3xl"] : radius["2xl"],
+              zIndex: "auto",
+              isolation: "auto",
+              overflow: "hidden",
+            } as unknown as ViewStyle, scrimStyle]} /> : null}
+            <Animated.View style={[{ flexShrink: 1 }, Platform.OS === "web" ? scrimStyle : null]}>
+            <PanelTitleContext.Provider value={titleId}>
+              {!scrollHeader ? headers.map((header) => React.isValidElement<{ style?: StyleProp<ViewStyle> }>(header)
+                ? React.cloneElement(header, { style: [header.props.style, { marginBottom: 0 }] }) : header) : null}
+              {scrollingBody ? <View style={{ flexShrink: 1, marginTop: !scrollHeader && headers.length ? spacing[24] : 0 }}>{scrollingBody}</View> : null}{actions}
+            </PanelTitleContext.Provider>
+            </Animated.View>
           </Animated.View>
         </KeyboardAvoidingView>
       </View>

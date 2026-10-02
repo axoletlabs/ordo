@@ -153,7 +153,7 @@ export default function ServerScreen() {
           label={cloud ? "Use your own server" : "Use ordo Cloud"}
           variant="secondary"
           block
-          size="lg"
+          size="md"
           onPress={() => {
             if (cloud) setSelfHostOpen(true);
             else setConfirmedUrl(CLOUD_SERVER_URL);

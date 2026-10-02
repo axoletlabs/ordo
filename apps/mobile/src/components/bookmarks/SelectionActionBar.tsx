@@ -1,10 +1,11 @@
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, View, useWindowDimensions } from "react-native";
 import { useColumnPadding } from "../../hooks/use-scene-column-insets";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { AppIcon } from "../ui/PinIcon";
 import { PressableScale } from "../ui/PressableScale";
 import { Text } from "../ui/Text";
+import { ButtonGroup } from "../ui/ButtonGroup";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
 import { layout, radius, spacing } from "../../theme/tokens";
@@ -29,7 +30,9 @@ export function SelectionActionBar({
   maxWidth?: number;
 }) {
   const { palette, shadows, expressive } = useTheme();
+  const { width } = useWindowDimensions();
   const column = useColumnPadding(maxWidth);
+  const itemWidth = Math.max(48, (Math.min(width, maxWidth) - column.left - column.right - 16 - Math.max(0, actions.length - 1) * 8) / Math.max(1, actions.length));
   if (actions.length === 0) return null;
 
   return (
@@ -56,8 +59,9 @@ export function SelectionActionBar({
             },
           ]}
         >
+          <ButtonGroup itemWidth={itemWidth} visualInset={0} gap={8}>
           {actions.map((action) => {
-            const color = action.danger ? palette.danger : palette.text;
+            const color = action.danger ? palette.onErrorContainer : palette.onSecondaryContainer;
             const muted = action.disabled;
             return (
               <PressableScale
@@ -70,15 +74,18 @@ export function SelectionActionBar({
                   haptics.light();
                   action.onPress();
                 }}
-                 style={[styles.action, { borderRadius: radius.full }, muted && styles.disabled]}
+                 stateLayerColor={color} shape={{ rest: 24, pressed: expressive ? radius.md : 24 }}
+                 hitSlop={4}
+                 style={[styles.action, { borderRadius: 24, backgroundColor: action.danger ? palette.errorContainer : palette.secondaryContainer }, muted && styles.disabled]}
               >
                 <AppIcon name={action.icon} size={22} color={color} />
-                <Text variant="label" style={{ color }} numberOfLines={1}>
+                <Text variant="labelSmall" style={{ color }} numberOfLines={1}>
                   {action.label}
                 </Text>
               </PressableScale>
             );
           })}
+          </ButtonGroup>
         </View>
       </View>
     </View>
@@ -99,10 +106,10 @@ const styles = StyleSheet.create({
     borderWidth: 0,
     borderRadius: radius["2xl"],
     paddingVertical: spacing[8],
-    paddingHorizontal: spacing[4],
+    paddingHorizontal: spacing[8],
   },
   action: {
-    flex: 1,
+    width: "100%",
     alignItems: "center",
     justifyContent: "center",
     gap: spacing[4],

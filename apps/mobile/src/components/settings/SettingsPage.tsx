@@ -11,8 +11,15 @@ import { Header } from "../ui/Header";
 import { ThemedScrollView, type ThemedScrollViewProps } from "../ui/ThemedScrollView";
 import { useScrollBarInsets } from "../ui/ScrollBar";
 import { Text } from "../ui/Text";
+import { SettingRow, type SettingRowProps } from "../ui/SettingRow";
 import { useTheme } from "../../theme/ThemeProvider";
 import { layout, spacing } from "../../theme/tokens";
+
+function groupChildren(children: React.ReactNode): React.ReactNode[] {
+  return React.Children.toArray(children).flatMap((child) =>
+    React.isValidElement<{ children?: React.ReactNode }>(child) && child.type === React.Fragment
+      ? groupChildren(child.props.children) : [child]);
+}
 
 interface SettingsPageProps {
   title: string;
@@ -143,10 +150,14 @@ export function SettingsGroup({
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
+  const rows = groupChildren(children);
+  const isSetting = (child: React.ReactNode) => React.isValidElement(child) && child.type === SettingRow;
   return (
     <View style={style}>
       {label ? <SettingsSectionLabel compact={compact}>{label}</SettingsSectionLabel> : null}
-      <View style={styles.group}>{children}</View>
+      <View style={styles.group}>{rows.map((child, index) => React.isValidElement<SettingRowProps>(child) && child.type === SettingRow
+        ? React.cloneElement(child, { position: !isSetting(rows[index - 1]) && !isSetting(rows[index + 1]) ? "only"
+          : !isSetting(rows[index - 1]) ? "first" : !isSetting(rows[index + 1]) ? "last" : "middle" }) : child)}</View>
       {footer ? (
         <Text variant="footnote" color="tertiary" style={styles.groupFooter}>
           {footer}

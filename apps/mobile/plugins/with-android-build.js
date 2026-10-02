@@ -26,6 +26,7 @@ const {
   ordoShareSessionModuleKotlin,
 } = require('./share-session-kotlin');
 const { ordoExportFileModuleKotlin } = require('./export-file-kotlin');
+const { ordoMaterialColorsModuleKotlin } = require('./material-colors-kotlin');
 
 const SCROLLBAR_THUMB_XML = `<?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
@@ -901,6 +902,7 @@ const withAndroidBuild = (config) => {
         ordoExportFileModuleKotlin(packageName)
       );
       await fs.writeFile(path.join(sourceDir, 'QuickShareSave.kt'), quickShareSaveKotlin(packageName));
+      await fs.writeFile(path.join(sourceDir, 'OrdoMaterialColorsModule.kt'), ordoMaterialColorsModuleKotlin(packageName));
       await fs.writeFile(
         path.join(sourceDir, 'ShareReceiverActivity.kt'),
         shareReceiverKotlin(packageName)

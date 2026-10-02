@@ -189,7 +189,7 @@ export function UnlockForm({
         <Button
           label="Use device lock"
           block
-          size="lg"
+          size="md"
           onPress={submitDeviceLock}
           loading={unlock.isPending}
         />

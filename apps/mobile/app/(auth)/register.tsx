@@ -221,7 +221,7 @@ export default function RegisterScreen() {
           ) : null}
 
           <View style={{ height: spacing[24] }} />
-          <Button label="Create account" block size="lg" onPress={submit} loading={register.isPending} />
+          <Button label="Create account" block size="md" onPress={submit} loading={register.isPending} />
         </>
       )}
     </AuthShell>

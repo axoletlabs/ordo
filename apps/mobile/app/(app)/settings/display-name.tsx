@@ -65,7 +65,7 @@ export default function ChangeDisplayNameScreen() {
               <Button
                 label="Save"
                 block
-                size="lg"
+                size="md"
                 onPress={submit}
                 loading={changeName.isPending}
                 disabled={!displayName.trim() || unchanged}

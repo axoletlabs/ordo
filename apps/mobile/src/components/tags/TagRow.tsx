@@ -10,7 +10,7 @@ import { PressableScale } from "../ui/PressableScale";
 import { Text } from "../ui/Text";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
-import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
+import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
 import { prefetchTaggedBookmarks } from "../../hooks/use-tags";
 import { tagColorValue } from "../../lib/tag-colors";
@@ -43,6 +43,7 @@ export const TagRow = React.memo(function TagRow({
   } : basePalette, [basePalette, highlighted]);
   const rowRef = React.useRef<View>(null);
   const [hovered, setHovered] = React.useState(false);
+  const [pressed, setPressed] = React.useState(false);
   const countLabel = `${tag.bookmarkCount} ${tag.bookmarkCount === 1 ? "bookmark" : "bookmarks"}`;
 
   const openTag = () => {
@@ -61,8 +62,8 @@ export const TagRow = React.memo(function TagRow({
 
   const rowFill = highlighted
     ? palette.secondaryContainer
-    : hovered
-      ? menuHoverFill(palette.mode)
+    : pressed || hovered
+      ? `${palette.onSurface}${pressed ? "1f" : "14"}`
       : "transparent";
 
   return (
@@ -88,6 +89,7 @@ export const TagRow = React.memo(function TagRow({
     >
       <RowHighlight color={rowFill} />
       <ListPressable
+        feedback={false}
         accessibilityRole="button"
         accessibilityLabel={`${tag.name}, ${countLabel}`}
         accessibilityHint={onMore ? "Press and hold for more actions" : undefined}
@@ -100,7 +102,8 @@ export const TagRow = React.memo(function TagRow({
             : undefined
         }
         style={styles.press}
-        onPressIn={warmTag}
+        onPressIn={() => { setPressed(true); warmTag(); }}
+        onPressOut={() => setPressed(false)}
         onPress={openTag}
         onLongPress={onMore ? (event) => openMore(event) : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}
@@ -134,6 +137,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderBottomWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden",
   },
   press: {
     flex: 1,

@@ -64,7 +64,7 @@ export function MfaSetupPanel({
         <Text variant="body" color="secondary">
           Use an authenticator app to generate login codes.
         </Text>
-        <Button label="Set up authenticator" block size="lg" loading={starting} onPress={start} />
+        <Button label="Set up authenticator" block size="md" loading={starting} onPress={start} />
         {error ? (
           <Text variant="footnote" color="danger" align="center">
             {error}

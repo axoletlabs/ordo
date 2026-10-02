@@ -8,6 +8,7 @@ import { BackHandler, Platform } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { create } from "zustand";
 import { haptics } from "../lib/haptics";
+import { dismissKeyboard } from "./use-keyboard-visible";
 import { createSelectionHoldGuard } from "../lib/selection-hold-guard";
 
 export type SelectionKey = `bookmark:${string}` | `folder:${string}`;
@@ -44,6 +45,7 @@ export function useSelectionMode() {
 
   const enter = useCallback(
     (key?: SelectionKey) => {
+      dismissKeyboard();
       haptics.medium();
       bump(key ? new Set([key]) : new Set(), true);
     },

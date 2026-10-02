@@ -135,8 +135,10 @@ import {
 } from "@expo-google-fonts/playfair-display";
 import { ROW_INSET, SCREEN_RAIL } from "./alignment";
 import { Roboto_400Regular, Roboto_500Medium, Roboto_700Bold } from "@expo-google-fonts/roboto";
+import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 export const fontAssets = {
+  ...MaterialIcons.font,
   Roboto_400Regular,
   Roboto_500Medium,
   Roboto_700Bold,

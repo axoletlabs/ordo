@@ -121,7 +121,7 @@ export default function DataScreen() {
             <Button
               label={exportLabel}
               block
-              size="lg"
+              size="md"
               loading={exportMutation.isPending}
               onPress={() => exportMutation.mutate()}
             />

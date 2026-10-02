@@ -1,5 +1,5 @@
 /** Google's Material 3 generated color roles, with compatibility aliases. */
-import { materialColorRoles, type MaterialColors } from "./material-colors";
+import { APP_COLOR, materialColorRoles, type DeviceTonalPalettes, type MaterialColors } from "./material-colors";
 export type { MaterialColors } from "./material-colors";
 import { makeShadow, type Shadow } from "./tokens";
 
@@ -25,15 +25,16 @@ export function resolvePalette(
   mode: ThemeMode,
   amoled: boolean,
   systemColorScheme: SystemColorScheme,
-  seed = "#006A60",
+  seed = APP_COLOR,
   expressive = false,
   contrast: 0 | 0.5 | 1 = 0,
+  device?: DeviceTonalPalettes | null,
 ): Palette {
   const isDark = mode === "dark" || (mode === "system" && systemColorScheme === "dark");
-  const key = `${isDark}:${amoled}:${seed}:${expressive}:${contrast}`;
+  const key = `${isDark}:${amoled}:${seed}:${contrast}:${device ? JSON.stringify(device) : "app"}`;
   const cached = cache.get(key);
   if (cached) return cached;
-  const roles = materialColorRoles(seed, isDark, expressive, contrast);
+  const roles = materialColorRoles(seed, isDark, expressive, contrast, device);
   const palette: Palette = {
     ...roles,
     mode: isDark ? "dark" : "light", amoled: isDark && amoled,
@@ -45,7 +46,7 @@ export function resolvePalette(
     accent: roles.primary, onAccent: roles.onPrimary, accentSoft: roles.primaryContainer,
     coral: roles.error, green: roles.primary, blue: roles.secondary, mustard: roles.tertiary,
     success: roles.primary, warning: roles.tertiary, danger: roles.error, dangerSoft: roles.errorContainer,
-    overlay: `${roles.scrim}66`,
+    overlay: `${roles.scrim}52`,
   };
   // Bound the cache even when callers supply custom colors.
   if (cache.size > 64) cache.clear();

@@ -1,54 +1,89 @@
-/** Material search app bar: search is an action, account is a trailing destination. */
-import React from "react";
-import { StyleSheet, View } from "react-native";
-import { useRouter } from "expo-router";
+/** A persistent search app bar and compact, contextual library actions. */
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { Keyboard, StyleSheet, TextInput, View } from "react-native";
+import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColumnPadding } from "../../hooks/use-scene-column-insets";
 import { useAuthStore } from "../../store/auth";
 import { useTheme } from "../../theme/ThemeProvider";
 import { layout, radius, spacing } from "../../theme/tokens";
+import { registerSearchFieldFocus } from "../../lib/search-field-focus";
 import { MaterialIcon } from "../ui/MaterialIcon";
+import { Input } from "../ui/Input";
+import { IconButton } from "../ui/IconButton";
 import { PressableScale } from "../ui/PressableScale";
 import { Text } from "../ui/Text";
 import { UserAvatar } from "../ui/UserAvatar";
 import { SelectionHeader } from "./SelectionHeader";
 
-export function LibraryHeader({ tools, selection }: { tools: React.ReactNode; selection?: {
-  count: number; selectableCount: number; onCancel: () => void; onToggleSelectAll: () => void;
-} }) {
-  const { palette, expressive } = useTheme();
+const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoFocus }: {
+  query: string; onChange: (query: string) => void; autoFocus?: boolean;
+}) {
+  const { palette } = useTheme();
+  const inputRef = useRef<TextInput>(null);
+  const [text, setText] = useState(query);
+  const focused = useRef(false);
+  const frame = useRef<number | null>(null);
+  useEffect(() => { if (!focused.current) setText(query); }, [query]);
+  useFocusEffect(useCallback(() => registerSearchFieldFocus(() => inputRef.current?.focus()), []));
+  useEffect(() => {
+    if (!autoFocus) return;
+    const timer = setTimeout(() => inputRef.current?.focus(), 200);
+    return () => clearTimeout(timer);
+  }, [autoFocus]);
+  useEffect(() => () => { if (frame.current != null) cancelAnimationFrame(frame.current); }, []);
+  const change = (next: string) => {
+    setText(next);
+    if (frame.current != null) cancelAnimationFrame(frame.current);
+    frame.current = requestAnimationFrame(() => { frame.current = null; onChange(next); });
+  };
+  const clear = () => { inputRef.current?.clear(); change(""); inputRef.current?.focus(); };
+  return <Input ref={inputRef} variant="search" value={text} onChangeText={change}
+    placeholder="Search your library" accessibilityLabel="Search your library"
+    onFocus={() => { focused.current = true; }} onBlur={() => { focused.current = false; }}
+    autoCorrect={false} spellCheck={false} autoCapitalize="none" returnKeyType="search"
+    onSubmitEditing={() => Keyboard.dismiss()}
+    onKeyPress={(event) => { if (event.nativeEvent.key === "Escape") { inputRef.current?.clear(); change(""); inputRef.current?.blur(); } }}
+    icon={<MaterialIcon name="search" color={palette.onSurfaceVariant} />}
+    overlayRightAccessory overlayPaddingRight={48}
+    rightAccessory={text ? <IconButton name="close" variant="standard" accessibilityLabel="Clear search" onPress={clear} /> : undefined} />;
+});
+
+export function LibraryHeader({ tools, query, onQueryChange, autoFocusSearch, resultLabel, filters, selection, maxWidth = layout.maxContentWidth }: {
+  tools: React.ReactNode; query: string; onQueryChange: (query: string) => void; autoFocusSearch?: boolean;
+  resultLabel?: string; filters?: React.ReactNode;
+  maxWidth?: number;
+  selection?: { count: number; selectableCount: number; onCancel: () => void; onToggleSelectAll: () => void };
+}) {
+  const { palette } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const column = useColumnPadding(layout.maxContentWidth);
+  const column = useColumnPadding(maxWidth);
   const user = useAuthStore((s) => s.user);
-  return <View style={{ width: "100%", maxWidth: layout.maxContentWidth, alignSelf: "center",
+  return <View style={{ width: "100%", maxWidth, alignSelf: "center",
     paddingTop: insets.top + spacing[8], paddingLeft: column.left, paddingRight: column.right }}>
-    {selection ? <SelectionHeader {...selection} embedded /> : <View style={styles.appBar}>
-      <PressableScale accessibilityRole="button" accessibilityLabel="Search your library"
-        accessibilityHint="Opens search and focuses the search field."
-        onPress={() => router.navigate("/search")} stateLayerColor={palette.onSurface}
-        style={[styles.search, { backgroundColor: palette.surfaceContainerHigh }]}>
-        <MaterialIcon name="search-outline" size={24} color={palette.onSurfaceVariant} />
-        <Text variant="bodyLarge" color="secondary" numberOfLines={1} style={{ flex: 1 }}>Search your library</Text>
-      </PressableScale>
+    <View style={[styles.appBar, selection ? { display: "none" } : null]}>
+      <View style={styles.search}><LibrarySearch query={query} onChange={onQueryChange} autoFocus={autoFocusSearch} /></View>
       <PressableScale accessibilityRole="button" accessibilityLabel="Account and settings"
-        onPress={() => router.navigate("/settings")} style={[styles.account, { backgroundColor: palette.secondaryContainer }]}>
-        {user ? <UserAvatar user={user} size={40} /> : <MaterialIcon name="person-circle-outline" size={28} color={palette.onSecondaryContainer} />}
+        onPress={() => router.navigate("/settings")} stateLayerColor={palette.onSecondaryContainer}
+        style={[styles.account, { backgroundColor: palette.secondaryContainer }]}>
+        {user ? <UserAvatar user={user} size={40} /> : <MaterialIcon name="person-circle" size={24} color={palette.onSecondaryContainer} />}
       </PressableScale>
-    </View>}
-    <View style={styles.titleRow}>
-      <Text variant={expressive ? "displaySmall" : "headlineLarge"}>Your library</Text>
     </View>
-    <View style={[styles.toolbar, { backgroundColor: palette.surfaceContainer, borderRadius: expressive ? radius["2xl"] : radius.full }]}>
-      <Text variant="labelLarge" color="secondary" style={{ flex: 1, paddingLeft: spacing[16] }}>{selection ? "Hold and drag to select more" : "Library tools"}</Text>
+    {selection ? <SelectionHeader {...selection} embedded /> : null}
+    <View style={styles.toolbar}>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text variant="titleLarge" numberOfLines={1}>{selection ? "Select items" : "Library"}</Text>
+        {resultLabel && !selection ? <Text variant="bodySmall" color="secondary" numberOfLines={1} accessibilityLiveRegion="polite">{resultLabel}</Text> : null}
+      </View>
       {!selection ? tools : null}
     </View>
+    {filters}
   </View>;
 }
 const styles = StyleSheet.create({
   appBar: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
-  search: { flex: 1, minWidth: 0, minHeight: 56, borderRadius: radius.full, flexDirection: "row", alignItems: "center", gap: spacing[16], paddingHorizontal: spacing[16] },
+  search: { flex: 1, minWidth: 0 },
   account: { width: 48, height: 48, borderRadius: radius.full, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  titleRow: { paddingTop: spacing[24], paddingBottom: spacing[16] },
-  toolbar: { minHeight: 56, flexDirection: "row", alignItems: "center", padding: spacing[4], marginBottom: spacing[16] },
+  toolbar: { height: 64, flexDirection: "row", alignItems: "center", gap: spacing[8] },
 });

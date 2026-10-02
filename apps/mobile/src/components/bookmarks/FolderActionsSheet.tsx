@@ -616,7 +616,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             onPress={() => showMode("removePasswordAccount")}
             style={styles.forgot}
           >
-            <Text variant="footnote" color="accent">Use account password</Text>
+            <Text variant="labelLarge" color="accent">Use account password</Text>
           </PressableScale>
           <View style={sheetMenuStyles.stack}>
             {(folder.lockType ?? "password") === "pattern" || (folder.lockType ?? "password") === "pin" ? (
@@ -666,7 +666,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             onPress={() => showMode("removePassword")}
             style={styles.forgot}
           >
-            <Text variant="footnote" color="accent">
+            <Text variant="labelLarge" color="accent">
               {(folder.lockType ?? "password") === "device"
                 ? "Use device lock"
                 : (folder.lockType ?? "password") === "pattern"
@@ -724,7 +724,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
 
 const styles = StyleSheet.create({
   error: { marginTop: spacing[8] },
-  forgot: { alignSelf: "center", marginTop: spacing[8] },
+  forgot: { alignSelf: "center", minHeight: 48, justifyContent: "center", paddingHorizontal: spacing[16], borderRadius: 24, marginTop: spacing[8] },
   confirmInput: { marginTop: spacing[12] },
   pinBoxes: { marginTop: spacing[12] },
 });

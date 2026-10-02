@@ -13,7 +13,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { contentInset } from "../../theme/alignment";
-import { radius, springs, spacing } from "../../theme/tokens";
+import { radius, spacing } from "../../theme/tokens";
+import { useMaterialMotion } from "../../theme/material-motion";
 
 export interface BannerProps {
   message: string;
@@ -24,14 +25,15 @@ export interface BannerProps {
 
 export function Banner({ message, visible, tone = "warning", icon }: BannerProps) {
   const { palette } = useTheme();
+  const motion = useMaterialMotion();
   const insets = useSafeAreaInsets();
   const h = useSharedValue(0);
 
   useEffect(() => {
-    h.value = visible
-      ? withSpring(1, springs.gentle)
+    h.value = motion.reducedMotion ? +visible : visible
+      ? withSpring(1, motion.spatial)
       : withTiming(0, { duration: 220, easing: Easing.inOut(Easing.ease) });
-  }, [visible, h]);
+  }, [visible, h, motion.spatial, motion.reducedMotion]);
 
   const bg = tone === "danger" ? palette.errorContainer : palette.tertiaryContainer;
   const fg = tone === "danger" ? palette.onErrorContainer : palette.onTertiaryContainer;

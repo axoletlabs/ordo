@@ -13,7 +13,7 @@ import { Text } from "../ui/Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { tagColorValue } from "../../lib/tag-colors";
 import { haptics } from "../../lib/haptics";
-import { menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
+import { type MenuAnchorRect } from "../../lib/menu-anchor";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { spacing } from "../../theme/tokens";
 import { useFolderUnlocked } from "../../hooks/use-folders";
@@ -395,7 +395,7 @@ function FolderFilterRow({
   const { palette } = useTheme();
   const unlocked = useFolderUnlocked(folderId);
   const [hovered, setHovered] = useState(false);
-  const highlight = menuHoverFill(palette.mode, true);
+  const highlight = `${palette.onSurface}1f`;
 
   return (
     <Pressable
@@ -444,7 +444,7 @@ function TagFilterRow({
 }) {
   const { palette } = useTheme();
   const [hovered, setHovered] = useState(false);
-  const highlight = menuHoverFill(palette.mode, true);
+  const highlight = `${palette.onSurface}1f`;
 
   return (
     <Pressable
@@ -482,7 +482,7 @@ const styles = StyleSheet.create({
   tagSearch: { paddingHorizontal: spacing[12], paddingTop: spacing[4], paddingBottom: spacing[6] },
   empty: { paddingHorizontal: spacing[12], paddingVertical: spacing[12] },
   tagRow: {
-    minHeight: 40,
+    minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[10],

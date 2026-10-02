@@ -143,7 +143,7 @@ function ChangeEmailForm() {
               <Button
                 label="Send code"
                 block
-                size="lg"
+                size="md"
                 onPress={submit}
                 loading={requestEmailChange.isPending && !mfaOpen}
               />

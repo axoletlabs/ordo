@@ -6,7 +6,6 @@ import { SettingRow } from "./SettingRow";
 import { toast } from "./toast-store";
 import { useAppUpdate } from "../../hooks/use-app-update";
 import type { AppUpdatePhase } from "../../lib/app-update-action";
-import { layout } from "../../theme/tokens";
 
 function phaseLabel(phase: AppUpdatePhase): string {
   if (phase.action === "download") return "Download";
@@ -122,5 +121,5 @@ export function OtaUpdateCard() {
 }
 
 const styles = StyleSheet.create({
-  checkButton: { width: layout.settingsControlWidth },
+  checkButton: { width: "100%" },
 });

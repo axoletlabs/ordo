@@ -4,6 +4,7 @@ import { StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Header } from "../../../src/components/ui/Header";
 import { UserAvatar } from "../../../src/components/ui/UserAvatar";
+import { MaterialIcon } from "../../../src/components/ui/MaterialIcon";
 import { PressableScale } from "../../../src/components/ui/PressableScale";
 import { Text } from "../../../src/components/ui/Text";
 import { useAuthStore } from "../../../src/store/auth";
@@ -30,21 +31,22 @@ export default function SettingsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.background }}>
-      <Header title="Settings" large showBack onBack={() => router.navigate("/")} maxWidth={layout.maxSettingsWidth} />
+      <Header title="Settings" showBack onBack={() => router.navigate("/")} maxWidth={layout.maxSettingsWidth} />
       <SettingsScrollView
         contentContainerStyle={{
           paddingBottom: floatingNavigation ? floatingBottomClearance : spacing[40],
         }}
       >
         <PressableScale accessibilityRole="button" accessibilityLabel="Manage your account"
-          onPress={() => router.push("/settings/account")} stateLayerColor={palette.onPrimaryContainer}
-          style={{ flexDirection: "row", alignItems: "center", gap: spacing[16], padding: spacing[24],
-            backgroundColor: palette.primaryContainer, borderRadius: radius["2xl"], marginBottom: spacing[8] }}>
-          <UserAvatar user={user} size={56} />
+          onPress={() => router.push("/settings/account")} stateLayerColor={palette.onSurface}
+          style={{ flexDirection: "row", alignItems: "center", gap: spacing[16], padding: spacing[16],
+            backgroundColor: palette.surfaceContainer, borderRadius: radius.xl, marginBottom: spacing[8] }}>
+          <UserAvatar user={user} size={48} />
           <View style={{ flex: 1, minWidth: 0, gap: spacing[4] }}>
-            <Text variant="titleLarge" numberOfLines={1} style={{ color: palette.onPrimaryContainer }}>{user?.displayName ?? "Your account"}</Text>
-            <Text variant="bodyMedium" numberOfLines={1} style={{ color: palette.onPrimaryContainer }}>{user?.email ?? "Manage account"}</Text>
+            <Text variant="titleMedium" numberOfLines={1}>{user?.displayName ?? "Your account"}</Text>
+            <Text variant="bodyMedium" color="secondary" numberOfLines={1}>{user?.email ?? "Manage account"}</Text>
           </View>
+          <MaterialIcon name="chevron-forward" color={palette.onSurfaceVariant} />
         </PressableScale>
         <SettingsGroup label="Preferences">
           <SettingRow
@@ -91,7 +93,7 @@ export default function SettingsScreen() {
           label="Sign out"
           variant="danger"
           block
-          size="lg"
+          size="md"
           loading={logout.isPending}
           onPress={() => setConfirmingLogout(true)}
           style={styles.signout}

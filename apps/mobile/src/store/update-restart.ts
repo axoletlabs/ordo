@@ -12,6 +12,7 @@ import {
 } from "../lib/runtime-restart";
 import { pinSystemChrome } from "../theme/pin-system-chrome";
 import { resolvePalette } from "../theme/theme";
+import { currentDeviceColors } from "../theme/device-colors";
 import { useSettingsStore } from "./settings";
 
 const SPLASH_PRESENT_TIMEOUT_MS = 1500;
@@ -62,8 +63,8 @@ export function markRestartSplashPresented(): void {
 }
 
 function currentPalette() {
-  const { themeMode, amoled } = useSettingsStore.getState();
-  return resolvePalette(themeMode, amoled, Appearance.getColorScheme());
+  const { themeMode, amoled, expressive, themeContrast, materialYouColors } = useSettingsStore.getState();
+  return resolvePalette(themeMode, amoled, Appearance.getColorScheme(), undefined, expressive, themeContrast, materialYouColors ? currentDeviceColors() : null);
 }
 
 function nextFrame(): Promise<void> {

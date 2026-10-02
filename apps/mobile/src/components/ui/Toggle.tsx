@@ -22,7 +22,7 @@ export function Toggle({ value, onValueChange, disabled, accessibilityLabel }: T
     borderColor: interpolateColor(effect.value, [0, 1], [palette.outline, palette.primary]),
   }));
   const handle = useAnimatedStyle(() => ({
-    left: 6 + position.value * 20, width: 16 + effect.value * 8, height: 16 + effect.value * 8,
+    left: 6 + position.value * 16, width: 16 + effect.value * 8, height: 16 + effect.value * 8,
     backgroundColor: interpolateColor(effect.value, [0, 1], [palette.outline, palette.onPrimary]),
   }));
   return <PressableScale accessibilityRole="switch" accessibilityLabel={accessibilityLabel}

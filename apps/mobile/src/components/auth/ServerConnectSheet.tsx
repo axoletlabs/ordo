@@ -14,29 +14,10 @@ import { FloatingPanel } from "../ui/FloatingPanel";
 import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
-import { Button } from "../ui/Button";
-import { spacing } from "../../theme/tokens";
+import { PanelActions } from "../ui/SheetActionRow";
 import { useSettingsStore } from "../../store/settings";
 import { useServerProbe } from "../../hooks/use-server-probe";
 import { probeServer } from "../../lib/server-probe";
-import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
-
-/**
- * Material Change action stays disabled until the server probe is ready.
- */
-function AnimatedChangeButton({
-  ready,
-  loading,
-  disabled,
-  onPress,
-}: {
-  ready: boolean;
-  loading: boolean;
-  disabled: boolean;
-  onPress: () => void;
-}) {
-  return <Button label="Change" block disabled={disabled || !ready} loading={loading} onPress={onPress} />;
-}
 
 export interface ServerConnectSheetProps {
   visible: boolean;
@@ -131,37 +112,9 @@ export function ServerConnectSheet({
           />
         </View>
 
-        <View style={styles.actions}>
-          <Button
-            label="Cancel"
-            variant="secondary"
-            onPress={() => {
-              dismissKeyboard();
-              onDismiss();
-            }}
-            disabled={confirming}
-            style={styles.action}
-          />
-          {animateReadyColor ? (
-            <View style={styles.action}>
-              <AnimatedChangeButton
-                ready={up && !probing}
-                loading={confirming}
-                disabled={!submitEnabled}
-                onPress={onChange}
-              />
-            </View>
-          ) : (
-            <Button
-              label="Change"
-              variant="primary"
-              onPress={onChange}
-              disabled={!submitEnabled}
-              loading={confirming}
-              style={styles.action}
-            />
-          )}
-        </View>
+        <PanelActions confirmLabel="Change" onConfirm={onChange} onCancel={onDismiss}
+          loading={confirming} cancelDisabled={confirming}
+          confirmDisabled={!submitEnabled || (animateReadyColor && (!up || probing))} />
       </ThemedScrollView>
     </FloatingPanel>
   );
@@ -169,11 +122,4 @@ export function ServerConnectSheet({
 
 const styles = StyleSheet.create({
   body: {},
-  actions: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    gap: spacing[8],
-    marginTop: spacing[12],
-  },
-  action: { flex: 1, minWidth: 0 },
 });

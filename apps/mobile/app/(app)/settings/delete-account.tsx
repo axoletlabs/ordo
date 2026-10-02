@@ -108,7 +108,7 @@ export default function DeleteAccountScreen() {
                 label="Delete account"
                 variant="danger"
                 block
-                size="lg"
+                size="md"
                 loading={deleteAccount.isPending && !mfaOpen}
                 disabled={!currentPassword || !confirmed}
                 onPress={submit}

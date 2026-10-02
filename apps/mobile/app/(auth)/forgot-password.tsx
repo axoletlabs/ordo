@@ -72,7 +72,7 @@ export default function ForgotPasswordScreen() {
         error={formError || undefined}
       />
       <View style={{ height: spacing[24] }} />
-      <Button label="Send reset code" block size="lg" onPress={submit} loading={forgot.isPending} />
+      <Button label="Send reset code" block size="md" onPress={submit} loading={forgot.isPending} />
     </AuthShell>
   );
 }
