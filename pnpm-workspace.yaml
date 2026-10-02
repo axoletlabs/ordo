@@ -13,6 +13,14 @@ minimumReleaseAgeExclude:
 
 nodeLinker: hoisted
 
+auditConfig:
+  ignoreGhsas:
+    # node-forge RSA PKCS#1 v1.5 verification (vulnerable <=1.4.0, no patched
+    # release exists yet). Only @expo/cli and @expo/code-signing-certificates
+    # use it — CI build tooling that never ships in an APK or runs on devices,
+    # and we do not use EAS code signing. Remove when a fixed node-forge ships.
+    - GHSA-86w9-cpqp-85rv
+
 overrides:
   js-yaml: 4.3.2
   "@xmldom/xmldom": 0.9.12
