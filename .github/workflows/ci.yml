@@ -57,7 +57,7 @@ on:
 jobs:
   detect:
     if: github.event_name != 'pull_request' && !github.event.deleted
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       actions: read
@@ -342,7 +342,7 @@ jobs:
     concurrency:
       group: ci-analyze-${{ github.ref }}-${{ github.run_id }}
       cancel-in-progress: false
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
 
@@ -378,7 +378,7 @@ jobs:
     concurrency:
       group: ci-supply-chain-${{ github.ref }}-${{ github.run_id }}
       cancel-in-progress: false
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
         with:
@@ -424,7 +424,7 @@ jobs:
     concurrency:
       group: ci-ota-${{ github.ref }}-publish
       cancel-in-progress: true
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       EXPO_UPDATES_CHANNEL: ${{ needs.detect.outputs.updates_channel }}
       ORDO_BUILD_BRANCH: ${{ github.ref_name }}
@@ -537,12 +537,16 @@ jobs:
   build_apk:
     needs: [detect, analyze, supply-chain]
     if: github.repository == 'axoletlabs/ordo' && needs.detect.outputs.should_build == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     env:
       EXPO_UPDATES_CHANNEL: ${{ needs.detect.outputs.updates_channel }}
       ORDO_BUILD_BRANCH: ${{ github.ref_name }}
+      ORDO_ENABLE_CCACHE: '1'
+      CCACHE_DIR: /home/runner/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPILERCHECK: content
       ORDO_UPLOAD_STORE_TYPE: PKCS12
       ORDO_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
       ORDO_UPLOAD_KEY_ALIAS: ordo
@@ -580,6 +584,22 @@ jobs:
           path: ~/.gradle/caches/build-cache-1
           key: gradle-build-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: gradle-build-
+
+      # The C++ layer is the bulk of assembleRelease and is recompiled from
+      # scratch on every fresh checkout. ccache carries it across runs; fresh
+      # runners get new compiler mtimes, so verify the compiler by content.
+      - name: Cache ccache
+        uses: actions/cache@v5
+        with:
+          path: /home/runner/.ccache
+          key: ccache-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ccache-${{ runner.os }}-
+
+      - name: Set up ccache
+        run: |
+          command -v ccache >/dev/null || sudo apt-get install -y ccache
+          ccache --set-config=max_size=3G
+          ccache --zero-stats >/dev/null
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -643,6 +663,10 @@ jobs:
         working-directory: apps/mobile/android
         run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a -Pandroid.versionCode=${{ needs.detect.outputs.version_code }}
 
+      - name: Show ccache stats
+        if: always()
+        run: ccache --show-stats
+
       - name: Build APKs (release, per-ABI splits + universal)
         if: needs.detect.outputs.is_release == 'true'
         working-directory: apps/mobile/android
@@ -679,7 +703,7 @@ jobs:
   package_server:
     needs: [detect, analyze, supply-chain]
     if: github.repository == 'axoletlabs/ordo' && needs.detect.outputs.is_release == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
@@ -747,7 +771,7 @@ jobs:
     # Stable (Latest): tag vX.Y.Z, pre-release unchecked.
     # Early (pre-release): tag vX.Y.Z-(alpha|beta|rc)[.N], pre-release checked.
     if: needs.detect.outputs.is_release == 'true'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:

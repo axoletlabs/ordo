@@ -1,0 +1,27 @@
+name: Audit ignores
+
+# Audit exceptions are safe only while their reason holds. This check fails
+# the day a patched release is published or an ignore passes its expiry.
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit-ignores
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check ignored advisories
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node .github/scripts/check-audit-ignores.js
