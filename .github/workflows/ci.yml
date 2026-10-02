@@ -599,7 +599,6 @@ jobs:
         run: |
           command -v ccache >/dev/null || sudo apt-get install -y ccache
           ccache --set-config=max_size=3G
-          ccache --set-config=compressor=true
           ccache --zero-stats >/dev/null
 
       - name: Install dependencies
