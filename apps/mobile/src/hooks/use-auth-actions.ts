@@ -146,6 +146,8 @@ export function useRevokeSession() {
 export function useUpdateReaderPreferences() {
   const setUser = useAuthStore((s) => s.setUser);
   return useMutation({
+    mutationKey: ["reader-preferences"],
+    scope: { id: "reader-preferences" },
     mutationFn: (patch: UpdateReaderPreferencesInput) => authApi.updatePreferences(patch),
     onMutate: (patch) => {
       const prev = useAuthStore.getState().user;
@@ -158,11 +160,14 @@ export function useUpdateReaderPreferences() {
       return { prev };
     },
     onSuccess: (user) => {
-      setUser(user);
-      queryClient.setQueryData<UserDto>(qk.me, user);
+      const current = useAuthStore.getState().user;
+      const next = current && queryClient.isMutating({ mutationKey: ["reader-preferences"] }) > 1
+        ? { ...user, preferences: current.preferences } : user;
+      setUser(next);
+      queryClient.setQueryData<UserDto>(qk.me, next);
     },
     onError: (_e, _patch, ctx) => {
-      if (ctx?.prev) setUser(ctx.prev);
+      if (ctx?.prev && queryClient.isMutating({ mutationKey: ["reader-preferences"] }) === 1) setUser(ctx.prev);
     },
   });
 }

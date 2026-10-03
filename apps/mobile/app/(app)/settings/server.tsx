@@ -46,7 +46,7 @@ import { useSettingsStore } from "../../../src/store/settings";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { haptics } from "../../../src/lib/haptics";
 import { ROW_ICON_GLYPH } from "../../../src/theme/alignment";
-import { layout, spacing } from "../../../src/theme/tokens";
+import { layout, radius, spacing } from "../../../src/theme/tokens";
 
 export default function ServerScreen() {
   const { palette } = useTheme();
@@ -90,6 +90,7 @@ export default function ServerScreen() {
     <SettingsPage title="Hosting">
       <SettingsScrollView>
         <SettingsGroup compact>
+          <View style={{ backgroundColor: palette.surfaceContainerLow, borderRadius: radius.xl, overflow: "hidden" }}>
           <View style={[styles.current, { borderBottomColor: palette.border }]}>
             {cloud ? (
               <View
@@ -145,13 +146,15 @@ export default function ServerScreen() {
               icon="pricetag-outline"
               label="Version"
               value={`v${serverInfo.data.version}`}
+              position="last" divider={false}
             />
           ) : null}
+          </View>
         </SettingsGroup>
 
         <Button
           label={cloud ? "Use your own server" : "Use ordo Cloud"}
-          variant="secondary"
+          variant="primary"
           block
           size="md"
           onPress={() => {
@@ -425,7 +428,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing[12],
     paddingHorizontal: layout.rowInset,
-    paddingVertical: spacing[8],
+    paddingVertical: spacing[16],
   },
   currentBody: { flex: 1, minWidth: 0 },
   currentUrl: { marginTop: spacing[2] },

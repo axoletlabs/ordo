@@ -70,7 +70,7 @@ export function AddTagsSheet({
 
   return (
     <>
-      <FloatingPanel visible={visible} onDismiss={onDismiss}>
+      <FloatingPanel visible={visible} obscured={createTagOpen} onDismiss={onDismiss} scrollBody={false}>
         <PanelHeader title="Add tags" />
         <View style={styles.body}>
           <TagSelectList
@@ -102,6 +102,6 @@ export function AddTagsSheet({
 }
 
 const styles = StyleSheet.create({
-  body: {},
+  body: { flexShrink: 1 },
   error: { marginTop: spacing[8] },
 });

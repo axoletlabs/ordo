@@ -19,6 +19,7 @@ export const qk = {
       ? (["bookmarks", folderId ?? null, sort] as const)
       : (["bookmarks", folderId ?? null] as const),
   bookmark: (id: string) => ["bookmarks", "detail", id] as const,
+  libraryIndex: (accessRevision: number) => ["bookmarks", "library-index", accessRevision] as const,
   search: (
     q: string,
     tagIds: readonly string[] = [],

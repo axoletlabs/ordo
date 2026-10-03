@@ -71,18 +71,18 @@ export function SortMenu({
   };
 
   return (
-    <ContextMenu visible={visible} onDismiss={onDismiss} anchor={anchor}>
+    <ContextMenu visible={visible} onDismiss={onDismiss} anchor={anchor} width={300}>
       {page === "root" && folderSort ? (
         <>
           <ContextMenuItem
             icon="folder-outline"
-            label="Sort folders"
+            label="Folders"
             trailing={<Trailing label={FOLDER_SORT_LABEL[folderSort]} />}
             onPress={() => setPage("folders")}
           />
           <ContextMenuItem
             icon="bookmark-outline"
-            label="Sort bookmarks"
+            label="Bookmarks"
             trailing={<Trailing label={BOOKMARK_SORT_LABEL[bookmarkSort]} />}
             onPress={() => setPage("bookmarks")}
           />

@@ -167,8 +167,8 @@ export function SearchFilterMenu({
     filters.tagIds.length === 0
       ? "Any"
       : filters.tagIds.length === 1
-        ? (tags.find((tag) => tag.id === filters.tagIds[0])?.name ?? "1")
-        : `${filters.tagIds.length}`;
+        ? (tags.find((tag) => tag.id === filters.tagIds[0])?.name ?? "1 tag")
+         : `${filters.tagIds.length} tags`;
 
   const folderCount = filters.folderIds.length + (filters.unfiled ? 1 : 0);
   const folderSummary =
@@ -177,8 +177,8 @@ export function SearchFilterMenu({
       : folderCount === 1 && filters.unfiled
         ? "Unfiled"
         : folderCount === 1
-          ? (folders.find((folder) => folder.id === filters.folderIds[0])?.name ?? "1")
-          : `${folderCount}`;
+          ? (folders.find((folder) => folder.id === filters.folderIds[0])?.name ?? "1 folder")
+           : `${folderCount} folders`;
 
   const showUnfiled = !folderQuery.trim() || "unfiled".includes(folderQuery.trim().toLocaleLowerCase("en-US"));
 

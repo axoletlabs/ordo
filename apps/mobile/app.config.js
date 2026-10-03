@@ -130,6 +130,7 @@ module.exports = {
   owner: "imlucki",
   android: {
     package: "com.axolet.ordo",
+    softwareKeyboardLayoutMode: "resize",
     permissions: [
       "android.permission.REQUEST_INSTALL_PACKAGES",
       "android.permission.POST_NOTIFICATIONS",

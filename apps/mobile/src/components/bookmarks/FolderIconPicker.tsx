@@ -1,36 +1,51 @@
-import React from "react";
-import { StyleSheet } from "react-native";
+import React, { useState } from "react";
+import { StyleSheet, View } from "react-native";
 import { PressableScale } from "../ui/PressableScale";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { FOLDER_ICONS, type FolderIcon } from "@ordo/shared";
 import { haptics } from "../../lib/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
-import { ThemedScrollView } from "../ui/ThemedScrollView";
+import { FloatingPanel } from "../ui/FloatingPanel";
+import { PanelHeader } from "../ui/PanelHeader";
+import { PickerField } from "../ui/PickerField";
+import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
 import { radius, spacing } from "../../theme/tokens";
 
 export function FolderIconPicker({
   value,
   onChange,
+  onOpenChange,
 }: {
   value: FolderIcon;
   onChange: (icon: FolderIcon) => void;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const { palette, expressive } = useTheme();
+  const [open, setOpen] = useState(false);
+  const close = () => { setOpen(false); onOpenChange?.(false); };
 
   return (
-    <ThemedScrollView
-      style={styles.scroll}
-      contentContainerStyle={styles.grid}
-      nestedScrollEnabled
-    >
+    <>
+    <PickerField label="Icon" value={value.replace(/-outline$/, "").replace(/-/g, " ").replace(/^./, (letter) => letter.toUpperCase())}
+      icon={value} onPress={() => { dismissKeyboard(); setOpen(true); onOpenChange?.(true); }} />
+    <FloatingPanel visible={open} onDismiss={close}>
+      <PanelHeader title="Folder icon" onClose={close} />
+      <FolderIconGrid value={value} onChange={(icon) => { onChange(icon); close(); }} />
+    </FloatingPanel>
+    </>
+  );
+}
+
+export function FolderIconGrid({ value, onChange }: { value: FolderIcon; onChange: (icon: FolderIcon) => void }) {
+  const { palette, expressive } = useTheme();
+  return <View accessibilityRole="radiogroup" accessibilityLabel="Folder icon" style={styles.grid}>
       {FOLDER_ICONS.map((icon) => {
         const selected = icon === value;
         return (
           <PressableScale
             key={icon}
-            accessibilityRole="button"
+            accessibilityRole="radio"
             accessibilityLabel={icon.replace(/-outline$/, "").replace(/-/g, " ")}
-            accessibilityState={{ selected }}
+            accessibilityState={{ checked: selected }}
             onPress={() => {
               haptics.selection();
               onChange(icon);
@@ -48,13 +63,11 @@ export function FolderIconPicker({
           </PressableScale>
         );
       })}
-    </ThemedScrollView>
-  );
+      </View>
+  ;
 }
 
 const styles = StyleSheet.create({
-  // Three 42px rows with two 8px gaps; remaining icons scroll vertically.
-  scroll: { maxHeight: 160 },
   grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing[8] },
   icon: {
     width: 48,

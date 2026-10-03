@@ -10,6 +10,7 @@ import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { spacing } from "../../theme/tokens";
 import { useTheme } from "../../theme/ThemeProvider";
 import { PanelTitleContext } from "./panel-title";
+import { IconButton } from "./IconButton";
 
 const ICON_SIZE = 24;
 
@@ -23,6 +24,7 @@ export function PanelHeader({
   subtitleVariant = "bodyMedium",
   numberOfLines = 3,
   accessory,
+  onClose,
   style,
 }: {
   title: string;
@@ -34,6 +36,7 @@ export function PanelHeader({
   subtitleVariant?: TextVariant;
   numberOfLines?: number;
   accessory?: React.ReactNode;
+  onClose?: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
   const { palette } = useTheme();
@@ -43,6 +46,9 @@ export function PanelHeader({
       ? palette.error : iconColor ?? palette.secondary;
   return (
     <View style={[styles.wrap, style]}>
+      {onClose ? <View style={{ position: "absolute", right: -spacing[8], top: -spacing[8], zIndex: 2 }}>
+        <IconButton name="close" variant="standard" accessibilityLabel="Close dialog" onPress={onClose} />
+      </View> : null}
       {icon ? (
         <View
           style={[
@@ -65,7 +71,7 @@ export function PanelHeader({
           accessibilityRole="header"
           align={icon ? "center" : "left"}
           numberOfLines={numberOfLines}
-          style={styles.title}
+          style={[styles.title, onClose && !icon ? { paddingRight: 40 } : null]}
         >
           {title}
         </Text>

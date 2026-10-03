@@ -121,7 +121,7 @@ export function useInfiniteSearch(
   const enabled = opts.enabled ?? true;
   return useInfiniteQuery({
     queryKey: qk.search(term, tagIds, unread, folderIds, unfiled, fuzzy, reminder),
-    queryFn: ({ pageParam }) =>
+    queryFn: ({ pageParam, signal }) =>
       bookmarksApi.search(
         term,
         pageParam ?? undefined,
@@ -132,6 +132,7 @@ export function useInfiniteSearch(
         unfiled,
         fuzzy,
         reminder,
+        signal,
       ),
     initialPageParam: null as string | null,
     getNextPageParam: nextPageCursor,

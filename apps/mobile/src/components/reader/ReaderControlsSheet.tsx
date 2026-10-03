@@ -80,7 +80,7 @@ export function ReaderControlsSheet({
 }: ReaderControlsSheetProps) {
   return (
     <FloatingPanel visible={visible} onDismiss={onDismiss}>
-      <PanelHeader title="Reader" />
+      <PanelHeader title="Reader" onClose={onDismiss} />
 
       <View style={styles.body}>
       <ControlGroup label="Text size" accessibilityHint="Changes the article text size.">

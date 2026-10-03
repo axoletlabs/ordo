@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   bookmarkSearchRank,
+  createBookmarkSearchMatcher,
+  prepareBookmarkSearch,
   firstSearchHighlight,
   rankSearchResults,
   tokenizeSearchQuery,
@@ -28,6 +30,18 @@ function bookmark(
 
 test("tokenizeSearchQuery collapses space and lowercases", () => {
   assert.deepEqual(tokenizeSearchQuery("  SSL   Guide "), ["ssl", "guide"]);
+});
+
+test("pre-indexed queries retain ranking and follow immutable record/tag replacements", () => {
+  const initial = bookmark({ title: "Reading notes", tags: [{ id: "design", name: "Design" }] });
+  prepareBookmarkSearch(initial);
+  const match = createBookmarkSearchMatcher("design");
+  assert.deepEqual(match(initial), bookmarkSearchRank(initial, "design"));
+  assert.equal(match(initial).field, "tag");
+  const changed = { ...initial, title: "Design notes", tags: [] };
+  assert.equal(match(changed).field, "title");
+  assert.equal(createBookmarkSearchMatcher("reading")(changed).matched, false);
+  assert.equal(createBookmarkSearchMatcher("design", { omitTagIds: ["design"] })(initial).matched, false);
 });
 
 test("hel prefixes hello/help/helpful and not shelf or Home", () => {

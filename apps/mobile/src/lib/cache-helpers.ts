@@ -314,23 +314,29 @@ export function removeBookmarksEverywhere(qc: QueryClient, ids: ReadonlySet<stri
 
 /** Every bookmark currently in the React Query cache (lists + reader detail). */
 export function collectCachedBookmarks(qc: QueryClient): BookmarkDto[] {
-  const byId = new Map<string, BookmarkDto>();
+  const byId = new Map<string, { item: BookmarkDto; cachedAt: number }>();
   for (const query of qc.getQueryCache().getAll()) {
     const key = query.queryKey;
     if (!Array.isArray(key) || key[0] !== "bookmarks") continue;
     const data = query.state.data;
+    const consider = (item: BookmarkDto) => {
+      const previous = byId.get(item.id);
+      if (!previous || (item.updatedAt ?? "") > (previous.item.updatedAt ?? "") ||
+        (item.updatedAt === previous.item.updatedAt && query.state.dataUpdatedAt > previous.cachedAt))
+        byId.set(item.id, { item, cachedAt: query.state.dataUpdatedAt });
+    };
     if (isPagedBookmarks(data)) {
       for (const page of data.pages) {
         if (!page || !Array.isArray(page.items)) continue;
         for (const item of page.items) {
-          if (isBookmarkRecord(item)) byId.set(item.id, item);
+          if (isBookmarkRecord(item)) consider(item);
         }
       }
     } else if (isBookmarkRecord(data)) {
-      byId.set(data.id, data);
+      consider(data);
     }
   }
-  return [...byId.values()];
+  return [...byId.values()].map(({ item }) => item);
 }
 
 /**

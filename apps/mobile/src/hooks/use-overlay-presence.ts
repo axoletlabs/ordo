@@ -15,15 +15,16 @@ const CLOSE_FALLBACK_MS = CLOSE_MS + 70;
 export function useOverlayPresence(
   visible: boolean,
   onDismiss: () => void,
-  options?: { dismissKeyboard?: boolean },
+  options?: { dismissKeyboard?: boolean; interactive?: boolean },
 ) {
-  const progress = useSharedValue(visible ? 1 : 0);
-  const spatial = useSharedValue(visible ? 1 : 0);
+  const progress = useSharedValue(0);
+  const spatial = useSharedValue(0);
   const motion = useMaterialMotion();
   const [rendered, setRendered] = useState(visible);
   const generation = useRef(0);
   const wasVisible = useRef(false);
   const hideKeyboard = options?.dismissKeyboard !== false;
+  const interactive = options?.interactive !== false;
 
   const hide = useCallback((token: number) => {
     if (generation.current !== token) return;
@@ -69,7 +70,7 @@ export function useOverlayPresence(
   }, [hide, rendered, visible]);
 
   useEffect(() => {
-    if (!rendered || !visible || Platform.OS !== "android") return;
+    if (!rendered || !visible || !interactive || Platform.OS !== "android") return;
     const sub = BackHandler.addEventListener("hardwareBackPress", () => {
       if (keyboardIsOpen()) {
         dismissKeyboard();
@@ -79,7 +80,7 @@ export function useOverlayPresence(
       return true;
     });
     return () => sub.remove();
-  }, [onDismiss, rendered, visible]);
+  }, [onDismiss, rendered, visible, interactive]);
 
   return { rendered, progress, spatial };
 }

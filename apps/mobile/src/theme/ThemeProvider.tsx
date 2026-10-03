@@ -9,7 +9,6 @@ import { Appearance, Platform, View, useColorScheme } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSettingsStore } from "../store/settings";
 import {
-  appearanceOverride,
   resolvePalette,
   resolveShadows,
   type Palette,
@@ -64,8 +63,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (typeof Appearance.setColorScheme !== "function") return;
-    Appearance.setColorScheme(appearanceOverride(themeMode));
-  }, [themeMode]);
+    // Palettes theme the app; Appearance remains the actual OS signal. An
+    // override makes "System" read our forced mode instead of the device.
+    Appearance.setColorScheme("unspecified");
+  }, []);
 
   useEffect(() => {
     applyWebScrollbarTheme(value.palette);

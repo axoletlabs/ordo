@@ -15,6 +15,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
 import { caretAfterKey, shouldCorrectWebCaret } from "../../lib/web-input-caret";
 import { useMaterialMotion } from "../../theme/material-motion";
+import { InputSurfaceContext } from "./input-surface";
 const AnimatedLabel = Animated.createAnimatedComponent(Text);
 
 type WebCaretNode = TextInput & {
@@ -76,6 +77,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   ...rest
 }, ref) {
   const { palette } = useTheme();
+  const fieldSurface = React.useContext(InputSurfaceContext) ?? palette.surface;
   const motion = useMaterialMotion();
   const [focused, setFocused] = useState(false);
   const [hasText, setHasText] = useState(!!value);
@@ -120,7 +122,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   useEffect(() => {
     floatProgress.value = withTiming(floating ? 1 : 0, { duration: motion.reducedMotion ? 0 : 150 });
   }, [floating, floatProgress, motion.reducedMotion]);
-  const labelPosition = useAnimatedStyle(() => ({ top: 16 - 26 * floatProgress.value }));
+  const labelPosition = useAnimatedStyle(() => ({ top: 16 - 24 * floatProgress.value }));
   const labelType = useAnimatedStyle(() => ({ fontSize: 16 - 4 * floatProgress.value, lineHeight: 24 - 8 * floatProgress.value }));
   // iOS Password AutoFill silently ignores secure fields that use a custom
   // font. Use the system face while the value is masked.
@@ -150,21 +152,20 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
       : null;
 
   return (
-    <View style={containerStyle}>
+    <View style={[label ? { paddingTop: 8 } : null, containerStyle]}>
       <View
         style={[
           styles.box,
           {
-            backgroundColor: search ? palette.surfaceContainerHigh : palette.surface,
-            borderColor,
-            borderWidth,
+            backgroundColor: search ? palette.surfaceContainerHigh : fieldSurface,
              borderRadius: search ? radius.full : radius.sm,
           },
         ]}
       >
+        {!search ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderColor, borderWidth, borderRadius: radius.sm }]} /> : null}
         {label ? <Animated.View pointerEvents="none" style={[styles.floatingLabel, {
           left: icon ? 48 : 12,
-          backgroundColor: palette.surface,
+          backgroundColor: fieldSurface,
         }, labelPosition]}>
           <AnimatedLabel variant="bodyLarge" style={[{ color: error ? palette.error : focused ? palette.primary : palette.onSurfaceVariant }, labelType]}>{label}</AnimatedLabel>
         </Animated.View> : null}
@@ -182,6 +183,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
           accessibilityLabel={rest.accessibilityLabel ?? label ?? rest.placeholder}
           selectionColor={palette.primary}
           cursorColor={palette.primary}
+          keyboardAppearance={palette.mode}
           {...rest}
           placeholder={label && !floating ? undefined : rest.placeholder}
           {...(Platform.OS === "web" ? { dir: "ltr" as const } : null)}

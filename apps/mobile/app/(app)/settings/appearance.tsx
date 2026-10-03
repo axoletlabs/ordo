@@ -6,13 +6,12 @@ import { SettingsSelect, type SettingsSelectOption } from "../../../src/componen
 import { SettingRow } from "../../../src/components/ui/SettingRow";
 import { Toggle } from "../../../src/components/ui/Toggle";
 import { Text } from "../../../src/components/ui/Text";
-import { MaterialIcon } from "../../../src/components/ui/MaterialIcon";
 import { Segmented } from "../../../src/components/ui/Segmented";
 import { useSettingsStore, type NavigationAnimation } from "../../../src/store/settings";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { type ThemeMode } from "../../../src/theme/theme";
 import { materialYouAvailable } from "../../../src/theme/device-colors";
-import { layout, radius, spacing } from "../../../src/theme/tokens";
+import { layout, spacing } from "../../../src/theme/tokens";
 
 const themeOptions: readonly SettingsSelectOption<ThemeMode>[] = [
   { value: "light", label: "Light", icon: "sunny-outline" },
@@ -34,18 +33,7 @@ export default function AppearanceScreen() {
   const dark = palette.mode === "dark";
   return <SettingsPage title="Appearance">
     <SettingsScrollView>
-      <View style={[styles.preview, { backgroundColor: palette.surfaceContainer, borderRadius: radius.xl }]}>
-        <View style={[styles.previewIcon, { backgroundColor: palette.primaryContainer, borderRadius: expressive ? radius.lg : radius.full }]}>
-          <MaterialIcon name="sparkles-outline" size={24} color={palette.onPrimaryContainer} />
-        </View>
-        <Text variant="titleLarge">
-          {expressive ? "Material 3 Expressive" : "Material 3"}
-        </Text>
-        <Text variant="bodyMedium" color="secondary">
-          {expressive ? "Emphasized type, contrasting shapes, and responsive spring motion." : "Tonal surfaces, rounded controls, and restrained motion."}
-        </Text>
-      </View>
-      <SettingsGroup label="Design">
+      <SettingsGroup label="Design" compact>
         <SettingRow icon="sparkles-outline" label="Expressive" description="Changes shapes, typography, lists, menus, and motion throughout the app."
           rightFit="content" right={<Toggle value={expressive} onValueChange={settings.setExpressive} accessibilityLabel="Material 3 Expressive" />} />
       </SettingsGroup>
@@ -57,6 +45,9 @@ export default function AppearanceScreen() {
         <Text variant="labelLarge" color="secondary" style={styles.controlLabel}>Contrast</Text>
         <View style={styles.contrast}>
           <Segmented options={contrasts} value={String(settings.themeContrast)} onChange={(value) => settings.setThemeContrast(Number(value) as 0 | 0.5 | 1)} />
+          <Text variant="bodySmall" color="secondary" style={{ marginTop: spacing[8] }}>
+            {settings.themeContrast === 0 ? "Default contrast for text, icons, and outlines." : settings.themeContrast === 0.5 ? "Stronger text, icons, and outlines for easier reading." : "Maximum contrast for text, icons, and outlines."} Light and dark modes stay the same.
+          </Text>
         </View>
         <SettingRow icon="contrast-outline" label="AMOLED black" description={dark ? "Pure black page background" : "Available in dark mode"}
           rightFit="content" right={<Toggle value={settings.amoled && dark} onValueChange={settings.setAmoled} disabled={!dark} accessibilityLabel="AMOLED black" />} />
@@ -69,8 +60,6 @@ export default function AppearanceScreen() {
   </SettingsPage>;
 }
 const styles = StyleSheet.create({
-  preview: { padding: spacing[24], gap: spacing[12], marginTop: spacing[8] },
-  previewIcon: { width: 48, height: 48, alignItems: "center", justifyContent: "center" },
   controlLabel: { paddingHorizontal: layout.rowInset, paddingTop: spacing[16], paddingBottom: spacing[8] },
   contrast: { paddingHorizontal: layout.rowInset, paddingBottom: spacing[16] },
 });

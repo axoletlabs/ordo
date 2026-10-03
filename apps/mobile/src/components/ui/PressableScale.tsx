@@ -1,5 +1,5 @@
 /** Shared Material state layer and interruptible Expressive shape morph. */
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -30,9 +30,18 @@ export function PressableScale({
   const [focused, setFocused] = useState(false);
   const [focusVisible, setFocusVisible] = useState(false);
   const [down, setDown] = useState(false);
+  const releaseFrame = useRef<number | null>(null);
+  useEffect(() => () => { if (releaseFrame.current != null) cancelAnimationFrame(releaseFrame.current); }, []);
   const progress = useSharedValue(0);
   const layer = useSharedValue(0);
   const flat = StyleSheet.flatten(style);
+  const background = useSharedValue(typeof flat?.backgroundColor === "string" ? flat.backgroundColor : "transparent");
+  const backgroundColor = flat?.backgroundColor;
+  useEffect(() => {
+    if (typeof backgroundColor !== "string") return;
+    background.value = motion.reducedMotion ? backgroundColor : withSpring(backgroundColor, materialMotion.effects.fast);
+  }, [background, backgroundColor, motion.reducedMotion]);
+  const backgroundStyle = useAnimatedStyle(() => typeof backgroundColor === "string" ? { backgroundColor: background.value } : {});
   const restCorner = typeof flat?.borderRadius === "number" ? flat.borderRadius : 0;
   const restShape = cornerValues(shape?.rest ?? restCorner);
   const pressedShape = cornerValues(shape?.pressed ?? restCorner);
@@ -67,8 +76,14 @@ export function PressableScale({
       aria-busy={rest.accessibilityState?.busy}
       aria-disabled={disabled || rest.accessibilityState?.disabled}
       disabled={disabled}
-      onPressIn={(event) => { setDown(true); groupInteraction?.(true); onPressIn?.(event); }}
-      onPressOut={(event) => { setDown(false); groupInteraction?.(false); onPressOut?.(event); }}
+      onPressIn={(event) => { if (releaseFrame.current != null) cancelAnimationFrame(releaseFrame.current); setDown(true); groupInteraction?.(true); onPressIn?.(event); }}
+      onPressOut={(event) => {
+        // A toggle's onPress commits selection after press-out. Resolve both
+        // together so its corners don't visit the old rest shape in between.
+        if (releaseFrame.current != null) cancelAnimationFrame(releaseFrame.current);
+        releaseFrame.current = requestAnimationFrame(() => { releaseFrame.current = null; setDown(false); });
+        groupInteraction?.(false); onPressOut?.(event);
+      }}
       onHoverIn={(event) => { setHovered(true); onHoverIn?.(event); }}
       onHoverOut={(event) => { setHovered(false); onHoverOut?.(event); }}
       onFocus={(event) => {
@@ -77,7 +92,7 @@ export function PressableScale({
         onFocus?.(event);
       }}
       onBlur={(event) => { setFocused(false); setFocusVisible(false); setDown(false); groupInteraction?.(false); onBlur?.(event); }}
-      style={[style, { position: flat?.position ?? "relative" }, Platform.OS === "web" && focusVisible && !disabled ? { outlineColor: palette.primary, outlineWidth: 3, outlineOffset: 2, outlineStyle: "solid" } : null, cornerStyle, feedback]}
+      style={[style, { position: flat?.position ?? "relative" }, Platform.OS === "web" && focusVisible && !disabled ? { outlineColor: palette.primary, outlineWidth: 3, outlineOffset: 2, outlineStyle: "solid" } : null, backgroundStyle, cornerStyle, feedback]}
     >
       {typeof children === "function" ? children({ pressed: down }) : children}
       <Animated.View testID="material-state-layer" pointerEvents="none" style={[StyleSheet.absoluteFill, {

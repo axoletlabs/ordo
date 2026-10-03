@@ -32,11 +32,11 @@ test("light reader uses dark ink on a Material surface", () => {
   assert.ok(luminance(LIGHT_BODY) < 0.2);
 });
 
-test("system reader does not pin the resolved color scheme", () => {
+test("switching from any reader palette leaves the real system scheme intact", () => {
   assert.equal(readerColorSchemeOverride("system"), "unspecified");
-  assert.equal(readerColorSchemeOverride("sepia"), "light");
-  assert.equal(readerColorSchemeOverride("light"), "light");
-  assert.equal(readerColorSchemeOverride("dark"), "dark");
+  assert.equal(readerColorSchemeOverride("sepia"), "unspecified");
+  assert.equal(readerColorSchemeOverride("light"), "unspecified");
+  assert.equal(readerColorSchemeOverride("dark"), "unspecified");
 });
 
 test("sepia reader is warm paper with dark ink, not an inverted dark theme", () => {

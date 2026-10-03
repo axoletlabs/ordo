@@ -65,10 +65,9 @@ import { ReminderPresetItems, useSaveReminder } from "../bookmarks/ReminderFlow"
 import { formatReminderWhen } from "../../lib/bookmark-reminders";
 import { READER_BODY_SIZE, resolveReaderFont } from "./reader-typography";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
-import { readerColorSchemeOverride } from "../../theme/reader-color-scheme";
 import { resolveReaderPalette } from "../../theme/reader-theme";
 import { pinSystemChrome } from "../../theme/pin-system-chrome";
-import { appearanceOverride, resolvePalette, type Palette } from "../../theme/theme";
+import { resolvePalette, type Palette } from "../../theme/theme";
 import { useDeviceColors } from "../../theme/device-colors";
 import { scrollbarColors } from "../../theme/scrollbar";
 import { queryClient } from "../../lib/query-client";
@@ -579,36 +578,22 @@ function ReaderPaneInner({
     : palette.background;
   const effectiveDark = palette.mode === "dark";
 
-  // Full-screen reader: pin a fixed light/dark scheme so Android night-mode
-  // force-dark cannot invert parchment. System stays unspecified — pinning the
-  // resolved mode feeds useColorScheme and flashes light/dark after sepia.
-  // Restore the app scheme only when leaving the reader, not on palette changes.
-  useEffect(() => {
-    if (embedded || showWebsiteView) return;
-    if (typeof Appearance.setColorScheme === "function") {
-      Appearance.setColorScheme(readerColorSchemeOverride(preferences.theme));
-    }
-  }, [embedded, showWebsiteView, preferences.theme]);
-
-  useEffect(() => {
-    if (embedded || showWebsiteView) return;
-    return () => {
-      if (typeof Appearance.setColorScheme !== "function") return;
-      const { themeMode } = useSettingsStore.getState();
-      Appearance.setColorScheme(appearanceOverride(themeMode));
-    };
-  }, [embedded, showWebsiteView]);
-
   useEffect(() => {
     if (embedded || showWebsiteView) return;
     void pinSystemChrome(readerPalette).catch(() => {});
+  }, [embedded, showWebsiteView, readerPalette]);
+
+  // Restore on exit only. Restoring between palette updates flashes app
+  // chrome through the reader's new theme and races asynchronous window writes.
+  useEffect(() => {
+    if (embedded || showWebsiteView) return;
     return () => {
       const { themeMode, amoled } = useSettingsStore.getState();
       const app = resolvePalette(themeMode, amoled, Appearance.getColorScheme());
       void pinSystemChrome(app).catch(() => {});
       setStatusBarStyle(app.mode === "dark" ? "light" : "dark");
     };
-  }, [embedded, showWebsiteView, readerPalette]);
+  }, [embedded, showWebsiteView]);
 
   useEffect(() => {
     setSurface(initialSurface === "browser" ? "browser" : "auto");

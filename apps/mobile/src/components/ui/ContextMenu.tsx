@@ -18,6 +18,7 @@ import { AppIcon } from "./PinIcon";
 import { Spinner } from "./Spinner";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "./Text";
+import { PressableScale } from "./PressableScale";
 import { OverlayPortal } from "./overlay-host";
 import { ThemedScrollView } from "./ThemedScrollView";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -253,37 +254,30 @@ export function ContextMenuItem({
   onPress: () => void;
 }) {
   const { palette, expressive } = useTheme();
-  const [hovered, setHovered] = React.useState(false);
-  const [focused, setFocused] = React.useState(false);
   const color = tone === "danger" ? palette.error : selected ? palette.onSecondaryContainer : palette.onSurface;
-  const highlight = `${palette.onSurface}14`;
   const inactive = disabled || busy;
 
   return (
-    <Pressable
+    <PressableScale
       accessibilityRole="menuitem"
       accessibilityLabel={detail ? `${label}, ${detail}` : label}
       accessibilityState={{ disabled: !!inactive, selected: !!selected, busy: !!busy }}
       aria-disabled={!!inactive}
       aria-busy={!!busy}
       disabled={inactive}
-      onHoverIn={() => setHovered(true)}
-      onHoverOut={() => setHovered(false)}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
+      stateLayerColor={color}
+      shape={expressive ? { rest: selected ? radius.md : radius.sm, pressed: selected ? radius.md : radius.sm } : undefined}
       onPress={() => {
         if (inactive) return;
         haptics.light();
         onPress();
       }}
-      style={({ pressed }) => [
+      style={[
         styles.item,
         Platform.OS === "web" ? styles.itemWeb : null,
         inactive && styles.itemDisabled,
-        selected ? { backgroundColor: palette.secondaryContainer } : null,
+        { backgroundColor: selected ? palette.secondaryContainer : "transparent" },
         expressive ? { borderRadius: selected ? radius.md : radius.sm, marginHorizontal: spacing[4] } : null,
-        (pressed || hovered || focused) && !inactive ? { backgroundColor: selected ? palette.secondaryContainer : highlight } : null,
-        focused && Platform.OS === "web" ? { outlineColor: palette.primary, outlineWidth: 2, outlineOffset: -2, outlineStyle: "solid" } : null,
       ]}
     >
       <View style={styles.iconSlot}>
@@ -298,7 +292,7 @@ export function ContextMenuItem({
         <Ionicons
           name="checkmark"
           size={16}
-          color={palette.accent}
+           color={palette.onSecondaryContainer}
           style={[styles.itemSide, iconGlyphStyle(16)]}
         />
       ) : trailing ? (
@@ -308,7 +302,7 @@ export function ContextMenuItem({
           {detail}
         </Text>
       ) : null}
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -336,8 +330,6 @@ const styles = StyleSheet.create({
   itemSide: { alignSelf: "center", flexShrink: 0 },
   itemWeb: {
     cursor: "pointer",
-    transitionProperty: "background-color",
-    transitionDuration: "120ms",
   } as ViewStyle,
   itemDisabled: { opacity: 0.45 },
   iconSlot: {

@@ -97,9 +97,10 @@ export function EditTagsSheet({ visible, onDismiss, bookmark }: EditTagsSheetPro
 
   return (
     <>
-      <FloatingPanel visible={visible} onDismiss={onDismiss}>
+      <FloatingPanel visible={visible} obscured={createTagOpen} onDismiss={onDismiss} scrollBody={false}>
         <PanelHeader title="Edit tags" />
-        <View style={styles.body}>
+        <TagSelectList selectedIds={selectedIds} onToggle={toggle} extraTags={bookmark.tags}
+          onRequestCreateTag={() => setCreateTagOpen(true)} header={<View style={styles.body}>
       {assigned.length > 0 ? (
         <ScrollView
           horizontal
@@ -150,22 +151,12 @@ export function EditTagsSheet({ visible, onDismiss, bookmark }: EditTagsSheetPro
         </View>
       ) : null}
 
-      <View style={styles.section}>
-        <Text variant="label" color="tertiary">Tags</Text>
-        <TagSelectList
-          selectedIds={selectedIds}
-          onToggle={toggle}
-          extraTags={bookmark.tags}
-          onRequestCreateTag={() => setCreateTagOpen(true)}
-        />
-      </View>
-
       {error ? (
         <Text variant="footnote" color="danger" style={styles.error}>
           {error}
         </Text>
       ) : null}
-        </View>
+        </View>} />
 
       <PanelActions
         confirmLabel="Save"
@@ -209,7 +200,7 @@ function PressableIconButton({
 }
 
 const styles = StyleSheet.create({
-  body: {},
+  body: { flexShrink: 1 },
   hint: { marginBottom: spacing[6] },
   chipRow: { flexDirection: "row", gap: spacing[8], paddingVertical: spacing[6], flexWrap: "wrap" },
   chipWrap: { flexDirection: "row", gap: spacing[8], flexWrap: "wrap", marginTop: spacing[6] },
@@ -219,6 +210,6 @@ const styles = StyleSheet.create({
     gap: spacing[4],
   },
   suggestionActions: { flexDirection: "row", gap: spacing[2] },
-  section: { marginTop: spacing[10] },
+  section: { marginTop: spacing[10], flexShrink: 1 },
   error: { marginTop: spacing[8] },
 });

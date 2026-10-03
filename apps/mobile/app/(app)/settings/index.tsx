@@ -31,7 +31,7 @@ export default function SettingsScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.background }}>
-      <Header title="Settings" showBack onBack={() => router.navigate("/")} maxWidth={layout.maxSettingsWidth} />
+      <Header title="Settings" showBack onBack={() => router.canGoBack() ? router.back() : router.replace("/")} maxWidth={layout.maxSettingsWidth} />
       <SettingsScrollView
         contentContainerStyle={{
           paddingBottom: floatingNavigation ? floatingBottomClearance : spacing[40],

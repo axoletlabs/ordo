@@ -40,13 +40,15 @@ function openURL(url: string): void {
   void Linking.openURL(url).catch(() => {});
 }
 
-async function copyFingerprint(value: string): Promise<void> {
+async function copyFingerprint(value: string): Promise<boolean> {
   haptics.light();
   try {
     await Clipboard.setStringAsync(value);
     toast.success("Fingerprint copied");
+    return true;
   } catch {
     toast.error("Couldn't copy the fingerprint.");
+    return false;
   }
 }
 
@@ -192,6 +194,7 @@ export default function AboutScreen() {
           iconColor={palette.accent}
           iconBackground={palette.accentSoft}
           title="Build fingerprint"
+          onClose={() => setFingerprintOpen(false)}
         />
         <View style={[styles.fingerprintBox, { backgroundColor: palette.surface, borderColor: palette.border }]}>
           <Text variant="mono" selectable>
@@ -200,11 +203,9 @@ export default function AboutScreen() {
         </View>
         <PanelActions
           confirmLabel="Copy"
-          cancelLabel="Done"
           onConfirm={() => {
-            if (fingerprint) void copyFingerprint(fingerprint);
+            if (fingerprint) void copyFingerprint(fingerprint).then((copied) => { if (copied) setFingerprintOpen(false); });
           }}
-          onCancel={() => setFingerprintOpen(false)}
         />
       </FloatingPanel>
     </SettingsPage>

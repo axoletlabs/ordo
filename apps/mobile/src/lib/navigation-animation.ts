@@ -23,7 +23,7 @@ export function stackScreenAnimation(preference: NavigationAnimation) {
 export function screenAnimationDuration(preference: NavigationAnimation) {
   if (preference === "instant") return 0;
   if (preference === "fade") return 200;
-  return 400;
+  return 300;
 }
 
 /** Tabs can't push like a stack; Slide is the built-in lateral shift. */

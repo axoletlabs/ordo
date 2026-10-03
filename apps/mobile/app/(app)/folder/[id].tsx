@@ -10,7 +10,7 @@ import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
 import { Header, HeaderActions, HeaderIconButton } from "../../../src/components/ui/Header";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
-import { FAB, FABLayer } from "../../../src/components/ui/FAB";
+import { FAB, FABDock } from "../../../src/components/ui/FAB";
 import { Button } from "../../../src/components/ui/Button";
 import { ScreenContent } from "../../../src/components/ui/ScreenContent";
 import { EmptyState } from "../../../src/components/ui/EmptyState";
@@ -46,7 +46,6 @@ import { errorMessage, isFolderProtected } from "../../../src/lib/error-message"
 import { flattenPages } from "../../../src/lib/api/query-keys";
 import { sortBookmarksBy } from "../../../src/lib/list-sort";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
-import { FAB_LIST_CLEARANCE } from "../../../src/lib/list-pagination";
 import { DEFAULT_BOOKMARK_LIST_SORT, type BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 import { useLoadMore, usePullToRefresh } from "../../../src/hooks/use-list-controls";
@@ -208,7 +207,7 @@ export default function FolderDetailScreen() {
     });
   };
 
-  const listContentPadding = selection.active ? selectionClearance : FAB_LIST_CLEARANCE + dockInset;
+  const listContentPadding = selection.active ? selectionClearance : spacing[8];
   const listPane = (
     <SelectionDragFrame drag={drag}>
     <ThemedFlashList
@@ -343,12 +342,12 @@ export default function FolderDetailScreen() {
             <View style={styles.listPane}>
               {listPane}
               {selection.active ? null : (
-              <FAB
+              <FABDock maxWidth={pageMax}><FAB
                 onPress={() => setAddOpen(true)}
                 accessibilityLabel="Save bookmark"
                 testID="add-bookmark-fab"
                 right={layout.screenHorizontalPad}
-              />
+              /></FABDock>
               )}
             </View>
             <View style={[styles.readerPane, { backgroundColor: palette.surface, borderColor: palette.border }]}>
@@ -372,7 +371,7 @@ export default function FolderDetailScreen() {
       )}
 
       {!showLocked && !loadFailed && !hasDetailPane && !selection.active ? (
-        <FABLayer maxWidth={pageMax}>
+        <FABDock maxWidth={pageMax}>
           <FAB
             onPress={() => setAddOpen(true)}
             accessibilityLabel="Save bookmark"
@@ -380,7 +379,7 @@ export default function FolderDetailScreen() {
             testID="add-bookmark-fab"
             maxContentWidth={pageMax}
           />
-        </FABLayer>
+        </FABDock>
       ) : null}
 
       <AddBookmarkSheet

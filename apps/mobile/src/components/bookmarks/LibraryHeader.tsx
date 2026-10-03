@@ -11,19 +11,21 @@ import { registerSearchFieldFocus } from "../../lib/search-field-focus";
 import { MaterialIcon } from "../ui/MaterialIcon";
 import { Input } from "../ui/Input";
 import { IconButton } from "../ui/IconButton";
+import { HeaderIconButton } from "../ui/Header";
+import type { MenuAnchorRect } from "../../lib/menu-anchor";
 import { PressableScale } from "../ui/PressableScale";
 import { Text } from "../ui/Text";
 import { UserAvatar } from "../ui/UserAvatar";
 import { SelectionHeader } from "./SelectionHeader";
 
-const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoFocus }: {
+const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoFocus, onFilter, filtersOn }: {
   query: string; onChange: (query: string) => void; autoFocus?: boolean;
+  onFilter: (anchor: MenuAnchorRect) => void; filtersOn: boolean;
 }) {
   const { palette } = useTheme();
   const inputRef = useRef<TextInput>(null);
   const [text, setText] = useState(query);
   const focused = useRef(false);
-  const frame = useRef<number | null>(null);
   useEffect(() => { if (!focused.current) setText(query); }, [query]);
   useFocusEffect(useCallback(() => registerSearchFieldFocus(() => inputRef.current?.focus()), []));
   useEffect(() => {
@@ -31,11 +33,9 @@ const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoF
     const timer = setTimeout(() => inputRef.current?.focus(), 200);
     return () => clearTimeout(timer);
   }, [autoFocus]);
-  useEffect(() => () => { if (frame.current != null) cancelAnimationFrame(frame.current); }, []);
   const change = (next: string) => {
     setText(next);
-    if (frame.current != null) cancelAnimationFrame(frame.current);
-    frame.current = requestAnimationFrame(() => { frame.current = null; onChange(next); });
+    onChange(next);
   };
   const clear = () => { inputRef.current?.clear(); change(""); inputRef.current?.focus(); };
   return <Input ref={inputRef} variant="search" value={text} onChangeText={change}
@@ -45,13 +45,20 @@ const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoF
     onSubmitEditing={() => Keyboard.dismiss()}
     onKeyPress={(event) => { if (event.nativeEvent.key === "Escape") { inputRef.current?.clear(); change(""); inputRef.current?.blur(); } }}
     icon={<MaterialIcon name="search" color={palette.onSurfaceVariant} />}
-    overlayRightAccessory overlayPaddingRight={48}
-    rightAccessory={text ? <IconButton name="close" variant="standard" accessibilityLabel="Clear search" onPress={clear} /> : undefined} />;
+    overlayRightAccessory overlayPaddingRight={104}
+    rightAccessory={<View style={{ flexDirection: "row", alignItems: "center" }}>
+      <View style={{ width: 48 }}>{text ? <IconButton name="close" variant="standard" accessibilityLabel="Clear search" onPress={clear} /> : null}</View>
+      <View><HeaderIconButton name="filter-outline" variant="standard" color={filtersOn ? palette.primary : palette.onSurfaceVariant}
+        accessibilityLabel={filtersOn ? "Search filters, active" : "Search filters"} onPress={onFilter} />
+        {filtersOn ? <View pointerEvents="none" style={{ position: "absolute", top: 6, right: 6, width: 6, height: 6, borderRadius: 3, backgroundColor: palette.primary }} /> : null}
+      </View>
+    </View>} />;
 });
 
-export function LibraryHeader({ tools, query, onQueryChange, autoFocusSearch, resultLabel, filters, selection, maxWidth = layout.maxContentWidth }: {
+export function LibraryHeader({ tools, query, onQueryChange, onFilter, filtersOn = false, autoFocusSearch, resultLabel, filters, selection, maxWidth = layout.maxContentWidth }: {
   tools: React.ReactNode; query: string; onQueryChange: (query: string) => void; autoFocusSearch?: boolean;
   resultLabel?: string; filters?: React.ReactNode;
+  onFilter: (anchor: MenuAnchorRect) => void; filtersOn?: boolean;
   maxWidth?: number;
   selection?: { count: number; selectableCount: number; onCancel: () => void; onToggleSelectAll: () => void };
 }) {
@@ -63,12 +70,7 @@ export function LibraryHeader({ tools, query, onQueryChange, autoFocusSearch, re
   return <View style={{ width: "100%", maxWidth, alignSelf: "center",
     paddingTop: insets.top + spacing[8], paddingLeft: column.left, paddingRight: column.right }}>
     <View style={[styles.appBar, selection ? { display: "none" } : null]}>
-      <View style={styles.search}><LibrarySearch query={query} onChange={onQueryChange} autoFocus={autoFocusSearch} /></View>
-      <PressableScale accessibilityRole="button" accessibilityLabel="Account and settings"
-        onPress={() => router.navigate("/settings")} stateLayerColor={palette.onSecondaryContainer}
-        style={[styles.account, { backgroundColor: palette.secondaryContainer }]}>
-        {user ? <UserAvatar user={user} size={40} /> : <MaterialIcon name="person-circle" size={24} color={palette.onSecondaryContainer} />}
-      </PressableScale>
+      <View style={styles.search}><LibrarySearch query={query} onChange={onQueryChange} autoFocus={autoFocusSearch} onFilter={onFilter} filtersOn={filtersOn} /></View>
     </View>
     {selection ? <SelectionHeader {...selection} embedded /> : null}
     <View style={styles.toolbar}>
@@ -77,6 +79,11 @@ export function LibraryHeader({ tools, query, onQueryChange, autoFocusSearch, re
         {resultLabel && !selection ? <Text variant="bodySmall" color="secondary" numberOfLines={1} accessibilityLiveRegion="polite">{resultLabel}</Text> : null}
       </View>
       {!selection ? tools : null}
+      {!selection ? <PressableScale accessibilityRole="button" accessibilityLabel="Account and settings"
+        onPress={() => router.push("/settings")} stateLayerColor={palette.onSecondaryContainer}
+        style={[styles.account, { backgroundColor: palette.secondaryContainer }]}>
+        {user ? <UserAvatar user={user} size={40} /> : <MaterialIcon name="person-circle" size={24} color={palette.onSecondaryContainer} />}
+      </PressableScale> : null}
     </View>
     {filters}
   </View>;

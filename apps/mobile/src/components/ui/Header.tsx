@@ -45,11 +45,11 @@ export function Header({ title, subtitle, showBack, onBack, right, large, safeTo
   return (
     <View style={{ width: "100%", alignSelf: "center", maxWidth,
       paddingTop: safeTop ? insets.top : 0, paddingLeft: column.left, paddingRight: column.right,
-      paddingBottom: spacing[16], backgroundColor: palette.background,
+      paddingBottom: expanded ? spacing[16] : spacing[8], backgroundColor: palette.background,
       borderBottomColor: palette.outlineVariant, borderBottomWidth: divider ? StyleSheet.hairlineWidth : 0,
     }}>
       <View style={styles.bar}>
-         {showBack ? <HeaderIconButton name="arrow-back" variant="standard" color={palette.onSurface} onPress={back} accessibilityLabel="Back" /> : null}
+         {showBack ? <HeaderIconButton name="arrow-back" variant="tonal" color={palette.onSecondaryContainer} onPress={back} accessibilityLabel="Back" /> : null}
         {!expanded ? <View style={styles.title}>
           {onTitleLongPress ? <PressableScale onLongPress={onTitleLongPress} accessibilityRole="button"
             accessibilityLabel={title} accessibilityHint={titleAccessibilityHint}>{titleText}</PressableScale> : titleText}

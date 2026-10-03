@@ -10,7 +10,7 @@ import { Header, HeaderActions, HeaderIconButton } from "../../../src/components
 import { ListLoadingFooter } from "../../../src/components/ui/ListLoadingFooter";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
-import { FAB, FABLayer } from "../../../src/components/ui/FAB";
+import { FAB, FABDock } from "../../../src/components/ui/FAB";
 import { Button } from "../../../src/components/ui/Button";
 import { ScreenContent } from "../../../src/components/ui/ScreenContent";
 import { EmptyState } from "../../../src/components/ui/EmptyState";
@@ -38,7 +38,6 @@ import { errorMessage } from "../../../src/lib/error-message";
 import { flattenPages } from "../../../src/lib/api/query-keys";
 import { useLoadMore, usePullToRefresh } from "../../../src/hooks/use-list-controls";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
-import { FAB_LIST_CLEARANCE } from "../../../src/lib/list-pagination";
 import type { BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
@@ -192,7 +191,7 @@ export default function TagDetailScreen() {
       keyExtractor={(b: BookmarkDto) => b.id}
       renderItem={renderBookmark}
       contentContainerStyle={{
-        paddingBottom: selection.active ? selectionClearance : FAB_LIST_CLEARANCE + dockInset,
+        paddingBottom: selection.active ? selectionClearance : spacing[8],
       }}
       refreshing={refreshing}
       onRefresh={onRefresh}
@@ -297,14 +296,14 @@ export default function TagDetailScreen() {
       )}
 
       {selection.active ? null : (
-      <FABLayer maxWidth={pageMax}>
+      <FABDock maxWidth={pageMax}>
         <FAB
           onPress={() => setAddOpen(true)}
           accessibilityLabel="Save bookmark"
           accessibilityHint="Tap to save a bookmark."
           maxContentWidth={pageMax}
         />
-      </FABLayer>
+      </FABDock>
       )}
 
       <AddBookmarkSheet

@@ -3,7 +3,8 @@
  * inline "New tag" affordance. Shared by the save sheet and edit-tags sheet.
  */
 import React, { useMemo, useState } from "react";
-import { FlatList, Keyboard, StyleSheet, View } from "react-native";
+import { Keyboard, StyleSheet, View } from "react-native";
+import { ThemedFlatList } from "../ui/ThemedScrollView";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { type TagColor } from "@ordo/shared";
 import { Text } from "../ui/Text";
@@ -28,6 +29,7 @@ export interface TagSelectListProps {
    * create-tag panel is still rendered by the caller so the list stays simple.
    */
   onRequestCreateTag?: () => void;
+  header?: React.ReactNode;
 }
 
 export function TagSelectList({
@@ -37,6 +39,7 @@ export function TagSelectList({
   maxHeight,
   autoCreate = true,
   onRequestCreateTag,
+  header,
 }: TagSelectListProps) {
   const { palette } = useTheme();
   const { height } = useResponsiveLayout();
@@ -125,23 +128,17 @@ export function TagSelectList({
     ) : null;
 
   return (
-    <FlatList
+    <View style={{ flexShrink: 1, gap: spacing[8] }}>
+      <Input value={query} onChangeText={setQuery} variant="search" placeholder="Find a tag" accessibilityLabel="Find a tag"
+        containerStyle={{ flexShrink: 0 }} icon={<Ionicons name="search-outline" size={24} color={palette.onSurfaceVariant} />} />
+    <ThemedFlatList animateChanges
       data={[...tags.selected, ...tags.unselected]}
       keyExtractor={(t) => t.id}
       renderItem={({ item }) => renderRow(item, selectedIds.includes(item.id))}
-      style={{ maxHeight: listHeight }}
+      style={{ maxHeight: listHeight, flexShrink: 1 }}
       keyboardShouldPersistTaps="always"
       keyboardDismissMode="none"
-      ListHeaderComponent={
-        <Input
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Filter tags…"
-          autoCapitalize="none"
-          autoCorrect={false}
-          icon={<Ionicons name="search-outline" size={18} color={palette.textTertiary} />}
-        />
-      }
+      ListHeaderComponent={header ? <View>{header}</View> : undefined}
       ListEmptyComponent={
         <Text variant="footnote" color="secondary" style={styles.empty}>
           {query ? `No tags match "${query}".` : "No tags yet."}
@@ -149,6 +146,7 @@ export function TagSelectList({
       }
       ListFooterComponent={createRow}
     />
+    </View>
   );
 }
 

@@ -213,8 +213,8 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
   const fill = wrapper?.flex == null && wrapper?.maxHeight == null && wrapper?.height == null;
   const itemCount = Array.isArray(data) ? data.length : data == null ? 0 : 1;
   const motion = useMaterialMotion();
-  const transition = React.useMemo(() => LinearTransition.springify().mass(motion.spatial.mass)
-    .stiffness(motion.spatial.stiffness).damping(motion.spatial.damping), [motion.spatial]);
+  const transition = React.useMemo(() => LinearTransition.springify().mass(motion.fast.mass)
+    .stiffness(motion.fast.stiffness).damping(motion.fast.damping), [motion.fast]);
   const List = (animateChanges ? Animated.FlatList : FlatList) as typeof FlatList;
 
   return (

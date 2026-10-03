@@ -13,6 +13,7 @@ import { useColumnPadding, type ColumnAlign } from "../../hooks/use-scene-column
 import { layout, radius, spacing } from "../../theme/tokens";
 import { SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useKeyboardVisible } from "../../hooks/use-keyboard-visible";
 
 export interface FABProps {
   icon?: keyof typeof Ionicons.glyphMap;
@@ -43,6 +44,16 @@ export function FABLayer({ children, maxWidth }: FABLayerProps) {
       </View>
     </View>
   );
+}
+
+/** Reserve the action's actual space instead of a blank footer inside the list. */
+export function FABDock({ children, maxWidth }: FABLayerProps) {
+  const insets = useSafeAreaInsets();
+  const keyboard = useKeyboardVisible();
+  if (keyboard) return null;
+  return <View style={{ height: 72 + Math.max(insets.bottom, spacing[16]), width: "100%" }}>
+    <FABLayer maxWidth={maxWidth}>{children}</FABLayer>
+  </View>;
 }
 
 export function FAB({

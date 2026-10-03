@@ -10,6 +10,7 @@ import {
   searchFiltersActive,
   searchFiltersEqual,
   searchScopeActive,
+  searchHighlightRanges,
   type SearchFilters,
 } from "./search-bookmarks.ts";
 
@@ -536,4 +537,22 @@ test("reuseSearchResults keeps the same array when order is unchanged", () => {
     first,
   ]);
   assert.notEqual(reordered, compiled);
+});
+
+test("each typed word is highlighted, with overlapping prefixes merged", () => {
+  assert.deepEqual(searchHighlightRanges("React Native animation", "react native"), [{ start: 0, end: 5 }, { start: 6, end: 12 }]);
+  assert.deepEqual(searchHighlightRanges("React Native", "rea react"), [{ start: 0, end: 5 }]);
+});
+
+test("optimistic reminder/tag changes are visible even before updatedAt changes", () => {
+  const row = bookmark({ id: "reminder", title: "Read later" });
+  assert.notEqual(reuseSearchResults([row], [{ ...row, remindAt: 1_800_000_000 }])[0], row);
+  assert.notEqual(reuseSearchResults([row], [{ ...row, tags: [{ id: "tag", name: "Reading", color: "green" }] }])[0], row);
+});
+
+test("fresh cached metadata wins over an older server page when applying filters", () => {
+  const server = bookmark({ id: "read", title: "React notes", isRead: false });
+  const cached = { ...server, isRead: true };
+  assert.deepEqual(compileSearchResults({ query: "react", filters: { ...none, status: "unread" },
+    serverItems: [server], cachedItems: [cached], serverMatchesQuery: true }), []);
 });

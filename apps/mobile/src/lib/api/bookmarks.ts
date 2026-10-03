@@ -54,6 +54,7 @@ export const bookmarksApi = {
     unfiled = false,
     fuzzy = false,
     reminder: "all" | "due" | "upcoming" = "all",
+    signal?: AbortSignal,
   ) =>
     api.get<typeof BookmarkRoutes.search.response>(BookmarkRoutes.search.path, {
       query: {
@@ -69,6 +70,7 @@ export const bookmarksApi = {
       },
       auth: true,
       folderTokens: true,
+      signal,
     }),
 
   detail: (id: string, folderId?: string | null) =>

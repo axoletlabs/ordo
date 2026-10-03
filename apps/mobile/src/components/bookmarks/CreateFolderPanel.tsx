@@ -8,7 +8,6 @@ import { FloatingPanel } from "../ui/FloatingPanel";
 import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
-import { Text } from "../ui/Text";
 import { FolderIconPicker } from "./FolderIconPicker";
 import { PanelActions } from "../ui/SheetActionRow";
 import { useCreateFolder } from "../../hooks/use-folders";
@@ -30,6 +29,7 @@ export function CreateFolderPanel({
   const [name, setName] = useState("");
   const [icon, setIcon] = useState<FolderIcon>(DEFAULT_FOLDER_ICON);
   const [error, setError] = useState("");
+  const [iconOpen, setIconOpen] = useState(false);
   const nameRef = React.useRef<TextInput>(null);
 
   const close = () => {
@@ -59,6 +59,7 @@ export function CreateFolderPanel({
   return (
     <FloatingPanel
       visible={visible}
+      obscured={iconOpen}
       onDismiss={close}
       onShow={() => setTimeout(() => nameRef.current?.focus(), 100)}
     >
@@ -75,8 +76,7 @@ export function CreateFolderPanel({
             error={error || undefined}
             onSubmitEditing={submit}
           />
-          <Text variant="label" color="tertiary" style={styles.iconLabel}>Icon</Text>
-          <FolderIconPicker value={icon} onChange={setIcon} />
+          <FolderIconPicker value={icon} onChange={setIcon} onOpenChange={setIconOpen} />
         </View>
         <PanelActions
           confirmLabel="Create folder"
@@ -90,6 +90,5 @@ export function CreateFolderPanel({
 }
 
 const styles = StyleSheet.create({
-  body: {},
-  iconLabel: { marginTop: spacing[10], marginBottom: spacing[6] },
+  body: { gap: spacing[16] },
 });

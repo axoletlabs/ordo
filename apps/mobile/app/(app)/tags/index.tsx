@@ -6,7 +6,7 @@ import React, { useCallback, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { Header } from "../../../src/components/ui/Header";
-import { FAB, FABLayer } from "../../../src/components/ui/FAB";
+import { FAB, FABDock } from "../../../src/components/ui/FAB";
 import { ScreenContent } from "../../../src/components/ui/ScreenContent";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
 import { EmptyState } from "../../../src/components/ui/EmptyState";
@@ -21,7 +21,6 @@ import { errorMessage } from "../../../src/lib/error-message";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { ROW_ICON_FRAME } from "../../../src/theme/alignment";
 import { layout, spacing } from "../../../src/theme/tokens";
-import { FAB_LIST_CLEARANCE } from "../../../src/lib/list-pagination";
 import type { TagDto } from "@ordo/shared";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
 
@@ -62,7 +61,7 @@ export default function TagsScreen() {
   );
 
   const listContentStyle = useMemo(
-    () => ({ paddingBottom: FAB_LIST_CLEARANCE }),
+    () => ({ paddingBottom: spacing[8] }),
     [],
   );
 
@@ -115,13 +114,13 @@ export default function TagsScreen() {
       </ScreenContent>
 
       {items.length > 0 ? (
-        <FABLayer maxWidth={layout.maxContentWidth}>
+        <FABDock maxWidth={layout.maxContentWidth}>
           <FAB
             onPress={() => setCreateOpen(true)}
             accessibilityLabel="New tag"
             maxContentWidth={layout.maxContentWidth}
           />
-        </FABLayer>
+        </FABDock>
       ) : null}
 
       <CreateTagPanel visible={createOpen} onDismiss={() => setCreateOpen(false)} />

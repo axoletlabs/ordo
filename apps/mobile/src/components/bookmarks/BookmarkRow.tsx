@@ -25,7 +25,7 @@ import { haptics } from "../../lib/haptics";
 import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { prefetchBookmarkDetail } from "../../hooks/use-bookmarks";
 import { prefetchTaggedBookmarks } from "../../hooks/use-tags";
-import { firstSearchHighlight } from "../../lib/search-bookmarks";
+import { searchHighlightRanges } from "../../lib/search-bookmarks";
 import { ROW_ICON_FRAME, ROW_ICON_GLYPH } from "../../theme/alignment";
 import { layout, radius, spacing } from "../../theme/tokens";
 import { bookmarkKey, SELECTION_LONG_PRESS_MS, useSelectionHoldGuard } from "../../hooks/use-selection";
@@ -33,20 +33,18 @@ import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
 import type { BookmarkDto } from "@ordo/shared";
 
 /** Compact tags shown inline on a row before overflow. */
-const MAX_ROW_TAGS = 3;
+const MAX_ROW_TAGS = 2;
 
 function highlightTitle(title: string, query?: string, fuzzy = false, onSelectedSurface = false) {
-  const span = query ? firstSearchHighlight(title, query, fuzzy) : null;
-  if (!span) return title;
-  return (
-    <>
-      {title.slice(0, span.start)}
-      <Text variant="headline" color={onSelectedSurface ? "primary" : "accent"}>
-        {title.slice(span.start, span.end)}
-      </Text>
-      {title.slice(span.end)}
-    </>
-  );
+  const spans = query ? searchHighlightRanges(title, query, fuzzy) : [];
+  if (!spans.length) return title;
+  let end = 0;
+  const nodes: React.ReactNode[] = [];
+  for (const span of spans) {
+    nodes.push(title.slice(end, span.start), <Text key={span.start} variant="headline" color={onSelectedSurface ? "primary" : "accent"}>{title.slice(span.start, span.end)}</Text>);
+    end = span.end;
+  }
+  return <>{nodes}{title.slice(end)}</>;
 }
 
 export interface BookmarkRowProps {
@@ -117,7 +115,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   } : basePalette, [basePalette, selected, highlighted]);
   const titleColor = bookmark.isRead ? "secondary" : "primary";
   const domain = bookmark.domain || domainFromUrl(bookmark.url);
-  const title = bookmark.title || domain;
+  const title = (bookmark.title || domain).replace(/\s+/g, " ");
   const createdLabel = relativeTime(bookmark.createdAt);
   const reminderLabel = bookmark.remindAt != null ? formatReminderWhen(bookmark.remindAt) : null;
   const reminderDue = bookmarkReminderStatus(bookmark.remindAt) === "due";
@@ -349,20 +347,10 @@ export const BookmarkRow = React.memo(function BookmarkRow({
         <View style={styles.content}>
           <View style={styles.titleRow}>
             <View style={styles.titleWrap}>
-              <Text variant="headline" color={titleColor} numberOfLines={2}>
+              <Text variant="headline" color={titleColor} numberOfLines={1} ellipsizeMode="tail">
                 {highlightTitle(title, searchQuery, searchFuzzy, !!selected || !!highlighted)}
               </Text>
             </View>
-            {bookmark.remindAt != null ? (
-              <RowStatusSlot>
-                <Ionicons
-                  name="alarm-outline"
-                  size={ROW_STATUS_ICON_SIZE}
-                  color={reminderDue ? palette.accent : palette.textTertiary}
-                  accessible={false}
-                />
-              </RowStatusSlot>
-            ) : null}
             {isPending ? (
               <RowStatusSlot>
                 <Spinner
@@ -428,7 +416,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
               ))}
               {overflowCount > 0 ? (
                 <Text variant="monoSmall" color="tertiary" style={styles.overflow}>
-                  +{overflowCount}
+                  +{overflowCount} tags
                 </Text>
               ) : null}
             </View>
@@ -446,28 +434,21 @@ export const BookmarkRow = React.memo(function BookmarkRow({
             <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.domain}>
               {domain}
             </Text>
-            {!showReadingTime ? <Text variant="bodySmall" color="tertiary" numberOfLines={1}>{createdLabel}</Text> : null}
-            {reminderLabel ? (
-              <>
-                <View style={[styles.separator, { backgroundColor: palette.textFaint }]} />
-                <Text
-                  variant="monoSmall"
-                  color={reminderDue ? "accent" : "tertiary"}
-                  numberOfLines={1}
-                >
-                  {reminderLabel}
-                </Text>
-              </>
-            ) : null}
+             {!showReadingTime ? <Text variant="bodySmall" color="tertiary" numberOfLines={1} style={{ flexShrink: 0 }}>{createdLabel}</Text> : null}
             {showReadingTime ? (
               <>
-                <View style={[styles.separator, { backgroundColor: palette.textFaint }]} />
-                <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
+                 <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={{ flexShrink: 0 }}>
                   {bookmark.readingTimeMinutes} min
                 </Text>
               </>
             ) : null}
-          </View>
+           </View>
+           {reminderLabel ? <View style={styles.reminderRow}>
+             <Ionicons name="alarm-outline" size={ROW_STATUS_ICON_SIZE} color={reminderDue ? palette.primary : palette.onSurfaceVariant} />
+             <Text variant="bodySmall" color={reminderDue ? "accent" : "tertiary"} numberOfLines={1} style={{ flexShrink: 1 }}>
+               {reminderLabel}
+             </Text>
+           </View> : null}
         </View>
       </ListPressable>
       {onMore && !selectionMode ? <PressableScale accessibilityRole="button" accessibilityLabel={`More actions for ${title}`}
@@ -481,6 +462,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
 
 const styles = StyleSheet.create({
   wrap: {
+    minHeight: 72,
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "stretch",
@@ -495,9 +477,9 @@ const styles = StyleSheet.create({
   },
   leading: {
     alignSelf: "stretch",
-    justifyContent: "flex-start",
+     justifyContent: "center",
     alignItems: "center",
-     paddingVertical: spacing[16],
+     paddingVertical: spacing[12],
     paddingLeft: layout.rowInset,
     ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
   },
@@ -505,7 +487,7 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-     paddingVertical: spacing[16],
+      paddingVertical: spacing[12],
      paddingLeft: spacing[16],
     paddingRight: spacing[8],
   },
@@ -533,20 +515,20 @@ const styles = StyleSheet.create({
   tagRow: {
     flexDirection: "row",
     alignItems: "center",
-    flexWrap: "wrap",
+     flexWrap: "nowrap",
     gap: spacing[4],
     marginTop: spacing[8],
   },
-  overflow: { marginLeft: spacing[2] },
+  overflow: { marginLeft: spacing[2], flexShrink: 0 },
   suggestionRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[4],
     marginTop: spacing[4],
   },
-  metaRow: { flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: spacing[8], marginTop: spacing[4] },
+   metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[8], marginTop: spacing[4] },
+   reminderRow: { flexDirection: "row", alignItems: "center", gap: spacing[8], marginTop: spacing[4] },
   domain: { flex: 1, minWidth: 0 },
-  separator: { width: 3, height: 3, borderRadius: radius.full },
   openExternal: {
     ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
   },

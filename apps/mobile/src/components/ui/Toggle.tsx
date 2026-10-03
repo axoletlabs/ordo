@@ -1,11 +1,11 @@
 /** Material switch: 52×32 track, 16/24dp handle, selected checkmark. */
 import React, { useEffect } from "react";
 import { StyleSheet } from "react-native";
-import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { MaterialIcon } from "./MaterialIcon";
 import { PressableScale } from "./PressableScale";
 import { useTheme } from "../../theme/ThemeProvider";
-import { useMaterialMotion } from "../../theme/material-motion";
+import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 import { haptics } from "../../lib/haptics";
 export interface ToggleProps { value: boolean; onValueChange: (value: boolean) => void; disabled?: boolean; accessibilityLabel?: string }
 export function Toggle({ value, onValueChange, disabled, accessibilityLabel }: ToggleProps) {
@@ -15,7 +15,7 @@ export function Toggle({ value, onValueChange, disabled, accessibilityLabel }: T
   const effect = useSharedValue(value ? 1 : 0);
   useEffect(() => {
     position.value = motion.reducedMotion ? +value : withSpring(+value, motion.fast);
-    effect.value = withTiming(+value, { duration: motion.reducedMotion ? 0 : 150 });
+    effect.value = motion.reducedMotion ? +value : withSpring(+value, materialMotion.effects.fast);
   }, [value, motion.fast, motion.reducedMotion, position, effect]);
   const track = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(effect.value, [0, 1], [palette.surfaceContainerHighest, palette.primary]),
@@ -25,12 +25,13 @@ export function Toggle({ value, onValueChange, disabled, accessibilityLabel }: T
     left: 6 + position.value * 16, width: 16 + effect.value * 8, height: 16 + effect.value * 8,
     backgroundColor: interpolateColor(effect.value, [0, 1], [palette.outline, palette.onPrimary]),
   }));
+  const check = useAnimatedStyle(() => ({ opacity: effect.value }));
   return <PressableScale accessibilityRole="switch" accessibilityLabel={accessibilityLabel}
     accessibilityState={{ checked: value, disabled: !!disabled }} disabled={disabled}
     style={styles.target} onPress={() => { haptics.selection(); onValueChange(!value); }}>
     <Animated.View pointerEvents="none" style={[styles.track, { opacity: disabled ? 0.38 : 1 }, track]}>
       <Animated.View style={[styles.handle, handle]}>
-        {value ? <MaterialIcon name="checkmark" size={16} color={palette.onPrimaryContainer} /> : null}
+        <Animated.View style={check}><MaterialIcon name="checkmark" size={16} color={palette.onPrimaryContainer} /></Animated.View>
       </Animated.View>
     </Animated.View>
   </PressableScale>;

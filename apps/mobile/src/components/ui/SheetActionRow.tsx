@@ -35,7 +35,7 @@ export function PanelActions({
 }: {
   confirmLabel: string;
   onConfirm: () => void;
-  onCancel: () => void;
+  onCancel?: () => void;
   cancelLabel?: string;
   loading?: boolean;
   confirmDisabled?: boolean;
@@ -44,7 +44,7 @@ export function PanelActions({
 }) {
   return (
     <View style={sheetMenuStyles.row}>
-      <Button
+      {onCancel ? <Button
         label={cancelLabel}
         variant="ghost"
         onPress={() => {
@@ -53,7 +53,7 @@ export function PanelActions({
         }}
         disabled={cancelDisabled}
         style={sheetMenuStyles.action}
-      />
+      /> : null}
       <Button
         label={confirmLabel}
         variant={confirmVariant}

@@ -14,7 +14,7 @@ import { EyeToggle } from "../ui/EyeToggle";
 import { PressableScale } from "../ui/PressableScale";
 import { Segmented } from "../ui/Segmented";
 import { OtpInput } from "../ui/OtpInput";
-import { FolderIconPicker } from "./FolderIconPicker";
+import { FolderIconGrid } from "./FolderIconPicker";
 import { PatternInput } from "./PatternInput";
 import { useTheme } from "../../theme/ThemeProvider";
 import { spacing } from "../../theme/tokens";
@@ -691,7 +691,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
         <>
           <PanelHeader title="Choose an icon" />
           <View>
-            <FolderIconPicker value={icon} onChange={setIcon} />
+            <FolderIconGrid value={icon} onChange={setIcon} />
             {error ? <Text variant="footnote" color="danger" style={styles.error}>{error}</Text> : null}
           </View>
           <PanelActions

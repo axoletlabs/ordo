@@ -51,6 +51,7 @@ export default function AppLayout() {
       <Stack.Screen name="reader/[id]" />
       <Stack.Screen name="tags/index" />
       <Stack.Screen name="tags/[id]" />
+      <Stack.Screen name="settings/index" />
       <Stack.Screen name="settings/sessions" />
       <Stack.Screen name="settings/about" />
       <Stack.Screen name="settings/changelog" />
