@@ -25,6 +25,14 @@ auditConfig:
     # expires: 2026-11-01 — the audit-ignore watchdog fails CI on this date
     # or the day a patched node-forge is published, whichever comes first.
     - GHSA-86w9-cpqp-85rv
+    # braces recursive AST stack-exhaustion DoS (GHSA-vfj7-8cjw-p6xm).
+    # npm still publishes only <=3.0.3; the audit's suggested 3.0.4 does not
+    # exist, and GitHub lists no patched release. Our production dependency
+    # paths are Metro/micromatch build tooling, not APK or backend execution.
+    # Glob patterns come from developer-controlled build configuration;
+    # saved URLs and article content are never passed to this parser.
+    # expires: 2026-11-01 — remove when an upstream patch is published.
+    - GHSA-vfj7-8cjw-p6xm
 
 overrides:
   js-yaml: 4.3.2
