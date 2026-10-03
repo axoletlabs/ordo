@@ -1,6 +1,6 @@
 import React from "react";
 import {
-  KeyboardAvoidingView,
+  Keyboard,
   Platform,
   Pressable,
   StyleSheet,
@@ -9,7 +9,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import Animated, { useAnimatedStyle } from "react-native-reanimated";
+import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { OverlayPortal } from "./overlay-host";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -20,6 +20,8 @@ import { PanelHeader } from "./PanelHeader";
 import { PanelActions } from "./SheetActionRow";
 import { ThemedScrollView } from "./ThemedScrollView";
 import { InputSurfaceContext } from "./input-surface";
+import { panelKeyboardLift } from "../../lib/panel-keyboard-layout";
+import { useMaterialMotion } from "../../theme/material-motion";
 
 function panelChildren(children: React.ReactNode): React.ReactNode[] {
   return React.Children.toArray(children).flatMap((child) =>
@@ -44,6 +46,8 @@ export interface FloatingPanelProps {
   scrollBody?: boolean;
   /** Keep a draft mounted while a sibling picker is the active surface. */
   obscured?: boolean;
+  /** An anchored dropdown can own focus/back without hiding its parent form. */
+  interactive?: boolean;
 }
 
 export function FloatingPanel({
@@ -57,6 +61,7 @@ export function FloatingPanel({
   dismissible = true,
   scrollBody = true,
   obscured = false,
+  interactive = true,
 }: FloatingPanelProps) {
   const { palette, expressive } = useTheme();
   const titleId = React.useId();
@@ -64,22 +69,33 @@ export function FloatingPanel({
   onShowRef.current = onShow;
   const { width, height } = useWindowDimensions();
   const [availableHeight, setAvailableHeight] = React.useState(height);
+  const [keyboardTop, setKeyboardTop] = React.useState<number | null>(null);
+  const [panelHeight, setPanelHeight] = React.useState(0);
+  const resting = React.useRef({ width, height });
+  if (width !== resting.current.width || Platform.OS === "web") resting.current = { width, height };
+  else resting.current.height = Math.max(resting.current.height, height);
+  const restHeight = resting.current.height;
+  const motion = useMaterialMotion();
+  const keyboardShift = useSharedValue(0);
   const insets = useSafeAreaInsets();
   const hideAndDismiss = React.useCallback(() => {
     if (!dismissible) return;
     dismissKeyboard();
     onDismiss();
   }, [dismissible, onDismiss]);
-  const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, { interactive: !obscured });
-  const panelRef = useOverlayFocus(visible && !obscured && rendered, hideAndDismiss, "dialog", dismissible);
+  const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, { interactive: interactive && !obscured });
+  const panelRef = useOverlayFocus(visible && interactive && !obscured && rendered, hideAndDismiss, "dialog", dismissible);
   const lastChildren = React.useRef(children);
   if (visible) lastChildren.current = children;
   const nodes = panelChildren(visible ? children : lastChildren.current);
   const headers = nodes.filter((node) => React.isValidElement(node) && node.type === PanelHeader);
   const actions = nodes.filter((node) => React.isValidElement(node) && node.type === PanelActions);
   const body = nodes.filter((node) => !headers.includes(node) && !actions.includes(node));
-  const heightLimit = Math.max(80, Math.min(height, availableHeight) - insets.top - insets.bottom - spacing[32]);
-  const panelPadding = heightLimit < 480 ? spacing[16] : layout.overlayPadding;
+  const viewportHeight = Math.min(height, availableHeight, keyboardTop ?? Infinity);
+  const bottomInset = keyboardTop == null ? insets.bottom : 0;
+  const heightLimit = Math.max(80, viewportHeight - insets.top - bottomInset - spacing[32]);
+  // Opening the keyboard must not also change the form's horizontal padding.
+  const panelPadding = restHeight - insets.top - insets.bottom - spacing[32] < 480 ? spacing[16] : layout.overlayPadding;
   // In short windows/above the IME, let the title scroll with the content so
   // long confirmations cannot push their actions out of the visible panel.
   const scrollHeader = heightLimit < 360;
@@ -92,13 +108,40 @@ export function FloatingPanel({
     : <View style={{ flexShrink: 1, maxHeight: bodyLimit }}>{scrollNodes}</View>;
 
   React.useEffect(() => {
-    if (!visible) return;
+    if (!visible || obscured || !interactive) return;
     const cleanup = onShowRef.current?.();
     return () => {
       if (typeof cleanup === "function") cleanup();
       else if (cleanup != null) clearTimeout(cleanup);
     };
-  }, [visible]);
+  }, [visible, obscured, interactive]);
+
+  React.useLayoutEffect(() => {
+    if (!visible) return;
+    setAvailableHeight(height);
+    if (Platform.OS !== "web") {
+      const metrics = Keyboard.metrics();
+      setKeyboardTop(metrics?.height ? metrics.screenY : null);
+    }
+    // Opening starts from the current viewport, never the previous IME session.
+  }, [visible, height]);
+
+  React.useEffect(() => {
+    if (Platform.OS === "web" || !rendered) return;
+    const show = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillChangeFrame" : "keyboardDidShow", (event) => {
+      setKeyboardTop(event.endCoordinates.height > 0 ? event.endCoordinates.screenY : null);
+    });
+    const hide = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide", () => setKeyboardTop(null));
+    const metrics = Keyboard.metrics();
+    setKeyboardTop(metrics?.height ? metrics.screenY : null);
+    return () => { show.remove(); hide.remove(); };
+  }, [rendered]);
+
+  React.useEffect(() => {
+    const center = (restHeight + insets.top - insets.bottom) / 2;
+    const lift = Platform.OS === "web" ? 0 : panelKeyboardLift(center, panelHeight, viewportHeight, insets.top + spacing[16], bottomInset + spacing[16]);
+    keyboardShift.value = withTiming(lift, { duration: motion.reducedMotion ? 0 : 250, easing: Easing.bezier(0.2, 0, 0, 1) });
+  }, [restHeight, panelHeight, viewportHeight, insets.top, insets.bottom, bottomInset, keyboardShift, motion.reducedMotion]);
 
   const scrimStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
@@ -108,7 +151,7 @@ export function FloatingPanel({
   // rounded panel (which leaves a square backing in Chromium).
   const panelStyle = useAnimatedStyle(() => Platform.OS === "web" ? {} : ({
     opacity: progress.value,
-    transform: [{ translateY: (1 - spatial.value) * 24 }, { scale: 0.94 + spatial.value * 0.06 }],
+    transform: [{ translateY: keyboardShift.value + (1 - spatial.value) * 24 }, ...(Platform.OS === "ios" ? [{ scale: 0.94 + spatial.value * 0.06 }] : [])],
   }));
 
   if (!rendered) return null;
@@ -116,11 +159,12 @@ export function FloatingPanel({
   return (
     <OverlayPortal>
       <View
-        accessibilityViewIsModal={visible && !obscured}
+        accessibilityViewIsModal={visible && interactive && !obscured}
         importantForAccessibility={obscured ? "no-hide-descendants" : "auto"}
         aria-hidden={!visible || obscured}
-        pointerEvents={visible && !obscured ? "auto" : "none"}
+        pointerEvents={visible && interactive && !obscured ? "auto" : "none"}
         style={[styles.root, obscured ? { display: "none" } : null]}
+        onLayout={(event) => { const next = event.nativeEvent.layout.height; if (!obscured && next > 0) setAvailableHeight((current) => Math.abs(current - next) < 1 ? current : next); }}
       >
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, scrimStyle]}>
           <View style={[StyleSheet.absoluteFill, { backgroundColor: palette.overlay }]} />
@@ -132,23 +176,19 @@ export function FloatingPanel({
           onPressIn={dismissible ? dismissKeyboard : undefined}
           onPress={dismissible ? hideAndDismiss : undefined}
         />
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "web" ? undefined : "padding"}
-          pointerEvents="box-none"
-          style={{ flex: 1 }}
-        >
-          <View pointerEvents="box-none" style={[styles.frame, { paddingTop: insets.top + spacing[16], paddingBottom: insets.bottom + spacing[16] }]}
-            onLayout={(event) => { const next = event.nativeEvent.layout.height; if (!obscured && next > 0) setAvailableHeight((current) => Math.abs(current - next) < 1 ? current : next); }}>
+          <View pointerEvents="box-none" style={[styles.frame, { paddingTop: insets.top + spacing[16], paddingBottom: insets.bottom + spacing[16] },
+            Platform.OS !== "web" ? { flex: 0, height: restHeight } : null]}>
           <Animated.View
             ref={panelRef}
+            onLayout={(event) => setPanelHeight(event.nativeEvent.layout.height)}
             role="dialog"
-            aria-modal={visible}
+            aria-modal={visible && interactive && !obscured}
             aria-hidden={!visible}
             aria-labelledby={titleId}
             accessibilityLabel={headers.map((child) => React.isValidElement(child) ? (child.props as { title?: string }).title : undefined).find(Boolean)}
             accessibilityLabelledBy={titleId}
-            accessibilityViewIsModal
-            {...(Platform.OS === "web" ? { tabIndex: -1, dataSet: { materialOverlay: visible ? "true" : "false" } } : {})}
+            accessibilityViewIsModal={visible && interactive && !obscured}
+            {...(Platform.OS === "web" ? { tabIndex: -1, dataSet: { materialOverlay: visible && interactive && !obscured ? "true" : "false" } } : {})}
             style={[
               styles.panel,
               {
@@ -184,7 +224,6 @@ export function FloatingPanel({
             </Animated.View>
           </Animated.View>
           </View>
-        </KeyboardAvoidingView>
       </View>
     </OverlayPortal>
   );

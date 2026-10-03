@@ -11,6 +11,7 @@ import {
   View,
   useWindowDimensions,
   type ViewStyle,
+  type PressableProps,
 } from "react-native";
 import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
 import { MaterialIcon as Ionicons } from "./MaterialIcon";
@@ -24,7 +25,7 @@ import { ThemedScrollView } from "./ThemedScrollView";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { useOverlayFocus } from "../../hooks/use-overlay-focus";
-import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
+import { dismissKeyboard, useKeyboardViewportHeight } from "../../hooks/use-keyboard-visible";
 import { haptics } from "../../lib/haptics";
 import {
   CONTEXT_MENU_WIDTH,
@@ -48,6 +49,8 @@ export function ContextMenu({
   preferredPlacement,
   estimatedHeight = 200,
   sessionKey,
+  scrollBody = true,
+  keyboardDismiss = true,
 }: {
   visible: boolean;
   onDismiss: () => void;
@@ -63,16 +66,21 @@ export function ContextMenu({
    * overlay session (Remind, Custom, Back). A new key starts a fresh place.
    */
   sessionKey?: string | number | null;
+  /** Searchable dropdowns own their virtualized list. */
+  scrollBody?: boolean;
+  /** Form dropdowns retain the IME so their trigger doesn't move on open. */
+  keyboardDismiss?: boolean;
 }) {
   const { palette, shadows, expressive } = useTheme();
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth, height } = useWindowDimensions();
+  const windowHeight = useKeyboardViewportHeight(height, visible);
   const insets = useSafeAreaInsets();
   const hideAndDismiss = React.useCallback(() => {
-    if (backdrop) dismissKeyboard();
+    if (backdrop && keyboardDismiss) dismissKeyboard();
     onDismiss();
-  }, [backdrop, onDismiss]);
+  }, [backdrop, keyboardDismiss, onDismiss]);
   const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, {
-    dismissKeyboard: backdrop,
+    dismissKeyboard: backdrop && keyboardDismiss,
   });
   const menuRef = useOverlayFocus(visible && rendered && backdrop, hideAndDismiss, "menu");
   const [contentHeight, setContentHeight] = React.useState(0);
@@ -167,7 +175,7 @@ export function ContextMenu({
             accessibilityLabel="Dismiss menu"
             style={StyleSheet.absoluteFill}
             pointerEvents={visible ? "auto" : "none"}
-            onPressIn={dismissKeyboard}
+            onPressIn={keyboardDismiss ? dismissKeyboard : undefined}
             onPress={hideAndDismiss}
           />
         ) : null}
@@ -192,13 +200,9 @@ export function ContextMenu({
             menuStyle,
           ]}
         >
-          <ThemedScrollView
-            bounces={false}
-            keyboardShouldPersistTaps="handled"
-            style={{ maxHeight: Math.max(48, placed.maxHeight - menuPadding * 2) }}
-          >
             <View
               collapsable={false}
+              style={{ maxHeight: Math.max(48, placed.maxHeight - menuPadding * 2), flexShrink: 1 }}
               onLayout={(event) => {
                 if (!visible || placementLock.current) return;
                 const next = event.nativeEvent.layout.height;
@@ -207,9 +211,10 @@ export function ContextMenu({
                 setContentHeight(next);
               }}
             >
-              {visible ? children : lastChildren.current}
+              {scrollBody ? <ThemedScrollView bounces={false} keyboardShouldPersistTaps="handled" style={{ maxHeight: Math.max(48, placed.maxHeight - menuPadding * 2) }}>
+                {visible ? children : lastChildren.current}
+              </ThemedScrollView> : visible ? children : lastChildren.current}
             </View>
-          </ThemedScrollView>
         </Animated.View>
       </View>
     </OverlayPortal>
@@ -241,6 +246,7 @@ export function ContextMenuItem({
   disabled,
   busy,
   onPress,
+  selectionRole,
 }: {
   icon?: keyof typeof Ionicons.glyphMap;
   label: string;
@@ -252,6 +258,7 @@ export function ContextMenuItem({
   disabled?: boolean;
   busy?: boolean;
   onPress: () => void;
+  selectionRole?: "menuitemradio" | "menuitemcheckbox";
 }) {
   const { palette, expressive } = useTheme();
   const color = tone === "danger" ? palette.error : selected ? palette.onSecondaryContainer : palette.onSurface;
@@ -259,9 +266,10 @@ export function ContextMenuItem({
 
   return (
     <PressableScale
-      accessibilityRole="menuitem"
+      accessibilityRole={selectionRole === "menuitemradio" ? "radio" : selectionRole === "menuitemcheckbox" ? "checkbox" : "menuitem"}
+      {...(Platform.OS === "web" ? { role: (selectionRole ?? "menuitem") as PressableProps["role"] } : null)}
       accessibilityLabel={detail ? `${label}, ${detail}` : label}
-      accessibilityState={{ disabled: !!inactive, selected: !!selected, busy: !!busy }}
+      accessibilityState={{ disabled: !!inactive, selected: !!selected, busy: !!busy, ...(selectionRole ? { checked: !!selected } : {}) }}
       aria-disabled={!!inactive}
       aria-busy={!!busy}
       disabled={inactive}

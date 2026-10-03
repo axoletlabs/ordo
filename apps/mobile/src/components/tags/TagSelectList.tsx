@@ -3,7 +3,7 @@
  * inline "New tag" affordance. Shared by the save sheet and edit-tags sheet.
  */
 import React, { useMemo, useState } from "react";
-import { Keyboard, StyleSheet, View } from "react-native";
+import { Keyboard, Platform, StyleSheet, View, type PressableProps } from "react-native";
 import { ThemedFlatList } from "../ui/ThemedScrollView";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { type TagColor } from "@ordo/shared";
@@ -30,6 +30,7 @@ export interface TagSelectListProps {
    */
   onRequestCreateTag?: () => void;
   header?: React.ReactNode;
+  menu?: boolean;
 }
 
 export function TagSelectList({
@@ -40,6 +41,7 @@ export function TagSelectList({
   autoCreate = true,
   onRequestCreateTag,
   header,
+  menu = false,
 }: TagSelectListProps) {
   const { palette } = useTheme();
   const { height } = useResponsiveLayout();
@@ -58,6 +60,7 @@ export function TagSelectList({
       ? all.filter((t) => t.name.toLocaleLowerCase("en-US").includes(q))
       : all;
     return {
+      all: filtered,
       selected: filtered.filter((t) => selectedIds.includes(t.id)),
       unselected: filtered.filter((t) => !selectedIds.includes(t.id)),
     };
@@ -81,6 +84,7 @@ export function TagSelectList({
     <PressableScale
       key={tag.id}
       accessibilityRole="checkbox"
+      {...(menu && Platform.OS === "web" ? { role: "menuitemcheckbox" as PressableProps["role"] } : null)}
       accessibilityLabel={`${tag.name}${selected ? ", selected" : ""}`}
       accessibilityState={{ checked: selected }}
       stateLayerColor={selected ? palette.onSecondaryContainer : palette.onSurface}
@@ -98,7 +102,7 @@ export function TagSelectList({
   const createRow =
     autoCreate && query.trim() ? (
       <PressableScale
-        accessibilityRole="button"
+        accessibilityRole={menu ? "menuitem" : "button"}
         accessibilityLabel={`Create tag ${query.trim()}`}
         style={styles.row}
         onPress={() => void createAndSelect(query.trim())}
@@ -111,7 +115,7 @@ export function TagSelectList({
       </PressableScale>
     ) : autoCreate ? (
       <PressableScale
-        accessibilityRole="button"
+        accessibilityRole={menu ? "menuitem" : "button"}
         accessibilityLabel="New tag"
         style={styles.row}
         onPress={() => {
@@ -132,7 +136,7 @@ export function TagSelectList({
       <Input value={query} onChangeText={setQuery} variant="search" placeholder="Find a tag" accessibilityLabel="Find a tag"
         containerStyle={{ flexShrink: 0 }} icon={<Ionicons name="search-outline" size={24} color={palette.onSurfaceVariant} />} />
     <ThemedFlatList animateChanges
-      data={[...tags.selected, ...tags.unselected]}
+      data={menu ? tags.all : [...tags.selected, ...tags.unselected]}
       keyExtractor={(t) => t.id}
       renderItem={({ item }) => renderRow(item, selectedIds.includes(item.id))}
       style={{ maxHeight: listHeight, flexShrink: 1 }}

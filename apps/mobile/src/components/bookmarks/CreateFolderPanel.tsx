@@ -3,7 +3,7 @@
  * Shared by the library home header action and the save-bookmark sheet.
  */
 import React, { useState } from "react";
-import { StyleSheet, View, type TextInput } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { PanelHeader } from "../ui/PanelHeader";
@@ -30,7 +30,6 @@ export function CreateFolderPanel({
   const [icon, setIcon] = useState<FolderIcon>(DEFAULT_FOLDER_ICON);
   const [error, setError] = useState("");
   const [iconOpen, setIconOpen] = useState(false);
-  const nameRef = React.useRef<TextInput>(null);
 
   const close = () => {
     setName("");
@@ -61,13 +60,11 @@ export function CreateFolderPanel({
       visible={visible}
       obscured={iconOpen}
       onDismiss={close}
-      onShow={() => setTimeout(() => nameRef.current?.focus(), 100)}
     >
       <ThemedScrollView keyboardShouldPersistTaps="handled">
         <PanelHeader title="New folder" />
         <View style={styles.body}>
           <Input
-            ref={nameRef}
             label="Name"
             value={name}
             onChangeText={setName}

@@ -49,7 +49,7 @@ export const useToastStore = create<ToastState>((set, get) => ({
       message,
       tone: opts?.tone ?? "default",
       action: opts?.action,
-      duration: opts?.duration ?? 3200,
+      duration: opts?.duration ?? 4000,
       swipeable: opts?.swipeable ?? true,
       onDismiss: opts?.onDismiss,
     };

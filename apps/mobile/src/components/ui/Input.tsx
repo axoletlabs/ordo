@@ -158,6 +158,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
           styles.box,
           {
             backgroundColor: search ? palette.surfaceContainerHigh : fieldSurface,
+            paddingHorizontal: icon && !search ? spacing[12] : spacing[16],
              borderRadius: search ? radius.full : radius.sm,
           },
         ]}
@@ -173,7 +174,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
         <TextInput
           ref={setInputRef}
           key={androidUncontrolled ? `android-field-${androidEpoch}` : undefined}
-          placeholderTextColor={palette.textFaint}
+          placeholderTextColor={palette.onSurfaceVariant}
           autoCorrect={false}
           autoCapitalize="none"
           secureTextEntry={secureTextEntry}
@@ -281,16 +282,16 @@ const styles = StyleSheet.create({
    box: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: spacing[16],
-     minHeight: 56,
+      minHeight: 56,
   },
-   icon: { marginRight: spacing[16], alignItems: "center", justifyContent: "center" },
+   icon: { width: 24, height: 24, marginRight: spacing[16], alignItems: "center", justifyContent: "center" },
   input: {
     flex: 1,
     minWidth: 0,
     borderWidth: 0,
     paddingVertical: spacing[16],
     fontSize: fontSize.md,
+    lineHeight: 24,
     ...Platform.select({
       android: { includeFontPadding: false, textAlignVertical: "center" as const },
       default: {},

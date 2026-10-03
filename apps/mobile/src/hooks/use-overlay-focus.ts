@@ -16,6 +16,8 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
     let frame = requestAnimationFrame(() => {
       // Portal publication happens in a layout effect; allow the host to attach.
       frame = requestAnimationFrame(() => {
+        // Returning from a dropdown should preserve its restored trigger focus.
+        if (node()?.contains(document.activeElement) && document.activeElement !== node()) return;
         const preferred = kind === "dialog" ? node()?.querySelector<HTMLElement>('input:not([disabled]), textarea:not([disabled])') : null;
         (preferred ?? items()[0] ?? node())?.focus?.();
       });
@@ -36,7 +38,7 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
         else if (!event.shiftKey && (index < 0 || index === controls.length - 1)) { event.preventDefault(); controls[0].focus(); }
       }
       if (kind !== "menu" || /INPUT|TEXTAREA|SELECT/.test((document.activeElement as HTMLElement)?.tagName ?? "")) return;
-      const rows = controls.filter((item) => item.getAttribute("role") === "menuitem");
+      const rows = controls.filter((item) => item.getAttribute("role")?.startsWith("menuitem"));
       if (!rows.length) return;
       const current = rows.indexOf(document.activeElement as HTMLElement);
       const target = event.key === "ArrowDown" ? (current + 1) % rows.length

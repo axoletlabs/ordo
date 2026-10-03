@@ -16,6 +16,8 @@ import { bumpFolderCount, syncReminderInCache, updateBookmarkEverywhere } from "
 import { bookmarkOpensAsWebsite } from "./bookmark-reader";
 import { reminderClearsOnOpen } from "./bookmark-reminders";
 import { useSettingsStore, type WebsiteBrowser } from "../store/settings";
+import { createLeadingTapGuard } from "./leading-tap-guard";
+const acceptBrowserTap = createLeadingTapGuard();
 
 export type SystemBrowser = Exclude<WebsiteBrowser, "ordo">;
 
@@ -24,6 +26,7 @@ function websiteBrowser(): WebsiteBrowser {
 }
 
 export async function openExternalBrowser(url: string): Promise<void> {
+  if (!acceptBrowserTap(`external:${url}`)) return;
   try {
     await Linking.openURL(url);
   } catch {
@@ -32,6 +35,7 @@ export async function openExternalBrowser(url: string): Promise<void> {
 }
 
 export async function openInAppBrowser(url: string): Promise<void> {
+  if (!acceptBrowserTap(`inApp:${url}`)) return;
   try {
     await WebBrowser.openBrowserAsync(url, {
       presentationStyle: WebBrowser.WebBrowserPresentationStyle.AUTOMATIC,

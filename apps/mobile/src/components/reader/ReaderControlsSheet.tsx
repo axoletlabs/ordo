@@ -71,7 +71,7 @@ function ControlGroup({
   );
 }
 
-export function ReaderControlsSheet({
+export const ReaderControlsSheet = React.memo(function ReaderControlsSheet({
   visible,
   onDismiss,
   preferences,
@@ -124,7 +124,7 @@ export function ReaderControlsSheet({
       </View>
     </FloatingPanel>
   );
-}
+});
 
 const styles = StyleSheet.create({
   body: {},

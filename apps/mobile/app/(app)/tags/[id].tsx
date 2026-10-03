@@ -11,6 +11,7 @@ import { ListLoadingFooter } from "../../../src/components/ui/ListLoadingFooter"
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
 import { FAB, FABDock } from "../../../src/components/ui/FAB";
+import { listPosition } from "../../../src/theme/list-shape";
 import { Button } from "../../../src/components/ui/Button";
 import { ScreenContent } from "../../../src/components/ui/ScreenContent";
 import { EmptyState } from "../../../src/components/ui/EmptyState";
@@ -47,7 +48,7 @@ export default function TagDetailScreen() {
   const router = useRouter();
   const { hasDetailPane } = useResponsiveLayout();
   const pageMax = hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth;
-  const { bottom: dockInset, selectionClearance } = useFloatingDockMetrics();
+  const { bottom: dockInset, selectionClearance, listOverlayClearance } = useFloatingDockMetrics();
   const { id, bookmark } = useLocalSearchParams<{ id: string; bookmark?: string }>();
   const routeId = Array.isArray(id) ? id[0] : id;
   const selectedBookmarkId = Array.isArray(bookmark) ? bookmark[0] : bookmark;
@@ -81,10 +82,7 @@ export default function TagDetailScreen() {
   const openReader = useCallback((b: BookmarkDto) => {
     openListBookmark(b, () => {
       if (hasDetailPane) {
-        router.push({
-          pathname: "/tags/[id]",
-          params: { id: routeId ?? "", bookmark: b.id },
-        });
+        router.setParams({ bookmark: b.id });
         return;
       }
       router.push(`/reader/${b.id}`);
@@ -150,9 +148,10 @@ export default function TagDetailScreen() {
   const selectionActive = selection.active;
   const selectionRevision = selection.revision;
   const renderBookmark = useCallback(
-    ({ item }: { item: BookmarkDto }) => (
+    ({ item, index }: { item: BookmarkDto; index: number }) => (
       <BookmarkRow
         bookmark={item}
+        position={listPosition(index, items.length)}
         selectionMode={selectionActive}
         selected={
           selectionActive
@@ -176,6 +175,7 @@ export default function TagDetailScreen() {
       selectedBookmarkId,
       selectionActive,
       selectionRevision,
+      items.length,
     ],
   );
 
@@ -191,7 +191,7 @@ export default function TagDetailScreen() {
       keyExtractor={(b: BookmarkDto) => b.id}
       renderItem={renderBookmark}
       contentContainerStyle={{
-        paddingBottom: selection.active ? selectionClearance : spacing[8],
+        paddingBottom: selection.active ? selectionClearance : listOverlayClearance,
       }}
       refreshing={refreshing}
       onRefresh={onRefresh}
@@ -201,6 +201,11 @@ export default function TagDetailScreen() {
     />
     </SelectionDragFrame>
   );
+
+  const saveFab = !selection.active ? <FABDock maxWidth={pageMax}>
+    <FAB onPress={() => setAddOpen(true)} accessibilityLabel="Save bookmark" accessibilityHint="Tap to save a bookmark."
+      maxContentWidth={pageMax} right={hasDetailPane ? spacing[16] : undefined} />
+  </FABDock> : null;
 
   if (!routeId) return null;
 
@@ -274,7 +279,7 @@ export default function TagDetailScreen() {
       ) : hasDetailPane ? (
         <ScreenContent maxWidth={layout.maxLibraryWidth} style={styles.content}>
           <View style={styles.splitPane}>
-            <View style={styles.listPane}>{listPane}</View>
+            <View style={styles.listPane}>{listPane}{saveFab}</View>
             <View style={[styles.readerPane, { backgroundColor: palette.surface, borderColor: palette.border }]}>
               {selectedBookmarkId ? (
                 <ReaderPane
@@ -295,16 +300,7 @@ export default function TagDetailScreen() {
         </ScreenContent>
       )}
 
-      {selection.active ? null : (
-      <FABDock maxWidth={pageMax}>
-        <FAB
-          onPress={() => setAddOpen(true)}
-          accessibilityLabel="Save bookmark"
-          accessibilityHint="Tap to save a bookmark."
-          maxContentWidth={pageMax}
-        />
-      </FABDock>
-      )}
+      {!hasDetailPane || items.length === 0 ? saveFab : null}
 
       <AddBookmarkSheet
         visible={addOpen}

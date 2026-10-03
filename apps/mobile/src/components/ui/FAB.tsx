@@ -1,6 +1,4 @@
-/**
- * Floating action button faithful to ordo-archive: 48px coral circle, white icon.
- */
+/** Material floating action button, overlaid on the library content. */
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { MaterialIcon as Ionicons } from "./MaterialIcon";
@@ -14,6 +12,8 @@ import { layout, radius, spacing } from "../../theme/tokens";
 import { SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useKeyboardVisible } from "../../hooks/use-keyboard-visible";
+import { useFocusEffect } from "expo-router";
+import { useFloatingActions } from "../../store/floating-actions";
 
 export interface FABProps {
   icon?: keyof typeof Ionicons.glyphMap;
@@ -46,14 +46,11 @@ export function FABLayer({ children, maxWidth }: FABLayerProps) {
   );
 }
 
-/** Reserve the action's actual space instead of a blank footer inside the list. */
+/** Overlay the action without reserving a separate row below the list. */
 export function FABDock({ children, maxWidth }: FABLayerProps) {
-  const insets = useSafeAreaInsets();
   const keyboard = useKeyboardVisible();
   if (keyboard) return null;
-  return <View style={{ height: 72 + Math.max(insets.bottom, spacing[16]), width: "100%" }}>
-    <FABLayer maxWidth={maxWidth}>{children}</FABLayer>
-  </View>;
+  return <FABLayer maxWidth={maxWidth}>{children}</FABLayer>;
 }
 
 export function FAB({
@@ -70,6 +67,11 @@ export function FAB({
   alignTo = "scene",
 }: FABProps) {
   const { palette, shadows, expressive } = useTheme();
+  const id = React.useId();
+  useFocusEffect(React.useCallback(() => {
+    useFloatingActions.getState().add(id);
+    return () => useFloatingActions.getState().remove(id);
+  }, [id]));
   const insets = useSafeAreaInsets();
   const column = useColumnPadding(maxContentWidth, alignTo);
   const anchorRef = React.useRef<View>(null);

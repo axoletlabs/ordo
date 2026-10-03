@@ -26,6 +26,7 @@ import { useFolderUnlocked } from "../../hooks/use-folders";
 import { DEFAULT_FOLDER_ICON, type FolderDto } from "@ordo/shared";
 import { FolderLockIcon } from "./FolderLockIcon";
 import { RowStatusSlot, ROW_STATUS_ICON_SIZE } from "./RowStatusIcon";
+import { listCorners, type ListPosition } from "../../theme/list-shape";
 
 export interface FolderRowProps {
   folder: FolderDto;
@@ -36,9 +37,10 @@ export interface FolderRowProps {
   selected?: boolean;
   selectionMode?: boolean;
   highlighted?: boolean;
+  position?: ListPosition;
 }
 
-export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore, onEnterSelection, selected, selectionMode, highlighted: highlightedProp }: FolderRowProps) {
+export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore, onEnterSelection, selected, selectionMode, highlighted: highlightedProp, position = "only" }: FolderRowProps) {
   const { palette: basePalette, expressive } = useTheme();
   const rowRef = React.useRef<View>(null);
   const dragRow = useSelectionDragRow(folderKey(folder.id));
@@ -108,8 +110,8 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
       collapsable={false}
       onLayout={() => dragRow.bind(rowRef.current)}
       style={[styles.wrap, { borderBottomColor: palette.outlineVariant, borderBottomWidth: expressive ? 0 : StyleSheet.hairlineWidth,
-        backgroundColor: expressive ? palette.surfaceContainerLow : "transparent", borderRadius: expressive ? radius.xl : 0,
-        marginBottom: expressive ? spacing[4] : 0, minHeight: 72 }]}
+         backgroundColor: expressive ? palette.surfaceContainerLow : "transparent", borderRadius: expressive ? radius.lg : 0,
+        marginBottom: expressive ? spacing[4] : 0, minHeight: 72 }, expressive ? listCorners(position, !!selected || !!highlighted) : null]}
       {...(Platform.OS === "web"
         ? {
             onMouseEnter: () => setHovered(true),
@@ -229,21 +231,13 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
                 {folder.name}
               </Text>
             </View>
-            {folder.pinned ? (
-              <RowStatusSlot>
-                <PinIcon size={ROW_STATUS_ICON_SIZE} color={palette.textTertiary} filled={false} />
-              </RowStatusSlot>
-            ) : null}
-            {folder.protected ? (
-              <RowStatusSlot>
-                <FolderLockIcon unlocked={sessionUnlocked} outline />
-              </RowStatusSlot>
-            ) : null}
           </View>
           <View style={styles.metaRow}>
+            {folder.protected ? <RowStatusSlot><FolderLockIcon unlocked={sessionUnlocked} outline /></RowStatusSlot> : null}
             <Text variant="bodyMedium" color="tertiary" numberOfLines={1} style={styles.count}>
               {countLabel}
             </Text>
+            {folder.pinned ? <RowStatusSlot><PinIcon size={ROW_STATUS_ICON_SIZE} color={palette.textTertiary} filled={false} /></RowStatusSlot> : null}
           </View>
         </View>
         {unread && !selectionMode ? <Badge tone="accent">{folder.unreadCount}</Badge> : null}

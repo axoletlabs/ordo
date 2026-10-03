@@ -61,6 +61,7 @@ import { layout, radius, spacing } from "../../../src/theme/tokens";
 import { type BookmarkDto, type FolderDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
+import { listPosition } from "../../../src/theme/list-shape";
 
 type LibraryItem =
   | { type: "folder"; folder: FolderDto }
@@ -73,7 +74,7 @@ export default function BookmarksScreen() {
   const selectedBookmarkId = sanitizeRouteParam(params.bookmark);
   const { hasDetailPane } = useResponsiveLayout();
   const contentWidth = hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth;
-   const { bottom: dockInset, selectionClearance } = useFloatingDockMetrics();
+   const { bottom: dockInset, selectionClearance, listOverlayClearance } = useFloatingDockMetrics();
   const folders = useFolders();
   const tags = useTags();
   const folderSort = useListSortStore((state) => state.folderSort);
@@ -246,11 +247,12 @@ export default function BookmarksScreen() {
   const toggleTag = useCallback((tagId: string) => search.setFilters((previous) => ({ ...previous,
     tagIds: previous.tagIds.includes(tagId) ? previous.tagIds.filter((id) => id !== tagId) : [...previous.tagIds, tagId] })), [search.setFilters]);
   const renderLibraryItem = useCallback(
-    ({ item }: { item: LibraryItem }) => {
+    ({ item, index }: { item: LibraryItem; index: number }) => {
       if (item.type === "folder") {
         return (
           <FolderRow
             folder={item.folder}
+            position={listPosition(index, folderItems.length)}
             selectionMode={selectionActive}
             selected={selectionRef.current.has(folderKey(item.folder.id))}
             onPress={onPressFolder}
@@ -262,6 +264,7 @@ export default function BookmarksScreen() {
       return (
         <BookmarkRow
           bookmark={item.bookmark}
+          position={listPosition(index - folderItems.length, items.length)}
           selectionMode={selectionActive}
           selected={selectionActive ? selectionRef.current.has(bookmarkKey(item.bookmark.id)) : hasDetailPane && item.bookmark.id === selectedBookmarkId}
           searchQuery={search.trimmed}
@@ -283,7 +286,8 @@ export default function BookmarksScreen() {
       onPressLibraryBookmark,
       selectionActive,
       selectionRevision,
-      hasDetailPane, selectedBookmarkId, search.trimmed, search.listFilters.fuzzy, search.listFilters.tagIds, search.active, toggleTag,
+       hasDetailPane, selectedBookmarkId, search.trimmed, search.listFilters.fuzzy, search.listFilters.tagIds, search.active, toggleTag,
+       folderItems.length, items.length,
     ],
   );
   const libraryKeyExtractor = useCallback(
@@ -294,9 +298,9 @@ export default function BookmarksScreen() {
   // first row's own padding sits inside that.
   const listContentStyle = useMemo(
     () => ({
-      paddingBottom: selection.active ? selectionClearance : spacing[8],
+      paddingBottom: selection.active ? selectionClearance : listOverlayClearance,
     }),
-    [selection.active, selectionClearance],
+    [selection.active, selectionClearance, listOverlayClearance],
   );
 
   const runCreateAction = (action: CreateButtonHoldAction, anchor?: MenuAnchorRect) => {
@@ -319,6 +323,29 @@ export default function BookmarksScreen() {
     if (action === "bookmark") return "save a bookmark";
     return "create a folder";
   };
+
+  const createFab = !selection.active ? (
+    <FABDock maxWidth={contentWidth}>
+      <FAB
+        onPress={(anchor) => runCreateAction(createButtonTapAction, anchor)}
+        onLongPress={(anchor) => {
+          if (createButtonHoldAction !== "none") haptics.medium();
+          runCreateAction(createButtonHoldAction, anchor);
+        }}
+        accessibilityLabel={createActionLabel(createButtonTapAction)}
+        accessibilityHint={
+          createButtonHoldAction === "none"
+            ? `Tap to ${createActionDescription(createButtonTapAction)}. Press and hold is disabled.`
+            : `Tap to ${createActionDescription(createButtonTapAction)}. Press and hold to ${createActionDescription(createButtonHoldAction)}.`
+        }
+        testID="add-bookmark-fab"
+        label={createActionLabel(createButtonTapAction)}
+        bottom={spacing[16]}
+        right={hasDetailPane ? spacing[16] : undefined}
+        maxContentWidth={contentWidth}
+      />
+    </FABDock>
+  ) : null;
 
   const headerRight = (
     <HeaderActions>
@@ -398,6 +425,7 @@ export default function BookmarksScreen() {
             onEndReached={search.active ? search.onEndReached : onEndReached}
           />
           </SelectionDragFrame>
+          {hasDetailPane ? createFab : null}
           </View>
           {hasDetailPane ? <View style={[styles.readerPane, { backgroundColor: palette.surfaceContainerLow }]}>
             {selectedBookmarkId ? <ReaderPane bookmarkId={selectedBookmarkId} embedded safeBottom={false} onBack={() => router.setParams({ bookmark: "" })} /> : <ReaderPanePlaceholder />}
@@ -406,27 +434,7 @@ export default function BookmarksScreen() {
         </ScreenContent>
       )}
 
-      {!selection.active ? (
-      <FABDock maxWidth={contentWidth}>
-        <FAB
-          onPress={(anchor) => runCreateAction(createButtonTapAction, anchor)}
-          onLongPress={(anchor) => {
-            if (createButtonHoldAction !== "none") haptics.medium();
-            runCreateAction(createButtonHoldAction, anchor);
-          }}
-          accessibilityLabel={createActionLabel(createButtonTapAction)}
-          accessibilityHint={
-            createButtonHoldAction === "none"
-              ? `Tap to ${createActionDescription(createButtonTapAction)}. Press and hold is disabled.`
-              : `Tap to ${createActionDescription(createButtonTapAction)}. Press and hold to ${createActionDescription(createButtonHoldAction)}.`
-          }
-          testID="add-bookmark-fab"
-          label={createActionLabel(createButtonTapAction)}
-          bottom={spacing[16]}
-          maxContentWidth={contentWidth}
-        />
-      </FABDock>
-      ) : null}
+      {!hasDetailPane ? createFab : null}
 
       <SortMenu
         visible={sortOpen}

@@ -19,6 +19,7 @@ import { useTags } from "../../../src/hooks/use-tags";
 import { usePullToRefresh } from "../../../src/hooks/use-list-controls";
 import { errorMessage } from "../../../src/lib/error-message";
 import { useTheme } from "../../../src/theme/ThemeProvider";
+import { useFloatingDockMetrics } from "../../../src/hooks/use-floating-dock-metrics";
 import { ROW_ICON_FRAME } from "../../../src/theme/alignment";
 import { layout, spacing } from "../../../src/theme/tokens";
 import type { TagDto } from "@ordo/shared";
@@ -27,6 +28,7 @@ import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
 export default function TagsScreen() {
   const { palette } = useTheme();
   const router = useRouter();
+  const { listOverlayClearance } = useFloatingDockMetrics();
   const { data: tags, isLoading, error, refetch } = useTags();
   const { refreshing, onRefresh } = usePullToRefresh(() => refetch());
 
@@ -61,8 +63,8 @@ export default function TagsScreen() {
   );
 
   const listContentStyle = useMemo(
-    () => ({ paddingBottom: spacing[8] }),
-    [],
+    () => ({ paddingBottom: listOverlayClearance }),
+    [listOverlayClearance],
   );
 
   return (

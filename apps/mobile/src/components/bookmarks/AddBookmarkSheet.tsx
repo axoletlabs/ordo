@@ -11,8 +11,8 @@ import { Input } from "../ui/Input";
 import { Text } from "../ui/Text";
 import { PressableScale } from "../ui/PressableScale";
 import { PickerField } from "../ui/PickerField";
-import { FolderPickerPanel } from "./FolderPickerPanel";
-import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
+import { FolderPickerMenu } from "./FolderPickerMenu";
+import { ContextMenu, type MenuAnchorRect } from "../ui/ContextMenu";
 import { PanelActions } from "../ui/SheetActionRow";
 import { UnlockForm } from "./LockPrompt";
 import { CreateFolderPanel } from "./CreateFolderPanel";
@@ -83,6 +83,8 @@ export function AddBookmarkSheet({
   const [destinationOpen, setDestinationOpen] = useState(false);
   const [createTagOpen, setCreateTagOpen] = useState(false);
   const [showTagPicker, setShowTagPicker] = useState(false);
+  const [destinationAnchor, setDestinationAnchor] = useState<MenuAnchorRect | null>(null);
+  const [tagAnchor, setTagAnchor] = useState<MenuAnchorRect | null>(null);
   const [urlEditing, setUrlEditing] = useState(false);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>(initialTagIds);
   const [selectedDestination, setSelectedDestination] = useState(folderId ?? ROOT_DESTINATION);
@@ -186,7 +188,8 @@ export function AddBookmarkSheet({
     <>
       <FloatingPanel
         visible={visible}
-        obscured={destinationOpen || showTagPicker || createFolderOpen || createTagOpen}
+        obscured={createFolderOpen || createTagOpen}
+        interactive={!destinationOpen && !showTagPicker}
         dismissible={!shareIntake}
         onDismiss={() => {
           if (unlocking) setLockedFolderId(null);
@@ -256,12 +259,12 @@ export function AddBookmarkSheet({
               </Text>
             ) : null}
 
-            {allowFolderSelection ? <PickerField label="Folder" value={destination ?? "Bookmarks"}
-              icon={selectedFolder?.icon ?? "bookmark-outline"} onPress={() => { dismissKeyboard(); setDestinationOpen(true); }} />
+            {allowFolderSelection ? <PickerField label="Folder" value={destination ?? "Bookmarks"} dropdown expanded={destinationOpen}
+              icon={selectedFolder?.icon ?? "bookmark-outline"} onPress={(anchor) => { setDestinationAnchor(anchor); setDestinationOpen(true); }} />
               : destination ? <Text variant="bodyMedium" color="secondary">Saving to {destination}</Text> : null}
-            <PickerField label="Tags" icon="pricetags-outline"
+            <PickerField label="Tags" icon="pricetags-outline" dropdown expanded={showTagPicker}
               value={selectedTagIds.length ? selectedTagIds.map((id) => tags?.find((tag) => tag.id === id)?.name).filter(Boolean).join(", ") || `${selectedTagIds.length} tags selected` : "Add tags"}
-              onPress={() => { dismissKeyboard(); setShowTagPicker(true); }} />
+              onPress={(anchor) => { setTagAnchor(anchor); setShowTagPicker(true); }} />
             </View>
             <PanelActions
               confirmLabel="Save"
@@ -272,16 +275,16 @@ export function AddBookmarkSheet({
           </>
         )}
       </FloatingPanel>
-      <FolderPickerPanel visible={destinationOpen} onDismiss={() => setDestinationOpen(false)} folders={folders ?? []}
+      <FolderPickerMenu visible={destinationOpen} onDismiss={() => setDestinationOpen(false)} folders={folders ?? []} anchor={destinationAnchor}
         value={selectedFolderId} onChange={(id) => setSelectedDestination(id ?? ROOT_DESTINATION)}
         onCreate={() => { setDestinationOpen(false); setCreateFolderOpen(true); }} />
-      <FloatingPanel visible={showTagPicker} obscured={createTagOpen} onDismiss={() => setShowTagPicker(false)} scrollBody={false}>
-        <PanelHeader title="Choose tags" onClose={() => setShowTagPicker(false)} />
+      <ContextMenu visible={showTagPicker && !createTagOpen} onDismiss={() => setShowTagPicker(false)} anchor={tagAnchor} width={tagAnchor?.width} scrollBody={false} keyboardDismiss={false} estimatedHeight={280}>
+        <View style={{ paddingHorizontal: spacing[8], flexShrink: 1 }}>
         <TagSelectList selectedIds={selectedTagIds}
           onToggle={(tagId) => setSelectedTagIds((previous) => previous.includes(tagId) ? previous.filter((id) => id !== tagId) : [...previous, tagId])}
-          maxHeight={280} onRequestCreateTag={() => setCreateTagOpen(true)} />
-        <PanelActions confirmLabel="Done" onConfirm={() => setShowTagPicker(false)} />
-      </FloatingPanel>
+          menu maxHeight={240} onRequestCreateTag={() => { setShowTagPicker(false); setCreateTagOpen(true); }} />
+        </View>
+      </ContextMenu>
       <CreateFolderPanel
         visible={createFolderOpen}
         onDismiss={() => setCreateFolderOpen(false)}

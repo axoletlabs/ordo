@@ -54,6 +54,9 @@ import {
 /** Custom fonts loaded via useFonts must be registered to avoid warnings. */
 const SYSTEM_FONTS = [
   ...defaultSystemFonts,
+  "Roboto_400Regular",
+  "Roboto_500Medium",
+  "Roboto_700Bold",
   "Inter_400Regular",
   "Inter_500Medium",
   "Inter_600SemiBold",
@@ -402,6 +405,7 @@ export const ArticleHtml = React.memo(function ArticleHtml({
     () => applyHighlightsToHtml(html, highlights ?? EMPTY_HIGHLIGHTS),
     [html, highlights],
   );
+  const source = useMemo(() => ({ html: highlightedHtml }), [highlightedHtml]);
   const paintedSourceRef = useRef<string | null>(null);
   const [ready, setReady] = useState(false);
 
@@ -540,7 +544,7 @@ export const ArticleHtml = React.memo(function ArticleHtml({
   return (
     <HighlightUiContext.Provider value={highlightUi}>
     <RenderHTML
-      source={{ html: highlightedHtml }}
+      source={source}
       contentWidth={contentWidth}
       baseStyle={baseStyle}
       tagsStyles={tagsStyles}

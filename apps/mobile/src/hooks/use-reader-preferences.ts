@@ -10,12 +10,12 @@ import { useAuthStore } from "../store/auth";
 import { useUpdateReaderPreferences } from "./use-auth-actions";
 
 export function useReaderPreferences() {
-  const user = useAuthStore((s) => s.user);
+  const stored = useAuthStore((s) => s.user?.preferences);
   const update = useUpdateReaderPreferences();
 
   const preferences = useMemo<ReaderPreferences>(
-    () => (user ? normalizeReaderPreferences(user.preferences) : DEFAULT_READER_PREFERENCES),
-    [user],
+    () => (stored ? normalizeReaderPreferences(stored) : DEFAULT_READER_PREFERENCES),
+    [stored],
   );
 
   /** Optimistically applies a partial patch and syncs it to the account. */

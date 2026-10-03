@@ -45,9 +45,9 @@ const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoF
     onSubmitEditing={() => Keyboard.dismiss()}
     onKeyPress={(event) => { if (event.nativeEvent.key === "Escape") { inputRef.current?.clear(); change(""); inputRef.current?.blur(); } }}
     icon={<MaterialIcon name="search" color={palette.onSurfaceVariant} />}
-    overlayRightAccessory overlayPaddingRight={104}
+    overlayRightAccessory overlayPaddingRight={text ? 104 : 56}
     rightAccessory={<View style={{ flexDirection: "row", alignItems: "center" }}>
-      <View style={{ width: 48 }}>{text ? <IconButton name="close" variant="standard" accessibilityLabel="Clear search" onPress={clear} /> : null}</View>
+      {text ? <IconButton name="close" variant="standard" accessibilityLabel="Clear search" onPress={clear} /> : null}
       <View><HeaderIconButton name="filter-outline" variant="standard" color={filtersOn ? palette.primary : palette.onSurfaceVariant}
         accessibilityLabel={filtersOn ? "Search filters, active" : "Search filters"} onPress={onFilter} />
         {filtersOn ? <View pointerEvents="none" style={{ position: "absolute", top: 6, right: 6, width: 6, height: 6, borderRadius: 3, backgroundColor: palette.primary }} /> : null}
@@ -71,6 +71,11 @@ export function LibraryHeader({ tools, query, onQueryChange, onFilter, filtersOn
     paddingTop: insets.top + spacing[8], paddingLeft: column.left, paddingRight: column.right }}>
     <View style={[styles.appBar, selection ? { display: "none" } : null]}>
       <View style={styles.search}><LibrarySearch query={query} onChange={onQueryChange} autoFocus={autoFocusSearch} onFilter={onFilter} filtersOn={filtersOn} /></View>
+      <PressableScale accessibilityRole="button" accessibilityLabel="Account and settings"
+        onPress={() => router.navigate("/settings")} stateLayerColor={palette.onSecondaryContainer}
+        style={[styles.account, { backgroundColor: palette.secondaryContainer }]}>
+        {user ? <UserAvatar user={user} size={40} /> : <MaterialIcon name="person-circle" size={24} color={palette.onSecondaryContainer} />}
+      </PressableScale>
     </View>
     {selection ? <SelectionHeader {...selection} embedded /> : null}
     <View style={styles.toolbar}>
@@ -79,11 +84,6 @@ export function LibraryHeader({ tools, query, onQueryChange, onFilter, filtersOn
         {resultLabel && !selection ? <Text variant="bodySmall" color="secondary" numberOfLines={1} accessibilityLiveRegion="polite">{resultLabel}</Text> : null}
       </View>
       {!selection ? tools : null}
-      {!selection ? <PressableScale accessibilityRole="button" accessibilityLabel="Account and settings"
-        onPress={() => router.push("/settings")} stateLayerColor={palette.onSecondaryContainer}
-        style={[styles.account, { backgroundColor: palette.secondaryContainer }]}>
-        {user ? <UserAvatar user={user} size={40} /> : <MaterialIcon name="person-circle" size={24} color={palette.onSecondaryContainer} />}
-      </PressableScale> : null}
     </View>
     {filters}
   </View>;

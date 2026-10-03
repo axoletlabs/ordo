@@ -8,12 +8,12 @@ export function useFloatingDockMetrics() {
   const selectionActive = useSelectionUiStore((s) => s.active);
   const bottom = Math.max(insets.bottom, spacing[16]);
   const selectionClearance = SELECTION_BAR_HEIGHT + bottom + spacing[16];
-  const safeBottomClearance = bottom + spacing[16];
+  const safeBottomClearance = bottom;
   return {
     floating: false, sideNavigation: false, visible: false,
     hideBottomNav: selectionActive, hideForKeyboard: false,
     bottom, height: 0, clearance: safeBottomClearance, selectionClearance,
-    overlayClearance: selectionActive ? selectionClearance : safeBottomClearance + 72,
-    listOverlayClearance: selectionActive ? selectionClearance : safeBottomClearance,
+    overlayClearance: selectionActive ? selectionClearance : safeBottomClearance,
+    listOverlayClearance: selectionActive ? selectionClearance : insets.bottom + spacing[16] + 56 + spacing[8],
   };
 }

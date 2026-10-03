@@ -31,6 +31,7 @@ import { layout, radius, spacing } from "../../theme/tokens";
 import { bookmarkKey, SELECTION_LONG_PRESS_MS, useSelectionHoldGuard } from "../../hooks/use-selection";
 import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
 import type { BookmarkDto } from "@ordo/shared";
+import { listCorners, type ListPosition } from "../../theme/list-shape";
 
 /** Compact tags shown inline on a row before overflow. */
 const MAX_ROW_TAGS = 2;
@@ -64,6 +65,7 @@ export interface BookmarkRowProps {
   /** When set, the matching word prefix in the title is emphasized. */
   searchQuery?: string;
   searchFuzzy?: boolean;
+  position?: ListPosition;
 }
 
 export const BookmarkRow = React.memo(function BookmarkRow({
@@ -78,6 +80,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   omitTagIds,
   searchQuery,
   searchFuzzy,
+  position = "only",
 }: BookmarkRowProps) {
   const { palette: basePalette, expressive } = useTheme();
   const router = useRouter();
@@ -125,7 +128,6 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   const opensAsWebsite = bookmarkOpensAsWebsite(bookmark);
   const isArticle = bookmarkIsArticle(bookmark);
   const showReadingTime = isArticle && !!bookmark.readingTimeMinutes;
-  const showDescription = isArticle && !!bookmark.description;
   const isPending = bookmark.fetchStatus === "pending";
   const tags = Array.isArray(bookmark.tags) ? bookmark.tags : [];
   const suggestedTags = Array.isArray(bookmark.suggestedTags) ? bookmark.suggestedTags : [];
@@ -135,6 +137,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
     : tags;
   const visibleTags = rowTags.slice(0, MAX_ROW_TAGS);
   const overflowCount = rowTags.length - visibleTags.length;
+  const hasDetails = rowTags.length > 0 || !!reminderLabel || hasSuggestions;
   const accessibilityLabel = [
     title,
     domain,
@@ -205,7 +208,8 @@ export const BookmarkRow = React.memo(function BookmarkRow({
         styles.wrap,
         { borderBottomColor: palette.outlineVariant, borderBottomWidth: expressive ? 0 : StyleSheet.hairlineWidth,
           backgroundColor: expressive ? palette.surfaceContainerLow : "transparent",
-          borderRadius: expressive ? radius.xl : 0, marginBottom: expressive ? spacing[4] : 0 },
+          borderRadius: expressive ? radius.lg : 0, marginBottom: expressive ? spacing[4] : 0 },
+        expressive ? listCorners(position, !!selected || !!highlighted) : null,
       ]}
       {...(Platform.OS === "web"
         ? {
@@ -243,7 +247,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
         accessibilityHint="Press and hold to select"
         accessible={!selectionMode}
         importantForAccessibility={selectionMode ? "no" : "yes"}
-        style={styles.leading}
+        style={[styles.leading, hasDetails ? { justifyContent: "flex-start" } : null]}
         onTouchStart={(event) => {
           leadStartY.current = event.nativeEvent.pageY;
           leadMoved.current = false;
@@ -351,6 +355,9 @@ export const BookmarkRow = React.memo(function BookmarkRow({
                 {highlightTitle(title, searchQuery, searchFuzzy, !!selected || !!highlighted)}
               </Text>
             </View>
+          </View>
+          <View style={styles.metaRow}>
+            <Text variant="bodySmall" color="tertiary" numberOfLines={1} style={styles.domain}>{domain}</Text>
             {isPending ? (
               <RowStatusSlot>
                 <Spinner
@@ -360,20 +367,21 @@ export const BookmarkRow = React.memo(function BookmarkRow({
                 />
               </RowStatusSlot>
             ) : isArticle ? (
-              <RowStatusSlot>
+              <View style={styles.readingTime}>
                 <Ionicons
                   name="document-text-outline"
                   size={ROW_STATUS_ICON_SIZE}
                   color={palette.textTertiary}
                   accessible={false}
                 />
-              </RowStatusSlot>
+                {showReadingTime ? <Text variant="bodySmall" color="tertiary">{bookmark.readingTimeMinutes} min</Text> : null}
+              </View>
             ) : opensAsWebsite ? (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Open ${title} in the browser`}
                 accessibilityHint="Opens the original page in your browser app."
-                hitSlop={16}
+                hitSlop={{ top: 14, bottom: 14, left: 8, right: 8 }}
                 disabled={selectionMode}
                 onPressIn={(event) => event.stopPropagation()}
                 onPress={openExternal}
@@ -395,30 +403,30 @@ export const BookmarkRow = React.memo(function BookmarkRow({
                   />
                 </RowStatusSlot>
               </Pressable>
-            ) : null}
+            ) : <Text variant="bodySmall" color="tertiary" numberOfLines={1} style={{ flexShrink: 0 }}>{createdLabel}</Text>}
           </View>
-          {showDescription ? (
-            <Text variant="footnote" color="secondary" numberOfLines={1} style={styles.description}>
-              {bookmark.description}
-            </Text>
-          ) : null}
-          {rowTags.length > 0 ? (
-            <View style={styles.tagRow}>
+          {rowTags.length > 0 || reminderLabel ? (
+            <View style={styles.detailsRow}>
               {visibleTags.map((tag) => (
                 <TagChip
                   key={tag.id}
                   name={tag.name}
                   color={tag.color}
                   compact
+                  inline
                   onPress={() => handleTagPress(tag.id)}
                   accessibilityLabel={`Show bookmarks tagged ${tag.name}`}
                 />
               ))}
               {overflowCount > 0 ? (
-                <Text variant="monoSmall" color="tertiary" style={styles.overflow}>
-                  +{overflowCount} tags
+                <Text variant="bodySmall" color="tertiary" style={styles.overflow}>
+                  +{overflowCount}
                 </Text>
               ) : null}
+              {reminderLabel ? <View style={styles.reminderRow}>
+                <Ionicons name="alarm-outline" size={ROW_STATUS_ICON_SIZE} color={reminderDue ? palette.primary : palette.onSurfaceVariant} />
+                <Text variant="bodySmall" color={reminderDue ? "accent" : "tertiary"} numberOfLines={1} style={{ flexShrink: 1 }}>{reminderLabel}</Text>
+              </View> : null}
             </View>
           ) : null}
           {hasSuggestions ? (
@@ -430,29 +438,10 @@ export const BookmarkRow = React.memo(function BookmarkRow({
               </Text>
             </View>
           ) : null}
-          <View style={styles.metaRow}>
-            <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.domain}>
-              {domain}
-            </Text>
-             {!showReadingTime ? <Text variant="bodySmall" color="tertiary" numberOfLines={1} style={{ flexShrink: 0 }}>{createdLabel}</Text> : null}
-            {showReadingTime ? (
-              <>
-                 <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={{ flexShrink: 0 }}>
-                  {bookmark.readingTimeMinutes} min
-                </Text>
-              </>
-            ) : null}
-           </View>
-           {reminderLabel ? <View style={styles.reminderRow}>
-             <Ionicons name="alarm-outline" size={ROW_STATUS_ICON_SIZE} color={reminderDue ? palette.primary : palette.onSurfaceVariant} />
-             <Text variant="bodySmall" color={reminderDue ? "accent" : "tertiary"} numberOfLines={1} style={{ flexShrink: 1 }}>
-               {reminderLabel}
-             </Text>
-           </View> : null}
         </View>
       </ListPressable>
       {onMore && !selectionMode ? <PressableScale accessibilityRole="button" accessibilityLabel={`More actions for ${title}`}
-        onPress={(event) => openMore(event)} style={{ width: 48, height: 48, borderRadius: radius.full, alignItems: "center", justifyContent: "center" }}>
+        onPress={(event) => openMore(event)} style={{ width: 48, height: 48, borderRadius: radius.full, alignItems: "center", justifyContent: "center", ...(hasDetails ? { alignSelf: "flex-start", marginTop: spacing[8] } : {}) }}>
         <Ionicons name="ellipsis-vertical" size={24} color={palette.onSurfaceVariant} />
       </PressableScale> : onMore ? <View style={{ width: 48, height: 48 }} /> : null}
     </View>
@@ -511,13 +500,12 @@ const styles = StyleSheet.create({
   content: { flex: 1, minWidth: 0 },
   titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
   titleWrap: { flex: 1, minWidth: 0 },
-  description: { marginTop: spacing[4] },
-  tagRow: {
+  detailsRow: {
     flexDirection: "row",
     alignItems: "center",
-     flexWrap: "nowrap",
-    gap: spacing[4],
-    marginTop: spacing[8],
+    flexWrap: "wrap",
+    columnGap: spacing[12],
+    marginTop: spacing[4],
   },
   overflow: { marginLeft: spacing[2], flexShrink: 0 },
   suggestionRow: {
@@ -527,7 +515,8 @@ const styles = StyleSheet.create({
     marginTop: spacing[4],
   },
    metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[8], marginTop: spacing[4] },
-   reminderRow: { flexDirection: "row", alignItems: "center", gap: spacing[8], marginTop: spacing[4] },
+   readingTime: { flexDirection: "row", alignItems: "center", gap: spacing[4], flexShrink: 0 },
+   reminderRow: { minHeight: 32, flexDirection: "row", alignItems: "center", gap: spacing[4], maxWidth: "100%" },
   domain: { flex: 1, minWidth: 0 },
   openExternal: {
     ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),

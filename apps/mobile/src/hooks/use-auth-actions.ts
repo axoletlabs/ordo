@@ -3,6 +3,7 @@
  * gate. Errors are surfaced via the returned rejection (screens handle UI).
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
 import {
   isMfaRequiredResponse,
   isPendingEmailVerificationResponse,
@@ -145,20 +146,10 @@ export function useRevokeSession() {
  */
 export function useUpdateReaderPreferences() {
   const setUser = useAuthStore((s) => s.setUser);
-  return useMutation({
+  const mutation = useMutation({
     mutationKey: ["reader-preferences"],
     scope: { id: "reader-preferences" },
-    mutationFn: (patch: UpdateReaderPreferencesInput) => authApi.updatePreferences(patch),
-    onMutate: (patch) => {
-      const prev = useAuthStore.getState().user;
-      if (prev) {
-        setUser({
-          ...prev,
-          preferences: { ...normalizeReaderPreferences(prev.preferences), ...patch },
-        });
-      }
-      return { prev };
-    },
+    mutationFn: ({ patch }: { patch: UpdateReaderPreferencesInput; prev: UserDto | null }) => authApi.updatePreferences(patch),
     onSuccess: (user) => {
       const current = useAuthStore.getState().user;
       const next = current && queryClient.isMutating({ mutationKey: ["reader-preferences"] }) > 1
@@ -166,10 +157,18 @@ export function useUpdateReaderPreferences() {
       setUser(next);
       queryClient.setQueryData<UserDto>(qk.me, next);
     },
-    onError: (_e, _patch, ctx) => {
-      if (ctx?.prev && queryClient.isMutating({ mutationKey: ["reader-preferences"] }) === 1) setUser(ctx.prev);
+    onError: (_e, { prev }) => {
+      if (prev && queryClient.isMutating({ mutationKey: ["reader-preferences"] }) === 1) setUser(prev);
     },
   });
+  const enqueue = mutation.mutate;
+  const mutate = useCallback((patch: UpdateReaderPreferencesInput) => {
+    const prev = useAuthStore.getState().user;
+    // Apply in the press handler, before React Query's asynchronous mutation lifecycle.
+    if (prev) setUser({ ...prev, preferences: { ...normalizeReaderPreferences(prev.preferences), ...patch } });
+    enqueue({ patch, prev });
+  }, [setUser, enqueue]);
+  return { ...mutation, mutate };
 }
 
 export function useLoginMfa() {

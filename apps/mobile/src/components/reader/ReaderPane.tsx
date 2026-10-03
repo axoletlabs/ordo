@@ -7,7 +7,7 @@
  * open according to the website-browser setting; "Read in ordo" appears when
  * extraction actually produced an article.
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
   Appearance,
   Platform,
@@ -161,6 +161,8 @@ export function ReaderPane(props: ReaderPaneProps) {
     () => resolveReaderPalette(preferences.theme, preferences.amoled, systemScheme, { expressive, contrast, deviceColors: materialYouColors ? deviceColors : null }),
     [preferences.theme, preferences.amoled, systemScheme, deviceColors, materialYouColors, expressive, contrast],
   );
+  // Commit control feedback first; let a long article reflow at interruptible priority.
+  const content = useDeferredValue(useMemo(() => ({ preferences, palette: readerPalette }), [preferences, readerPalette]));
 
   // The reader surface owns the status bar (full-screen stack usage only);
   // on unmount, restore the style the app theme expects.
@@ -176,14 +178,16 @@ export function ReaderPane(props: ReaderPaneProps) {
     <ReaderPaneInner
       {...props}
       preferences={preferences}
+      contentPreferences={content.preferences}
       onUpdatePreferences={setPreferences}
-      readerPalette={readerPalette}
+      readerPalette={content.palette}
     />
   );
 }
 
 interface ReaderPaneInnerProps extends ReaderPaneProps {
   preferences: ReaderPreferences;
+  contentPreferences: ReaderPreferences;
   onUpdatePreferences: (patch: UpdateReaderPreferencesInput) => void;
   readerPalette: Palette;
 }
@@ -195,6 +199,7 @@ function ReaderPaneInner({
   safeBottom = !embedded,
   initialSurface = "auto",
   preferences,
+  contentPreferences,
   onUpdatePreferences,
   readerPalette,
 }: ReaderPaneInnerProps) {
@@ -238,6 +243,7 @@ function ReaderPaneInner({
     !!detail.error;
 
   const [controlsOpen, setControlsOpen] = useState(false);
+  const closeControls = useCallback(() => setControlsOpen(false), []);
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [actionPanel, setActionPanel] = useState<
     "actions" | "contents" | "highlights" | "remind" | "remind-custom" | null
@@ -320,9 +326,9 @@ function ReaderPaneInner({
       ? `${bookmark.readingTimeMinutes} min read`
       : undefined
     : undefined;
-  const readerBodySize = READER_BODY_SIZE[preferences.fontSize];
-  const readerFont = resolveReaderFont(preferences.fontFamily);
-  const readerBoldFont = resolveReaderFont(preferences.fontFamily, "700");
+  const readerBodySize = READER_BODY_SIZE[contentPreferences.fontSize];
+  const readerFont = resolveReaderFont(contentPreferences.fontFamily);
+  const readerBoldFont = resolveReaderFont(contentPreferences.fontFamily, "700");
   const articleHeadings = headingState.bookmarkId === bookmark?.id ? headingState.headings : [];
   const highlights = detail.data?.highlights ?? EMPTY_HIGHLIGHTS;
 
@@ -1076,7 +1082,7 @@ function ReaderPaneInner({
                 <View style={styles.content}>
                   <ArticleHtml
                     html={detail.data?.contentHtml ?? ""}
-                    preferences={preferences}
+                    preferences={contentPreferences}
                     contentWidth={articleWidth || fallbackArticleWidth}
                     highlights={highlights}
                     onTextSelect={handleTextSelect}
@@ -1165,13 +1171,13 @@ function ReaderPaneInner({
         </FABLayer>
       ) : null}
 
-      <ReaderControlsSheet
+      <ThemeOverrideProvider palette={appPalette}><ReaderControlsSheet
         visible={controlsOpen}
-        onDismiss={() => setControlsOpen(false)}
+        onDismiss={closeControls}
         preferences={preferences}
         onUpdate={onUpdatePreferences}
         effectiveDark={effectiveDark}
-      />
+      /></ThemeOverrideProvider>
       <EditTagsSheet
         visible={editTagsOpen}
         bookmark={bookmark ?? null}

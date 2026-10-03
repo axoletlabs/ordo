@@ -11,6 +11,7 @@ import { Header, HeaderActions, HeaderIconButton } from "../../../src/components
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
 import { FAB, FABDock } from "../../../src/components/ui/FAB";
+import { listPosition } from "../../../src/theme/list-shape";
 import { Button } from "../../../src/components/ui/Button";
 import { ScreenContent } from "../../../src/components/ui/ScreenContent";
 import { EmptyState } from "../../../src/components/ui/EmptyState";
@@ -57,7 +58,7 @@ export default function FolderDetailScreen() {
   const router = useRouter();
   const { hasDetailPane } = useResponsiveLayout();
   const pageMax = hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth;
-  const { bottom: dockInset, selectionClearance } = useFloatingDockMetrics();
+  const { bottom: dockInset, selectionClearance, listOverlayClearance } = useFloatingDockMetrics();
   const { id, bookmark } = useLocalSearchParams<{ id: string; bookmark?: string }>();
   const routeId = Array.isArray(id) ? id[0] : id;
   const selectedBookmarkId = Array.isArray(bookmark) ? bookmark[0] : bookmark;
@@ -119,10 +120,7 @@ export default function FolderDetailScreen() {
   const openReader = useCallback((b: BookmarkDto) => {
     openListBookmark(b, () => {
       if (hasDetailPane) {
-        router.push({
-          pathname: "/folder/[id]",
-          params: { id: folderId ?? "root", bookmark: b.id },
-        });
+        router.setParams({ bookmark: b.id });
         return;
       }
       router.push(`/reader/${b.id}`);
@@ -154,9 +152,10 @@ export default function FolderDetailScreen() {
   const selectionActive = selection.active;
   const selectionRevision = selection.revision;
   const renderBookmark = useCallback(
-    ({ item }: { item: BookmarkDto }) => (
+    ({ item, index }: { item: BookmarkDto; index: number }) => (
       <BookmarkRow
         bookmark={item}
+        position={listPosition(index, items.length)}
         selectionMode={selectionActive}
         selected={
           selectionActive
@@ -168,7 +167,7 @@ export default function FolderDetailScreen() {
         onMore={onMoreBookmark}
       />
     ),
-    [hasDetailPane, onEnterSelection, onMoreBookmark, onPressBookmark, selectedBookmarkId, selectionActive, selectionRevision],
+    [hasDetailPane, onEnterSelection, onMoreBookmark, onPressBookmark, selectedBookmarkId, selectionActive, selectionRevision, items.length],
   );
 
   const { onEndReached, loadingMore, resetPaging } = useLoadMore({
@@ -207,7 +206,7 @@ export default function FolderDetailScreen() {
     });
   };
 
-  const listContentPadding = selection.active ? selectionClearance : spacing[8];
+  const listContentPadding = selection.active ? selectionClearance : listOverlayClearance;
   const listPane = (
     <SelectionDragFrame drag={drag}>
     <ThemedFlashList
