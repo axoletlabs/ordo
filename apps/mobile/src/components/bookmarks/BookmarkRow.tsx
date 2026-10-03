@@ -358,6 +358,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
           </View>
           <View style={styles.metaRow}>
             <Text variant="bodySmall" color="tertiary" numberOfLines={1} style={styles.domain}>{domain}</Text>
+            {!showReadingTime ? <Text variant="bodySmall" color="tertiary" numberOfLines={1} style={{ flexShrink: 0 }}>{createdLabel}</Text> : null}
             {isPending ? (
               <RowStatusSlot>
                 <Spinner
@@ -403,7 +404,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
                   />
                 </RowStatusSlot>
               </Pressable>
-            ) : <Text variant="bodySmall" color="tertiary" numberOfLines={1} style={{ flexShrink: 0 }}>{createdLabel}</Text>}
+            ) : null}
           </View>
           {rowTags.length > 0 || reminderLabel ? (
             <View style={styles.detailsRow}>
