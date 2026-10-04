@@ -42,6 +42,9 @@ test("library uses one search app bar in every orientation", () => {
   assert.doesNotMatch(source, /inlineLibraryHeader|showLibraryTitle|styles\.toolbar/);
   assert.match(source, /onFocusChange=\{setFocused\}/);
   assert.match(source, /motion\.reducedMotion \? 0 : 180/);
+  assert.match(source, /const collapseTools = focused;/);
+  assert.match(source, /rightAccessory=\{editing \?/);
+  assert.match(source, /useSearchBack\(editing/);
 });
 
 for (const screen of ["(tabs)/index", "folder/[id]", "tags/[id]"]) {

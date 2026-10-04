@@ -360,7 +360,7 @@ export default function BookmarksScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.background }}>
-      <LibraryHeader tools={headerRight} query={search.query} onQueryChange={search.setQuery}
+      <LibraryHeader tools={headerRight} query={search.query} onQueryChange={search.setQuery} filterOpen={filterOpen}
         onFilter={(anchor) => { setFilterAnchor(anchor); setFilterOpen(true); }} filtersOn={search.filtersOn}
         autoFocusSearch={params.focus === "1"} maxWidth={contentWidth}
         resultLabel={search.active ? `${libraryItems.length}${search.search.hasNextPage ? "+" : ""} ${libraryItems.length === 1 ? "result" : "results"}` : undefined}
