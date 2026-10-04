@@ -34,8 +34,8 @@ export function Header({ title, subtitle, showBack, onBack, right, large, safeTo
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const column = useColumnPadding(maxWidth, alignTo);
-  const { isLandscape, isTablet } = useResponsiveLayout();
-  const expanded = large && (!isLandscape || isTablet);
+  const { compactHeight } = useResponsiveLayout();
+  const expanded = large && !compactHeight;
   const back = () => {
     dismissKeyboard(); haptics.light();
     if (onBack) onBack(); else if (router.canGoBack()) router.back(); else router.replace("/");
@@ -48,7 +48,7 @@ export function Header({ title, subtitle, showBack, onBack, right, large, safeTo
       paddingBottom: expanded ? spacing[16] : spacing[8], backgroundColor: palette.background,
       borderBottomColor: palette.outlineVariant, borderBottomWidth: divider ? StyleSheet.hairlineWidth : 0,
     }}>
-      <View style={styles.bar}>
+      <View style={[styles.bar, compactHeight ? { minHeight: 56 } : null]}>
          {showBack ? <HeaderIconButton name="arrow-back" variant="tonal" color={palette.onSecondaryContainer} onPress={back} accessibilityLabel="Back" /> : null}
         {!expanded ? <View style={styles.title}>
           {onTitleLongPress ? <PressableScale onLongPress={onTitleLongPress} accessibilityRole="button"

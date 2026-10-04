@@ -7,10 +7,9 @@ import { HeaderActions, HeaderIconButton } from "../../../src/components/ui/Head
 import { LibraryHeader } from "../../../src/components/bookmarks/LibraryHeader";
 import { LibraryFilters } from "../../../src/components/bookmarks/LibraryFilters";
 import { SearchFilterMenu } from "../../../src/components/bookmarks/SearchFilterMenu";
-import { ReaderPane, ReaderPanePlaceholder } from "../../../src/components/reader/ReaderPane";
 import { useLibrarySearch } from "../../../src/hooks/use-library-search";
-import { useResponsiveLayout } from "../../../src/hooks/use-responsive-layout";
-import { sanitizeRouteParam, searchScopeActive } from "../../../src/lib/search-bookmarks";
+import { useLegacyReaderLink } from "../../../src/hooks/use-legacy-reader-link";
+import { searchScopeActive } from "../../../src/lib/search-bookmarks";
 import { ListLoadingFooter } from "../../../src/components/ui/ListLoadingFooter";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
 import { FAB, FABDock } from "../../../src/components/ui/FAB";
@@ -57,7 +56,7 @@ import {
   type CreateButtonAction,
   type CreateButtonHoldAction,
 } from "../../../src/store/settings";
-import { layout, radius, spacing } from "../../../src/theme/tokens";
+import { layout, spacing } from "../../../src/theme/tokens";
 import { type BookmarkDto, type FolderDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
@@ -71,9 +70,8 @@ export default function BookmarksScreen() {
   const { palette } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ bookmark?: string; focus?: string }>();
-  const selectedBookmarkId = sanitizeRouteParam(params.bookmark);
-  const { hasDetailPane } = useResponsiveLayout();
-  const contentWidth = hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth;
+  useLegacyReaderLink(params.bookmark);
+  const contentWidth = layout.maxContentWidth;
    const { bottom: dockInset, selectionClearance, listOverlayClearance } = useFloatingDockMetrics();
   const folders = useFolders();
   const tags = useTags();
@@ -159,7 +157,7 @@ export default function BookmarksScreen() {
 
   const onDelete = (bookmark: BookmarkDto) => {
     haptics.medium();
-    deleteBookmark.mutate(bookmark, { onDeleted: () => { if (selectedBookmarkId === bookmark.id) router.setParams({ bookmark: "" }); } });
+    deleteBookmark.mutate(bookmark);
   };
 
   const onMarkAllRead = () => {
@@ -184,10 +182,9 @@ export default function BookmarksScreen() {
 
   const openBookmark = useCallback((bookmark: BookmarkDto) => {
     openListBookmark(bookmark, () => {
-      if (hasDetailPane) router.setParams({ bookmark: bookmark.id });
-      else router.push(`/reader/${bookmark.id}`);
+      router.push(`/reader/${bookmark.id}`);
     });
-  }, [router, hasDetailPane]);
+  }, [router]);
 
   const enterFolder = useCallback((folder: FolderDto) => {
     void prefetchFolderBookmarks(folder.id);
@@ -266,7 +263,7 @@ export default function BookmarksScreen() {
           bookmark={item.bookmark}
           position={listPosition(index - folderItems.length, items.length)}
           selectionMode={selectionActive}
-          selected={selectionActive ? selectionRef.current.has(bookmarkKey(item.bookmark.id)) : hasDetailPane && item.bookmark.id === selectedBookmarkId}
+          selected={selectionActive && selectionRef.current.has(bookmarkKey(item.bookmark.id))}
           searchQuery={search.trimmed}
           searchFuzzy={search.listFilters.fuzzy}
           omitTagIds={search.listFilters.tagIds}
@@ -286,7 +283,7 @@ export default function BookmarksScreen() {
       onPressLibraryBookmark,
       selectionActive,
       selectionRevision,
-       hasDetailPane, selectedBookmarkId, search.trimmed, search.listFilters.fuzzy, search.listFilters.tagIds, search.active, toggleTag,
+       search.trimmed, search.listFilters.fuzzy, search.listFilters.tagIds, search.active, toggleTag,
        folderItems.length, items.length,
     ],
   );
@@ -341,7 +338,6 @@ export default function BookmarksScreen() {
         testID="add-bookmark-fab"
         label={createActionLabel(createButtonTapAction)}
         bottom={spacing[16]}
-        right={hasDetailPane ? spacing[16] : undefined}
         maxContentWidth={contentWidth}
       />
     </FABDock>
@@ -384,8 +380,6 @@ export default function BookmarksScreen() {
         </ScreenContent>
       ) : (
         <ScreenContent maxWidth={contentWidth} style={styles.content}>
-          <View style={hasDetailPane ? styles.splitPane : styles.singlePane}>
-          <View style={hasDetailPane ? styles.listPane : styles.singlePane}>
           <SelectionDragFrame drag={drag}>
           <ThemedFlashList
             ref={drag.listRef}
@@ -425,16 +419,10 @@ export default function BookmarksScreen() {
             onEndReached={search.active ? search.onEndReached : onEndReached}
           />
           </SelectionDragFrame>
-          {hasDetailPane ? createFab : null}
-          </View>
-          {hasDetailPane ? <View style={[styles.readerPane, { backgroundColor: palette.surfaceContainerLow }]}>
-            {selectedBookmarkId ? <ReaderPane bookmarkId={selectedBookmarkId} embedded safeBottom={false} onBack={() => router.setParams({ bookmark: "" })} /> : <ReaderPanePlaceholder />}
-          </View> : null}
-          </View>
         </ScreenContent>
       )}
 
-      {!hasDetailPane ? createFab : null}
+      {createFab}
 
       <SortMenu
         visible={sortOpen}
@@ -562,8 +550,4 @@ const styles = StyleSheet.create({
   content: { flex: 1, width: "100%" },
   center: { flex: 1, width: "100%", justifyContent: "center" },
   emptyBookmarks: { minHeight: 300, justifyContent: "center" },
-  singlePane: { flex: 1, width: "100%" },
-  splitPane: { flex: 1, flexDirection: "row", gap: spacing[16] },
-  listPane: { width: "40%", minWidth: 320, flexShrink: 0 },
-  readerPane: { flex: 1, minWidth: 0, overflow: "hidden", borderRadius: radius.xl },
 });

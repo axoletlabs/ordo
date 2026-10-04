@@ -5,7 +5,7 @@ Use shared primitives; do not introduce screen-specific visual systems.
 
 - Color comes from `Palette` Material roles, generated with Google's Material color utilities. Pair each container with its `on*` role. Dividers use `outlineVariant`, fields use `outline`.
 - Typography uses the Roboto Material type scale through `Text` variants. Sentence case throughout. Reader content may retain the user's chosen reading font.
-- Layout uses an 8dp grid, a shared 16dp screen rail, safe-area-aware columns, and minimum 48dp interactive targets. Wide screens use constrained content and list/detail panes.
+- Layout uses an 8dp grid, a shared 16dp screen rail, safe-area-aware columns, and minimum 48dp interactive targets. Every orientation uses one constrained content pane; bookmarks open a full-screen reader with Back returning to the originating list. Landscape uses a compact search app bar, not a list/detail split.
 - The library is home. Search filters and reorders its existing list in place; account/settings opens from the top-right icon. There is no separate search screen or persistent navigation bar or rail.
 - Keep filters inside the search bar. Sorting/tag management use library overflow; folder creation belongs to the customizable Create menu. Search uses pre-indexed cached metadata immediately and remote matches asynchronously; global indexes must respect folder access and stay off disk.
 - App colors retain a single identity in both design modes. Material You reads Android 12+ system tonal palettes; do not offer preset app colors or equate Expressive components with the Expressive color variant.

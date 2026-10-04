@@ -346,6 +346,7 @@ function ReaderPaneInner({
       return;
     }
     if (router.canGoBack()) router.back();
+    else router.replace("/");
   };
 
   const handleOpenOriginal = () => {
@@ -1029,7 +1030,7 @@ function ReaderPaneInner({
           collapsable={false}
           style={[
             styles.browserPane,
-            { backgroundColor: websiteChrome },
+            { backgroundColor: websiteChrome, paddingLeft: insets.left, paddingRight: insets.right },
             !showWebsiteView && styles.browserParked,
           ]}
           pointerEvents={showWebsiteView ? "auto" : "none"}
@@ -1063,7 +1064,7 @@ function ReaderPaneInner({
               paddingBottom: spacing[16] + (safeBottom ? insets.bottom : 0),
             }}
           >
-            <ScreenContent alignTo={embedded ? "parent" : "scene"} style={styles.body}>
+            <ScreenContent maxWidth={layout.maxReaderWidth} alignTo={embedded ? "parent" : "scene"} style={styles.body}>
               <View
                 style={styles.articleColumn}
                 onLayout={(e) => setArticleWidth(e.nativeEvent.layout.width)}
@@ -1164,7 +1165,7 @@ function ReaderPaneInner({
             onPress={() => {
               setActionPanel("contents");
             }}
-            maxContentWidth={layout.maxContentWidth}
+            maxContentWidth={layout.maxReaderWidth}
             alignTo={embedded ? "parent" : "scene"}
             bottom={spacing[20] + (safeBottom ? insets.bottom : 0)}
           />
@@ -1470,18 +1471,6 @@ function ReaderPaneInner({
       </ContextMenu>
     </View>
     </ThemeOverrideProvider>
-  );
-}
-
-export function ReaderPanePlaceholder() {
-  return (
-    <View style={styles.stateCenter}>
-      <EmptyState
-        icon="reader-outline"
-        title="Select a bookmark"
-        message="Choose a bookmark from the list."
-      />
-    </View>
   );
 }
 

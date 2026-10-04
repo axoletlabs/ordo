@@ -23,13 +23,12 @@ import { BookmarkActionsSheet } from "../../../src/components/bookmarks/Bookmark
 import { MoveSheet } from "../../../src/components/bookmarks/MoveSheet";
 import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
 import { TagActionsSheet } from "../../../src/components/tags/TagActionsSheet";
-import { ReaderPane, ReaderPanePlaceholder } from "../../../src/components/reader/ReaderPane";
 import { useTags, useTaggedBookmarks } from "../../../src/hooks/use-tags";
 import {
   useToggleRead,
   useDeleteBookmark,
 } from "../../../src/hooks/use-bookmarks";
-import { useResponsiveLayout } from "../../../src/hooks/use-responsive-layout";
+import { useLegacyReaderLink } from "../../../src/hooks/use-legacy-reader-link";
 import { bookmarkKey, useSelectionMode } from "../../../src/hooks/use-selection";
 import { SelectionDragFrame, useSelectionDrag } from "../../../src/components/bookmarks/SelectionDrag";
 import { useFloatingDockMetrics } from "../../../src/hooks/use-floating-dock-metrics";
@@ -38,7 +37,7 @@ import { haptics } from "../../../src/lib/haptics";
 import { errorMessage } from "../../../src/lib/error-message";
 import { flattenPages } from "../../../src/lib/api/query-keys";
 import { useLoadMore, usePullToRefresh } from "../../../src/hooks/use-list-controls";
-import { layout, radius, spacing } from "../../../src/theme/tokens";
+import { layout } from "../../../src/theme/tokens";
 import type { BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
@@ -46,12 +45,11 @@ import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
 export default function TagDetailScreen() {
   const { palette } = useTheme();
   const router = useRouter();
-  const { hasDetailPane } = useResponsiveLayout();
-  const pageMax = hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth;
+  const pageMax = layout.maxContentWidth;
   const { bottom: dockInset, selectionClearance, listOverlayClearance } = useFloatingDockMetrics();
   const { id, bookmark } = useLocalSearchParams<{ id: string; bookmark?: string }>();
   const routeId = Array.isArray(id) ? id[0] : id;
-  const selectedBookmarkId = Array.isArray(bookmark) ? bookmark[0] : bookmark;
+  useLegacyReaderLink(bookmark);
 
   const { data: tags } = useTags();
   const anchor = useMemo(() => tags?.find((t) => t.id === routeId), [tags, routeId]);
@@ -81,13 +79,9 @@ export default function TagDetailScreen() {
 
   const openReader = useCallback((b: BookmarkDto) => {
     openListBookmark(b, () => {
-      if (hasDetailPane) {
-        router.setParams({ bookmark: b.id });
-        return;
-      }
       router.push(`/reader/${b.id}`);
     });
-  }, [hasDetailPane, routeId, router]);
+  }, [router]);
 
   const onPressBookmark = useCallback((bookmark: BookmarkDto) => {
     const sel = selectionRef.current;
@@ -111,13 +105,7 @@ export default function TagDetailScreen() {
 
   const onDelete = (b: BookmarkDto) => {
     haptics.medium();
-    deleteBm.mutate(b, {
-      onDeleted: () => {
-        if (selectedBookmarkId === b.id) {
-          router.replace({ pathname: "/tags/[id]", params: { id: routeId ?? "" } });
-        }
-      },
-    });
+    deleteBm.mutate(b);
   };
 
   const { onEndReached, loadingMore, resetPaging } = useLoadMore({
@@ -153,11 +141,7 @@ export default function TagDetailScreen() {
         bookmark={item}
         position={listPosition(index, items.length)}
         selectionMode={selectionActive}
-        selected={
-          selectionActive
-            ? selectionRef.current.has(bookmarkKey(item.id))
-            : hasDetailPane && item.id === selectedBookmarkId
-        }
+        selected={selectionActive && selectionRef.current.has(bookmarkKey(item.id))}
         onPress={onPressBookmark}
         onEnterSelection={onEnterSelection}
         onMore={onMoreBookmark}
@@ -167,12 +151,10 @@ export default function TagDetailScreen() {
     ),
     [
       activeIds,
-      hasDetailPane,
       onEnterSelection,
       onMoreBookmark,
       onPressBookmark,
       onTagPress,
-      selectedBookmarkId,
       selectionActive,
       selectionRevision,
       items.length,
@@ -187,7 +169,7 @@ export default function TagDetailScreen() {
       onContentSizeChange={drag.onContentSizeChange}
       scrollEventThrottle={drag.scrollEventThrottle}
       data={items}
-      extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}`}
+      extraData={selectionRevision}
       keyExtractor={(b: BookmarkDto) => b.id}
       renderItem={renderBookmark}
       contentContainerStyle={{
@@ -204,7 +186,7 @@ export default function TagDetailScreen() {
 
   const saveFab = !selection.active ? <FABDock maxWidth={pageMax}>
     <FAB onPress={() => setAddOpen(true)} accessibilityLabel="Save bookmark" accessibilityHint="Tap to save a bookmark."
-      maxContentWidth={pageMax} right={hasDetailPane ? spacing[16] : undefined} />
+      maxContentWidth={pageMax} />
   </FABDock> : null;
 
   if (!routeId) return null;
@@ -276,31 +258,13 @@ export default function TagDetailScreen() {
         >
           <BookmarkListSkeleton />
         </ScreenContent>
-      ) : hasDetailPane ? (
-        <ScreenContent maxWidth={layout.maxLibraryWidth} style={styles.content}>
-          <View style={styles.splitPane}>
-            <View style={styles.listPane}>{listPane}{saveFab}</View>
-            <View style={[styles.readerPane, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-              {selectedBookmarkId ? (
-                <ReaderPane
-                  bookmarkId={selectedBookmarkId}
-                  embedded
-                  safeBottom={false}
-                  onBack={() => router.setParams({ bookmark: undefined })}
-                />
-              ) : (
-                <ReaderPanePlaceholder />
-              )}
-            </View>
-          </View>
-        </ScreenContent>
       ) : (
         <ScreenContent maxWidth={pageMax} style={styles.content}>
-          <View style={styles.singlePane}>{listPane}</View>
+          {listPane}
         </ScreenContent>
       )}
 
-      {!hasDetailPane || items.length === 0 ? saveFab : null}
+      {saveFab}
 
       <AddBookmarkSheet
         visible={addOpen}
@@ -354,12 +318,7 @@ export default function TagDetailScreen() {
         active={selection.active}
         bookmarks={selectedBookmarks}
         fromFolderId={null}
-        onFinished={() => {
-          if (hasDetailPane && selectedBookmarkId && selection.has(bookmarkKey(selectedBookmarkId))) {
-            router.replace({ pathname: "/tags/[id]", params: { id: routeId ?? "" } });
-          }
-          selection.exit();
-        }}
+        onFinished={selection.exit}
         bottom={dockInset}
         maxWidth={pageMax}
       />
@@ -370,14 +329,4 @@ export default function TagDetailScreen() {
 const styles = StyleSheet.create({
   content: { flex: 1, width: "100%" },
   center: { flex: 1, width: "100%", justifyContent: "center" },
-  singlePane: { flex: 1, width: "100%" },
-  splitPane: { flex: 1, width: "100%", flexDirection: "row", gap: spacing[16], paddingBottom: spacing[8] },
-  listPane: { width: 380, flexShrink: 0 },
-  readerPane: {
-    flex: 1,
-    minWidth: 0,
-    borderWidth: 1,
-    borderRadius: radius.lg,
-    overflow: "hidden",
-  },
 });

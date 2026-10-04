@@ -5,6 +5,7 @@ import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { radius, spacing } from "../../theme/tokens";
+import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
 
 export interface EmptyStateProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -17,12 +18,13 @@ export interface EmptyStateProps {
 
 export function EmptyState({ icon, title, message, action, compact }: EmptyStateProps) {
   const { palette, expressive } = useTheme();
+  const { compactHeight } = useResponsiveLayout();
   return (
-    <View style={[styles.wrap, compact && styles.compact]}>
-      <View style={[styles.iconCircle, { backgroundColor: palette.tertiaryContainer, borderRadius: expressive ? radius["2xl"] : radius.full }]}>
-        <Ionicons name={icon} size={40} color={palette.onTertiaryContainer} />
+    <View style={[styles.wrap, compact && styles.compact, compactHeight && styles.short]}>
+      <View style={[styles.iconCircle, compactHeight ? { width: 48, height: 48 } : null, { backgroundColor: palette.tertiaryContainer, borderRadius: expressive ? radius["2xl"] : radius.full }]}>
+        <Ionicons name={icon} size={compactHeight ? 24 : 40} color={palette.onTertiaryContainer} />
       </View>
-      <Text variant="headlineSmall" align="center" style={{ marginTop: spacing[24] }}>{title}</Text>
+      <Text variant={compactHeight ? "titleLarge" : "headlineSmall"} align="center" style={{ marginTop: compactHeight ? spacing[8] : spacing[24] }}>{title}</Text>
       {message ? (
         <Text variant="bodyMedium" color="secondary" align="center" style={{ marginTop: spacing[8] }}>
           {message}
@@ -47,5 +49,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[20],
     paddingHorizontal: spacing[16],
   },
+  short: { paddingVertical: spacing[16] },
   iconCircle: { width: 88, height: 88, alignItems: "center", justifyContent: "center" },
 });
