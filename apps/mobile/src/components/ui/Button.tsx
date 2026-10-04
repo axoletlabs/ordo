@@ -28,13 +28,12 @@ export function Button({ label, onPress, variant = "primary", size = "sm", loadi
   const { palette, expressive, shadows } = useTheme();
   const inactive = disabled || loading;
   const tokens = sizes[size];
-  const filled = variant === "primary" || variant === "danger" || variant === "tonal" || variant === "elevated";
+  const filled = variant === "primary" || variant === "danger" || variant === "tonal" || variant === "secondary" || variant === "elevated";
   const surface = inactive ? filled ? `${palette.onSurface}1f` : "transparent"
     : variant === "primary" ? palette.primary : variant === "danger" ? palette.error
-    : variant === "tonal" ? palette.secondaryContainer : variant === "elevated" ? palette.surfaceContainerLow : "transparent";
+    : variant === "tonal" || variant === "secondary" ? palette.secondaryContainer : variant === "elevated" ? palette.surfaceContainerLow : "transparent";
   const foreground = inactive ? `${palette.onSurface}61` : variant === "primary" ? palette.onPrimary
-    : variant === "danger" ? palette.onError : variant === "tonal" ? palette.onSecondaryContainer
-    : variant === "secondary" ? palette.onSurface : palette.primary;
+    : variant === "danger" ? palette.onError : variant === "tonal" || variant === "secondary" ? palette.onSecondaryContainer : palette.primary;
   return <View style={[{ minHeight: 48, minWidth: 48, justifyContent: "center", ...(block ? { width: "100%" as const } : {}) }, style]}>
     <PressableScale testID={testID} disabled={inactive} accessibilityRole="button" accessibilityLabel={label}
       accessibilityState={{ disabled: inactive, busy: loading }} stateLayerColor={foreground}
@@ -43,7 +42,7 @@ export function Button({ label, onPress, variant = "primary", size = "sm", loadi
       onPress={() => { haptics.light(); onPress?.(); }}
       style={[styles.base, { height: tokens.height, paddingHorizontal: tokens.padding,
         backgroundColor: surface, borderRadius: tokens.height / 2,
-        borderWidth: variant === "secondary" ? size === "xl" ? 3 : size === "lg" ? 2 : 1 : 0,
+        borderWidth: 0,
         borderColor: inactive ? `${palette.onSurface}1f` : palette.outline },
         variant === "elevated" && !inactive ? shadows.level1 : null]}>
       <View style={styles.content}>

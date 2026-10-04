@@ -42,6 +42,7 @@ import { layout } from "../../../src/theme/tokens";
 import type { BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
+import { useBookmarkListLayout } from "../../../src/hooks/use-bookmark-list-layout";
 
 export default function TagDetailScreen() {
   const { palette } = useTheme();
@@ -77,17 +78,16 @@ export default function TagDetailScreen() {
     [items, selection],
   );
   const selectableKeys = useMemo(() => items.map((bookmark) => bookmarkKey(bookmark.id)), [items]);
+  const getItemLayout = useBookmarkListLayout(items, 0, activeIds);
 
   const openReader = useCallback((b: BookmarkDto) => {
-    openListBookmark(b, () => {
-      router.push(`/reader/${b.id}`);
-    });
+    return openListBookmark(b, () => router.push(`/reader/${b.id}`));
   }, [router]);
 
   const onPressBookmark = useCallback((bookmark: BookmarkDto) => {
     const sel = selectionRef.current;
     if (sel.active) sel.toggle(bookmarkKey(bookmark.id));
-    else openReader(bookmark);
+    else return openReader(bookmark);
   }, [openReader]);
 
   const onMoreBookmark = useCallback((b: BookmarkDto, menuAnchor: MenuAnchorRect) => {
@@ -171,6 +171,7 @@ export default function TagDetailScreen() {
       scrollEventThrottle={drag.scrollEventThrottle}
       data={items}
       extraData={selectionRevision}
+      getItemLayout={getItemLayout}
       keyExtractor={(b: BookmarkDto) => b.id}
       renderItem={renderBookmark}
       contentContainerStyle={{

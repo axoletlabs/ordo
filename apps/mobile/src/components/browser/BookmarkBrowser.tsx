@@ -37,7 +37,7 @@ import { haptics } from "../../lib/haptics";
 import { WEBSITE_FORCE_DARK_SCRIPT } from "../../lib/website-force-dark";
 import { useSettingsStore } from "../../store/settings";
 import { useTheme } from "../../theme/ThemeProvider";
-import { resolvePalette } from "../../theme/theme";
+import { currentAppPalette } from "../../theme/current-app-palette";
 import { spacing } from "../../theme/tokens";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
@@ -60,7 +60,6 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
   function BookmarkBrowser({ url, active = true, onPageHost }, ref) {
     const { palette } = useTheme();
     const forceWebsiteDark = useSettingsStore((s) => s.forceWebsiteDark);
-    const amoled = useSettingsStore((s) => s.amoled);
     const webRef = useRef<WebView>(null);
     const canGoBackRef = useRef(false);
     const ptrDyRef = useRef(0);
@@ -73,7 +72,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     const [ptrDy, setPtrDy] = useState(0);
     const source = useMemo(() => ({ uri: url }), [url]);
     const chromeBackground = forceWebsiteDark
-      ? resolvePalette("dark", amoled, "dark").background
+      ? currentAppPalette("dark").background
       : palette.background;
     const injected = useMemo(
       () =>

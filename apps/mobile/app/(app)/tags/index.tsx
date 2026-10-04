@@ -40,7 +40,7 @@ export default function TagsScreen() {
 
   const onPressTag = useCallback(
     (tag: TagDto) => {
-      router.push(`/tags/${tag.id}`);
+      return router.push(`/tags/${tag.id}`);
     },
     [router],
   );

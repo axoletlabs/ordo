@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { BookmarkDto } from "@ordo/shared";
-import { bookmarkListItemType, estimateBookmarkRowSize, FOLDER_ROW_SIZE } from "./bookmark-row-layout.ts";
+import { bookmarkListItemType, estimateBookmarkRowSize, FOLDER_ROW_SIZE, listRowLayouts } from "./bookmark-row-layout.ts";
 
 function bookmark(partial: Partial<BookmarkDto> & Pick<BookmarkDto, "id" | "title">): BookmarkDto {
   return {
@@ -43,4 +43,18 @@ test("compact website rows are shorter than tagged articles", () => {
   assert.ok(FOLDER_ROW_SIZE <= estimateBookmarkRowSize(web));
   assert.equal(bookmarkListItemType(web), "bookmark");
   assert.equal(bookmarkListItemType(article), "bookmark:article-tags");
+});
+
+test("metadata uses one bounded third line; hidden tags do not reserve a line", () => {
+  const row = bookmark({ id: "a", title: "Article", tags: [{ id: "t", name: "News", color: "slate" }], suggestedTags: [{ id: "s", name: "Ideas", color: "slate" }] });
+  assert.equal(estimateBookmarkRowSize(row), 96);
+  assert.equal(estimateBookmarkRowSize({ ...row, suggestedTags: [] }, ["t"]), 72);
+  assert.equal(estimateBookmarkRowSize({ ...row, tags: [], suggestedTags: [], remindAt: 123 }), 96);
+  assert.equal(estimateBookmarkRowSize({ ...row, tags: [], suggestedTags: [], description: "Does not add a row" }), 72);
+});
+
+test("exact offsets include segmented gaps and do not need cell measurements", () => {
+  assert.deepEqual(listRowLayouts([74, 98, 74]), [
+    { index: 0, length: 74, offset: 0 }, { index: 1, length: 98, offset: 74 }, { index: 2, length: 74, offset: 172 },
+  ]);
 });

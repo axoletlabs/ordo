@@ -27,6 +27,10 @@ function websiteBrowser(): WebsiteBrowser {
 
 export async function openExternalBrowser(url: string): Promise<void> {
   if (!acceptBrowserTap(`external:${url}`)) return;
+  await launchExternalBrowser(url);
+}
+
+async function launchExternalBrowser(url: string): Promise<void> {
   try {
     await Linking.openURL(url);
   } catch {
@@ -36,6 +40,10 @@ export async function openExternalBrowser(url: string): Promise<void> {
 
 export async function openInAppBrowser(url: string): Promise<void> {
   if (!acceptBrowserTap(`inApp:${url}`)) return;
+  await launchInAppBrowser(url);
+}
+
+async function launchInAppBrowser(url: string): Promise<void> {
   try {
     await WebBrowser.openBrowserAsync(url, {
       presentationStyle: WebBrowser.WebBrowserPresentationStyle.AUTOMATIC,
@@ -45,7 +53,7 @@ export async function openInAppBrowser(url: string): Promise<void> {
       createTask: false,
     });
   } catch {
-    await openExternalBrowser(url);
+    await launchExternalBrowser(url);
   }
 }
 
@@ -106,21 +114,24 @@ export function ackBookmarkOpened(bookmark: BookmarkDto): void {
 }
 
 /** Open the live page in the device browser app, even if websites usually stay in ordo. */
-export function openBookmarkInExternalBrowser(bookmark: BookmarkDto): void {
+export function openBookmarkInExternalBrowser(bookmark: BookmarkDto): boolean {
+  if (!acceptBrowserTap(`external:${bookmark.url}`)) return false;
   ackBookmarkOpened(bookmark);
-  void openExternalBrowser(bookmark.url);
+  void launchExternalBrowser(bookmark.url);
+  return true;
 }
 
 /**
  * Open a library bookmark. Returns after handing off to a system browser, or
  * calls `openReader` when the page should stay in ordo.
  */
-export function openListBookmark(bookmark: BookmarkDto, openReader: () => void): void {
+export function openListBookmark(bookmark: BookmarkDto, openReader: () => void | boolean): void | boolean {
   const browser = websiteBrowser();
   if (bookmarkOpensAsWebsite(bookmark) && browser !== "ordo") {
+    if (!acceptBrowserTap(`${browser}:${bookmark.url}`)) return false;
     ackBookmarkOpened(bookmark);
-    void openLivePage(bookmark.url, browser);
-    return;
+    void (browser === "inApp" ? launchInAppBrowser(bookmark.url) : launchExternalBrowser(bookmark.url));
+    return true;
   }
-  openReader();
+  return openReader();
 }

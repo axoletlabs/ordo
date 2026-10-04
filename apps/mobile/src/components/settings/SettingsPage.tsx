@@ -5,7 +5,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useAppRouter as useRouter } from "../../hooks/use-app-router";
 import { useColumnPadding, type ColumnAlign } from "../../hooks/use-scene-column-insets";
 import { Header } from "../ui/Header";
 import { ThemedScrollView, type ThemedScrollViewProps } from "../ui/ThemedScrollView";

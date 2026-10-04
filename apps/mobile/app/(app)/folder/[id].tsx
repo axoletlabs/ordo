@@ -52,6 +52,7 @@ import { openListBookmark } from "../../../src/lib/open-website";
 import { useLoadMore, usePullToRefresh } from "../../../src/hooks/use-list-controls";
 import { ListLoadingFooter } from "../../../src/components/ui/ListLoadingFooter";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
+import { useBookmarkListLayout } from "../../../src/hooks/use-bookmark-list-layout";
 
 export default function FolderDetailScreen() {
   const { palette } = useTheme();
@@ -112,20 +113,19 @@ export default function FolderDetailScreen() {
     [items, selection],
   );
   const selectableKeys = useMemo(() => items.map((bookmark) => bookmarkKey(bookmark.id)), [items]);
+  const getItemLayout = useBookmarkListLayout(items);
   const isEmpty = !foldersLoading && !bookmarks.isLoading && !showLocked && !loadFailed && items.length === 0;
   // Root isn't a folder row, so derive unread state from the loaded items.
   const hasUnread = folder ? folder.unreadCount > 0 : items.some((b) => !b.isRead);
 
   const openReader = useCallback((b: BookmarkDto) => {
-    openListBookmark(b, () => {
-      router.push(`/reader/${b.id}`);
-    });
+    return openListBookmark(b, () => router.push(`/reader/${b.id}`));
   }, [router]);
 
   const onPressBookmark = useCallback((bookmark: BookmarkDto) => {
     const sel = selectionRef.current;
     if (sel.active) sel.toggle(bookmarkKey(bookmark.id));
-    else openReader(bookmark);
+    else return openReader(bookmark);
   }, [openReader]);
 
   const onMoreBookmark = useCallback((b: BookmarkDto, anchor: MenuAnchorRect) => {
@@ -203,6 +203,7 @@ export default function FolderDetailScreen() {
       scrollEventThrottle={drag.scrollEventThrottle}
       data={items}
       extraData={`${selectionRevision}:${bookmarkSort}`}
+      getItemLayout={getItemLayout}
       key={`folder:${folderId ?? "root"}`}
       keyExtractor={(b: BookmarkDto) => b.id}
       renderItem={renderBookmark}

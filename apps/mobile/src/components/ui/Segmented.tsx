@@ -29,7 +29,7 @@ export interface SegmentedProps<T extends string> {
 export function Segmented<T extends string>({ options, value, onChange }: SegmentedProps<T>) {
   const { palette, expressive } = useTheme();
   return <View style={{ minHeight: 48, justifyContent: "center" }}><View accessibilityRole="radiogroup" style={[styles.group, {
-    gap: expressive ? 2 : 0, borderWidth: expressive ? 0 : 1, borderColor: palette.outline,
+    gap: expressive ? 2 : 0, backgroundColor: expressive ? "transparent" : palette.surfaceContainerHigh,
     borderRadius: radius.full,
   }]}>
     {options.map((option, index) => {
@@ -44,9 +44,9 @@ export function Segmented<T extends string>({ options, value, onChange }: Segmen
         accessibilityState={{ checked: selected }} onPress={() => { if (!selected) { haptics.selection(); onChange(option.value); } }}
         stateLayerColor={fg} hitSlop={{ top: 4, bottom: 4 }} shape={expressive ? { rest, pressed } : undefined}
         style={[styles.option, {
-          height: expressive ? 40 : 38,
+          height: 40,
           backgroundColor: selected ? expressive ? palette.secondary : palette.secondaryContainer : expressive ? palette.surfaceContainerHigh : "transparent",
-          borderRightWidth: !expressive && index < options.length - 1 ? 1 : 0, borderColor: palette.outline,
+          borderWidth: 0,
           ...(!expressive ? { borderTopLeftRadius: index === 0 ? outer : 0, borderBottomLeftRadius: index === 0 ? outer : 0,
             borderTopRightRadius: index === options.length - 1 ? outer : 0, borderBottomRightRadius: index === options.length - 1 ? outer : 0 } : {}),
         }]}>

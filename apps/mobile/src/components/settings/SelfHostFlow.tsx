@@ -155,8 +155,8 @@ export function SelfHostFlow({
               <CopyList
                 items={[
                   "Keep the server online, updated, and backed up.",
-                  "TLS and who can reach it.",
-                  "SMTP if you want verification and password-reset email.",
+                  "HTTPS and who can access the server.",
+                  "Email delivery for verification and password resets.",
                 ]}
               />
               <CheckLine
@@ -172,6 +172,7 @@ export function SelfHostFlow({
             <View style={styles.stack}>
               <Input
                 ref={inputRef}
+                label="Server address"
                 value={url}
                 onChangeText={setUrl}
                 placeholder="https://ordo.example.com"

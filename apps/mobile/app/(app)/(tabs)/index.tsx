@@ -64,6 +64,7 @@ import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
 import { listPosition } from "../../../src/theme/list-shape";
 import { useOverlaySessionMode } from "../../../src/lib/overlay-session-mode";
 import { useCollapsingFab } from "../../../src/hooks/use-collapsing-fab";
+import { useBookmarkListLayout } from "../../../src/hooks/use-bookmark-list-layout";
 
 type LibraryItem =
   | { type: "folder"; folder: FolderDto }
@@ -134,6 +135,7 @@ export default function BookmarksScreen() {
     ],
     [folderItems, items],
   );
+  const getItemLayout = useBookmarkListLayout(items, folderItems.length, search.listFilters.tagIds);
   // Folders return first. Keep the skeleton until the unfiled page is in
   // too, so a cold start never paints folders and then pops bookmarks in.
   const libraryLoading =
@@ -182,14 +184,12 @@ export default function BookmarksScreen() {
   const { refreshing, onRefresh } = usePullToRefresh(refreshAll);
 
   const openBookmark = useCallback((bookmark: BookmarkDto) => {
-    openListBookmark(bookmark, () => {
-      router.push(`/reader/${bookmark.id}`);
-    });
+    return openListBookmark(bookmark, () => router.push(`/reader/${bookmark.id}`));
   }, [router]);
 
   const enterFolder = useCallback((folder: FolderDto) => {
     void prefetchFolderBookmarks(folder.id);
-    router.push(`/folder/${folder.id}`);
+    return router.push(`/folder/${folder.id}`);
   }, [router]);
 
   const openFolder = useCallback((folder: FolderDto) => {
@@ -197,7 +197,7 @@ export default function BookmarksScreen() {
       setUnlockFolder(folder);
       return;
     }
-    enterFolder(folder);
+    return enterFolder(folder);
   }, [enterFolder]);
 
   const onPressFolder = useCallback((selectedFolder: FolderDto) => {
@@ -206,7 +206,7 @@ export default function BookmarksScreen() {
       sel.toggle(folderKey(selectedFolder.id));
       return;
     }
-    openFolder(selectedFolder);
+    return openFolder(selectedFolder);
   }, [openFolder]);
 
   const onMoreFolder = useCallback((selectedFolder: FolderDto, anchor: MenuAnchorRect) => {
@@ -217,7 +217,7 @@ export default function BookmarksScreen() {
   const onPressLibraryBookmark = useCallback((bookmark: BookmarkDto) => {
     const sel = selectionRef.current;
     if (sel.active) sel.toggle(bookmarkKey(bookmark.id));
-    else openBookmark(bookmark);
+    else return openBookmark(bookmark);
   }, [openBookmark]);
 
   const onMoreBookmark = useCallback((bookmark: BookmarkDto, anchor: MenuAnchorRect) => {
@@ -400,6 +400,7 @@ export default function BookmarksScreen() {
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"
             renderItem={renderLibraryItem}
+            getItemLayout={getItemLayout}
             ListEmptyComponent={
               libraryLoading ? (
                 <BookmarkListSkeleton />

@@ -10,6 +10,7 @@ import { PressableScale } from "../ui/PressableScale";
 import { Text } from "../ui/Text";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
+import { runPressAction } from "../../lib/press-action";
 import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
 import { prefetchTaggedBookmarks } from "../../hooks/use-tags";
@@ -24,7 +25,7 @@ export const TAG_ROW_SIZE = 72;
 
 export interface TagRowProps {
   tag: TagDto;
-  onPress: (tag: TagDto) => void;
+  onPress: (tag: TagDto) => void | boolean;
   onMore?: (tag: TagDto, anchor: MenuAnchorRect) => void;
   highlighted?: boolean;
 }
@@ -47,8 +48,7 @@ export const TagRow = React.memo(function TagRow({
   const countLabel = `${tag.bookmarkCount} ${tag.bookmarkCount === 1 ? "bookmark" : "bookmarks"}`;
 
   const openTag = () => {
-    haptics.light();
-    onPress(tag);
+    runPressAction(() => onPress(tag), haptics.light);
   };
 
   const warmTag = () => {
@@ -71,9 +71,9 @@ export const TagRow = React.memo(function TagRow({
     <View
       ref={rowRef}
       collapsable={false}
-      style={[styles.wrap, { borderBottomColor: palette.outlineVariant, borderBottomWidth: expressive ? 0 : StyleSheet.hairlineWidth,
+      style={[styles.wrap, { borderBottomWidth: 0,
         backgroundColor: expressive ? palette.surfaceContainerLow : "transparent", borderRadius: expressive ? radius.xl : 0,
-        marginBottom: expressive ? spacing[4] : 0 }]}
+        marginBottom: expressive ? spacing[2] : 0 }]}
       {...(Platform.OS === "web"
         ? {
             onMouseEnter: () => setHovered(true),

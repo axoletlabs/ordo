@@ -11,15 +11,12 @@ import {
 } from "../../../src/components/settings/SettingsPage";
 import { SelfHostFlow } from "../../../src/components/settings/SelfHostFlow";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
-import { Badge } from "../../../src/components/ui/Badge";
-import { Button } from "../../../src/components/ui/Button";
 import { ConfirmDialog } from "../../../src/components/ui/ConfirmDialog";
 import { FloatingPanel } from "../../../src/components/ui/FloatingPanel";
 import { ThemedScrollView } from "../../../src/components/ui/ThemedScrollView";
 import { PanelHeader } from "../../../src/components/ui/PanelHeader";
 import { Input } from "../../../src/components/ui/Input";
 import { PanelActions } from "../../../src/components/ui/SheetActionRow";
-import { PressableScale } from "../../../src/components/ui/PressableScale";
 import { RowIconWell } from "../../../src/components/ui/RowIconWell";
 import { Text } from "../../../src/components/ui/Text";
 import { Spinner } from "../../../src/components/ui/Spinner";
@@ -49,7 +46,7 @@ import { ROW_ICON_GLYPH } from "../../../src/theme/alignment";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
 
 export default function ServerScreen() {
-  const { palette } = useTheme();
+  const { palette, expressive } = useTheme();
   const currentUrl = useSettingsStore((s) => s.serverUrl);
   const canRename = useAuthStore((s) => Boolean(s.user?.canRenameInstance));
   const serverInfo = useServerInfo();
@@ -59,13 +56,11 @@ export default function ServerScreen() {
   const [selfHostOpen, setSelfHostOpen] = useState(false);
 
   const cloud = isCloudServerUrl(currentUrl);
-  const connected = Boolean(serverInfo.data && !serverInfo.error);
   const statusLabel = serverInfo.error
     ? "Unavailable"
     : serverInfo.data
       ? "Connected"
       : "Checking…";
-  const statusTone = serverInfo.error ? "danger" : serverInfo.data ? "green" : "neutral";
   const displayName = cloud ? CLOUD_DISPLAY_NAME : instanceNameOf(serverInfo.data, currentUrl);
   const toCloud = Boolean(confirmedUrl && isCloudServerUrl(confirmedUrl));
 
@@ -80,89 +75,59 @@ export default function ServerScreen() {
     if (ok) setConfirmedUrl(null);
   };
 
-  const statusIcon = serverInfo.isLoading
-    ? "cloud-outline"
-    : connected
-      ? "checkmark-circle-outline"
-      : "cloud-offline-outline";
-
   return (
     <SettingsPage title="Hosting">
       <SettingsScrollView>
-        <SettingsGroup compact>
-          <View style={{ backgroundColor: palette.surfaceContainerLow, borderRadius: radius.xl, overflow: "hidden" }}>
-          <View style={[styles.current, { borderBottomColor: palette.border }]}>
-            {cloud ? (
+        <SettingsGroup label="Current server" compact>
+          <View style={{ backgroundColor: palette.surfaceContainerLow, borderRadius: expressive ? radius.xl : radius.lg, overflow: "hidden" }}>
               <View
                 accessible
                 accessibilityLabel={`${displayName}, ${hostOf(currentUrl)}. ${statusLabel}`}
                 style={styles.currentMain}
               >
                 <RowIconWell>
-                  <Ionicons name={statusIcon} size={ROW_ICON_GLYPH} color={palette.accent} />
+                  <Ionicons name={cloud ? "cloud-outline" : "server-outline"} size={ROW_ICON_GLYPH} color={palette.onSecondaryContainer} />
                 </RowIconWell>
                 <View style={styles.currentBody}>
-                  <Text variant="headline" numberOfLines={1}>
+                  <Text variant="titleMedium" numberOfLines={1}>
                     {displayName}
                   </Text>
-                  <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.currentUrl}>
+                  <Text variant="bodyMedium" color="secondary" numberOfLines={1} style={styles.currentUrl}>
                     {hostOf(currentUrl)}
                   </Text>
-                </View>
-                <View style={styles.status}>
-                  <Badge tone={statusTone}>{statusLabel}</Badge>
-                  {serverInfo.isFetching ? <Spinner size="sm" color={palette.accent} /> : null}
+                  <View style={styles.status}>
+                    <Text variant="bodySmall" color={serverInfo.error ? "danger" : "secondary"}>
+                      {statusLabel}{serverInfo.data ? ` · v${serverInfo.data.version}` : ""}
+                    </Text>
+                    {serverInfo.isFetching ? <Spinner size={16} color={palette.onSurfaceVariant} /> : null}
+                  </View>
                 </View>
               </View>
-            ) : (
-              <PressableScale
-                accessibilityRole="button"
-                accessibilityLabel={`Edit server ${displayName}, ${currentUrl}. ${statusLabel}`}
-                dim
-                onPress={() => openEditor(currentUrl)}
-                style={styles.currentMain}
-              >
-                <RowIconWell>
-                  <Ionicons name={statusIcon} size={ROW_ICON_GLYPH} color={palette.accent} />
-                </RowIconWell>
-                <View style={styles.currentBody}>
-                  <Text variant="headline" numberOfLines={1}>
-                    {displayName}
-                  </Text>
-                  <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.currentUrl}>
-                    {currentUrl}
-                  </Text>
-                </View>
-                <View style={styles.status}>
-                  <Badge tone={statusTone}>{statusLabel}</Badge>
-                  {serverInfo.isFetching ? <Spinner size="sm" color={palette.accent} /> : null}
-                </View>
-                <Ionicons name="chevron-forward" size={ROW_ICON_GLYPH} color={palette.textFaint} />
-              </PressableScale>
-            )}
-          </View>
-          {serverInfo.data ? (
+          {!cloud ? (
             <SettingRow
-              icon="pricetag-outline"
-              label="Version"
-              value={`v${serverInfo.data.version}`}
+              icon="settings-outline"
+              label="Edit server"
+              description="Change its address or name."
+              onPress={() => openEditor(currentUrl)}
+              showChevron
               position="last" divider={false}
             />
           ) : null}
           </View>
         </SettingsGroup>
 
-        <Button
+        <SettingsGroup label="Switch hosting" footer="Switching signs you out. Your existing library stays on its current server.">
+        <SettingRow
+          icon={cloud ? "server-outline" : "cloud-outline"}
           label={cloud ? "Use your own server" : "Use ordo Cloud"}
-          variant="primary"
-          block
-          size="md"
+          description={cloud ? "Connect an ordo instance you manage." : "Connect to the managed ordo service."}
+          showChevron
           onPress={() => {
             if (cloud) setSelfHostOpen(true);
             else setConfirmedUrl(CLOUD_SERVER_URL);
           }}
-          style={styles.switchHost}
         />
+        </SettingsGroup>
       </SettingsScrollView>
 
       <SelfHostFlow visible={selfHostOpen} onDismiss={() => setSelfHostOpen(false)} />
@@ -416,11 +381,6 @@ function ServerEditPanel({
 }
 
 const styles = StyleSheet.create({
-  current: {
-    flexDirection: "row",
-    alignItems: "center",
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
   currentMain: {
     flex: 1,
     minWidth: 0,
@@ -440,10 +400,4 @@ const styles = StyleSheet.create({
   },
   fields: { gap: spacing[16] },
   hostChange: { width: "100%", gap: spacing[6], alignItems: "center" },
-  switchHost: {
-    marginTop: spacing[20],
-    marginHorizontal: layout.rowInset,
-    width: "auto",
-    alignSelf: "stretch",
-  },
 });

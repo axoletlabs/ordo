@@ -6,6 +6,7 @@ import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
+import { runPressAction } from "../../lib/press-action";
 import { ROW_ICON_GLYPH } from "../../theme/alignment";
 import { layout, radius, spacing } from "../../theme/tokens";
 
@@ -14,7 +15,7 @@ export interface SettingRowProps {
   label: string;
   description?: string;
   value?: string;
-  onPress?: () => void;
+  onPress?: () => void | boolean | Promise<unknown>;
   right?: React.ReactNode;
   /** `column` (default) reserves the settings picker width so labels align. */
   rightFit?: "column" | "content";
@@ -37,7 +38,7 @@ export function SettingRow({
   destructive,
   iconColor,
   showChevron,
-  divider = true,
+  divider = false,
   position = "only",
 }: SettingRowProps) {
   const { palette, expressive } = useTheme();
@@ -45,12 +46,12 @@ export function SettingRow({
   const tint = destructive ? palette.error : iconColor ?? palette.onSurfaceVariant;
   const valueColor = destructive ? palette.danger : palette.textTertiary;
   const rowStyle = [styles.row, { borderBottomColor: palette.outlineVariant,
-    backgroundColor: expressive ? palette.surfaceContainerLow : "transparent",
+    backgroundColor: palette.surfaceContainerLow,
     borderRadius: expressive ? radius.xs : 0,
-    borderTopLeftRadius: expressive && (position === "first" || position === "only") ? radius.xl : undefined,
-    borderTopRightRadius: expressive && (position === "first" || position === "only") ? radius.xl : undefined,
-    borderBottomLeftRadius: expressive && (position === "last" || position === "only") ? radius.xl : undefined,
-    borderBottomRightRadius: expressive && (position === "last" || position === "only") ? radius.xl : undefined,
+    borderTopLeftRadius: position === "first" || position === "only" ? expressive ? radius.xl : radius.lg : undefined,
+    borderTopRightRadius: position === "first" || position === "only" ? expressive ? radius.xl : radius.lg : undefined,
+    borderBottomLeftRadius: position === "last" || position === "only" ? expressive ? radius.xl : radius.lg : undefined,
+    borderBottomRightRadius: position === "last" || position === "only" ? expressive ? radius.xl : radius.lg : undefined,
     marginBottom: expressive ? spacing[2] : 0,
     borderBottomWidth: expressive || !divider ? 0 : StyleSheet.hairlineWidth }];
 
@@ -62,7 +63,7 @@ export function SettingRow({
         </View>
       ) : null}
       <View style={styles.body}>
-        <Text variant="headline" numberOfLines={2} color={destructive ? "danger" : "primary"}>
+        <Text variant="bodyLarge" numberOfLines={2} color={destructive ? "danger" : "primary"}>
           {label}
         </Text>
         {description ? (
@@ -94,8 +95,7 @@ export function SettingRow({
       accessibilityLabel={description ? `${label}, ${description}` : label}
       style={rowStyle}
       onPress={() => {
-        haptics.light();
-        onPress();
+        runPressAction(onPress, haptics.light);
       }}
     >
       {content}

@@ -188,10 +188,11 @@ export function ImportFlow({
 
   return (
     <>
-      <SettingsGroup label="Import">
+      <SettingsGroup label="Import" compact>
         <SettingRow
           icon="download-outline"
           label="Import from file"
+          description="Add bookmarks from JSON, HTML, or CSV."
           onPress={pickFile}
           showChevron
         />

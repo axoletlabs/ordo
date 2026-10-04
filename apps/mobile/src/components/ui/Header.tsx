@@ -9,10 +9,11 @@ import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
 import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
 import { haptics } from "../../lib/haptics";
+import { runPressAction } from "../../lib/press-action";
 import { Text } from "./Text";
 import { PressableScale } from "./PressableScale";
 import { PlainTooltip } from "./PlainTooltip";
-import { ButtonGroup, useButtonGroupInteraction } from "./ButtonGroup";
+import { useButtonGroupInteraction } from "./ButtonGroup";
 import { IconButton } from "./IconButton";
 import { useTheme } from "../../theme/ThemeProvider";
 import { layout, radius, spacing } from "../../theme/tokens";
@@ -23,12 +24,13 @@ export const HEADER_TITLE_INSET = 96;
 export const HEADER_ICON_SIZE = 24;
 export const headerTitleTextStyle: TextStyle = { includeFontPadding: false, textAlignVertical: "center" };
 export interface HeaderProps {
-  title: string; subtitle?: string; showBack?: boolean; onBack?: () => void; right?: React.ReactNode;
+  title: string; subtitle?: string; showBack?: boolean; onBack?: () => void | boolean; right?: React.ReactNode;
+  variant?: "standard" | "tonal";
   large?: boolean; safeTop?: boolean; maxWidth?: number; alignTo?: ColumnAlign; divider?: boolean;
   onTitleLongPress?: () => void; titleAccessibilityHint?: string;
 }
 export function Header({ title, subtitle, showBack, onBack, right, large, safeTop = true,
-  maxWidth = layout.maxContentWidth, alignTo = "scene", divider = false, onTitleLongPress, titleAccessibilityHint,
+  maxWidth = layout.maxContentWidth, alignTo = "scene", divider = false, onTitleLongPress, titleAccessibilityHint, variant = "standard",
 }: HeaderProps) {
   const { palette, expressive } = useTheme();
   const router = useRouter();
@@ -37,19 +39,20 @@ export function Header({ title, subtitle, showBack, onBack, right, large, safeTo
   const { compactHeight } = useResponsiveLayout();
   const expanded = large && !compactHeight;
   const back = () => {
-    dismissKeyboard(); haptics.light();
-    if (onBack) onBack(); else if (router.canGoBack()) router.back(); else router.replace("/");
+    dismissKeyboard();
+    return onBack ? onBack() : router.canGoBack() ? router.back() : router.replace("/");
   };
-  const titleText = <Text variant={expanded ? (expressive ? "displaySmall" : "headlineLarge") : "titleLarge"}
+  const titleText = <Text variant={expanded ? (expressive ? "displaySmall" : "headlineLarge") : variant === "tonal" ? "bodyLarge" : "titleLarge"}
     numberOfLines={1} style={headerTitleTextStyle}>{title}</Text>;
   return (
     <View style={{ width: "100%", alignSelf: "center", maxWidth,
-      paddingTop: safeTop ? insets.top : 0, paddingLeft: column.left, paddingRight: column.right,
+      paddingTop: (safeTop ? insets.top : 0) + spacing[8], paddingLeft: column.left, paddingRight: column.right,
       paddingBottom: expanded ? spacing[16] : spacing[8], backgroundColor: palette.background,
       borderBottomColor: palette.outlineVariant, borderBottomWidth: divider ? StyleSheet.hairlineWidth : 0,
     }}>
-      <View style={[styles.bar, compactHeight ? { minHeight: 56 } : null]}>
-         {showBack ? <HeaderIconButton name="arrow-back" variant="tonal" color={palette.onSecondaryContainer} onPress={back} accessibilityLabel="Back" measureOnPress={false} /> : null}
+      <View style={[styles.bar, compactHeight || variant === "tonal" ? { minHeight: 56 } : null,
+        variant === "tonal" ? { backgroundColor: palette.surfaceContainerHigh, borderRadius: radius.full, paddingHorizontal: spacing[4], gap: spacing[4] } : null]}>
+         {showBack ? <HeaderIconButton name="arrow-back" variant="standard" color={palette.onSurface} onPress={back} accessibilityLabel="Back" measureOnPress={false} /> : null}
         {!expanded ? <View style={styles.title}>
           {onTitleLongPress ? <PressableScale onLongPress={onTitleLongPress} accessibilityRole="button"
             accessibilityLabel={title} accessibilityHint={titleAccessibilityHint}>{titleText}</PressableScale> : titleText}
@@ -66,10 +69,10 @@ export function Header({ title, subtitle, showBack, onBack, right, large, safeTo
   );
 }
 export function HeaderActions({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
-  return <ButtonGroup style={style}>{children}</ButtonGroup>;
+  return <View style={[styles.actions, style]}>{children}</View>;
 }
-export function HeaderIconButton({ name, color, variant = "tonal", onPress, accessibilityLabel, accessibilityHint, measureOnPress = true }: {
-  name: keyof typeof Ionicons.glyphMap; color: string; onPress: (anchor: MenuAnchorRect) => void;
+export function HeaderIconButton({ name, color, variant = "standard", onPress, accessibilityLabel, accessibilityHint, measureOnPress = true }: {
+  name: keyof typeof Ionicons.glyphMap; color: string; onPress: (anchor: MenuAnchorRect) => void | boolean;
   accessibilityLabel: string; accessibilityHint?: string; variant?: "standard" | "filled" | "tonal" | "outlined";
   measureOnPress?: boolean;
 }) {
@@ -102,9 +105,10 @@ export function HeaderIconButton({ name, color, variant = "tonal", onPress, acce
       accessibilityHint={accessibilityHint} onHoverIn={scheduleTooltip} onFocus={scheduleTooltip}
       onHoverOut={dismissTooltip} onBlur={dismissTooltip} onLongPress={showTooltip}
       onPress={(event) => {
-        dismissTooltip(); haptics.light();
-        if (measureOnPress) measureAnchor(ref.current, onPress, event);
-        else onPress({ x: 0, y: 0, width: 1, height: 1 });
+        dismissTooltip();
+        const invoke = (anchor: MenuAnchorRect) => runPressAction(() => onPress(anchor), haptics.light);
+        if (measureOnPress) measureAnchor(ref.current, invoke, event);
+        else invoke({ x: 0, y: 0, width: 1, height: 1 });
       }} />
   </View><PlainTooltip visible={!!tooltip} anchor={tooltip} label={accessibilityLabel} onDismiss={dismissTooltip} /></>;
 }

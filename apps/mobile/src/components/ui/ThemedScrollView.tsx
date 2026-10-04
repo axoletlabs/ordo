@@ -57,6 +57,7 @@ export type ThemedScrollViewProps = ScrollViewProps & {
 export type ThemedFlashListProps<T> = FlashListProps<T> & {
   scrollBarInsets?: ScrollBarInsets;
   animateChanges?: boolean;
+  getItemLayout?: FlatListProps<T>["getItemLayout"];
 };
 
 export type ThemedFlatListProps<T> = FlatListProps<T> & {
@@ -173,11 +174,13 @@ export const ThemedFlashList = React.forwardRef(function ThemedFlashList<T>(
   return (
     <ThemedFlatList
       ref={ref}
-      animateChanges
+      animateChanges={false}
       removeClippedSubviews={false}
       initialNumToRender={12}
       maxToRenderPerBatch={8}
-      windowSize={7}
+      // Exact offsets make overscan eligible immediately. Seven screens mounted
+      // an entire 40-row folder during navigation; keep one screen on each side.
+      windowSize={3}
       updateCellsBatchingPeriod={50}
       onEndReachedThreshold={LIST_END_REACHED_THRESHOLD}
       {...(flatListProps as ThemedFlatListProps<T>)}

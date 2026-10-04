@@ -99,6 +99,7 @@ export function FAB({
       style={[styles.fab, { bottom: Math.max(bottom, insets.bottom + spacing[16]), right, borderRadius: expressive ? radius.xl : radius.lg }, shadows.level3, widthStyle]}
     >
       <PressableScale
+        animated
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         accessibilityHint={accessibilityHint}

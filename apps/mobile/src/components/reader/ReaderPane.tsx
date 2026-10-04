@@ -9,7 +9,6 @@
  */
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Appearance,
   Platform,
   ScrollView,
   Share,
@@ -55,7 +54,8 @@ import { PanelHeader } from "../ui/PanelHeader";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
 import { sheetMenuStyles } from "../ui/SheetActionRow";
 import { FAB, FABLayer } from "../ui/FAB";
-import { ArticleHtml, type ArticleHeading } from "./ArticleHtml";
+import type { ArticleHeading } from "./ArticleHtml";
+import { ReaderArticle } from "./ReaderArticle";
 import type { HighlightSelectDraft } from "./article-highlight-ui";
 import { ReaderControlsSheet } from "./ReaderControlsSheet";
 import { EditTagsSheet } from "../tags/EditTagsSheet";
@@ -67,7 +67,8 @@ import { READER_BODY_SIZE, resolveReaderFont } from "./reader-typography";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 import { resolveReaderPalette } from "../../theme/reader-theme";
 import { pinSystemChrome } from "../../theme/pin-system-chrome";
-import { resolvePalette, type Palette } from "../../theme/theme";
+import type { Palette } from "../../theme/theme";
+import { currentAppPalette } from "../../theme/current-app-palette";
 import { useDeviceColors } from "../../theme/device-colors";
 import { scrollbarColors } from "../../theme/scrollbar";
 import { queryClient } from "../../lib/query-client";
@@ -168,8 +169,7 @@ export function ReaderPane(props: ReaderPaneProps) {
   // on unmount, restore the style the app theme expects.
   useEffect(() => {
     return () => {
-      const { themeMode, amoled } = useSettingsStore.getState();
-      const appMode = resolvePalette(themeMode, amoled, Appearance.getColorScheme()).mode;
+      const appMode = currentAppPalette().mode;
       setStatusBarStyle(appMode === "dark" ? "light" : "dark");
     };
   }, []);
@@ -205,7 +205,6 @@ function ReaderPaneInner({
 }: ReaderPaneInnerProps) {
   const { palette: appPalette } = useTheme();
   const forceWebsiteDark = useSettingsStore((s) => s.forceWebsiteDark);
-  const settingsAmoled = useSettingsStore((s) => s.amoled);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { height: windowHeight } = useWindowDimensions();
@@ -317,15 +316,11 @@ function ReaderPaneInner({
     ? [
         bookmark.author?.trim() || null,
         bookmark.publishedAt ? formatDate(bookmark.publishedAt) : null,
+        bookmark.readingTimeMinutes ? `${bookmark.readingTimeMinutes} min read` : null,
       ]
         .filter(Boolean)
         .join(" · ")
     : "";
-  const headerSubtitle = bookmark
-    ? bookmark.readingTimeMinutes
-      ? `${bookmark.readingTimeMinutes} min read`
-      : undefined
-    : undefined;
   const readerBodySize = READER_BODY_SIZE[contentPreferences.fontSize];
   const readerFont = resolveReaderFont(contentPreferences.fontFamily);
   const readerBoldFont = resolveReaderFont(contentPreferences.fontFamily, "700");
@@ -340,13 +335,11 @@ function ReaderPaneInner({
   );
 
   const handleBack = () => {
-    if (websiteViewRef.current && browserRef.current?.goBack()) return;
+    if (websiteViewRef.current && browserRef.current?.goBack()) return true;
     if (onBack) {
-      onBack();
-      return;
+      return onBack();
     }
-    if (router.canGoBack()) router.back();
-    else router.replace("/");
+    return router.canGoBack() ? router.back() : router.replace("/");
   };
 
   const handleOpenOriginal = () => {
@@ -581,7 +574,7 @@ function ReaderPaneInner({
   websiteViewRef.current = showWebsiteView;
   const palette = showWebsiteView ? appPalette : readerPalette;
   const websiteChrome = forceWebsiteDark
-    ? resolvePalette("dark", settingsAmoled, "dark").background
+    ? currentAppPalette("dark").background
     : palette.background;
   const effectiveDark = palette.mode === "dark";
 
@@ -595,8 +588,7 @@ function ReaderPaneInner({
   useEffect(() => {
     if (embedded || showWebsiteView) return;
     return () => {
-      const { themeMode, amoled } = useSettingsStore.getState();
-      const app = resolvePalette(themeMode, amoled, Appearance.getColorScheme());
+      const app = currentAppPalette();
       void pinSystemChrome(app).catch(() => {});
       setStatusBarStyle(app.mode === "dark" ? "light" : "dark");
     };
@@ -879,6 +871,7 @@ function ReaderPaneInner({
           onPress={() => setControlsOpen(true)}
           accessibilityLabel="Reader settings"
           accessibilityHint="Adjust text size, typeface, and reading theme."
+          measureOnPress={false}
         />
       )}
       <HeaderIconButton
@@ -949,13 +942,12 @@ function ReaderPaneInner({
     <View style={[styles.container, { backgroundColor: palette.background }]}>
       <Header
         title={bookmark ? (showWebsiteView && pageHost ? pageHost : domain) : "Reader"}
-        subtitle={showWebsiteView ? "Website" : headerSubtitle}
+        variant="tonal"
         showBack={!embedded}
         onBack={!embedded ? handleBack : undefined}
         safeTop={!embedded}
         alignTo={embedded ? "parent" : "scene"}
         maxWidth={layout.maxReaderWidth}
-        divider
         right={rightActions}
         onTitleLongPress={bookmark ? handleCopyLink : undefined}
         titleAccessibilityHint={bookmark ? "Copies the link." : undefined}
@@ -1081,7 +1073,7 @@ function ReaderPaneInner({
 
                 {hasHtml ? (
                 <View style={styles.content}>
-                  <ArticleHtml
+                  <ReaderArticle
                     html={detail.data?.contentHtml ?? ""}
                     preferences={contentPreferences}
                     contentWidth={articleWidth || fallbackArticleWidth}

@@ -10,6 +10,7 @@ import { ImportFlow } from "../../../src/components/settings/ImportFlow";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
 import { Segmented } from "../../../src/components/ui/Segmented";
 import { Button } from "../../../src/components/ui/Button";
+import { Text } from "../../../src/components/ui/Text";
 import { LockPrompt } from "../../../src/components/bookmarks/LockPrompt";
 import { toast } from "../../../src/components/ui/toast-store";
 import { useFolders } from "../../../src/hooks/use-folders";
@@ -116,21 +117,22 @@ export default function DataScreen() {
   return (
     <SettingsPage title="Data">
       <SettingsScrollView>
-        <SettingsGroup label="Export" compact>
-          <View style={styles.pad}>
-            <Button
-              label={exportLabel}
-              block
-              size="md"
-              loading={exportMutation.isPending}
-              onPress={() => exportMutation.mutate()}
-            />
+        <ImportFlow
+          folders={folders}
+          tokenFor={tokenFor}
+          onUnlock={(folder) => setUnlockTarget({ folder, source: "import" })}
+        />
+        <SettingsGroup label="Export">
+          <View style={styles.options}>
+            <Text variant="bodyMedium" color="secondary">Save a copy of your bookmarks. JSON keeps folders and tags; HTML works with browsers.</Text>
+            <Segmented options={FORMAT_OPTIONS} value={format} onChange={setFormat} />
           </View>
           <SettingRow
-            icon="ellipsis-horizontal"
-            label="More options"
+            icon="folder-outline"
+            label="Include"
             onPress={() => setMore((open) => !open)}
-            value={more ? "Hide" : "Show"}
+            value={isLibrary ? "Entire library" : `${selectedFolderIds.length} ${selectedFolderIds.length === 1 ? "folder" : "folders"}`}
+            showChevron
           />
           {more ? (
             <>
@@ -167,18 +169,13 @@ export default function DataScreen() {
                   />
                 );
               })}
-              <View style={styles.pad}>
-                <Segmented options={FORMAT_OPTIONS} value={format} onChange={setFormat} />
-              </View>
             </>
           ) : null}
+          <View style={styles.pad}>
+            <Button label={exportLabel} block variant="tonal" size="md"
+              loading={exportMutation.isPending} onPress={() => exportMutation.mutate()} />
+          </View>
         </SettingsGroup>
-
-        <ImportFlow
-          folders={folders}
-          tokenFor={tokenFor}
-          onUnlock={(folder) => setUnlockTarget({ folder, source: "import" })}
-        />
       </SettingsScrollView>
 
       <LockPrompt
@@ -205,4 +202,5 @@ export default function DataScreen() {
 
 const styles = StyleSheet.create({
   pad: { padding: layout.rowInset },
+  options: { padding: layout.rowInset, gap: 16 },
 });

@@ -20,9 +20,9 @@ export const TagChip = React.memo(function TagChip({ name, color, selected = fal
     <Text variant={compact ? "labelMedium" : "labelLarge"} numberOfLines={1} style={{ color: fg, flexShrink: 1 }}>{name}</Text>
     {count != null ? <Text variant="labelMedium" style={{ color: fg }}>{count}</Text> : null}
   </>;
-  const style = [styles.chip, { minHeight: compact ? 32 : 40, flexShrink: 1, backgroundColor: selected ? palette.secondaryContainer : "transparent",
-    borderColor: selected ? "transparent" : palette.outlineVariant, borderRadius: expressive ? radius.full : radius.sm },
-    inline ? { borderWidth: 0, paddingHorizontal: 0, maxWidth: 120 } : null];
+  const style = [styles.chip, { minHeight: compact ? 32 : 40, flexShrink: 1, backgroundColor: selected ? palette.secondaryContainer : palette.surfaceContainerHigh,
+    borderWidth: 0, borderRadius: expressive ? radius.full : radius.sm },
+    inline ? { minHeight: 24, paddingHorizontal: 0, backgroundColor: "transparent", maxWidth: 120 } : null];
   return onPress ? <PressableScale accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? name}
     accessibilityState={{ selected }} hitSlop={{ top: 8, bottom: 8 }} stateLayerColor={fg} style={style}
     onPress={(event) => { event.stopPropagation(); onPress(); }}>{contents}</PressableScale> : <View style={style}>{contents}</View>;

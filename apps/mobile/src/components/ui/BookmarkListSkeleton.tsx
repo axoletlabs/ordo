@@ -14,7 +14,7 @@ export function BookmarkListSkeleton({ count = 6 }: { count?: number }) {
   return (
     <View style={styles.wrap}>
       {Array.from({ length: count }).map((_, i) => (
-        <View key={i} style={[styles.row, { backgroundColor: expressive ? palette.surfaceContainerLow : "transparent", borderRadius: expressive ? radius.xl : 0, marginBottom: expressive ? spacing[4] : 0 }]}>
+        <View key={i} style={[styles.row, { backgroundColor: expressive ? palette.surfaceContainerLow : "transparent", borderRadius: expressive ? radius.xl : 0, marginBottom: expressive ? spacing[2] : 0 }]}>
           <Skeleton width={ROW_ICON_FRAME} height={ROW_ICON_FRAME} radiusKey="sm" />
           <View style={styles.copy}>
             <Skeleton width="72%" height={15} />

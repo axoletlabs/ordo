@@ -8,9 +8,8 @@
  * is purely presentation: token-driven typography scaled by the reader
  * preferences, responsive images, select-to-highlight text, and external links.
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import {
-  InteractionManager,
   Linking,
   StyleSheet,
   Text,
@@ -406,37 +405,10 @@ export const ArticleHtml = React.memo(function ArticleHtml({
     [html, highlights],
   );
   const source = useMemo(() => ({ html: highlightedHtml }), [highlightedHtml]);
-  const paintedSourceRef = useRef<string | null>(null);
-  const [ready, setReady] = useState(false);
-
-  // Let the reader chrome commit (and the push animation run) before building
-  // a native view tree. Large tables otherwise freeze the JS thread on open.
-  // Highlight updates keep the same source HTML, so skip the skeleton flash.
   useEffect(() => {
-    if (paintedSourceRef.current === html) {
-      setReady(true);
-      return;
-    }
-    setReady(false);
-    let cancelled = false;
-    const handle = InteractionManager.runAfterInteractions(() => {
-      requestAnimationFrame(() => {
-        if (cancelled) return;
-        paintedSourceRef.current = html;
-        setReady(true);
-      });
-    });
-    return () => {
-      cancelled = true;
-      handle.cancel();
-    };
-  }, [html]);
-
-  useEffect(() => {
-    if (!ready) return;
     const frame = requestAnimationFrame(() => onReady?.());
     return () => cancelAnimationFrame(frame);
-  }, [ready, onReady]);
+  }, [html, onReady]);
 
   const tagsStyles = useMemo(
     () => buildTagsStyles(palette, family, base),
@@ -519,27 +491,6 @@ export const ArticleHtml = React.memo(function ArticleHtml({
   );
 
   if (contentWidth <= 0) return null;
-  if (!ready) {
-    return (
-      <View>
-        <View style={[styles.placeholder, { backgroundColor: palette.surfaceSecondary }]} />
-        <View
-          style={[
-            styles.placeholder,
-            styles.placeholderShort,
-            { backgroundColor: palette.surfaceSecondary },
-          ]}
-        />
-        <View
-          style={[
-            styles.placeholder,
-            styles.placeholderMid,
-            { backgroundColor: palette.surfaceSecondary },
-          ]}
-        />
-      </View>
-    );
-  }
 
   return (
     <HighlightUiContext.Provider value={highlightUi}>
@@ -571,11 +522,4 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[10],
     gap: spacing[8],
   },
-  placeholder: {
-    height: 16,
-    borderRadius: radius.xs,
-    marginTop: spacing[14],
-  },
-  placeholderShort: { width: "92%" },
-  placeholderMid: { width: "68%" },
 });
