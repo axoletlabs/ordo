@@ -5,7 +5,8 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { useAppRouter as useRouter } from "../../../src/hooks/use-app-router";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
 import { Header, HeaderActions, HeaderIconButton } from "../../../src/components/ui/Header";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
@@ -145,6 +146,7 @@ export default function FolderDetailScreen() {
 
   const selectionActive = selection.active;
   const selectionRevision = selection.revision;
+  const openTag = useCallback((tagId: string) => router.push(`/tags/${tagId}`), [router]);
   const renderBookmark = useCallback(
     ({ item, index }: { item: BookmarkDto; index: number }) => (
       <BookmarkRow
@@ -153,11 +155,12 @@ export default function FolderDetailScreen() {
         selectionMode={selectionActive}
         selected={selectionActive && selectionRef.current.has(bookmarkKey(item.id))}
         onPress={onPressBookmark}
+        onTagPress={openTag}
         onEnterSelection={onEnterSelection}
         onMore={onMoreBookmark}
       />
     ),
-    [onEnterSelection, onMoreBookmark, onPressBookmark, selectionActive, selectionRevision, items.length],
+    [onEnterSelection, onMoreBookmark, onPressBookmark, selectionActive, selectionRevision, items.length, openTag],
   );
 
   const { onEndReached, loadingMore, resetPaging } = useLoadMore({

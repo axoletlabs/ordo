@@ -1,7 +1,7 @@
 /** Settings hub: focused destinations for account and app preferences. */
 import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useAppRouter as useRouter } from "../../../src/hooks/use-app-router";
 import { Header } from "../../../src/components/ui/Header";
 import { UserAvatar } from "../../../src/components/ui/UserAvatar";
 import { MaterialIcon } from "../../../src/components/ui/MaterialIcon";

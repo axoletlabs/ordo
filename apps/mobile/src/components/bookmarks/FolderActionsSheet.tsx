@@ -376,7 +376,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
 
   return (
     <>
-      <ContextMenu visible={menuOpen} onDismiss={onDismiss} anchor={anchor ?? null}>
+      <ContextMenu visible={menuOpen} onDismiss={onDismiss} anchor={anchor ?? null} pageKey={mode} sessionKey={displayFolder?.id}>
         {displayFolder && mode === "menu" ? (
           <>
             {error ? <ContextMenuNote tone="danger">{error}</ContextMenuNote> : null}

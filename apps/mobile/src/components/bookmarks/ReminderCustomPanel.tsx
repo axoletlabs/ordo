@@ -38,7 +38,13 @@ function seedUnix(initialUnix: number | null): number {
   return initialUnix != null && initialUnix > unixSeconds() ? initialUnix : defaultCustomReminderAt();
 }
 
-export function ReminderCustomPanel({
+export function ReminderCustomPanel(props: Parameters<typeof ReminderCustomPanelContent>[0]) {
+  const [activated, setActivated] = useState(props.visible);
+  if (props.visible && !activated) setActivated(true);
+  return activated ? <ReminderCustomPanelContent {...props} /> : null;
+}
+
+function ReminderCustomPanelContent({
   visible,
   initialUnix,
   onDismiss,

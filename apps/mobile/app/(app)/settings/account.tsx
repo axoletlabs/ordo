@@ -1,7 +1,7 @@
 /** Account identity and security settings. */
 import React, { useState } from "react";
 import { Pressable, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useAppRouter as useRouter } from "../../../src/hooks/use-app-router";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import {

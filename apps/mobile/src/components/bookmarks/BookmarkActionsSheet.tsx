@@ -1,5 +1,5 @@
 import React, { useEffect } from "react";
-import { useRouter } from "expo-router";
+import { useAppRouter as useRouter } from "../../hooks/use-app-router";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Text } from "../ui/Text";
@@ -87,6 +87,7 @@ export function BookmarkActionsSheet({
         onDismiss={onDismiss}
         anchor={anchor}
         sessionKey={visible ? displayBookmark.id : undefined}
+        pageKey={`${mode}:${remindPage}`}
       >
         {mode === "remind" ? (
           <ReminderPresetItems

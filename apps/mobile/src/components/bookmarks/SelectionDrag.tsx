@@ -85,7 +85,7 @@ export function useSelectionDragRow(key: string | null) {
 
   const consumePress = useCallback(() => ctx?.consumePress() ?? false, [ctx]);
 
-  return { bind, consumePress };
+  return useMemo(() => ({ bind, consumePress }), [bind, consumePress]);
 }
 
 /**
@@ -243,7 +243,9 @@ export function useSelectionDrag({
         return;
       }
       nodes.current.set(key, node);
-      measureNode(key, node);
+      // Beginning a drag already measures every registered row. Normal taps
+      // must not enqueue native measurements or force web layout per row.
+      if (dragRef.current) measureNode(key, node);
     },
     [measureNode],
   );
@@ -466,7 +468,7 @@ export function useSelectionDrag({
   }, []);
 
   const onHostLayout = useCallback(() => {
-    measureHost();
+    if (dragRef.current) measureHost();
   }, [measureHost]);
 
   return {

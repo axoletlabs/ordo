@@ -183,7 +183,7 @@ export function SearchFilterMenu({
   const showUnfiled = !folderQuery.trim() || "unfiled".includes(folderQuery.trim().toLocaleLowerCase("en-US"));
 
   return (
-    <ContextMenu visible={visible} onDismiss={onDismiss} anchor={anchor} width={280}>
+    <ContextMenu visible={visible} onDismiss={onDismiss} anchor={anchor} width={280} pageKey={page}>
       {page === "root" ? (
         <>
           <ContextMenuItem

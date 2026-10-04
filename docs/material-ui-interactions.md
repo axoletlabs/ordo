@@ -24,10 +24,13 @@ finding and opening saved content; chrome and metadata should stay quiet.
   retains its draft, and yields focus/back to the menu. Menu selections do not
   reorder themselves under the pointer.
 
-The initial temptation to make every field a search-shaped pill was rejected:
-Material search and form text fields have different anatomy. Outlined fields
-are deliberately quieter for a multi-field form. Both creation dialogs already
-share bottom padding and actions; no bookmark-specific footer spacer is needed.
+Material search and form text fields have different anatomy. Both outlined and
+filled fields are valid. The current forms use filled fields to match the tonal
+search treatment: `surfaceContainerHighest`, 56dp height, an in-field floating
+label, rounded top corners, and an active bottom indicator. Folder/tag fields
+use the same filled treatment. The search bar retains its full-round shape.
+Both creation dialogs share bottom padding and actions; no bookmark-specific
+footer spacer is needed.
 
 ## Official Material references
 
@@ -50,6 +53,9 @@ Researched rendered guidance and specs, including the Expressive updates:
 - [Dialog guidelines](https://m3.material.io/components/dialogs/guidelines):
   use less disruptive menus for simple choices; preserve visible actions and
   titles where possible in constrained windows.
+- [Extended FAB guidelines](https://m3.material.io/components/extended-fab/guidelines):
+  transform to an icon FAB on downward scroll, expand on upward scroll, move
+  the icon as width changes, and fade the label without shrinking its target.
 - [Snackbar guidelines](https://m3.material.io/components/snackbar/guidelines)
   and [specs](https://m3.material.io/components/snackbar/specs): inverse color
   roles, one message at a time, restrained rectangular shape, no decorative
@@ -65,11 +71,29 @@ Researched rendered guidance and specs, including the Expressive updates:
 
 ## Behavior and verification
 
-- Stack route identity, not delayed button debounce, prevents duplicate pages.
+- Known authenticated routes dispatch through the public navigation object in
+  the press handler, bypassing Expo's extra effect-queue commit. A source-route
+  flight guard rejects repeat taps until focus returns; it never delays the
+  first tap. Stack route identity remains a second protection against duplicates.
   Different folder/article IDs still have distinct routes. Embedded detail
   choices change params rather than adding another copy of the list page.
 - Browser handoffs accept the first tap immediately and reject the same URL
   within the double-tap window.
+- Selection rows register stable refs but do not measure geometry until a drag
+  begins. Passive row layout handlers are absent. Hidden menus/dialogs allocate
+  their animation hooks only when first opened.
+- Nested menus retain their original width, origin, and scrollable viewport.
+  Library sorting, lock choices, reminder choices, and filter pages share a
+  160ms content transition. Longer choices scroll rather than resizing the
+  surface. State layers have an 8dp inset on every edge.
+- Bookmark/folder rows use long-press, right-click, Shift+F10, and accessibility
+  actions instead of permanent overflow buttons. Manage tags has no menu count.
+- The link field reads the clipboard only after its Paste action. External
+  native edits update focused Android fields without remounting them.
+- Create uses spatial springs for width/icon placement and effects springs for
+  label opacity. Direction hysteresis collapses it on downward scroll and
+  expands it on upward scroll or return to the top, without per-frame React
+  state updates. Its accessible label and 56dp target remain intact.
 - Icon selection uses a virtualized grid with lightweight list controls.
 - Keyboard layout uses one viewport calculation and lifts only actual overlap,
   rather than recentering above the IME or applying Android resize twice.
@@ -85,3 +109,11 @@ the normal mobile tests, Material color tests, lint, and typecheck.
 Visual verification covers 390×844 portrait, 1280×800 landscape, 320×420
 constrained forms, light/dark, baseline/Expressive, and reduced motion. Native
 JS export is not a substitute for checking the keyboard animation on a device.
+
+The refinement smoke test also covers clipboard paste, long-press/right-click,
+Shift+F10, selection entry, submenu geometry, and Create changing from 108dp to
+56dp. A four-open, 4×-CPU-throttled web benchmark measured median folder chrome
+paint at 428ms before and 321ms after. Account median was 145ms before and 195ms
+after; first article opening also remained expensive. These results do not
+establish instant navigation across every destination. Native latency remains
+unverified without a connected device; further performance work is required.

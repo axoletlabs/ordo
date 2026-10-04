@@ -14,10 +14,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useKeyboardVisible } from "../../hooks/use-keyboard-visible";
 import { useFocusEffect } from "expo-router";
 import { useFloatingActions } from "../../store/floating-actions";
+import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
 
 export interface FABProps {
   icon?: keyof typeof Ionicons.glyphMap;
   label?: string;
+  expansion?: { spatial: SharedValue<number>; effects: SharedValue<number> };
   onPress: (anchor: MenuAnchorRect) => void;
   onLongPress?: (anchor: MenuAnchorRect) => void;
   accessibilityLabel?: string;
@@ -56,6 +58,7 @@ export function FABDock({ children, maxWidth }: FABLayerProps) {
 export function FAB({
   icon = "add",
   label,
+  expansion,
   onPress,
   onLongPress,
   accessibilityLabel = "Create",
@@ -67,6 +70,15 @@ export function FAB({
   alignTo = "scene",
 }: FABProps) {
   const { palette, shadows, expressive } = useTheme();
+  const [labelWidth, setLabelWidth] = React.useState(0);
+  const expanded = useSharedValue(1);
+  const spatial = expansion?.spatial ?? expanded;
+  const effects = expansion?.effects ?? expanded;
+  const widthStyle = useAnimatedStyle(() => ({
+    width: label ? 56 + (labelWidth + spacing[8]) * Math.max(0, spatial.value) : 56,
+  }));
+  const hitStyle = useAnimatedStyle(() => ({ gap: label ? spacing[8] * Math.max(0, Math.min(1, spatial.value)) : 0 }));
+  const labelStyle = useAnimatedStyle(() => ({ width: labelWidth * Math.max(0, spatial.value), opacity: Math.max(0, Math.min(1, effects.value)) }));
   const id = React.useId();
   useFocusEffect(React.useCallback(() => {
     useFloatingActions.getState().add(id);
@@ -81,17 +93,17 @@ export function FAB({
     measureAnchor(anchorRef.current, handler, event);
   };
   return (
-    <View
+    <Animated.View
       ref={anchorRef}
       collapsable={false}
-      style={[styles.fab, { bottom: Math.max(bottom, insets.bottom + spacing[16]), right, borderRadius: expressive ? radius.xl : radius.lg }, shadows.level3]}
+      style={[styles.fab, { bottom: Math.max(bottom, insets.bottom + spacing[16]), right, borderRadius: expressive ? radius.xl : radius.lg }, shadows.level3, widthStyle]}
     >
       <PressableScale
         accessibilityRole="button"
         accessibilityLabel={accessibilityLabel}
         accessibilityHint={accessibilityHint}
         testID={testID}
-        style={[styles.fabHit, { backgroundColor: palette.primaryContainer, borderRadius: expressive ? radius.xl : radius.lg, paddingHorizontal: label ? spacing[16] : 0 }]}
+        style={[styles.fabHit, { width: "100%", overflow: "hidden", backgroundColor: palette.primaryContainer, borderRadius: expressive ? radius.xl : radius.lg, paddingHorizontal: spacing[16] }, hitStyle]}
         stateLayerColor={palette.onPrimaryContainer}
         shape={{ rest: expressive ? radius.xl : radius.lg, pressed: expressive ? radius.md : radius.lg }}
         onPress={(event) => {
@@ -102,9 +114,16 @@ export function FAB({
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         <Ionicons name={icon} size={24} color={palette.onPrimaryContainer} />
-        {label ? <Text variant="labelLarge" style={{ color: palette.onPrimaryContainer }}>{label}</Text> : null}
+        {label ? <>
+          <View pointerEvents="none" aria-hidden importantForAccessibility="no-hide-descendants" style={{ position: "absolute", width: 280, height: 24, opacity: 0 }}>
+            <Text variant="labelLarge" numberOfLines={1} style={{ alignSelf: "flex-start" }} onLayout={(event) => setLabelWidth(event.nativeEvent.layout.width)}>{label}</Text>
+          </View>
+          <Animated.View pointerEvents="none" aria-hidden style={[{ overflow: "hidden" }, labelStyle]}>
+            <Text variant="labelLarge" numberOfLines={1} style={{ width: labelWidth, color: palette.onPrimaryContainer }}>{label}</Text>
+          </Animated.View>
+        </> : null}
       </PressableScale>
-    </View>
+    </Animated.View>
   );
 }
 

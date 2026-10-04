@@ -4,7 +4,7 @@
  */
 import React, { useCallback, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useAppRouter as useRouter } from "../../../src/hooks/use-app-router";
 import { Header } from "../../../src/components/ui/Header";
 import { FAB, FABDock } from "../../../src/components/ui/FAB";
 import { ScreenContent } from "../../../src/components/ui/ScreenContent";

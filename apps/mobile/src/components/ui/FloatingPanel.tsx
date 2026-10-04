@@ -50,7 +50,13 @@ export interface FloatingPanelProps {
   interactive?: boolean;
 }
 
-export function FloatingPanel({
+export function FloatingPanel(props: FloatingPanelProps) {
+  const [activated, setActivated] = React.useState(props.visible);
+  if (props.visible && !activated) setActivated(true);
+  return activated ? <FloatingPanelSurface {...props} /> : null;
+}
+
+function FloatingPanelSurface({
   visible,
   onDismiss,
   children,

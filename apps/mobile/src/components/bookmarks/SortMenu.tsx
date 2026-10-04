@@ -2,15 +2,11 @@
  * Session-only list order menu. Home offers folder + bookmark pages;
  * a folder list is bookmark order only.
  */
-import React, { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import React from "react";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import type { BookmarkListSort } from "@ordo/shared";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
-import { Text } from "../ui/Text";
-import { useTheme } from "../../theme/ThemeProvider";
-import { iconGlyphStyle } from "../../theme/icon-glyph";
-import { spacing } from "../../theme/tokens";
+import { useOverlaySessionMode } from "../../lib/overlay-session-mode";
 import type { MenuAnchorRect } from "../../lib/menu-anchor";
 import {
   BOOKMARK_SORT_LABEL,
@@ -45,6 +41,9 @@ export function SortMenu({
   bookmarkSort,
   onFolderSort,
   onBookmarkSort,
+  embedded = false,
+  onBack,
+  onPageChange,
 }: {
   visible: boolean;
   onDismiss: () => void;
@@ -54,12 +53,12 @@ export function SortMenu({
   bookmarkSort: BookmarkListSort;
   onFolderSort?: (sort: FolderListSort) => void;
   onBookmarkSort: (sort: BookmarkListSort) => void;
+  embedded?: boolean;
+  onBack?: () => void;
+  onPageChange?: (page: Page) => void;
 }) {
-  const [page, setPage] = useState<Page>(variant === "home" ? "root" : "bookmarks");
-
-  useEffect(() => {
-    if (!visible) setPage(variant === "home" ? "root" : "bookmarks");
-  }, [visible, variant]);
+  const [page, setPageState] = useOverlaySessionMode<Page>(visible, variant === "home" ? "root" : "bookmarks");
+  const setPage = (next: Page) => { setPageState(next); onPageChange?.(next); };
 
   const pickFolder = (sort: FolderListSort) => {
     onFolderSort?.(sort);
@@ -70,20 +69,21 @@ export function SortMenu({
     onDismiss();
   };
 
-  return (
-    <ContextMenu visible={visible} onDismiss={onDismiss} anchor={anchor} width={300}>
+  const content = (
+    <>
       {page === "root" && folderSort ? (
         <>
+          {onBack ? <ContextMenuItem icon="chevron-back" label="Back" onPress={onBack} /> : null}
           <ContextMenuItem
             icon="folder-outline"
             label="Folders"
-            trailing={<Trailing label={FOLDER_SORT_LABEL[folderSort]} />}
+            trailing={<Ionicons name="chevron-forward" />}
             onPress={() => setPage("folders")}
           />
           <ContextMenuItem
             icon="bookmark-outline"
             label="Bookmarks"
-            trailing={<Trailing label={BOOKMARK_SORT_LABEL[bookmarkSort]} />}
+            trailing={<Ionicons name="chevron-forward" />}
             onPress={() => setPage("bookmarks")}
           />
         </>
@@ -120,29 +120,7 @@ export function SortMenu({
           ))}
         </>
       ) : null}
-    </ContextMenu>
+    </>
   );
+  return embedded ? content : <ContextMenu visible={visible} onDismiss={onDismiss} anchor={anchor} pageKey={page}>{content}</ContextMenu>;
 }
-
-function Trailing({ label }: { label: string }) {
-  const { palette } = useTheme();
-  return (
-    <View style={styles.trailing}>
-      <Text variant="footnote" color="tertiary" numberOfLines={1} style={styles.trailingLabel}>
-        {label}
-      </Text>
-      <Ionicons name="chevron-forward" size={16} color={palette.textFaint} style={iconGlyphStyle(16)} />
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  trailing: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[4],
-    flexShrink: 0,
-    maxWidth: 120,
-  },
-  trailingLabel: { flexShrink: 1, includeFontPadding: false },
-});

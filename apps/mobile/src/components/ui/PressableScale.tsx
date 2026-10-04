@@ -1,7 +1,7 @@
 /** Shared Material state layer and interruptible Expressive shape morph. */
 import React, { useEffect, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, type AnimatedStyle } from "react-native-reanimated";
 import { useTheme } from "../../theme/ThemeProvider";
 import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 import { useButtonGroupInteraction } from "./ButtonGroup";
@@ -14,14 +14,16 @@ function cornerValues(shape: CornerShape): number[] {
 export type PressableScaleProps = Omit<PressableProps, "style"> & {
   scaleTo?: number;
   dim?: boolean;
-  style?: StyleProp<ViewStyle>;
+  style?: StyleProp<AnimatedStyle<ViewStyle>>;
   /** Explicit shape mapping prevents arbitrary components from morphing. */
   shape?: { rest: CornerShape; pressed: CornerShape };
   stateLayerColor?: string;
+  /** Menus should not retain a second mouse-focus highlight beside the hovered item. */
+  focusOnlyVisible?: boolean;
 };
 export function PressableScale({
   scaleTo = 1, dim = false, style, children, disabled, onPressIn, onPressOut,
-  onHoverIn, onHoverOut, onFocus, onBlur, shape, stateLayerColor, ...rest
+  onHoverIn, onHoverOut, onFocus, onBlur, shape, stateLayerColor, focusOnlyVisible = false, ...rest
 }: PressableScaleProps) {
   const { palette } = useTheme();
   const motion = useMaterialMotion();
@@ -34,7 +36,7 @@ export function PressableScale({
   useEffect(() => () => { if (releaseFrame.current != null) cancelAnimationFrame(releaseFrame.current); }, []);
   const progress = useSharedValue(0);
   const layer = useSharedValue(0);
-  const flat = StyleSheet.flatten(style);
+  const flat = StyleSheet.flatten(style as StyleProp<ViewStyle>);
   const background = useSharedValue(typeof flat?.backgroundColor === "string" ? flat.backgroundColor : "transparent");
   const backgroundColor = flat?.backgroundColor;
   useEffect(() => {
@@ -50,9 +52,10 @@ export function PressableScale({
 
   useEffect(() => {
     progress.value = motion.reducedMotion ? (down ? 1 : 0) : withSpring(down ? 1 : 0, motion.fast);
-    const opacity = disabled ? 0 : down || focused ? 0.1 : hovered ? 0.08 : 0;
+    const focusLayer = focused && (!focusOnlyVisible || Platform.OS !== "web" || focusVisible);
+    const opacity = disabled ? 0 : down || focusLayer ? 0.1 : hovered ? 0.08 : 0;
     layer.value = motion.reducedMotion ? opacity : withSpring(opacity, materialMotion.effects.fast);
-  }, [down, hovered, focused, disabled, progress, layer, motion.fast, motion.reducedMotion]);
+  }, [down, hovered, focused, focusVisible, focusOnlyVisible, disabled, progress, layer, motion.fast, motion.reducedMotion]);
   useEffect(() => {
     const values = cornerKey.split(":").map(Number);
     const target = down && !disabled ? values.slice(4) : values.slice(0, 4);

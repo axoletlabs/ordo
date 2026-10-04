@@ -1,7 +1,6 @@
 /**
  * Anchored floating context menu: sits beside its trigger instead of a
- * centered, dimmed dialog. Rows fill the panel (no inset, no inter-row gap)
- * so hover is full-bleed; comfort comes from each row's inner padding.
+ * centered dialog. Inset state layers stay inside the rounded menu surface.
  */
 import React from "react";
 import {
@@ -13,7 +12,8 @@ import {
   type ViewStyle,
   type PressableProps,
 } from "react-native";
-import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { useMaterialMotion } from "../../theme/material-motion";
 import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { AppIcon } from "./PinIcon";
 import { Spinner } from "./Spinner";
@@ -39,7 +39,29 @@ import { layout, radius, spacing } from "../../theme/tokens";
 
 export type { MenuAnchorRect };
 
-export function ContextMenu({
+export interface ContextMenuProps {
+  visible: boolean;
+  onDismiss: () => void;
+  anchor: MenuAnchorRect | null;
+  children: React.ReactNode;
+  width?: number;
+  backdrop?: boolean;
+  preferredPlacement?: MenuPlacement["placement"];
+  estimatedHeight?: number;
+  sessionKey?: string | number | null;
+  scrollBody?: boolean;
+  keyboardDismiss?: boolean;
+  /** Nested pages share the first page's viewport and transition in place. */
+  pageKey?: string;
+}
+
+export function ContextMenu(props: ContextMenuProps) {
+  const [activated, setActivated] = React.useState(props.visible);
+  if (props.visible && !activated) setActivated(true);
+  return activated ? <ContextMenuSurface {...props} /> : null;
+}
+
+function ContextMenuSurface({
   visible,
   onDismiss,
   anchor,
@@ -51,26 +73,8 @@ export function ContextMenu({
   sessionKey,
   scrollBody = true,
   keyboardDismiss = true,
-}: {
-  visible: boolean;
-  onDismiss: () => void;
-  anchor: MenuAnchorRect | null;
-  children: React.ReactNode;
-  width?: number;
-  /** When false, taps pass through so OS text selection stays alive. */
-  backdrop?: boolean;
-  preferredPlacement?: MenuPlacement["placement"];
-  estimatedHeight?: number;
-  /**
-   * Keep the panel where it first landed across hide/show in the same
-   * overlay session (Remind, Custom, Back). A new key starts a fresh place.
-   */
-  sessionKey?: string | number | null;
-  /** Searchable dropdowns own their virtualized list. */
-  scrollBody?: boolean;
-  /** Form dropdowns retain the IME so their trigger doesn't move on open. */
-  keyboardDismiss?: boolean;
-}) {
+  pageKey,
+}: ContextMenuProps) {
   const { palette, shadows, expressive } = useTheme();
   const { width: windowWidth, height } = useWindowDimensions();
   const windowHeight = useKeyboardViewportHeight(height, visible);
@@ -85,6 +89,20 @@ export function ContextMenu({
   const menuRef = useOverlayFocus(visible && rendered && backdrop, hideAndDismiss, "menu");
   const [contentHeight, setContentHeight] = React.useState(0);
   const contentHeightRef = React.useRef(0);
+  const retainedHeight = React.useRef(0);
+  const pageProgress = useSharedValue(1);
+  const motion = useMaterialMotion();
+  const lastPage = React.useRef(pageKey);
+  React.useLayoutEffect(() => {
+    if (!visible || pageKey === lastPage.current) return;
+    lastPage.current = pageKey;
+    pageProgress.value = motion.reducedMotion ? 1 : 0;
+    pageProgress.value = withTiming(1, { duration: motion.reducedMotion ? 0 : 160 });
+  }, [visible, pageKey, pageProgress, motion.reducedMotion]);
+  const pageStyle = useAnimatedStyle(() => ({
+    opacity: pageProgress.value,
+    ...(Platform.OS !== "web" ? { transform: [{ translateX: (1 - pageProgress.value) * 8 }] } : {}),
+  }));
   const lastPlacement = React.useRef<MenuPlacement | null>(null);
   const placementLock = React.useRef<MenuPlacement | null>(null);
   const sessionSide = React.useRef<MenuPlacement["placement"] | null>(null);
@@ -93,9 +111,10 @@ export function ContextMenu({
   const lastChildren = React.useRef(children);
   if (visible) lastChildren.current = children;
   const sessionKeyRef = React.useRef(sessionKey);
-  if (sessionKeyRef.current !== sessionKey) {
+  if (visible && sessionKeyRef.current !== sessionKey) {
     sessionKeyRef.current = sessionKey;
     contentHeightRef.current = 0;
+    retainedHeight.current = 0;
     placementLock.current = null;
     sessionSide.current = null;
     if (contentHeight !== 0) setContentHeight(0);
@@ -107,6 +126,7 @@ export function ContextMenu({
     const continueSession = sessionKey != null && placementLock.current != null;
     if (!continueSession) {
       contentHeightRef.current = 0;
+      retainedHeight.current = 0;
       placementLock.current = null;
       sessionSide.current = null;
       if (contentHeight !== 0) setContentHeight(0);
@@ -115,7 +135,7 @@ export function ContextMenu({
   wasVisibleRef.current = visible;
 
   const menuWidth = Math.min(width, Math.max(160, windowWidth - spacing[32]));
-  const menuPadding = expressive ? spacing[4] : spacing[8];
+  const menuPadding = spacing[8];
   const layoutKey = [
     windowWidth,
     windowHeight,
@@ -152,6 +172,8 @@ export function ContextMenu({
     }
   }
   const placed = lastPlacement.current;
+  const pageHeight = pageKey != null && retainedHeight.current > 0 && placed
+    ? Math.min(retainedHeight.current, placed.maxHeight - menuPadding * 2) : undefined;
   const fromY = placed?.placement === "above" ? 6 : -6;
   const awaitingMeasure = visible && measuredHeight <= 0;
 
@@ -183,7 +205,7 @@ export function ContextMenu({
           ref={menuRef}
           accessibilityRole="menu"
           aria-hidden={!visible}
-          {...(Platform.OS === "web" ? { tabIndex: -1, dataSet: { materialOverlay: visible ? "true" : "false" } } : {})}
+          {...(Platform.OS === "web" ? { tabIndex: -1, dataSet: { materialOverlay: visible ? "true" : "false", menuPage: pageKey ?? "" } } : {})}
           pointerEvents="auto"
           style={[
             styles.menu,
@@ -192,6 +214,7 @@ export function ContextMenu({
               top: placed.top,
               width: menuWidth,
               maxHeight: placed.maxHeight,
+              height: pageHeight != null ? pageHeight + menuPadding * 2 : undefined,
               backgroundColor: palette.surfaceContainerHigh,
               borderRadius: expressive ? radius.xl : radius.xs,
               paddingVertical: menuPadding,
@@ -202,18 +225,22 @@ export function ContextMenu({
         >
             <View
               collapsable={false}
-              style={{ maxHeight: Math.max(48, placed.maxHeight - menuPadding * 2), flexShrink: 1 }}
+              style={{ height: pageHeight, maxHeight: Math.max(48, placed.maxHeight - menuPadding * 2), flexShrink: 1 }}
               onLayout={(event) => {
                 if (!visible || placementLock.current) return;
-                const next = event.nativeEvent.layout.height;
+                const actual = event.nativeEvent.layout.height;
+                const next = pageKey != null ? retainedHeight.current || Math.max(144, actual) : actual;
                 if (next <= 0 || Math.abs(next - contentHeightRef.current) < 1) return;
                 contentHeightRef.current = next;
+                if (pageKey != null && retainedHeight.current === 0) retainedHeight.current = next;
                 setContentHeight(next);
               }}
             >
-              {scrollBody ? <ThemedScrollView bounces={false} keyboardShouldPersistTaps="handled" style={{ maxHeight: Math.max(48, placed.maxHeight - menuPadding * 2) }}>
+              <Animated.View style={[{ flexShrink: 1, ...(pageHeight != null ? { flex: 1 } : {}) }, pageStyle]}>
+              {scrollBody ? <ThemedScrollView bounces={false} keyboardShouldPersistTaps="handled" style={pageHeight != null ? { flex: 1 } : { maxHeight: Math.max(48, placed.maxHeight - menuPadding * 2) }}>
                 {visible ? children : lastChildren.current}
               </ThemedScrollView> : visible ? children : lastChildren.current}
+              </Animated.View>
             </View>
         </Animated.View>
       </View>
@@ -274,6 +301,8 @@ export function ContextMenuItem({
       aria-busy={!!busy}
       disabled={inactive}
       stateLayerColor={color}
+      focusOnlyVisible
+      onHoverIn={Platform.OS === "web" && !inactive ? (event) => (event.currentTarget as unknown as HTMLElement)?.focus() : undefined}
       shape={expressive ? { rest: selected ? radius.md : radius.sm, pressed: selected ? radius.md : radius.sm } : undefined}
       onPress={() => {
         if (inactive) return;
@@ -285,7 +314,7 @@ export function ContextMenuItem({
         Platform.OS === "web" ? styles.itemWeb : null,
         inactive && styles.itemDisabled,
         { backgroundColor: selected ? palette.secondaryContainer : "transparent" },
-        expressive ? { borderRadius: selected ? radius.md : radius.sm, marginHorizontal: spacing[4] } : null,
+        { borderRadius: expressive ? radius.md : radius.xs, marginHorizontal: spacing[8] },
       ]}
     >
       <View style={styles.iconSlot}>

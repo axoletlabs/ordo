@@ -2,12 +2,15 @@
  * Floating dialog to validate and save a new URL.
  */
 import React, { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, View, type TextInput } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
+import { IconButton } from "../ui/IconButton";
+import { extractSharedUrl } from "../../lib/shared-url";
 import { Text } from "../ui/Text";
 import { PressableScale } from "../ui/PressableScale";
 import { PickerField } from "../ui/PickerField";
@@ -77,6 +80,10 @@ export function AddBookmarkSheet({
   const { data: folders } = useFolders();
   const { data: tags } = useTags();
   const [url, setUrl] = useState("");
+  const urlRef = React.useRef<TextInput>(null);
+  const pasteEpoch = React.useRef(0);
+  const active = React.useRef(visible);
+  active.current = visible;
   const [error, setError] = useState("");
   const [lockedFolderId, setLockedFolderId] = useState<string | null>(null);
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
@@ -97,6 +104,7 @@ export function AddBookmarkSheet({
 
   React.useEffect(() => {
     if (!visible) {
+      pasteEpoch.current += 1;
       setCreateFolderOpen(false);
       setDestinationOpen(false);
       setCreateTagOpen(false);
@@ -181,6 +189,21 @@ export function AddBookmarkSheet({
 
   const lockedFolder = folders?.find((folder) => folder.id === lockedFolderId);
 
+  const pasteLink = async () => {
+    const epoch = ++pasteEpoch.current;
+    try {
+      const clipboard = await Clipboard.getStringAsync();
+      if (!active.current || epoch !== pasteEpoch.current) return;
+      const next = extractSharedUrl(undefined, clipboard) ?? clipboard.trim();
+      if (!next) { setError("Clipboard is empty. Copy a link first."); return; }
+      setUrl(next);
+      setError("");
+      requestAnimationFrame(() => { if (active.current && epoch === pasteEpoch.current) urlRef.current?.focus(); });
+    } catch {
+      if (active.current && epoch === pasteEpoch.current) setError("Clipboard access is blocked. Paste the link manually.");
+    }
+  };
+
   const unlocking = Boolean(lockedFolderId);
   const showUrlPreview = shareIntake && !urlEditing && Boolean(url.trim());
 
@@ -239,6 +262,7 @@ export function AddBookmarkSheet({
               </PressableScale>
             ) : (
               <Input
+                ref={urlRef}
                 label="Link"
                 value={url}
                 onChangeText={setUrl}
@@ -251,6 +275,8 @@ export function AddBookmarkSheet({
                 icon={<Ionicons name="link-outline" size={18} color={palette.textTertiary} style={iconGlyphStyle(18)} />}
                 onSubmitEditing={() => void submit()}
                 returnKeyType="done"
+                overlayRightAccessory overlayPaddingRight={56}
+                rightAccessory={<IconButton name="clipboard-outline" variant="standard" accessibilityLabel="Paste link from clipboard" onPress={() => void pasteLink()} />}
               />
             )}
             {showUrlPreview && error ? (

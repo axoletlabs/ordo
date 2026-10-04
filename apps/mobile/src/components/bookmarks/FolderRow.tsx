@@ -6,7 +6,6 @@ import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { ListPressable } from "../ui/ListPressable";
-import { PressableScale } from "../ui/PressableScale";
 import { PinIcon } from "../ui/PinIcon";
 import { Text } from "../ui/Text";
 import { Badge } from "../ui/Badge";
@@ -108,7 +107,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
     <View
       ref={setRowRef}
       collapsable={false}
-      onLayout={() => dragRow.bind(rowRef.current)}
+      onLayout={selectionMode ? () => dragRow.bind(rowRef.current) : undefined}
       style={[styles.wrap, { borderBottomColor: palette.outlineVariant, borderBottomWidth: expressive ? 0 : StyleSheet.hairlineWidth,
          backgroundColor: expressive ? palette.surfaceContainerLow : "transparent", borderRadius: expressive ? radius.lg : 0,
         marginBottom: expressive ? spacing[4] : 0, minHeight: 72 }, expressive ? listCorners(position, !!selected || !!highlighted) : null]}
@@ -123,6 +122,9 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
                     openMore();
                   }
                 : undefined,
+            onKeyDown: onMore && !selectionMode ? (event: { key: string; shiftKey: boolean; preventDefault: () => void }) => {
+              if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); openMore(); }
+            } : undefined,
           }
         : null)}
     >
@@ -242,10 +244,6 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
         </View>
         {unread && !selectionMode ? <Badge tone="accent">{folder.unreadCount}</Badge> : null}
       </ListPressable>
-      {onMore && !selectionMode ? <PressableScale accessibilityRole="button" accessibilityLabel={`More actions for ${folder.name}`}
-        onPress={(event) => openMore(event)} style={{ width: 48, height: 48, borderRadius: radius.full, alignItems: "center", justifyContent: "center" }}>
-        <Ionicons name="ellipsis-vertical" size={24} color={palette.onSurfaceVariant} />
-      </PressableScale> : onMore ? <View style={{ width: 48, height: 48 }} /> : null}
     </View>
     </ThemeOverrideProvider>
   );

@@ -1,7 +1,8 @@
 /** Bookmarks home: folders and unfiled bookmarks in one library list. */
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { useAppRouter as useRouter } from "../../../src/hooks/use-app-router";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
 import { HeaderActions, HeaderIconButton } from "../../../src/components/ui/Header";
 import { LibraryHeader } from "../../../src/components/bookmarks/LibraryHeader";
@@ -61,6 +62,8 @@ import { type BookmarkDto, type FolderDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
 import { listPosition } from "../../../src/theme/list-shape";
+import { useOverlaySessionMode } from "../../../src/lib/overlay-session-mode";
+import { useCollapsingFab } from "../../../src/hooks/use-collapsing-fab";
 
 type LibraryItem =
   | { type: "folder"; folder: FolderDto }
@@ -90,9 +93,8 @@ export default function BookmarksScreen() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [createAnchor, setCreateAnchor] = useState<MenuAnchorRect | null>(null);
-  const [sortOpen, setSortOpen] = useState(false);
-  const [sortAnchor, setSortAnchor] = useState<MenuAnchorRect | null>(null);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [toolsPage, setToolsPage] = useOverlaySessionMode<"actions" | "sort" | "sort:folders" | "sort:bookmarks">(toolsOpen, "actions");
   const [toolsAnchor, setToolsAnchor] = useState<MenuAnchorRect | null>(null);
   const [filterOpen, setFilterOpen] = useState(false);
   const [filterAnchor, setFilterAnchor] = useState<MenuAnchorRect | null>(null);
@@ -125,7 +127,6 @@ export default function BookmarksScreen() {
     const terms = search.trimmed.toLocaleLowerCase().split(/\s+/).filter(Boolean);
     return sortedFolders.filter((folder) => terms.every((term) => folder.name.toLocaleLowerCase().split(/\s+/).some((word) => word.startsWith(term))));
   }, [sortedFolders, search.active, search.trimmed, search.listFilters]);
-  const tagCount = tags.data?.length ?? 0;
   const libraryItems = useMemo<LibraryItem[]>(
     () => [
       ...folderItems.map((folder) => ({ type: "folder" as const, folder })),
@@ -238,11 +239,17 @@ export default function BookmarksScreen() {
     selected: selection.ids,
     onSelectedChange: selection.assign,
   });
+  const collapsingFab = useCollapsingFab();
+  const onLibraryScroll = useCallback((event: Parameters<typeof drag.onScroll>[0]) => {
+    drag.onScroll(event);
+    collapsingFab.onScroll(event);
+  }, [drag.onScroll, collapsingFab.onScroll]);
 
   const selectionActive = selection.active;
   const selectionRevision = selection.revision;
   const toggleTag = useCallback((tagId: string) => search.setFilters((previous) => ({ ...previous,
     tagIds: previous.tagIds.includes(tagId) ? previous.tagIds.filter((id) => id !== tagId) : [...previous.tagIds, tagId] })), [search.setFilters]);
+  const openTag = useCallback((tagId: string) => router.push(`/tags/${tagId}`), [router]);
   const renderLibraryItem = useCallback(
     ({ item, index }: { item: LibraryItem; index: number }) => {
       if (item.type === "folder") {
@@ -267,7 +274,7 @@ export default function BookmarksScreen() {
           searchQuery={search.trimmed}
           searchFuzzy={search.listFilters.fuzzy}
           omitTagIds={search.listFilters.tagIds}
-          onTagPress={search.active ? toggleTag : undefined}
+          onTagPress={search.active ? toggleTag : openTag}
           onPress={onPressLibraryBookmark}
           onEnterSelection={onEnterBookmark}
           onMore={onMoreBookmark}
@@ -283,8 +290,8 @@ export default function BookmarksScreen() {
       onPressLibraryBookmark,
       selectionActive,
       selectionRevision,
-       search.trimmed, search.listFilters.fuzzy, search.listFilters.tagIds, search.active, toggleTag,
-       folderItems.length, items.length,
+        search.trimmed, search.listFilters.fuzzy, search.listFilters.tagIds, search.active, toggleTag,
+        folderItems.length, items.length, openTag,
     ],
   );
   const libraryKeyExtractor = useCallback(
@@ -337,6 +344,7 @@ export default function BookmarksScreen() {
         }
         testID="add-bookmark-fab"
         label={createActionLabel(createButtonTapAction)}
+        expansion={collapsingFab.expansion}
         bottom={spacing[16]}
         maxContentWidth={contentWidth}
       />
@@ -383,7 +391,7 @@ export default function BookmarksScreen() {
           <SelectionDragFrame drag={drag}>
           <ThemedFlashList
             ref={drag.listRef}
-            onScroll={drag.onScroll}
+            onScroll={onLibraryScroll}
             onContentSizeChange={drag.onContentSizeChange}
             scrollEventThrottle={drag.scrollEventThrottle}
             data={libraryLoading ? [] : libraryItems}
@@ -424,24 +432,14 @@ export default function BookmarksScreen() {
 
       {createFab}
 
-      <SortMenu
-        visible={sortOpen}
-        onDismiss={() => {
-          setSortOpen(false);
-          setSortAnchor(null);
-        }}
-        anchor={sortAnchor}
-        variant="home"
-        folderSort={folderSort}
-        bookmarkSort={unfiledSort}
-        onFolderSort={setFolderSort}
-        onBookmarkSort={setUnfiledSort}
-      />
-
-      <ContextMenu visible={toolsOpen} onDismiss={() => setToolsOpen(false)} anchor={toolsAnchor}>
-        <ContextMenuItem icon="swap-vertical-outline" label="Sort library" onPress={() => { setToolsOpen(false); setSortAnchor(toolsAnchor); setSortOpen(true); }} />
-        {hasUnread ? <ContextMenuItem icon="checkmark-done" label="Mark all as read" onPress={() => { setToolsOpen(false); onMarkAllRead(); }} /> : null}
-        <ContextMenuItem icon="pricetags-outline" label="Manage tags" detail={`${tagCount} ${tagCount === 1 ? "tag" : "tags"}`} onPress={() => { setToolsOpen(false); router.push("/tags"); }} />
+      <ContextMenu visible={toolsOpen} onDismiss={() => setToolsOpen(false)} anchor={toolsAnchor} pageKey={toolsPage}>
+        {toolsPage === "actions" ? <>
+          <ContextMenuItem icon="swap-vertical-outline" label="Sort library" onPress={() => setToolsPage("sort")} />
+          <ContextMenuItem icon="checkmark-done" label="Mark all as read" disabled={!hasUnread} onPress={() => { setToolsOpen(false); onMarkAllRead(); }} />
+          <ContextMenuItem icon="pricetags-outline" label="Manage tags" onPress={() => { setToolsOpen(false); router.push("/tags"); }} />
+        </> : <SortMenu embedded visible={toolsOpen} onDismiss={() => setToolsOpen(false)} anchor={toolsAnchor} variant="home"
+          folderSort={folderSort} bookmarkSort={unfiledSort} onFolderSort={setFolderSort} onBookmarkSort={setUnfiledSort}
+          onBack={() => setToolsPage("actions")} onPageChange={(page) => setToolsPage(page === "root" ? "sort" : `sort:${page}`)} />}
       </ContextMenu>
       <SearchFilterMenu visible={filterOpen} onDismiss={() => setFilterOpen(false)} anchor={filterAnchor}
         tags={tags.data ?? []} folders={folders.data ?? []} filters={search.filters} onChange={search.setFilters}

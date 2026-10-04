@@ -2,7 +2,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Keyboard, StyleSheet, TextInput, View, useWindowDimensions } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect } from "expo-router";
+import { useAppRouter as useRouter } from "../../hooks/use-app-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColumnPadding } from "../../hooks/use-scene-column-insets";
 import { useMaterialMotion } from "../../theme/material-motion";

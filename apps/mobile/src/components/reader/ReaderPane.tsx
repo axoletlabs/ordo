@@ -24,7 +24,7 @@ import { useSceneColumnInsets } from "../../hooks/use-scene-column-insets";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { StatusBar, setStatusBarStyle } from "expo-status-bar";
-import { useRouter } from "expo-router";
+import { useAppRouter as useRouter } from "../../hooks/use-app-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   APP_NAME,
@@ -1189,6 +1189,7 @@ function ReaderPaneInner({
         onDismiss={closeActions}
         anchor={actionsAnchor}
         sessionKey={actionPanel ? bookmark?.id : undefined}
+        pageKey={actionPanel === "remind" ? "remind" : "actions"}
       >
         {actionPanel === "remind" && bookmark ? (
           <ReminderPresetItems

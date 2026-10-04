@@ -8,7 +8,6 @@ import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { ListPressable } from "../ui/ListPressable";
-import { PressableScale } from "../ui/PressableScale";
 import { Spinner } from "../ui/Spinner";
 import { Text } from "../ui/Text";
 import { TagChip } from "../tags/TagChip";
@@ -203,7 +202,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
     <View
       ref={setRowRef}
       collapsable={false}
-      onLayout={() => dragRow.bind(rowRef.current)}
+      onLayout={selectionMode ? () => dragRow.bind(rowRef.current) : undefined}
       style={[
         styles.wrap,
         { borderBottomColor: palette.outlineVariant, borderBottomWidth: expressive ? 0 : StyleSheet.hairlineWidth,
@@ -222,6 +221,9 @@ export const BookmarkRow = React.memo(function BookmarkRow({
                     openMore();
                   }
                 : undefined,
+            onKeyDown: onMore && !selectionMode ? (event: { key: string; shiftKey: boolean; preventDefault: () => void }) => {
+              if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); openMore(); }
+            } : undefined,
           }
         : null)}
     >
@@ -441,10 +443,6 @@ export const BookmarkRow = React.memo(function BookmarkRow({
           ) : null}
         </View>
       </ListPressable>
-      {onMore && !selectionMode ? <PressableScale accessibilityRole="button" accessibilityLabel={`More actions for ${title}`}
-        onPress={(event) => openMore(event)} style={{ width: 48, height: 48, borderRadius: radius.full, alignItems: "center", justifyContent: "center", ...(hasDetails ? { alignSelf: "flex-start", marginTop: spacing[8] } : {}) }}>
-        <Ionicons name="ellipsis-vertical" size={24} color={palette.onSurfaceVariant} />
-      </PressableScale> : onMore ? <View style={{ width: 48, height: 48 }} /> : null}
     </View>
     </ThemeOverrideProvider>
   );

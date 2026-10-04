@@ -1,7 +1,7 @@
 /** Material small / large top app bars with shared 48dp action targets. */
 import React from "react";
 import { StyleSheet, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
-import { useRouter } from "expo-router";
+import { useAppRouter as useRouter } from "../../hooks/use-app-router";
 import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColumnPadding, type ColumnAlign } from "../../hooks/use-scene-column-insets";
@@ -49,7 +49,7 @@ export function Header({ title, subtitle, showBack, onBack, right, large, safeTo
       borderBottomColor: palette.outlineVariant, borderBottomWidth: divider ? StyleSheet.hairlineWidth : 0,
     }}>
       <View style={[styles.bar, compactHeight ? { minHeight: 56 } : null]}>
-         {showBack ? <HeaderIconButton name="arrow-back" variant="tonal" color={palette.onSecondaryContainer} onPress={back} accessibilityLabel="Back" /> : null}
+         {showBack ? <HeaderIconButton name="arrow-back" variant="tonal" color={palette.onSecondaryContainer} onPress={back} accessibilityLabel="Back" measureOnPress={false} /> : null}
         {!expanded ? <View style={styles.title}>
           {onTitleLongPress ? <PressableScale onLongPress={onTitleLongPress} accessibilityRole="button"
             accessibilityLabel={title} accessibilityHint={titleAccessibilityHint}>{titleText}</PressableScale> : titleText}
@@ -68,9 +68,10 @@ export function Header({ title, subtitle, showBack, onBack, right, large, safeTo
 export function HeaderActions({ children, style }: { children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
   return <ButtonGroup style={style}>{children}</ButtonGroup>;
 }
-export function HeaderIconButton({ name, color, variant = "tonal", onPress, accessibilityLabel, accessibilityHint }: {
+export function HeaderIconButton({ name, color, variant = "tonal", onPress, accessibilityLabel, accessibilityHint, measureOnPress = true }: {
   name: keyof typeof Ionicons.glyphMap; color: string; onPress: (anchor: MenuAnchorRect) => void;
   accessibilityLabel: string; accessibilityHint?: string; variant?: "standard" | "filled" | "tonal" | "outlined";
+  measureOnPress?: boolean;
 }) {
   const grouped = useButtonGroupInteraction() != null;
   const ref = React.useRef<View>(null);
@@ -100,7 +101,11 @@ export function HeaderIconButton({ name, color, variant = "tonal", onPress, acce
     <IconButton name={name} variant={variant} color={color} accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint} onHoverIn={scheduleTooltip} onFocus={scheduleTooltip}
       onHoverOut={dismissTooltip} onBlur={dismissTooltip} onLongPress={showTooltip}
-      onPress={(event) => { dismissTooltip(); haptics.light(); measureAnchor(ref.current, onPress, event); }} />
+      onPress={(event) => {
+        dismissTooltip(); haptics.light();
+        if (measureOnPress) measureAnchor(ref.current, onPress, event);
+        else onPress({ x: 0, y: 0, width: 1, height: 1 });
+      }} />
   </View><PlainTooltip visible={!!tooltip} anchor={tooltip} label={accessibilityLabel} onDismiss={dismissTooltip} /></>;
 }
 const styles = StyleSheet.create({

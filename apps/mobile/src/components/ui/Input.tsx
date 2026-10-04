@@ -1,4 +1,4 @@
-/** Material outlined / contained-search fields, preserving native editing and autofill behavior. */
+/** Material filled / outlined / search fields, preserving native editing and autofill. */
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import {
@@ -11,11 +11,13 @@ import {
   type ViewStyle,
 } from "react-native";
 import { Text } from "./Text";
+import { MaterialIcon } from "./MaterialIcon";
 import { useTheme } from "../../theme/ThemeProvider";
 import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
 import { caretAfterKey, shouldCorrectWebCaret } from "../../lib/web-input-caret";
 import { useMaterialMotion } from "../../theme/material-motion";
 import { InputSurfaceContext } from "./input-surface";
+import { nativeInputEdit } from "../../lib/native-input-edit";
 const AnimatedLabel = Animated.createAnimatedComponent(Text);
 
 type WebCaretNode = TextInput & {
@@ -50,7 +52,7 @@ export interface InputProps extends Omit<TextInputProps, "style"> {
   /** Skip measuring the overlay; avoids TextInput padding jumps while typing. */
   overlayPaddingRight?: number;
   mono?: boolean;
-  variant?: "outlined" | "search";
+  variant?: "filled" | "outlined" | "search";
   containerStyle?: ViewStyle;
 }
 
@@ -63,7 +65,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   overlayRightAccessory,
   overlayPaddingRight,
   mono,
-  variant = "outlined",
+  variant = "filled",
   containerStyle,
   onFocus,
   onBlur,
@@ -108,13 +110,22 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
 
   useLayoutEffect(() => {
     if (!androidUncontrolled) return;
-    if (focusedRef.current) return;
-    if (value === lastAppliedValue.current) return;
+    const edit = nativeInputEdit(value, lastAppliedValue.current, focusedRef.current);
+    if (edit === "none") return;
     lastAppliedValue.current = value;
-    setAndroidEpoch((n) => n + 1);
+    setHasText(!!value);
+    if (edit === "replace") {
+      // Clipboard/clear actions are external edits, not another controlled echo
+      // of the keystroke. Apply them without remounting or dismissing the IME.
+      const text = value ?? "";
+      inputRef.current?.setNativeProps({ text, selection: { start: text.length, end: text.length } });
+    } else setAndroidEpoch((n) => n + 1);
   }, [androidUncontrolled, value]);
 
   const search = variant === "search";
+  const filled = variant === "filled";
+  const leadingIcon = React.isValidElement<React.ComponentProps<typeof MaterialIcon>>(icon) && icon.type === MaterialIcon
+    ? React.cloneElement(icon, { size: 24, style: [icon.props.style, { width: 24, height: 24 }] }) : icon;
   const borderColor = search ? "transparent" : error ? palette.error : focused ? palette.primary : palette.outline;
   const borderWidth = search ? 0 : focused ? 2 : 1;
   const floating = focused || hasText || !!value;
@@ -122,7 +133,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   useEffect(() => {
     floatProgress.value = withTiming(floating ? 1 : 0, { duration: motion.reducedMotion ? 0 : 150 });
   }, [floating, floatProgress, motion.reducedMotion]);
-  const labelPosition = useAnimatedStyle(() => ({ top: 16 - 24 * floatProgress.value }));
+  const labelPosition = useAnimatedStyle(() => ({ top: 16 - (filled ? 8 : 24) * floatProgress.value }));
   const labelType = useAnimatedStyle(() => ({ fontSize: 16 - 4 * floatProgress.value, lineHeight: 24 - 8 * floatProgress.value }));
   // iOS Password AutoFill silently ignores secure fields that use a custom
   // font. Use the system face while the value is masked.
@@ -152,25 +163,27 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
       : null;
 
   return (
-    <View style={[label ? { paddingTop: 8 } : null, containerStyle]}>
+    <View style={[label && !filled && !search ? { paddingTop: 8 } : null, containerStyle]}>
       <View
         style={[
           styles.box,
           {
-            backgroundColor: search ? palette.surfaceContainerHigh : fieldSurface,
+            backgroundColor: search ? palette.surfaceContainerHigh : filled ? palette.surfaceContainerHighest : fieldSurface,
             paddingHorizontal: icon && !search ? spacing[12] : spacing[16],
-             borderRadius: search ? radius.full : radius.sm,
+            borderRadius: search ? radius.full : filled ? 0 : radius.sm,
+            ...(filled ? { borderTopLeftRadius: radius.xs, borderTopRightRadius: radius.xs } : {}),
           },
         ]}
       >
-        {!search ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderColor, borderWidth, borderRadius: radius.sm }]} /> : null}
+        {filled ? <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: borderWidth, backgroundColor: borderColor }} />
+          : !search ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderColor, borderWidth, borderRadius: radius.sm }]} /> : null}
         {label ? <Animated.View pointerEvents="none" style={[styles.floatingLabel, {
           left: icon ? 48 : 12,
-          backgroundColor: fieldSurface,
+          backgroundColor: filled || search ? "transparent" : fieldSurface,
         }, labelPosition]}>
           <AnimatedLabel variant="bodyLarge" style={[{ color: error ? palette.error : focused ? palette.primary : palette.onSurfaceVariant }, labelType]}>{label}</AnimatedLabel>
         </Animated.View> : null}
-        {icon ? <View style={styles.icon}>{icon}</View> : null}
+        {icon ? <View style={styles.icon}>{leadingIcon}</View> : null}
         <TextInput
           ref={setInputRef}
           key={androidUncontrolled ? `android-field-${androidEpoch}` : undefined}
@@ -234,7 +247,10 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
             }
             restoreWebCaret(webCaretNode(target), pendingCaret.current);
           }}
-          onChangeText={editable ? (text) => { setHasText(text.length > 0); onChangeText?.(text); } : undefined}
+          onChangeText={editable ? (text) => {
+            if (androidUncontrolled) lastAppliedValue.current = text;
+            setHasText(text.length > 0); onChangeText?.(text);
+          } : undefined}
           style={[
             styles.input,
             {
@@ -245,6 +261,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
             webCaretFix,
             Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0, boxShadow: "none" } as unknown as TextStyle : null,
             padRight != null ? { paddingRight: padRight } : null,
+            filled && label ? { paddingTop: spacing[24], paddingBottom: spacing[8] } : null,
           ]}
         />
         {rightAccessory ? (
