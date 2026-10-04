@@ -1,10 +1,11 @@
 /** A persistent search app bar and compact, contextual library actions. */
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Keyboard, StyleSheet, TextInput, View } from "react-native";
+import { Keyboard, StyleSheet, TextInput, View, useWindowDimensions } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColumnPadding } from "../../hooks/use-scene-column-insets";
-import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
+import { useMaterialMotion } from "../../theme/material-motion";
 import { useAuthStore } from "../../store/auth";
 import { useTheme } from "../../theme/ThemeProvider";
 import { layout, radius, spacing } from "../../theme/tokens";
@@ -19,14 +20,16 @@ import { Text } from "../ui/Text";
 import { UserAvatar } from "../ui/UserAvatar";
 import { SelectionHeader } from "./SelectionHeader";
 
-const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoFocus, onFilter, filtersOn }: {
+const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoFocus, onFilter, filtersOn, onFocusChange }: {
   query: string; onChange: (query: string) => void; autoFocus?: boolean;
   onFilter: (anchor: MenuAnchorRect) => void; filtersOn: boolean;
+  onFocusChange: (focused: boolean) => void;
 }) {
   const { palette } = useTheme();
   const inputRef = useRef<TextInput>(null);
   const [text, setText] = useState(query);
   const focused = useRef(false);
+  const [editing, setEditing] = useState(false);
   useEffect(() => { if (!focused.current) setText(query); }, [query]);
   useFocusEffect(useCallback(() => registerSearchFieldFocus(() => inputRef.current?.focus()), []));
   useEffect(() => {
@@ -40,10 +43,12 @@ const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoF
   };
   const clear = () => { inputRef.current?.clear(); change(""); inputRef.current?.focus(); };
   return <Input ref={inputRef} variant="search" value={text} onChangeText={change}
-    placeholder="Search your library" accessibilityLabel="Search your library"
-    onFocus={() => { focused.current = true; }} onBlur={() => { focused.current = false; }}
+    placeholder={editing ? "Search your library" : "Library"} accessibilityLabel="Search your library"
+    accessibilityHint="Search saved bookmarks and folders."
+    onFocus={() => { focused.current = true; setEditing(true); onFocusChange(true); }}
+    onBlur={() => { focused.current = false; setEditing(false); onFocusChange(false); }}
     autoCorrect={false} spellCheck={false} autoCapitalize="none" returnKeyType="search"
-    onSubmitEditing={() => Keyboard.dismiss()}
+    onSubmitEditing={() => { inputRef.current?.blur(); Keyboard.dismiss(); }}
     onKeyPress={(event) => { if (event.nativeEvent.key === "Escape") { inputRef.current?.clear(); change(""); inputRef.current?.blur(); } }}
     icon={<MaterialIcon name="search" color={palette.onSurfaceVariant} />}
     overlayRightAccessory overlayPaddingRight={text ? 104 : 56}
@@ -67,37 +72,46 @@ export function LibraryHeader({ tools, query, onQueryChange, onFilter, filtersOn
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const column = useColumnPadding(maxWidth);
-  const { inlineLibraryHeader, showLibraryTitle } = useResponsiveLayout();
+  const motion = useMaterialMotion();
+  const { width, fontScale } = useWindowDimensions();
+  const [focused, setFocused] = useState(false);
+  const collapseTools = focused && width / Math.max(1, fontScale) < 600;
+  const toolsProgress = useSharedValue(0);
+  const focusProgress = useSharedValue(0);
+  useEffect(() => {
+    focusProgress.value = withTiming(focused ? 1 : 0, { duration: motion.reducedMotion ? 0 : 180 });
+  }, [focused, focusProgress, motion.reducedMotion]);
+  const focusStyle = useAnimatedStyle(() => ({ opacity: focusProgress.value }));
+  useEffect(() => {
+    toolsProgress.value = withTiming(collapseTools ? 1 : 0, { duration: motion.reducedMotion ? 0 : 180 });
+  }, [collapseTools, toolsProgress, motion.reducedMotion]);
+  const toolsStyle = useAnimatedStyle(() => ({ width: 48 * (1 - toolsProgress.value), opacity: 1 - toolsProgress.value }));
+  useEffect(() => { if (selection) Keyboard.dismiss(); }, [!!selection]);
   const user = useAuthStore((s) => s.user);
-  const title = <View style={inlineLibraryHeader ? styles.inlineTitle : styles.title}>
-    <Text variant="titleLarge" numberOfLines={1}>Library</Text>
-    {resultLabel ? <Text variant="bodySmall" color="secondary" numberOfLines={1} accessibilityLiveRegion="polite">{resultLabel}</Text> : null}
-  </View>;
   return <View style={{ width: "100%", maxWidth, alignSelf: "center",
-    paddingTop: insets.top + spacing[8], paddingBottom: inlineLibraryHeader ? spacing[8] : 0,
+    paddingTop: insets.top + spacing[8], paddingBottom: spacing[8],
     paddingLeft: column.left, paddingRight: column.right }}>
-    <View style={[styles.appBar, selection ? { display: "none" } : null]}>
-      {inlineLibraryHeader && showLibraryTitle ? title : null}
-      <View style={styles.search}><LibrarySearch query={query} onChange={onQueryChange} autoFocus={autoFocusSearch} onFilter={onFilter} filtersOn={filtersOn} /></View>
-      {inlineLibraryHeader ? tools : null}
+    <View style={[styles.appBar, { backgroundColor: palette.surfaceContainerHigh }, selection ? { display: "none" } : null]}>
+      <View style={styles.search}><LibrarySearch query={query} onChange={onQueryChange} autoFocus={autoFocusSearch} onFilter={onFilter} filtersOn={filtersOn} onFocusChange={setFocused} /></View>
+      <Animated.View pointerEvents={collapseTools ? "none" : "auto"} aria-hidden={collapseTools}
+        accessibilityElementsHidden={collapseTools} importantForAccessibility={collapseTools ? "no-hide-descendants" : "auto"}
+        style={[{ height: 48, overflow: "hidden", justifyContent: "center" }, toolsStyle]}>{tools}</Animated.View>
       <PressableScale accessibilityRole="button" accessibilityLabel="Account and settings"
-        onPress={() => router.navigate("/settings")} stateLayerColor={palette.onSecondaryContainer}
-        style={[styles.account, { backgroundColor: palette.secondaryContainer }]}>
+        onPress={() => router.navigate("/settings")} stateLayerColor={palette.onSurface}
+        style={styles.account}>
         {user ? <UserAvatar user={user} size={40} /> : <MaterialIcon name="person-circle" size={24} color={palette.onSecondaryContainer} />}
       </PressableScale>
+      <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, styles.focusRing, { borderColor: palette.primary }, focusStyle]} />
     </View>
     {selection ? <SelectionHeader {...selection} embedded /> : null}
-    {!selection && !inlineLibraryHeader ? <View style={styles.toolbar}>{title}{tools}</View> : null}
-    {!selection && inlineLibraryHeader && !showLibraryTitle && resultLabel ?
-      <Text variant="bodySmall" color="secondary" accessibilityLiveRegion="polite" style={{ marginTop: spacing[8] }}>{resultLabel}</Text> : null}
+    {!selection && resultLabel ?
+      <Text variant="bodySmall" color="secondary" accessibilityLiveRegion="polite" style={{ marginTop: spacing[8], marginLeft: spacing[16] }}>{resultLabel}</Text> : null}
     {!selection ? filters : null}
   </View>;
 }
 const styles = StyleSheet.create({
-  appBar: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
+  appBar: { flexDirection: "row", alignItems: "center", minHeight: 56, borderRadius: radius.full, paddingRight: spacing[4] },
   search: { flex: 1, minWidth: 0 },
-  title: { flex: 1, minWidth: 0 },
-  inlineTitle: { maxWidth: 160, flexShrink: 1, marginRight: spacing[8] },
+  focusRing: { borderWidth: 2, borderRadius: radius.full },
   account: { width: 48, height: 48, borderRadius: radius.full, alignItems: "center", justifyContent: "center", overflow: "hidden" },
-  toolbar: { height: 64, flexDirection: "row", alignItems: "center", gap: spacing[8] },
 });

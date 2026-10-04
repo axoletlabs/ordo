@@ -7,7 +7,5 @@ export function responsiveLayout(width: number, height: number, fontScale = 1) {
     isTablet: Math.min(width, height) >= 600,
     isWide: width >= 600,
     compactHeight: height / textScale < 480,
-    inlineLibraryHeader: isLandscape || width / textScale >= 600,
-    showLibraryTitle: width / textScale >= 600,
   };
 }

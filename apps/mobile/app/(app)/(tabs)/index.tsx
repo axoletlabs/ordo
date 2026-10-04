@@ -345,7 +345,7 @@ export default function BookmarksScreen() {
 
   const headerRight = (
     <HeaderActions>
-      <HeaderIconButton name="ellipsis-horizontal" color={palette.onSurface}
+      <HeaderIconButton name="ellipsis-horizontal" variant="standard" color={palette.onSurface}
         onPress={(anchor) => { setToolsAnchor(anchor); setToolsOpen(true); }} accessibilityLabel="Library actions" />
     </HeaderActions>
   );
