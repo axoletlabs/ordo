@@ -1,5 +1,5 @@
 /** Android 12+ Material You palettes; refresh when returning from system settings. */
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { AppState, NativeModules, Platform } from "react-native";
 import type { DeviceTonalFamily, DeviceTonalPalettes } from "./material-colors";
 
@@ -17,21 +17,37 @@ function validPalettes(value: DeviceTonalPalettes | null): value is DeviceTonalP
 }
 
 export function useDeviceColors() {
-  const [colors, setColors] = useState(current);
-  useEffect(() => {
-    if (!materialYouAvailable) return;
-    let alive = true;
-    const refresh = async () => {
-      try {
-        const next = await native!.get();
-        if (!alive || !validPalettes(next)) return;
-        current = next;
-        setColors((previous) => JSON.stringify(previous) === JSON.stringify(next) ? previous : next);
-      } catch { /* An older APK or unsupported device keeps the app palette. */ }
-    };
-    void refresh();
-    const listener = AppState.addEventListener("change", (state) => { if (state === "active") void refresh(); });
-    return () => { alive = false; listener.remove(); };
-  }, []);
-  return colors;
+  return useSyncExternalStore(subscribe, currentDeviceColors, currentDeviceColors);
+}
+
+// Theme, reader, and error boundary share one native read and foreground
+// subscription. Mounting a reader must not re-read 100+ Android resources.
+const subscribers = new Set<() => void>();
+let listener: ReturnType<typeof AppState.addEventListener> | null = null;
+let refreshing = false;
+let fingerprint = "";
+async function refresh() {
+  if (refreshing || !materialYouAvailable) return;
+  refreshing = true;
+  try {
+    const next = await native!.get();
+    if (!validPalettes(next)) return;
+    const nextFingerprint = JSON.stringify(next);
+    if (nextFingerprint === fingerprint) return;
+    fingerprint = nextFingerprint;
+    current = next;
+    subscribers.forEach((notify) => notify());
+  } catch { /* An older APK or unsupported device keeps the app palette. */ }
+  finally { refreshing = false; }
+}
+function subscribe(notify: () => void) {
+  subscribers.add(notify);
+  if (materialYouAvailable && subscribers.size === 1) {
+    if (!current) void refresh();
+    listener = AppState.addEventListener("change", (state) => { if (state === "active") void refresh(); });
+  }
+  return () => {
+    subscribers.delete(notify);
+    if (!subscribers.size) { listener?.remove(); listener = null; }
+  };
 }

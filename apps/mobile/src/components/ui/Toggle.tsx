@@ -31,7 +31,7 @@ export function Toggle({ value, onValueChange, disabled, accessibilityLabel }: T
     style={styles.target} onPress={() => { haptics.selection(); onValueChange(!value); }}>
     <Animated.View pointerEvents="none" style={[styles.track, { opacity: disabled ? 0.38 : 1 }, track]}>
       <Animated.View style={[styles.handle, handle]}>
-        <Animated.View style={check}><MaterialIcon name="checkmark" size={16} color={palette.onPrimaryContainer} /></Animated.View>
+        <Animated.View style={check}><MaterialIcon name="checkmark" size={16} color={palette.primary} /></Animated.View>
       </Animated.View>
     </Animated.View>
   </PressableScale>;

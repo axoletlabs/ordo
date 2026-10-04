@@ -24,7 +24,8 @@ export function RowIconWell({
         style,
       ]}
     >
-      {children}
+      {React.Children.map(children, (child) => React.isValidElement<{ color?: string }>(child)
+        ? React.cloneElement(child, { color: palette.onSecondaryContainer }) : child)}
     </View>
   );
 }

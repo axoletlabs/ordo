@@ -49,14 +49,18 @@ test("Material You preserves all of the device's selected color families", () =>
   assert.equal(dark.primary, device.accent1["80"]);
   assert.notDeepEqual(light, materialColorRoles(APP_COLOR, false, true, 0));
 });
-test("Android semantic roles preserve its selected style instead of regenerating a seed", () => {
+test("Android's contrast-adjusted semantic roles cannot override app contrast", () => {
   const exact: DeviceTonalPalettes = { ...device, schemes: {
     light: { primary: "#000000", onPrimary: "#FFFFFF" },
     dark: { primary: "#FFFFFF", onPrimary: "#000000" },
   } };
-  assert.equal(materialColorRoles(APP_COLOR, false, true, 0, exact).primary, "#000000");
-  assert.equal(materialColorRoles(APP_COLOR, true, true, 0, exact).primary, "#FFFFFF");
-  assert.notEqual(materialColorRoles(APP_COLOR, false, true, 0.5, exact).primary, "#000000");
+  for (const dark of [false, true]) {
+    const schemes = [0, 0.5, 1].map((contrast) => materialColorRoles(APP_COLOR, dark, true, contrast as 0 | 0.5 | 1, exact));
+    assert.deepEqual(schemes[0], materialColorRoles(APP_COLOR, dark, true, 0, device));
+    assert.notDeepEqual(schemes[0], schemes[1]);
+    assert.notDeepEqual(schemes[1], schemes[2]);
+    assert.notEqual(schemes[0].primaryContainer, schemes[2].primaryContainer);
+  }
 });
 for (const dark of [false, true]) for (const contrast of [0, 0.5, 1] as const) {
   test(`Material You role contrast: ${dark ? "dark" : "light"}, ${contrast}`, () => {
@@ -67,3 +71,17 @@ for (const dark of [false, true]) for (const contrast of [0, 0.5, 1] as const) {
     }
   });
 }
+
+test("monochrome and legacy Android palettes retain distinct app contrast levels", () => {
+  const mono: DeviceTonalPalettes = { accent1: tones("#777777"), accent2: tones("#666666"), accent3: tones("#555555"), neutral1: tones("#666666"), neutral2: tones("#666666") };
+  for (const colors of [mono, { ...device, legacyNeutral: true }]) for (const dark of [false, true]) {
+    const standard = materialColorRoles(APP_COLOR, dark, false, 0, colors);
+    const medium = materialColorRoles(APP_COLOR, dark, false, 0.5, colors);
+    const high = materialColorRoles(APP_COLOR, dark, false, 1, colors);
+    assert.notDeepEqual(standard, medium);
+    assert.notDeepEqual(medium, high);
+    for (const roles of [standard, medium, high]) for (const [container, foreground] of pairs) {
+      assert.ok(Contrast.ratioOfTones(lstarFromArgb(argbFromHex(roles[container])), lstarFromArgb(argbFromHex(roles[foreground]))) >= 4.45);
+    }
+  }
+});

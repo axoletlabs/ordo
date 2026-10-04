@@ -27,17 +27,10 @@ export function materialColorRoles(seed: string, dark: boolean, _expressive: boo
     tertiaryPalette: devicePalette(device.accent3), neutralPalette: devicePalette(device.legacyNeutral ? device.neutral2 : device.neutral1),
     neutralVariantPalette: devicePalette(device.neutral2),
   }) : appScheme;
-  const roles = Object.fromEntries(MATERIAL_ROLES.map((role) => [role, hexFromArgb(scheme[role])])) as MaterialColors;
-  const system = device?.schemes?.[dark ? "dark" : "light"];
-  // Android 14+ exposes the exact semantic scheme, including monochrome and
-  // system contrast choices. Explicit app contrast levels still use MCU.
-  if (contrast === 0 && system) {
-    for (const role of MATERIAL_ROLES) {
-      const color = system[role];
-      if (typeof color === "string" && /^#[0-9a-f]{6}$/i.test(color)) roles[role] = color;
-    }
-  }
-  return roles;
+  // Semantic system roles already include Android's contrast preference.
+  // Importing them only for Standard made Standard equal High on high-contrast
+  // devices. Apply every app contrast level to the same original tonal families.
+  return Object.fromEntries(MATERIAL_ROLES.map((role) => [role, hexFromArgb(scheme[role])])) as MaterialColors;
 }
 
 function devicePalette(tones: Record<string, string>): TonalPalette {
