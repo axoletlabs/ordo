@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Pressable, Share, StyleSheet, View } from "react-native";
+import { Share, StyleSheet, View } from "react-native";
+import { PressableScale } from "../ui/PressableScale";
 import QRCode from "react-native-qrcode-svg";
 import { Button } from "../ui/Button";
 import { Text } from "../ui/Text";
@@ -82,7 +83,9 @@ export function MfaSetupPanel({
       <Text variant="footnote" color="secondary" align="center">
         Can't scan? Enter this key in your app:
       </Text>
-      <Pressable
+      <PressableScale accessibilityRole="button" accessibilityLabel="Share authenticator key"
+        accessibilityHint="Only share this key with your authenticator app."
+        style={styles.secretTarget}
         onPress={() => {
           void Share.share({ message: secret, title: "Authenticator key" }).catch(() => undefined);
         }}
@@ -90,7 +93,7 @@ export function MfaSetupPanel({
         <Text variant="mono" align="center" style={styles.secret}>
           {secret}
         </Text>
-      </Pressable>
+      </PressableScale>
       <OtpInput
         value={code}
         onChange={(next) => {
@@ -122,6 +125,7 @@ export function MfaCodeField({
   status?: OtpStatus;
 }) {
   const [mode, setMode] = useState<"totp" | "backup">("totp");
+  const busy = status === "loading" || status === "success";
 
   return (
     <View style={styles.codeField}>
@@ -136,18 +140,19 @@ export function MfaCodeField({
         status={status}
         label={mode === "backup" ? "Backup code" : "Authenticator code"}
       />
-      <Pressable
+      <PressableScale accessibilityRole="button"
+        accessibilityLabel={mode === "totp" ? "Use a backup code" : "Use an authenticator code"}
+        disabled={busy}
         onPress={() => {
           onChange("");
           setMode((current) => (current === "totp" ? "backup" : "totp"));
         }}
-        hitSlop={8}
         style={styles.switcher}
       >
-        <Text variant="footnote" color="accent">
+        <Text variant="labelLarge" color="accent">
           {mode === "totp" ? "Use a backup code" : "Use an authenticator code"}
         </Text>
-      </Pressable>
+      </PressableScale>
     </View>
   );
 }
@@ -155,7 +160,8 @@ export function MfaCodeField({
 const styles = StyleSheet.create({
   block: { gap: spacing[16] },
   codeField: { gap: spacing[8] },
-  switcher: { alignSelf: "flex-start" },
+  switcher: { alignSelf: "flex-start", minHeight: 48, justifyContent: "center", paddingHorizontal: spacing[8] },
+  secretTarget: { minHeight: 48, justifyContent: "center", paddingHorizontal: spacing[8] },
   qr: {
     alignSelf: "center",
     padding: spacing[16],

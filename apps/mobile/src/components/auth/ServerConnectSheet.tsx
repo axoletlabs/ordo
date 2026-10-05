@@ -86,9 +86,7 @@ export function ServerConnectSheet({
       visible={visible}
       onDismiss={onDismiss}
       dismissible={!confirming}
-      onShow={() => {
-        setTimeout(() => inputRef.current?.focus(), 100);
-      }}
+      onShow={() => setTimeout(() => inputRef.current?.focus(), 100)}
     >
       <ThemedScrollView keyboardShouldPersistTaps="handled">
         <PanelHeader title="Server address" />
@@ -96,6 +94,7 @@ export function ServerConnectSheet({
         <View style={styles.body}>
           <Input
             ref={inputRef}
+            label="Server address"
             value={url}
             onChangeText={setUrl}
             placeholder="https://ordo.example.com"

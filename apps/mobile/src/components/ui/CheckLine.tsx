@@ -5,7 +5,8 @@
  * the mark to the vertical center of the paragraph.
  */
 import React from "react";
-import { Pressable, StyleSheet, View } from "react-native";
+import { StyleSheet, View } from "react-native";
+import { PressableScale } from "./PressableScale";
 import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -27,12 +28,12 @@ export function CheckLine({
 }) {
   const { palette } = useTheme();
   return (
-    <Pressable
+    <PressableScale
       accessibilityRole="checkbox"
       accessibilityState={{ checked }}
       accessibilityLabel={label}
       onPress={onPress}
-      hitSlop={8}
+      stateLayerColor={palette.primary}
       style={styles.row}
     >
       <View style={styles.box} pointerEvents="none">
@@ -46,7 +47,7 @@ export function CheckLine({
       <Text variant="footnote" style={styles.label}>
         {children ?? label}
       </Text>
-    </Pressable>
+    </PressableScale>
   );
 }
 

@@ -1,9 +1,11 @@
 /**
  * Login screen. Cloud is the default; self-host is a secondary opt-in.
  */
-import React, { useCallback, useState } from "react";
-import { StyleSheet, View } from "react-native";
-import { Link, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useRef, useState } from "react";
+import { StyleSheet, View, type TextInput } from "react-native";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { AuthLink } from "../../src/components/auth/AuthLink";
+import { FormError } from "../../src/components/ui/FormError";
 import { AuthShell } from "../../src/components/auth/AuthShell";
 import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
@@ -51,6 +53,9 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
   const [showServer, setShowServer] = useState(false);
   const [confirmCloud, setConfirmCloud] = useState(false);
   const [formError, setFormError] = useState("");
+  const [errorField, setErrorField] = useState<string | null>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const inFlight = useRef(false);
   const [screenFocused, setScreenFocused] = useState(true);
 
   useFocusEffect(
@@ -61,12 +66,16 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
   );
 
   const submit = async () => {
+    if (inFlight.current) return;
     setFormError("");
+    setErrorField(null);
     const parsed = LoginSchema.safeParse({ identifier, password });
     if (!parsed.success) {
       setFormError(parsed.error.issues[0]?.message || "Please check your input.");
+      setErrorField(String(parsed.error.issues[0]?.path[0] ?? ""));
       return;
     }
+    inFlight.current = true;
     try {
       const result = await login.mutateAsync(parsed.data);
       if (isMfaRequiredResponse(result)) {
@@ -92,6 +101,8 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
         return;
       }
       setFormError(errorMessage(e));
+    } finally {
+      inFlight.current = false;
     }
   };
 
@@ -100,13 +111,11 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
   return (
     <>
       <AuthShell
-        title="Welcome back"
+        title="Sign in"
         footer={
           <View style={styles.row}>
             <Text variant="footnote" color="secondary">No account yet? </Text>
-            <Link href="/(auth)/register" asChild replace>
-              <Text variant="footnote" color="accent" style={styles.link}>Create one</Text>
-            </Link>
+            <AuthLink href="/(auth)/register" label="Create account" replace />
           </View>
         }
       >
@@ -120,10 +129,14 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
           autoComplete="email"
           autoCapitalize="none"
           importantForAutofill="yes"
-          error={formError || undefined}
+          error={errorField === "identifier" ? formError : undefined}
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() => passwordRef.current?.focus()}
         />
         <View style={{ height: spacing[16] }} />
         <Input
+          ref={passwordRef}
           key={screenFocused ? "password" : "password-locked"}
           label="Password"
           value={passwordField.value}
@@ -132,14 +145,16 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
           secureTextEntry={passwordField.secureTextEntry}
           {...passwordAutofillProps("current-password", !screenFocused)}
           rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
+          error={errorField === "password" ? formError : undefined}
+          returnKeyType="go"
+          onSubmitEditing={() => void submit()}
         />
         <View style={styles.forgotRow}>
-          <Link href="/(auth)/forgot-password" asChild>
-            <Text variant="footnote" color="accent" style={styles.link}>Forgot password?</Text>
-          </Link>
+          <AuthLink href="/(auth)/forgot-password" label="Forgot password?" />
         </View>
 
         <View style={{ height: spacing[24] }} />
+        <FormError message={errorField ? undefined : formError} />
         <Button label="Sign in" block size="md" onPress={submit} loading={login.isPending} />
 
         {selfHosted ? (
@@ -151,23 +166,24 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
               <PressableScale
                 accessibilityRole="button"
                 accessibilityLabel={`Change server. Current server: ${serverUrl}`}
+                style={styles.hostingAction}
                 onPress={() => {
                   haptics.light();
                   setShowServer(true);
                 }}
               >
-                <Text variant="footnote" color="accent">Change server</Text>
+                <Text variant="labelLarge" color="accent">Change server</Text>
               </PressableScale>
-              <Text variant="footnote" color="faint"> · </Text>
               <PressableScale
                 accessibilityRole="button"
                 accessibilityLabel="Use ordo Cloud"
+                style={styles.hostingAction}
                 onPress={() => {
                   haptics.light();
                   setConfirmCloud(true);
                 }}
               >
-                <Text variant="footnote" color="accent">Use ordo Cloud</Text>
+                <Text variant="labelLarge" color="accent">Use ordo Cloud</Text>
               </PressableScale>
             </View>
           </View>
@@ -217,14 +233,14 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", justifyContent: "center" },
-  link: { textDecorationLine: "underline" },
-  hosting: { marginTop: spacing[20], gap: spacing[6] },
+  row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center" },
+  hosting: { marginTop: spacing[16], gap: spacing[8], minHeight: 48, justifyContent: "center" },
   hostingActions: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     flexWrap: "wrap",
   },
-  forgotRow: { marginTop: spacing[10], alignItems: "flex-end" },
+  hostingAction: { minHeight: 48, paddingHorizontal: spacing[8], justifyContent: "center" },
+  forgotRow: { marginTop: spacing[8], alignItems: "flex-end" },
 });

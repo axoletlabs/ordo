@@ -1,6 +1,7 @@
 /** Account identity and security settings. */
 import React, { useState } from "react";
-import { Pressable, View } from "react-native";
+import { View } from "react-native";
+import { PressableScale } from "../../../src/components/ui/PressableScale";
 import { useAppRouter as useRouter } from "../../../src/hooks/use-app-router";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
@@ -120,7 +121,7 @@ export default function AccountScreen() {
     <SettingsPage title="Account">
       <SettingsScrollView>
         <View ref={avatarRef} collapsable={false} style={{ alignSelf: "center" }}>
-          <Pressable
+          <PressableScale
             onPress={(event) => {
               if (busy) return;
               measureAnchor(avatarRef.current, (anchor) => {
@@ -137,7 +138,7 @@ export default function AccountScreen() {
             }}
           >
             <UserAvatar user={user} size={72} />
-          </Pressable>
+          </PressableScale>
         </View>
 
         <SettingsGroup compact>

@@ -5,13 +5,13 @@
  */
 import React, { useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { Link, useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { AuthLink } from "../../src/components/auth/AuthLink";
 import { EMAIL_OTP, ResetPasswordSchema } from "@ordo/shared";
 import { AuthShell } from "../../src/components/auth/AuthShell";
 import { OtpDeliveryHint } from "../../src/components/auth/OtpDeliveryHint";
 import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
-import { Text } from "../../src/components/ui/Text";
 import { EyeToggle } from "../../src/components/ui/EyeToggle";
 import { OtpInput, holdOtpSuccess, type OtpStatus } from "../../src/components/ui/OtpInput";
 import { useForgotPassword, useResetPassword } from "../../src/hooks/use-auth-actions";
@@ -118,9 +118,7 @@ export default function ResetPasswordScreen() {
       subtitle={stage === "code" ? otpEnterHelper(smtpConfigured, email || undefined) : undefined}
       footer={
         <View style={styles.row}>
-          <Link href="/(auth)/login" asChild replace>
-            <Text variant="footnote" color="accent" style={styles.link}>Back to sign in</Text>
-          </Link>
+          <AuthLink href="/(auth)/login" label="Back to sign in" replace />
         </View>
       }
     >
@@ -162,6 +160,7 @@ export default function ResetPasswordScreen() {
           <Input
             label="Email"
             value={email}
+            editable={false}
             onChangeText={() => {}}
             showSoftInputOnFocus={false}
             caretHidden
@@ -191,6 +190,8 @@ export default function ResetPasswordScreen() {
             {...passwordAutofillProps("new-password")}
             passwordRules="minlength: 8;"
             error={formError || undefined}
+            returnKeyType="done"
+            onSubmitEditing={() => void submit()}
           />
           <View style={{ height: spacing[24] }} />
           <Button
@@ -215,6 +216,5 @@ export default function ResetPasswordScreen() {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", justifyContent: "center" },
-  link: { textDecorationLine: "underline" },
+  row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center" },
 });

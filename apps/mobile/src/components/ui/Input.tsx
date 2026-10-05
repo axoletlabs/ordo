@@ -79,6 +79,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   ...rest
 }, ref) {
   const { palette } = useTheme();
+  const messageId = React.useId();
   const fieldSurface = React.useContext(InputSurfaceContext) ?? palette.surface;
   const motion = useMaterialMotion();
   const [focused, setFocused] = useState(false);
@@ -199,6 +200,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
           cursorColor={palette.primary}
           keyboardAppearance={palette.mode}
           {...rest}
+          {...(Platform.OS === "web" ? { "aria-invalid": !!error, "aria-describedby": error || helper ? messageId : undefined } : null)}
           placeholder={label && !floating ? undefined : rest.placeholder}
           {...(Platform.OS === "web" ? { dir: "ltr" as const } : null)}
           {...(androidUncontrolled
@@ -282,11 +284,11 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
         ) : null}
       </View>
       {error ? (
-        <Text variant="footnote" color="danger" style={styles.msg}>
+        <Text nativeID={messageId} variant="bodySmall" color="danger" accessibilityLiveRegion="polite" style={styles.msg}>
           {error}
         </Text>
       ) : helper ? (
-        <Text variant="footnote" color="tertiary" style={styles.msg}>
+        <Text nativeID={messageId} variant="bodySmall" color="secondary" style={styles.msg}>
           {helper}
         </Text>
       ) : null}

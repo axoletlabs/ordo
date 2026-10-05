@@ -40,7 +40,7 @@ export const Text = React.forwardRef<RNText, TextProps>(function Text({ variant 
     coral: palette.error, green: palette.primary, blue: palette.secondary, mustard: palette.tertiary, danger: palette.error,
   };
   return <RNText ref={ref} {...rest} style={[{
-    color: colors[color], fontFamily: resolveFont("sans", weight), fontSize, lineHeight,
+    color: colors[color], fontFamily: resolveFont(variant === "mono" || variant === "monoSmall" ? "mono" : "sans", weight), fontSize, lineHeight,
     fontWeight: weight as TextStyle["fontWeight"], letterSpacing, textAlign: align, includeFontPadding: false,
   }, style]} />;
 });

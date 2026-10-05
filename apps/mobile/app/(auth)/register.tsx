@@ -3,7 +3,9 @@
  */
 import React, { useCallback, useRef, useState } from "react";
 import { BackHandler, Linking, Platform, StyleSheet, View, type TextInput } from "react-native";
-import { Link, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { AuthLink } from "../../src/components/auth/AuthLink";
+import { FormError } from "../../src/components/ui/FormError";
 import { AuthShell } from "../../src/components/auth/AuthShell";
 import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
@@ -48,6 +50,10 @@ export default function RegisterScreen() {
   const [showPwd, setShowPwd] = useState(false);
   const [atLeast13, setAtLeast13] = useState(returning?.atLeast13 ?? false);
   const [formError, setFormError] = useState("");
+  const [errorField, setErrorField] = useState<string | null>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const confirmRef = useRef<TextInput>(null);
+  const inFlight = useRef(false);
   const skipAgeToggle = useRef(false);
   const emailRef = useRef<TextInput>(null);
   const markLegalOpen = () => {
@@ -77,13 +83,17 @@ export default function RegisterScreen() {
   );
 
   const submit = async () => {
+    if (inFlight.current) return;
     setFormError("");
+    setErrorField(null);
     if (password !== confirm) {
       setFormError("Passwords don't match.");
+      setErrorField("confirm");
       return;
     }
     if (isCloud && !atLeast13) {
       setFormError(AGE_CONFIRM_ERROR);
+      setErrorField("age");
       return;
     }
     const parsed = RegisterSchema.safeParse({
@@ -93,8 +103,10 @@ export default function RegisterScreen() {
     });
     if (!parsed.success) {
       setFormError(parsed.error.issues[0]?.message || "Please check your input.");
+      setErrorField(String(parsed.error.issues[0]?.path[0] ?? ""));
       return;
     }
+    inFlight.current = true;
     try {
       const result = await register.mutateAsync(parsed.data);
       haptics.success();
@@ -114,6 +126,8 @@ export default function RegisterScreen() {
     } catch (e) {
       haptics.error();
       setFormError(errorMessage(e));
+    } finally {
+      inFlight.current = false;
     }
   };
 
@@ -123,9 +137,7 @@ export default function RegisterScreen() {
         footer={
           <View style={styles.row}>
             <Text variant="footnote" color="secondary">Already have an account? </Text>
-            <Link href="/(auth)/login" asChild replace>
-              <Text variant="footnote" color="accent" style={styles.link}>Sign in</Text>
-            </Link>
+            <AuthLink href="/(auth)/login" label="Sign in" replace />
           </View>
         }
       >
@@ -152,7 +164,10 @@ export default function RegisterScreen() {
             autoComplete="name"
             autoCapitalize="words"
             importantForAutofill="yes"
-            error={formError && formError !== AGE_CONFIRM_ERROR ? formError : undefined}
+            error={errorField === "displayName" ? formError : undefined}
+            returnKeyType="next"
+            submitBehavior="submit"
+            onSubmitEditing={() => emailRef.current?.focus()}
           />
           <View style={{ height: spacing[16] }} />
           <Input
@@ -166,13 +181,23 @@ export default function RegisterScreen() {
             autoComplete="email"
             autoCapitalize="none"
             autoFocus={focusEmail}
+            error={errorField === "email" ? formError : undefined}
+            returnKeyType="next"
+            submitBehavior="submit"
+            onSubmitEditing={() => passwordRef.current?.focus()}
           />
           <View style={{ height: spacing[16] }} />
           <Input
             label="Password"
+            ref={passwordRef}
             value={password}
             onChangeText={setPassword}
             placeholder="At least 8 characters"
+            helper="Use at least 8 characters."
+            error={errorField === "password" ? formError : undefined}
+            returnKeyType="next"
+            submitBehavior="submit"
+            onSubmitEditing={() => confirmRef.current?.focus()}
             secureTextEntry={!showPwd}
             textContentType="newPassword"
             autoComplete="new-password"
@@ -182,6 +207,7 @@ export default function RegisterScreen() {
           <View style={{ height: spacing[16] }} />
           <Input
             label="Confirm password"
+            ref={confirmRef}
             value={confirm}
             onChangeText={setConfirm}
             placeholder="Re-enter your password"
@@ -189,6 +215,9 @@ export default function RegisterScreen() {
             textContentType="newPassword"
             autoComplete="new-password"
             importantForAutofill="yes"
+            error={errorField === "confirm" ? formError : undefined}
+            returnKeyType="done"
+            onSubmitEditing={() => void submit()}
           />
 
           {isCloud ? (
@@ -213,7 +242,7 @@ export default function RegisterScreen() {
                 .
               </CheckLine>
               {formError === AGE_CONFIRM_ERROR ? (
-                <Text variant="footnote" color="danger" style={{ marginTop: spacing[6] }}>
+                <Text variant="bodySmall" color="danger" accessibilityLiveRegion="polite" style={{ marginTop: spacing[8] }}>
                   {formError}
                 </Text>
               ) : null}
@@ -221,6 +250,7 @@ export default function RegisterScreen() {
           ) : null}
 
           <View style={{ height: spacing[24] }} />
+          <FormError message={errorField ? undefined : formError} />
           <Button label="Create account" block size="md" onPress={submit} loading={register.isPending} />
         </>
       )}
@@ -257,7 +287,7 @@ function LegalLink({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", justifyContent: "center" },
+  row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center" },
   link: { textDecorationLine: "underline", includeFontPadding: false },
   disabledCard: { padding: spacing[16], borderRadius: radius.lg, borderWidth: 1 },
 });

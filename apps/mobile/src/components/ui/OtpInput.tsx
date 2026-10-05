@@ -33,6 +33,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
 import { useMaterialMotion } from "../../theme/material-motion";
 import { haptics } from "../../lib/haptics";
+import { InputSurfaceContext } from "./input-surface";
 
 export type OtpStatus = "idle" | "loading" | "success" | "error";
 
@@ -77,6 +78,8 @@ export function OtpInput({
   style,
 }: OtpInputProps) {
   const { palette } = useTheme();
+  const fieldSurface = React.useContext(InputSurfaceContext) ?? palette.surface;
+  const messageId = React.useId();
   const motion = useMaterialMotion();
   const inputRef = useRef<TextInput>(null);
   const completedRef = useRef<string | null>(null);
@@ -98,10 +101,10 @@ export function OtpInput({
   const pulse = useSharedValue(1);
 
   useEffect(() => {
-    if (!autoFocus) return;
+    if (!autoFocus || locked) return;
     const t = setTimeout(() => inputRef.current?.focus(), 280);
     return () => clearTimeout(t);
-  }, [autoFocus]);
+  }, [autoFocus, locked]);
 
   useEffect(() => {
     if (chars.length > prevLen.current) haptics.selection();
@@ -116,13 +119,13 @@ export function OtpInput({
     }
     if (skipRestoredComplete.current) return;
     if (completedRef.current === chars) return;
-    if (status === "loading" || status === "success" || !onComplete) return;
+    if (locked || !onComplete) return;
     const t = setTimeout(() => {
       completedRef.current = chars;
       onComplete(chars);
     }, 80);
     return () => clearTimeout(t);
-  }, [chars, length, onComplete, status]);
+  }, [chars, length, onComplete, locked]);
 
   useEffect(() => {
     if (status !== "error" || motion.reducedMotion) return;
@@ -172,10 +175,10 @@ export function OtpInput({
   const compact = kind === "backup";
   const boxPalette = {
     text: palette.text,
-    border: palette.border,
+    border: palette.outline,
     borderStrong: palette.borderStrong,
     accent: palette.accent,
-    background: palette.background,
+    background: fieldSurface,
     surface: palette.surfaceElevated,
     danger: palette.onErrorContainer,
     dangerSoft: palette.dangerSoft,
@@ -212,7 +215,7 @@ export function OtpInput({
         }}
         style={styles.hit}
       >
-        <Animated.View style={[styles.row, rowMotion]}>
+        <Animated.View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" aria-hidden style={[styles.row, rowMotion]}>
           {compact && length === MFA.BACKUP_CODE_LENGTH ? (
             <>
               <View style={styles.group}>{Array.from({ length: 4 }, (_, i) => renderBox(i))}</View>
@@ -248,6 +251,7 @@ export function OtpInput({
           maxLength={kind === "backup" ? length * 2 : length}
           accessibilityLabel={label ?? (purpose === "pin" ? "PIN" : "Verification code")}
           accessibilityValue={{ text: chars }}
+          {...(Platform.OS === "web" ? { "aria-invalid": !!error, "aria-describedby": message ? messageId : undefined } : null)}
           style={[
             styles.hiddenInput,
             Platform.OS === "web"
@@ -258,7 +262,7 @@ export function OtpInput({
       </Pressable>
 
       {message ? (
-        <Text variant="footnote" color={messageDanger ? "danger" : "tertiary"} style={styles.msg}>
+        <Text nativeID={messageId} variant="bodySmall" color={messageDanger ? "danger" : "secondary"} accessibilityLiveRegion={messageDanger ? "polite" : "none"} style={styles.msg}>
           {message}
         </Text>
       ) : null}
@@ -341,6 +345,7 @@ const DigitBox = React.memo(function DigitBox({
       caret.value = 0;
       return;
     }
+    if (motion.reducedMotion) { cancelAnimation(caret); caret.value = 1; return; }
     caret.value = withRepeat(
       withSequence(
         withTiming(1, { duration: 0 }),
@@ -352,7 +357,7 @@ const DigitBox = React.memo(function DigitBox({
       false,
     );
     return () => cancelAnimation(caret);
-  }, [active, caret]);
+  }, [active, caret, motion.reducedMotion]);
 
   const boxStyle = useAnimatedStyle(() => {
     const idleBorder = interpolateColor(
@@ -380,7 +385,7 @@ const DigitBox = React.memo(function DigitBox({
         Extrapolation.CLAMP,
       ),
       transform: [
-        { scale: interpolate(focusAmt.value, [0, 1], [1, 1.04]) * pop.value },
+        { scale: motion.reducedMotion ? 1 : interpolate(focusAmt.value, [0, 1], [1, 1.04]) * pop.value },
       ],
     };
   });
@@ -435,7 +440,7 @@ const DigitBox = React.memo(function DigitBox({
 
 const styles = StyleSheet.create({
   label: { marginBottom: spacing[8] },
-  hit: { position: "relative" },
+  hit: { position: "relative", minHeight: 48, justifyContent: "center" },
   row: {
     flexDirection: "row",
     alignItems: "center",

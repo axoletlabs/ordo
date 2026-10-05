@@ -14,6 +14,7 @@ import { Input } from "../../../src/components/ui/Input";
 import { Button } from "../../../src/components/ui/Button";
 import { EyeToggle } from "../../../src/components/ui/EyeToggle";
 import { Text } from "../../../src/components/ui/Text";
+import { FormError } from "../../../src/components/ui/FormError";
 import { toast } from "../../../src/components/ui/toast-store";
 import { MfaStepUpPanel } from "../../../src/components/auth/MfaStepUpPanel";
 import { useDeleteAccount } from "../../../src/hooks/use-auth-actions";
@@ -85,6 +86,9 @@ export default function DeleteAccountScreen() {
         <SettingsScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           <SettingsGroup compact>
             <SettingsForm key={mfaOpen ? "mfa-locked" : "editable"}>
+              <Text variant="bodyMedium" color="secondary">
+                Deleting your account permanently removes your bookmarks, folders, tags, and account data. Export your library first if you want to keep it. This cannot be undone.
+              </Text>
               <Input
                 label="Password"
                 value={passwordField.value}
@@ -99,6 +103,7 @@ export default function DeleteAccountScreen() {
                 value={confirmation}
                 onChangeText={setConfirmation}
                 placeholder={DELETE_ACCOUNT_CONFIRMATION}
+                helper={`Type ${DELETE_ACCOUNT_CONFIRMATION} to confirm.`}
                 autoCapitalize="characters"
                 autoCorrect={false}
                 mono
@@ -113,11 +118,7 @@ export default function DeleteAccountScreen() {
                 disabled={!currentPassword || !confirmed}
                 onPress={submit}
               />
-              {formError ? (
-                <Text variant="footnote" color="danger" align="center">
-                  {formError}
-                </Text>
-              ) : null}
+              <FormError message={formError} />
             </SettingsForm>
           </SettingsGroup>
         </SettingsScrollView>

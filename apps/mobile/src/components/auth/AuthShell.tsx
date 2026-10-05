@@ -30,7 +30,7 @@ export function AuthShell({ title, subtitle, children, footer, style }: AuthShel
       <ThemedScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" style={styles.root}
         contentContainerStyle={[styles.container, { justifyContent: compact ? "flex-start" : "center",
           paddingTop: insets.top + (compact ? spacing[16] : spacing[32]), paddingBottom: insets.bottom + (compact ? spacing[16] : spacing[32]),
-          paddingLeft: Math.max(insets.left, spacing[24]), paddingRight: Math.max(insets.right, spacing[24]) }]}>
+          paddingLeft: Math.max(insets.left, layout.screenHorizontalPad), paddingRight: Math.max(insets.right, layout.screenHorizontalPad) }]}>
         <View style={styles.shell}>
           <View style={[styles.form, { maxWidth: layout.maxFormWidth }, style]}>
             {mark}{heading}
