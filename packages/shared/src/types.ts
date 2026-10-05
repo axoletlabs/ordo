@@ -19,7 +19,7 @@ export interface UserDto {
 
 export type ReaderFontFamily = "sans" | "serif" | "mono";
 export type ReaderFontSize = "small" | "medium" | "large" | "xlarge";
-export type ReaderTheme = "system" | "light" | "dark" | "sepia";
+export type ReaderTheme = "system" | "light" | "dark";
 
 /** Synced reader appearance preferences persisted on the user. */
 export interface ReaderPreferences {

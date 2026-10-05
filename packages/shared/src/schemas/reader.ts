@@ -3,7 +3,11 @@ import type { ReaderPreferences } from "../types.js";
 
 export const ReaderFontFamilySchema = z.enum(["sans", "serif", "mono"]);
 export const ReaderFontSizeSchema = z.enum(["small", "medium", "large", "xlarge"]);
-export const ReaderThemeSchema = z.enum(["system", "light", "dark", "sepia"]);
+// Preserve existing accounts/older clients without retaining a Sepia palette.
+export const ReaderThemeSchema = z.preprocess(
+  (value) => value === "sepia" ? "system" : value,
+  z.enum(["system", "light", "dark"]),
+);
 
 export const ReaderPreferencesSchema = z.object({
   fontFamily: ReaderFontFamilySchema,

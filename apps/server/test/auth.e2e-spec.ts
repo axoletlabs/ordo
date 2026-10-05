@@ -734,12 +734,12 @@ describe("Auth (e2e)", () => {
 
         const first = await agent
           .patch("/api/auth/preferences")
-          .send({ theme: "sepia" })
+          .send({ theme: "dark" })
           .expect(200);
         expect(first.body.preferences).toEqual({
           fontFamily: "serif",
           fontSize: "medium",
-          theme: "sepia",
+          theme: "dark",
           amoled: false,
         });
 
@@ -750,13 +750,27 @@ describe("Auth (e2e)", () => {
         expect(second.body.preferences).toEqual({
           fontFamily: "serif",
           fontSize: "large",
-          theme: "sepia",
+          theme: "dark",
           amoled: true,
         });
 
         // persisted — /auth/me reports the same synced preferences
         const me = await agent.get("/api/auth/me").expect(200);
         expect(me.body.preferences).toEqual(second.body.preferences);
+      });
+
+      it("maps legacy Sepia clients to System without losing stored typography", async () => {
+        const agent = await authedAgent(pctx.app, "legacy-reader@ordo.app");
+        await pctx.prisma.user.update({ where: { email: "legacy-reader@ordo.app" }, data: {
+          preferences: JSON.stringify({ theme: "sepia", fontFamily: "mono", fontSize: "large", amoled: true }),
+        } });
+        const legacy = await agent.get("/api/auth/me").expect(200);
+        expect(legacy.body.preferences).toEqual({ theme: "system", fontFamily: "mono", fontSize: "large", amoled: true });
+        const result = await agent.patch("/api/auth/preferences")
+          .send({ theme: "sepia", fontFamily: "mono", fontSize: "large", amoled: true }).expect(200);
+        expect(result.body.preferences).toEqual({ theme: "system", fontFamily: "mono", fontSize: "large", amoled: true });
+        const me = await agent.get("/api/auth/me").expect(200);
+        expect(me.body.preferences).toEqual(result.body.preferences);
       });
 
       it("validates preference values and requires a field", async () => {
