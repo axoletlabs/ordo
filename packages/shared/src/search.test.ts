@@ -32,6 +32,33 @@ test("tokenizeSearchQuery collapses space and lowercases", () => {
   assert.deepEqual(tokenizeSearchQuery("  SSL   Guide "), ["ssl", "guide"]);
 });
 
+test("metadata warming and short queries never read article bodies", () => {
+  let reads = 0;
+  const source = { ...bookmark({ title: "Material reading" }), get contentText() { reads++; return "secondary body content"; } };
+  prepareBookmarkSearch(source);
+  assert.equal(createBookmarkSearchMatcher("mat")(source).matched, true);
+  assert.equal(createBookmarkSearchMatcher("absent", { allowSecondary: false })(source).matched, false);
+  assert.equal(reads, 0);
+});
+
+test("secondary body indexing is lazy, cached, and follows immutable replacements", () => {
+  let reads = 0;
+  const source = { ...bookmark({ title: "Notes" }), get contentText() { reads++; return "secondary body content"; } };
+  assert.equal(bookmarkSearchRank(source, "secondary").field, "body");
+  assert.equal(bookmarkSearchRank(source, "content").matched, true);
+  assert.equal(reads, 1);
+  const updated = { ...source, contentText: "different article text" };
+  assert.equal(bookmarkSearchRank(updated, "secondary").matched, false);
+  assert.equal(bookmarkSearchRank(updated, "different").field, "body");
+});
+
+test("a primary or description hit need not tokenize a long body", () => {
+  const source = { ...bookmark({ title: "Material", description: "description" }),
+    get contentText(): string { throw new Error("Body should remain cold"); } };
+  assert.equal(bookmarkSearchRank(source, "material").field, "title");
+  assert.equal(bookmarkSearchRank(source, "description").field, "description");
+});
+
 test("pre-indexed queries retain ranking and follow immutable record/tag replacements", () => {
   const initial = bookmark({ title: "Reading notes", tags: [{ id: "design", name: "Design" }] });
   prepareBookmarkSearch(initial);

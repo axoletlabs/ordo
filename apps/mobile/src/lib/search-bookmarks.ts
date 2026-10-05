@@ -121,8 +121,10 @@ function namedTags(tags: BookmarkDto["tags"] | unknown): { id?: string; name: st
 }
 
 export function bookmarkPassesSearchFilters(bookmark: BookmarkDto, filters: SearchFilters): boolean {
-  const tags = namedTags(bookmark.tags);
-  if (filters.tagIds.some((id) => !tags.some((tag) => tag.id === id))) return false;
+  if (filters.tagIds.length > 0) {
+    const tags = namedTags(bookmark.tags);
+    if (filters.tagIds.some((id) => !tags.some((tag) => tag.id === id))) return false;
+  }
   if (filters.folderIds.length > 0 || filters.unfiled) {
     const inFolder = bookmark.folderId
       ? filters.folderIds.includes(bookmark.folderId)
@@ -190,7 +192,10 @@ export function compileSearchResults({
   const match = createBookmarkSearchMatcher(query, { fuzzy: filters.fuzzy, omitTagIds: filters.tagIds });
   const matchIncludingTags = createBookmarkSearchMatcher(query, { fuzzy: filters.fuzzy });
   const byId = new Map<string, { bookmark: BookmarkDto; rank: BookmarkSearchRank }>();
-  const cachedById = new Map(cachedItems.map((bookmark) => [bookmark.id, bookmark]));
+  // Local typing commonly has no server rows yet. Avoid an O(n) lookup map
+  // and its temporary tuple array unless remote rows actually need merging.
+  const cachedById = new Map<string, BookmarkDto>();
+  if (serverItems.length > 0) for (const bookmark of cachedItems) cachedById.set(bookmark.id, bookmark);
 
   const consider = (bookmark: BookmarkDto, allowBodyOnlyHit: boolean) => {
     if (byId.has(bookmark.id)) return;

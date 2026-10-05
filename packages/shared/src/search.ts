@@ -178,14 +178,16 @@ type IndexedField = { folded: string; words: readonly string[] };
 const documents = new WeakMap<SearchableBookmark, ReturnType<typeof indexDocument>>();
 function indexField(text: string | null | undefined): IndexedField {
   const folded = fold(text);
-  return { folded, words: searchWords(folded) };
+  return { folded, words: folded.match(new RegExp(WORD_PATTERN, "gu")) ?? [] };
 }
 function indexDocument(bookmark: SearchableBookmark) {
   return {
     title: indexField(bookmark.title), domain: indexField(bookmark.domain), url: indexField(bookmark.url),
     tags: namedTags(bookmark.tags, emptyOmit).map((tag) => ({ ...tag, indexed: indexField(tag.name) })),
     description: indexField(`${bookmark.description ?? ""} ${bookmark.author ?? ""}`),
-    body: indexField(bookmark.contentText),
+    // Reader details can contain megabytes of text. A metadata/title query
+    // must not tokenize that body before the five-letter secondary-field gate.
+    body: undefined as IndexedField | undefined,
   };
 }
 /** DTOs are immutable: retain tokenized fields until that record is replaced. */
@@ -239,6 +241,7 @@ function fieldMatch(field: SearchMatchField, quality: SearchMatchQuality) {
 
 function bestFieldForToken(
   bookmark: ReturnType<typeof indexDocument>,
+  source: SearchableBookmark,
   token: string,
   fuzzy: boolean,
   allowSecondary: boolean,
@@ -262,6 +265,7 @@ function bestFieldForToken(
   if (allowSecondary) {
     const descriptionQ = qualityAgainstText(bookmark.description, token, fuzzy);
     if (descriptionQ) return fieldMatch("description", descriptionQ);
+    bookmark.body ??= indexField(source.contentText);
     const bodyQ = qualityAgainstText(bookmark.body, token, fuzzy);
     if (bodyQ) return fieldMatch("body", bodyQ);
   }
@@ -291,24 +295,30 @@ export function createBookmarkSearchMatcher(query: string, opts: SearchRankOptio
     if (tokens.length === 0) return { ...UNMATCHED, matched: true, clause: "and", field: "title", hits: 0 };
     const bookmark = indexedDocument(source);
 
-    const perToken = tokens.map((token) => bestFieldForToken(bookmark, token, fuzzy, allowSecondary, omit));
-    const hits = perToken.filter((row): row is NonNullable<typeof row> => row != null);
-    if (hits.length === 0) return UNMATCHED;
+    let count = 0;
+    let weakestField: SearchMatchField = "title";
+    let strongestField: SearchMatchField = "body";
+    let lowestQuality: SearchMatchQuality = SEARCH_MATCH_QUALITY.starts;
+    let highestQuality: SearchMatchQuality = SEARCH_MATCH_QUALITY.none;
+    let usedFuzzy = false;
+    for (const token of tokens) {
+      const hit = bestFieldForToken(bookmark, source, token, fuzzy, allowSecondary, omit);
+      if (!hit) continue;
+      count++;
+      weakestField = weakerField(weakestField, hit.field);
+      if (FIELD_SCORE[hit.field] > FIELD_SCORE[strongestField]) strongestField = hit.field;
+      lowestQuality = Math.min(lowestQuality, hit.quality) as SearchMatchQuality;
+      highestQuality = Math.max(highestQuality, hit.quality) as SearchMatchQuality;
+      usedFuzzy ||= hit.usedFuzzy;
+    }
+    if (count === 0) return UNMATCHED;
 
-    const all = hits.length === tokens.length;
+    const all = count === tokens.length;
     const clause: SearchMatchClause = all ? "and" : "or";
     if (!all && tokens.length < 2) return UNMATCHED;
 
-    let field = hits[0]!.field;
-    let quality: SearchMatchQuality = hits[0]!.quality;
-    let usedFuzzy = hits[0]!.usedFuzzy;
-    for (let i = 1; i < hits.length; i++) {
-      const row = hits[i]!;
-      field = all ? weakerField(field, row.field) : FIELD_SCORE[row.field] > FIELD_SCORE[field] ? row.field : field;
-      if (all) quality = Math.min(quality, row.quality) as SearchMatchQuality;
-      else if (row.quality > quality) quality = row.quality;
-      usedFuzzy = usedFuzzy || row.usedFuzzy;
-    }
+    let field = all ? weakestField : strongestField;
+    let quality = all ? lowestQuality : highestQuality;
 
     if (all && bookmark.title.folded.startsWith(full)) {
       field = "title";
@@ -320,7 +330,7 @@ export function createBookmarkSearchMatcher(query: string, opts: SearchRankOptio
       clause,
       field,
       quality,
-      hits: hits.length,
+      hits: count,
       usedFuzzy: usedFuzzy && quality === SEARCH_MATCH_QUALITY.fuzzy,
     };
   };

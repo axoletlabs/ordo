@@ -122,19 +122,19 @@ export function resolveFont(
 }
 
 /** The list of font assets to preload (passed to useFonts in the root layout). */
-import {
-  JetBrainsMono_400Regular,
-  JetBrainsMono_500Medium,
-  JetBrainsMono_600SemiBold,
-  JetBrainsMono_700Bold,
-} from "@expo-google-fonts/jetbrains-mono";
-import {
-  PlayfairDisplay_400Regular,
-  PlayfairDisplay_700Bold,
-  PlayfairDisplay_400Regular_Italic,
-} from "@expo-google-fonts/playfair-display";
+// Import individual faces: the package barrels require every TTF and make
+// Metro ship unused weights/styles, even though Font.loadAsync uses only these.
+import { JetBrainsMono_400Regular } from "@expo-google-fonts/jetbrains-mono/400Regular";
+import { JetBrainsMono_500Medium } from "@expo-google-fonts/jetbrains-mono/500Medium";
+import { JetBrainsMono_600SemiBold } from "@expo-google-fonts/jetbrains-mono/600SemiBold";
+import { JetBrainsMono_700Bold } from "@expo-google-fonts/jetbrains-mono/700Bold";
+import { PlayfairDisplay_400Regular } from "@expo-google-fonts/playfair-display/400Regular";
+import { PlayfairDisplay_700Bold } from "@expo-google-fonts/playfair-display/700Bold";
+import { PlayfairDisplay_400Regular_Italic } from "@expo-google-fonts/playfair-display/400Regular_Italic";
 import { ROW_INSET, SCREEN_RAIL } from "./alignment";
-import { Roboto_400Regular, Roboto_500Medium, Roboto_700Bold } from "@expo-google-fonts/roboto";
+import { Roboto_400Regular } from "@expo-google-fonts/roboto/400Regular";
+import { Roboto_500Medium } from "@expo-google-fonts/roboto/500Medium";
+import { Roboto_700Bold } from "@expo-google-fonts/roboto/700Bold";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
 
 export const fontAssets = {
