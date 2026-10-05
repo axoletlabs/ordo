@@ -17,14 +17,16 @@ export interface UserDto {
   createdAt: string;
 }
 
-export type ReaderFontFamily = "sans" | "serif" | "mono";
+export type ReaderFontFamily = "sans" | "serif";
 export type ReaderFontSize = "small" | "medium" | "large" | "xlarge";
+export type ReaderLineSpacing = "compact" | "default" | "relaxed";
 export type ReaderTheme = "system" | "light" | "dark";
 
 /** Synced reader appearance preferences persisted on the user. */
 export interface ReaderPreferences {
   fontFamily: ReaderFontFamily;
   fontSize: ReaderFontSize;
+  lineSpacing: ReaderLineSpacing;
   theme: ReaderTheme;
   amoled: boolean;
 }

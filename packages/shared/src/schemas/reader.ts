@@ -1,8 +1,14 @@
 import { z } from "zod";
 import type { ReaderPreferences } from "../types.js";
 
-export const ReaderFontFamilySchema = z.enum(["sans", "serif", "mono"]);
+// Reader families are reading typefaces. "mono" is no longer offered for
+// long-form articles; stored preferences normalize it to Sans.
+export const ReaderFontFamilySchema = z.preprocess(
+  (value) => value === "mono" ? "sans" : value,
+  z.enum(["sans", "serif"]),
+);
 export const ReaderFontSizeSchema = z.enum(["small", "medium", "large", "xlarge"]);
+export const ReaderLineSpacingSchema = z.enum(["compact", "default", "relaxed"]);
 // Preserve existing accounts/older clients without retaining a Sepia palette.
 export const ReaderThemeSchema = z.preprocess(
   (value) => value === "sepia" ? "system" : value,
@@ -12,6 +18,7 @@ export const ReaderThemeSchema = z.preprocess(
 export const ReaderPreferencesSchema = z.object({
   fontFamily: ReaderFontFamilySchema,
   fontSize: ReaderFontSizeSchema,
+  lineSpacing: ReaderLineSpacingSchema,
   theme: ReaderThemeSchema,
   amoled: z.boolean(),
 });
@@ -20,6 +27,7 @@ export type ReaderPreferencesInput = z.infer<typeof ReaderPreferencesSchema>;
 export const DEFAULT_READER_PREFERENCES: ReaderPreferences = {
   fontFamily: "serif",
   fontSize: "medium",
+  lineSpacing: "default",
   theme: "system",
   amoled: false,
 };
@@ -57,6 +65,9 @@ export function normalizeReaderPreferences(value: unknown): ReaderPreferences {
     ),
     fontSize: ReaderFontSizeSchema.catch(DEFAULT_READER_PREFERENCES.fontSize).parse(
       obj.fontSize,
+    ),
+    lineSpacing: ReaderLineSpacingSchema.catch(DEFAULT_READER_PREFERENCES.lineSpacing).parse(
+      obj.lineSpacing,
     ),
     theme: ReaderThemeSchema.catch(DEFAULT_READER_PREFERENCES.theme).parse(obj.theme),
     amoled: z.boolean().catch(DEFAULT_READER_PREFERENCES.amoled).parse(obj.amoled),
