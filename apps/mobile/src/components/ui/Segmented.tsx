@@ -1,6 +1,6 @@
 /** Baseline segmented buttons / Expressive connected toggle button group. */
 import React, { useEffect } from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View, type TextStyle } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
@@ -10,7 +10,7 @@ import { radius } from "../../theme/tokens";
 import { haptics } from "../../lib/haptics";
 import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 const AnimatedText = Animated.createAnimatedComponent(Text);
-function SegmentLabel({ label, foreground, selected }: { label: string; foreground: string; selected: boolean }) {
+function SegmentLabel({ label, foreground, selected, labelStyle }: { label: string; foreground: string; selected: boolean; labelStyle?: TextStyle }) {
   const motion = useMaterialMotion();
   const tint = useSharedValue(foreground);
   const selection = useSharedValue(selected ? 1 : 0);
@@ -18,13 +18,13 @@ function SegmentLabel({ label, foreground, selected }: { label: string; foregrou
     tint.value = motion.reducedMotion ? foreground : withSpring(foreground, materialMotion.effects.fast);
     selection.value = motion.reducedMotion ? Number(selected) : withSpring(Number(selected), materialMotion.effects.fast);
   }, [foreground, selected, motion.reducedMotion, tint, selection]);
-  const labelStyle = useAnimatedStyle(() => ({ color: tint.value }));
+  const labelStyleAnimated = useAnimatedStyle(() => ({ color: tint.value }));
   const checkStyle = useAnimatedStyle(() => ({ opacity: selection.value }));
   return <>{selected ? <Animated.View testID="material-segment-check" style={[{ width: 18 }, checkStyle]}><MaterialIcon name="checkmark" size={18} color={foreground} /></Animated.View> : null}
-    <AnimatedText variant="labelLarge" numberOfLines={1} style={[{ flexShrink: 1 }, labelStyle]}>{label}</AnimatedText></>;
+    <AnimatedText variant="labelLarge" numberOfLines={1} style={[{ flexShrink: 1 }, labelStyle, labelStyleAnimated]}>{label}</AnimatedText></>;
 }
 export interface SegmentedProps<T extends string> {
-  options: readonly { value: T; label: string; accessibilityLabel?: string }[]; value: T; onChange: (value: T) => void;
+  options: readonly { value: T; label: string; accessibilityLabel?: string; labelStyle?: TextStyle }[]; value: T; onChange: (value: T) => void;
   accessibilityLabel?: string;
   orientation?: "horizontal" | "vertical";
 }
@@ -78,7 +78,7 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
           ...(!expressive ? { borderTopLeftRadius: outline.topLeft, borderBottomLeftRadius: outline.bottomLeft,
             borderTopRightRadius: outline.topRight, borderBottomRightRadius: outline.bottomRight } : {}),
         }]}>
-          <SegmentLabel label={option.label} foreground={fg} selected={selected} />
+          <SegmentLabel label={option.label} foreground={fg} selected={selected} labelStyle={option.labelStyle} />
       </PressableScale>;
     })}
   </View></View>;

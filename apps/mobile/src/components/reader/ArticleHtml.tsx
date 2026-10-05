@@ -29,10 +29,14 @@ import RenderHTML, {
 import { useTheme } from "../../theme/ThemeProvider";
 import type { Palette } from "../../theme/theme";
 import { radius, resolveFont, spacing, type FontFamily } from "../../theme/tokens";
-import type { HighlightDto, ReaderPreferences } from "@ordo/shared";
+import type { HighlightDto, ReaderLineSpacing, ReaderPreferences } from "@ordo/shared";
 import { applyHighlightsToHtml, htmlToPlainText } from "@ordo/shared";
 import { readerArticleColors, READER_IGNORED_INLINE_STYLES } from "./reader-article-colors";
-import { READER_BODY_SIZE, resolveReaderFontFamily } from "./reader-typography";
+import {
+  READER_BODY_SIZE,
+  readerLineHeight,
+  resolveReaderFontFamily,
+} from "./reader-typography";
 import {
   collectTableRows,
   plainTextFromNode,
@@ -56,21 +60,18 @@ const SYSTEM_FONTS = [
   "Roboto_400Regular",
   "Roboto_500Medium",
   "Roboto_700Bold",
-  "Inter_400Regular",
-  "Inter_500Medium",
-  "Inter_600SemiBold",
-  "Inter_700Bold",
-  "InterTight_400Regular",
-  "InterTight_500Medium",
-  "InterTight_600SemiBold",
-  "InterTight_700Bold",
   "JetBrainsMono_400Regular",
   "JetBrainsMono_500Medium",
   "JetBrainsMono_600SemiBold",
   "JetBrainsMono_700Bold",
-  "PlayfairDisplay_400Regular",
-  "PlayfairDisplay_700Bold",
-  "PlayfairDisplay_400Regular_Italic",
+  "Libron_400Regular",
+  "Libron_400Regular_Italic",
+  "Libron_700Bold",
+  "Libron_700BoldItalic",
+  "NVLegibleNext_400Regular",
+  "NVLegibleNext_400Regular_Italic",
+  "NVLegibleNext_700Bold",
+  "NVLegibleNext_700BoldItalic",
 ];
 
 /** Only http(s)/mailto may leave the app; everything else is ignored. */
@@ -86,10 +87,12 @@ function buildTagsStyles(
   palette: Palette,
   family: FontFamily,
   base: number,
+  lineSpacing: ReaderLineSpacing,
 ): MixedStyleRecord {
   const colors = readerArticleColors(palette);
   const bodyFont = (weight = "400") => resolveFont(family, weight);
   const monoSize = Math.max(12, base - 2);
+  const bodyLineHeight = readerLineHeight(base, lineSpacing);
   const cell = {
     paddingVertical: spacing[6],
     paddingHorizontal: spacing[10],
@@ -100,7 +103,7 @@ function buildTagsStyles(
   const body = {
     fontFamily: bodyFont(),
     fontSize: base,
-    lineHeight: Math.round(base * 1.65),
+    lineHeight: bodyLineHeight,
     color: colors.body,
   };
 
@@ -144,11 +147,11 @@ function buildTagsStyles(
     strong: { fontFamily: bodyFont("700"), color: palette.text },
     b: { fontFamily: bodyFont("700"), color: palette.text },
     em: {
-      fontFamily: family === "serif" ? resolveFont(family, "400", true) : undefined,
+      fontFamily: resolveFont(family, "400", true),
       fontStyle: "italic",
     },
     i: {
-      fontFamily: family === "serif" ? resolveFont(family, "400", true) : undefined,
+      fontFamily: resolveFont(family, "400", true),
       fontStyle: "italic",
     },
     a: { color: palette.accent, textDecorationLine: "underline" },
@@ -157,7 +160,7 @@ function buildTagsStyles(
     li: {
       fontFamily: bodyFont(),
       fontSize: base,
-      lineHeight: Math.round(base * 1.6),
+      lineHeight: Math.round(bodyLineHeight * 0.97),
       color: colors.body,
       marginBottom: spacing[6],
     },
@@ -399,8 +402,10 @@ export const ArticleHtml = React.memo(function ArticleHtml({
   onReady,
 }: ArticleHtmlProps) {
   const { palette } = useTheme();
+  const colors = readerArticleColors(palette);
   const family = resolveReaderFontFamily(preferences.fontFamily);
   const base = READER_BODY_SIZE[preferences.fontSize];
+  const lineSpacing: ReaderLineSpacing = preferences.lineSpacing ?? "default";
   const highlightedHtml = useMemo(
     () => applyHighlightsToHtml(html, highlights ?? EMPTY_HIGHLIGHTS),
     [html, highlights],
@@ -412,8 +417,8 @@ export const ArticleHtml = React.memo(function ArticleHtml({
   }, [html, onReady]);
 
   const tagsStyles = useMemo(
-    () => buildTagsStyles(palette, family, base),
-    [palette, family, base],
+    () => buildTagsStyles(palette, family, base, lineSpacing),
+    [palette, family, base, lineSpacing],
   );
   // Pin untagged text to the reader, not the app/activity appearance.
   const baseStyle = useMemo(
@@ -421,17 +426,17 @@ export const ArticleHtml = React.memo(function ArticleHtml({
       color: palette.onSurface,
       fontFamily: resolveFont(family),
       fontSize: base,
-      lineHeight: Math.round(base * 1.65),
+      lineHeight: readerLineHeight(base, lineSpacing),
     }),
-    [palette.onSurface, family, base],
+    [palette.onSurface, family, base, lineSpacing],
   );
   const defaultTextProps = useMemo(
     () => ({
       selectable: false as const,
-      selectionColor: palette.surfaceContainerHighest,
+      selectionColor: colors.selection,
       style: { color: palette.onSurface },
     }),
-    [palette.surfaceContainerHighest, palette.onSurface],
+    [colors.selection, palette.onSurface],
   );
   const onTextSelectRef = useRef(onTextSelect);
   onTextSelectRef.current = onTextSelect;
@@ -441,12 +446,12 @@ export const ArticleHtml = React.memo(function ArticleHtml({
   const highlightUi = useMemo(
     () => ({
       articlePlain,
-      selectionColor: palette.surfaceContainerHighest,
-      highlightStyle: { color: palette.onTertiaryContainer, backgroundColor: palette.tertiaryContainer },
+      selectionColor: colors.selection,
+      highlightStyle: { color: colors.onHighlight, backgroundColor: colors.highlight },
       textStyle: baseStyle,
       onTextSelect: (draft) => (onTextSelectRef.current ?? ignoreTextSelect)(draft),
     }) satisfies HighlightUiHandlers,
-    [baseStyle, articlePlain, palette.surfaceContainerHighest, palette.onTertiaryContainer, palette.tertiaryContainer],
+    [baseStyle, articlePlain, colors.highlight, colors.onHighlight, colors.selection],
   );
 
   // List markers should match the article's font (and accent color).
