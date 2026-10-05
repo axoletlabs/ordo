@@ -30,7 +30,6 @@
     "@babel/runtime": "^7.29.7",
     "@bsky.app/react-native-uitextview": "2.4.0",
     "@expo-google-fonts/jetbrains-mono": "^0.4.1",
-    "@expo-google-fonts/playfair-display": "^0.4.2",
     "@expo-google-fonts/roboto": "^0.4.2",
     "@expo/vector-icons": "^15.1.1",
     "@material/material-color-utilities": "^0.3.0",

@@ -44,9 +44,6 @@ importers:
       '@expo-google-fonts/jetbrains-mono':
         specifier: ^0.4.1
         version: 0.4.1
-      '@expo-google-fonts/playfair-display':
-        specifier: ^0.4.2
-        version: 0.4.2
       '@expo-google-fonts/roboto':
         specifier: ^0.4.2
         version: 0.4.3
@@ -963,9 +960,6 @@ packages:
 
   '@expo-google-fonts/material-symbols@0.4.47':
     resolution: {integrity: sha512-5G4ObZlyGvDzx6g/+NC+RAMeeCc3dc0/HLu/llY5dYZUlNDYzaZWQZwPUzoTixf27riT8I7ur9mQKPYCPFDJzQ==}
-
-  '@expo-google-fonts/playfair-display@0.4.2':
-    resolution: {integrity: sha512-mWhBV59RUjSS3aYpytUb7UyHHTnXcHh7epAn7gq+M4XAEh5PuMKUrP8eiUfkJLb6UwHZCi7EhQpUzxHu5OL96w==}
 
   '@expo-google-fonts/roboto@0.4.3':
     resolution: {integrity: sha512-kX3wmpmu06fN1yOwYWMdjYJWNUYW6xUiAGeHbvPzzSEb3A3j23JelQ3tAgwQNKgEKRq6wtMmzixy2r7y9c8dsA==}
@@ -7344,8 +7338,6 @@ snapshots:
   '@expo-google-fonts/jetbrains-mono@0.4.1': {}
 
   '@expo-google-fonts/material-symbols@0.4.47': {}
-
-  '@expo-google-fonts/playfair-display@0.4.2': {}
 
   '@expo-google-fonts/roboto@0.4.3': {}
 

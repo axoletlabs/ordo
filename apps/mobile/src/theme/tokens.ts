@@ -80,9 +80,11 @@ export const fontWeight = {
 };
 
 /* ----------------------------- Font families ----------------------------- */
-// Loaded via @expo-google-fonts in app/_layout.tsx. Referenced by name string.
+// Loaded via @expo-google-fonts or assets/fonts in app/_layout.tsx. Referenced
+// by name string. "book" (Libron) and "legible" (NV Legible Next) are the
+// reader's reading typefaces; sans/mono drive app UI and code respectively.
 
-export type FontFamily = "display" | "sans" | "mono" | "serif";
+export type FontFamily = "display" | "sans" | "mono" | "book" | "legible";
 
 const FONTS = {
   display: {
@@ -103,10 +105,23 @@ const FONTS = {
     "600": "JetBrainsMono_600SemiBold",
     "700": "JetBrainsMono_700Bold",
   },
-  serif: {
-    "400": "PlayfairDisplay_400Regular",
-    "700": "PlayfairDisplay_700Bold",
-    "400-italic": "PlayfairDisplay_400Regular_Italic",
+  // Libron — a Newsreader reading variant with full italic support.
+  book: {
+    "400": "Libron_400Regular",
+    "500": "Libron_700Bold",
+    "600": "Libron_700Bold",
+    "700": "Libron_700Bold",
+    "400-italic": "Libron_400Regular_Italic",
+    "700-italic": "Libron_700BoldItalic",
+  },
+  // NV Legible Next (Atkinson Hyperlegible Next) — built for legibility.
+  legible: {
+    "400": "NVLegibleNext_400Regular",
+    "500": "NVLegibleNext_700Bold",
+    "600": "NVLegibleNext_700Bold",
+    "700": "NVLegibleNext_700Bold",
+    "400-italic": "NVLegibleNext_400Regular_Italic",
+    "700-italic": "NVLegibleNext_700BoldItalic",
   },
 } as const;
 
@@ -116,9 +131,16 @@ export function resolveFont(
   weight: keyof typeof fontWeight | string = "400",
   italic?: boolean,
 ): string {
-  if (family === "serif" && italic) return FONTS.serif["400-italic"];
   const table = FONTS[family] as Record<string, string>;
-  return table[weight] ?? table["400"];
+  if (italic) {
+    const bold = weight === "600" || weight === "700";
+    return (
+      table[bold ? "700-italic" : "400-italic"] ??
+      table[weight] ??
+      table["400"]!
+    );
+  }
+  return table[weight] ?? table["400"]!;
 }
 
 /** The list of font assets to preload (passed to useFonts in the root layout). */
@@ -128,14 +150,21 @@ import { JetBrainsMono_400Regular } from "@expo-google-fonts/jetbrains-mono/400R
 import { JetBrainsMono_500Medium } from "@expo-google-fonts/jetbrains-mono/500Medium";
 import { JetBrainsMono_600SemiBold } from "@expo-google-fonts/jetbrains-mono/600SemiBold";
 import { JetBrainsMono_700Bold } from "@expo-google-fonts/jetbrains-mono/700Bold";
-import { PlayfairDisplay_400Regular } from "@expo-google-fonts/playfair-display/400Regular";
-import { PlayfairDisplay_700Bold } from "@expo-google-fonts/playfair-display/700Bold";
-import { PlayfairDisplay_400Regular_Italic } from "@expo-google-fonts/playfair-display/400Regular_Italic";
 import { ROW_INSET, SCREEN_RAIL } from "./alignment";
 import { Roboto_400Regular } from "@expo-google-fonts/roboto/400Regular";
 import { Roboto_500Medium } from "@expo-google-fonts/roboto/500Medium";
 import { Roboto_700Bold } from "@expo-google-fonts/roboto/700Bold";
 import MaterialIcons from "@expo/vector-icons/MaterialIcons";
+
+// Reading typefaces ship as local TTFs (see assets/fonts/README.md).
+import Libron_400Regular from "../../assets/fonts/Libron-Regular.ttf";
+import Libron_400Regular_Italic from "../../assets/fonts/Libron-Italic.ttf";
+import Libron_700Bold from "../../assets/fonts/Libron-Bold.ttf";
+import Libron_700BoldItalic from "../../assets/fonts/Libron-BoldItalic.ttf";
+import NVLegibleNext_400Regular from "../../assets/fonts/NVLegibleNext-Regular.ttf";
+import NVLegibleNext_400Regular_Italic from "../../assets/fonts/NVLegibleNext-Italic.ttf";
+import NVLegibleNext_700Bold from "../../assets/fonts/NVLegibleNext-Bold.ttf";
+import NVLegibleNext_700BoldItalic from "../../assets/fonts/NVLegibleNext-BoldItalic.ttf";
 
 export const fontAssets = {
   ...MaterialIcons.font,
@@ -146,9 +175,14 @@ export const fontAssets = {
   JetBrainsMono_500Medium,
   JetBrainsMono_600SemiBold,
   JetBrainsMono_700Bold,
-  PlayfairDisplay_400Regular,
-  PlayfairDisplay_700Bold,
-  PlayfairDisplay_400Regular_Italic,
+  Libron_400Regular,
+  Libron_400Regular_Italic,
+  Libron_700Bold,
+  Libron_700BoldItalic,
+  NVLegibleNext_400Regular,
+  NVLegibleNext_400Regular_Italic,
+  NVLegibleNext_700Bold,
+  NVLegibleNext_700BoldItalic,
 };
 
 /**
