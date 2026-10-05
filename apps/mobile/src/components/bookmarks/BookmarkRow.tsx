@@ -3,7 +3,7 @@
  * reveals actions. Hold the favicon to multi-select.
  */
 import React from "react";
-import { Platform, Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Platform, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Image } from "expo-image";
 import { useAppRouter as useRouter } from "../../hooks/use-app-router";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
@@ -383,12 +383,12 @@ export const BookmarkRow = React.memo(function BookmarkRow({
           ) : null}
         </View>
       </ListPressable>
-      {opensAsWebsite && !isPending ? <Pressable
+      {opensAsWebsite && !isPending ? <ListPressable
         accessibilityRole="button" accessibilityLabel={`Open ${title} in the browser`}
         accessibilityHint="Opens the original page in your browser app." disabled={selectionMode}
-        onPress={openExternal} style={({ pressed }) => [styles.trailing, hasDetails ? styles.trailingTop : null, pressed ? styles.openExternalPressed : null]}>
+        onPress={openExternal} style={[styles.trailing, { borderRadius: radius.full }, hasDetails ? styles.trailingTop : null]}>
         <Ionicons name="open-outline" size={20} color={palette.onSurfaceVariant} accessible={false} />
-      </Pressable> : <View pointerEvents="none" style={[styles.trailing, hasDetails ? styles.trailingTop : null]}>
+      </ListPressable> : <View pointerEvents="none" style={[styles.trailing, hasDetails ? styles.trailingTop : null]}>
         {isPending ? <Spinner size={20} color={palette.onSurfaceVariant} accessible={false} />
           : isArticle ? <Ionicons name="document-text-outline" size={20} color={palette.onSurfaceVariant} accessible={false} /> : null}
       </View>}
@@ -451,5 +451,4 @@ const styles = StyleSheet.create({
   domain: { flexShrink: 1, minWidth: 0 },
   trailing: { width: 48, height: 48, alignItems: "center", justifyContent: "center", flexShrink: 0 },
   trailingTop: { alignSelf: "flex-start", marginTop: 12 },
-  openExternalPressed: { opacity: 0.72 },
 });

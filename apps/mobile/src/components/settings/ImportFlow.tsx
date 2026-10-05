@@ -48,10 +48,12 @@ export function ImportFlow({
   folders,
   tokenFor,
   onUnlock,
+  obscured = false,
 }: {
   folders: FolderDto[];
   tokenFor: (id: string) => string | null | undefined;
   onUnlock: (folder: FolderDto) => void;
+  obscured?: boolean;
 }) {
   const qc = useQueryClient();
   const toasted = useRef<string | null>(null);
@@ -90,7 +92,7 @@ export function ImportFlow({
   });
 
   const job: ImportJobDto | undefined = jobQuery.data;
-  const preview = job?.status === "ready" ? normalizeImportPreview(job.preview) : null;
+  const preview = useMemo(() => job?.status === "ready" ? normalizeImportPreview(job.preview) : null, [job]);
 
   const lockedMatches = useMemo(() => {
     if (!preview) return [] as FolderDto[];
@@ -200,6 +202,7 @@ export function ImportFlow({
 
       <FloatingPanel
         visible={overlayOpen}
+        obscured={obscured}
         onDismiss={() => reset(true)}
         dismissible={!busy}
         maxWidth={440}
@@ -463,7 +466,7 @@ function PreviewState({
               <Text variant="label" color="secondary">
                 Duplicates
               </Text>
-              <Segmented options={POLICY_OPTIONS} value={policy} onChange={onPolicy} />
+              <Segmented accessibilityLabel="Duplicate bookmarks" options={POLICY_OPTIONS} value={policy} onChange={onPolicy} />
               <SettingRow
                 icon="shield-checkmark-outline"
                 label="All at once"

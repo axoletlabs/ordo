@@ -208,6 +208,7 @@ export function UnlockForm({
         <View>
           {knownPinLength ? null : (
             <Segmented
+              accessibilityLabel="PIN length"
               options={[
                 { value: "4", label: "4 digits" },
                 { value: "6", label: "6 digits" },

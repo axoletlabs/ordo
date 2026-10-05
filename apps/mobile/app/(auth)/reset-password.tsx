@@ -4,7 +4,8 @@
  * reset code would otherwise rewrite the new-password boxes.
  */
 import React, { useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, View, type TextInput } from "react-native";
+import { FormError } from "../../src/components/ui/FormError";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { AuthLink } from "../../src/components/auth/AuthLink";
 import { EMAIL_OTP, ResetPasswordSchema } from "@ordo/shared";
@@ -38,6 +39,8 @@ export default function ResetPasswordScreen() {
   const [confirm, setConfirm] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [formError, setFormError] = useState("");
+  const [fieldError, setFieldError] = useState<{ field: "newPassword" | "confirm"; message: string } | null>(null);
+  const confirmRef = useRef<TextInput>(null);
   const [otpError, setOtpError] = useState("");
   const [otpStatus, setOtpStatus] = useState<OtpStatus>("idle");
   const inFlight = useRef(false);
@@ -51,6 +54,7 @@ export default function ResetPasswordScreen() {
 
   const goToCode = () => {
     setFormError("");
+    setFieldError(null);
     setOtpStatus("idle");
     setStage("code");
   };
@@ -58,9 +62,10 @@ export default function ResetPasswordScreen() {
   const submit = async () => {
     if (inFlight.current || otpStatus === "success") return;
     setFormError("");
+    setFieldError(null);
     setOtpError("");
     if (newPassword !== confirm) {
-      setFormError("New passwords don't match.");
+      setFieldError({ field: "confirm", message: "New passwords don't match." });
       return;
     }
     const parsed = ResetPasswordSchema.safeParse({
@@ -74,6 +79,8 @@ export default function ResetPasswordScreen() {
       if (issue?.path[0] === "token") {
         setOtpError(message);
         setStage("code");
+      } else if (issue?.path[0] === "newPassword") {
+        setFieldError({ field: "newPassword", message });
       } else {
         setFormError(message);
       }
@@ -179,9 +186,14 @@ export default function ResetPasswordScreen() {
             {...passwordAutofillProps("new-password")}
             passwordRules="minlength: 8;"
             rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
+            error={fieldError?.field === "newPassword" ? fieldError.message : undefined}
+            returnKeyType="next"
+            submitBehavior="submit"
+            onSubmitEditing={() => confirmRef.current?.focus()}
           />
           <View style={{ height: spacing[16] }} />
           <Input
+            ref={confirmRef}
             label="Confirm new password"
             value={confirm}
             onChangeText={setConfirm}
@@ -189,11 +201,12 @@ export default function ResetPasswordScreen() {
             secureTextEntry={!showPwd}
             {...passwordAutofillProps("new-password")}
             passwordRules="minlength: 8;"
-            error={formError || undefined}
+            error={fieldError?.field === "confirm" ? fieldError.message : undefined}
             returnKeyType="done"
             onSubmitEditing={() => void submit()}
           />
           <View style={{ height: spacing[24] }} />
+          <FormError message={formError || undefined} />
           <Button
             label="Reset password"
             block

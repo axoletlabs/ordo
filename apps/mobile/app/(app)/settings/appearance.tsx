@@ -44,7 +44,7 @@ export default function AppearanceScreen() {
           rightFit="content" right={<Toggle value={settings.materialYouColors && materialYouAvailable} disabled={!materialYouAvailable} onValueChange={settings.setMaterialYouColors} accessibilityLabel="Material You colors" />} />
         <Text variant="labelLarge" color="secondary" style={styles.controlLabel}>Contrast</Text>
         <View style={styles.contrast}>
-          <Segmented options={contrasts} value={String(settings.themeContrast)} onChange={(value) => settings.setThemeContrast(Number(value) as 0 | 0.5 | 1)} />
+          <Segmented accessibilityLabel="Color contrast" options={contrasts} value={String(settings.themeContrast)} onChange={(value) => settings.setThemeContrast(Number(value) as 0 | 0.5 | 1)} />
           <Text variant="bodySmall" color="secondary" style={{ marginTop: spacing[8] }}>
             {settings.themeContrast === 0 ? "Default contrast for text, icons, and outlines." : settings.themeContrast === 0.5 ? "Stronger text, icons, and outlines for easier reading." : "Maximum contrast for text, icons, and outlines."} Light and dark modes stay the same.
           </Text>

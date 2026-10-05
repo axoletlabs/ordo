@@ -1,18 +1,17 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Pressable, StyleSheet, View, useWindowDimensions } from "react-native";
+import { StyleSheet, View, useWindowDimensions } from "react-native";
+import { PressableScale } from "../ui/PressableScale";
+import { Input } from "../ui/Input";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { unixSeconds } from "@ordo/shared";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { PanelActions } from "../ui/SheetActionRow";
 import { Segmented } from "../ui/Segmented";
-import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { Text } from "../ui/Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
-import { iconGlyphStyle } from "../../theme/icon-glyph";
-import { layout, radius, spacing } from "../../theme/tokens";
+import { radius, spacing } from "../../theme/tokens";
 import {
   MINUTE_STEPS,
   applyLocalDate,
@@ -27,6 +26,7 @@ import {
   weekdayNarrowLabels,
   type DayPeriod,
 } from "../../lib/bookmark-reminders";
+import { formatCalendarInput, parseCalendarInput } from "../../lib/calendar-input";
 
 const HOURS_12 = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12] as const;
 const PERIODS = [
@@ -58,9 +58,9 @@ function ReminderCustomPanelContent({
   busy?: boolean;
 }) {
   const { palette } = useTheme();
-  const { height } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
   const [at, setAt] = useState(() => seedUnix(initialUnix));
+  const [dateInput, setDateInput] = useState(() => formatCalendarInput(seedUnix(initialUnix)));
   const [view, setView] = useState(() => {
     const parts = localTimeParts(seedUnix(initialUnix));
     return { year: parts.year, month: parts.month };
@@ -71,38 +71,39 @@ function ReminderCustomPanelContent({
     const next = seedUnix(initialUnix);
     const parts = localTimeParts(next);
     setAt(next);
+    setDateInput(formatCalendarInput(next));
     setView({ year: parts.year, month: parts.month });
   }, [initialUnix, visible]);
 
   const now = useMemo(() => new Date(), [visible]);
   const parts = localTimeParts(at);
   const future = at > unixSeconds();
+  // Seven independent 48dp dates need 336dp inside the dialog. Use Material's
+  // text-entry alternative rather than overlapping hitSlop in compact windows.
+  const calendarVisible = width >= 416;
+  const inputDate = parseCalendarInput(dateInput);
+  const dateValid = calendarVisible || inputDate !== null;
   const cells = useMemo(
     () => reminderMonthGrid(view.year, view.month, at, now),
     [view.year, view.month, at, now],
   );
   const weekdays = useMemo(() => weekdayNarrowLabels(), []);
   const nowMonth = now.getFullYear() === view.year && now.getMonth() === view.month;
-  const scrollMax =
-    height - insets.top - insets.bottom - spacing[48] - layout.overlayPadding * 2 - 72;
 
   const setTime = (hour12: number, period: DayPeriod, minute: number) => {
     setAt((current) => applyLocalTime(current, hour12To24(hour12, period), minute));
   };
 
   return (
-    <FloatingPanel visible={visible} onDismiss={onDismiss} maxWidth={layout.overlayConfirmWidth}>
-      <ThemedScrollView
-        keyboardShouldPersistTaps="handled"
-        style={{ maxHeight: Math.max(240, scrollMax) }}
-      >
-        <PanelHeader
+    <FloatingPanel visible={visible} onDismiss={onDismiss} dismissible={!busy} maxWidth={384}>
+      <PanelHeader
           icon="alarm-outline"
           iconColor={palette.accent}
-          title="Custom"
+          title="Custom reminder"
           subtitle={formatReminderFull(at)}
         />
-        <View style={styles.monthNav}>
+      <View>
+        {calendarVisible ? <><View style={styles.monthNav}>
           <MonthChevrons
             label="Previous month"
             icon="chevron-back"
@@ -134,17 +135,19 @@ function ReminderCustomPanelContent({
             }
             const disabled = cell.isPast;
             return (
-              <Pressable
+              <PressableScale
                 key={cell.key}
                 accessibilityRole="button"
-                accessibilityLabel={`${cell.day}${cell.isToday ? ", today" : ""}${cell.selected ? ", selected" : ""}`}
+                accessibilityLabel={new Date(cell.year, cell.month, cell.day).toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
                 accessibilityState={{ disabled, selected: cell.selected }}
                 disabled={disabled}
                 onPress={() => {
                   haptics.selection();
                   setAt((current) => applyLocalDate(current, cell.year, cell.month, cell.day!));
+                  setDateInput(formatCalendarInput(applyLocalDate(at, cell.year, cell.month, cell.day!)));
                 }}
-                style={({ pressed }) => [styles.dayCell, { opacity: pressed ? 0.7 : 1 }]}
+                stateLayerColor={cell.selected ? palette.onPrimary : palette.primary}
+                style={[styles.dayCell, { borderRadius: radius.full }]}
               >
                 <View
                   style={[
@@ -153,7 +156,7 @@ function ReminderCustomPanelContent({
                   ]}
                 >
                   <Text
-                    variant="caption"
+                    variant="bodyLarge"
                     color={cell.selected ? "onAccent" : cell.isPast ? "faint" : cell.isToday ? "accent" : "primary"}
                     align="center"
                     style={styles.cellLabel}
@@ -161,13 +164,18 @@ function ReminderCustomPanelContent({
                     {cell.day}
                   </Text>
                 </View>
-              </Pressable>
+              </PressableScale>
             );
           })}
-        </View>
-        <View style={[styles.rule, { backgroundColor: palette.border }]} />
+        </View></> : <Input label="Date" value={dateInput} placeholder="YYYY-MM-DD" helper="Year-month-day, for example 2026-10-12."
+          accessibilityLabel="Reminder date" autoCapitalize="none" autoCorrect={false}
+          error={inputDate ? undefined : "Enter a valid date as YYYY-MM-DD."}
+          onChangeText={(text) => { setDateInput(text); const date = parseCalendarInput(text);
+            if (date) { setAt((current) => applyLocalDate(current, date.year, date.month, date.day)); setView({ year: date.year, month: date.month }); } }} />}
+        <View style={[styles.rule, { backgroundColor: palette.outlineVariant }]} />
         <Segmented
           options={PERIODS}
+          accessibilityLabel="Day period"
           value={parts.period}
           onChange={(period) => setTime(parts.hour12, period, parts.minute)}
         />
@@ -206,13 +214,13 @@ function ReminderCustomPanelContent({
             Pick a time in the future.
           </Text>
         ) : null}
-      </ThemedScrollView>
+      </View>
       <PanelActions
         confirmLabel="Remind"
         onConfirm={() => onConfirm(at)}
         onCancel={onDismiss}
         loading={busy}
-        confirmDisabled={!future || busy}
+        confirmDisabled={!future || !dateValid || busy}
       />
     </FloatingPanel>
   );
@@ -233,7 +241,7 @@ function PadCell({
 }) {
   const { palette } = useTheme();
   return (
-    <Pressable
+    <PressableScale
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ selected }}
@@ -241,11 +249,11 @@ function PadCell({
         haptics.selection();
         onPress();
       }}
-      style={({ pressed }) => [
+      stateLayerColor={selected ? palette.onSecondaryContainer : palette.onSurface}
+      style={[
         styles.padCell,
         {
           backgroundColor: selected ? palette.secondaryContainer : "transparent",
-          opacity: pressed ? 0.7 : 1,
         },
       ]}
     >
@@ -257,7 +265,7 @@ function PadCell({
       >
         {label}
       </Text>
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -274,21 +282,21 @@ function MonthChevrons({
 }) {
   const { palette } = useTheme();
   return (
-    <Pressable
+    <PressableScale
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled: !!disabled }}
       disabled={disabled}
-      hitSlop={8}
+      stateLayerColor={palette.onSurface}
       onPress={() => {
         if (disabled) return;
         haptics.selection();
         onPress();
       }}
-      style={[styles.monthHit, { opacity: disabled ? 0.28 : 1 }]}
+      style={[styles.monthHit, { borderRadius: radius.full, opacity: disabled ? 0.38 : 1 }]}
     >
-      <Ionicons name={icon} size={18} color={palette.text} style={iconGlyphStyle(18)} />
-    </Pressable>
+      <Ionicons name={icon} size={24} color={palette.onSurface} />
+    </PressableScale>
   );
 }
 
@@ -308,14 +316,14 @@ const styles = StyleSheet.create({
   },
   weekdays: { flexDirection: "row" },
   weekday: {
-    width: "14.2857%",
+    width: 48,
     alignItems: "center",
     paddingVertical: spacing[4],
   },
   cellLabel: { includeFontPadding: false },
   days: { flexDirection: "row", flexWrap: "wrap" },
   dayCell: {
-    width: "14.2857%",
+    width: 48,
     height: 48,
     alignItems: "center",
     justifyContent: "center",

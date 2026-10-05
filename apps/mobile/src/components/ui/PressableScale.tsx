@@ -45,7 +45,7 @@ function StatePressable({ style, children, disabled, stateLayerColor, focusOnlyV
   return <Pressable {...rest} disabled={disabled}
     aria-checked={rest.accessibilityState?.checked} aria-selected={rest.accessibilityState?.selected}
     aria-disabled={disabled || rest.accessibilityState?.disabled}
-    android_ripple={{ color: `${tint}1a` }}
+    android_ripple={{ color: tint === "transparent" ? "transparent" : `${tint}1a` }}
     onPressIn={(event) => { group?.(true); onPressIn?.(event); }}
     onPressOut={(event) => { group?.(false); onPressOut?.(event); }}
     onHoverIn={(event) => { setHovered(true); onHoverIn?.(event); }}

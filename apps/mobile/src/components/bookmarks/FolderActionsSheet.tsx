@@ -469,6 +469,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             <View>
               {savedPin ? null : (
                 <Segmented
+                  accessibilityLabel="PIN length"
                   options={[
                     { value: "4", label: "4 digits" },
                     { value: "6", label: "6 digits" },
@@ -566,6 +567,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             <View>
               {folder.pinLength ? null : (
                 <Segmented
+                  accessibilityLabel="PIN length"
                   options={[
                     { value: "4", label: "4 digits" },
                     { value: "6", label: "6 digits" },

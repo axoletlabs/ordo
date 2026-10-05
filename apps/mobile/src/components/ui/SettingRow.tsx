@@ -25,6 +25,8 @@ export interface SettingRowProps {
   showChevron?: boolean;
   divider?: boolean;
   position?: "first" | "middle" | "last" | "only";
+  selectionRole?: "radio" | "checkbox";
+  checked?: boolean;
 }
 
 export function SettingRow({
@@ -40,6 +42,8 @@ export function SettingRow({
   showChevron,
   divider = false,
   position = "only",
+  selectionRole,
+  checked,
 }: SettingRowProps) {
   const { palette, expressive } = useTheme();
   const { width } = useWindowDimensions();
@@ -91,7 +95,8 @@ export function SettingRow({
   if (!onPress) return <View style={rowStyle}>{content}</View>;
   return (
     <PressableScale
-      accessibilityRole="button"
+      accessibilityRole={selectionRole ?? "button"}
+      accessibilityState={selectionRole ? { checked: !!checked } : undefined}
       accessibilityLabel={description ? `${label}, ${description}` : label}
       style={rowStyle}
       onPress={() => {

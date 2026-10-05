@@ -118,6 +118,7 @@ export default function DataScreen() {
     <SettingsPage title="Data">
       <SettingsScrollView>
         <ImportFlow
+          obscured={unlockTarget?.source === "import"}
           folders={folders}
           tokenFor={tokenFor}
           onUnlock={(folder) => setUnlockTarget({ folder, source: "import" })}
@@ -125,7 +126,7 @@ export default function DataScreen() {
         <SettingsGroup label="Export">
           <View style={styles.options}>
             <Text variant="bodyMedium" color="secondary">Save a copy of your bookmarks. JSON keeps folders and tags; HTML works with browsers.</Text>
-            <Segmented options={FORMAT_OPTIONS} value={format} onChange={setFormat} />
+            <Segmented accessibilityLabel="Export format" options={FORMAT_OPTIONS} value={format} onChange={setFormat} />
           </View>
           <SettingRow
             icon="folder-outline"
@@ -139,6 +140,8 @@ export default function DataScreen() {
               <SettingRow
                 icon="library-outline"
                 label="Entire library"
+                selectionRole="radio"
+                checked={isLibrary}
                 right={radio(isLibrary)}
                 rightFit="content"
                 onPress={() => setSelectedFolderIds([])}
@@ -162,6 +165,8 @@ export default function DataScreen() {
                     icon={folder.protected ? "lock-open-outline" : "folder-outline"}
                     iconColor={folder.protected ? palette.success : undefined}
                     label={folder.name}
+                    selectionRole="checkbox"
+                    checked={selectedFolderIds.includes(folder.id)}
                     description={`${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}`}
                     right={check(selectedFolderIds.includes(folder.id))}
                     rightFit="content"

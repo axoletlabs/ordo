@@ -11,6 +11,7 @@ import { PanelHeader } from "../ui/PanelHeader";
 import { Segmented } from "../ui/Segmented";
 import { Text } from "../ui/Text";
 import { Toggle } from "../ui/Toggle";
+import { SettingsSelect } from "../settings/SettingsSelect";
 import { spacing } from "../../theme/tokens";
 import type {
   ReaderFontFamily,
@@ -20,11 +21,11 @@ import type {
   UpdateReaderPreferencesInput,
 } from "@ordo/shared";
 
-const sizeOptions: readonly { value: ReaderFontSize; label: string }[] = [
-  { value: "small", label: "S" },
-  { value: "medium", label: "M" },
-  { value: "large", label: "L" },
-  { value: "xlarge", label: "XL" },
+const sizeOptions: readonly { value: ReaderFontSize; label: string; accessibilityLabel: string }[] = [
+  { value: "small", label: "S", accessibilityLabel: "Small" },
+  { value: "medium", label: "M", accessibilityLabel: "Medium" },
+  { value: "large", label: "L", accessibilityLabel: "Large" },
+  { value: "xlarge", label: "XL", accessibilityLabel: "Extra large" },
 ];
 
 const familyOptions: readonly { value: ReaderFontFamily; label: string }[] = [
@@ -60,7 +61,7 @@ function ControlGroup({
 }) {
   return (
     <View
-      accessibilityRole="radiogroup"
+      accessibilityRole="none"
       accessibilityLabel={label}
       accessibilityHint={accessibilityHint}
       style={styles.group}
@@ -85,6 +86,7 @@ export const ReaderControlsSheet = React.memo(function ReaderControlsSheet({
       <View style={styles.body}>
       <ControlGroup label="Text size" accessibilityHint="Changes the article text size.">
         <Segmented
+          accessibilityLabel="Text size"
           options={sizeOptions}
           value={preferences.fontSize}
           onChange={(fontSize) => onUpdate({ fontSize })}
@@ -93,6 +95,7 @@ export const ReaderControlsSheet = React.memo(function ReaderControlsSheet({
 
       <ControlGroup label="Font" accessibilityHint="Changes the article typeface.">
         <Segmented
+          accessibilityLabel="Font"
           options={familyOptions}
           value={preferences.fontFamily}
           onChange={(fontFamily) => onUpdate({ fontFamily })}
@@ -100,7 +103,8 @@ export const ReaderControlsSheet = React.memo(function ReaderControlsSheet({
       </ControlGroup>
 
       <ControlGroup label="Theme" accessibilityHint="Changes the reader theme.">
-        <Segmented
+        <SettingsSelect
+          title="Reader theme"
           options={themeOptions}
           value={preferences.theme}
           onChange={(theme) => onUpdate({ theme })}
