@@ -1,0 +1,400 @@
+/** Built Expo web smoke test. API responses are fixtures, not backend verification.
+ * PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs
+ * PLAYWRIGHT_CHROMIUM=/path/to/chromium
+ * ORDO_UI_URL=http://127.0.0.1:8235 ORDO_UI_OUTPUT=/tmp/opencode/ordo-ui node tests/material-ui-smoke.mjs
+ */
+import assert from "node:assert/strict";
+import { mkdir, writeFile } from "node:fs/promises";
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? "playwright");
+const base = process.env.ORDO_UI_URL ?? "http://127.0.0.1:8235";
+const output = process.env.ORDO_UI_OUTPUT ?? "/tmp/opencode/ordo-material-ui";
+await mkdir(output, { recursive: true });
+const browser = await chromium.launch({ headless: true, executablePath: process.env.PLAYWRIGHT_CHROMIUM, args: ["--no-sandbox"] });
+const stamp = "2026-10-01T12:00:00Z";
+const user = { id: "ui-audit", displayName: "Alex Morgan", email: "alex@example.test", emailVerified: true, hasAvatar: false,
+  mfaEnabled: false, libraryEncrypted: false, canRenameInstance: false, createdAt: stamp,
+  preferences: { fontFamily: "sans", fontSize: "medium", theme: "dark", amoled: false } };
+const tag = { id: "design", name: "Design", color: "blue", bookmarkCount: 2, createdAt: stamp, updatedAt: stamp };
+const folder = { id: "collection", name: "Design & inspiration", icon: "color-palette-outline", pinned: true,
+  protected: false, lockType: null, pinLength: null, bookmarkCount: 2, unreadCount: 2, createdAt: stamp, updatedAt: stamp };
+const bookmark = { id: "article", folderId: null, url: "https://example.test/article", domain: "example.test",
+  title: "Building a more expressive design system", description: "Shape and motion clarify familiar interactions.",
+  fetchStatus: "ok", contentKind: "article", contentKindOverride: null, extractionVersion: 1, author: "Alex Chen",
+  publishedAt: stamp, readingTimeMinutes: 4, readProgress: 0, isRead: false, remindAt: null, tags: [tag], suggestedTags: [], createdAt: stamp, updatedAt: stamp };
+const authResponse = { user, tokens: { accessToken: "fixture-access", refreshToken: "fixture-refresh", expiresIn: 3600 } };
+const results = { screens: [], interactions: [], errors: [] };
+let activePage;
+const authRoutes = ["login", "register", "forgot-password", "reset-password?email=alex%40example.test", "verify-email?email=alex%40example.test", "mfa?challengeToken=fixture&emailRecovery=1"];
+const appRoutes = ["", "search", "folder/collection", "tags", "tags/design", "reader/article", "settings", "settings/account",
+  "settings/display-name", "settings/email", "settings/password", "settings/verify-email?email=next%40example.test", "settings/security",
+  "settings/sessions", "settings/appearance", "settings/controls", "settings/server", "settings/data", "settings/about", "settings/changelog", "settings/delete-account"];
+
+async function fixture(page, scenario = {}) {
+  page.on("pageerror", e => results.errors.push(e.message));
+  await page.route("**/*", async route => {
+    const request = route.request(), url = new URL(request.url()), path = url.pathname;
+    if (url.origin === new URL(base).origin) return route.continue();
+    let body = { success: true }, status = 200;
+    if (path === "/api/bookmarks" && request.method() === "GET" && scenario.libraryState) {
+      if (scenario.gate) await scenario.gate;
+      if (scenario.libraryState === "error") {
+        status = 503; body = { error: { code: "INTERNAL_ERROR", message: "Your library is temporarily unavailable. Try again." } };
+      } else body = { items: [], nextCursor: null, hasMore: false };
+    }
+    else if (path === "/api/folders" && scenario.libraryState) body = [];
+    else if (path === "/api/folders" && scenario.catalogue) body = [folder, ...Array.from({ length: 6 }, (_, i) => ({ ...folder, id: `folder-${i}`, name: `Collection ${i}`, pinned: false }))];
+    else if (path === "/api/tags" && scenario.catalogue) body = [tag, ...Array.from({ length: 6 }, (_, i) => ({ ...tag, id: `tag-${i}`, name: `Topic ${i}`, bookmarkCount: 0 }))];
+    else if (url.hostname === "offline.example.test") { status = 503; body = {}; }
+    else if (path === "/api/tags" && request.method() === "POST" && request.postDataJSON()?.name === "Failure test") {
+      status = 409; body = { error: { code: "CONFLICT", message: "Couldn't create the tag. Try again." } };
+    }
+    else if (path === "/api/server/info") body = { name: "ordo", version: "0.1.0", registrationEnabled: true, emailVerificationRequired: false,
+      smtpConfigured: true, mfaRequired: false, folderLockTypes: true, reminders: true };
+    else if (path === "/api/auth/login" && request.postDataJSON()?.password === "wrong-password") {
+      status = 401; body = { error: { code: "INVALID_CREDENTIALS", message: "Email or password is incorrect." } };
+    } else if (["/api/auth/login", "/api/auth/refresh", "/api/auth/register"].includes(path)) body = authResponse;
+    else if (path === "/api/auth/me") body = user;
+    else if (path === "/api/auth/sessions") body = [{ id: "current", current: true, deviceType: "desktop", deviceName: "This browser", lastSeenAt: stamp, createdAt: stamp },
+      { id: "other", current: false, deviceType: "phone", deviceName: "Pixel 9", lastSeenAt: stamp, createdAt: stamp }];
+    else if (path === "/api/auth/mfa/totp/begin") body = { secret: "JBSWY3DPEHPK3PXP", otpauthUrl: "otpauth://totp/ordo:alex?secret=JBSWY3DPEHPK3PXP&issuer=ordo" };
+    else if (path === "/api/auth/mfa/totp/confirm") body = { user: { ...user, mfaEnabled: true }, backupCodes: ["abcd1234", "efgh5678", "ijkl9012", "mnop3456"] };
+    else if (path === "/api/folders") body = [folder];
+    else if (path === "/api/folders/collection") body = folder;
+    else if (path === "/api/tags") body = [tag];
+    else if (path === "/api/tags/design") body = tag;
+    else if (path === "/api/bookmarks/extraction-progress") body = { pending: 0, total: 2 };
+    else if (path === "/api/bookmarks/reminders") body = [];
+    else if (path === "/api/bookmarks" && request.method() === "POST") body = { ...bookmark, ...request.postDataJSON() };
+    else if (path === "/api/bookmarks" || path.includes("/bookmarks") && !path.startsWith("/api/bookmarks/article")) body = { items: [bookmark], nextCursor: null, hasMore: false };
+    else if (path.startsWith("/api/bookmarks/article")) body = { ...bookmark, contentHtml: "<h2>Reading with purpose</h2><p>Saved ideas make a useful library.</p>", highlights: [] };
+    else if (url.hostname === "api.github.com") body = [];
+    if (url.hostname === "www.google.com") return route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect width="24" height="24" rx="4" fill="#006a60"/></svg>' });
+    return route.fulfill({ status, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify(body) });
+  });
+}
+const button = (page, name) => page.getByRole("button", { name, exact: true });
+async function settle(page) { await page.waitForTimeout(450); }
+async function capture(page, name) {
+  await settle(page);
+  const content = await page.locator("body").innerText();
+  assert.ok(content.trim().length > 0, `${name}: blank screen`);
+  assert.ok(!content.includes("Something went wrong"), `${name}: error boundary`);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${name}: horizontal overflow`);
+  await page.screenshot({ path: `${output}/${name}.png` });
+  results.screens.push(name);
+}
+async function checkAuthTargets(page) {
+  for (const link of await page.getByRole("link").all()) {
+    if (["Terms", "Privacy Policy"].includes(await link.getAttribute("aria-label"))) continue; // Inline prose links.
+    const rect = await link.boundingBox();
+    if (rect) assert.ok(rect.height >= 48, `Auth link target: ${await link.innerText()} (${rect.height})`);
+  }
+}
+async function checkTagDialogSizes(page, mode, name, value) {
+  for (const viewport of [{ name: "landscape", width: 1280, height: 800 }, { name: "constrained", width: 320, height: 420 }]) {
+    await page.setViewportSize(viewport); await capture(page, `${mode}-${viewport.name}-${name}`);
+    const rect = await page.getByRole("dialog").boundingBox();
+    assert.ok(rect.y >= 0 && rect.y + rect.height <= viewport.height, `${name}: dialog viewport`);
+    assert.equal(await page.getByRole("textbox", { name: "Tag name", exact: true }).inputValue(), value);
+    if (viewport.name === "constrained") {
+      await button(page, "pink").click();
+      assert.equal(await button(page, "pink").getAttribute("aria-selected"), "true");
+      const target = await button(page, "pink").boundingBox();
+      assert.ok(target.y >= rect.y && target.y + target.height <= rect.y + rect.height, `${name}: last color is reachable`);
+      await capture(page, `${mode}-constrained-${name}-last-color`);
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+}
+async function login(page) {
+  await page.goto(`${base}/login`);
+  await page.getByRole("textbox", { name: "Email", exact: true }).fill(user.email);
+  await page.getByRole("textbox", { name: "Password", exact: true }).fill("Test-password-123");
+  await button(page, "Sign in").click();
+  await button(page, "Account and settings").waitFor();
+}
+// Expo SecureStore has no web implementation. Keep the fixture login in memory
+// and exercise the router, rather than reloading native-only token storage.
+async function navigate(page, path) {
+  if (await page.getByRole("dialog").count() || await page.getByRole("menu").count()) { await page.keyboard.press("Escape"); await settle(page); }
+  for (let i = 0; i < 8; i++) {
+    if (await button(page, "Exit search").count()) { await button(page, "Exit search").click(); await settle(page); }
+    if (await button(page, "Account and settings").count()) break;
+    assert.ok(await button(page, "Back").count(), `${path}: no path back to library`);
+    await button(page, "Back").click(); await settle(page);
+  }
+  if (path === "search") await page.getByRole("textbox", { name: "Search your library", exact: true }).focus();
+  else if (path.startsWith("folder/")) await page.getByRole("button", { name: /^Design & inspiration,/ }).click();
+  else if (path.startsWith("reader/")) await page.getByRole("button", { name: /^Building a more expressive design system,/ }).click();
+  else if (path.startsWith("tags")) {
+    await button(page, "Library actions").click(); await page.getByRole("menuitem", { name: "Manage tags", exact: true }).click();
+    if (path.includes("/")) await page.getByRole("button", { name: /^Design,/ }).click();
+  } else if (path.startsWith("settings")) {
+    await button(page, "Account and settings").click();
+    const target = path.split("/")[1]?.split("?")[0];
+    if (["account", "display-name", "email", "password", "security", "delete-account", "verify-email"].includes(target)) {
+      await button(page, "Manage your account").click();
+      const label = { "display-name": "Display name", email: "Email", password: "Password", security: "Authenticator", "delete-account": "Delete account", "verify-email": "Email" }[target];
+      if (label) await button(page, label).click();
+      if (target === "verify-email") {
+        await page.getByRole("textbox", { name: "New email", exact: true }).fill("next@example.test");
+        await page.getByRole("textbox", { name: "Current password", exact: true }).fill("Test-password-123");
+        await button(page, "Send code").click();
+      }
+    } else if (target) {
+      const label = { sessions: "Active sessions", server: "Hosting", appearance: "Appearance", controls: "Controls", data: "Data", about: "About", changelog: "About" }[target];
+      assert.ok(label, `Missing navigation for ${path}`); await button(page, label).click();
+      if (target === "changelog") await button(page, "Changelog").click(); // Same shared surface; legacy page remains source-only.
+    }
+  }
+  await settle(page);
+  if (await button(page, "Dismiss notification").count()) { await button(page, "Dismiss notification").click(); await settle(page); }
+  assert.equal(await button(page, "Sign in").count(), 0, `${path}: authenticated route did not render`);
+}
+try {
+  for (const theme of process.env.ORDO_UI_THEME ? [process.env.ORDO_UI_THEME] : ["light", "dark"]) for (const expressive of process.env.ORDO_UI_EXPRESSIVE ? [process.env.ORDO_UI_EXPRESSIVE === "true"] : [false, true]) {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: theme });
+    await context.addInitScript(({ theme, expressive }) => {
+      if (!localStorage.getItem("ordo.settings")) localStorage.setItem("ordo.settings", JSON.stringify({ themeMode: theme, expressive,
+        createButtonTapAction: "menu", materialYouColors: false }));
+    }, { theme, expressive });
+    const page = await context.newPage(); activePage = page; await fixture(page);
+    const mode = `${theme}-${expressive ? "expressive" : "standard"}`;
+    if (!process.env.ORDO_UI_SKIP_SCREEN_MATRIX) for (const viewport of [{ name: "portrait", width: 390, height: 844 }, { name: "landscape", width: 1280, height: 800 }]) {
+      await page.setViewportSize(viewport);
+      for (const path of authRoutes) {
+        await page.goto(`${base}/${path}`); await page.getByRole("textbox").first().waitFor();
+        await page.waitForTimeout(900);
+        await capture(page, `${mode}-${viewport.name}-${path.split("?")[0]}`); await checkAuthTargets(page);
+      }
+    }
+    // Error labels attach to the field whose validation failed.
+    await page.goto(`${base}/register`);
+    await page.getByRole("textbox", { name: "Display name", exact: true }).fill("Alex");
+    await page.getByRole("textbox", { name: "Email", exact: true }).fill(user.email);
+    await page.getByRole("textbox", { name: "Password", exact: true }).fill("Test-password-123");
+    await page.getByRole("textbox", { name: "Confirm password", exact: true }).fill("different");
+    await button(page, "Create account").click();
+    const confirm = page.getByRole("textbox", { name: "Confirm password", exact: true });
+    assert.equal(await confirm.getAttribute("aria-invalid"), "true");
+    assert.equal(await page.getByRole("textbox", { name: "Display name", exact: true }).getAttribute("aria-invalid"), "false");
+    const messageId = await confirm.getAttribute("aria-describedby");
+    assert.equal(await page.locator(`[id="${messageId}"]`).innerText(), "Passwords don't match.");
+    results.interactions.push(`${mode}: field error ownership and accessible description`);
+    await page.goto(`${base}/mfa?challengeToken=fixture`); await button(page, "Use a backup code").click();
+    await button(page, "Back to sign in").click(); await button(page, "Sign in").waitFor();
+    results.interactions.push(`${mode}: backup-code sign-in exit`);
+    await page.getByRole("textbox", { name: "Email", exact: true }).fill(user.email);
+    await page.getByRole("textbox", { name: "Email", exact: true }).press("Enter");
+    assert.equal(await page.getByRole("textbox", { name: "Password", exact: true }).evaluate(el => el === document.activeElement), true);
+    await page.getByRole("textbox", { name: "Password", exact: true }).fill("wrong-password");
+    await page.getByRole("textbox", { name: "Password", exact: true }).press("Enter");
+    await page.getByRole("alert").waitFor();
+    assert.equal(await page.getByRole("alert").innerText(), "Email or password is incorrect.");
+    assert.equal(await page.getByRole("textbox", { name: "Email", exact: true }).getAttribute("aria-invalid"), "false");
+    await capture(page, `${mode}-login-server-error`);
+    results.interactions.push(`${mode}: auth keyboard progression, Enter submission, server failure announcement`);
+    await button(page, "Use your own server").click();
+    await page.getByRole("dialog", { name: "Use your own server", exact: true }).waitFor();
+    assert.equal(await button(page, "Continue").isDisabled(), true);
+    await page.getByRole("checkbox").click(); await button(page, "Continue").click();
+    const address = page.getByRole("textbox", { name: "Server address", exact: true });
+    await address.fill("https://reachable.example.test");
+    await page.getByText("Reachable · ordo v0.1.0", { exact: true }).waitFor();
+    assert.equal(await button(page, "Connect").isEnabled(), true);
+    await address.fill("https://offline.example.test");
+    assert.equal(await button(page, "Connect").isDisabled(), true, "A new address must not reuse the previous server's verification");
+    await page.getByText("Server responded with HTTP 503.", { exact: true }).waitFor();
+    assert.equal(await address.getAttribute("aria-invalid"), "true");
+    await capture(page, `${mode}-self-host-server-error`);
+    await address.fill("https://");
+    await page.getByText("Enter a valid URL.", { exact: true }).waitFor();
+    assert.equal(await button(page, "Connect").isDisabled(), true);
+    await page.keyboard.press("Escape"); await settle(page);
+    results.interactions.push(`${mode}: self-host responsibility gate and address-specific verification failure`);
+    await login(page);
+    if (!process.env.ORDO_UI_SKIP_SCREEN_MATRIX) for (const viewport of [{ name: "portrait", width: 390, height: 844 }, { name: "landscape", width: 1280, height: 800 }]) {
+      await page.setViewportSize(viewport);
+      for (const path of appRoutes) {
+        await navigate(page, path);
+        await page.getByRole("button").first().waitFor(); await page.waitForTimeout(200);
+        await capture(page, `${mode}-${viewport.name}-${path.split("?")[0].replaceAll("/", "-") || "library"}${path === "settings/changelog" ? "-sheet" : ""}`);
+      }
+    }
+    await page.setViewportSize({ width: 390, height: 844 }); await navigate(page, "");
+    await button(page, "Library actions").click(); await page.getByRole("menu").waitFor();
+    await page.keyboard.press("End");
+    assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("role")), "menuitem");
+    await capture(page, `${mode}-library-menu`); await page.keyboard.press("Escape");
+    results.interactions.push(`${mode}: menu keyboard navigation and dismissal`);
+    await page.getByTestId("add-bookmark-fab").click(); await page.getByRole("menuitem", { name: "Save bookmark", exact: true }).click();
+    await page.getByRole("dialog", { name: "Save bookmark", exact: true }).waitFor();
+    await page.getByRole("textbox", { name: "Link", exact: true }).fill("https://example.test/saved");
+    await button(page, "Folder, Bookmarks").click(); await page.getByRole("menuitemradio", { name: folder.name, exact: true }).click();
+    assert.equal(await page.getByRole("textbox", { name: "Link", exact: true }).inputValue(), "https://example.test/saved");
+    for (const viewport of [{ name: "portrait", width: 390, height: 844 }, { name: "landscape", width: 1280, height: 800 }, { name: "constrained", width: 320, height: 420 }]) {
+      await page.setViewportSize(viewport); await capture(page, `${mode}-${viewport.name}-save-dialog`);
+      const rect = await page.getByRole("dialog").boundingBox();
+      assert.ok(rect.y >= 0 && rect.y + rect.height <= viewport.height, `${mode}: dialog viewport`);
+    }
+    await page.keyboard.press("Escape"); await settle(page);
+    results.interactions.push(`${mode}: nested picker preserves draft; dialog fits three sizes`);
+    await page.setViewportSize({ width: 390, height: 844 }); await navigate(page, "");
+    await page.getByTestId("add-bookmark-fab").click(); await page.getByRole("menuitem", { name: "New folder", exact: true }).click();
+    await page.getByRole("textbox", { name: "Name", exact: true }).fill("Ideas for later");
+    await page.getByRole("button", { name: /^Icon,/ }).click(); await capture(page, `${mode}-folder-icon-picker`);
+    assert.equal(await page.getByRole("dialog").count(), 1); await page.keyboard.press("Escape"); await settle(page);
+    assert.equal(await page.getByRole("textbox", { name: "Name", exact: true }).inputValue(), "Ideas for later");
+    await capture(page, `${mode}-new-folder-dialog`); await page.keyboard.press("Escape"); await settle(page);
+    const folderRow = page.getByRole("button", { name: /^Design & inspiration,/ });
+    await folderRow.click({ button: "right" }); await capture(page, `${mode}-folder-menu`);
+    await page.getByRole("menuitem", { name: "Rename", exact: true }).click();
+    await page.getByRole("dialog", { name: "Rename folder", exact: true }).waitFor();
+    assert.equal(await page.getByRole("textbox", { name: "Name", exact: true }).inputValue(), folder.name);
+    await capture(page, `${mode}-rename-folder-dialog`); await page.keyboard.press("Escape"); await settle(page);
+    await folderRow.click({ button: "right" }); await page.getByRole("menuitem", { name: "Lock folder", exact: true }).click();
+    await capture(page, `${mode}-folder-lock-menu`);
+    await page.getByRole("menuitem", { name: "Text password", exact: true }).click();
+    await page.getByRole("dialog", { name: "Set a password", exact: true }).waitFor();
+    await capture(page, `${mode}-folder-password-dialog`); await button(page, "Back").click();
+    await page.getByRole("menuitem", { name: "PIN", exact: true }).click();
+    await page.getByRole("textbox", { name: "PIN", exact: true }).fill("1234");
+    await page.getByRole("dialog", { name: "Confirm PIN", exact: true }).waitFor();
+    await capture(page, `${mode}-folder-pin-confirmation`);
+    await page.getByRole("textbox", { name: "PIN", exact: true }).fill("9876");
+    await page.getByText("PINs do not match. Try again.", { exact: true }).waitFor();
+    assert.equal(await page.getByRole("textbox", { name: "PIN", exact: true }).getAttribute("aria-invalid"), "true");
+    await button(page, "Back").click(); await page.getByRole("menuitem", { name: "Pattern", exact: true }).click();
+    await capture(page, `${mode}-folder-pattern-dialog`); await page.keyboard.press("Escape"); await settle(page);
+    await folderRow.click({ button: "right" }); await page.getByRole("menuitem", { name: "Delete folder", exact: true }).click();
+    await capture(page, `${mode}-delete-folder-dialog`); await page.keyboard.press("Escape"); await settle(page);
+    await page.getByRole("menuitem", { name: "Rename", exact: true }).waitFor();
+    await page.keyboard.press("Escape"); await settle(page);
+    for (const section of ["Folders", "Bookmarks"]) {
+      await button(page, "Library actions").click(); await page.getByRole("menuitem", { name: "Sort library", exact: true }).click();
+      await page.getByRole("menuitem", { name: section, exact: true }).click();
+      await page.getByRole("menuitemradio").first().waitFor();
+      assert.equal(await page.getByRole("menuitemradio").count(), section === "Folders" ? 3 : 4);
+      await capture(page, `${mode}-sort-${section.toLowerCase()}`); await page.keyboard.press("Escape"); await settle(page);
+    }
+    await navigate(page, "tags"); await button(page, "New tag").click();
+    await page.getByRole("textbox", { name: "Tag name", exact: true }).fill("Reading notes");
+    await capture(page, `${mode}-new-tag-dialog`); await checkTagDialogSizes(page, mode, "new-tag-dialog", "Reading notes");
+    await page.keyboard.press("Escape"); await settle(page);
+    const tagRow = page.getByRole("button", { name: /^Design,/ });
+    await tagRow.click({ button: "right" }); await capture(page, `${mode}-tag-menu`);
+    await page.getByRole("menuitem", { name: "Edit tag", exact: true }).click();
+    await page.getByRole("dialog", { name: "Edit tag", exact: true }).waitFor(); await settle(page);
+    assert.equal(await page.getByRole("textbox", { name: "Tag name", exact: true }).inputValue(), tag.name);
+    await capture(page, `${mode}-edit-tag-dialog`); await checkTagDialogSizes(page, mode, "edit-tag-dialog", tag.name);
+    await page.keyboard.press("Escape"); await settle(page);
+    await tagRow.click({ button: "right" }); await page.getByRole("menuitem", { name: "Delete tag", exact: true }).click();
+    await capture(page, `${mode}-delete-tag-dialog`); await page.keyboard.press("Escape"); await settle(page);
+    await navigate(page, "");
+    results.interactions.push(`${mode}: folder rename, lock methods and PIN mismatch, folder/tag confirmations, sorting radio semantics, persistent tag field labels`);
+    const articleRow = page.getByRole("button", { name: /^Building a more expressive design system,/ });
+    await articleRow.click({ button: "right" }); await capture(page, `${mode}-bookmark-menu`);
+    await page.getByRole("menuitem", { name: "Move to folder", exact: true }).click(); await capture(page, `${mode}-move-picker`);
+    await page.keyboard.press("Escape"); await settle(page);
+    await articleRow.click({ button: "right" }); await page.getByRole("menuitem", { name: "Edit tags", exact: true }).click();
+    await capture(page, `${mode}-edit-tags-dialog`);
+    await page.getByRole("textbox", { name: "Find a tag", exact: true }).fill("Failure test");
+    await button(page, "Create tag Failure test").click();
+    await page.getByText("Couldn't create the tag. Try again.", { exact: true }).waitFor();
+    assert.equal(await page.getByRole("textbox", { name: "Find a tag", exact: true }).inputValue(), "Failure test");
+    await capture(page, `${mode}-tag-create-error`);
+    await page.keyboard.press("Escape"); await settle(page);
+    results.interactions.push(`${mode}: quick-tag failure is reported and retains input`);
+    await articleRow.click({ button: "right" }); await page.getByRole("menuitem", { name: "Remind", exact: true }).click();
+    await capture(page, `${mode}-reminder-menu`); await page.getByRole("menuitem", { name: "Custom…", exact: true }).click();
+    await capture(page, `${mode}-custom-reminder-dialog`); await page.keyboard.press("Escape"); await settle(page); await page.keyboard.press("Escape"); await settle(page);
+    await articleRow.click({ button: "right" }); await page.getByRole("menuitem", { name: "Delete bookmark", exact: true }).click();
+    await capture(page, `${mode}-delete-bookmark-dialog`); await page.keyboard.press("Escape"); await settle(page);
+    await navigate(page, "search"); await button(page, "Search filters").click(); await capture(page, `${mode}-search-filters`);
+    await page.getByRole("menuitem", { name: "Status", exact: true }).click();
+    await page.getByRole("menuitemradio").first().waitFor();
+    assert.equal(await page.getByRole("menuitemradio").count(), 3);
+    await page.getByRole("menuitemradio", { name: "Unread", exact: true }).click(); await page.keyboard.press("Escape"); await settle(page);
+    await navigate(page, "reader/article"); await button(page, "Reader settings").click(); await capture(page, `${mode}-reader-controls`);
+    await page.keyboard.press("Escape"); await settle(page);
+    results.interactions.push(`${mode}: creation, icon draft, bookmark actions, move, tags, reminders, destructive confirmation, search filters, reader controls`);
+    await page.setViewportSize({ width: 390, height: 844 }); await navigate(page, "settings/account");
+    await button(page, "Profile picture").hover();
+    assert.equal(await button(page, "Profile picture").evaluate(el => parseFloat(getComputedStyle(el).borderRadius) >= el.getBoundingClientRect().width / 2), true);
+    await capture(page, `${mode}-profile-feedback`);
+    await button(page, "Profile picture").click(); await capture(page, `${mode}-profile-menu`); await page.keyboard.press("Escape");
+    await navigate(page, "settings/appearance"); await page.getByRole("button", { name: /^Theme,/ }).click();
+    await page.getByRole("menuitemradio").first().waitFor();
+    assert.equal(await page.getByRole("menuitemradio").count(), 3); await page.keyboard.press("Escape");
+    results.interactions.push(`${mode}: settings selection exposes radio semantics`);
+    await navigate(page, "settings/sessions"); await button(page, "Revoke").click();
+    await capture(page, `${mode}-revoke-dialog`); await page.keyboard.press("Escape");
+    await navigate(page, "settings"); await button(page, "Sign out").click();
+    await capture(page, `${mode}-signout-dialog`); await page.keyboard.press("Escape");
+    await navigate(page, "settings/security"); await button(page, "Set up authenticator").click();
+    await capture(page, `${mode}-authenticator-setup`);
+    await page.getByRole("textbox", { name: "Authenticator code", exact: true }).fill("123456");
+    await page.getByRole("dialog", { name: "Save your backup codes", exact: true }).waitFor();
+    await capture(page, `${mode}-backup-codes-dialog`); await page.keyboard.press("Escape");
+    results.interactions.push(`${mode}: authenticator enrollment and one-time backup-code surface`);
+    await page.emulateMedia({ reducedMotion: "reduce" }); await navigate(page, "");
+    await button(page, "Library actions").click(); await capture(page, `${mode}-reduced-motion-menu`); await page.keyboard.press("Escape");
+    results.interactions.push(`${mode}: reduced-motion overlay`);
+    await context.close();
+    for (const state of ["loading", "error"]) {
+      const stateContext = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: theme });
+      await stateContext.addInitScript(({ theme, expressive }) => localStorage.setItem("ordo.settings", JSON.stringify({ themeMode: theme, expressive, materialYouColors: false })), { theme, expressive });
+      const statePage = await stateContext.newPage(); activePage = statePage;
+      let release;
+      const scenario = { libraryState: state === "loading" ? "empty" : "error",
+        gate: state === "loading" ? new Promise(resolve => { release = resolve; }) : null };
+      await fixture(statePage, scenario); await login(statePage);
+      if (state === "loading") {
+        assert.equal(await statePage.getByText("No bookmarks yet", { exact: true }).count(), 0);
+        await capture(statePage, `${mode}-library-loading`); release();
+      } else {
+        await statePage.getByText("Couldn't load bookmarks", { exact: true }).waitFor();
+        await capture(statePage, `${mode}-library-error`);
+        scenario.libraryState = "empty"; await button(statePage, "Retry").click();
+      }
+      await statePage.getByText("No bookmarks yet", { exact: true }).waitFor();
+      await capture(statePage, `${mode}-library-${state === "loading" ? "empty" : "retry-recovered"}`);
+      await button(statePage, "Save bookmark").and(statePage.locator(':not([data-testid="add-bookmark-fab"])')).click();
+      await statePage.getByRole("dialog", { name: "Save bookmark", exact: true }).waitFor();
+      await statePage.keyboard.press("Escape");
+      results.interactions.push(`${mode}: library ${state} to empty and working empty-state action`);
+      await stateContext.close();
+    }
+    const catalogueContext = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: theme });
+    await catalogueContext.addInitScript(({ theme, expressive }) => localStorage.setItem("ordo.settings", JSON.stringify({ themeMode: theme, expressive, materialYouColors: false })), { theme, expressive });
+    const cataloguePage = await catalogueContext.newPage(); activePage = cataloguePage;
+    await fixture(cataloguePage, { catalogue: true }); await login(cataloguePage);
+    await navigate(cataloguePage, "search"); await button(cataloguePage, "Search filters").click();
+    await cataloguePage.getByRole("menuitem", { name: "Tags", exact: true }).click();
+    await cataloguePage.getByRole("textbox", { name: "Filter tags", exact: true }).waitFor();
+    const order = await cataloguePage.getByRole("menuitemcheckbox").evaluateAll(items => items.map(item => item.getAttribute("aria-label")));
+    await cataloguePage.getByRole("menuitemcheckbox", { name: "Topic 0", exact: true }).click(); await settle(cataloguePage);
+    assert.deepEqual(await cataloguePage.getByRole("menuitemcheckbox").evaluateAll(items => items.map(item => item.getAttribute("aria-label"))), order);
+    await cataloguePage.getByRole("textbox", { name: "Filter tags", exact: true }).fill("Topic 0");
+    await settle(cataloguePage);
+    assert.equal(await cataloguePage.getByRole("menuitemcheckbox").count(), 1);
+    await capture(cataloguePage, `${mode}-tag-filter-query`);
+    await cataloguePage.getByRole("menuitem", { name: "Back", exact: true }).click();
+    await cataloguePage.getByRole("menuitem", { name: "Folders", exact: true }).click();
+    await cataloguePage.getByRole("textbox", { name: "Filter folders", exact: true }).fill("Design");
+    await cataloguePage.getByRole("menuitemcheckbox", { name: folder.name, exact: true }).waitFor();
+    await capture(cataloguePage, `${mode}-folder-filter-query`);
+    results.interactions.push(`${mode}: larger filter catalogues, named search fields and stable selection order`);
+    await catalogueContext.close();
+  }
+  assert.deepEqual(results.errors, []);
+  console.log(JSON.stringify({ passed: true, screenCount: results.screens.length, interactionCount: results.interactions.length }, null, 2));
+} catch (error) {
+  if (activePage && !activePage.isClosed()) {
+    await activePage.screenshot({ path: `${output}/failure.png` });
+    console.error(activePage.url(), (await activePage.locator("body").innerText()).slice(-5000));
+  }
+  results.failure = error.stack; console.error(error); process.exitCode = 1;
+} finally {
+  await writeFile(`${output}/results.json`, JSON.stringify(results, null, 2)); await browser.close();
+}
