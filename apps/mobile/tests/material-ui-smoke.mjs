@@ -90,7 +90,8 @@ async function fixture(page, scenario = {}) {
     else if (path === "/api/bookmarks/extraction-progress") body = { pending: 0, total: 2 };
     else if (path === "/api/bookmarks/reminders") body = [];
     else if (path === "/api/bookmarks" && request.method() === "POST") body = { ...bookmark, ...request.postDataJSON() };
-    else if (path === "/api/bookmarks" || path.includes("/bookmarks") && !path.startsWith("/api/bookmarks/article")) body = { items: [bookmark], nextCursor: null, hasMore: false };
+    else if (path === "/api/bookmarks" || path.includes("/bookmarks") && !path.startsWith("/api/bookmarks/article")) body = { items: [bookmark,
+      ...Array.from({ length: Math.max(0, (scenario.bookmarkCount ?? 1) - 1) }, (_, index) => ({ ...bookmark, id: `saved-${index}`, title: `Saved reading ${index + 1}`, tags: [], createdAt: new Date(Date.parse(stamp) - (index + 1) * 60000).toISOString() }))], nextCursor: null, hasMore: false };
     else if (path.startsWith("/api/bookmarks/article/highlights") && request.method() === "DELETE") { scenario.highlightRemoved = true; body = { success: true }; }
     else if (path.startsWith("/api/bookmarks/article")) body = { ...bookmark,
       contentHtml: scenario.richReader ? readerHtml : "<h2>Reading with purpose</h2><p>Saved ideas make a useful library.</p>",
@@ -103,7 +104,7 @@ async function fixture(page, scenario = {}) {
 }
 const button = (page, name) => page.getByRole("button", { name, exact: true });
 async function settle(page) { await page.waitForTimeout(450); }
-async function profileAction(page, name, action) {
+async function profileAction(page, name, action, fixtureBookmarks = 1) {
   await page.evaluate(() => {
     const sample = { frames: [], longTasks: [], lastFrame: null, frame: 0, observer: null };
     if (PerformanceObserver.supportedEntryTypes.includes("longtask")) {
@@ -120,7 +121,44 @@ async function profileAction(page, name, action) {
     return { frames: frames.length, p95FrameIntervalMs: frames[Math.floor(frames.length * 0.95)] ?? null,
       maxFrameIntervalMs: frames.at(-1) ?? null, longTaskCount: sample.longTasks.length, maxLongTaskMs: Math.max(0, ...sample.longTasks) };
   });
-  results.performanceSamples.push({ name, fixtureBookmarks: 1, ...sample });
+  results.performanceSamples.push({ name, fixtureBookmarks, ...sample });
+}
+
+async function selectionPerformance() {
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: "dark" });
+  await context.addInitScript(() => localStorage.setItem("ordo.settings", JSON.stringify({ themeMode: "dark", expressive: true, materialYouColors: false })));
+  const page = await context.newPage(); activePage = page;
+  await fixture(page, { bookmarkCount: 1000 }); await login(page); await settle(page);
+  const lead = await button(page, `Select ${bookmark.title}`).boundingBox();
+  await page.mouse.move(lead.x + lead.width / 2, lead.y + lead.height / 2);
+  await page.mouse.down(); await page.waitForTimeout(550); await page.mouse.up(); await settle(page);
+  const row = page.getByRole("checkbox", { name: /^Building a more expressive/ });
+  await row.evaluate(node => {
+    window.selectionLatency = []; let clicked = null;
+    node.addEventListener("click", () => { clicked = performance.now(); }, true);
+    new MutationObserver(() => {
+      if (clicked != null) { window.selectionLatency.push(performance.now() - clicked); clicked = null; }
+    }).observe(node, { attributes: true, attributeFilter: ["aria-checked"] });
+  });
+  await profileAction(page, "20 selection toggles in a 1,000-bookmark fixture", async () => {
+    for (let index = 0; index < 20; index++) { await row.click(); await page.waitForTimeout(100); }
+  }, 1000);
+  const samples = await page.evaluate(() => window.selectionLatency); samples.sort((a, b) => a - b);
+  assert.equal(samples.length, 20);
+  const deletion = await button(page, "Delete").boundingBox();
+  await page.evaluate(() => {
+    const node = [...document.querySelectorAll('[role="button"]')].find(node => node.getAttribute("aria-label") === "Delete");
+    window.deleteFrames = []; const start = performance.now();
+    const sample = time => { const rect = node.getBoundingClientRect(); window.deleteFrames.push({ right: rect.right, width: rect.width });
+      if (time - start < 600) requestAnimationFrame(sample); };
+    requestAnimationFrame(sample);
+  });
+  await row.click(); await page.waitForTimeout(750);
+  const frames = await page.evaluate(() => window.deleteFrames);
+  results.selectionBenchmark = { bookmarks: 1000, toggles: samples.length,
+    medianClickToSemanticsMs: samples[Math.floor(samples.length / 2)], p95ClickToSemanticsMs: samples[Math.floor(samples.length * 0.95)],
+    deleteRightEdgeDriftPx: Math.max(...frames.map(frame => Math.abs(frame.right - (deletion.x + deletion.width)))) };
+  await context.close();
 }
 async function capture(page, name) {
   await settle(page);
@@ -128,8 +166,151 @@ async function capture(page, name) {
   assert.ok(content.trim().length > 0, `${name}: blank screen`);
   assert.ok(!content.includes("Something went wrong"), `${name}: error boundary`);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, `${name}: horizontal overflow`);
+  if (process.env.ORDO_UI_HOVER_AUDIT) await auditStateLayers(page, name);
   await page.screenshot({ path: `${output}/${name}.png` });
   results.screens.push(name);
+}
+
+async function auditStateLayers(page, name) {
+  const result = await page.evaluate(() => {
+    const corners = ["borderTopLeftRadius", "borderTopRightRadius", "borderBottomLeftRadius", "borderBottomRightRadius"];
+    const failures = []; let count = 0;
+    for (const layer of document.querySelectorAll('[data-testid="material-state-layer"], [data-testid="material-list-state-layer"]')) {
+      const parent = layer.parentElement, rect = parent.getBoundingClientRect();
+      if (!rect.width || !rect.height || rect.bottom < 0 || rect.top > innerHeight) continue;
+      count++;
+      const style = getComputedStyle(parent), feedback = getComputedStyle(layer), bounds = layer.getBoundingClientRect();
+      if (corners.some(corner => style[corner] !== feedback[corner]) || bounds.x < rect.x - 1 || bounds.right > rect.right + 1 || bounds.y < rect.y - 1 || bounds.bottom > rect.bottom + 1)
+        failures.push({ label: parent.getAttribute("aria-label"), surface: corners.map(corner => style[corner]), feedback: corners.map(corner => feedback[corner]) });
+      if (parent.getAttribute("aria-disabled") === "true" && +feedback.opacity > 0.001) failures.push({ label: parent.getAttribute("aria-label"), disabledOpacity: feedback.opacity });
+    }
+    return { count, failures };
+  });
+  results.hoverSurfaces = (results.hoverSurfaces ?? 0) + result.count;
+  assert.deepEqual(result.failures, [], `${name}: hover silhouette ${JSON.stringify(result.failures)}`);
+}
+
+async function polishMatrix() {
+  for (const theme of process.env.ORDO_UI_THEME ? [process.env.ORDO_UI_THEME] : ["light", "dark"]) for (const expressive of process.env.ORDO_UI_EXPRESSIVE ? [process.env.ORDO_UI_EXPRESSIVE === "true"] : [false, true]) {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: theme });
+    await context.addInitScript(({ theme, expressive }) => localStorage.setItem("ordo.settings", JSON.stringify({ themeMode: theme, expressive, materialYouColors: false })), { theme, expressive });
+    const page = await context.newPage(); activePage = page;
+    await fixture(page, { bookmarkCount: 40 }); await login(page); await settle(page);
+    const mode = `${theme}-${expressive ? "expressive" : "standard"}`;
+    async function hoverControl(locator, name) {
+      await settle(page);
+      const before = await locator.boundingBox(); await locator.hover(); await settle(page);
+      const after = await locator.boundingBox();
+      assert.ok(["x", "y", "width", "height"].every(key => Math.abs(after[key] - before[key]) < 0.5),
+        `${name}: hover must not move or resize the target ${JSON.stringify({ before, after })}`);
+      await auditStateLayers(page, name); await capture(page, `${mode}-${name}`);
+      await page.mouse.move(0, 0); await settle(page);
+    }
+    const header = page.locator('[data-testid="material-app-bar"]:visible').last();
+    assert.equal((await header.boundingBox()).height, 64);
+    await hoverControl(button(page, "Account and settings"), "avatar-hover");
+    const avatar = button(page, "Account and settings").getByTestId("material-state-layer");
+    assert.equal((await avatar.boundingBox()).width, 40);
+    await button(page, "Library actions").click();
+    const items = page.getByRole("menuitem"); await items.first().waitFor();
+    await hoverControl(items.first(), "menu-first-hover"); await hoverControl(items.last(), "menu-last-hover");
+    await page.keyboard.press("Escape"); await settle(page);
+    await hoverControl(page.getByRole("button", { name: /^Building a more expressive design system, / }), "bookmark-hover");
+    const rowFill = page.getByTestId("material-row-state-layer").nth(1);
+    const rowClip = await rowFill.evaluate(node => getComputedStyle(node.parentElement).overflow);
+    assert.equal(rowClip, "hidden");
+    await hoverControl(button(page, "Show bookmarks tagged Design"), "nested-tag-hover");
+    assert.ok(await rowFill.evaluate(node => +getComputedStyle(node).opacity < 0.001), "Nested chip must not also hover the whole row");
+    await navigate(page, "settings");
+    assert.equal((await header.boundingBox()).height, 64);
+    await hoverControl(button(page, "Controls"), "settings-group-edge-hover");
+    await navigate(page, "settings/account"); await hoverControl(button(page, "Profile picture"), "profile-hover");
+    await navigate(page, "settings/appearance");
+    await hoverControl(page.getByRole("switch", { name: "Expressive", exact: true }), "switch-hover");
+    await navigate(page, "reader/article");
+    assert.equal((await header.boundingBox()).height, 64);
+    await hoverControl(button(page, "example.test"), "reader-url-hover");
+    await hoverControl(button(page, "More article actions"), "reader-overflow-hover");
+    await button(page, "More article actions").click();
+    await page.getByRole("menuitem", { name: "Open original", exact: true }).click(); await settle(page);
+    const browserPane = page.getByTestId("bookmark-browser"); await browserPane.waitFor();
+    const headerBox = await header.boundingBox(), browserBox = await browserPane.boundingBox();
+    assert.ok(Math.abs(browserBox.y - (headerBox.y + headerBox.height)) < 0.5, "Website host begins flush below its app bar");
+    results.interactions.push(`${mode}: browser host has no reserved gap (web placeholder, not a native WebView rendering test)`);
+    await navigate(page, "");
+    // Enter through the same leading-icon long hold used on native.
+    const lead = button(page, `Select ${bookmark.title}`); const leadRect = await lead.boundingBox();
+    await page.mouse.move(leadRect.x + leadRect.width / 2, leadRect.y + leadRect.height / 2);
+    await page.mouse.down(); await page.waitForTimeout(550); await page.mouse.up(); await settle(page);
+    await button(page, "Cancel selection").waitFor();
+    const selected = page.getByRole("checkbox", { name: /^Building a more expressive design system, / });
+    assert.equal(await selected.getAttribute("aria-checked"), "true");
+    const deleting = button(page, "Delete");
+    const end = await deleting.boundingBox(); const anchor = end.x + end.width;
+    async function sampleToggle(locator, name) {
+      const label = await locator.getAttribute("aria-label");
+      await page.evaluate(label => {
+        const row = [...document.querySelectorAll('[role="checkbox"]')].find(node => node.getAttribute("aria-label") === label);
+        const fill = row.parentElement.querySelector('[data-testid="material-row-selection"]');
+        const deletion = [...document.querySelectorAll('[role="button"]')].find(node => node.getAttribute("aria-label") === "Delete");
+        window.polishFrames = [];
+        const start = performance.now();
+        const sample = time => { const r = deletion.getBoundingClientRect(); window.polishFrames.push({ elapsed: time - start, right: r.right, width: r.width, opacity: +getComputedStyle(fill).opacity, checked: row.getAttribute("aria-checked") });
+          if (time - start < 650) requestAnimationFrame(sample); };
+        requestAnimationFrame(sample);
+      }, label);
+      await locator.click(); await page.waitForTimeout(750);
+      const frames = await page.evaluate(() => window.polishFrames);
+      assert.ok(frames.length > 10, name);
+      assert.ok(frames.every(frame => Math.abs(frame.right - anchor) < 1.1), `${name}: delete right-edge drift ${JSON.stringify(frames)}`);
+      assert.ok(frames.some(frame => frame.opacity > 0.01 && frame.opacity < 0.99), `${name}: selection must fade, not jump`);
+      results.selectionSamples ??= []; results.selectionSamples.push({ name: `${mode}-${name}`, frames });
+    }
+    await sampleToggle(selected, "deselect"); assert.equal(await selected.getAttribute("aria-checked"), "false");
+    await sampleToggle(selected, "select"); assert.equal(await selected.getAttribute("aria-checked"), "true");
+    const readAction = button(page, "Read");
+    const readBox = await readAction.boundingBox(), deleteBox = await deleting.boundingBox();
+    await page.mouse.move(readBox.x + readBox.width / 2, readBox.y + readBox.height / 2);
+    await page.mouse.down(); await settle(page);
+    const expandedBox = await readAction.boundingBox(), compressedBox = await deleting.boundingBox();
+    assert.ok(expandedBox.width > readBox.width * 1.1, "Standard button groups expand their pressed action in both design modes");
+    assert.ok(Math.abs(compressedBox.x + compressedBox.width - deleteBox.x - deleteBox.width) < 1.1, "Pressed toolbar retains right edge");
+    await page.mouse.move(0, 0); await page.mouse.up(); await settle(page);
+    const folderRow = page.getByRole("checkbox", { name: /^Design & inspiration, / });
+    await sampleToggle(folderRow, "mixed-selection");
+    assert.equal(await folderRow.getAttribute("aria-checked"), "true");
+    for (const viewport of [{ name: "portrait", width: 390, height: 844 }, { name: "landscape", width: 1280, height: 800 }, { name: "constrained", width: 320, height: 420 }]) {
+      await page.setViewportSize(viewport); await hoverControl(deleting, `selection-delete-hover-${viewport.name}`);
+      await capture(page, `${mode}-selection-${viewport.name}`);
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" }); await settle(page);
+    await selected.click(); await settle(page);
+    const fillOpacity = await page.getByTestId("material-row-selection").nth(1).evaluate(node => +getComputedStyle(node).opacity);
+    assert.equal(fillOpacity, 0);
+    await button(page, "Select all").click(); await settle(page);
+    assert.equal(await selected.getAttribute("aria-checked"), "true");
+    await button(page, "Deselect all").click(); await settle(page);
+    assert.equal(await selected.getAttribute("aria-checked"), "false");
+    await selected.focus(); await page.keyboard.press("Space"); await settle(page);
+    assert.equal(await selected.getAttribute("aria-checked"), "true");
+    await button(page, "Cancel selection").click();
+    for (const path of ["folder/collection", "tags/design"]) {
+      await navigate(page, path);
+      assert.equal((await header.boundingBox()).height, 64);
+      const icon = await button(page, `Select ${bookmark.title}`).boundingBox();
+      await page.mouse.move(icon.x + icon.width / 2, icon.y + icon.height / 2);
+      await page.mouse.down(); await page.waitForTimeout(550); await page.mouse.up(); await settle(page);
+      const checkbox = page.getByRole("checkbox", { name: /^Building a more expressive design system, / });
+      assert.equal(await checkbox.getAttribute("aria-checked"), "true", `${path}: scoped selection provider`);
+      await checkbox.click(); await settle(page); assert.equal(await checkbox.getAttribute("aria-checked"), "false");
+      await checkbox.focus(); await page.keyboard.press("Space"); await settle(page); assert.equal(await checkbox.getAttribute("aria-checked"), "true");
+      await capture(page, `${mode}-${path.startsWith("folder") ? "folder" : "tag"}-selection`);
+      await button(page, "Back").click();
+    }
+    results.interactions.push(`${mode}: exact hover silhouettes, stable targets, direct selection updates, fading rows, anchored toolbar, consistent app bars and reduced motion`);
+    await context.close();
+  }
 }
 async function checkAuthTargets(page) {
   for (const link of await page.getByRole("link").all()) {
@@ -316,6 +497,8 @@ async function readerMatrix() {
 }
 try {
   if (process.env.ORDO_UI_READER_ONLY) await readerMatrix();
+  else if (process.env.ORDO_UI_SELECTION_PERF) await selectionPerformance();
+  else if (process.env.ORDO_UI_POLISH_ONLY) await polishMatrix();
   else for (const theme of process.env.ORDO_UI_THEME ? [process.env.ORDO_UI_THEME] : ["light", "dark"]) for (const expressive of process.env.ORDO_UI_EXPRESSIVE ? [process.env.ORDO_UI_EXPRESSIVE === "true"] : [false, true]) {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: theme });
     await context.addInitScript(({ theme, expressive }) => {
@@ -644,7 +827,7 @@ try {
   }
   assert.deepEqual(results.errors, []);
   console.log(JSON.stringify({ passed: true, screenCount: results.screens.length, interactionCount: results.interactions.length,
-    performanceSamples: results.performanceSamples }, null, 2));
+    hoverSurfaces: results.hoverSurfaces, selectionBenchmark: results.selectionBenchmark, performanceSamples: results.performanceSamples }, null, 2));
 } catch (error) {
   if (activePage && !activePage.isClosed()) {
     await activePage.screenshot({ path: `${output}/failure.png` });
