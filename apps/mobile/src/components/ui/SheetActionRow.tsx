@@ -51,7 +51,7 @@ export function PanelActions({
           dismissKeyboard();
           onCancel();
         }}
-        disabled={cancelDisabled}
+        disabled={cancelDisabled ?? loading}
         style={sheetMenuStyles.action}
       /> : null}
       <Button
@@ -84,6 +84,8 @@ export function SheetActionRow({
   tone,
   trailing,
   onPress,
+  disabled,
+  busy,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
@@ -91,9 +93,11 @@ export function SheetActionRow({
   trailing?: React.ReactNode;
   divider?: boolean;
   onPress: () => void;
+  disabled?: boolean;
+  busy?: boolean;
 }) {
   return (
-    <ContextMenuItem icon={icon} label={label} tone={tone} trailing={trailing} onPress={onPress} />
+    <ContextMenuItem role="button" icon={icon} label={label} tone={tone} trailing={trailing} onPress={onPress} disabled={disabled} busy={busy} />
   );
 }
 

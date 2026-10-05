@@ -52,6 +52,7 @@ export function MoveSheet({
   const { data: folders } = useFolders();
   const move = useMoveBookmark(fromFolderId);
   const batch = useBatchBookmarks();
+  const busy = move.isPending || batch.isPending;
   const { height } = useResponsiveLayout();
   const [error, setError] = useState("");
   const [lockedTarget, setLockedTarget] = useState<FolderDto | null>(null);
@@ -74,7 +75,7 @@ export function MoveSheet({
   if (fromFolderId !== null) destinations.unshift(ROOT_DESTINATION);
 
   const pick = async (destination: Destination) => {
-    if (targets.length === 0) return;
+    if (targets.length === 0 || busy) return;
     const toFolderId = isRootDestination(destination) ? null : destination.id;
     const name = isRootDestination(destination) ? "Bookmarks" : destination.name;
     setError("");
@@ -109,6 +110,8 @@ export function MoveSheet({
   return (
     <FloatingPanel
       visible={visible}
+      scrollBody={Boolean(lockedTarget)}
+      dismissible={!busy}
       onDismiss={() => {
         if (lockedTarget) setLockedTarget(null);
         else onDismiss();
@@ -156,6 +159,8 @@ export function MoveSheet({
                     )
                   }
                   onPress={() => void pick(item)}
+                  disabled={busy}
+                  busy={busy}
                 />
               )}
               style={{ maxHeight: Math.min(320, height * 0.5) }}

@@ -56,6 +56,8 @@ export function SettingsSelect<T extends string>({
           accessibilityRole="button"
           accessibilityLabel={`${title}, ${selected?.label ?? value}`}
           accessibilityState={{ expanded: open }}
+          aria-haspopup="menu"
+          stateLayerColor={palette.onSecondaryContainer}
           onPress={show}
           hitSlop={{ top: 4, bottom: 4 }}
           style={[
@@ -90,6 +92,7 @@ export function SettingsSelect<T extends string>({
             icon={option.icon}
             label={option.label}
             selected={option.value === value}
+            selectionRole="menuitemradio"
             onPress={() => choose(option.value)}
           />
         ))}

@@ -265,6 +265,7 @@ export function ContextMenuNote({
 
 export function ContextMenuItem({
   icon,
+  leading,
   label,
   detail,
   tone,
@@ -274,8 +275,10 @@ export function ContextMenuItem({
   busy,
   onPress,
   selectionRole,
+  role = "menuitem",
 }: {
   icon?: keyof typeof Ionicons.glyphMap;
+  leading?: React.ReactNode;
   label: string;
   /** Trailing local time or similar meta, same row as the label. */
   detail?: string;
@@ -286,6 +289,7 @@ export function ContextMenuItem({
   busy?: boolean;
   onPress: () => void;
   selectionRole?: "menuitemradio" | "menuitemcheckbox";
+  role?: "menuitem" | "button";
 }) {
   const { palette, expressive } = useTheme();
   const color = tone === "danger" ? palette.error : selected ? palette.onSecondaryContainer : palette.onSurface;
@@ -293,8 +297,8 @@ export function ContextMenuItem({
 
   return (
     <PressableScale
-      accessibilityRole={selectionRole === "menuitemradio" ? "radio" : selectionRole === "menuitemcheckbox" ? "checkbox" : "menuitem"}
-      {...(Platform.OS === "web" ? { role: (selectionRole ?? "menuitem") as PressableProps["role"] } : null)}
+      accessibilityRole={selectionRole === "menuitemradio" ? "radio" : selectionRole === "menuitemcheckbox" ? "checkbox" : role}
+      {...(Platform.OS === "web" ? { role: (selectionRole ?? role) as PressableProps["role"] } : null)}
       accessibilityLabel={detail ? `${label}, ${detail}` : label}
       accessibilityState={{ disabled: !!inactive, selected: !!selected, busy: !!busy, ...(selectionRole ? { checked: !!selected } : {}) }}
       aria-disabled={!!inactive}
@@ -318,7 +322,7 @@ export function ContextMenuItem({
       ]}
     >
       <View style={styles.iconSlot}>
-        {icon ? <AppIcon name={icon} size={24} color={color} /> : null}
+        {leading ?? (icon ? <AppIcon name={icon} size={24} color={color} /> : null)}
       </View>
       <Text variant="bodyLarge" style={[styles.itemLabel, { color }]} numberOfLines={2}>
         {label}

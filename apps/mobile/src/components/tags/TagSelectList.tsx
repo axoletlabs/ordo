@@ -15,6 +15,8 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { radius, spacing } from "../../theme/tokens";
 import { tagColorValue } from "../../lib/tag-colors";
 import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
+import { toast } from "../ui/toast-store";
+import { errorMessage } from "../../lib/error-message";
 
 export interface TagSelectListProps {
   /** Currently selected tag ids (assignment or draft). */
@@ -75,8 +77,8 @@ export function TagSelectList({
       const tag = await create.mutateAsync({ name });
       onToggle(tag.id);
       setQuery("");
-    } catch {
-      // Best-effort quick create; failures surface via the host sheet's toast.
+    } catch (error) {
+      toast.error(errorMessage(error, "Couldn't create the tag. Try again."));
     }
   };
 
@@ -85,7 +87,7 @@ export function TagSelectList({
       key={tag.id}
       accessibilityRole="checkbox"
       {...(menu && Platform.OS === "web" ? { role: "menuitemcheckbox" as PressableProps["role"] } : null)}
-      accessibilityLabel={`${tag.name}${selected ? ", selected" : ""}`}
+      accessibilityLabel={tag.name}
       accessibilityState={{ checked: selected }}
       stateLayerColor={selected ? palette.onSecondaryContainer : palette.onSurface}
       style={[styles.row, { backgroundColor: selected ? palette.secondaryContainer : "transparent" }]}
@@ -104,6 +106,8 @@ export function TagSelectList({
       <PressableScale
         accessibilityRole={menu ? "menuitem" : "button"}
         accessibilityLabel={`Create tag ${query.trim()}`}
+        disabled={create.isPending}
+        accessibilityState={{ busy: create.isPending }}
         style={styles.row}
         onPress={() => void createAndSelect(query.trim())}
       >
@@ -113,7 +117,7 @@ export function TagSelectList({
         </Text>
         <Ionicons name="add" size={18} color={palette.accent} />
       </PressableScale>
-    ) : autoCreate ? (
+    ) : autoCreate && onRequestCreateTag ? (
       <PressableScale
         accessibilityRole={menu ? "menuitem" : "button"}
         accessibilityLabel="New tag"

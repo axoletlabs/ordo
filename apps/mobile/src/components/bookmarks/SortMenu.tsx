@@ -99,6 +99,7 @@ export function SortMenu({
               icon={FOLDER_SORT_ICON[sort]}
               label={FOLDER_SORT_LABEL[sort]}
               selected={folderSort === sort}
+              selectionRole="menuitemradio"
               onPress={() => pickFolder(sort)}
             />
           ))}
@@ -115,6 +116,7 @@ export function SortMenu({
               icon={BOOKMARK_SORT_ICON[sort]}
               label={BOOKMARK_SORT_LABEL[sort]}
               selected={bookmarkSort === sort}
+              selectionRole="menuitemradio"
               onPress={() => pickBookmark(sort)}
             />
           ))}

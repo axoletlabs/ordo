@@ -3,7 +3,7 @@
  * article/website, reminders, and optional fuzzy matching.
  */
 import React, { useEffect, useMemo, useState } from "react";
-import { Platform, Pressable, StyleSheet, View, type ViewStyle } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import type { FolderDto, TagDto } from "@ordo/shared";
 import { DEFAULT_FOLDER_ICON } from "@ordo/shared";
@@ -12,7 +12,6 @@ import { Input } from "../ui/Input";
 import { Text } from "../ui/Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { tagColorValue } from "../../lib/tag-colors";
-import { haptics } from "../../lib/haptics";
 import { type MenuAnchorRect } from "../../lib/menu-anchor";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { spacing } from "../../theme/tokens";
@@ -88,11 +87,10 @@ export function SearchFilterMenu({
       : [...tags];
     return list.sort(
       (a, b) =>
-        Number(filters.tagIds.includes(b.id)) - Number(filters.tagIds.includes(a.id)) ||
         b.bookmarkCount - a.bookmarkCount ||
         a.name.localeCompare(b.name),
     );
-  }, [filters.tagIds, tagQuery, tags]);
+  }, [tagQuery, tags]);
 
   const filteredFolders = useMemo(() => {
     const q = folderQuery.trim().toLocaleLowerCase("en-US");
@@ -101,11 +99,10 @@ export function SearchFilterMenu({
       : [...folders];
     return list.sort(
       (a, b) =>
-        Number(filters.folderIds.includes(b.id)) - Number(filters.folderIds.includes(a.id)) ||
         Number(b.pinned) - Number(a.pinned) ||
         a.name.localeCompare(b.name),
     );
-  }, [filters.folderIds, folderQuery, folders]);
+  }, [folderQuery, folders]);
 
   const go = (next: FilterPage) => {
     setPage(next);
@@ -224,6 +221,7 @@ export function SearchFilterMenu({
             icon="sparkles-outline"
             label="Fuzzy match"
             selected={filters.fuzzy}
+            selectionRole="menuitemcheckbox"
             onPress={toggleFuzzy}
           />
           {searchFiltersActive(filters) ? (
@@ -320,6 +318,7 @@ export function SearchFilterMenu({
               icon={status === "unread" ? "mail-unread-outline" : status === "read" ? "mail-open-outline" : "layers-outline"}
               label={STATUS_LABEL[status]}
               selected={filters.status === status}
+              selectionRole="menuitemradio"
               onPress={() => setStatus(status)}
             />
           ))}
@@ -335,6 +334,7 @@ export function SearchFilterMenu({
               icon={kind === "article" ? "document-text-outline" : kind === "web" ? "globe-outline" : "apps-outline"}
               label={KIND_LABEL[kind]}
               selected={filters.kind === kind}
+              selectionRole="menuitemradio"
               onPress={() => setKind(kind)}
             />
           ))}
@@ -356,6 +356,7 @@ export function SearchFilterMenu({
               }
               label={REMINDER_LABEL[reminder]}
               selected={filters.reminder === reminder}
+              selectionRole="menuitemradio"
               onPress={() => setReminder(reminder)}
             />
           ))}
@@ -392,43 +393,10 @@ function FolderFilterRow({
   folderId?: string;
   onPress: () => void;
 }) {
-  const { palette } = useTheme();
   const unlocked = useFolderUnlocked(folderId);
-  const [hovered, setHovered] = useState(false);
-  const highlight = `${palette.onSurface}1f`;
-
-  return (
-    <Pressable
-      accessibilityRole="menuitem"
-      accessibilityLabel={`${name}${locked ? (unlocked ? ", unlocked" : ", locked") : ""}`}
-      accessibilityState={{ selected }}
-      onHoverIn={() => setHovered(true)}
-      onHoverOut={() => setHovered(false)}
-      onPress={() => {
-        haptics.light();
-        onPress();
-      }}
-      style={({ pressed }) => [
-        styles.tagRow,
-        Platform.OS === "web" ? styles.tagRowWeb : null,
-        (pressed || hovered) ? { backgroundColor: highlight } : null,
-      ]}
-    >
-      <Ionicons
-        name={icon as keyof typeof Ionicons.glyphMap}
-        size={16}
-        color={palette.text}
-        style={iconGlyphStyle(16)}
-      />
-      <Text variant="body" numberOfLines={1} style={styles.tagName}>
-        {name}
-      </Text>
-      {locked ? <FolderLockIcon unlocked={unlocked} size={14} outline /> : null}
-      {selected ? (
-        <Ionicons name="checkmark" size={16} color={palette.accent} style={iconGlyphStyle(16)} />
-      ) : null}
-    </Pressable>
-  );
+  return <ContextMenuItem label={`${name}${locked ? (unlocked ? ", unlocked" : ", locked") : ""}`}
+    icon={icon as keyof typeof Ionicons.glyphMap} selected={selected} selectionRole="menuitemcheckbox"
+    trailing={locked ? <FolderLockIcon unlocked={unlocked} size={18} outline /> : undefined} onPress={onPress} />;
 }
 
 function TagFilterRow({
@@ -442,38 +410,8 @@ function TagFilterRow({
   selected: boolean;
   onPress: () => void;
 }) {
-  const { palette } = useTheme();
-  const [hovered, setHovered] = useState(false);
-  const highlight = `${palette.onSurface}1f`;
-
-  return (
-    <Pressable
-      accessibilityRole="menuitem"
-      accessibilityLabel={name}
-      accessibilityState={{ selected }}
-      onHoverIn={() => setHovered(true)}
-      onHoverOut={() => setHovered(false)}
-      onPress={() => {
-        haptics.light();
-        onPress();
-      }}
-      style={({ pressed }) => [
-        styles.tagRow,
-        Platform.OS === "web" ? styles.tagRowWeb : null,
-        (pressed || hovered) ? { backgroundColor: highlight } : null,
-      ]}
-    >
-      <View style={styles.iconSlot}>
-        <View style={[styles.dot, { backgroundColor: tagColorValue(color).dot }]} />
-      </View>
-      <Text variant="body" numberOfLines={1} style={styles.tagName}>
-        {name}
-      </Text>
-      {selected ? (
-        <Ionicons name="checkmark" size={16} color={palette.accent} style={iconGlyphStyle(16)} />
-      ) : null}
-    </Pressable>
-  );
+  return <ContextMenuItem label={name} selected={selected} selectionRole="menuitemcheckbox"
+    leading={<View style={[styles.dot, { backgroundColor: tagColorValue(color).dot }]} />} onPress={onPress} />;
 }
 
 const styles = StyleSheet.create({
@@ -481,25 +419,5 @@ const styles = StyleSheet.create({
   trailingLabel: { flexShrink: 1, includeFontPadding: false },
   tagSearch: { paddingHorizontal: spacing[12], paddingTop: spacing[4], paddingBottom: spacing[6] },
   empty: { paddingHorizontal: spacing[12], paddingVertical: spacing[12] },
-  tagRow: {
-    minHeight: 48,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[10],
-    paddingHorizontal: spacing[12],
-    paddingVertical: spacing[8],
-  },
-  tagRowWeb: {
-    cursor: "pointer",
-    transitionProperty: "background-color",
-    transitionDuration: "120ms",
-  } as ViewStyle,
-  iconSlot: {
-    width: 16,
-    height: 16,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  dot: { width: 7, height: 7, borderRadius: 9999 },
-  tagName: { flex: 1, minWidth: 0, includeFontPadding: false },
+  dot: { width: 12, height: 12, borderRadius: 6 },
 });
