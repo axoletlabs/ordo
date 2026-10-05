@@ -4,9 +4,14 @@ import { useSharedValue, withSpring } from "react-native-reanimated";
 import { createFabScrollState } from "../lib/fab-scroll";
 import { materialMotion, useMaterialMotion } from "../theme/material-motion";
 
-export function useCollapsingFab() {
+/**
+ * Scroll-aware expansion shared by FAB labels and reader chrome.
+ * `threshold` is the scroll distance that flips collapse; call `expand(offset)`
+ * after programmatic scrolling so stale deltas cannot flip the state back.
+ */
+export function useCollapsingFab(threshold = 24) {
   const motion = useMaterialMotion();
-  const state = useRef(createFabScrollState());
+  const state = useRef(createFabScrollState(threshold));
   const collapsed = useRef(false);
   const spatial = useSharedValue(1);
   const effects = useSharedValue(1);
@@ -18,5 +23,16 @@ export function useCollapsingFab() {
     spatial.value = motion.reducedMotion ? target : withSpring(target, motion.spatial);
     effects.value = motion.reducedMotion ? target : withSpring(target, materialMotion.effects.fast);
   }, [spatial, effects, motion.spatial, motion.reducedMotion]);
-  return { expansion: useMemo(() => ({ spatial, effects }), [spatial, effects]), onScroll };
+  const expand = useCallback((offset?: number) => {
+    if (offset != null) state.current.reset(offset);
+    if (!collapsed.current && spatial.value === 1 && effects.value === 1) return;
+    collapsed.current = false;
+    const target = 1;
+    spatial.value = motion.reducedMotion ? target : withSpring(target, motion.spatial);
+    effects.value = motion.reducedMotion ? target : withSpring(target, materialMotion.effects.fast);
+  }, [effects, motion.reducedMotion, motion.spatial, spatial]);
+  return useMemo(
+    () => ({ expansion: { spatial, effects }, onScroll, expand }),
+    [effects, expand, onScroll, spatial],
+  );
 }
