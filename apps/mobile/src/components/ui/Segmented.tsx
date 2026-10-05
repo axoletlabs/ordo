@@ -1,6 +1,6 @@
 /** Baseline segmented buttons / Expressive connected toggle button group. */
 import React, { useEffect } from "react";
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
@@ -26,32 +26,57 @@ function SegmentLabel({ label, foreground, selected }: { label: string; foregrou
 export interface SegmentedProps<T extends string> {
   options: readonly { value: T; label: string; accessibilityLabel?: string }[]; value: T; onChange: (value: T) => void;
   accessibilityLabel?: string;
+  orientation?: "horizontal" | "vertical";
 }
-export function Segmented<T extends string>({ options, value, onChange, accessibilityLabel }: SegmentedProps<T>) {
+export function Segmented<T extends string>({ options, value, onChange, accessibilityLabel, orientation = "horizontal" }: SegmentedProps<T>) {
   const { palette, expressive } = useTheme();
-  return <View style={{ minHeight: 48, justifyContent: "center" }}><View accessibilityRole="radiogroup" accessibilityLabel={accessibilityLabel} style={[styles.group, {
+  const vertical = orientation === "vertical";
+  const keyboardProps = Platform.OS === "web" ? {
+    onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
+      const radios = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]'));
+      const focused = radios.indexOf(event.target as HTMLElement);
+      if (focused < 0) return;
+      let next = focused;
+      if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (focused + 1) % options.length;
+      else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (focused + options.length - 1) % options.length;
+      else if (event.key === "Home") next = 0;
+      else if (event.key === "End") next = options.length - 1;
+      else return;
+      event.preventDefault();
+      const option = options[next];
+      if (option && option.value !== value) { haptics.selection(); onChange(option.value); }
+      radios[next]?.focus();
+    },
+  } : {};
+  return <View style={{ minHeight: 48, justifyContent: "center" }}><View {...keyboardProps} accessibilityRole="radiogroup" accessibilityLabel={accessibilityLabel} style={[styles.group, {
     gap: expressive ? 2 : 0, backgroundColor: "transparent",
     borderRadius: radius.full,
+    ...(vertical ? { flexDirection: "column" as const, height: "auto" as const } : {}),
   }]}>
     {options.map((option, index) => {
       const selected = value === option.value;
       const fg = selected ? expressive ? palette.onSecondary : palette.onSecondaryContainer : palette.onSurface;
-      const outer = 20;
-      const rest = selected ? outer : { topLeft: index === 0 ? outer : radius.sm, bottomLeft: index === 0 ? outer : radius.sm,
-        topRight: index === options.length - 1 ? outer : radius.sm, bottomRight: index === options.length - 1 ? outer : radius.sm };
-      const pressed = { topLeft: index === 0 ? outer : radius.xs, bottomLeft: index === 0 ? outer : radius.xs,
-        topRight: index === options.length - 1 ? outer : radius.xs, bottomRight: index === options.length - 1 ? outer : radius.xs };
+      const outer = vertical ? 24 : 20;
+      const first = index === 0, last = index === options.length - 1;
+      const ends = { topLeft: first, bottomLeft: vertical ? last : first, topRight: vertical ? first : last, bottomRight: last };
+      const corners = (inner: number) => ({ topLeft: ends.topLeft ? outer : inner, bottomLeft: ends.bottomLeft ? outer : inner,
+        topRight: ends.topRight ? outer : inner, bottomRight: ends.bottomRight ? outer : inner });
+      const rest = selected ? outer : corners(radius.sm);
+      const pressed = corners(radius.xs);
+      const outline = corners(0);
       return <PressableScale key={option.value} accessibilityRole="radio" accessibilityLabel={option.accessibilityLabel ?? option.label}
+        {...(Platform.OS === "web" ? { tabIndex: selected ? 0 : -1 } : {})}
         accessibilityState={{ checked: selected }} onPress={() => { if (!selected) { haptics.selection(); onChange(option.value); } }}
-        stateLayerColor={fg} hitSlop={{ top: 4, bottom: 4 }} shape={expressive ? { rest, pressed } : undefined}
+        stateLayerColor={fg} hitSlop={vertical ? undefined : { top: 4, bottom: 4 }} shape={expressive ? { rest, pressed } : undefined}
         style={[styles.option, {
-          height: 40,
-          backgroundColor: selected ? expressive ? palette.secondary : palette.secondaryContainer : expressive ? palette.surfaceContainerHigh : "transparent",
+          height: vertical ? 48 : 40,
+          ...(vertical ? { flex: 0, flexShrink: 0, minHeight: 48, width: "100%" as const } : {}),
+          backgroundColor: selected ? expressive ? palette.secondary : palette.secondaryContainer : expressive ? palette.surfaceContainerLow : "transparent",
           borderColor: palette.outline,
-          borderTopWidth: expressive ? 0 : 1, borderBottomWidth: expressive ? 0 : 1,
-          borderLeftWidth: expressive || index > 0 ? 0 : 1, borderRightWidth: expressive ? 0 : 1,
-          ...(!expressive ? { borderTopLeftRadius: index === 0 ? outer : 0, borderBottomLeftRadius: index === 0 ? outer : 0,
-            borderTopRightRadius: index === options.length - 1 ? outer : 0, borderBottomRightRadius: index === options.length - 1 ? outer : 0 } : {}),
+          borderTopWidth: expressive || vertical && !first ? 0 : 1, borderBottomWidth: expressive ? 0 : 1,
+          borderLeftWidth: expressive || !vertical && !first ? 0 : 1, borderRightWidth: expressive ? 0 : 1,
+          ...(!expressive ? { borderTopLeftRadius: outline.topLeft, borderBottomLeftRadius: outline.bottomLeft,
+            borderTopRightRadius: outline.topRight, borderBottomRightRadius: outline.bottomRight } : {}),
         }]}>
           <SegmentLabel label={option.label} foreground={fg} selected={selected} />
       </PressableScale>;

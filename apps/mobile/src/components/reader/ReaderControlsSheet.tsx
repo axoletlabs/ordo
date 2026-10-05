@@ -1,17 +1,16 @@
 /**
  * Compact reader appearance controls: font size, font family, theme
- * (system/light/dark/sepia) and — when the effective theme is dark — the
+ * (system/light/dark) and — when the effective theme is dark — the
  * AMOLED pure-black toggle. Presented as a FloatingPanel so it matches the
  * app's existing menu/sheet language on phones and tablets alike.
  */
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, View, useWindowDimensions } from "react-native";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Segmented } from "../ui/Segmented";
 import { Text } from "../ui/Text";
 import { Toggle } from "../ui/Toggle";
-import { SettingsSelect } from "../settings/SettingsSelect";
 import { spacing } from "../../theme/tokens";
 import type {
   ReaderFontFamily,
@@ -38,7 +37,6 @@ const themeOptions: readonly { value: ReaderTheme; label: string }[] = [
   { value: "system", label: "System" },
   { value: "light", label: "Light" },
   { value: "dark", label: "Dark" },
-  { value: "sepia", label: "Sepia" },
 ];
 
 export interface ReaderControlsSheetProps {
@@ -79,6 +77,8 @@ export const ReaderControlsSheet = React.memo(function ReaderControlsSheet({
   onUpdate,
   effectiveDark,
 }: ReaderControlsSheetProps) {
+  const { width, fontScale } = useWindowDimensions();
+  const orientation = width < 360 || fontScale > 1.3 ? "vertical" : "horizontal";
   return (
     <FloatingPanel visible={visible} onDismiss={onDismiss}>
       <PanelHeader title="Reader" onClose={onDismiss} />
@@ -87,6 +87,7 @@ export const ReaderControlsSheet = React.memo(function ReaderControlsSheet({
       <ControlGroup label="Text size" accessibilityHint="Changes the article text size.">
         <Segmented
           accessibilityLabel="Text size"
+          orientation={orientation}
           options={sizeOptions}
           value={preferences.fontSize}
           onChange={(fontSize) => onUpdate({ fontSize })}
@@ -96,6 +97,7 @@ export const ReaderControlsSheet = React.memo(function ReaderControlsSheet({
       <ControlGroup label="Font" accessibilityHint="Changes the article typeface.">
         <Segmented
           accessibilityLabel="Font"
+          orientation={orientation}
           options={familyOptions}
           value={preferences.fontFamily}
           onChange={(fontFamily) => onUpdate({ fontFamily })}
@@ -103,8 +105,9 @@ export const ReaderControlsSheet = React.memo(function ReaderControlsSheet({
       </ControlGroup>
 
       <ControlGroup label="Theme" accessibilityHint="Changes the reader theme.">
-        <SettingsSelect
-          title="Reader theme"
+        <Segmented
+          accessibilityLabel="Reader theme"
+          orientation={orientation}
           options={themeOptions}
           value={preferences.theme}
           onChange={(theme) => onUpdate({ theme })}

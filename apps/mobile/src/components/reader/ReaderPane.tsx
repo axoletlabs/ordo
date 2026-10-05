@@ -18,7 +18,8 @@ import {
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
-import { useColorScheme, useWindowDimensions } from "react-native";
+import { useWindowDimensions } from "react-native";
+import { useSystemColorScheme } from "../../theme/use-system-color-scheme";
 import { useSceneColumnInsets } from "../../hooks/use-scene-column-insets";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
@@ -152,7 +153,7 @@ const EMPTY_HIGHLIGHTS: HighlightDto[] = [];
  * them, independent of the app theme.
  */
 export function ReaderPane(props: ReaderPaneProps) {
-  const systemScheme = useColorScheme();
+  const systemScheme = useSystemColorScheme();
   const { preferences, setPreferences } = useReaderPreferences();
   const materialYouColors = useSettingsStore((s) => s.materialYouColors);
   const deviceColors = useDeviceColors();
@@ -163,7 +164,7 @@ export function ReaderPane(props: ReaderPaneProps) {
     [preferences.theme, preferences.amoled, systemScheme, deviceColors, materialYouColors, expressive, contrast],
   );
   // Commit control feedback first; let a long article reflow at interruptible priority.
-  const content = useDeferredValue(useMemo(() => ({ preferences, palette: readerPalette }), [preferences, readerPalette]));
+  const contentPreferences = useDeferredValue(preferences);
 
   // The reader surface owns the status bar (full-screen stack usage only);
   // on unmount, restore the style the app theme expects.
@@ -178,9 +179,9 @@ export function ReaderPane(props: ReaderPaneProps) {
     <ReaderPaneInner
       {...props}
       preferences={preferences}
-      contentPreferences={content.preferences}
+      contentPreferences={contentPreferences}
       onUpdatePreferences={setPreferences}
-      readerPalette={content.palette}
+      readerPalette={readerPalette}
     />
   );
 }
@@ -1164,13 +1165,13 @@ function ReaderPaneInner({
         </FABLayer>
       ) : null}
 
-      <ThemeOverrideProvider palette={appPalette}><ReaderControlsSheet
+      <ReaderControlsSheet
         visible={controlsOpen}
         onDismiss={closeControls}
         preferences={preferences}
         onUpdate={onUpdatePreferences}
         effectiveDark={effectiveDark}
-      /></ThemeOverrideProvider>
+      />
       <EditTagsSheet
         visible={editTagsOpen}
         bookmark={bookmark ?? null}
@@ -1477,20 +1478,20 @@ const styles = StyleSheet.create({
   content: { marginTop: spacing[24] },
   actionLabel: { flex: 1 },
   tocList: { maxHeight: 420 },
-  tocRow: { minHeight: 44, justifyContent: "center" },
+  tocRow: { minHeight: 48, justifyContent: "center" },
   highlightList: { maxHeight: 420 },
   highlightRow: {
-    minHeight: 44,
+    minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[8],
     paddingVertical: spacing[8],
   },
-  highlightBody: { flex: 1, minWidth: 0 },
+  highlightBody: { flex: 1, minWidth: 0, minHeight: 48, justifyContent: "center" },
   highlightMeta: { marginTop: spacing[4] },
   removeHit: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
   },

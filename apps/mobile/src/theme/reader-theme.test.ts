@@ -4,18 +4,13 @@ import { readerColorSchemeOverride } from "./reader-color-scheme.ts";
 import { materialColorRoles } from "./material-colors.ts";
 
 /**
- * Contrast contract for reader light/sepia. Keep these hex values in sync with
- * `reader-theme.ts` (sepia). Light uses the actual generated Material roles.
+ * Contrast contract for reader light/dark using generated Material roles.
  * Reader ink stays dark on light surfaces even when the app is in night mode.
  */
 const light = materialColorRoles("#006A60", false, false, 0);
 const LIGHT_BG = light.surface;
 const LIGHT_INK = light.onSurface;
 const LIGHT_BODY = light.onSurfaceVariant;
-const SEPIA_BG = "#F2E8D5";
-const SEPIA_SURFACE = "#F7EFDF";
-const SEPIA_INK = "#43351F";
-const SEPIA_BODY = "#57452B";
 
 function luminance(hex: string): number {
   const n = hex.replace("#", "");
@@ -34,14 +29,13 @@ test("light reader uses dark ink on a Material surface", () => {
 
 test("switching from any reader palette leaves the real system scheme intact", () => {
   assert.equal(readerColorSchemeOverride("system"), "unspecified");
-  assert.equal(readerColorSchemeOverride("sepia"), "unspecified");
   assert.equal(readerColorSchemeOverride("light"), "unspecified");
   assert.equal(readerColorSchemeOverride("dark"), "unspecified");
 });
 
-test("sepia reader is warm paper with dark ink, not an inverted dark theme", () => {
-  assert.ok(luminance(SEPIA_BG) > 0.7);
-  assert.ok(luminance(SEPIA_SURFACE) > 0.7);
-  assert.ok(luminance(SEPIA_INK) < 0.15);
-  assert.ok(luminance(SEPIA_BODY) < 0.25);
+test("dark reader uses light ink on a dark Material surface", () => {
+  const dark = materialColorRoles("#006A60", true, false, 0);
+  assert.ok(luminance(dark.surface) < 0.05);
+  assert.ok(luminance(dark.onSurface) > 0.5);
+  assert.ok(luminance(dark.onSurfaceVariant) > 0.3);
 });

@@ -30,7 +30,8 @@ import { useTheme } from "../../theme/ThemeProvider";
 import type { Palette } from "../../theme/theme";
 import { radius, resolveFont, spacing, type FontFamily } from "../../theme/tokens";
 import type { HighlightDto, ReaderPreferences } from "@ordo/shared";
-import { applyHighlightsToHtml } from "@ordo/shared";
+import { applyHighlightsToHtml, htmlToPlainText } from "@ordo/shared";
+import { readerArticleColors, READER_IGNORED_INLINE_STYLES } from "./reader-article-colors";
 import { READER_BODY_SIZE, resolveReaderFontFamily } from "./reader-typography";
 import {
   collectTableRows,
@@ -43,7 +44,6 @@ import {
   SelectablePhrase,
   asHtmlNode,
   anchorRenderer,
-  highlightHandlersFromHtml,
   ignoreTextSelect,
   markRenderer,
   selectableBlockRenderer,
@@ -87,6 +87,7 @@ function buildTagsStyles(
   family: FontFamily,
   base: number,
 ): MixedStyleRecord {
+  const colors = readerArticleColors(palette);
   const bodyFont = (weight = "400") => resolveFont(family, weight);
   const monoSize = Math.max(12, base - 2);
   const cell = {
@@ -100,7 +101,7 @@ function buildTagsStyles(
     fontFamily: bodyFont(),
     fontSize: base,
     lineHeight: Math.round(base * 1.65),
-    color: palette.textSecondary,
+    color: colors.body,
   };
 
   return {
@@ -157,34 +158,34 @@ function buildTagsStyles(
       fontFamily: bodyFont(),
       fontSize: base,
       lineHeight: Math.round(base * 1.6),
-      color: palette.textSecondary,
+      color: colors.body,
       marginBottom: spacing[6],
     },
     blockquote: {
       borderLeftWidth: 3,
       borderLeftColor: palette.accent,
-      backgroundColor: palette.surfaceSecondary,
-      paddingHorizontal: spacing[14],
-      paddingVertical: spacing[10],
-      borderRadius: 6,
+      backgroundColor: colors.block,
+      paddingHorizontal: spacing[16],
+      paddingVertical: spacing[12],
+      borderRadius: radius.sm,
       marginTop: spacing[16],
     },
     pre: {
       fontFamily: resolveFont("mono", "400"),
       fontSize: monoSize,
       lineHeight: Math.round(monoSize * 1.55),
-      color: palette.textSecondary,
-      backgroundColor: palette.surfaceSecondary,
-      paddingHorizontal: spacing[14],
+      color: colors.body,
+      backgroundColor: colors.block,
+      paddingHorizontal: spacing[16],
       paddingVertical: spacing[12],
-      borderRadius: 10,
+      borderRadius: radius.sm,
       marginTop: spacing[16],
     },
     code: {
       fontFamily: resolveFont("mono", "400"),
       fontSize: monoSize,
       color: palette.text,
-      backgroundColor: palette.surfaceSecondary,
+      backgroundColor: colors.block,
     },
     figure: { marginTop: spacing[20], alignItems: "center" },
     figcaption: {
@@ -195,7 +196,7 @@ function buildTagsStyles(
       textAlign: "center",
       marginTop: spacing[6],
     },
-    img: { borderRadius: 8 },
+    img: { borderRadius: radius.sm },
     picture: { marginTop: spacing[16] },
     table: { marginTop: spacing[16] },
     th: {
@@ -216,8 +217,8 @@ function buildTagsStyles(
       marginVertical: spacing[20],
     },
     mark: {
-      backgroundColor: palette.tertiaryContainer,
-      color: palette.onTertiaryContainer,
+      backgroundColor: colors.highlight,
+      color: colors.onHighlight,
     },
     small: { fontSize: Math.max(11, base - 3) },
   };
@@ -309,7 +310,7 @@ const tableRenderer: CustomBlockRenderer = ({ tnode, TNodeChildrenRenderer }) =>
     <View
       style={[
         styles.table,
-        { borderColor: palette.border, backgroundColor: palette.surfaceSecondary },
+        { borderColor: palette.outlineVariant, backgroundColor: palette.surfaceContainerLow },
       ]}
     >
       {records.map((row, rowIndex) => (
@@ -414,35 +415,38 @@ export const ArticleHtml = React.memo(function ArticleHtml({
     () => buildTagsStyles(palette, family, base),
     [palette, family, base],
   );
-  // Default RN text follows the activity (often night-mode white). Untagged
-  // nodes would then paint white ink on parchment. Pin every run of text to
-  // the reader palette so light/sepia never mix with the app's dark scheme.
+  // Pin untagged text to the reader, not the app/activity appearance.
   const baseStyle = useMemo(
     () => ({
-      color: palette.textSecondary,
+      color: palette.onSurface,
       fontFamily: resolveFont(family),
       fontSize: base,
       lineHeight: Math.round(base * 1.65),
     }),
-    [palette.textSecondary, family, base],
+    [palette.onSurface, family, base],
   );
   const defaultTextProps = useMemo(
     () => ({
       selectable: false as const,
-      selectionColor: palette.mustard,
-      style: { color: palette.textSecondary },
+      selectionColor: palette.surfaceContainerHighest,
+      style: { color: palette.onSurface },
     }),
-    [palette.mustard, palette.textSecondary],
+    [palette.surfaceContainerHighest, palette.onSurface],
   );
   const onTextSelectRef = useRef(onTextSelect);
   onTextSelectRef.current = onTextSelect;
+  // Parsing the article is independent of colors/font size. Keep it warm when
+  // controls change rather than rescanning a long document on every reflow.
+  const articlePlain = useMemo(() => htmlToPlainText(html), [html]);
   const highlightUi = useMemo(
-    () =>
-      highlightHandlersFromHtml(html, palette.mustard, {
-        textStyle: baseStyle,
-        onTextSelect: (draft) => (onTextSelectRef.current ?? ignoreTextSelect)(draft),
-      }),
-    [baseStyle, html, palette.mustard],
+    () => ({
+      articlePlain,
+      selectionColor: palette.surfaceContainerHighest,
+      highlightStyle: { color: palette.onTertiaryContainer, backgroundColor: palette.tertiaryContainer },
+      textStyle: baseStyle,
+      onTextSelect: (draft) => (onTextSelectRef.current ?? ignoreTextSelect)(draft),
+    }) satisfies HighlightUiHandlers,
+    [baseStyle, articlePlain, palette.surfaceContainerHighest, palette.onTertiaryContainer, palette.tertiaryContainer],
   );
 
   // List markers should match the article's font (and accent color).
@@ -505,6 +509,7 @@ export const ArticleHtml = React.memo(function ArticleHtml({
       onTTreeChange={handleTreeChange}
       systemFonts={SYSTEM_FONTS}
       defaultTextProps={defaultTextProps}
+      ignoredStyles={READER_IGNORED_INLINE_STYLES}
     />
     </HighlightUiContext.Provider>
   );

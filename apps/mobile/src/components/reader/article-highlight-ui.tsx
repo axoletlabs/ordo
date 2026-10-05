@@ -115,24 +115,25 @@ function InlineSpan({
 }) {
   if (Platform.OS === "ios") {
     return (
-      <UITextView style={style} onPress={onPress}>
+      <UITextView style={style} onPress={onPress} accessibilityRole={onPress ? "link" : undefined}>
         {children}
       </UITextView>
     );
   }
   return (
-    <Text selectable={false} style={style} onPress={onPress}>
+    <Text selectable={false} style={style} onPress={onPress} accessibilityRole={onPress ? "link" : undefined}>
       {children}
     </Text>
   );
 }
 
 /** Rebuild a TNode as inline spans so the OS can select inside one text view. */
-function selectableInline(node: TNode): React.ReactNode {
+function selectableInline(node: TNode, highlightStyle?: TextStyle, highlighted = false): React.ReactNode {
+  const marked = highlighted || node.tagName === "mark";
   if (isBreakTNode(asHtmlNode(node))) return "\n";
   if (node.type === "text") {
     if (!node.data) return null;
-    const style = pickTextStyle(node.getNativeStyles() as Record<string, unknown>);
+    const style = { ...pickTextStyle(node.getNativeStyles() as Record<string, unknown>), ...(marked ? highlightStyle : {}) };
     const press = pressPropsFor(node);
     if (!press && Object.keys(style).length === 0) return node.data;
     return (
@@ -144,15 +145,15 @@ function selectableInline(node: TNode): React.ReactNode {
   if (node.type === "empty" || node.tagName === "img") return null;
   if (node.tagName == null) {
     return node.children.map((child, index) => (
-      <React.Fragment key={index}>{selectableInline(child)}</React.Fragment>
+      <React.Fragment key={index}>{selectableInline(child, highlightStyle, marked)}</React.Fragment>
     ));
   }
-  const style = pickTextStyle(node.getNativeStyles() as Record<string, unknown>);
+  const style = { ...pickTextStyle(node.getNativeStyles() as Record<string, unknown>), ...(marked ? highlightStyle : {}) };
   const press = pressPropsFor(node);
   return (
     <InlineSpan style={style} onPress={press?.onPress}>
       {node.children.map((child, index) => (
-        <React.Fragment key={index}>{selectableInline(child)}</React.Fragment>
+        <React.Fragment key={index}>{selectableInline(child, highlightStyle, marked)}</React.Fragment>
       ))}
     </InlineSpan>
   );
@@ -175,6 +176,7 @@ export interface HighlightUiHandlers {
   articlePlain: string;
   selectionColor: string;
   textStyle?: StyleProp<TextStyle>;
+  highlightStyle?: TextStyle;
   onTextSelect: (draft: HighlightSelectDraft | null) => void;
 }
 
@@ -204,11 +206,11 @@ export function SelectablePhrase({
   const hostRef = useRef<View>(null);
   const text = useMemo(() => nodeTextContent(asHtmlNode(tnode)), [tnode]);
   const spans = useMemo(() => {
-    if (tnode.type === "text") return selectableInline(tnode);
+    if (tnode.type === "text") return selectableInline(tnode, ui?.highlightStyle);
     return tnode.children.map((child, index) => (
-      <React.Fragment key={index}>{selectableInline(child)}</React.Fragment>
+      <React.Fragment key={index}>{selectableInline(child, ui?.highlightStyle, tnode.tagName === "mark")}</React.Fragment>
     ));
-  }, [tnode]);
+  }, [tnode, ui?.highlightStyle]);
 
   const publishRange = useCallback(
     (start: number, end: number, nativeRect?: MenuAnchorRect) => {
@@ -286,7 +288,9 @@ export function SelectablePhrase({
     publishRange(start, start + selected.length, webSelectionAnchor());
   }, [publishRange, text, ui]);
 
-  const phraseStyle = [styles.phrase, ui?.textStyle];
+  // A heading/code block must keep its own computed font and ink rather than
+  // having the generic paragraph fallback override its semantic styles.
+  const phraseStyle = [styles.phrase, ui?.textStyle, pickTextStyle(tnode.getNativeStyles() as Record<string, unknown>)];
   const phrase =
     Platform.OS === "ios" ? (
       <UITextView
