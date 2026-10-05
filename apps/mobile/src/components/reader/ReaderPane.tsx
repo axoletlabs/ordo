@@ -9,10 +9,12 @@
  */
 import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
+  findNodeHandle,
   Platform,
   ScrollView,
   Share,
   StyleSheet,
+  UIManager,
   View,
   type LayoutChangeEvent,
   type NativeScrollEvent,
@@ -84,6 +86,7 @@ import {
 import * as bookmarkHooks from "../../hooks/use-bookmarks";
 import { useFolders, useServerInfo } from "../../hooks/queries";
 import { useReaderPreferences } from "../../hooks/use-reader-preferences";
+import { useCollapsingFab } from "../../hooks/use-collapsing-fab";
 import { useSettingsStore } from "../../store/settings";
 import { domainFromUrl, formatDate } from "../../lib/format";
 import { errorMessage, folderProtectedId, isFolderProtected } from "../../lib/error-message";
@@ -283,6 +286,14 @@ function ReaderPaneInner({
   const browserRef = useRef<BookmarkBrowserHandle>(null);
   const scrollRef = useRef<ScrollView>(null);
   const offsetRef = useRef(0);
+  // Chrome (header + progress rule) only reacts to real user drags, so
+  // programmatic scrolls (position restore, TOC jumps) never yank it around.
+  const userScrollingRef = useRef(false);
+  const collapsingFab = useCollapsingFab(48);
+  const chromeHeightSV = useSharedValue(0);
+  const chromeShiftStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -chromeHeightSV.value * (1 - collapsingFab.expansion.spatial.value) }],
+  }));
   const websiteViewRef = useRef(false);
   const [keptBrowserId, setKeptBrowserId] = useState<string | null>(null);
   const [pageHost, setPageHost] = useState<string | null>(null);
@@ -389,7 +400,22 @@ function ReaderPaneInner({
     const open = () => {
       if (!isMenuAnchorRect(draft.anchor)) return;
       menuScrollY.current = offsetRef.current;
-      setSelectionMenu({ draft, anchor: draft.anchor });
+      // A tap on a saved highlight addresses the whole highlight: resolve the
+      // stored quote so copy/remove operate on it, not the tapped fragment.
+      let resolved = draft;
+      if (draft.whole && draft.highlightId) {
+        const record = highlights.find((row) => row.id === draft.highlightId);
+        if (record) {
+          resolved = {
+            ...draft,
+            exact: record.exact,
+            prefix: record.prefix ?? "",
+            suffix: record.suffix ?? "",
+            href: record.href ?? null,
+          };
+        }
+      }
+      setSelectionMenu({ draft: resolved, anchor: draft.anchor });
       setActionPanel(null);
     };
     if (selectionMenuRef.current) {
@@ -400,7 +426,7 @@ function ReaderPaneInner({
       selectTimer.current = null;
       open();
     }, SELECT_OPEN_MS);
-  }, []);
+  }, [highlights]);
 
   const dismissSelectionMenu = useCallback(() => {
     if (selectTimer.current) {
@@ -445,14 +471,13 @@ function ReaderPaneInner({
         },
         {
           onSuccess: () => {
-            dismissSelectionMenu();
             toast.success(absorbIds.length > 0 ? "Highlight updated" : "Highlighted");
           },
           onError: (err) => toast.error(errorMessage(err, "Couldn't save the highlight.")),
         },
       );
     },
-    [bookmark, createHighlight, detail.data?.contentHtml, dismissSelectionMenu, highlights],
+    [bookmark, createHighlight, detail.data?.contentHtml, highlights],
   );
 
   const dropHighlight = useCallback(
@@ -482,6 +507,7 @@ function ReaderPaneInner({
     if (!bookmark || !selectionMenu) return;
     const html = detail.data?.contentHtml;
     if (!html) return;
+    haptics.light();
     const plan = planUnhighlight(html, highlights, selectionMenu.draft);
     if (plan.kind === "none") {
       toast.error("Couldn't update the highlight.");
@@ -492,6 +518,7 @@ function ReaderPaneInner({
       return;
     }
     try {
+      dismissSelectionMenu();
       for (const row of plan.updates) {
         await updateHighlight.mutateAsync({
           id: bookmark.id,
@@ -520,7 +547,6 @@ function ReaderPaneInner({
           folderId: bookmark.folderId,
         });
       }
-      dismissSelectionMenu();
       const removedOnly = plan.deleteIds.length > 0 && plan.updates.length === 0 && plan.creates.length === 0;
       toast.success(removedOnly ? "Highlight removed" : "Highlight updated");
     } catch (err) {
@@ -600,6 +626,11 @@ function ReaderPaneInner({
     setPageHost(null);
   }, [bookmarkId, initialSurface]);
 
+  // The website view sits below the app header: never leave it half-hidden.
+  useEffect(() => {
+    if (showWebsiteView) collapsingFab.expand(offsetRef.current);
+  }, [collapsingFab, showWebsiteView]);
+
   useEffect(() => {
     if (showWebsiteView && bookmarkId) setKeptBrowserId(bookmarkId);
   }, [showWebsiteView, bookmarkId]);
@@ -628,18 +659,60 @@ function ReaderPaneInner({
 
   const handleHeadingSelect = useCallback((id: string) => {
     const heading = headingRefs.current.get(id);
-    const scrollContent = scrollRef.current?.getInnerViewNode();
-    if (!heading || !scrollContent) return;
-    heading.measureLayout(
-      scrollContent,
-      (_x, y) => {
-        haptics.light();
-        setActionPanel(null);
-        scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing[16]), animated: true });
+    const scroll = scrollRef.current;
+    if (!heading || !scroll) return;
+    haptics.light();
+    setActionPanel(null);
+    // Re-sync the chrome machine with the current offset so the jump's own
+    // scroll deltas don't toggle the header mid-flight.
+    collapsingFab.expand(offsetRef.current);
+    const jump = (contentY: number) => {
+      if (!Number.isFinite(contentY)) return;
+      scroll.scrollTo({ y: Math.max(0, contentY - spacing[16]), animated: true });
+    };
+    // Content-space Y = heading window Y - content-origin window Y, measured
+    // in the same frame. measureLayout against the inner view silently no-ops
+    // under Fabric; view-level window measurement works on Fabric and web
+    // (RN-web attaches measureInWindow to host nodes).
+    const withWindowY = (view: unknown) =>
+      new Promise<number | null>((resolve) => {
+        let settled = false;
+        const done = (value: number | null) => {
+          if (!settled) {
+            settled = true;
+            resolve(value);
+          }
+        };
+        setTimeout(() => done(null), 200);
+        const finish = (_x: number, y: number, width: number, height: number) => {
+          done(!Number.isFinite(y) || (width === 0 && height === 0) ? null : y);
+        };
+        const measurable = view as {
+          measureInWindow?: (cb: (x: number, y: number, width: number, height: number) => void) => void;
+        } | null;
+        if (typeof measurable?.measureInWindow === "function") {
+          measurable.measureInWindow(finish);
+          return;
+        }
+        try {
+          const handle = findNodeHandle(view as View);
+          if (handle != null && typeof UIManager.measureInWindow === "function") {
+            UIManager.measureInWindow(handle, finish);
+            return;
+          }
+        } catch {
+          // web: findNodeHandle is unsupported; host nodes carry measureInWindow.
+        }
+        done(null);
+      });
+    const inner = scroll.getInnerViewNode?.();
+    void Promise.all([withWindowY(heading), withWindowY(inner)]).then(
+      ([headingY, originY]) => {
+        if (headingY == null || originY == null) return;
+        jump(headingY - originY);
       },
-      () => {},
     );
-  }, []);
+  }, [collapsingFab]);
 
   const syncContentsShortcut = useCallback(
     (offset: number, headerHeight = articleHeaderHeightRef.current, defer = false) => {
@@ -758,6 +831,9 @@ function ReaderPaneInner({
     htmlReadyRef.current = false;
     offsetRef.current = 0;
     articleHeaderHeightRef.current = 0;
+    userScrollingRef.current = false;
+    collapsingFab.expand(0);
+    chromeHeightSV.value = 0;
     progressSV.value = baseline;
     setProgress(baseline);
     if (contentsShortcutTimerRef.current) {
@@ -774,7 +850,7 @@ function ReaderPaneInner({
     return () => {
       flushProgress();
     };
-  }, [bookmark?.id]);
+  }, [bookmark?.id, chromeHeightSV, collapsingFab]);
 
   // Restore the saved reading position once layout + content size are known.
   const maybeRestore = useCallback(() => {
@@ -816,6 +892,11 @@ function ReaderPaneInner({
       offsetRef.current = contentOffset.y;
       viewHeightRef.current = layoutMeasurement.height;
       contentHeightRef.current = contentSize.height;
+      // Chrome follows user drags on native (programmatic scrolls — position
+      // restore, TOC jumps — never yank it around). Web wheel scrolling has no
+      // drag events, so there the chrome simply follows the scroll.
+      if (selectionMenuRef.current) collapsingFab.expand(offsetRef.current);
+      else if (Platform.OS === "web" || userScrollingRef.current) collapsingFab.onScroll(event);
       const menu = selectionMenuRef.current;
       if (menu) {
         const dy = contentOffset.y - menuScrollY.current;
@@ -836,8 +917,15 @@ function ReaderPaneInner({
         scrollReadingProgress(contentOffset.y, layoutMeasurement.height, contentSize.height),
       );
     },
-    [handleFraction, hasHtml, syncContentsShortcut, windowHeight],
+    [collapsingFab, handleFraction, hasHtml, syncContentsShortcut, windowHeight],
   );
+
+  const handleScrollBeginDrag = useCallback(() => {
+    userScrollingRef.current = true;
+  }, []);
+  const handleScrollEnd = useCallback(() => {
+    userScrollingRef.current = false;
+  }, []);
 
   // Recompute when content settles/grows (images loading, HTML rendering).
   const onContentSizeChange = useCallback(
@@ -941,6 +1029,12 @@ function ReaderPaneInner({
         <StatusBar style={readerPalette.mode === "dark" ? "light" : "dark"} />
       ) : null}
     <View style={[styles.container, { backgroundColor: palette.background }]}>
+      <Animated.View
+        style={chromeShiftStyle}
+        onLayout={(event) => {
+          chromeHeightSV.value = event.nativeEvent.layout.height;
+        }}
+      >
       <Header
         title={bookmark ? (showWebsiteView && pageHost ? pageHost : domain) : "Reader"}
         variant="tonal"
@@ -980,6 +1074,7 @@ function ReaderPaneInner({
           />
         </View>
       ) : null}
+      </Animated.View>
 
       {loading ? (
         <ScreenContent alignTo={embedded ? "parent" : "scene"} style={styles.stateBody}>
@@ -1039,7 +1134,7 @@ function ReaderPaneInner({
         </View>
         ) : null}
         {!showWebsiteView ? (
-        <View style={styles.scrollViewport}>
+        <Animated.View style={[styles.scrollViewport, chromeShiftStyle]}>
           <ThemedScrollView
             key={bookmark.id}
             ref={scrollRef}
@@ -1049,6 +1144,8 @@ function ReaderPaneInner({
             onLayout={onScrollViewLayout}
             onContentSizeChange={onContentSizeChange}
             onScroll={onScroll}
+            onScrollBeginDrag={handleScrollBeginDrag}
+            onMomentumScrollEnd={handleScrollEnd}
             scrollEventThrottle={16}
             contentContainerStyle={{
               // Inset under the progress rule. The header row gap is separate,
@@ -1144,7 +1241,7 @@ function ReaderPaneInner({
               </View>
             </ScreenContent>
           </ThemedScrollView>
-        </View>
+        </Animated.View>
         ) : null}
         </>
       )}
@@ -1153,6 +1250,8 @@ function ReaderPaneInner({
         <FABLayer maxWidth={layout.maxReaderWidth}>
           <FAB
             icon="list-outline"
+            label="Contents"
+            expansion={collapsingFab.expansion}
             accessibilityLabel="Table of contents"
             accessibilityHint="Jump to a section in this article."
             onPress={() => {
@@ -1424,6 +1523,8 @@ function ReaderPaneInner({
             }
             onPress={() => {
               if (!selectionMenu) return;
+              haptics.light();
+              dismissSelectionMenu();
               saveHighlight(selectionMenu.draft);
             }}
           />

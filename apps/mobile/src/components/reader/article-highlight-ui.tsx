@@ -104,6 +104,15 @@ function pressPropsFor(node: TNode) {
   return undefined;
 }
 
+type PressPoint = { x: number; y: number };
+type InlinePressEvent = { nativeEvent?: { pageX?: number; pageY?: number } };
+
+function pressPoint(event?: InlinePressEvent): PressPoint | undefined {
+  const x = event?.nativeEvent?.pageX;
+  const y = event?.nativeEvent?.pageY;
+  return typeof x === "number" && typeof y === "number" ? { x, y } : undefined;
+}
+
 function InlineSpan({
   style,
   children,
@@ -111,7 +120,7 @@ function InlineSpan({
 }: {
   style: TextStyle;
   children: React.ReactNode;
-  onPress?: () => void;
+  onPress?: (event?: InlinePressEvent) => void;
 }) {
   if (Platform.OS === "ios") {
     return (
@@ -120,20 +129,52 @@ function InlineSpan({
       </UITextView>
     );
   }
+  // No explicit selectable: the selectable phrase root decides. Forcing false
+  // pins user-select:none on web, which blocks styled spans from selection.
   return (
-    <Text selectable={false} style={style} onPress={onPress} accessibilityRole={onPress ? "link" : undefined}>
+    <Text style={style} onPress={onPress} accessibilityRole={onPress ? "link" : undefined}>
       {children}
     </Text>
   );
 }
 
+interface InlineCtx {
+  highlightStyle?: TextStyle;
+  /** Tapping a saved highlight opens its menu; offsets map to the block text. */
+  onHighlightPress?: (start: number, end: number, point?: PressPoint) => void;
+}
+
 /** Rebuild a TNode as inline spans so the OS can select inside one text view. */
-function selectableInline(node: TNode, highlightStyle?: TextStyle, highlighted = false): React.ReactNode {
+function selectableInline(
+  node: TNode,
+  ctx: InlineCtx,
+  highlighted = false,
+  offset: { value: number } = { value: 0 },
+): React.ReactNode {
   const marked = highlighted || node.tagName === "mark";
-  if (isBreakTNode(asHtmlNode(node))) return "\n";
+  if (isBreakTNode(asHtmlNode(node))) {
+    offset.value += 1;
+    return "\n";
+  }
   if (node.type === "text") {
+    const start = offset.value;
+    const len = node.data?.length ?? 0;
+    offset.value += len;
     if (!node.data) return null;
-    const style = { ...pickTextStyle(node.getNativeStyles() as Record<string, unknown>), ...(marked ? highlightStyle : {}) };
+    // TRE collapses <mark> into a text-type node that keeps tagName/id.
+    // It is one tap target for the tap-to-manage-highlight menu.
+    if (marked && node.tagName === "mark" && ctx.onHighlightPress && len > 0) {
+      const style = { ...pickTextStyle(node.getNativeStyles() as Record<string, unknown>), ...(ctx.highlightStyle ?? {}) };
+      return (
+        <InlineSpan
+          style={style}
+          onPress={(event) => ctx.onHighlightPress?.(start, start + len, pressPoint(event))}
+        >
+          {node.data}
+        </InlineSpan>
+      );
+    }
+    const style = { ...pickTextStyle(node.getNativeStyles() as Record<string, unknown>), ...(marked ? ctx.highlightStyle : {}) };
     const press = pressPropsFor(node);
     if (!press && Object.keys(style).length === 0) return node.data;
     return (
@@ -145,15 +186,31 @@ function selectableInline(node: TNode, highlightStyle?: TextStyle, highlighted =
   if (node.type === "empty" || node.tagName === "img") return null;
   if (node.tagName == null) {
     return node.children.map((child, index) => (
-      <React.Fragment key={index}>{selectableInline(child, highlightStyle, marked)}</React.Fragment>
+      <React.Fragment key={index}>{selectableInline(child, ctx, marked, offset)}</React.Fragment>
     ));
   }
-  const style = { ...pickTextStyle(node.getNativeStyles() as Record<string, unknown>), ...(marked ? highlightStyle : {}) };
+  const style = { ...pickTextStyle(node.getNativeStyles() as Record<string, unknown>), ...(marked ? ctx.highlightStyle : {}) };
   const press = pressPropsFor(node);
+  // A mark is one tap target: inner links still win (innermost onPress).
+  if (node.tagName === "mark" && ctx.onHighlightPress) {
+    const start = offset.value;
+    const children = node.children.map((child, index) => (
+      <React.Fragment key={index}>{selectableInline(child, ctx, marked, offset)}</React.Fragment>
+    ));
+    const end = offset.value;
+    return (
+      <InlineSpan
+        style={style}
+        onPress={(event) => ctx.onHighlightPress?.(start, end, pressPoint(event))}
+      >
+        {children}
+      </InlineSpan>
+    );
+  }
   return (
     <InlineSpan style={style} onPress={press?.onPress}>
       {node.children.map((child, index) => (
-        <React.Fragment key={index}>{selectableInline(child, highlightStyle, marked)}</React.Fragment>
+        <React.Fragment key={index}>{selectableInline(child, ctx, marked, offset)}</React.Fragment>
       ))}
     </InlineSpan>
   );
@@ -169,6 +226,8 @@ function webSelectedText(): string {
 /** Selection draft; `highlightId` is set when the range sits inside a mark. */
 export type HighlightSelectDraft = HighlightAnchor & {
   highlightId?: string;
+  /** The draft covers one whole saved highlight (tap, not a text selection). */
+  whole?: boolean;
   anchor?: MenuAnchorRect;
 };
 
@@ -204,17 +263,74 @@ export function SelectablePhrase({
 }) {
   const ui = useContext(HighlightUiContext);
   const hostRef = useRef<View>(null);
+  const publishSeq = useRef(0);
   const text = useMemo(() => nodeTextContent(asHtmlNode(tnode)), [tnode]);
+
+  // Deferred anchor callbacks (measureInWindow) must never publish a stale
+  // draft over a newer selection event.
+  const publish = useCallback(
+    (draft: HighlightSelectDraft | null) => {
+      publishSeq.current += 1;
+      ui?.onTextSelect(draft);
+    },
+    [ui],
+  );
+
+  const publishHighlightTap = useCallback(
+    (start: number, end: number, point?: PressPoint) => {
+      if (!ui) return;
+      const range = selectedRange(start, end);
+      if (!range) return;
+      const htmlNode = asHtmlNode(tnode);
+      const highlightId = highlightIdCoveringRange(htmlNode, range.start, range.end);
+      // Only saved highlights open the tap menu; plain text just selects.
+      if (!highlightId) return;
+      const quote =
+        quoteFromBlock(ui.articlePlain, text, range.start, range.end) ??
+        quoteFromRange(text, range.start, range.end);
+      if (!quote) return;
+      const href = hrefCoveringRange(htmlNode, range.start, range.end);
+      const finish = (anchor: MenuAnchorRect) => {
+        ui.onTextSelect({ ...quote, ...(href ? { href } : {}), highlightId, whole: true, anchor });
+      };
+      if (point) {
+        const { width, height } = Dimensions.get("window");
+        finish({
+          x: Math.max(8, Math.min(point.x - 16, width - 40)),
+          y: Math.max(8, Math.min(point.y - 16, height - 40)),
+          width: 32,
+          height: 32,
+        });
+        return;
+      }
+      // No press coordinates (platform-dependent): center on the block itself.
+      const host = hostRef.current;
+      if (host && typeof host.measureInWindow === "function") {
+        host.measureInWindow((x, y, width, height) => {
+          if (!isMenuAnchorRect({ x, y, width, height })) return;
+          finish({ x: x + width / 2 - 16, y: y + height / 2 - 16, width: 32, height: 32 });
+        });
+      }
+    },
+    [text, tnode, ui],
+  );
+
   const spans = useMemo(() => {
-    if (tnode.type === "text") return selectableInline(tnode, ui?.highlightStyle);
+    const ctx: InlineCtx = {
+      highlightStyle: ui?.highlightStyle,
+      onHighlightPress: publishHighlightTap,
+    };
+    if (tnode.type === "text") return selectableInline(tnode, ctx);
     return tnode.children.map((child, index) => (
-      <React.Fragment key={index}>{selectableInline(child, ui?.highlightStyle, tnode.tagName === "mark")}</React.Fragment>
+      <React.Fragment key={index}>{selectableInline(child, ctx, tnode.tagName === "mark")}</React.Fragment>
     ));
-  }, [tnode, ui?.highlightStyle]);
+  }, [tnode, ui?.highlightStyle, publishHighlightTap]);
 
   const publishRange = useCallback(
     (start: number, end: number, nativeRect?: MenuAnchorRect) => {
       if (!ui) return;
+      publishSeq.current += 1;
+      const seq = publishSeq.current;
       const range = selectedRange(start, end);
       if (!range) {
         ui.onTextSelect(null);
@@ -236,6 +352,7 @@ export function SelectablePhrase({
         ...(highlightId ? { highlightId } : {}),
       };
       const finish = (host?: MenuAnchorRect) => {
+        if (seq !== publishSeq.current) return;
         const { width, height } = Dimensions.get("window");
         const anchor = resolveSelectionAnchor({
           nativeRect,
@@ -272,21 +389,23 @@ export function SelectablePhrase({
   const onWebSelect = useCallback(() => {
     const selected = webSelectedText();
     if (!selected) {
-      ui?.onTextSelect(null);
+      publish(null);
       return;
     }
-    const start = text.indexOf(selected);
+    // Browser selections may carry a trailing newline the block text lacks.
+    const trimmed = selected.replace(/\s+$/, "");
+    const start = trimmed ? text.indexOf(trimmed) : -1;
     if (start < 0) {
-      const quote = quoteFromRange(selected, 0, selected.length);
+      const quote = quoteFromRange(trimmed || selected, 0, (trimmed || selected).length);
       if (!quote) {
-        ui?.onTextSelect(null);
+        publish(null);
         return;
       }
-      ui?.onTextSelect({ ...quote, anchor: webSelectionAnchor() });
+      publish({ ...quote, anchor: webSelectionAnchor() });
       return;
     }
-    publishRange(start, start + selected.length, webSelectionAnchor());
-  }, [publishRange, text, ui]);
+    publishRange(start, start + trimmed.length, webSelectionAnchor());
+  }, [publish, publishRange, text]);
 
   // A heading/code block must keep its own computed font and ink rather than
   // having the generic paragraph fallback override its semantic styles.
