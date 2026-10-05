@@ -1,34 +1,17 @@
-/**
- * Inset squircle behind a library row for hover, the open row, and multi-select.
- * A full-bleed rectangle reads as a hard slab; the curve stays visible against
- * the page because the fill is inset from the row edges.
- */
 import React from "react";
-import { StyleSheet, View } from "react-native";
-import { radius, spacing } from "../../theme/tokens";
+import { Animated, StyleSheet } from "react-native";
 import { useTheme } from "../../theme/ThemeProvider";
+import { useStateOpacity } from "../ui/StateLayer";
 
-export function RowHighlight({ color }: { color: string }) {
-  const { expressive } = useTheme();
-  if (color === "transparent") return null;
-  return (
-    <View
-      pointerEvents="none"
-      style={[
-        styles.fill,
-        { backgroundColor: color, borderRadius: expressive ? radius.xl : 0 },
-      ]}
-    />
-  );
+/** Full-bleed layers are clipped by the row's exact group silhouette. */
+export function RowHighlight({ selected, hovered, pressed }: { selected: boolean; hovered: boolean; pressed: boolean }) {
+  const { palette } = useTheme();
+  const selection = useStateOpacity(+selected);
+  const feedback = useStateOpacity(pressed ? 0.1 : hovered ? 0.08 : 0);
+  return <>
+    <Animated.View testID="material-row-selection" pointerEvents="none" accessible={false}
+      style={[StyleSheet.absoluteFill, { backgroundColor: palette.secondaryContainer, opacity: selection }]} />
+    <Animated.View testID="material-row-state-layer" pointerEvents="none" accessible={false}
+      style={[StyleSheet.absoluteFill, { backgroundColor: palette.onSurface, opacity: feedback }]} />
+  </>;
 }
-
-const styles = StyleSheet.create({
-  fill: {
-    position: "absolute",
-    left: spacing[0],
-    right: spacing[0],
-    top: spacing[0],
-    bottom: spacing[0],
-    borderRadius: radius.sm,
-  },
-});

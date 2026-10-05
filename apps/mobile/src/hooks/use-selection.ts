@@ -6,12 +6,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BackHandler, Platform } from "react-native";
 import { useFocusEffect } from "expo-router";
-import { create } from "zustand";
+import { create, useStore } from "zustand";
+import { commitSelection, createSelectionState, toggleSelection, type SelectionKey } from "../lib/selection-state";
 import { haptics } from "../lib/haptics";
 import { dismissKeyboard } from "./use-keyboard-visible";
 import { createSelectionHoldGuard } from "../lib/selection-hold-guard";
 
-export type SelectionKey = `bookmark:${string}` | `folder:${string}`;
+export type { SelectionKey } from "../lib/selection-state";
 
 export function bookmarkKey(id: string): SelectionKey {
   return `bookmark:${id}`;
@@ -33,15 +34,12 @@ export function useSelectionHoldGuard() {
 export const useSelectionUiStore = create<{ active: boolean }>(() => ({ active: false }));
 
 export function useSelectionMode() {
-  const [active, setActive] = useState(false);
-  const [ids, setIds] = useState<ReadonlySet<SelectionKey>>(() => new Set());
-  const [revision, setRevision] = useState(0);
+  const [store] = useState(createSelectionState);
+  const { active, ids, revision } = useStore(store);
 
   const bump = useCallback((next: ReadonlySet<SelectionKey>, nextActive: boolean) => {
-    setIds(next);
-    setActive(nextActive);
-    setRevision((value) => value + 1);
-  }, []);
+    commitSelection(store, next, nextActive);
+  }, [store]);
 
   const enter = useCallback(
     (key?: SelectionKey) => {
@@ -56,16 +54,10 @@ export function useSelectionMode() {
     bump(new Set(), false);
   }, [bump]);
 
-  const idsRef = useRef(ids);
-  idsRef.current = ids;
-
   const toggle = useCallback((key: SelectionKey) => {
     haptics.selection();
-    const next = new Set(idsRef.current);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    bump(next, true);
-  }, [bump]);
+    toggleSelection(store, key);
+  }, [store]);
 
   const replace = useCallback(
     (keys: readonly SelectionKey[]) => {
@@ -115,6 +107,7 @@ export function useSelectionMode() {
   );
 
   return {
+    store,
     active,
     ids,
     count: ids.size,

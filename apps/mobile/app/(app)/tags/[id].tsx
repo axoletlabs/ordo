@@ -134,15 +134,11 @@ export default function TagDetailScreen() {
     onSelectedChange: selection.assign,
   });
 
-  const selectionActive = selection.active;
-  const selectionRevision = selection.revision;
   const renderBookmark = useCallback(
     ({ item, index }: { item: BookmarkDto; index: number }) => (
       <BookmarkRow
         bookmark={item}
         position={listPosition(index, items.length)}
-        selectionMode={selectionActive}
-        selected={selectionActive && selectionRef.current.has(bookmarkKey(item.id))}
         onPress={onPressBookmark}
         onEnterSelection={onEnterSelection}
         onMore={onMoreBookmark}
@@ -156,21 +152,18 @@ export default function TagDetailScreen() {
       onMoreBookmark,
       onPressBookmark,
       onTagPress,
-      selectionActive,
-      selectionRevision,
       items.length,
     ],
   );
 
   const listPane = (
-    <SelectionDragFrame drag={drag}>
+    <SelectionDragFrame drag={drag} selectionStore={selection.store}>
     <ThemedFlashList
       ref={drag.listRef}
       onScroll={drag.onScroll}
       onContentSizeChange={drag.onContentSizeChange}
       scrollEventThrottle={drag.scrollEventThrottle}
       data={items}
-      extraData={selectionRevision}
       getItemLayout={getItemLayout}
       keyExtractor={(b: BookmarkDto) => b.id}
       renderItem={renderBookmark}

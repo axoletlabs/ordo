@@ -17,6 +17,7 @@ import { useButtonGroupInteraction } from "./ButtonGroup";
 import { IconButton } from "./IconButton";
 import { useTheme } from "../../theme/ThemeProvider";
 import { layout, radius, spacing } from "../../theme/tokens";
+import { appBarLayout } from "../../theme/app-bar-layout";
 
 export const HEADER_LINE_HEIGHT = 28;
 export const HEADER_CONTROL_SIZE = 48;
@@ -38,6 +39,7 @@ export function Header({ title, subtitle, showBack, onBack, right, large, safeTo
   const column = useColumnPadding(maxWidth, alignTo);
   const { compactHeight } = useResponsiveLayout();
   const expanded = large && !compactHeight;
+  const barLayout = appBarLayout({ topInset: insets.top, safeTop, compact: compactHeight, tonal: variant === "tonal" });
   const back = () => {
     dismissKeyboard();
     return onBack ? onBack() : router.canGoBack() ? router.back() : router.replace("/");
@@ -45,24 +47,26 @@ export function Header({ title, subtitle, showBack, onBack, right, large, safeTo
   const titleText = <Text variant={expanded ? (expressive ? "displaySmall" : "headlineLarge") : variant === "tonal" ? "bodyLarge" : "titleLarge"}
     numberOfLines={1} style={headerTitleTextStyle}>{title}</Text>;
   return (
-    <View style={{ width: "100%", alignSelf: "center", maxWidth,
-      paddingTop: (safeTop ? insets.top : 0) + spacing[8], paddingLeft: column.left, paddingRight: column.right,
-      paddingBottom: expanded ? spacing[16] : spacing[8], backgroundColor: palette.background,
+    <View testID="material-app-bar" style={{ width: "100%", alignSelf: "center", maxWidth,
+      paddingTop: barLayout.paddingTop, paddingLeft: column.left, paddingRight: column.right,
+      paddingBottom: expanded ? spacing[16] : barLayout.paddingBottom, backgroundColor: palette.background,
       borderBottomColor: palette.outlineVariant, borderBottomWidth: divider ? StyleSheet.hairlineWidth : 0,
     }}>
-      <View style={[styles.bar, compactHeight || variant === "tonal" ? { minHeight: 56 } : null,
+      <View style={[styles.bar, { minHeight: barLayout.minHeight },
         variant === "tonal" ? { backgroundColor: palette.surfaceContainerHigh, borderRadius: radius.full, paddingHorizontal: spacing[4], gap: spacing[4] } : null]}>
          {showBack ? <HeaderIconButton name="arrow-back" variant="standard" color={palette.onSurface} onPress={back} accessibilityLabel="Back" measureOnPress={false} /> : null}
         {!expanded ? <View style={styles.title}>
           {onTitleLongPress ? <PressableScale onLongPress={onTitleLongPress} accessibilityRole="button"
-            accessibilityLabel={title} accessibilityHint={titleAccessibilityHint}>{titleText}</PressableScale> : titleText}
+            accessibilityLabel={title} accessibilityHint={titleAccessibilityHint}
+            style={{ minHeight: 48, justifyContent: "center", borderRadius: variant === "tonal" ? radius.full : radius.sm }}>{titleText}</PressableScale> : titleText}
           {subtitle ? <Text variant="bodySmall" color="secondary" numberOfLines={1}>{subtitle}</Text> : null}
         </View> : <View style={{ flex: 1 }} />}
         {right}
       </View>
       {expanded ? <View style={{ paddingTop: spacing[8] }}>
         {onTitleLongPress ? <PressableScale onLongPress={onTitleLongPress} accessibilityRole="button"
-          accessibilityLabel={title} accessibilityHint={titleAccessibilityHint}>{titleText}</PressableScale> : titleText}
+          accessibilityLabel={title} accessibilityHint={titleAccessibilityHint}
+          style={{ minHeight: 48, justifyContent: "center", borderRadius: radius.sm }}>{titleText}</PressableScale> : titleText}
         {subtitle ? <Text variant="bodyMedium" color="secondary" style={{ marginTop: spacing[8] }}>{subtitle}</Text> : null}
       </View> : null}
     </View>

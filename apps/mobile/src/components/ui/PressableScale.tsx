@@ -1,10 +1,14 @@
 /** Shared Material state layer and interruptible Expressive shape morph. */
 import React, { useEffect, useRef, useState } from "react";
-import { Platform, Pressable, StyleSheet, View, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
+import { Platform, Pressable, StyleSheet, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, type AnimatedStyle } from "react-native-reanimated";
 import { useTheme } from "../../theme/ThemeProvider";
 import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 import { useButtonGroupInteraction } from "./ButtonGroup";
+import { StateLayer } from "./StateLayer";
+import { stateLayerCorners, stateLayerOpacity } from "../../theme/state-layer";
+import { webSelectionKeys, type WebPressKeyEvent } from "./pressable-web";
+import { nativeHoverEvents } from "../../lib/pointer-hover";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 type CornerShape = number | { topLeft: number; topRight: number; bottomLeft: number; bottomRight: number };
@@ -12,12 +16,16 @@ function cornerValues(shape: CornerShape): number[] {
   return typeof shape === "number" ? [shape, shape, shape, shape] : [shape.topLeft, shape.topRight, shape.bottomLeft, shape.bottomRight];
 }
 export type PressableScaleProps = Omit<PressableProps, "style"> & {
+  dataSet?: Record<string, string>;
+  onKeyDown?: (event: WebPressKeyEvent) => void;
   scaleTo?: number;
   dim?: boolean;
   style?: StyleProp<AnimatedStyle<ViewStyle>>;
   /** Explicit shape mapping prevents arbitrary components from morphing. */
   shape?: { rest: CornerShape; pressed: CornerShape };
   stateLayerColor?: string;
+  /** Inset painted feedback when the visual (e.g. avatar) is smaller than its target. */
+  stateLayerInset?: number;
   /** Menus should not retain a second mouse-focus highlight beside the hovered item. */
   focusOnlyVisible?: boolean;
   /** A caller supplies a Reanimated style (e.g. the collapsing FAB). */
@@ -31,7 +39,7 @@ export function PressableScale(props: PressableScaleProps) {
 }
 
 /** Ordinary actions need a state layer, not shared values and mount-time springs. */
-function StatePressable({ style, children, disabled, stateLayerColor, focusOnlyVisible = false,
+function StatePressable({ style, children, disabled, stateLayerColor, stateLayerInset = 0, focusOnlyVisible = true,
   onPressIn, onPressOut, onHoverIn, onHoverOut, onFocus, onBlur,
   shape: _shape, scaleTo: _scaleTo, dim: _dim, animated: _animated, ...rest }: PressableScaleProps) {
   const { palette } = useTheme();
@@ -43,9 +51,14 @@ function StatePressable({ style, children, disabled, stateLayerColor, focusOnlyV
   const tint = stateLayerColor ?? palette.onSurface;
   const focusLayer = focused && (!focusOnlyVisible || focusVisible || Platform.OS !== "web");
   return <Pressable {...rest} disabled={disabled}
+    {...(Platform.OS === "web" ? { dataSet: { ...rest.dataSet, materialHoverSurface: "true" } } : {})}
+    {...(Platform.OS === "web" ? webSelectionKeys({ ...rest, disabled }) : {})}
+    {...(Platform.OS !== "web" ? nativeHoverEvents({ ...rest, disabled, onHoverIn, onHoverOut }, setHovered) : {})}
     aria-checked={rest.accessibilityState?.checked} aria-selected={rest.accessibilityState?.selected}
     aria-disabled={disabled || rest.accessibilityState?.disabled}
-    android_ripple={{ color: tint === "transparent" ? "transparent" : `${tint}1a` }}
+    // A transparent stateful drawable suppresses Android's stock rectangular
+    // hover/focus highlight; the bounded Material layer below owns feedback.
+    android_ripple={{ color: "transparent", borderless: false }}
     onPressIn={(event) => { group?.(true); onPressIn?.(event); }}
     onPressOut={(event) => { group?.(false); onPressOut?.(event); }}
     onHoverIn={(event) => { setHovered(true); onHoverIn?.(event); }}
@@ -55,21 +68,14 @@ function StatePressable({ style, children, disabled, stateLayerColor, focusOnlyV
     style={[style as StyleProp<ViewStyle>, { position: flat?.position ?? "relative" },
       focusVisible && !disabled ? { outlineColor: palette.primary, outlineWidth: 3, outlineOffset: 2, outlineStyle: "solid" } : null]}>
     {(state) => <>{typeof children === "function" ? children(state) : children}
-      <View testID="material-state-layer" pointerEvents="none" style={[StyleSheet.absoluteFill, {
-        borderRadius: flat?.borderRadius ?? 0,
-        borderTopLeftRadius: flat?.borderTopLeftRadius ?? flat?.borderRadius ?? 0,
-        borderTopRightRadius: flat?.borderTopRightRadius ?? flat?.borderRadius ?? 0,
-        borderBottomLeftRadius: flat?.borderBottomLeftRadius ?? flat?.borderRadius ?? 0,
-        borderBottomRightRadius: flat?.borderBottomRightRadius ?? flat?.borderRadius ?? 0,
-        backgroundColor: tint,
-        opacity: disabled ? 0 : (state.pressed && Platform.OS !== "android") || focusLayer ? 0.1 : hovered ? 0.08 : 0,
-      }]} /></>}
+      <StateLayer color={tint} surfaceStyle={style as StyleProp<ViewStyle>} inset={stateLayerInset}
+        opacity={stateLayerOpacity({ disabled, pressed: state.pressed, focused: focusLayer, hovered })} /></>}
   </Pressable>;
 }
 
 function AnimatedStatePressable({
   scaleTo = 1, dim = false, style, children, disabled, onPressIn, onPressOut,
-  onHoverIn, onHoverOut, onFocus, onBlur, shape, stateLayerColor, focusOnlyVisible = false, animated: _animated, ...rest
+  onHoverIn, onHoverOut, onFocus, onBlur, shape, stateLayerColor, stateLayerInset = 0, focusOnlyVisible = true, animated: _animated, ...rest
 }: PressableScaleProps) {
   const { palette } = useTheme();
   const motion = useMaterialMotion();
@@ -99,7 +105,7 @@ function AnimatedStatePressable({
   useEffect(() => {
     progress.value = motion.reducedMotion ? (down ? 1 : 0) : withSpring(down ? 1 : 0, motion.fast);
     const focusLayer = focused && (!focusOnlyVisible || Platform.OS !== "web" || focusVisible);
-    const opacity = disabled ? 0 : down || focusLayer ? 0.1 : hovered ? 0.08 : 0;
+    const opacity = stateLayerOpacity({ disabled, pressed: down, focused: focusLayer, hovered });
     layer.value = motion.reducedMotion ? opacity : withSpring(opacity, materialMotion.effects.fast);
   }, [down, hovered, focused, focusVisible, focusOnlyVisible, disabled, progress, layer, motion.fast, motion.reducedMotion]);
   useEffect(() => {
@@ -119,12 +125,16 @@ function AnimatedStatePressable({
   return (
     <AnimatedPressable
       {...rest}
+      {...(Platform.OS === "web" ? { dataSet: { ...rest.dataSet, materialHoverSurface: "true" } } : {})}
+      {...(Platform.OS === "web" ? webSelectionKeys({ ...rest, disabled }) : {})}
+      {...(Platform.OS !== "web" ? nativeHoverEvents({ ...rest, disabled, onHoverIn, onHoverOut }, setHovered) : {})}
       aria-checked={rest.accessibilityState?.checked}
       aria-selected={rest.accessibilityState?.selected}
       aria-expanded={rest.accessibilityState?.expanded}
       aria-busy={rest.accessibilityState?.busy}
       aria-disabled={disabled || rest.accessibilityState?.disabled}
       disabled={disabled}
+      android_ripple={{ color: "transparent", borderless: false }}
       onPressIn={(event) => { if (releaseFrame.current != null) cancelAnimationFrame(releaseFrame.current); setDown(true); groupInteraction?.(true); onPressIn?.(event); }}
       onPressOut={(event) => {
         // A toggle's onPress commits selection after press-out. Resolve both
@@ -144,12 +154,8 @@ function AnimatedStatePressable({
       style={[style, { position: flat?.position ?? "relative" }, Platform.OS === "web" && focusVisible && !disabled ? { outlineColor: palette.primary, outlineWidth: 3, outlineOffset: 2, outlineStyle: "solid" } : null, backgroundStyle, cornerStyle, feedback]}
     >
       {typeof children === "function" ? children({ pressed: down }) : children}
-      <Animated.View testID="material-state-layer" pointerEvents="none" style={[StyleSheet.absoluteFill, {
-        borderRadius: restCorner,
-        borderTopLeftRadius: flat?.borderTopLeftRadius ?? restCorner,
-        borderTopRightRadius: flat?.borderTopRightRadius ?? restCorner,
-        borderBottomLeftRadius: flat?.borderBottomLeftRadius ?? restCorner,
-        borderBottomRightRadius: flat?.borderBottomRightRadius ?? restCorner,
+      <Animated.View testID="material-state-layer" pointerEvents="none" accessible={false} style={[{ position: "absolute", top: stateLayerInset, bottom: stateLayerInset, left: stateLayerInset, right: stateLayerInset }, stateLayerCorners(flat), {
+        overflow: "hidden",
         backgroundColor: stateLayerColor ?? palette.onSurface,
       }, cornerStyle, layerStyle]} />
     </AnimatedPressable>

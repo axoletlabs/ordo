@@ -12,7 +12,7 @@ import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { CHECK_GLYPH, FOOTNOTE_LINE_BOX } from "../../theme/type-metrics";
-import { spacing } from "../../theme/tokens";
+import { radius, spacing } from "../../theme/tokens";
 
 export function CheckLine({
   checked,
@@ -53,6 +53,7 @@ export function CheckLine({
 
 const styles = StyleSheet.create({
   row: {
+    borderRadius: radius.sm,
     flexDirection: "row",
     alignItems: "flex-start",
     gap: spacing[8],

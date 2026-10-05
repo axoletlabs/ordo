@@ -245,7 +245,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     }, []);
 
     return (
-      <View collapsable={false} style={[styles.wrap, { backgroundColor: chromeBackground }]}>
+      <View testID="bookmark-browser" collapsable={false} style={[styles.wrap, { backgroundColor: chromeBackground }]}>
         <WebView
           ref={webRef}
           key={`${url}:${forceWebsiteDark ? "dark" : "auto"}`}
@@ -286,6 +286,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           mediaPlaybackRequiresUserAction={false}
           automaticallyAdjustContentInsets={false}
           contentInsetAdjustmentBehavior="never"
+          contentInset={{ top: 0, left: 0, bottom: 0, right: 0 }}
           hideKeyboardAccessoryView
           showsHorizontalScrollIndicator={false}
           originWhitelist={["http://*", "https://*", "about:blank"]}
@@ -333,8 +334,8 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
 );
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1 },
-  web: { flex: 1, ...(Platform.OS === "web" ? ({ height: "100%" } as const) : null) },
+  wrap: { flex: 1, minHeight: 0, overflow: "hidden" },
+  web: { flex: 1, margin: 0, padding: 0, ...(Platform.OS === "web" ? ({ height: "100%" } as const) : null) },
   blankCover: { ...StyleSheet.absoluteFill },
   progressTrack: {
     position: "absolute",

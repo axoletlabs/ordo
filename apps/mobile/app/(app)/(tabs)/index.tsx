@@ -245,8 +245,6 @@ export default function BookmarksScreen() {
     collapsingFab.onScroll(event);
   }, [drag.onScroll, collapsingFab.onScroll]);
 
-  const selectionActive = selection.active;
-  const selectionRevision = selection.revision;
   const toggleTag = useCallback((tagId: string) => search.setFilters((previous) => ({ ...previous,
     tagIds: previous.tagIds.includes(tagId) ? previous.tagIds.filter((id) => id !== tagId) : [...previous.tagIds, tagId] })), [search.setFilters]);
   const openTag = useCallback((tagId: string) => router.push(`/tags/${tagId}`), [router]);
@@ -257,8 +255,6 @@ export default function BookmarksScreen() {
           <FolderRow
             folder={item.folder}
             position={listPosition(index, folderItems.length)}
-            selectionMode={selectionActive}
-            selected={selectionRef.current.has(folderKey(item.folder.id))}
             onPress={onPressFolder}
             onEnterSelection={onEnterFolder}
             onMore={onMoreFolder}
@@ -269,8 +265,6 @@ export default function BookmarksScreen() {
         <BookmarkRow
           bookmark={item.bookmark}
           position={listPosition(index - folderItems.length, items.length)}
-          selectionMode={selectionActive}
-          selected={selectionActive && selectionRef.current.has(bookmarkKey(item.bookmark.id))}
           searchQuery={search.trimmed}
           searchFuzzy={search.listFilters.fuzzy}
           omitTagIds={search.listFilters.tagIds}
@@ -288,8 +282,6 @@ export default function BookmarksScreen() {
       onMoreFolder,
       onPressFolder,
       onPressLibraryBookmark,
-      selectionActive,
-      selectionRevision,
         search.trimmed, search.listFilters.fuzzy, search.listFilters.tagIds, search.active, toggleTag,
         folderItems.length, items.length, openTag,
     ],
@@ -388,14 +380,14 @@ export default function BookmarksScreen() {
         </ScreenContent>
       ) : (
         <ScreenContent maxWidth={contentWidth} style={styles.content}>
-          <SelectionDragFrame drag={drag}>
+          <SelectionDragFrame drag={drag} selectionStore={selection.store}>
           <ThemedFlashList
             ref={drag.listRef}
             onScroll={onLibraryScroll}
             onContentSizeChange={drag.onContentSizeChange}
             scrollEventThrottle={drag.scrollEventThrottle}
             data={libraryLoading ? [] : libraryItems}
-            extraData={`${selectionRevision}:${folderSort}:${unfiledSort}`}
+            extraData={`${folderSort}:${unfiledSort}`}
             keyExtractor={libraryKeyExtractor}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode="on-drag"

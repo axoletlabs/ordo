@@ -20,6 +20,8 @@ import { ROW_ICON_GLYPH } from "../../theme/alignment";
 import { layout, radius, spacing } from "../../theme/tokens";
 import { RowHighlight } from "../bookmarks/RowHighlight";
 import type { TagDto } from "@ordo/shared";
+import { rowOwnsHover } from "../../lib/row-hover";
+import { nativeHoverEvents } from "../../lib/pointer-hover";
 
 export const TAG_ROW_SIZE = 72;
 
@@ -60,12 +62,6 @@ export const TagRow = React.memo(function TagRow({
     measureAnchor(rowRef.current, (anchor) => onMore?.(tag, anchor), event);
   };
 
-  const rowFill = highlighted
-    ? palette.secondaryContainer
-    : pressed || hovered
-      ? `${palette.onSurface}${pressed ? "1f" : "14"}`
-      : "transparent";
-
   return (
     <ThemeOverrideProvider palette={palette}>
     <View
@@ -76,7 +72,8 @@ export const TagRow = React.memo(function TagRow({
         marginBottom: expressive ? spacing[2] : 0 }]}
       {...(Platform.OS === "web"
         ? {
-            onMouseEnter: () => setHovered(true),
+            onMouseEnter: (event: { target?: unknown; currentTarget?: unknown }) => setHovered(rowOwnsHover(event)),
+            onMouseMove: (event: { target?: unknown; currentTarget?: unknown }) => setHovered(rowOwnsHover(event)),
             onMouseLeave: () => setHovered(false),
             onContextMenu: onMore
               ? (event: { preventDefault?: () => void }) => {
@@ -85,9 +82,9 @@ export const TagRow = React.memo(function TagRow({
                 }
               : undefined,
           }
-        : null)}
+          : nativeHoverEvents({}, setHovered))}
     >
-      <RowHighlight color={rowFill} />
+      <RowHighlight selected={!!highlighted} hovered={hovered} pressed={pressed} />
       <ListPressable
         feedback={false}
         accessibilityRole="button"

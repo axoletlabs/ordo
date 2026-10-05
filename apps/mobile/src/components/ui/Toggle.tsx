@@ -1,6 +1,6 @@
 /** Material switch: 52×32 track, 16/24dp handle, selected checkmark. */
-import React, { useEffect } from "react";
-import { StyleSheet } from "react-native";
+import React, { useEffect, useRef } from "react";
+import { Platform, StyleSheet } from "react-native";
 import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { MaterialIcon } from "./MaterialIcon";
 import { PressableScale } from "./PressableScale";
@@ -8,6 +8,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 import { haptics } from "../../lib/haptics";
 import { radius } from "../../theme/tokens";
+import { stateLayerOpacity } from "../../theme/state-layer";
 export interface ToggleProps { value: boolean; onValueChange: (value: boolean) => void; disabled?: boolean; accessibilityLabel?: string }
 export function Toggle({ value, onValueChange, disabled, accessibilityLabel }: ToggleProps) {
   const { palette } = useTheme();
@@ -16,6 +17,11 @@ export function Toggle({ value, onValueChange, disabled, accessibilityLabel }: T
   const effect = useSharedValue(value ? 1 : 0);
   const pressed = useSharedValue(0);
   const state = useSharedValue(0);
+  const interaction = useRef({ pressed: false, focused: false, hovered: false });
+  const updateHalo = () => {
+    const target = stateLayerOpacity({ ...interaction.current, disabled });
+    state.value = motion.reducedMotion ? target : withSpring(target, materialMotion.effects.fast);
+  };
   useEffect(() => {
     position.value = motion.reducedMotion ? +value : withSpring(+value, motion.fast);
     effect.value = motion.reducedMotion ? +value : withSpring(+value, materialMotion.effects.fast);
@@ -37,10 +43,11 @@ export function Toggle({ value, onValueChange, disabled, accessibilityLabel }: T
   return <PressableScale accessibilityRole="switch" accessibilityLabel={accessibilityLabel}
     accessibilityState={{ checked: value, disabled: !!disabled }} disabled={disabled}
     stateLayerColor="transparent"
-    onPressIn={() => { pressed.value = motion.reducedMotion ? 1 : withSpring(1, motion.fast); state.value = 0.1; }}
-    onPressOut={() => { pressed.value = motion.reducedMotion ? 0 : withSpring(0, motion.fast); state.value = 0; }}
-    onHoverIn={() => { state.value = 0.08; }} onHoverOut={() => { state.value = 0; }}
-    onFocus={() => { state.value = 0.1; }} onBlur={() => { pressed.value = 0; state.value = 0; }}
+    onPressIn={() => { pressed.value = motion.reducedMotion ? 1 : withSpring(1, motion.fast); interaction.current.pressed = true; updateHalo(); }}
+    onPressOut={() => { pressed.value = motion.reducedMotion ? 0 : withSpring(0, motion.fast); interaction.current.pressed = false; updateHalo(); }}
+    onHoverIn={() => { interaction.current.hovered = true; updateHalo(); }} onHoverOut={() => { interaction.current.hovered = false; updateHalo(); }}
+    onFocus={event => { interaction.current.focused = Platform.OS !== "web" || !!(event.currentTarget as unknown as HTMLElement)?.matches?.(":focus-visible"); updateHalo(); }}
+    onBlur={() => { pressed.value = 0; interaction.current.focused = false; interaction.current.pressed = false; updateHalo(); }}
     style={styles.target} onPress={() => { haptics.selection(); onValueChange(!value); }}>
     <Animated.View pointerEvents="none" style={[styles.track, track]}>
       <Animated.View style={[styles.halo, halo]} />

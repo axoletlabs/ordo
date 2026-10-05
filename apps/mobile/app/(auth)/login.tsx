@@ -234,13 +234,13 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center" },
-  hosting: { marginTop: spacing[16], gap: spacing[8], minHeight: 48, justifyContent: "center" },
+  hosting: { marginTop: spacing[16], gap: spacing[8], minHeight: 48, justifyContent: "center", borderRadius: 24 },
   hostingActions: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     flexWrap: "wrap",
   },
-  hostingAction: { minHeight: 48, paddingHorizontal: spacing[8], justifyContent: "center" },
+  hostingAction: { minHeight: 48, paddingHorizontal: spacing[8], justifyContent: "center", borderRadius: 24 },
   forgotRow: { marginTop: spacing[8], alignItems: "flex-end" },
 });

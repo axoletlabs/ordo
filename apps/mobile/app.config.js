@@ -114,6 +114,7 @@ module.exports = {
     "./plugins/with-updates-channel.js",
     "./plugins/with-android-build.js",
     "./plugins/with-high-refresh-rate.js",
+    "./plugins/with-pointer-hover.js",
     "./plugins/with-uitextview-selection.js",
     "./plugins/with-selectable-text.js",
   ],

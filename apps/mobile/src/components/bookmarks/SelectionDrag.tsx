@@ -32,6 +32,8 @@ import {
   type SelectionRowFrame,
 } from "../../lib/selection-drag";
 import { SELECTION_LONG_PRESS_MS, type SelectionKey } from "../../hooks/use-selection";
+import { SelectionStateContext } from "../../hooks/selection-state-context";
+import type { SelectionStore } from "../../lib/selection-state";
 
 /** Native activation distance. Smaller than Android's scroll touch-slop so the mark wins first. */
 const MARK_ACTIVATE_PX = 4;
@@ -486,11 +488,14 @@ export function useSelectionDrag({
 export function SelectionDragFrame({
   drag,
   children,
+  selectionStore,
 }: {
   drag: ReturnType<typeof useSelectionDrag>;
   children: React.ReactNode;
+  selectionStore?: SelectionStore;
 }) {
   return (
+    <SelectionStateContext.Provider value={selectionStore ?? null}>
     <SelectionDragContext.Provider value={drag.context}>
       <View
         ref={drag.hostRef}
@@ -502,6 +507,7 @@ export function SelectionDragFrame({
         {children}
       </View>
     </SelectionDragContext.Provider>
+    </SelectionStateContext.Provider>
   );
 }
 

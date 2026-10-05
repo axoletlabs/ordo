@@ -21,6 +21,8 @@ import { PressableScale } from "../ui/PressableScale";
 import { Text } from "../ui/Text";
 import { UserAvatar } from "../ui/UserAvatar";
 import { SelectionHeader } from "./SelectionHeader";
+import { appBarLayout } from "../../theme/app-bar-layout";
+import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
 
 const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoFocus, onFilter, filtersOn, onFocusChange, filterOpen, selecting }: {
   query: string; onChange: (query: string) => void; autoFocus?: boolean;
@@ -88,6 +90,8 @@ export function LibraryHeader({ tools, query, onQueryChange, onFilter, filtersOn
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const column = useColumnPadding(maxWidth);
+  const { compactHeight } = useResponsiveLayout();
+  const barLayout = appBarLayout({ topInset: insets.top, tonal: true, compact: compactHeight });
   const motion = useMaterialMotion();
   const [focused, setFocused] = useState(false);
   const collapseTools = focused;
@@ -103,8 +107,8 @@ export function LibraryHeader({ tools, query, onQueryChange, onFilter, filtersOn
   const toolsStyle = useAnimatedStyle(() => ({ width: 96 * (1 - toolsProgress.value), opacity: 1 - toolsProgress.value }));
   useEffect(() => { if (selection) Keyboard.dismiss(); }, [!!selection]);
   const user = useAuthStore((s) => s.user);
-  return <View style={{ width: "100%", maxWidth, alignSelf: "center",
-    paddingTop: insets.top + spacing[8], paddingBottom: spacing[8],
+  return <View testID="material-app-bar" style={{ width: "100%", maxWidth, alignSelf: "center",
+    paddingTop: barLayout.paddingTop, paddingBottom: barLayout.paddingBottom,
     paddingLeft: column.left, paddingRight: column.right }}>
     <View style={[styles.appBar, { backgroundColor: palette.surfaceContainerHigh }, selection ? { display: "none" } : null]}>
       <View style={styles.search}><LibrarySearch query={query} onChange={onQueryChange} autoFocus={autoFocusSearch} onFilter={onFilter} filtersOn={filtersOn} onFocusChange={setFocused} filterOpen={filterOpen} selecting={!!selection} /></View>
@@ -113,6 +117,7 @@ export function LibraryHeader({ tools, query, onQueryChange, onFilter, filtersOn
         style={[{ height: 48, overflow: "hidden", flexDirection: "row", alignItems: "center" }, toolsStyle]}>{tools}
       <PressableScale accessibilityRole="button" accessibilityLabel="Account and settings"
         onPress={() => router.navigate("/settings")} stateLayerColor={palette.onSurface}
+        stateLayerInset={4}
         style={styles.account}>
         {user ? <UserAvatar user={user} size={40} /> : <MaterialIcon name="person-circle" size={24} color={palette.onSecondaryContainer} />}
        </PressableScale>

@@ -33,6 +33,9 @@ import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
 import type { BookmarkDto } from "@ordo/shared";
 import { listCorners, type ListPosition } from "../../theme/list-shape";
 import { estimateBookmarkRowSize } from "../../lib/bookmark-row-layout";
+import { useRowSelection } from "../../hooks/selection-state-context";
+import { rowOwnsHover } from "../../lib/row-hover";
+import { nativeHoverEvents } from "../../lib/pointer-hover";
 
 /** Compact tags shown inline on a row before overflow. */
 const MAX_ROW_TAGS = 2;
@@ -74,8 +77,8 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   onPress,
   onMore,
   onEnterSelection,
-  selected,
-  selectionMode,
+  selected: selectedProp,
+  selectionMode: selectionModeProp,
   highlighted: highlightedProp,
   onTagPress,
   omitTagIds,
@@ -83,6 +86,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   searchFuzzy,
   position = "only",
 }: BookmarkRowProps) {
+  const { selected, selectionMode } = useRowSelection(bookmarkKey(bookmark.id), { selected: selectedProp, selectionMode: selectionModeProp });
   const { palette: basePalette, expressive } = useTheme();
   const { fontScale } = useWindowDimensions();
   const router = useRouter();
@@ -191,12 +195,6 @@ export const BookmarkRow = React.memo(function BookmarkRow({
     runPressAction(() => openBookmarkInExternalBrowser(bookmark), haptics.light);
   };
 
-  const rowFill = selected || highlighted
-    ? palette.secondaryContainer
-    : pressed || hovered
-      ? `${palette.onSurface}${pressed ? "1f" : "14"}`
-      : "transparent";
-
   return (
     <ThemeOverrideProvider palette={palette}>
     <View
@@ -209,11 +207,12 @@ export const BookmarkRow = React.memo(function BookmarkRow({
         { borderBottomWidth: 0,
           backgroundColor: expressive ? palette.surfaceContainerLow : "transparent",
           borderRadius: expressive ? radius.lg : 0, marginBottom: expressive ? spacing[2] : 0 },
-        expressive ? listCorners(position, !!selected || !!highlighted) : null,
+        expressive ? listCorners(position, false) : null,
       ]}
       {...(Platform.OS === "web"
         ? {
-            onMouseEnter: () => setHovered(true),
+            onMouseEnter: (event: { target?: unknown; currentTarget?: unknown }) => setHovered(rowOwnsHover(event)),
+            onMouseMove: (event: { target?: unknown; currentTarget?: unknown }) => setHovered(rowOwnsHover(event)),
             onMouseLeave: () => setHovered(false),
             onContextMenu:
               onMore && !selectionMode
@@ -226,9 +225,9 @@ export const BookmarkRow = React.memo(function BookmarkRow({
               if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); openMore(); }
             } : undefined,
           }
-        : null)}
+          : nativeHoverEvents({}, setHovered))}
     >
-      <RowHighlight color={rowFill} />
+      <RowHighlight selected={!!selected || !!highlighted} hovered={hovered} pressed={pressed} />
       <SelectionDragHandle
         selectionKey={bookmarkKey(bookmark.id)}
         selectionMode={!!selectionMode}

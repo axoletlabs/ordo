@@ -307,7 +307,6 @@ export function ContextMenuItem({
       stateLayerColor={color}
       focusOnlyVisible
       onHoverIn={Platform.OS === "web" && !inactive ? (event) => (event.currentTarget as unknown as HTMLElement)?.focus() : undefined}
-      shape={expressive ? { rest: selected ? radius.md : radius.sm, pressed: selected ? radius.md : radius.sm } : undefined}
       onPress={() => {
         if (inactive) return;
         haptics.light();
@@ -318,7 +317,7 @@ export function ContextMenuItem({
         Platform.OS === "web" ? styles.itemWeb : null,
         inactive && styles.itemDisabled,
         { backgroundColor: selected ? palette.secondaryContainer : "transparent" },
-        { borderRadius: expressive ? radius.md : radius.xs, marginHorizontal: spacing[8] },
+        { borderRadius: expressive ? radius.md : radius.xs, marginHorizontal: spacing[8], overflow: "hidden" },
       ]}
     >
       <View style={styles.iconSlot}>

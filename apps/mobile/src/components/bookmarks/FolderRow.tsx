@@ -27,6 +27,9 @@ import { DEFAULT_FOLDER_ICON, type FolderDto } from "@ordo/shared";
 import { FolderLockIcon } from "./FolderLockIcon";
 import { RowStatusSlot, ROW_STATUS_ICON_SIZE } from "./RowStatusIcon";
 import { listCorners, type ListPosition } from "../../theme/list-shape";
+import { useRowSelection } from "../../hooks/selection-state-context";
+import { rowOwnsHover } from "../../lib/row-hover";
+import { nativeHoverEvents } from "../../lib/pointer-hover";
 
 export interface FolderRowProps {
   folder: FolderDto;
@@ -40,7 +43,8 @@ export interface FolderRowProps {
   position?: ListPosition;
 }
 
-export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore, onEnterSelection, selected, selectionMode, highlighted: highlightedProp, position = "only" }: FolderRowProps) {
+export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore, onEnterSelection, selected: selectedProp, selectionMode: selectionModeProp, highlighted: highlightedProp, position = "only" }: FolderRowProps) {
+  const { selected, selectionMode } = useRowSelection(folderKey(folder.id), { selected: selectedProp, selectionMode: selectionModeProp });
   const { palette: basePalette, expressive } = useTheme();
   const { fontScale } = useWindowDimensions();
   const rowRef = React.useRef<View>(null);
@@ -97,11 +101,6 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
     haptics.light();
     measureAnchor(rowRef.current, (anchor) => onMore?.(folder, anchor), event);
   };
-  const rowFill = selected || highlighted
-    ? palette.secondaryContainer
-    : pressed || hovered
-      ? `${palette.onSurface}${pressed ? "1f" : "14"}`
-      : "transparent";
 
   return (
     <ThemeOverrideProvider palette={palette}>
@@ -111,10 +110,11 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
       onLayout={selectionMode ? () => dragRow.bind(rowRef.current) : undefined}
       style={[styles.wrap, fontScale <= 1 ? { height: 72 } : null, { borderBottomWidth: 0,
          backgroundColor: expressive ? palette.surfaceContainerLow : "transparent", borderRadius: expressive ? radius.lg : 0,
-        marginBottom: expressive ? spacing[2] : 0, minHeight: 72 }, expressive ? listCorners(position, !!selected || !!highlighted) : null]}
+        marginBottom: expressive ? spacing[2] : 0, minHeight: 72 }, expressive ? listCorners(position, false) : null]}
       {...(Platform.OS === "web"
         ? {
-            onMouseEnter: () => setHovered(true),
+            onMouseEnter: (event: { target?: unknown; currentTarget?: unknown }) => setHovered(rowOwnsHover(event)),
+            onMouseMove: (event: { target?: unknown; currentTarget?: unknown }) => setHovered(rowOwnsHover(event)),
             onMouseLeave: () => setHovered(false),
             onContextMenu:
               onMore && !selectionMode
@@ -127,9 +127,9 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
               if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); openMore(); }
             } : undefined,
           }
-        : null)}
+          : nativeHoverEvents({}, setHovered))}
     >
-      <RowHighlight color={rowFill} />
+      <RowHighlight selected={!!selected || !!highlighted} hovered={hovered} pressed={pressed} />
       <SelectionDragHandle
         selectionKey={folderKey(folder.id)}
         selectionMode={!!selectionMode}

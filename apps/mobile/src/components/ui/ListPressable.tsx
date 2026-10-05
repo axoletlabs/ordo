@@ -3,16 +3,23 @@
  * views per bookmark row and stutters once a couple dozen are on screen).
  */
 import React from "react";
-import { Platform, Pressable, StyleSheet, View, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
+import { Platform, Pressable, StyleSheet, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
 import { useTheme } from "../../theme/ThemeProvider";
+import { StateLayer } from "./StateLayer";
+import { stateLayerOpacity } from "../../theme/state-layer";
+import { webSelectionKeys, type WebPressKeyEvent } from "./pressable-web";
+import { nativeHoverEvents } from "../../lib/pointer-hover";
 
-export function ListPressable({ style, children, feedback = true, ...rest }: PressableProps & { feedback?: boolean }) {
+export function ListPressable({ style, children, feedback = true, ...rest }: PressableProps & { feedback?: boolean; dataSet?: Record<string, string>; onKeyDown?: (event: WebPressKeyEvent) => void }) {
   const { palette } = useTheme();
   const [focused, setFocused] = React.useState(false);
   const [hovered, setHovered] = React.useState(false);
   return (
     <Pressable
       {...rest}
+      {...(Platform.OS === "web" && feedback ? { dataSet: { ...rest.dataSet, materialHoverSurface: "true" } } : {})}
+      {...(Platform.OS === "web" ? webSelectionKeys(rest) : {})}
+      {...(Platform.OS !== "web" ? nativeHoverEvents(rest, setHovered) : {})}
       aria-checked={rest.accessibilityState?.checked}
       aria-selected={rest.accessibilityState?.selected}
       aria-disabled={rest.disabled || rest.accessibilityState?.disabled}
@@ -20,22 +27,15 @@ export function ListPressable({ style, children, feedback = true, ...rest }: Pre
       onBlur={(event) => { setFocused(false); rest.onBlur?.(event); }}
       onHoverIn={(event) => { setHovered(true); rest.onHoverIn?.(event); }}
       onHoverOut={(event) => { setHovered(false); rest.onHoverOut?.(event); }}
-      android_ripple={feedback ? { color: `${palette.onSurface}1a` } : undefined}
+      android_ripple={{ color: "transparent", borderless: false }}
       style={(state) => [typeof style === "function" ? style(state) : style as StyleProp<ViewStyle>,
         focused ? { outlineColor: palette.primary, outlineWidth: 2, outlineOffset: -2, outlineStyle: "solid" } : null]}
     >
       {state => {
         const flat = StyleSheet.flatten(typeof style === "function" ? style(state) : style as StyleProp<ViewStyle>);
         return <>{typeof children === "function" ? children(state) : children}
-          {feedback ? <View testID="material-list-state-layer" pointerEvents="none" style={[StyleSheet.absoluteFill, {
-            borderRadius: flat?.borderRadius ?? 0,
-            borderTopLeftRadius: flat?.borderTopLeftRadius ?? flat?.borderRadius ?? 0,
-            borderTopRightRadius: flat?.borderTopRightRadius ?? flat?.borderRadius ?? 0,
-            borderBottomLeftRadius: flat?.borderBottomLeftRadius ?? flat?.borderRadius ?? 0,
-            borderBottomRightRadius: flat?.borderBottomRightRadius ?? flat?.borderRadius ?? 0,
-            backgroundColor: palette.onSurface,
-            opacity: rest.disabled ? 0 : (state.pressed && Platform.OS !== "android") || focused ? 0.1 : hovered ? 0.08 : 0,
-          }]} /> : null}</>;
+          {feedback ? <StateLayer testID="material-list-state-layer" color={palette.onSurface} surfaceStyle={flat}
+            opacity={stateLayerOpacity({ disabled: rest.disabled, pressed: state.pressed, focused, hovered })} /> : null}</>;
       }}
     </Pressable>
   );
