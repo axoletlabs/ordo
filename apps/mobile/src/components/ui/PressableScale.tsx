@@ -55,6 +55,7 @@ function StatePressable({ style, children, disabled, stateLayerColor, stateLayer
     {...(Platform.OS === "web" ? webSelectionKeys({ ...rest, disabled }) : {})}
     {...(Platform.OS !== "web" ? nativeHoverEvents({ ...rest, disabled, onHoverIn, onHoverOut }, setHovered) : {})}
     aria-checked={rest.accessibilityState?.checked} aria-selected={rest.accessibilityState?.selected}
+    aria-expanded={rest.accessibilityState?.expanded} aria-busy={rest.accessibilityState?.busy}
     aria-disabled={disabled || rest.accessibilityState?.disabled}
     // A transparent stateful drawable suppresses Android's stock rectangular
     // hover/focus highlight; the bounded Material layer below owns feedback.
