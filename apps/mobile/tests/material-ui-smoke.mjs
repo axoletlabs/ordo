@@ -21,6 +21,17 @@ const bookmark = { id: "article", folderId: null, url: "https://example.test/art
   title: "Building a more expressive design system", description: "Shape and motion clarify familiar interactions.",
   fetchStatus: "ok", contentKind: "article", contentKindOverride: null, extractionVersion: 1, author: "Alex Chen",
   publishedAt: stamp, readingTimeMinutes: 4, readProgress: 0, isRead: false, remindAt: null, tags: [tag], suggestedTags: [], createdAt: stamp, updatedAt: stamp };
+const readerHtml = `<h2>Reading with purpose</h2>
+  <p>Plain reader paragraph for contrast.</p>
+  <p>A <strong>durable <a href="https://example.test/library">library</a></strong> makes reading easier.</p>
+  <p><span style="color: #ffffff; background-color: #ffffff; font-size: 80px; font-family: fantasy">Source styling cannot override the reader.</span></p>
+  <blockquote><p>A quiet space for saved ideas.</p></blockquote>
+  <pre><code>const library = "saved ideas";\n${"reader_code_token_".repeat(12)}</code></pre>
+  <h2>Notes and comparisons</h2><ul><li>Readable lists</li><li>Consistent typography</li></ul>
+  <table><thead><tr><th>Tool</th><th>Purpose</th></tr></thead><tbody><tr><td>Library</td><td>Save ideas</td></tr><tr><td>Reader</td><td>Read with focus</td></tr></tbody></table>
+  <figure><img src="https://example.test/reader-illustration.svg" width="1600" height="600" alt="A reading-library illustration"/><figcaption>Images stay inside the reading column.</figcaption></figure>
+  <h3>Keep exploring</h3><p>${"A library grows one thoughtful read at a time. ".repeat(24)}</p>`;
+const readerHighlight = { id: "saved-highlight", exact: "durable library", prefix: "A ", suffix: " makes reading easier.", href: null, createdAt: stamp };
 const authResponse = { user, tokens: { accessToken: "fixture-access", refreshToken: "fixture-refresh", expiresIn: 3600 } };
 const results = { screens: [], interactions: [], errors: [], performanceSamples: [] };
 let activePage;
@@ -30,7 +41,7 @@ const appRoutes = ["", "search", "folder/collection", "tags", "tags/design", "re
   "settings/sessions", "settings/appearance", "settings/controls", "settings/server", "settings/data", "settings/about", "settings/changelog", "settings/delete-account"];
 
 async function fixture(page, scenario = {}) {
-  let currentUser = { ...user, preferences: { ...user.preferences } };
+  let currentUser = { ...user, preferences: { ...user.preferences, ...scenario.readerPreferences } };
   let importCount = 0;
   page.on("pageerror", e => results.errors.push(e.message));
   await page.route("**/*", async route => {
@@ -80,9 +91,13 @@ async function fixture(page, scenario = {}) {
     else if (path === "/api/bookmarks/reminders") body = [];
     else if (path === "/api/bookmarks" && request.method() === "POST") body = { ...bookmark, ...request.postDataJSON() };
     else if (path === "/api/bookmarks" || path.includes("/bookmarks") && !path.startsWith("/api/bookmarks/article")) body = { items: [bookmark], nextCursor: null, hasMore: false };
-    else if (path.startsWith("/api/bookmarks/article")) body = { ...bookmark, contentHtml: "<h2>Reading with purpose</h2><p>Saved ideas make a useful library.</p>", highlights: [] };
+    else if (path.startsWith("/api/bookmarks/article/highlights") && request.method() === "DELETE") { scenario.highlightRemoved = true; body = { success: true }; }
+    else if (path.startsWith("/api/bookmarks/article")) body = { ...bookmark,
+      contentHtml: scenario.richReader ? readerHtml : "<h2>Reading with purpose</h2><p>Saved ideas make a useful library.</p>",
+      highlights: scenario.richReader && !scenario.highlightRemoved ? [readerHighlight] : [] };
     else if (url.hostname === "api.github.com") body = [];
     if (url.hostname === "www.google.com") return route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect width="24" height="24" rx="4" fill="#006a60"/></svg>' });
+    if (path === "/reader-illustration.svg") return route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="600"><rect width="1600" height="600" fill="#dceee9"/><path d="M450 150h280v300H450zm380 0h280v300H830z" fill="#006a60"/></svg>' });
     return route.fulfill({ status, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: JSON.stringify(body) });
   });
 }
@@ -184,8 +199,124 @@ async function navigate(page, path) {
   if (await button(page, "Dismiss notification").count()) { await button(page, "Dismiss notification").click(); await settle(page); }
   assert.equal(await button(page, "Sign in").count(), 0, `${path}: authenticated route did not render`);
 }
+function luminance(color) {
+  const values = color.match(/[\d.]+/g).slice(0, 3).map(Number).map(value => value / 255);
+  const linear = values.map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4);
+  return linear[0] * 0.2126 + linear[1] * 0.7152 + linear[2] * 0.0722;
+}
+async function readerTextMetrics(locator) {
+  return locator.evaluate(element => {
+    let background = "rgb(255, 255, 255)";
+    for (let node = element; node; node = node.parentElement) {
+      // FloatingPanel paints its web surface as a sibling of the contents so
+      // inputs do not inherit a clipped/opacity-composited caret ancestor.
+      const surface = node.getAttribute("role") === "dialog" ? node.firstElementChild : node;
+      const candidate = getComputedStyle(surface ?? node).backgroundColor;
+      if (candidate !== "transparent" && candidate !== "rgba(0, 0, 0, 0)") { background = candidate; break; }
+    }
+    const style = getComputedStyle(element);
+    return { ink: style.color, background, font: style.fontFamily, size: parseFloat(style.fontSize) };
+  });
+}
+async function checkReaderArticle(page, expectedDark, expectedSize = 17) {
+  const paragraph = page.getByText("Plain reader paragraph for contrast.", { exact: true }).first();
+  await paragraph.waitFor();
+  for (const text of [paragraph, page.getByText("Source styling cannot override the reader.", { exact: true }).first(),
+    page.getByRole("link", { name: "library", exact: true }), page.getByText(/^const library =/).first()]) {
+    const metrics = await readerTextMetrics(text);
+    const a = luminance(metrics.ink), b = luminance(metrics.background);
+    assert.ok((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= 4.45, JSON.stringify(metrics));
+  }
+  const metrics = await readerTextMetrics(paragraph);
+  assert.equal(metrics.size, expectedSize);
+  assert.equal(luminance(metrics.background) < 0.1, expectedDark, JSON.stringify({ ...metrics,
+    deviceDark: await page.evaluate(() => matchMedia("(prefers-color-scheme: dark)").matches) }));
+  const sourceStyle = await readerTextMetrics(page.getByText("Source styling cannot override the reader.", { exact: true }).first());
+  assert.equal(sourceStyle.size, expectedSize, "Source-site fonts cannot override text size");
+  const code = await readerTextMetrics(page.getByText(/^const library =/).first());
+  assert.ok(code.font.includes("JetBrainsMono"), JSON.stringify(code));
+  const mark = await readerTextMetrics(page.getByText("durable", { exact: true }).first());
+  const a = luminance(mark.ink), b = luminance(mark.background);
+  assert.ok((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= 4.45, `Saved highlight: ${JSON.stringify(mark)}`);
+  const heading = await readerTextMetrics(page.getByText("Reading with purpose", { exact: true }).first());
+  assert.ok(heading.size > expectedSize, "Heading keeps its semantic size");
+  const image = await page.getByRole("img", { name: "A reading-library illustration", exact: true }).boundingBox();
+  assert.ok(image && image.width > 0 && image.width <= Math.min(680, await page.evaluate(() => innerWidth)));
+}
+async function readerMatrix() {
+  for (const theme of ["light", "dark"]) for (const expressive of [false, true]) {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: theme });
+    await context.addInitScript(({ theme, expressive }) => localStorage.setItem("ordo.settings", JSON.stringify({ themeMode: theme, expressive, materialYouColors: false })), { theme, expressive });
+    const page = await context.newPage(); activePage = page;
+    await fixture(page, { richReader: true, readerPreferences: { theme: "sepia" } });
+    await login(page); await navigate(page, "reader/article");
+    await button(page, "Reader settings").click();
+    const group = () => page.getByRole("radiogroup", { name: "Reader theme", exact: true });
+    assert.deepEqual(await group().getByRole("radio").evaluateAll(items => items.map(item => item.getAttribute("aria-label"))), ["System", "Light", "Dark"]);
+    assert.equal(await group().getByRole("radio", { name: "System", exact: true }).getAttribute("aria-checked"), "true", "Legacy Sepia becomes System");
+    for (const choice of ["System", "Light", "Dark"]) {
+      const mode = `${theme}-${expressive ? "expressive" : "standard"}-reader-${choice.toLowerCase()}`;
+      const dark = choice === "Dark" || choice === "System" && theme === "dark";
+      await profileAction(page, `${mode}-theme-change`, () => group().getByRole("radio", { name: choice, exact: true }).click());
+      const controls = await readerTextMetrics(page.getByRole("dialog").getByText("Reader", { exact: true }));
+      assert.equal(luminance(controls.background) < 0.1, dark, `Reader settings follows the reader: ${JSON.stringify(controls)}`);
+      for (const viewport of [{ name: "portrait", width: 390, height: 844 }, { name: "landscape", width: 1280, height: 800 }, { name: "compact", width: 320, height: 420 }]) {
+        await page.setViewportSize(viewport); await settle(page);
+        if (viewport.name === "compact") {
+          const radio = group().getByRole("radio", { name: choice, exact: true });
+          await radio.scrollIntoViewIfNeeded();
+          const target = await radio.boundingBox(); assert.ok(target.width >= 48 && target.height >= 48, JSON.stringify(target));
+          assert.equal(await radio.evaluate(element => element.scrollWidth <= element.clientWidth), true);
+        }
+        await capture(page, `${mode}-${viewport.name}-controls`);
+        const rect = await page.getByRole("dialog").boundingBox();
+        assert.ok(rect.y >= 0 && rect.y + rect.height <= viewport.height);
+      }
+      await page.setViewportSize({ width: 390, height: 844 }); await page.keyboard.press("Escape"); await settle(page);
+      await checkReaderArticle(page, dark); await capture(page, `${mode}-portrait-article`);
+      await page.setViewportSize({ width: 1280, height: 800 }); await checkReaderArticle(page, dark); await capture(page, `${mode}-landscape-article`);
+      await page.setViewportSize({ width: 390, height: 844 }); await button(page, "Reader settings").click();
+      results.interactions.push(`${mode}: reader palette, legacy preferences, visible choices, content contrast and three dialog sizes`);
+    }
+    await group().getByRole("radio", { name: "Dark", exact: true }).click(); await settle(page);
+    await page.getByRole("switch", { name: "Reader AMOLED black", exact: true }).click(); await settle(page);
+    await page.keyboard.press("Escape"); await settle(page); await checkReaderArticle(page, true);
+    await capture(page, `${theme}-${expressive}-reader-amoled`);
+    await button(page, "Reader settings").click(); await page.getByRole("switch", { name: "Reader AMOLED black", exact: true }).click();
+    for (const readerTheme of ["Light", "Dark"]) {
+    await group().getByRole("radio", { name: readerTheme, exact: true }).click();
+    for (const font of ["Sans", "Serif", "Mono"]) for (const [size, px] of [["Small", 15], ["Medium", 17], ["Large", 19], ["Extra large", 21]]) {
+      await page.getByRole("radiogroup", { name: "Font", exact: true }).getByRole("radio", { name: font, exact: true }).click();
+      await page.getByRole("radiogroup", { name: "Text size", exact: true }).getByRole("radio", { name: size, exact: true }).click();
+      await settle(page); await page.keyboard.press("Escape"); await settle(page);
+      await checkReaderArticle(page, readerTheme === "Dark", px);
+      await capture(page, `${theme}-${expressive}-reader-${readerTheme}-${font}-${size.replaceAll(" ", "-")}`);
+      await button(page, "Reader settings").click();
+    }
+    }
+    const lightRadio = group().getByRole("radio", { name: "Light", exact: true });
+    await lightRadio.click(); await lightRadio.focus(); await lightRadio.press("ArrowRight"); await settle(page);
+    assert.equal(await group().getByRole("radio", { name: "Dark", exact: true }).getAttribute("aria-checked"), "true");
+    await group().getByRole("radio", { name: "Dark", exact: true }).press("Home"); await settle(page);
+    assert.equal(await group().getByRole("radio", { name: "System", exact: true }).getAttribute("aria-checked"), "true");
+    await page.keyboard.press("Escape"); await settle(page);
+    const opposite = theme === "light" ? "dark" : "light";
+    await page.emulateMedia({ colorScheme: opposite, reducedMotion: "reduce" }); await settle(page);
+    await capture(page, `${theme}-${expressive}-reader-system-live-change`);
+    await checkReaderArticle(page, opposite === "dark", 21);
+    await button(page, "More article actions").click(); await page.getByRole("menuitem", { name: "Table of contents", exact: true }).click();
+    await capture(page, `${theme}-${expressive}-reader-contents`); await button(page, "Go to Keep exploring").click(); await settle(page);
+    await button(page, "More article actions").click(); await page.getByRole("menuitem", { name: "Highlights", exact: true }).click();
+    const remove = button(page, "Remove highlight"); const target = await remove.boundingBox(); assert.ok(target.width >= 48 && target.height >= 48);
+    await capture(page, `${theme}-${expressive}-reader-highlights`); await remove.click();
+    await page.getByText("Select a passage in the article to save it.", { exact: true }).waitFor();
+    results.interactions.push(`${theme}-${expressive}: all fonts/sizes, AMOLED, keyboard selection, live System theme, contents and highlight removal`);
+    await context.close();
+  }
+}
 try {
-  for (const theme of process.env.ORDO_UI_THEME ? [process.env.ORDO_UI_THEME] : ["light", "dark"]) for (const expressive of process.env.ORDO_UI_EXPRESSIVE ? [process.env.ORDO_UI_EXPRESSIVE === "true"] : [false, true]) {
+  if (process.env.ORDO_UI_READER_ONLY) await readerMatrix();
+  else for (const theme of process.env.ORDO_UI_THEME ? [process.env.ORDO_UI_THEME] : ["light", "dark"]) for (const expressive of process.env.ORDO_UI_EXPRESSIVE ? [process.env.ORDO_UI_EXPRESSIVE === "true"] : [false, true]) {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: theme });
     await context.addInitScript(({ theme, expressive }) => {
       if (!localStorage.getItem("ordo.settings")) localStorage.setItem("ordo.settings", JSON.stringify({ themeMode: theme, expressive,
@@ -383,9 +514,10 @@ try {
     assert.equal(await selectedSize.getAttribute("aria-checked"), "true");
     assert.equal(await selectedSize.getByTestId("material-segment-check").count(), 1);
     assert.equal(await selectedSize.evaluate(el => getComputedStyle(el).borderTopWidth), expressive ? "0px" : "1px");
-    await button(page, "Reader theme, Dark").click();
-    await page.getByRole("menuitemradio", { name: "Sepia", exact: true }).click(); await settle(page);
-    await button(page, "Reader theme, Sepia").waitFor();
+    const readerThemes = page.getByRole("radiogroup", { name: "Reader theme", exact: true });
+    assert.equal(await readerThemes.getByRole("radio").count(), 3);
+    await readerThemes.getByRole("radio", { name: "Light", exact: true }).click(); await settle(page);
+    assert.equal(await readerThemes.getByRole("radio", { name: "Light", exact: true }).getAttribute("aria-checked"), "true");
     await capture(page, `${mode}-portrait-reader-controls`);
     await page.setViewportSize({ width: 1280, height: 800 });
     await capture(page, `${mode}-landscape-reader-controls`);
