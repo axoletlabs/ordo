@@ -22,7 +22,7 @@ const bookmark = { id: "article", folderId: null, url: "https://example.test/art
   fetchStatus: "ok", contentKind: "article", contentKindOverride: null, extractionVersion: 1, author: "Alex Chen",
   publishedAt: stamp, readingTimeMinutes: 4, readProgress: 0, isRead: false, remindAt: null, tags: [tag], suggestedTags: [], createdAt: stamp, updatedAt: stamp };
 const authResponse = { user, tokens: { accessToken: "fixture-access", refreshToken: "fixture-refresh", expiresIn: 3600 } };
-const results = { screens: [], interactions: [], errors: [] };
+const results = { screens: [], interactions: [], errors: [], performanceSamples: [] };
 let activePage;
 const authRoutes = ["login", "register", "forgot-password", "reset-password?email=alex%40example.test", "verify-email?email=alex%40example.test", "mfa?challengeToken=fixture&emailRecovery=1"];
 const appRoutes = ["", "search", "folder/collection", "tags", "tags/design", "reader/article", "settings", "settings/account",
@@ -30,12 +30,25 @@ const appRoutes = ["", "search", "folder/collection", "tags", "tags/design", "re
   "settings/sessions", "settings/appearance", "settings/controls", "settings/server", "settings/data", "settings/about", "settings/changelog", "settings/delete-account"];
 
 async function fixture(page, scenario = {}) {
+  let currentUser = { ...user, preferences: { ...user.preferences } };
+  let importCount = 0;
   page.on("pageerror", e => results.errors.push(e.message));
   await page.route("**/*", async route => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname;
     if (url.origin === new URL(base).origin) return route.continue();
     let body = { success: true }, status = 200;
-    if (path === "/api/bookmarks" && request.method() === "GET" && scenario.libraryState) {
+    if (path === "/api/import-export/import" && request.method() === "POST") body = { jobId: `fixture-import-${++importCount}` };
+    else if (path.startsWith("/api/import-export/import/fixture-import-")) {
+      if (path.endsWith("/commit")) scenario.importStatus = "completed";
+      body = { id: path.split("/")[4], status: scenario.importStatus ?? "ready", fileName: "reading.json", createdAt: stamp, expiresAt: "2026-12-01T00:00:00Z",
+        failure: "The file could not be parsed. Choose a JSON, HTML, or CSV export.",
+        preview: { format: "ordo-json", totalRows: 2, validRows: 2, invalidRows: 0, duplicates: 0, uniqueNew: 2, uniqueDuplicates: 0, withinFileDuplicates: 0,
+          newFolders: [], existingFolders: [], lockedFolderMatches: scenario.protected ? [folder.name] : [], invalidSamples: [], duplicateSamples: [] },
+        result: scenario.importStatus === "completed" ? { imported: 2, updated: 0, skipped: 0, failed: 0, foldersCreated: 0, atomic: true, duplicatePolicy: "skip", failures: [] } : null };
+    }
+    else if (path === "/api/folders/collection/unlock") body = { token: "fixture-folder-token", expiresIn: 600 };
+    else if (path === "/api/auth/reset-password") { status = 400; body = { error: { code: "INVALID_TOKEN", message: "That reset code has expired. Request a new code." } }; }
+    else if (path === "/api/bookmarks" && request.method() === "GET" && scenario.libraryState) {
       if (scenario.gate) await scenario.gate;
       if (scenario.libraryState === "error") {
         status = 503; body = { error: { code: "INTERNAL_ERROR", message: "Your library is temporarily unavailable. Try again." } };
@@ -52,13 +65,14 @@ async function fixture(page, scenario = {}) {
       smtpConfigured: true, mfaRequired: false, folderLockTypes: true, reminders: true };
     else if (path === "/api/auth/login" && request.postDataJSON()?.password === "wrong-password") {
       status = 401; body = { error: { code: "INVALID_CREDENTIALS", message: "Email or password is incorrect." } };
-    } else if (["/api/auth/login", "/api/auth/refresh", "/api/auth/register"].includes(path)) body = authResponse;
-    else if (path === "/api/auth/me") body = user;
+    } else if (["/api/auth/login", "/api/auth/refresh", "/api/auth/register"].includes(path)) body = { ...authResponse, user: currentUser };
+    else if (path === "/api/auth/preferences") { currentUser = { ...currentUser, preferences: { ...currentUser.preferences, ...request.postDataJSON() } }; body = currentUser; }
+    else if (path === "/api/auth/me") body = currentUser;
     else if (path === "/api/auth/sessions") body = [{ id: "current", current: true, deviceType: "desktop", deviceName: "This browser", lastSeenAt: stamp, createdAt: stamp },
       { id: "other", current: false, deviceType: "phone", deviceName: "Pixel 9", lastSeenAt: stamp, createdAt: stamp }];
     else if (path === "/api/auth/mfa/totp/begin") body = { secret: "JBSWY3DPEHPK3PXP", otpauthUrl: "otpauth://totp/ordo:alex?secret=JBSWY3DPEHPK3PXP&issuer=ordo" };
     else if (path === "/api/auth/mfa/totp/confirm") body = { user: { ...user, mfaEnabled: true }, backupCodes: ["abcd1234", "efgh5678", "ijkl9012", "mnop3456"] };
-    else if (path === "/api/folders") body = [folder];
+    else if (path === "/api/folders") body = [{ ...folder, ...(scenario.protected ? { protected: true, lockType: "password" } : {}) }];
     else if (path === "/api/folders/collection") body = folder;
     else if (path === "/api/tags") body = [tag];
     else if (path === "/api/tags/design") body = tag;
@@ -74,6 +88,25 @@ async function fixture(page, scenario = {}) {
 }
 const button = (page, name) => page.getByRole("button", { name, exact: true });
 async function settle(page) { await page.waitForTimeout(450); }
+async function profileAction(page, name, action) {
+  await page.evaluate(() => {
+    const sample = { frames: [], longTasks: [], lastFrame: null, frame: 0, observer: null };
+    if (PerformanceObserver.supportedEntryTypes.includes("longtask")) {
+      sample.observer = new PerformanceObserver(list => sample.longTasks.push(...list.getEntries().map(entry => entry.duration)));
+      sample.observer.observe({ entryTypes: ["longtask"] });
+    }
+    const frame = time => { if (sample.lastFrame != null) sample.frames.push(time - sample.lastFrame); sample.lastFrame = time; sample.frame = requestAnimationFrame(frame); };
+    sample.frame = requestAnimationFrame(frame); window.ordoPerformanceSample = sample;
+  });
+  await action(); await settle(page);
+  const sample = await page.evaluate(() => {
+    const sample = window.ordoPerformanceSample; cancelAnimationFrame(sample.frame); sample.observer?.disconnect();
+    const frames = sample.frames.sort((a, b) => a - b);
+    return { frames: frames.length, p95FrameIntervalMs: frames[Math.floor(frames.length * 0.95)] ?? null,
+      maxFrameIntervalMs: frames.at(-1) ?? null, longTaskCount: sample.longTasks.length, maxLongTaskMs: Math.max(0, ...sample.longTasks) };
+  });
+  results.performanceSamples.push({ name, fixtureBookmarks: 1, ...sample });
+}
 async function capture(page, name) {
   await settle(page);
   const content = await page.locator("body").innerText();
@@ -184,6 +217,23 @@ try {
     await page.goto(`${base}/mfa?challengeToken=fixture`); await button(page, "Use a backup code").click();
     await button(page, "Back to sign in").click(); await button(page, "Sign in").waitFor();
     results.interactions.push(`${mode}: backup-code sign-in exit`);
+    await page.goto(`${base}/reset-password?email=alex%40example.test`);
+    await page.getByRole("textbox", { name: "Reset code", exact: true }).fill("123456");
+    await page.getByRole("textbox", { name: "New password", exact: true }).waitFor();
+    await page.getByRole("textbox", { name: "New password", exact: true }).fill("Test-password-123");
+    await page.getByRole("textbox", { name: "New password", exact: true }).press("Enter");
+    assert.equal(await page.getByRole("textbox", { name: "Confirm new password", exact: true }).evaluate(el => el === document.activeElement), true);
+    await page.getByRole("textbox", { name: "Confirm new password", exact: true }).fill("wrong");
+    await button(page, "Reset password").click();
+    assert.equal(await page.getByRole("textbox", { name: "Confirm new password", exact: true }).getAttribute("aria-invalid"), "true");
+    await page.getByRole("textbox", { name: "Confirm new password", exact: true }).fill("Test-password-123");
+    await button(page, "Reset password").click();
+    await page.getByRole("alert").waitFor();
+    assert.equal(await page.getByRole("alert").innerText(), "That reset code has expired. Request a new code.");
+    assert.equal(await page.getByRole("textbox", { name: "Confirm new password", exact: true }).getAttribute("aria-invalid"), "false");
+    await capture(page, `${mode}-reset-password-server-error`);
+    await page.getByRole("link", { name: "Back to sign in", exact: true }).click();
+    results.interactions.push(`${mode}: reset-password second stage, focus progression and failure ownership`);
     await page.getByRole("textbox", { name: "Email", exact: true }).fill(user.email);
     await page.getByRole("textbox", { name: "Email", exact: true }).press("Enter");
     assert.equal(await page.getByRole("textbox", { name: "Password", exact: true }).evaluate(el => el === document.activeElement), true);
@@ -222,7 +272,7 @@ try {
       }
     }
     await page.setViewportSize({ width: 390, height: 844 }); await navigate(page, "");
-    await button(page, "Library actions").click(); await page.getByRole("menu").waitFor();
+    await profileAction(page, `${mode}: library menu`, () => button(page, "Library actions").click()); await page.getByRole("menu").waitFor();
     await page.keyboard.press("End");
     assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("role")), "menuitem");
     await capture(page, `${mode}-library-menu`); await page.keyboard.press("Escape");
@@ -305,9 +355,21 @@ try {
     await capture(page, `${mode}-tag-create-error`);
     await page.keyboard.press("Escape"); await settle(page);
     results.interactions.push(`${mode}: quick-tag failure is reported and retains input`);
+    if (await button(page, "Dismiss notification").count()) await button(page, "Dismiss notification").click();
     await articleRow.click({ button: "right" }); await page.getByRole("menuitem", { name: "Remind", exact: true }).click();
     await capture(page, `${mode}-reminder-menu`); await page.getByRole("menuitem", { name: "Custom…", exact: true }).click();
-    await capture(page, `${mode}-custom-reminder-dialog`); await page.keyboard.press("Escape"); await settle(page); await page.keyboard.press("Escape"); await settle(page);
+    await page.getByRole("textbox", { name: "Reminder date", exact: true }).waitFor();
+    await page.getByRole("textbox", { name: "Reminder date", exact: true }).fill("2026-02-31");
+    assert.equal(await button(page, "Remind").isDisabled(), true);
+    await page.getByRole("textbox", { name: "Reminder date", exact: true }).fill("2099-10-12");
+    assert.equal(await button(page, "Remind").isEnabled(), true);
+    await capture(page, `${mode}-portrait-custom-reminder-dialog`);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await capture(page, `${mode}-landscape-custom-reminder-dialog`);
+    const dates = page.getByRole("dialog").getByRole("button").filter({ hasText: /^\d{1,2}$/ });
+    for (const date of await dates.all()) { const target = await date.boundingBox(); if (target) assert.ok(target.width >= 48 && target.height >= 48); }
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.keyboard.press("Escape"); await settle(page); await page.keyboard.press("Escape"); await settle(page);
     await articleRow.click({ button: "right" }); await page.getByRole("menuitem", { name: "Delete bookmark", exact: true }).click();
     await capture(page, `${mode}-delete-bookmark-dialog`); await page.keyboard.press("Escape"); await settle(page);
     await navigate(page, "search"); await button(page, "Search filters").click(); await capture(page, `${mode}-search-filters`);
@@ -315,7 +377,19 @@ try {
     await page.getByRole("menuitemradio").first().waitFor();
     assert.equal(await page.getByRole("menuitemradio").count(), 3);
     await page.getByRole("menuitemradio", { name: "Unread", exact: true }).click(); await page.keyboard.press("Escape"); await settle(page);
-    await navigate(page, "reader/article"); await button(page, "Reader settings").click(); await capture(page, `${mode}-reader-controls`);
+    await navigate(page, "reader/article"); await profileAction(page, `${mode}: reader settings`, () => button(page, "Reader settings").click()); await capture(page, `${mode}-reader-controls-default`);
+    await profileAction(page, `${mode}: reader font-size change`, () => page.getByRole("radiogroup", { name: "Text size", exact: true }).getByRole("radio", { name: "Extra large", exact: true }).click());
+    const selectedSize = page.getByRole("radio", { name: "Extra large", exact: true });
+    assert.equal(await selectedSize.getAttribute("aria-checked"), "true");
+    assert.equal(await selectedSize.getByTestId("material-segment-check").count(), 1);
+    assert.equal(await selectedSize.evaluate(el => getComputedStyle(el).borderTopWidth), expressive ? "0px" : "1px");
+    await button(page, "Reader theme, Dark").click();
+    await page.getByRole("menuitemradio", { name: "Sepia", exact: true }).click(); await settle(page);
+    await button(page, "Reader theme, Sepia").waitFor();
+    await capture(page, `${mode}-portrait-reader-controls`);
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await capture(page, `${mode}-landscape-reader-controls`);
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.keyboard.press("Escape"); await settle(page);
     results.interactions.push(`${mode}: creation, icon draft, bookmark actions, move, tags, reminders, destructive confirmation, search filters, reader controls`);
     await page.setViewportSize({ width: 390, height: 844 }); await navigate(page, "settings/account");
@@ -327,6 +401,30 @@ try {
     await page.getByRole("menuitemradio").first().waitFor();
     assert.equal(await page.getByRole("menuitemradio").count(), 3); await page.keyboard.press("Escape");
     results.interactions.push(`${mode}: settings selection exposes radio semantics`);
+    const expressiveSwitch = page.getByRole("switch", { name: "Expressive", exact: true });
+    const switchTarget = await expressiveSwitch.boundingBox();
+    await page.mouse.move(switchTarget.x + switchTarget.width / 2, switchTarget.y + switchTarget.height / 2); await page.mouse.down();
+    await page.waitForTimeout(400);
+    const pressedHandle = await expressiveSwitch.getByTestId("material-switch-handle").boundingBox();
+    assert.ok(Math.abs(pressedHandle.width - 28) < 0.5 && Math.abs(pressedHandle.height - 28) < 0.5);
+    await page.mouse.move(1, 1); await page.mouse.up(); await settle(page);
+    assert.equal(await expressiveSwitch.getAttribute("aria-checked"), String(expressive));
+    await navigate(page, "settings/data");
+    await page.getByRole("radiogroup", { name: "Export format", exact: true }).waitFor();
+    await button(page, "Include").click();
+    await page.getByRole("checkbox", { name: /^Design & inspiration/ }).click();
+    assert.equal(await page.getByRole("checkbox", { name: /^Design & inspiration/ }).getAttribute("aria-checked"), "true");
+    assert.equal(await page.getByRole("radio", { name: "Entire library", exact: true }).getAttribute("aria-checked"), "false");
+    await capture(page, `${mode}-export-folder-selection`);
+    const chooser = page.waitForEvent("filechooser"); await button(page, "Import from file, Add bookmarks from JSON, HTML, or CSV.").click();
+    await (await chooser).setFiles({ name: "reading.json", mimeType: "application/json", buffer: Buffer.from("[]") });
+    await page.getByText("2 new bookmarks", { exact: true }).waitFor();
+    await button(page, "Advanced").click();
+    await page.getByRole("radiogroup", { name: "Duplicate bookmarks", exact: true }).waitFor();
+    await capture(page, `${mode}-import-preview`);
+    await button(page, "Import").click(); await page.getByText("Import complete", { exact: true }).waitFor();
+    await capture(page, `${mode}-import-complete`); await button(page, "Done").click(); await settle(page);
+    results.interactions.push(`${mode}: pressed switch geometry, segmented outlines/checks, reader theme, date input/calendar targets, export selection and import completion`);
     await navigate(page, "settings/sessions"); await button(page, "Revoke").click();
     await capture(page, `${mode}-revoke-dialog`); await page.keyboard.press("Escape");
     await navigate(page, "settings"); await button(page, "Sign out").click();
@@ -386,9 +484,35 @@ try {
     await capture(cataloguePage, `${mode}-folder-filter-query`);
     results.interactions.push(`${mode}: larger filter catalogues, named search fields and stable selection order`);
     await catalogueContext.close();
+    const importContext = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: theme });
+    await importContext.addInitScript(({ theme, expressive }) => localStorage.setItem("ordo.settings", JSON.stringify({ themeMode: theme, expressive, materialYouColors: false })), { theme, expressive });
+    const importPage = await importContext.newPage(); activePage = importPage;
+    const importScenario = { protected: true };
+    await fixture(importPage, importScenario); await login(importPage); await navigate(importPage, "settings/data");
+    const importChooser = importPage.waitForEvent("filechooser"); await button(importPage, "Import from file, Add bookmarks from JSON, HTML, or CSV.").click();
+    await (await importChooser).setFiles({ name: "reading.json", mimeType: "application/json", buffer: Buffer.from("[]") });
+    await importPage.getByText("2 new bookmarks", { exact: true }).waitFor();
+    await button(importPage, folder.name).click();
+    await importPage.getByRole("textbox", { name: "Password", exact: true }).waitFor();
+    assert.equal(await importPage.getByRole("dialog").count(), 1, "Only the unlock surface is exposed");
+    await capture(importPage, `${mode}-import-unlock-active`);
+    await importPage.keyboard.press("Escape"); await settle(importPage);
+    await importPage.getByRole("dialog").waitFor();
+    await importPage.getByText("2 new bookmarks", { exact: true }).waitFor();
+    await capture(importPage, `${mode}-import-preview-retained`);
+    await button(importPage, "Discard").click(); await settle(importPage);
+    importScenario.importStatus = "failed";
+    const failedChooser = importPage.waitForEvent("filechooser"); await button(importPage, "Import from file, Add bookmarks from JSON, HTML, or CSV.").click();
+    await (await failedChooser).setFiles({ name: "broken.json", mimeType: "application/json", buffer: Buffer.from("{") });
+    await importPage.getByText("The file could not be parsed. Choose a JSON, HTML, or CSV export.", { exact: true }).waitFor();
+    await capture(importPage, `${mode}-import-parse-failure`);
+    await button(importPage, "Try again").click(); await settle(importPage);
+    results.interactions.push(`${mode}: import parse failure, protected-folder unlock focus ownership and retained preview`);
+    await importContext.close();
   }
   assert.deepEqual(results.errors, []);
-  console.log(JSON.stringify({ passed: true, screenCount: results.screens.length, interactionCount: results.interactions.length }, null, 2));
+  console.log(JSON.stringify({ passed: true, screenCount: results.screens.length, interactionCount: results.interactions.length,
+    performanceSamples: results.performanceSamples }, null, 2));
 } catch (error) {
   if (activePage && !activePage.isClosed()) {
     await activePage.screenshot({ path: `${output}/failure.png` });

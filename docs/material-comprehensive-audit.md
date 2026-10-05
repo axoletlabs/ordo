@@ -2,6 +2,11 @@
 
 Date: 2026-10-05. Target: `apps/mobile`, shared contracts, and `apps/server`.
 
+This records the first pass. See the [Material/performance follow-up](material-performance-follow-up.md)
+for the source inventory, later control corrections, additional browser branches
+and performance evidence. The results below are historical, not exhaustive
+release approval.
+
 ## Design decision
 
 Ordo is a reading library, not a dashboard. Keep the teal Material role palette,
