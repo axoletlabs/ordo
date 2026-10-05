@@ -74,3 +74,5 @@ yarn-error.log*
 
 # machine-local agent rules (per-VPS setup, not committed; each machine keeps its own)
 .cursor/rules/*.local.mdc
+# untracked per-agent instructions dropped at the repo root
+/AGENTS.md
