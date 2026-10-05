@@ -57,6 +57,7 @@ export function CreateTagPanel({ visible, onDismiss, onCreated }: CreateTagPanel
       <PanelHeader title="New tag" />
       <View style={styles.body}>
         <Input
+          label="Tag name"
           value={name}
           onChangeText={setName}
           placeholder="Tag name"
@@ -81,5 +82,5 @@ export function CreateTagPanel({ visible, onDismiss, onCreated }: CreateTagPanel
 
 const styles = StyleSheet.create({
   body: {},
-  label: { marginTop: spacing[10], marginBottom: spacing[6] },
+  label: { marginTop: spacing[16], marginBottom: spacing[8] },
 });

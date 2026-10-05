@@ -236,12 +236,14 @@ export function SearchFilterMenu({
           {folders.length > 6 ? (
             <View style={styles.tagSearch}>
               <Input
+                variant="search"
+                accessibilityLabel="Filter folders"
                 value={folderQuery}
                 onChangeText={setFolderQuery}
                 placeholder="Filter folders…"
                 autoCapitalize="none"
                 autoCorrect={false}
-                icon={<Ionicons name="search-outline" size={16} color={palette.textTertiary} />}
+                icon={<Ionicons name="search-outline" size={24} color={palette.onSurfaceVariant} />}
               />
             </View>
           ) : null}
@@ -279,12 +281,14 @@ export function SearchFilterMenu({
           {tags.length > 6 ? (
             <View style={styles.tagSearch}>
               <Input
+                variant="search"
+                accessibilityLabel="Filter tags"
                 value={tagQuery}
                 onChangeText={setTagQuery}
                 placeholder="Filter tags…"
                 autoCapitalize="none"
                 autoCorrect={false}
-                icon={<Ionicons name="search-outline" size={16} color={palette.textTertiary} />}
+                icon={<Ionicons name="search-outline" size={24} color={palette.onSurfaceVariant} />}
               />
             </View>
           ) : null}
