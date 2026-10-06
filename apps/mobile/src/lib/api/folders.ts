@@ -4,6 +4,7 @@
 import {
   FolderRoutes,
   buildPath,
+  normalizeFolderIcon,
   type BatchFoldersInput,
   type CreateFolderInput,
   type RemoveFolderPasswordInput,
@@ -11,6 +12,16 @@ import {
   type UpdateFolderInput,
 } from "@ordo/shared";
 import { api } from "./client";
+
+/** Fetch + normalize the folder list. Single source for the hook and the launch prefetch. */
+export async function fetchFoldersNormalized() {
+  const folders = await foldersApi.list();
+  return folders.map((folder) => ({
+    ...folder,
+    icon: normalizeFolderIcon(folder.icon),
+    pinned: folder.pinned ?? false,
+  }));
+}
 
 export const foldersApi = {
   list: () => api.get<typeof FolderRoutes.list.response>(FolderRoutes.list.path),
@@ -40,10 +51,10 @@ export const foldersApi = {
     ),
 
   unlock: (id: string, password: string) =>
-    api.post<{ token: string; expiresIn: number }>(buildPath(FolderRoutes.unlock.path, { id }), {
+    api.post<typeof FolderRoutes.unlock.response>(buildPath(FolderRoutes.unlock.path, { id }), {
       password,
     }),
 
   batch: (body: BatchFoldersInput) =>
-    api.post<typeof FolderRoutes.batch.response>(FolderRoutes.batch.path, body, { folderTokens: true }),
+    api.post<typeof FolderRoutes.batch.response>(FolderRoutes.batch.path, body),
 };

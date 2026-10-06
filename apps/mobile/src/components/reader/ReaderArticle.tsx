@@ -1,15 +1,14 @@
 import React, { useEffect, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { View } from "react-native";
 import type { ArticleHtmlProps } from "./ArticleHtml";
-import { useTheme } from "../../theme/ThemeProvider";
-import { radius, spacing } from "../../theme/tokens";
+import { Skeleton } from "../ui/Skeleton";
+import { spacing } from "../../theme/tokens";
 
 let renderer: React.ComponentType<ArticleHtmlProps> | null = null;
 let loading: Promise<typeof import("./ArticleHtml")> | null = null;
 
 /** The HTML engine is content, not navigation chrome. Load it after shell paint. */
 export function ReaderArticle(props: ArticleHtmlProps) {
-  const { palette } = useTheme();
   const [Renderer, setRenderer] = useState(() => renderer);
   const [paintedHtml, setPaintedHtml] = useState<string | null>(null);
   const [failure, setFailure] = useState<Error | null>(null);
@@ -39,9 +38,6 @@ export function ReaderArticle(props: ArticleHtmlProps) {
   if (failure) throw failure;
   if (Renderer && paintedHtml === html) return <Renderer {...props} />;
   return <View accessibilityLabel="Loading article" style={{ gap: spacing[12] }}>
-    {["100%", "92%", "68%"].map((width) => <View key={width} style={[styles.line, {
-      backgroundColor: palette.surfaceContainerHigh, width: width as `${number}%`,
-    }]} />)}
+    {(["100%", "92%", "68%"] as const).map((width) => <Skeleton key={width} width={width} height={16} />)}
   </View>;
 }
-const styles = StyleSheet.create({ line: { height: 16, borderRadius: radius.xs } });

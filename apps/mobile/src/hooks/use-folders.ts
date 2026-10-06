@@ -5,9 +5,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { foldersApi } from "../lib/api/folders";
 import { queryClient } from "../lib/query-client";
 import { qk, tagsAnyAccess } from "../lib/api/query-keys";
-import { errorMessage, isFolderProtected } from "../lib/error-message";
+import { sortFoldersDefault } from "../lib/list-sort";
 import { deleteUndoable } from "../lib/undoable-delete";
-import { toast } from "../components/ui/toast-store";
 import { useFolderTokenStore } from "../store/folder-tokens";
 import {
   normalizeFolderIcon,
@@ -35,9 +34,7 @@ function mergeMetadata(
 }
 
 function sortFolders(folders: FolderDto[]) {
-  return [...folders].sort(
-    (a, b) => Number(b.pinned) - Number(a.pinned) || a.createdAt.localeCompare(b.createdAt),
-  );
+  return sortFoldersDefault(folders);
 }
 
 export { useFolders } from "./queries";
@@ -163,11 +160,6 @@ export function useBatchFolders() {
   });
 }
 
-export interface FolderActionResult {
-  ok: boolean;
-  error?: string;
-}
-
 /** Unlock a protected folder and cache the token before any refetch runs. */
 export function useUnlockFolder() {
   return useMutation({
@@ -192,21 +184,6 @@ export function patchFolderLock(
       folder.id === id ? { ...folder, pinLength: null, ...lock } : folder,
     ),
   );
-}
-
-/** Generic folder mutation runner that surfaces a toast on failure. */
-export async function runFolderAction<T>(
-  fn: () => Promise<T>,
-  successMsg?: string,
-): Promise<FolderActionResult & { data?: T }> {
-  try {
-    const data = await fn();
-    if (successMsg) toast.success(successMsg);
-    return { ok: true, data };
-  } catch (e) {
-    if (isFolderProtected(e)) return { ok: false, error: "This folder is locked." };
-    return { ok: false, error: errorMessage(e) };
-  }
 }
 
 /** Invalidate all folder + bookmark caches after structural changes. */

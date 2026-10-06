@@ -28,6 +28,7 @@ const FRIENDLY: Record<string, string> = {
   [ErrorCode.FOLDER_TOKEN_EXPIRED]: "Folder access expired. Unlock it again.",
   [ErrorCode.INVALID_FOLDER_PASSWORD]: "That password is incorrect.",
   [ErrorCode.BOOKMARK_NOT_FOUND]: "This bookmark no longer exists.",
+  [ErrorCode.HIGHLIGHT_NOT_FOUND]: "This highlight no longer exists.",
   [ErrorCode.FETCH_FAILED]: "Couldn't load that page.",
   [ErrorCode.TAG_NOT_FOUND]: "This tag no longer exists.",
   [ErrorCode.TAG_ALREADY_EXISTS]: "A tag with this name already exists.",

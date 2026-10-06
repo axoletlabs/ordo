@@ -54,12 +54,11 @@ export function useResendVerification() {
   return useMutation({ mutationFn: authApi.resendVerification });
 }
 
-/** Write an updated user into the auth store + the `me` query cache. */
+/** Write an updated user into the auth store. */
 function useUpdateUser() {
   const setUser = useAuthStore((s) => s.setUser);
   return (user: UserDto) => {
     setUser(user);
-    queryClient.setQueryData<UserDto>(qk.me, user);
   };
 }
 
@@ -155,7 +154,6 @@ export function useUpdateReaderPreferences() {
       const next = current && queryClient.isMutating({ mutationKey: ["reader-preferences"] }) > 1
         ? { ...user, preferences: current.preferences } : user;
       setUser(next);
-      queryClient.setQueryData<UserDto>(qk.me, next);
     },
     onError: (_e, { prev }) => {
       if (prev && queryClient.isMutating({ mutationKey: ["reader-preferences"] }) === 1) setUser(prev);

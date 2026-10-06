@@ -5,13 +5,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { prepareBookmarkSearch, type BookmarkDto, type FolderDto } from "@ordo/shared";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { bookmarksApi } from "../lib/api/bookmarks";
-import { nextPageCursor, qk } from "../lib/api/query-keys";
+import { flattenPages, nextPageCursor, qk } from "../lib/api/query-keys";
 import { LIST_PAGE_SIZE } from "../lib/list-pagination";
 import { useFolderTokenStore } from "../store/folder-tokens";
 import { useInfiniteSearch } from "./use-bookmarks";
 import { useLoadMore } from "./use-list-controls";
 import { collectCachedBookmarks } from "../lib/cache-helpers";
-import { flattenPages } from "../lib/api/query-keys";
 import { compileSearchResults, EMPTY_SEARCH_FILTERS, reuseSearchResults, sanitizeRouteParam,
    searchFiltersActive, searchScopeActive, useDebouncedValue,
   type SearchFilters } from "../lib/search-bookmarks";
@@ -55,6 +54,9 @@ export function useLibrarySearch(localItems: readonly BookmarkDto[], folders: re
   const [cacheRevision, setCacheRevision] = useState(0);
   useEffect(() => queryClient.getQueryCache().subscribe((event) => {
     if (event.query.queryKey[0] !== "bookmarks") return;
+    // Search pages are written by this hook's own query; recomputing the
+    // cached-match snapshot on each would be redundant work per page.
+    if (event.query.queryKey[1] === "search") return;
     if (event.type === "removed" || (event.type === "updated" && event.action.type === "success"))
       setCacheRevision((revision) => revision + 1);
   }), [queryClient]);

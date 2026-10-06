@@ -29,6 +29,8 @@ import { useFloatingActions } from "../../store/floating-actions";
 
 const SWIPE_THRESHOLD = 80;
 const SWIPE_VELOCITY = 600;
+/** Action toasts never auto-dismiss faster than this. */
+const ACTION_TOAST_FLOOR_MS = 8_000;
 
 function ToastItem({ toast }: { toast: Toast }) {
   const { palette, shadows } = useTheme();
@@ -46,13 +48,15 @@ function ToastItem({ toast }: { toast: Toast }) {
     enter.value = withTiming(0, { duration: motion.reducedMotion ? 0 : 200 }, () => runOnJS(dismiss)(toast.id));
   }, [dismiss, enter, toast.id, motion.reducedMotion]);
 
-  // Enter, then schedule an auto-dismiss.
+  // Enter, then schedule an auto-dismiss. Action toasts keep their explicit
+  // close button but still time out — with a longer floor so the action can
+  // be read and tapped. Web keeps the close button and gains the same timer.
   useEffect(() => {
     enter.value = motion.reducedMotion ? 1 : withSpring(1, materialMotion.effects.spatial);
-    if (toast.action || Platform.OS === "web") return;
-    const timer = setTimeout(animateOut, toast.duration);
+    const duration = toast.action ? Math.max(toast.duration, ACTION_TOAST_FLOOR_MS) : toast.duration;
+    const timer = setTimeout(animateOut, duration);
     return () => clearTimeout(timer);
-  }, [toast.id, toast.duration, enter, animateOut, motion.spatial, motion.reducedMotion]);
+  }, [toast.id, toast.duration, toast.action, enter, animateOut, motion.spatial, motion.reducedMotion]);
 
   const pan = Gesture.Pan()
     .enabled(toast.swipeable)

@@ -1,7 +1,7 @@
 /**
  * View-only list order. Session memory only — not persisted, not on the account.
  */
-import type { BookmarkDto, BookmarkListSort, FolderDto } from "@ordo/shared";
+import type { BookmarkDto, BookmarkListSort, FolderDto, TagDto } from "@ordo/shared";
 
 export const FOLDER_LIST_SORTS = ["name", "newest", "oldest"] as const;
 export type FolderListSort = (typeof FOLDER_LIST_SORTS)[number];
@@ -32,6 +32,20 @@ export function sortFoldersBy(folders: readonly FolderDto[], sort: FolderListSor
     }
     return a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id);
   });
+}
+
+/** Default folder order when no explicit sort is selected: pinned first, then oldest → newest. */
+export function sortFoldersDefault(folders: readonly FolderDto[]): FolderDto[] {
+  return [...folders].sort(
+    (a, b) => Number(b.pinned) - Number(a.pinned) || a.createdAt.localeCompare(b.createdAt),
+  );
+}
+
+/** Default tag order: most used first, then name. */
+export function sortTagsDefault(tags: readonly TagDto[]): TagDto[] {
+  return [...tags].sort(
+    (a, b) => b.bookmarkCount - a.bookmarkCount || a.name.localeCompare(b.name),
+  );
 }
 
 /** Reorder loaded bookmarks to match the selected sort (case-insensitive titles). */

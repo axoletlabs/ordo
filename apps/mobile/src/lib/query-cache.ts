@@ -12,10 +12,10 @@ import {
   type PersistedClient,
   type Persister,
 } from "@tanstack/react-query-persist-client";
-import { DEFAULT_BOOKMARK_LIST_SORT, normalizeFolderIcon } from "@ordo/shared";
+import { DEFAULT_BOOKMARK_LIST_SORT } from "@ordo/shared";
 import { createMMKV, type MMKV } from "react-native-mmkv";
 import { bookmarksApi } from "./api/bookmarks";
-import { foldersApi } from "./api/folders";
+import { fetchFoldersNormalized } from "./api/folders";
 import { nextPageCursor, qk } from "./api/query-keys";
 import { serverApi } from "./api/server";
 import { LIST_PAGE_SIZE } from "./list-pagination";
@@ -151,14 +151,7 @@ async function fetchHomeLibrary(): Promise<void> {
   await Promise.all([
     queryClient.fetchQuery({
       queryKey: qk.folders,
-      queryFn: async () => {
-        const folders = await foldersApi.list();
-        return folders.map((folder) => ({
-          ...folder,
-          icon: normalizeFolderIcon(folder.icon),
-          pinned: folder.pinned ?? false,
-        }));
-      },
+      queryFn: fetchFoldersNormalized,
       staleTime: 30_000,
       gcTime: PERSISTED_QUERY_GC_TIME_MS,
       // Launch fetches never retry: the splash deadline (below) is the only

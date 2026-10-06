@@ -105,7 +105,8 @@ export function LibraryHeader({ tools, query, onQueryChange, onFilter, filtersOn
     toolsProgress.value = withTiming(collapseTools ? 1 : 0, { duration: motion.reducedMotion ? 0 : 180 });
   }, [collapseTools, toolsProgress, motion.reducedMotion]);
   const toolsStyle = useAnimatedStyle(() => ({ width: 96 * (1 - toolsProgress.value), opacity: 1 - toolsProgress.value }));
-  useEffect(() => { if (selection) Keyboard.dismiss(); }, [!!selection]);
+  const hasSelection = selection != null;
+  useEffect(() => { if (selection) Keyboard.dismiss(); }, [hasSelection]);
   const user = useAuthStore((s) => s.user);
   return <View testID="material-app-bar" style={{ width: "100%", maxWidth, alignSelf: "center",
     paddingTop: barLayout.paddingTop, paddingBottom: barLayout.paddingBottom,

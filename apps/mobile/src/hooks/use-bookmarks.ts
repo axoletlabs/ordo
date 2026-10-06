@@ -210,19 +210,6 @@ export function useToggleRead(folderId: string | null) {
   });
 }
 
-/** Mark a bookmark read when its folder is only known at tap time (search). */
-export function useMarkBookmarkRead() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, folderId }: { id: string; folderId: string | null }) =>
-      bookmarksApi.update(id, { isRead: true }, { folderId }),
-    onSuccess: (updated) => {
-      updateBookmarkEverywhere(qc, updated.id, (bookmark) => ({ ...bookmark, ...updated }));
-      void qc.invalidateQueries({ queryKey: qk.folders });
-    },
-  });
-}
-
 /** Force a bookmark to open as an article or a website, or clear the override. */
 export function useSetContentKind() {
   const qc = useQueryClient();
@@ -275,6 +262,12 @@ export function useSetContentKind() {
         ...("contentHtml" in bookmark && updated.fetchStatus !== "ok" ? { contentHtml: null } : {}),
       }));
       void qc.invalidateQueries({ queryKey: qk.bookmark(updated.id) });
+    },
+    onError: (_e, { id }) => {
+      // The optimistic override was never persisted; refetch the truth. The
+      // prefix key also heals the detail query.
+      void qc.invalidateQueries({ queryKey: qk.bookmark(id) });
+      void qc.invalidateQueries({ queryKey: ["bookmarks"] });
     },
   });
 }
@@ -387,7 +380,7 @@ export function useMarkAllRead(folderId: string | null) {
       );
       // Zero out the folder's unread count (unfiled root has no folder cache entry).
       if (folderId) {
-        queryClient.setQueryData<FolderDto[]>(qk.folders, (old) =>
+        qc.setQueryData<FolderDto[]>(qk.folders, (old) =>
           (old ?? []).map((f) => (f.id === folderId ? { ...f, unreadCount: 0 } : f)),
         );
       }
@@ -399,7 +392,7 @@ export function useMarkAllRead(folderId: string | null) {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: qk.bookmarks(folderId) });
-      void queryClient.refetchQueries({ queryKey: qk.folders });
+      void qc.refetchQueries({ queryKey: qk.folders });
     },
   });
 }

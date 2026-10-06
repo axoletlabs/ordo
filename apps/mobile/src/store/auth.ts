@@ -140,6 +140,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
       persistAuth(user, tokens, accessExpiresAt, nextUpdatedAt);
     } else {
+      // Partial/corrupt blob: drop it so it isn't re-parsed on every launch.
+      if (saved) void secureDelete(StorageKeys.AUTH);
       set({
         user: null,
         tokens: null,
