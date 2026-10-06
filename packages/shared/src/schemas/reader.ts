@@ -5,7 +5,7 @@ import type { ReaderPreferences } from "../types.js";
 // long-form articles; stored preferences normalize it to Sans.
 export const ReaderFontFamilySchema = z.preprocess(
   (value) => value === "mono" ? "sans" : value,
-  z.enum(["sans", "serif"]),
+  z.enum(["sans", "serif", "garamond", "bitter", "jost"]),
 );
 export const ReaderFontSizeSchema = z.enum(["small", "medium", "large", "xlarge"]);
 export const ReaderLineSpacingSchema = z.enum(["compact", "default", "relaxed"]);

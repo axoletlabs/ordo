@@ -20,7 +20,10 @@ test("legacy stored preferences retain typography and AMOLED while dropping Sepi
   assert.deepEqual(normalizeReaderPreferences("broken json"), DEFAULT_READER_PREFERENCES);
 });
 
-test("mono normalizes to sans and line spacing only accepts known values", () => {
+test("reader offers the reading typefaces and maps legacy values", () => {
+  for (const family of ["sans", "serif", "garamond", "bitter", "jost"]) {
+    assert.equal(ReaderFontFamilySchema.parse(family), family);
+  }
   assert.equal(ReaderFontFamilySchema.parse("mono"), "sans");
   assert.equal(ReaderFontFamilySchema.safeParse("bogus").success, false);
   assert.equal(ReaderLineSpacingSchema.parse("relaxed"), "relaxed");

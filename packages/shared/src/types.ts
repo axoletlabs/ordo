@@ -17,7 +17,7 @@ export interface UserDto {
   createdAt: string;
 }
 
-export type ReaderFontFamily = "sans" | "serif";
+export type ReaderFontFamily = "sans" | "serif" | "garamond" | "bitter" | "jost";
 export type ReaderFontSize = "small" | "medium" | "large" | "xlarge";
 export type ReaderLineSpacing = "compact" | "default" | "relaxed";
 export type ReaderTheme = "system" | "light" | "dark";
