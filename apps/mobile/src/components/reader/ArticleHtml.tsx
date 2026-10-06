@@ -72,6 +72,18 @@ const SYSTEM_FONTS = [
   "NVLegibleNext_400Regular_Italic",
   "NVLegibleNext_700Bold",
   "NVLegibleNext_700BoldItalic",
+  "NVGaramond_400Regular",
+  "NVGaramond_400Regular_Italic",
+  "NVGaramond_700Bold",
+  "NVGaramond_700BoldItalic",
+  "NVBitter_400Regular",
+  "NVBitter_400Regular_Italic",
+  "NVBitter_700Bold",
+  "NVBitter_700BoldItalic",
+  "NVJost_400Regular",
+  "NVJost_400Regular_Italic",
+  "NVJost_700Bold",
+  "NVJost_700BoldItalic",
 ];
 
 /** Only http(s)/mailto may leave the app; everything else is ignored. */

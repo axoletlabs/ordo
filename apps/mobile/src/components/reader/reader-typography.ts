@@ -5,6 +5,9 @@ import type { ReaderFontFamily, ReaderFontSize, ReaderLineSpacing } from "@ordo/
 const FAMILY: Record<ReaderFontFamily, FontFamily> = {
   sans: "legible",
   serif: "book",
+  garamond: "garamond",
+  bitter: "bitter",
+  jost: "jost",
 };
 
 export const READER_BODY_SIZE: Record<ReaderFontSize, number> = {

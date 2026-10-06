@@ -35,9 +35,17 @@ const sizeOptions: readonly { value: ReaderFontSize; label: string; accessibilit
 ];
 
 // Each option renders in its own typeface so the choice previews itself.
-const familyOptions: readonly { value: ReaderFontFamily; label: string; labelStyle: { fontFamily: string } }[] = [
-  { value: "serif", label: "Serif", labelStyle: { fontFamily: resolveReaderFont("serif") } },
-  { value: "sans", label: "Sans", labelStyle: { fontFamily: resolveReaderFont("sans") } },
+const familyOptions: readonly {
+  value: ReaderFontFamily;
+  label: string;
+  accessibilityLabel: string;
+  labelStyle: { fontFamily: string };
+}[] = [
+  { value: "serif", label: "Libron", accessibilityLabel: "Libron, a reading serif", labelStyle: { fontFamily: resolveReaderFont("serif") } },
+  { value: "sans", label: "Legible Sans", accessibilityLabel: "Legible Sans, an accessible sans serif", labelStyle: { fontFamily: resolveReaderFont("sans") } },
+  { value: "garamond", label: "Garamond", accessibilityLabel: "Garamond, a classical old-style serif", labelStyle: { fontFamily: resolveReaderFont("garamond") } },
+  { value: "bitter", label: "Bitter", accessibilityLabel: "Bitter, a contemporary slab serif", labelStyle: { fontFamily: resolveReaderFont("bitter") } },
+  { value: "jost", label: "Jost", accessibilityLabel: "Jost, a geometric sans serif", labelStyle: { fontFamily: resolveReaderFont("jost") } },
 ];
 
 const lineSpacingOptions: readonly { value: ReaderLineSpacing; label: string; accessibilityLabel: string }[] = [
@@ -132,7 +140,8 @@ export const ReaderControlsSheet = React.memo(function ReaderControlsSheet({
       <ControlGroup label="Typeface" accessibilityHint="Changes the article typeface.">
         <Segmented
           accessibilityLabel="Typeface"
-          orientation={orientation}
+          // Vertical rows give each reading typeface room to preview itself.
+          orientation="vertical"
           options={familyOptions}
           value={preferences.fontFamily}
           onChange={(fontFamily) => onUpdate({ fontFamily })}

@@ -279,6 +279,23 @@ export function SelectablePhrase({
   const publishHighlightTap = useCallback(
     (start: number, end: number, point?: PressPoint) => {
       if (!ui) return;
+      // An active text selection owns this gesture (select-to-extend inside a
+      // highlight); only a plain tap opens the highlight menu.
+      if (
+        typeof globalThis.getSelection === "function" &&
+        (() => {
+          try {
+            const selection = (
+              globalThis as { getSelection?: () => { isCollapsed: boolean; rangeCount: number } | null }
+            ).getSelection?.();
+            return !!selection && selection.rangeCount > 0 && !selection.isCollapsed;
+          } catch {
+            return false;
+          }
+        })()
+      ) {
+        return;
+      }
       const range = selectedRange(start, end);
       if (!range) return;
       const htmlNode = asHtmlNode(tnode);
