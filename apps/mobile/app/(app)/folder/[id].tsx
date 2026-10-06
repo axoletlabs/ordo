@@ -85,6 +85,8 @@ export default function FolderDetailScreen() {
   const [bookmarkAnchor, setBookmarkAnchor] = useState<MenuAnchorRect | null>(null);
   const [editTagsBm, setEditTagsBm] = useState<BookmarkDto | null>(null);
   const [unlockOpen, setUnlockOpen] = useState(false);
+  /** Skips auto-opening the unlock sheet once, right after a lock is applied here. */
+  const skipAutoUnlockRef = useRef(false);
   const [folderActions, setFolderActions] = useState(false);
   const [folderAnchor, setFolderAnchor] = useState<MenuAnchorRect | null>(null);
   const [sortOpen, setSortOpen] = useState(false);
@@ -101,6 +103,12 @@ export default function FolderDetailScreen() {
   const protectedError = !!bookmarks.error && isFolderProtected(bookmarks.error) && !unlocked;
   const showLocked = locked || protectedError;
   useEffect(() => {
+    // A lock just applied from the folder actions sheet shouldn't immediately
+    // prompt to unlock (the gate's Unlock button is there when actually wanted).
+    if (showLocked && skipAutoUnlockRef.current) {
+      skipAutoUnlockRef.current = false;
+      return;
+    }
     setUnlockOpen(showLocked);
   }, [showLocked]);
   const loadFailed = !!bookmarks.error && !showLocked && !bookmarks.data;
@@ -387,6 +395,9 @@ export default function FolderDetailScreen() {
         folder={folder ?? null}
         anchor={folderAnchor}
         onDismiss={() => setFolderActions(false)}
+        onLockSet={() => {
+          skipAutoUnlockRef.current = true;
+        }}
         onDeleted={() => {
           setFolderActions(false);
           router.replace("/");

@@ -51,9 +51,11 @@ export interface FolderActionsSheetProps {
   folder: FolderDto | null;
   anchor?: MenuAnchorRect | null;
   onDeleted?: (id: string) => void;
+  /** Called after a lock is applied, so hosts can skip immediately prompting to unlock. */
+  onLockSet?: () => void;
 }
 
-export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDeleted }: FolderActionsSheetProps) {
+export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDeleted, onLockSet }: FolderActionsSheetProps) {
   const { palette } = useTheme();
   const serverInfo = useServerInfo();
   /** Older servers drop lockType and silently store every lock as a password. */
@@ -236,6 +238,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
       });
       clearToken(folder.id);
       invalidateBookmarks();
+      onLockSet?.();
       haptics.success();
       toast.success("Folder locked");
       onDismiss();
@@ -263,6 +266,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
       patchFolderLock(folder.id, { protected: true, lockType: "device" });
       clearToken(folder.id);
       invalidateBookmarks();
+      onLockSet?.();
       haptics.success();
       toast.success("Folder locked");
       onDismiss();
