@@ -2,11 +2,11 @@
  * Authenticated library stack. Details retain native push/pop motion and
  * singular route identities, including when multiple taps are queued.
  */
-import React from "react";
+import React, { useEffect } from "react";
 import { View } from "react-native";
 import { Stack } from "expo-router";
 import { enableFreeze } from "react-native-screens";
-import { useReducedMotion } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useSharedValue, withTiming, useReducedMotion } from "react-native-reanimated";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { useServerInfo, useValidateSession } from "../../src/hooks/queries";
 import { useAuthStore } from "../../src/store/auth";
@@ -23,7 +23,75 @@ export const unstable_settings = {
   initialRouteName: "(tabs)",
 };
 
+/**
+ * Full-screen MFA enrollment surface. It appears once the server's
+ * mfa-required answer lands, which can be after the library painted — so it
+ * fades in like an incoming page instead of popping over the content.
+ */
+function MfaEnrollmentGate() {
+  const { palette } = useTheme();
+  const reducedMotion = useReducedMotion();
+  const opacity = useSharedValue(0);
+
+  useEffect(() => {
+    opacity.value = withTiming(1, { duration: reducedMotion ? 0 : 200 });
+  }, [opacity, reducedMotion]);
+
+  const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
+
+  return (
+    <Animated.View
+      accessibilityViewIsModal
+      importantForAccessibility="yes"
+      style={[
+        {
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          zIndex: 40,
+          elevation: 40,
+          backgroundColor: palette.background,
+        },
+        animatedStyle,
+      ]}
+    >
+      <MfaEnrollmentScreen />
+    </Animated.View>
+  );
+}
+
+/**
+ * Themed blank surface shown while the router holds this group before the
+ * auth redirect reconciles (web URLs can deep-link into "/" = the library).
+ * The launch cover sits above it, so it is a safety net, not a screen.
+ */
+function UnauthenticatedSurface() {
+  const { palette } = useTheme();
+  return <View style={{ flex: 1, backgroundColor: palette.background }} />;
+}
+
 export default function AppLayout() {
+  const status = useAuthStore((s) => s.status);
+
+  // Latch once this layout instance has seen a session. The router can mount
+  // this group while logged out (web URL resolution); without the latch that
+  // fires the entire library query volley behind the splash. After the first
+  // authentication the content instead stays mounted through the sign-out
+  // crossfade, keeping the outgoing library painted.
+  const [seenAuthenticated, setSeenAuthenticated] = React.useState(
+    status === "authenticated",
+  );
+  useEffect(() => {
+    if (status === "authenticated") setSeenAuthenticated(true);
+  }, [status]);
+
+  if (!seenAuthenticated) return <UnauthenticatedSurface />;
+  return <AuthenticatedAppLayout />;
+}
+
+function AuthenticatedAppLayout() {
   const { palette } = useTheme();
   const user = useAuthStore((s) => s.user);
   const reducedMotion = useReducedMotion();
@@ -75,24 +143,7 @@ export default function AppLayout() {
     <View style={{ flex: 1, backgroundColor: palette.background }}>
       <View style={{ flex: 1 }}>{stack}</View>
       <ReminderNotificationHost />
-      {needsMfaEnrollment ? (
-        <View
-          accessibilityViewIsModal
-          importantForAccessibility="yes"
-          style={{
-            position: "absolute",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            zIndex: 40,
-            elevation: 40,
-            backgroundColor: palette.background,
-          }}
-        >
-          <MfaEnrollmentScreen />
-        </View>
-      ) : null}
+      {needsMfaEnrollment ? <MfaEnrollmentGate /> : null}
     </View>
   );
 }

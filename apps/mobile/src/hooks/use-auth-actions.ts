@@ -13,7 +13,6 @@ import {
   type UserDto,
 } from "@ordo/shared";
 import { queryClient } from "../lib/query-client";
-import { discardQueryCache } from "../lib/query-cache";
 import { authApi } from "../lib/api/auth";
 import { useAuthStore } from "../store/auth";
 import { useFolderTokenStore } from "../store/folder-tokens";
@@ -115,7 +114,8 @@ export function useDeleteAccount() {
     mutationFn: authApi.deleteAccount,
     onSuccess: async () => {
       cancelProactiveRefresh();
-      discardQueryCache();
+      // The root layout stops persistence immediately and wipes the cache
+      // once the sign-out crossfade has settled — see app/_layout.tsx.
       await Promise.allSettled([
         clear(),
         useFolderTokenStore.getState().clearAll(),
@@ -212,7 +212,9 @@ export function useLogout() {
     },
     onSettled: () => {
       cancelProactiveRefresh();
-      discardQueryCache();
+      // Cache teardown is owned by the root layout: it stops persistence at
+      // once and wipes after the crossfade, so the outgoing library keeps
+      // its painted rows while the sign-in screen fades in.
       void clear();
     },
   });

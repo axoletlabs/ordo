@@ -3,9 +3,10 @@
  * persisted state, initialises connectivity, and gates navigation by auth status.
  *
  * Launch sequence: the native splash is held (expo-splash-screen) while fonts +
- * persisted stores hydrate and navigation reconciles with the auth status. It
- * is dismissed only after the correct route is ready and a minimum brand beat
- * has elapsed, so the native logo remains the same size for the whole launch.
+ * persisted stores hydrate, the disk library snapshot restores, and navigation
+ * reconciles with the auth status. It is dismissed only after the correct route
+ * is ready and a minimum brand beat has elapsed. After that first reveal, auth
+ * changes crossfade between groups instead of re-covering with the logo.
  */
 import React, { useEffect } from "react";
 import { Stack, useRouter, useSegments } from "expo-router";
@@ -18,7 +19,12 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider, useTheme } from "../src/theme/ThemeProvider";
 import { queryClient } from "../src/lib/query-client";
-import { prepareLaunchLibrary, restoreQueryPersistence, stopQueryPersistence } from "../src/lib/query-cache";
+import {
+  discardQueryCache,
+  prepareLaunchLibrary,
+  restoreQueryPersistence,
+  stopQueryPersistence,
+} from "../src/lib/query-cache";
 import { qk } from "../src/lib/api/query-keys";
 import { isServerUnreachable } from "../src/lib/server-availability";
 import { useAuthStore } from "../src/store/auth";
@@ -63,8 +69,15 @@ SplashScreen.setOptions(
     : { duration: 200, fade: true },
 );
 
-// Brand beat: keep the native splash up for at least this long once mounted.
+// Brand beat: the logo stays up for at least this long, measured from
+// process start so the beat overlaps hydration instead of extending the
+// launch by a full beat after hydration finishes.
 const MIN_SPLASH_MS = 600;
+const LAUNCH_STARTED_AT = Date.now();
+
+// Sign-out crossfade budget: the outgoing library keeps its painted data
+// while the auth group fades in; the cache wipe follows once it settles.
+const AUTH_HANDOFF_CLEAR_MS = 700;
 
 function RootShell() {
   const { palette } = useTheme();
@@ -79,16 +92,28 @@ function RootShell() {
   const runtimeRestart = restarting || restartCount > 0 || peekRestartCover() != null;
   const sharedUrl = useIncomingShareStore((s) => s.pendingUrl);
   const clearSharedUrl = useIncomingShareStore((s) => s.clear);
-  const [minElapsed, setMinElapsed] = React.useState(runtimeRestart);
+  const [minElapsed, setMinElapsed] = React.useState(
+    () => runtimeRestart || Date.now() - LAUNCH_STARTED_AT >= MIN_SPLASH_MS,
+  );
+  const revealedRef = React.useRef(false);
+  const everAuthenticatedRef = React.useRef(false);
+  if (status === "authenticated") everAuthenticatedRef.current = true;
 
-  // Minimum brand display so a cold launch reads as intentional, not a flicker.
-  // Runtime reloads already spent that time under the matching cover.
+  // Minimum brand display so a cold launch reads as intentional, not a
+  // flicker. The deadline is anchored to process start, so whatever part of
+  // the beat hydration did not consume is all that remains here. Runtime
+  // reloads already spent that time under the matching cover.
   useEffect(() => {
     if (runtimeRestart) {
       setMinElapsed(true);
       return;
     }
-    const t = setTimeout(() => setMinElapsed(true), MIN_SPLASH_MS);
+    const remaining = MIN_SPLASH_MS - (Date.now() - LAUNCH_STARTED_AT);
+    if (remaining <= 0) {
+      setMinElapsed(true);
+      return;
+    }
+    const t = setTimeout(() => setMinElapsed(true), remaining);
     return () => clearTimeout(t);
   }, [runtimeRestart]);
 
@@ -114,7 +139,16 @@ function RootShell() {
 
   useEffect(() => {
     if (status === "unauthenticated") {
+      // Stop writing at once, but let the logout crossfade run on painted
+      // data: wipe the cache after the auth group settles so the outgoing
+      // library never flashes empty. Re-authenticating cancels the wipe. A
+      // boot that was never signed in keeps any on-disk snapshot for the
+      // next sign-in instead of destroying it.
       stopQueryPersistence();
+      if (everAuthenticatedRef.current) {
+        const t = setTimeout(() => void discardQueryCache(), AUTH_HANDOFF_CLEAR_MS);
+        return () => clearTimeout(t);
+      }
       return;
     }
     if (status !== "authenticated" || !userId) return;
@@ -129,13 +163,18 @@ function RootShell() {
     status !== "loading" &&
     (status === "authenticated" ? segments[0] === "(app)" : segments[0] === "(auth)");
 
-  const showSplash = !routeMatchesAuth || !minElapsed;
+  // Before the first reveal the brand cover guards every reconciliation gap.
+  // After it, auth changes crossfade between groups — re-covering with the
+  // logo on each sign-in/out reads as a flash, not a handoff.
+  const coveredByLaunch = !routeMatchesAuth || !minElapsed;
+  const showSplash = restarting || (!revealedRef.current && coveredByLaunch);
 
   useEffect(() => {
-    if (showSplash || restarting) return;
+    if (showSplash) return;
+    revealedRef.current = true;
     SplashScreen.hideAsync().catch(() => {});
     clearRestartCover();
-  }, [restarting, showSplash]);
+  }, [showSplash]);
 
   return (
     <>
@@ -153,7 +192,7 @@ function RootShell() {
           <Stack.Screen name="(app)" />
         </Stack>
         <IncomingShareHandler />
-        {!showSplash && !restarting && routeMatchesAuth && status === "authenticated" ? (
+        {!showSplash && routeMatchesAuth && status === "authenticated" ? (
           <AddBookmarkSheet
             visible={!!sharedUrl}
             onDismiss={() => {
@@ -175,7 +214,7 @@ function RootShell() {
       </OverlayHost>
       <ToastHost />
       <OfflineGate />
-      {(showSplash || restarting) && (
+      {showSplash && (
         <LaunchSplash
           onPresented={restarting ? markRestartSplashPresented : undefined}
         />
