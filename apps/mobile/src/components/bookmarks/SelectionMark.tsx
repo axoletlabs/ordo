@@ -4,14 +4,14 @@ import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { useTheme } from "../../theme/ThemeProvider";
 import { ROW_ICON_FRAME, ROW_ICON_GLYPH } from "../../theme/alignment";
 import { radius } from "../../theme/tokens";
-import { useStateOpacity } from "../ui/StateLayer";
+import { useStateVisibility } from "../ui/StateLayer";
 
 /** Same footprint as folder/favicon tiles so selection chrome matches the row. */
 export const SELECTION_MARK_SIZE = ROW_ICON_FRAME;
 
 export function SelectionMark({ selected, size = SELECTION_MARK_SIZE }: { selected: boolean; size?: number }) {
   const { palette } = useTheme();
-  const progress = useStateOpacity(+selected);
+  const progress = useStateVisibility(selected);
   return (
     <View
       style={[

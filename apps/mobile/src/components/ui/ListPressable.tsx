@@ -35,7 +35,7 @@ export function ListPressable({ style, children, feedback = true, ...rest }: Pre
         const flat = StyleSheet.flatten(typeof style === "function" ? style(state) : style as StyleProp<ViewStyle>);
         return <>{typeof children === "function" ? children(state) : children}
           {feedback ? <StateLayer testID="material-list-state-layer" color={palette.onSurface} surfaceStyle={flat}
-            opacity={stateLayerOpacity({ disabled: rest.disabled, pressed: state.pressed, focused, hovered })} /> : null}</>;
+            fraction={stateLayerOpacity({ disabled: rest.disabled, pressed: state.pressed, focused, hovered })} /> : null}</>;
       }}
     </Pressable>
   );

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { stateLayerCorners, stateLayerOpacity } from "../theme/state-layer.ts";
+import { stateLayerCorners, stateLayerOpacity, alphaTint } from "../theme/state-layer.ts";
 import { appBarLayout } from "../theme/app-bar-layout.ts";
 import { selectionActionLayout } from "./selection-action-layout.ts";
 import { commitSelection, createSelectionState, toggleSelection } from "./selection-state.ts";
@@ -18,6 +18,15 @@ test("state layers preserve circular, grouped and field corner shapes", () => {
   });
   assert.equal(stateLayerCorners({ borderTopLeftRadius: 4 }).borderBottomLeftRadius, 0);
   assert.equal(stateLayerCorners({ borderRadius: 20, borderBottomLeftRadius: 0 }).borderBottomLeftRadius, 0);
+});
+test("state feedback alpha is baked into the color, never a resting opacity", () => {
+  assert.equal(alphaTint("#dde4e1", 0.08), "#dde4e114");
+  assert.equal(alphaTint("#dde4e1", 0.1), "#dde4e11a");
+  assert.equal(alphaTint("#dde4e1", 0), "#dde4e100");
+  assert.equal(alphaTint("#dde4e1", 1), "#dde4e1ff");
+  assert.equal(alphaTint("#dde4e161", 0.08), "#dde4e114");
+  assert.equal(alphaTint("transparent", 0.08), "transparent");
+  assert.equal(alphaTint("rgb(1, 2, 3)", 0.08), "rgb(1, 2, 3)");
 });
 test("disabled controls never show a state layer and states do not stack", () => {
   assert.equal(stateLayerOpacity({ disabled: true, pressed: true, focused: true, hovered: true }), 0);

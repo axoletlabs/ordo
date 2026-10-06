@@ -19,3 +19,17 @@ export function stateLayerOpacity({ disabled, pressed, focused, hovered }: {
 }) {
   return disabled ? 0 : pressed || focused ? 0.1 : hovered ? 0.08 : 0;
 }
+
+/**
+ * Bake the state fraction into the color itself. A resting element must never
+ * carry a sub-1 opacity: the compositor then distorts its radius clip and the
+ * feedback stops matching the surface (seen as a squared-off hover cap).
+ * "transparent" and unknown formats pass through unchanged.
+ */
+export function alphaTint(color: string, fraction: number): string {
+  if (color === "transparent") return "transparent";
+  const hex = /^#([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(color.trim());
+  if (!hex) return color;
+  const alpha = Math.round(Math.min(1, Math.max(0, fraction || 0)) * 255).toString(16).padStart(2, "0");
+  return `#${hex[1]}${alpha}`;
+}

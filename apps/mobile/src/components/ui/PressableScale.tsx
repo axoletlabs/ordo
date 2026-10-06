@@ -6,7 +6,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 import { useButtonGroupInteraction } from "./ButtonGroup";
 import { StateLayer } from "./StateLayer";
-import { stateLayerCorners, stateLayerOpacity } from "../../theme/state-layer";
+import { alphaTint, stateLayerCorners, stateLayerOpacity } from "../../theme/state-layer";
 import { webSelectionKeys, type WebPressKeyEvent } from "./pressable-web";
 import { nativeHoverEvents } from "../../lib/pointer-hover";
 
@@ -70,7 +70,7 @@ function StatePressable({ style, children, disabled, stateLayerColor, stateLayer
       focusVisible && !disabled ? { outlineColor: palette.primary, outlineWidth: 3, outlineOffset: 2, outlineStyle: "solid" } : null]}>
     {(state) => <>{typeof children === "function" ? children(state) : children}
       <StateLayer color={tint} surfaceStyle={style as StyleProp<ViewStyle>} inset={stateLayerInset}
-        opacity={stateLayerOpacity({ disabled, pressed: state.pressed, focused: focusLayer, hovered })} /></>}
+        fraction={stateLayerOpacity({ disabled, pressed: state.pressed, focused: focusLayer, hovered })} /></>}
   </Pressable>;
 }
 
@@ -92,6 +92,8 @@ function AnimatedStatePressable({
   const flat = StyleSheet.flatten(style as StyleProp<ViewStyle>);
   const background = useSharedValue(typeof flat?.backgroundColor === "string" ? flat.backgroundColor : "transparent");
   const backgroundColor = flat?.backgroundColor;
+  const focusLayer = focused && (!focusOnlyVisible || Platform.OS !== "web" || focusVisible);
+  const fraction = stateLayerOpacity({ disabled, pressed: down, focused: focusLayer, hovered });
   useEffect(() => {
     if (typeof backgroundColor !== "string") return;
     background.value = motion.reducedMotion ? backgroundColor : withSpring(backgroundColor, materialMotion.effects.fast);
@@ -105,10 +107,8 @@ function AnimatedStatePressable({
 
   useEffect(() => {
     progress.value = motion.reducedMotion ? (down ? 1 : 0) : withSpring(down ? 1 : 0, motion.fast);
-    const focusLayer = focused && (!focusOnlyVisible || Platform.OS !== "web" || focusVisible);
-    const opacity = stateLayerOpacity({ disabled, pressed: down, focused: focusLayer, hovered });
-    layer.value = motion.reducedMotion ? opacity : withSpring(opacity, materialMotion.effects.fast);
-  }, [down, hovered, focused, focusVisible, focusOnlyVisible, disabled, progress, layer, motion.fast, motion.reducedMotion]);
+    layer.value = motion.reducedMotion ? (fraction > 0 ? 1 : 0) : withSpring(fraction > 0 ? 1 : 0, motion.fast);
+  }, [down, hovered, focused, focusVisible, focusOnlyVisible, disabled, progress, layer, motion.fast, motion.reducedMotion, fraction]);
   useEffect(() => {
     const values = cornerKey.split(":").map(Number);
     const target = down && !disabled ? values.slice(4) : values.slice(0, 4);
@@ -157,7 +157,7 @@ function AnimatedStatePressable({
       {typeof children === "function" ? children({ pressed: down }) : children}
       <Animated.View testID="material-state-layer" pointerEvents="none" accessible={false} style={[{ position: "absolute", top: stateLayerInset, bottom: stateLayerInset, left: stateLayerInset, right: stateLayerInset }, stateLayerCorners(flat), {
         overflow: "hidden",
-        backgroundColor: stateLayerColor ?? palette.onSurface,
+        backgroundColor: alphaTint(stateLayerColor ?? palette.onSurface, fraction),
       }, cornerStyle, layerStyle]} />
     </AnimatedPressable>
   );

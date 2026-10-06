@@ -19,8 +19,8 @@ export function Toggle({ value, onValueChange, disabled, accessibilityLabel }: T
   const state = useSharedValue(0);
   const interaction = useRef({ pressed: false, focused: false, hovered: false });
   const updateHalo = () => {
-    const target = stateLayerOpacity({ ...interaction.current, disabled });
-    state.value = motion.reducedMotion ? target : withSpring(target, materialMotion.effects.fast);
+    const active = stateLayerOpacity({ ...interaction.current, disabled }) > 0;
+    state.value = motion.reducedMotion ? (active ? 1 : 0) : withSpring(active ? 1 : 0, materialMotion.effects.fast);
   };
   useEffect(() => {
     position.value = motion.reducedMotion ? +value : withSpring(+value, motion.fast);
@@ -37,8 +37,8 @@ export function Toggle({ value, onValueChange, disabled, accessibilityLabel }: T
       backgroundColor: disabled ? value ? palette.surface : `${palette.onSurface}61`
         : interpolateColor(effect.value, [0, 1], [palette.outline, palette.onPrimary]) };
   });
-  const halo = useAnimatedStyle(() => ({ left: -6 + position.value * 20, opacity: disabled ? 0 : state.value,
-    backgroundColor: value ? palette.primary : palette.onSurface }));
+  const halo = useAnimatedStyle(() => ({ left: -6 + position.value * 20,
+    backgroundColor: interpolateColor(state.value, [0, 1], [`${value ? palette.primary : palette.onSurface}00`, `${value ? palette.primary : palette.onSurface}14`]) }));
   const check = useAnimatedStyle(() => ({ opacity: effect.value }));
   return <PressableScale accessibilityRole="switch" accessibilityLabel={accessibilityLabel}
     accessibilityState={{ checked: value, disabled: !!disabled }} disabled={disabled}
