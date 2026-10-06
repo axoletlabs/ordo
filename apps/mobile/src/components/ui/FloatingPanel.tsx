@@ -9,7 +9,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { OverlayPortal } from "./overlay-host";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -91,6 +91,32 @@ function FloatingPanelSurface({
   }, [dismissible, onDismiss]);
   const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, { interactive: interactive && !obscured });
   const panelRef = useOverlayFocus(visible && interactive && !obscured && rendered, hideAndDismiss, "dialog", dismissible);
+  // A sibling picker obscures this panel while staying mounted above it.
+  // Crossfade this panel and its scrim (same 200ms inOut quad as the
+  // picker's own fade, so the stacked scrims keep a constant dim) instead
+  // of cutting to display:none; the display switch only happens after the
+  // fade-out settles, and is lifted before fading back in.
+  const obscuredFade = useSharedValue(obscured ? 0 : 1);
+  const [collapsedObscured, setCollapsedObscured] = React.useState(obscured);
+  const lastObscured = React.useRef(obscured);
+  React.useLayoutEffect(() => {
+    if (obscured === lastObscured.current) return;
+    lastObscured.current = obscured;
+    if (motion.reducedMotion) {
+      obscuredFade.value = obscured ? 0 : 1;
+      setCollapsedObscured(obscured);
+      return;
+    }
+    const fade = { duration: 200, easing: Easing.inOut(Easing.quad) };
+    if (obscured) {
+      obscuredFade.value = withTiming(0, fade, (finished) => {
+        if (finished && lastObscured.current) runOnJS(setCollapsedObscured)(true);
+      });
+      return;
+    }
+    setCollapsedObscured(false);
+    obscuredFade.value = withTiming(1, fade);
+  }, [obscured, obscuredFade, motion.reducedMotion]);
   const lastChildren = React.useRef(children);
   if (visible) lastChildren.current = children;
   const nodes = panelChildren(visible ? children : lastChildren.current);
@@ -150,13 +176,13 @@ function FloatingPanelSurface({
   }, [restHeight, panelHeight, viewportHeight, insets.top, insets.bottom, bottomInset, keyboardShift, motion.reducedMotion]);
 
   const scrimStyle = useAnimatedStyle(() => ({
-    opacity: progress.value,
+    opacity: progress.value * obscuredFade.value,
   }));
   // Web keeps its input ancestors untransformed/unclipped. Fade a separate
   // clipped surface and the contents, rather than compositing the entire
   // rounded panel (which leaves a square backing in Chromium).
   const panelStyle = useAnimatedStyle(() => Platform.OS === "web" ? {} : ({
-    opacity: progress.value,
+    opacity: progress.value * obscuredFade.value,
     transform: [{ translateY: keyboardShift.value + (1 - spatial.value) * 24 }, ...(Platform.OS === "ios" ? [{ scale: 0.94 + spatial.value * 0.06 }] : [])],
   }));
 
@@ -169,7 +195,7 @@ function FloatingPanelSurface({
         importantForAccessibility={obscured ? "no-hide-descendants" : "auto"}
         aria-hidden={!visible || obscured}
         pointerEvents={visible && interactive && !obscured ? "auto" : "none"}
-        style={[styles.root, obscured ? { display: "none" } : null]}
+        style={[styles.root, collapsedObscured ? { display: "none" } : null]}
         onLayout={(event) => { const next = event.nativeEvent.layout.height; if (!obscured && next > 0) setAvailableHeight((current) => Math.abs(current - next) < 1 ? current : next); }}
       >
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, scrimStyle]}>

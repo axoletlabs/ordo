@@ -12,7 +12,7 @@ import {
   type ViewStyle,
   type PressableProps,
 } from "react-native";
-import Animated, { interpolate, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from "react-native-reanimated";
 import { useMaterialMotion } from "../../theme/material-motion";
 import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { AppIcon } from "./PinIcon";
@@ -91,17 +91,43 @@ function ContextMenuSurface({
   const contentHeightRef = React.useRef(0);
   const retainedHeight = React.useRef(0);
   const pageProgress = useSharedValue(1);
+  const leavingProgress = useSharedValue(1);
+  // Snapshot of the outgoing page while a fade-through hands off to the
+  // next page. The menu surface keeps its size; only the content swaps.
+  const [leavingPage, setLeavingPage] = React.useState<React.ReactNode>(null);
+  const leavingPageRef = React.useRef<React.ReactNode>(null);
   const motion = useMaterialMotion();
   const lastPage = React.useRef(pageKey);
   React.useLayoutEffect(() => {
     if (!visible || pageKey === lastPage.current) return;
     lastPage.current = pageKey;
-    pageProgress.value = motion.reducedMotion ? 1 : 0;
-    pageProgress.value = withTiming(1, { duration: motion.reducedMotion ? 0 : 160 });
-  }, [visible, pageKey, pageProgress, motion.reducedMotion]);
+    if (motion.reducedMotion) {
+      pageProgress.value = 1;
+      leavingPageRef.current = null;
+      return;
+    }
+    // Material fade-through: the outgoing page fades out in place, then the
+    // new page fades in with a small settle. Direction-free, so opening a
+    // nested page reads the same as coming back.
+    const outgoing = leavingPageRef.current;
+    leavingPageRef.current = null;
+    setLeavingPage(outgoing ?? null);
+    if (outgoing) {
+      leavingProgress.value = 1;
+      leavingProgress.value = withTiming(0, { duration: 100, easing: Easing.in(Easing.quad) }, (finished) => {
+        if (finished) runOnJS(setLeavingPage)(null);
+      });
+    }
+    pageProgress.value = 0;
+    pageProgress.value = withDelay(outgoing ? 100 : 0, withTiming(1, { duration: outgoing ? 200 : 160, easing: Easing.out(Easing.quad) }));
+  }, [visible, pageKey, pageProgress, leavingProgress, motion.reducedMotion]);
   const pageStyle = useAnimatedStyle(() => ({
     opacity: pageProgress.value,
     ...(Platform.OS !== "web" ? { transform: [{ translateX: (1 - pageProgress.value) * 8 }] } : {}),
+  }));
+  const leavingStyle = useAnimatedStyle(() => ({
+    opacity: leavingProgress.value,
+    ...(Platform.OS !== "web" ? { transform: [{ translateX: -8 * (1 - leavingProgress.value) }] } : {}),
   }));
   const lastPlacement = React.useRef<MenuPlacement | null>(null);
   const placementLock = React.useRef<MenuPlacement | null>(null);
@@ -109,7 +135,14 @@ function ContextMenuSurface({
   const wasVisibleRef = React.useRef(visible);
   const layoutKeyRef = React.useRef("");
   const lastChildren = React.useRef(children);
+  const lastPageRender = React.useRef(pageKey);
+  if (visible && pageKey !== lastPageRender.current) {
+    // Snapshot the outgoing page before the children swap so the ghost
+    // layer can fade it out during the page handoff.
+    leavingPageRef.current = lastChildren.current;
+  }
   if (visible) lastChildren.current = children;
+  lastPageRender.current = pageKey;
   const sessionKeyRef = React.useRef(sessionKey);
   if (visible && sessionKeyRef.current !== sessionKey) {
     sessionKeyRef.current = sessionKey;
@@ -131,6 +164,9 @@ function ContextMenuSurface({
       sessionSide.current = null;
       if (contentHeight !== 0) setContentHeight(0);
     }
+    // A new open never inherits a page ghost from a previous session.
+    leavingPageRef.current = null;
+    if (leavingPage !== null) setLeavingPage(null);
   }
   wasVisibleRef.current = visible;
 
@@ -241,6 +277,11 @@ function ContextMenuSurface({
                 {visible ? children : lastChildren.current}
               </ThemedScrollView> : visible ? children : lastChildren.current}
               </Animated.View>
+              {leavingPage != null ? (
+                <Animated.View pointerEvents="none" aria-hidden style={[StyleSheet.absoluteFill, leavingStyle]}>
+                  {leavingPage}
+                </Animated.View>
+              ) : null}
             </View>
         </Animated.View>
       </View>
