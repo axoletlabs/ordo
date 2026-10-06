@@ -121,11 +121,6 @@ export function bumpFolderCount(
   );
 }
 
-/** Re-key helper: all bookmark list caches for any folder (for global effects). */
-export function allBookmarkListMatcher() {
-  return { predicate: (q: { queryKey: readonly unknown[] }) => q.queryKey[0] === "bookmarks" && q.queryKey[1] !== "search" };
-}
-
 function isPagedBookmarks(
   data: unknown,
 ): data is InfiniteData<CursorPage<BookmarkDto>> {

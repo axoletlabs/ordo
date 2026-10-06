@@ -124,7 +124,6 @@ function AuthenticatedAppLayout() {
       <Stack.Screen name="settings/index" dangerouslySingular />
       <Stack.Screen name="settings/sessions" dangerouslySingular />
       <Stack.Screen name="settings/about" dangerouslySingular />
-      <Stack.Screen name="settings/changelog" dangerouslySingular />
       <Stack.Screen name="settings/account" dangerouslySingular />
       <Stack.Screen name="settings/appearance" dangerouslySingular />
       <Stack.Screen name="settings/controls" dangerouslySingular />

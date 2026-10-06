@@ -15,9 +15,6 @@ export interface Palette extends MaterialColors {
 }
 
 export type SystemColorScheme = "light" | "dark" | "unspecified" | null | undefined;
-export function appearanceOverride(mode: ThemeMode): "light" | "dark" | "unspecified" {
-  return mode === "system" ? "unspecified" : mode;
-}
 
 const cache = new Map<string, Palette>();
 

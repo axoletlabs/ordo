@@ -32,11 +32,6 @@ export const CONTEXT_MENU_WIDTH = 240;
 export const CONTEXT_MENU_GAP = 6;
 export const CONTEXT_MENU_EDGE = 12;
 
-export function menuHoverFill(mode: "light" | "dark", strong = false): string {
-  if (mode === "dark") return strong ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.05)";
-  return strong ? "rgba(21,20,15,0.08)" : "rgba(21,20,15,0.05)";
-}
-
 function clamp(value: number, min: number, max: number): number {
   if (max < min) return min;
   return Math.min(max, Math.max(min, value));

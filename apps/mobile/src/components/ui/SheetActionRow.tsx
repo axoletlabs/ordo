@@ -70,14 +70,6 @@ export function PanelActions({
 }
 
 /** Shrink-wraps action rows to the longest label and centers that column. */
-export function SheetMenu({ children }: { children: React.ReactNode }) {
-  return (
-    <View style={styles.menu}>
-      <View>{children}</View>
-    </View>
-  );
-}
-
 export function SheetActionRow({
   icon,
   label,
@@ -100,7 +92,3 @@ export function SheetActionRow({
     <ContextMenuItem role="button" icon={icon} label={label} tone={tone} trailing={trailing} onPress={onPress} disabled={disabled} busy={busy} />
   );
 }
-
-const styles = StyleSheet.create({
-  menu: { width: "100%", alignItems: "center" },
-});

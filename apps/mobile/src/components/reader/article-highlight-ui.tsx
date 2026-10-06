@@ -25,7 +25,7 @@ import {
   type CustomTextualRenderer,
   type TNode,
 } from "@native-html/render";
-import { htmlToPlainText, quoteFromBlock, quoteFromRange, type HighlightAnchor } from "@ordo/shared";
+import { quoteFromBlock, quoteFromRange, type HighlightAnchor } from "@ordo/shared";
 import { isMenuAnchorRect, resolveSelectionAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { useAndroidPhraseSelection } from "./android-phrase-selection";
 import {
@@ -242,18 +242,6 @@ export interface HighlightUiHandlers {
 export const HighlightUiContext = createContext<HighlightUiHandlers | null>(null);
 
 export function ignoreTextSelect(_draft: HighlightSelectDraft | null) {}
-
-export function highlightHandlersFromHtml(
-  html: string,
-  selectionColor: string,
-  handlers: Omit<HighlightUiHandlers, "articlePlain" | "selectionColor">,
-): HighlightUiHandlers {
-  return {
-    articlePlain: htmlToPlainText(html),
-    selectionColor,
-    ...handlers,
-  };
-}
 
 export function SelectablePhrase({
   tnode,

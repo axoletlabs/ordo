@@ -19,11 +19,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { layout, radius, spacing } from "../../theme/tokens";
 import { appBarLayout } from "../../theme/app-bar-layout";
 
-export const HEADER_LINE_HEIGHT = 28;
-export const HEADER_CONTROL_SIZE = 48;
-export const HEADER_TITLE_INSET = 96;
-export const HEADER_ICON_SIZE = 24;
-export const headerTitleTextStyle: TextStyle = { includeFontPadding: false, textAlignVertical: "center" };
+const headerTitleTextStyle: TextStyle = { includeFontPadding: false, textAlignVertical: "center" };
 export interface HeaderProps {
   title: string; subtitle?: string; showBack?: boolean; onBack?: () => void | boolean; right?: React.ReactNode;
   variant?: "standard" | "tonal";
@@ -120,6 +116,4 @@ const styles = StyleSheet.create({
   bar: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: spacing[8] },
   title: { flex: 1, minWidth: 0 },
   actions: { flexDirection: "row", alignItems: "center" },
-  icon: { width: 48, height: 48, borderRadius: radius.full, justifyContent: "center", alignItems: "center" },
 });
-export const headerSideStyle: ViewStyle = { flexDirection: "row", alignItems: "center" };

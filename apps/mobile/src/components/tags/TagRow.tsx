@@ -23,8 +23,6 @@ import type { TagDto } from "@ordo/shared";
 import { rowOwnsHover } from "../../lib/row-hover";
 import { nativeHoverEvents } from "../../lib/pointer-hover";
 
-export const TAG_ROW_SIZE = 72;
-
 export interface TagRowProps {
   tag: TagDto;
   onPress: (tag: TagDto) => void | boolean;

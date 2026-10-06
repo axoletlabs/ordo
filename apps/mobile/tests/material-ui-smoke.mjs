@@ -38,7 +38,7 @@ let activePage;
 const authRoutes = ["login", "register", "forgot-password", "reset-password?email=alex%40example.test", "verify-email?email=alex%40example.test", "mfa?challengeToken=fixture&emailRecovery=1"];
 const appRoutes = ["", "search", "folder/collection", "tags", "tags/design", "reader/article", "settings", "settings/account",
   "settings/display-name", "settings/email", "settings/password", "settings/verify-email?email=next%40example.test", "settings/security",
-  "settings/sessions", "settings/appearance", "settings/controls", "settings/server", "settings/data", "settings/about", "settings/changelog", "settings/delete-account"];
+  "settings/sessions", "settings/appearance", "settings/controls", "settings/server", "settings/data", "settings/about", "settings/delete-account"];
 
 async function fixture(page, scenario = {}) {
   let currentUser = { ...user, preferences: { ...user.preferences, ...scenario.readerPreferences } };
@@ -371,9 +371,8 @@ async function navigate(page, path) {
         await button(page, "Send code").click();
       }
     } else if (target) {
-      const label = { sessions: "Active sessions", server: "Hosting", appearance: "Appearance", controls: "Controls", data: "Data", about: "About", changelog: "About" }[target];
+      const label = { sessions: "Active sessions", server: "Hosting", appearance: "Appearance", controls: "Controls", data: "Data", about: "About" }[target];
       assert.ok(label, `Missing navigation for ${path}`); await button(page, label).click();
-      if (target === "changelog") await button(page, "Changelog").click(); // Same shared surface; legacy page remains source-only.
     }
   }
   await settle(page);
@@ -582,7 +581,7 @@ try {
       for (const path of appRoutes) {
         await navigate(page, path);
         await page.getByRole("button").first().waitFor(); await page.waitForTimeout(200);
-        await capture(page, `${mode}-${viewport.name}-${path.split("?")[0].replaceAll("/", "-") || "library"}${path === "settings/changelog" ? "-sheet" : ""}`);
+        await capture(page, `${mode}-${viewport.name}-${path.split("?")[0].replaceAll("/", "-") || "library"}`);
       }
     }
     await page.setViewportSize({ width: 390, height: 844 }); await navigate(page, "");

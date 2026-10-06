@@ -25,9 +25,6 @@ export interface TextProps extends RNTextProps {
   color?: TextColor;
   align?: "auto" | "left" | "center" | "right" | "justify";
 }
-export const NAV_CHROME_TEXT = {
-  fontFamily: resolveFont("sans", "500"), fontSize: 12, fontWeight: "500" as const, lineHeight: 16, letterSpacing: 0.5,
-};
 export const Text = React.forwardRef<RNText, TextProps>(function Text({ variant = "body", color = "primary", align, style, ...rest }, ref) {
   const { palette, expressive } = useTheme();
   const role = variant in aliases ? aliases[variant as keyof typeof aliases] : variant as MaterialType;

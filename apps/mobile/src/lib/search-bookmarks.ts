@@ -2,7 +2,7 @@
  * Client-side search: sanitize route params, merge cached bookmarks with the
  * server result, and filter as you type with word-prefix matching.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   compareBookmarkSearchRanks,
   createBookmarkSearchMatcher,
@@ -78,33 +78,6 @@ export function searchFiltersEqual(a: SearchFilters, b: SearchFilters): boolean 
     a.tagIds.every((id, index) => id === b.tagIds[index]) &&
     a.folderIds.every((id, index) => id === b.folderIds[index])
   );
-}
-
-/**
- * Optional frame-separated updates for legacy recycler callers. The inline
- * FlatList search deliberately does not defer text or filter changes.
- */
-export function useDeferredLayoutValue<T>(value: T, equal?: (a: T, b: T) => boolean): T {
-  const [committed, setCommitted] = useState(value);
-  const valueRef = useRef(value);
-  const committedRef = useRef(committed);
-  valueRef.current = value;
-  committedRef.current = committed;
-  const isEqual = equal ?? Object.is;
-  useEffect(() => {
-    if (isEqual(value, committedRef.current)) return;
-    let inner = 0;
-    const outer = requestAnimationFrame(() => {
-      inner = requestAnimationFrame(() => {
-        setCommitted(valueRef.current);
-      });
-    });
-    return () => {
-      cancelAnimationFrame(outer);
-      if (inner) cancelAnimationFrame(inner);
-    };
-  }, [isEqual, value]);
-  return committed;
 }
 
 function isArticleBookmark(bookmark: BookmarkDto): boolean {

@@ -127,5 +127,4 @@ const styles = StyleSheet.create({
     minWidth: 0,
     includeFontPadding: false,
   },
-  pressed: { opacity: 0.72 },
 });

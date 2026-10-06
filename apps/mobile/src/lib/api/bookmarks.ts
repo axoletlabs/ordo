@@ -41,7 +41,6 @@ export const bookmarksApi = {
         cursor,
         limit,
       },
-      folderTokens: true,
     }),
 
   search: (
@@ -69,7 +68,6 @@ export const bookmarksApi = {
         reminder: reminder === "all" ? undefined : reminder,
       },
       auth: true,
-      folderTokens: true,
       signal,
     }),
 
@@ -129,7 +127,6 @@ export const bookmarksApi = {
   batch: (body: BatchBookmarksInput, opts?: { folderId?: string | null }) =>
     api.post<typeof BookmarkRoutes.batch.response>(BookmarkRoutes.batch.path, body, {
       folderId: opts?.folderId,
-      folderTokens: true,
     }),
 
   extractionProgress: () =>

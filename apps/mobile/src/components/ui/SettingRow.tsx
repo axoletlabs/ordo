@@ -119,7 +119,6 @@ const styles = StyleSheet.create({
     minHeight: 72,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  noDivider: { borderBottomWidth: 0 },
   icon: { width: 24, height: 24, alignItems: "center", justifyContent: "center" },
   body: { flex: 1, flexBasis: 0, minWidth: 0 },
   description: { marginTop: spacing[2] },

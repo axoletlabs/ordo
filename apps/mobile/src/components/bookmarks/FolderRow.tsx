@@ -234,7 +234,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
             <Text variant="bodyMedium" color="tertiary" numberOfLines={1} style={styles.count}>
               {countLabel}
             </Text>
-            {folder.pinned ? <RowStatusSlot><PinIcon size={ROW_STATUS_ICON_SIZE} color={palette.textTertiary} filled={false} /></RowStatusSlot> : null}
+            {folder.pinned ? <RowStatusSlot><PinIcon size={ROW_STATUS_ICON_SIZE} color={palette.textTertiary} /></RowStatusSlot> : null}
           </View>
         </View>
         {unread && !selectionMode ? <Badge tone="accent">{folder.unreadCount}</Badge> : null}
