@@ -37,6 +37,8 @@ export interface ExtractionTask {
 const CONCURRENCY = 8;
 const PER_HOST = 3;
 const LOW_PRIORITY_MAX = 2;
+/** How long a cancel flag for a non-in-flight task outlives the cancel call. */
+const CANCELED_GRACE_MS = 60_000;
 
 @Injectable()
 export class ExtractionService {
@@ -127,6 +129,12 @@ export class ExtractionService {
     this.queuedIds.delete(bookmarkId);
     this.dropQueued(bookmarkId);
     this.controllers.get(bookmarkId)?.abort();
+    if (!this.controllers.has(bookmarkId)) {
+      // Nothing in flight: the flag only guards the take-next race, so drop
+      // it shortly to keep the set from growing for the process lifetime.
+      const timer = setTimeout(() => this.canceled.delete(bookmarkId), CANCELED_GRACE_MS);
+      timer.unref?.();
+    }
   }
 
   prefetch(url: string, userId?: string): void {
@@ -370,6 +378,7 @@ export class ExtractionService {
         const task = list.shift()!;
         if (this.canceled.has(task.bookmarkId)) {
           this.queuedIds.delete(task.bookmarkId);
+          this.canceled.delete(task.bookmarkId);
           continue;
         }
         if (list.length === 0) lane.delete(host);

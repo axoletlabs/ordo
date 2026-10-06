@@ -15,13 +15,12 @@ describe("bookmark URL schemas", () => {
     expect(CreateBookmarkSchema.safeParse({ url: "file:///etc/passwd" }).success).toBe(false);
   });
 
-  it("updates and highlight hrefs reject non-http(s) URLs", () => {
-    expect(UpdateBookmarkSchema.safeParse({ isRead: true, url: "https://example.com" }).success).toBe(
-      true,
-    );
-    expect(
-      UpdateBookmarkSchema.safeParse({ isRead: true, url: "javascript:alert(1)" }).success,
-    ).toBe(false);
+  it("updates ignore url (immutable) and highlight hrefs reject non-http(s) URLs", () => {
+    // Bookmark URLs are immutable: `url` is not an updatable field, so any
+    // value sent on PATCH is stripped rather than validated or applied.
+    const parsed = UpdateBookmarkSchema.safeParse({ isRead: true, url: "javascript:alert(1)" });
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && "url" in parsed.data).toBe(false);
     expect(CreateHighlightSchema.safeParse({ exact: "quote" }).success).toBe(true);
     expect(
       CreateHighlightSchema.safeParse({ exact: "quote", href: "https://example.com#a" }).success,

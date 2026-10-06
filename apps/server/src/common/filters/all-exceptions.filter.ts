@@ -8,7 +8,7 @@ import {
 } from "@nestjs/common";
 import type { Request, Response } from "express";
 import { AppError, type AppErrorPayload } from "../errors/app-error.js";
-import { ErrorCode, type ApiError } from "@ordo/shared";
+import { ErrorCode, IMPORT_EXPORT, type ApiError } from "@ordo/shared";
 
 /** Global filter — every response uses the `{ error: ApiError }` envelope. */
 @Catch()
@@ -33,11 +33,17 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ...(body.details !== undefined ? { details: body.details } : {}),
       };
     } else if (isMulterTooLarge(exception)) {
+      const isImport = req.path.startsWith("/api/import-export/");
       status = HttpStatus.PAYLOAD_TOO_LARGE;
-      payload = {
-        code: ErrorCode.AVATAR_TOO_LARGE,
-        message: "That image is too large.",
-      };
+      payload = isImport
+        ? {
+            code: ErrorCode.IMPORT_FILE_TOO_LARGE,
+            message: `Import files can be at most ${Math.floor(IMPORT_EXPORT.MAX_FILE_BYTES / 1024 / 1024)} MB.`,
+          }
+        : {
+            code: ErrorCode.AVATAR_TOO_LARGE,
+            message: "That image is too large.",
+          };
     } else if (exception instanceof HttpException) {
       status = exception.getStatus();
       const body = exception.getResponse();

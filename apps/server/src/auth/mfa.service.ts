@@ -68,13 +68,6 @@ export class MfaService {
     return { totpEnabled: this.isEnabled(user), backupCodesRemaining: remaining };
   }
 
-  createLoginChallengeResponse(
-    user: User,
-    dek: Buffer | null,
-  ): Promise<MfaRequiredResponse> {
-    return this.createLoginChallenge(user, dek);
-  }
-
   async createLoginChallenge(
     user: User,
     dek: Buffer | null = null,

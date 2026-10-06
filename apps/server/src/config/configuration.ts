@@ -160,6 +160,11 @@ function resolveSecret(): { value: string; explicit: boolean } {
   const fromEnv = process.env.JWT_SECRET?.trim();
   if (fromEnv) return { value: fromEnv, explicit: true };
 
+  // Jest should not write a key file into the package directory.
+  if (process.env.NODE_ENV === "test") {
+    return { value: randomBytes(48).toString("hex"), explicit: false };
+  }
+
   const secretPath = join(process.cwd(), ".ordo-secret");
   if (existsSync(secretPath)) {
     return { value: readFileSync(secretPath, "utf8").trim(), explicit: false };

@@ -19,12 +19,11 @@
     "db:setup": "DATABASE_URL=\"file:./ordo.db\" prisma generate && DATABASE_URL=\"file:./ordo.db\" prisma migrate deploy",
     "db:upgrade": "node dist/prisma/upgrade-cli.js",
     "studio": "prisma studio",
-    "clean": "rimraf dist .turbo coverage prisma/*.db src/generated"
+    "clean": "rimraf dist .turbo coverage src/generated"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
     "@nestjs/common": "^12.0.2",
-    "@nestjs/config": "^12.0.0",
     "@nestjs/core": "^12.0.2",
     "@nestjs/platform-express": "^12.0.2",
     "@ordo/shared": "workspace:*",
@@ -50,7 +49,6 @@
     "@swc/core": "^1.16.2",
     "@swc/jest": "^0.2.39",
     "@types/bcryptjs": "^2.4.6",
-    "@types/better-sqlite3": "^7.6.13",
     "@types/cookie-parser": "^1.4.8",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",
@@ -63,10 +61,6 @@
     "prisma": "^7.10.0",
     "rimraf": "^6.0.1",
     "supertest": "^7.0.0",
-    "ts-jest": "^29.2.5",
-    "ts-loader": "^9.5.2",
-    "ts-node": "^10.9.2",
-    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.7.3"
   }
 }

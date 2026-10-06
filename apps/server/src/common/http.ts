@@ -1,5 +1,6 @@
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { Request, Response, NextFunction } from "express";
+import { json as expressJson } from "express";
 import cookieParser from "cookie-parser";
 import { CSRF_TOKEN_HEADER, IMPORT_EXPORT } from "@ordo/shared";
 import type { AppConfig } from "../config/config.module.js";
@@ -14,6 +15,13 @@ export const CONTENT_SECURITY_POLICY =
 
 /** One year, including subdomains. Browsers ignore this on plain HTTP. */
 export const STRICT_TRANSPORT_SECURITY = "max-age=31536000; includeSubDomains";
+
+/**
+ * JSON body cap for every route except the JSON import upload, which
+ * registers its own larger parser. Largest normal payloads are batch
+ * operations (BATCH_ITEM_LIMIT = 200 ids), well under this.
+ */
+export const DEFAULT_JSON_BODY_LIMIT = "1mb";
 
 /**
  * Shared HTTP setup for `main.ts` and e2e: trust proxy, CORS, cookies,
@@ -35,8 +43,15 @@ export function applyHttp(app: NestExpressApplication, cfg: AppConfig): void {
     }
     next();
   });
-  // Native import sends the file as JSON; escaping can nearly double the bytes.
-  app.useBodyParser("json", { limit: IMPORT_EXPORT.MAX_FILE_BYTES * 2 + 5 * 1024 * 1024 });
+  // The native client posts an import file as JSON; escaping can nearly double
+  // the bytes, so that one route gets an oversized allowance. Every other
+  // route is capped at 1 MB so unauthenticated endpoints can't be used to
+  // make the server parse ~100 MB bodies before any rate limit applies.
+  app.use(
+    "/api/import-export/import",
+    expressJson({ limit: IMPORT_EXPORT.MAX_FILE_BYTES * 2 + 5 * 1024 * 1024 }),
+  );
+  app.useBodyParser("json", { limit: DEFAULT_JSON_BODY_LIMIT });
   app.enableCors((incoming, callback) => {
     const req = incoming as Request;
     const origin = req.get("origin") || undefined;

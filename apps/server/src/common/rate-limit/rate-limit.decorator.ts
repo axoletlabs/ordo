@@ -13,7 +13,8 @@ export type RateLimitPolicyName =
   | "mfa-verify"
   | "avatar-upload"
   | "import-upload"
-  | "export";
+  | "export"
+  | "password-confirm";
 
 /** Bind a consume-on-request rate-limit policy to a handler. */
 export const RateLimit = (policy: RateLimitPolicyName) => SetMetadata(RATE_LIMIT_KEY, policy);

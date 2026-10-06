@@ -26,11 +26,8 @@ import {
   type UpdateFolderInput,
 } from "@ordo/shared";
 import { AuthGuard } from "../auth/auth.guard.js";
-import {
-  CurrentUser,
-  type AuthContext,
-  type AuthenticatedRequest,
-} from "../common/decorators/current-user.decorator.js";
+import { CurrentUser, type AuthContext } from "../common/decorators/current-user.decorator.js";
+import { RateLimit } from "../common/rate-limit/rate-limit.decorator.js";
 import { FoldersService } from "./folders.service.js";
 import { getPresentedFolderTokens } from "../common/utils/folder-tokens.js";
 
@@ -96,6 +93,7 @@ export class FoldersController {
   }
 
   @Post(":id/remove-password")
+  @RateLimit("password-confirm")
   @HttpCode(200)
   async removePassword(
     @CurrentUser() user: AuthContext,
@@ -117,4 +115,3 @@ export class FoldersController {
   }
 }
 
-export type { AuthenticatedRequest };

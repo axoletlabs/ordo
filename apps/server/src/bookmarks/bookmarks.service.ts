@@ -413,7 +413,7 @@ export class BookmarksService implements OnApplicationBootstrap {
     } = {};
     if (changes.isRead !== undefined) {
       data.isRead = changes.isRead;
-      if (!changes.isRead) data.completedAt = null;
+      data.completedAt = changes.isRead ? (bookmark.completedAt ?? new Date()) : null;
     }
     if (changes.readProgress !== undefined) {
       // Clamp defensively even though the schema already bounds it to 0..1.
@@ -569,7 +569,8 @@ export class BookmarksService implements OnApplicationBootstrap {
   async markAllRead(userId: string, folder: Folder | null): Promise<number> {
     const result = await this.prisma.bookmark.updateMany({
       where: { userId, folderId: folder ? folder.id : null, isRead: false },
-      data: { isRead: true },
+      // Unread rows carry completedAt = null by invariant, so this only fills it in.
+      data: { isRead: true, completedAt: new Date() },
     });
     return result.count;
   }
@@ -600,7 +601,8 @@ export class BookmarksService implements OnApplicationBootstrap {
     if (input.action === "markRead") {
       const result = await this.prisma.bookmark.updateMany({
         where: { id: { in: targetIds }, userId, isRead: false },
-        data: { isRead: true },
+        // Unread rows carry completedAt = null by invariant, so this only fills it in.
+        data: { isRead: true, completedAt: new Date() },
       });
       return { updated: result.count };
     }

@@ -91,7 +91,7 @@ export class BookmarksController {
       cursor,
       limit: limit ? parseInt(limit, 10) : undefined,
       scopeAll: scope === "all",
-      tagIds: this.parseTagIds(rawTagIds),
+      tagIds: this.parseIdList(rawTagIds),
       folderTokens: tokens,
       sort: parseBookmarkListSort(sort),
     });
@@ -114,8 +114,8 @@ export class BookmarksController {
     return this.bookmarks.search(user.userId, q ?? "", {
       cursor,
       limit: limit ? parseInt(limit, 10) : undefined,
-      tagIds: this.parseTagIds(rawTagIds),
-      folderIds: this.parseTagIds(rawFolderIds),
+      tagIds: this.parseIdList(rawTagIds),
+      folderIds: this.parseIdList(rawFolderIds),
       unfiled: unfiled === "1" || unfiled === "true",
       fuzzy: fuzzy === "1" || fuzzy === "true",
       unread: unread === "1" || unread === "true" ? true : unread === "0" || unread === "false" ? false : undefined,
@@ -269,7 +269,7 @@ export class BookmarksController {
     return this.bookmarks.batch(user.userId, body, getPresentedFolderTokens(req));
   }
 
-  private parseTagIds(value: string | undefined): string[] {
+  private parseIdList(value: string | undefined): string[] {
     return value
       ? [...new Set(value.split(",").map((id) => id.trim()).filter(Boolean))]
       : [];

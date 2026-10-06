@@ -14,6 +14,9 @@ async function bootstrap(): Promise<void> {
 
   const cfg = app.get<AppConfig>(APP_CONFIG);
   applyHttp(app, cfg);
+  // Route SIGTERM/SIGINT through OnModuleDestroy (Prisma disconnect,
+  // reader worker pool, undici agent, sweep timers).
+  app.enableShutdownHooks();
 
   await app.listen(cfg.port, cfg.listenHost);
   new Logger("Bootstrap").log(
