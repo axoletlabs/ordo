@@ -61,7 +61,7 @@ function paint(text, code, color) {
 
 function renderReleaseMenu(state, { color = false, hiddenPre = 0 } = {}) {
   const rows = state.rows ?? [];
-  const lines = [paint("Choose a release", "1", color), ""];
+  const lines = [paint("  Choose a release", "1", color), ""];
   if (rows.length === 0) {
     lines.push(paint("  No matching release", "2", color));
   }
@@ -90,6 +90,8 @@ async function promptReleaseMenu({ rows, hiddenPre = 0, input, output, color } =
   if (!input || !output) throw new Error("promptReleaseMenu needs input and output streams.");
   const useColor = color ?? (Boolean(output.isTTY) && !process.env.NO_COLOR);
   readline.emitKeypressEvents(input);
+  // Menus after a closed readline question need stdin flowing again.
+  if (typeof input.resume === "function") input.resume();
   const wasRaw = Boolean(input.isRaw);
   if (typeof input.setRawMode === "function") input.setRawMode(true);
   if (output.isTTY) output.write("\x1b[?25l");

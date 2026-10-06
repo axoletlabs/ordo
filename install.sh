@@ -251,11 +251,10 @@ ordo_ensure_pnpm() {
     ordo_die "$(printf '%s\n\n%s\n' "pnpm is not installed." "$(ordo_pnpm_how)")"
   fi
   home=$(ordo_pnpm_home)
-  printf 'Installing pnpm %s\n' "$ORDO_PNPM_VERSION"
+  ordo_doing "Installing pnpm ${ORDO_PNPM_VERSION}"
   if ! ordo_install_pnpm; then
     ordo_die "$(printf '%s\n\n%s\n' "Could not install pnpm." "$(ordo_pnpm_how)")"
   fi
-  printf 'Installed pnpm %s\n' "$ORDO_PNPM_VERSION"
   ordo_prepend_path "$home"
   ordo_prepend_path "${home}/bin"
   hash -r 2>/dev/null || true
@@ -299,13 +298,14 @@ ordo_download_release() {
   tmp=$(mktemp -d)
   trap 'rm -rf "$tmp"' RETURN
   url="https://github.com/${repo}/releases/download/${tag}/${asset}"
-  printf 'Downloading Ordo %s\n' "$tag"
+  ordo_doing "Downloading ordo ${tag} (checksum included)"
   curl -fsSL --retry 3 --retry-delay 2 -o "${tmp}/${asset}" "$url" ||
     ordo_die "Could not download Ordo ${tag}."
   curl -fsSL --retry 3 --retry-delay 2 -o "${tmp}/${asset}.sha256" "${url}.sha256" ||
     ordo_die "Could not download the checksum for ${tag}."
   ordo_verify_sha256 "${tmp}/${asset}" "${tmp}/${asset}.sha256" ||
     ordo_die "The download for ${tag} did not match its checksum."
+  ordo_tick "Checksum verified"
   mkdir -p "$dest"
   tar -xzf "${tmp}/${asset}" -C "$dest" --strip-components=1
   if ! ordo_is_ordo_tree "$dest"; then
@@ -313,6 +313,7 @@ ordo_download_release() {
     trap - RETURN
     ordo_die "The ${tag} download is not an Ordo server."
   fi
+  ordo_tick "Release unpacked"
   rm -rf "$tmp"
   trap - RETURN
 }
@@ -324,6 +325,53 @@ ordo_paint() {
   else
     printf '%s' "$text"
   fi
+}
+
+# Step markers for the install log. Color follows the terminal, not the menu.
+ordo_step_color() {
+  if [[ -z "${NO_COLOR:-}" && -t 1 ]]; then
+    ORDO_STEP_COLOR=1
+  else
+    ORDO_STEP_COLOR=0
+  fi
+}
+
+ordo_step_paint() {
+  local code="$1" text="$2"
+  if [[ "${ORDO_STEP_COLOR:-0}" == 1 && -n "$code" ]]; then
+    printf '\033[%sm%s\033[0m' "$code" "$text"
+  else
+    printf '%s' "$text"
+  fi
+}
+
+ordo_banner() {
+  ordo_step_color
+  {
+    printf '\n'
+    ordo_step_paint "1" "ordo installer"
+    printf '\n'
+    ordo_step_paint "2" "──────────────"
+    printf '\n'
+  }
+}
+
+ordo_tick() {
+  ordo_step_color
+  {
+    printf '  '
+    ordo_step_paint "32" "✓"
+    printf ' %s\n' "$1"
+  }
+}
+
+ordo_doing() {
+  ordo_step_color
+  {
+    printf '  '
+    ordo_step_paint "36" "●"
+    printf ' %s\n' "$1"
+  }
 }
 
 # Title, optional explanation, blank line, one row per option, blank line, hint.
@@ -984,11 +1032,14 @@ ordo_install_main() {
     ordo_uninstall "$@"
   fi
 
+  ordo_banner
   ordo_ensure_node
+  ordo_tick "Node.js $(node -p 'process.versions.node' 2>/dev/null || true)"
   ordo_ensure_pnpm
+  ordo_tick "pnpm $(pnpm --version 2>/dev/null || true)"
 
   if ordo_is_ordo_tree "$dest"; then
-    printf 'Using %s\n' "$dest"
+    ordo_doing "Using the existing install in ${dest}"
     ordo_exec_server "$dest" 0 "$@"
   fi
   if [[ -e "$dest" ]] && ! ordo_dir_empty "$dest"; then
@@ -1027,7 +1078,6 @@ ordo_install_main() {
     printf 'Would download Ordo %s into %s and run the server installer.\n' "$tag" "$dest"
     return 0
   fi
-  printf 'Installing Ordo %s into %s\n' "$tag" "$dest"
   ordo_download_release "$dest" "$tag" "$repo"
   ordo_exec_server "$dest" 1 "$@"
 }

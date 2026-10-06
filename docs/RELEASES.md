@@ -146,7 +146,10 @@ Publish a new version for a changed binary.
 ## Self-hosted server
 
 Each GitHub Release contains `ordo-server-vX.Y.Z.tar.gz` and its `.sha256` file.
-The archive is tagged source, including the release manifest. Hosts install
+The archive is tagged source, including the release manifest. First-run setup
+is a guided wizard that writes a complete, documented `apps/server/.env` —
+secrets generated and stored explicitly — then installs, builds, and prepares
+the database; `docs/SERVER-SETUP.md` documents every step. Hosts install
 dependencies and compile native modules with Node.js 22.13+ and the pinned pnpm.
 
 ```sh

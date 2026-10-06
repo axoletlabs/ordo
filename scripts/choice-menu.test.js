@@ -22,6 +22,8 @@ test("arrows wrap and other keys do nothing", () => {
   assert.equal(reduceChoiceMenu(state, { name: "y", sequence: "y" }, 2).action, "ignore");
   assert.equal(reduceChoiceMenu(state, { name: "return" }, 2).action, "submit");
   assert.equal(reduceChoiceMenu(state, { name: "c", ctrl: true, sequence: "\u0003" }, 2).action, "cancel");
+  assert.equal(reduceChoiceMenu(state, { name: "escape", sequence: "\u001b" }, 2).action, "cancel");
+  assert.equal(reduceChoiceMenu(state, { sequence: "\u001b" }, 2).action, "cancel");
 });
 
 test("the highlight is the only marker", () => {
@@ -33,7 +35,7 @@ test("the highlight is the only marker", () => {
   assert.match(plain, /› Install pnpm 11\.10\.0/);
   assert.match(plain, / {2}I'll install it myself/);
   assert.doesNotMatch(plain, /› I'll install it myself/);
-  assert.match(plain, /↑↓ move {4}enter select/);
+  assert.match(plain, /↑↓ move {4}enter select {4}esc cancel/);
   assert.doesNotMatch(plain, /\u001b\[/);
 
   const colored = renderChoiceMenu(
@@ -76,6 +78,13 @@ test("enter selects the highlighted row", async () => {
   assert.equal(await pending, "manual");
   const drawn = output.read().toString("utf8");
   assert.match(drawn, /› I'll install it myself/);
+});
+
+test("escape cancels the menu", async () => {
+  const { input, output } = keyStreams();
+  const pending = promptChoiceMenu({ title: "Pick", options, selected: 0, input, output, color: false });
+  setImmediate(() => input.write("\u001b"));
+  await assert.rejects(() => pending, (error) => error.code === "CANCELLED");
 });
 
 test("yes and no start on the default", async () => {

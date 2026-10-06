@@ -9,7 +9,11 @@ export type AvatarStorage = "filesystem" | "database";
 
 /**
  * Resolved, typed application configuration.
- * All values default such that the server boots with ZERO environment config.
+ *
+ * Production installs get a complete, documented `apps/server/.env` from
+ * `scripts/deploy-server` — secrets included — so nothing is invented at
+ * boot. The defaults below only exist so `pnpm dev` works from a fresh
+ * checkout without one.
  */
 export interface AppConfig {
   port: number;
@@ -147,14 +151,18 @@ export function applyDotEnvFile(filePath: string, env: NodeJS.ProcessEnv = proce
   }
 }
 
-/** Generate and persist a stable secret so tokens survive restarts. */
-function resolveSecret(): string {
+/**
+ * Generate and persist a stable secret so tokens survive restarts.
+ * The explicit order is: environment (including `.env`), then the sidecar
+ * file earlier setups wrote, then a fresh generated value.
+ */
+function resolveSecret(): { value: string; explicit: boolean } {
   const fromEnv = process.env.JWT_SECRET?.trim();
-  if (fromEnv) return fromEnv;
+  if (fromEnv) return { value: fromEnv, explicit: true };
 
   const secretPath = join(process.cwd(), ".ordo-secret");
   if (existsSync(secretPath)) {
-    return readFileSync(secretPath, "utf8").trim();
+    return { value: readFileSync(secretPath, "utf8").trim(), explicit: false };
   }
   const generated = randomBytes(48).toString("hex");
   try {
@@ -163,22 +171,22 @@ function resolveSecret(): string {
   } catch {
     // best-effort persistence; if it fails we still boot with an in-memory secret
   }
-  return generated;
+  return { value: generated, explicit: false };
 }
 
 /** 32-byte library wrapping key. Independent of JWT_SECRET. */
-function resolveLibraryKek(): string {
+function resolveLibraryKek(): { value: string; explicit: boolean } {
   const fromEnv = process.env.LIBRARY_KEK?.trim();
-  if (fromEnv) return normalizeLibraryKek(fromEnv);
+  if (fromEnv) return { value: normalizeLibraryKek(fromEnv), explicit: true };
 
   // Jest should not write a key file into the package directory.
   if (process.env.NODE_ENV === "test") {
-    return randomBytes(32).toString("hex");
+    return { value: randomBytes(32).toString("hex"), explicit: false };
   }
 
   const keyPath = join(process.cwd(), ".ordo-library-key");
   if (existsSync(keyPath)) {
-    return normalizeLibraryKek(readFileSync(keyPath, "utf8").trim());
+    return { value: normalizeLibraryKek(readFileSync(keyPath, "utf8").trim()), explicit: false };
   }
   const generated = randomBytes(32).toString("hex");
   try {
@@ -187,7 +195,22 @@ function resolveLibraryKek(): string {
   } catch {
     /* best-effort persistence; boot still works in memory */
   }
-  return generated;
+  return { value: generated, explicit: false };
+}
+
+/**
+ * Production hygiene nudge: the setup script writes JWT_SECRET and
+ * LIBRARY_KEK into apps/server/.env. If either is still implicit here, the
+ * operator is running on the legacy auto-generated files (or nothing) and
+ * should re-run setup to make the configuration explicit.
+ */
+function warnOnImplicitSecrets(secrets: { key: string; explicit: boolean }[]): void {
+  const implicit = secrets.filter((s) => !s.explicit).map((s) => s.key);
+  if (implicit.length === 0 || process.env.NODE_ENV !== "production") return;
+  console.warn(
+    `[ordo] ${implicit.join(" and ")} ${implicit.length === 1 ? "is" : "are"} not set in apps/server/.env; ` +
+      "running on an auto-generated value. Run scripts/deploy-server to write an explicit, documented config.",
+  );
 }
 
 function normalizeLibraryKek(raw: string): string {
@@ -235,6 +258,10 @@ export function loadConfig(): AppConfig {
   const parsed = EnvSchema.parse(process.env);
   const secret = resolveSecret();
   const libraryKek = resolveLibraryKek();
+  warnOnImplicitSecrets([
+    { key: "JWT_SECRET", explicit: secret.explicit },
+    { key: "LIBRARY_KEK", explicit: libraryKek.explicit },
+  ]);
 
   const corsAllowedOrigins = parseCorsAllowlist(parsed.CORS_ALLOWED_ORIGINS);
 
@@ -249,8 +276,8 @@ export function loadConfig(): AppConfig {
     port: parsed.PORT,
     listenHost: resolveListenHost(parsed.LISTEN_HOST),
     databaseUrl,
-    jwtSecret: secret,
-    libraryKek,
+    jwtSecret: secret.value,
+    libraryKek: libraryKek.value,
     registrationEnabled: toBool(parsed.REGISTRATION_ENABLED),
     emailVerificationRequired: toBool(parsed.EMAIL_VERIFICATION_REQUIRED),
     corsAllowedOrigins,

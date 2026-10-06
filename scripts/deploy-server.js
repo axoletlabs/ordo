@@ -62,7 +62,9 @@ From a fresh machine:
   curl -fsSL https://ordo.axolet.com/install | bash
 
 Commands
-  install    First-time setup: prompts (on a TTY), writes .env, install, migrate, build
+  install    First-time setup: a guided wizard (on a TTY) that writes a complete,
+             documented apps/server/.env — including generated secrets — then
+             installs dependencies, builds, and prepares the database
   update     Keep .env, install a release, backup SQLite, rebuild, apply pending migrations
   uninstall  Stop the server and remove this install, including the database
 
@@ -75,10 +77,9 @@ enter. Type a version to jump to a specific tag. --yes with no --release
 installs the latest stable release.
 
 Modes
-  Interactive (default on a terminal): move with the arrow keys and press
-  enter. Install asks for a port and an SMTP URL; enter keeps the default.
-  Yes and no questions, and the release list, use the same arrow keys.
-  Type a version and press enter to pick a specific tag.
+  Interactive (default on a terminal): a step-by-step wizard. Arrow keys
+  move, enter selects, enter on a blank line keeps the default, and every
+  answer is shown in a summary you confirm before anything is written.
   Non-interactive: --yes, CI=true, or piped stdin. Uses flags and defaults.
 
 Options
@@ -97,12 +98,16 @@ Options
   --mfa-required <bool>          Require MFA for every account (default false)
   --smtp-url <url>               SMTP URL; omit to print codes in the console
   --smtp-from <addr>             From address when SMTP is set
+  --smtp-required <bool>         Never print codes; fail when mail cannot send
+                                 (default: true when --smtp-url is passed)
   --trust-proxy <n>              Reverse-proxy hops (default 0; 1 behind nginx/Caddy)
   --cors <origins>               Extra browser origins (empty = same-origin + localhost)
   --database-url <url>           SQLite URL (default file:./ordo.db)
-  --jwt-secret <secret>          Session secret (default: auto-saved .ordo-secret)
+  --jwt-secret <secret>          Session secret (default: generated and written to .env)
   --write-env                    Write apps/server/.env in non-interactive mode
   --force-env                    Overwrite an existing .env
+  --migrate-env                  Rewrite an existing .env in the documented format
+                                 (values, secrets, and custom keys are preserved)
   --no-write-env                 Never write .env
   --pull                         Same as --from-git
   --no-pull                      Same as --no-release
@@ -124,8 +129,11 @@ Running server
   is left alone, and the script refuses to bind over it.
 
 Release data
-  .env, .ordo-secret, .ordo-library-key, SQLite, backups, and avatars under
-  apps/server/prisma/ are kept. Other files are replaced by the release.
+  .env (complete and documented, secrets included), .ordo-secret,
+  .ordo-library-key, SQLite, backups, and avatars under apps/server/prisma/
+  are kept. Other files are replaced by the release. An update can rewrite
+  .env into the documented format with --migrate-env (or by prompt); every
+  existing value is carried over.
 
 Database
   Missing or empty SQLite file  → generate client, apply all migrations
@@ -158,6 +166,7 @@ const DEFAULTS = {
   mfaRequired: false,
   smtpUrl: "",
   smtpFrom: "",
+  smtpRequired: false,
   trustProxy: 0,
   cors: "",
   databaseUrl: "file:./ordo.db",
@@ -209,6 +218,7 @@ function parseArgs(argv) {
     yes: false,
     writeEnv: null,
     forceEnv: false,
+    migrateEnv: false,
     start: null,
     pull: null,
     backup: null,
@@ -230,6 +240,7 @@ function parseArgs(argv) {
     mfaRequired: null,
     smtpUrl: null,
     smtpFrom: null,
+    smtpRequired: null,
     trustProxy: null,
     cors: null,
     databaseUrl: null,
@@ -337,6 +348,12 @@ function parseArgs(argv) {
         break;
       case "--smtp-from":
         args.smtpFrom = consume();
+        break;
+      case "--smtp-required":
+        args.smtpRequired = parseBool(consume(), flag);
+        break;
+      case "--migrate-env":
+        args.migrateEnv = true;
         break;
       case "--trust-proxy":
         args.trustProxy = parseTrustProxy(consume());
@@ -464,6 +481,10 @@ function settingsFromSources(args, existingEnv) {
     mfaRequired: args.mfaRequired ?? envBool(existingEnv.MFA_REQUIRED, DEFAULTS.mfaRequired),
     smtpUrl: args.smtpUrl ?? existingEnv.SMTP_URL ?? DEFAULTS.smtpUrl,
     smtpFrom: args.smtpFrom ?? existingEnv.SMTP_FROM ?? DEFAULTS.smtpFrom,
+    // Fail closed: an explicit --smtp-url means codes must go by email.
+    smtpRequired:
+      args.smtpRequired ??
+      (args.smtpUrl != null ? true : envBool(existingEnv.SMTP_REQUIRED, DEFAULTS.smtpRequired)),
     trustProxy: args.trustProxy ?? envInt(existingEnv.TRUST_PROXY, DEFAULTS.trustProxy),
     cors: args.cors ?? existingEnv.CORS_ALLOWED_ORIGINS ?? DEFAULTS.cors,
     databaseUrl: args.databaseUrl ?? existingEnv.DATABASE_URL ?? DEFAULTS.databaseUrl,
@@ -476,32 +497,158 @@ function quoteEnv(value) {
   return JSON.stringify(value);
 }
 
-function renderEnv(settings) {
+/** Every key renderEnv manages. Anything else in an old .env is preserved. */
+const MANAGED_ENV_KEYS = new Set([
+  "PORT",
+  "LISTEN_HOST",
+  "CORS_ALLOWED_ORIGINS",
+  "REGISTRATION_ENABLED",
+  "EMAIL_VERIFICATION_REQUIRED",
+  "MFA_REQUIRED",
+  "SMTP_URL",
+  "SMTP_FROM",
+  "SMTP_REQUIRED",
+  "DATABASE_URL",
+  "JWT_SECRET",
+  "LIBRARY_KEK",
+  "TRUST_PROXY",
+  "RATE_LIMIT_ENABLED",
+]);
+
+/**
+ * Render a complete, documented apps/server/.env. Production installs get an
+ * explicit file: every supported key is present, secrets included, so the
+ * server never has to invent configuration at boot.
+ */
+function renderEnv(settings, opts = {}) {
+  const secrets = opts.secrets ?? {};
+  const preserved = opts.preserved ?? {};
+  const stamp = opts.stamp ?? new Date().toISOString().slice(0, 10);
   const lines = [
-    "# Written by scripts/deploy-server. All keys are optional; delete a line to use the default.",
+    "# ordo server configuration",
+    `# Written by scripts/deploy-server on ${stamp}.`,
+    "# Every key is documented here and in apps/server/.env.example.",
+    "# Edit, restart the server, done:  cd apps/server && NODE_ENV=production pnpm start",
+    "",
+    "# ── HTTP ────────────────────────────────────────────────────────────────",
+    "# Port browsers and reverse proxies connect to.",
     `PORT=${settings.port}`,
+    "# Bind address. 127.0.0.1 = this machine only; 0.0.0.0 = this machine and the LAN.",
     `LISTEN_HOST=${settings.listenHost}`,
-    `DATABASE_URL=${quoteEnv(settings.databaseUrl)}`,
-    `REGISTRATION_ENABLED=${settings.registration}`,
-    `EMAIL_VERIFICATION_REQUIRED=${settings.emailVerification}`,
-    `MFA_REQUIRED=${settings.mfaRequired}`,
-    `TRUST_PROXY=${settings.trustProxy}`,
+    "# Extra browser origins allowed besides this API (comma-separated).",
     `CORS_ALLOWED_ORIGINS=${quoteEnv(settings.cors)}`,
+    "",
+    "# ── Accounts ────────────────────────────────────────────────────────────",
+    "# Allow sign-ups after the first account. The first account can always register,",
+    "# so a private instance can still be created.",
+    `REGISTRATION_ENABLED=${settings.registration}`,
+    "# Require a one-time email code when signing up or changing email.",
+    `EMAIL_VERIFICATION_REQUIRED=${settings.emailVerification}`,
+    "# Require TOTP multi-factor auth for every account (users cannot opt out).",
+    `MFA_REQUIRED=${settings.mfaRequired}`,
+    "",
+    "# ── Mail ────────────────────────────────────────────────────────────────",
+    "# SMTP URL for verification codes and notices, e.g.",
+    "#   smtp://user:pass@smtp.example.com:587        (587 = STARTTLS)",
+    `SMTP_URL=${settings.smtpUrl ? quoteEnv(settings.smtpUrl) : ""}`,
+    "# From address people see in their inbox.",
+    `SMTP_FROM=${quoteEnv(settings.smtpFrom || "ordo <noreply@ordo.local>")}`,
+    "# true = codes are only ever sent by email; mail failures are errors.",
+    "# false = fall back to printing codes in the server log.",
+    `SMTP_REQUIRED=${settings.smtpRequired ?? Boolean(settings.smtpUrl)}`,
+    "",
+    "# ── Database ────────────────────────────────────────────────────────────",
+    "# SQLite file. Relative paths resolve from apps/server/prisma/.",
+    `DATABASE_URL=${quoteEnv(settings.databaseUrl)}`,
+    "",
+    "# ── Security ────────────────────────────────────────────────────────────",
+    "# Session secret. Generated by setup; everyone is signed out if it changes.",
+    "# Keep a copy with your database backups.",
+    secrets.jwtSecret
+      ? `JWT_SECRET=${quoteEnv(secrets.jwtSecret)}`
+      : "# JWT_SECRET=   # run scripts/deploy-server to generate one",
+    "# Wraps the per-library encryption keys. Generated by setup; losing it",
+    "# loses access to encrypted libraries. Keep a copy with your backups.",
+    secrets.libraryKek
+      ? `LIBRARY_KEK=${quoteEnv(secrets.libraryKek)}`
+      : "# LIBRARY_KEK=   # run scripts/deploy-server to generate one",
+    "",
+    "# ── Network & limits ────────────────────────────────────────────────────",
+    "# Reverse-proxy hops to trust for X-Forwarded-For. 0 = socket address only.",
+    "# Set to 1 behind nginx, Caddy, or a Cloudflare tunnel (deploy/ has examples).",
+    `TRUST_PROXY=${settings.trustProxy}`,
+    "# In-memory rate limiting for sign-in, sign-up, and resets. Keep on.",
+    `RATE_LIMIT_ENABLED=${settings.rateLimitEnabled ?? true}`,
   ];
-  if (settings.jwtSecret) {
-    lines.push(`JWT_SECRET=${quoteEnv(settings.jwtSecret)}`);
-  } else {
-    lines.push("# JWT_SECRET auto-generates to .ordo-secret if unset");
-  }
-  if (settings.smtpUrl) {
-    lines.push(`SMTP_URL=${quoteEnv(settings.smtpUrl)}`);
-    if (settings.smtpFrom) lines.push(`SMTP_FROM=${quoteEnv(settings.smtpFrom)}`);
-  } else {
-    lines.push("# SMTP_URL=smtp://user:pass@smtp.example.com:587");
-    lines.push("# SMTP_REQUIRED=true  # never print codes; fail if mail cannot send");
+  const extra = Object.entries(preserved).filter(([key]) => !MANAGED_ENV_KEYS.has(key));
+  if (extra.length) {
+    lines.push(
+      "",
+      "# ── Preserved from your previous .env ───────────────────────────────────",
+      ...extra.map(([key, value]) => `${key}=${quoteEnv(value)}`),
+    );
   }
   lines.push("");
   return lines.join("\n");
+}
+
+/**
+ * Resolve the two secrets for an explicit .env: existing env value first (so
+ * sessions and encrypted libraries survive), then the legacy sidecar files
+ * the server used to auto-generate, then a fresh value.
+ */
+function resolveSetupSecrets(serverDir, existingEnv = {}, { randomBytesFn } = {}) {
+  const random = randomBytesFn ?? require("node:crypto").randomBytes;
+  const readTrim = (path) => {
+    try {
+      return readFileSync(path, "utf8").trim() || null;
+    } catch {
+      return null;
+    }
+  };
+  const fromEnvJwt = existingEnv.JWT_SECRET?.trim() || null;
+  const fromEnvKek = existingEnv.LIBRARY_KEK?.trim() || null;
+  const fileJwt = readTrim(join(serverDir, ".ordo-secret"));
+  const fileKek = readTrim(join(serverDir, ".ordo-library-key"));
+  return {
+    jwtSecret: fromEnvJwt ?? fileJwt ?? random(48).toString("hex"),
+    libraryKek: fromEnvKek ?? fileKek ?? random(32).toString("hex"),
+    jwtSource: fromEnvJwt ? "env" : fileJwt ? "file" : "generated",
+    kekSource: fromEnvKek ? "env" : fileKek ? "file" : "generated",
+  };
+}
+
+/** Keys from an old .env that renderEnv does not manage, so nothing is lost. */
+function preservedEnvKeys(existingEnv = {}) {
+  const out = {};
+  for (const [key, value] of Object.entries(existingEnv)) {
+    if (!MANAGED_ENV_KEYS.has(key)) out[key] = value;
+  }
+  return out;
+}
+
+/** An .env written before setup made secrets explicit can be migrated. */
+function needsEnvMigration(existingEnv = {}) {
+  return !existingEnv.JWT_SECRET || !existingEnv.LIBRARY_KEK;
+}
+
+/** Validate an SMTP URL the wizard accepts. Returns an error string or null. */
+function validateSmtpUrl(raw) {
+  const value = String(raw).trim();
+  if (value === "" || value === "(empty)") return null;
+  let url;
+  try {
+    url = new URL(value);
+  } catch {
+    return "That is not a URL. Try smtp://user:pass@smtp.example.com:587";
+  }
+  if (url.protocol !== "smtp:" && url.protocol !== "smtps:") {
+    return "The URL must start with smtp:// or smtps://";
+  }
+  if (!url.hostname) {
+    return "The URL needs a mail host, like smtp://user:pass@smtp.example.com:587";
+  }
+  return null;
 }
 
 function ignoreSqliteExperimentalWarning() {
@@ -1035,130 +1182,258 @@ function promptYesNo(question, fallback, io) {
   });
 }
 
-function formatSetupSummary(settings, folder) {
+/** ANSI helpers. When color is off every helper returns the text unchanged. */
+function makePainter(enabled) {
+  const wrap = (code) => (text) => (enabled && text ? `\x1b[${code}m${text}\x1b[0m` : text);
+  return { bold: wrap("1"), dim: wrap("2"), green: wrap("32"), cyan: wrap("36") };
+}
+
+/** The banner the interactive wizard opens with. */
+function formatSetupBanner(color = false) {
+  const p = makePainter(color);
+  return [
+    "",
+    p.bold("  ordo · self-hosted server"),
+    p.dim("  ──────────────────────────"),
+    "  A few questions, then this setup:",
+    "    1. writes a complete, documented apps/server/.env",
+    "    2. generates the session and library-encryption secrets",
+    "    3. installs dependencies and compiles the server",
+    "    4. creates the database and applies migrations",
+    "",
+    p.dim("  ↑↓ move    enter select    enter on a blank line keeps the default"),
+    "",
+  ].join("\n");
+}
+
+/** A numbered step header: `Step 2 of 5 · Accounts`. */
+function formatStepHeader(step, total, label, color = false) {
+  const p = makePainter(color);
+  return `\n${p.dim(`Step ${step} of ${total}`)} ${p.bold(`· ${label}`)}`;
+}
+
+function describeMail(settings) {
+  if (!settings.smtpUrl) return "Codes in the server log";
+  return settings.smtpRequired ? "SMTP, email only" : "SMTP, log fallback";
+}
+
+function describeNetwork(settings) {
+  if (settings.trustProxy > 0) {
+    const hops = settings.trustProxy === 1 ? "1 hop" : `${settings.trustProxy} hops`;
+    return `Reverse proxy in front, ${hops}`;
+  }
+  if (settings.listenHost === "0.0.0.0") return "This machine and the LAN";
+  return "Only this machine";
+}
+
+/** The label/value rows both the summary and the wizard confirm screen share. */
+function setupSummaryRows(settings, folder) {
   const host = settings.listenHost === "0.0.0.0" ? "0.0.0.0" : "127.0.0.1";
   const accounts = settings.registration
     ? "Anyone who can reach the server"
     : "Only the first account";
   const signup = settings.emailVerification ? "Email code required" : "No email code";
-  const mail = settings.smtpUrl ? "SMTP configured" : "Codes in the server log";
-  let network = "Only this machine";
-  if (settings.trustProxy > 0) {
-    const hops = settings.trustProxy === 1 ? "1 hop" : `${settings.trustProxy} hops`;
-    network = `Proxy in front, ${hops}`;
-  } else if (settings.listenHost === "0.0.0.0") {
-    network = "This machine and the LAN";
-  }
-  const lines = ["", "Ready", ""];
-  if (folder) lines.push(`  Folder      ${folder}`);
-  lines.push(`  Address     http://${host}:${settings.port}`);
-  lines.push(`  Accounts    ${accounts}`);
-  lines.push(`  Sign-up     ${signup}`);
-  lines.push(`  Mail        ${mail}`);
-  lines.push(`  Network     ${network}`);
-  lines.push("");
+  const rows = [];
+  if (folder) rows.push(`  Folder      ${folder}`);
+  rows.push(`  Address     http://${host}:${settings.port}`);
+  rows.push(`  Accounts    ${accounts}`);
+  rows.push(`  Sign-up     ${signup}`);
+  rows.push(`  Mail        ${describeMail(settings)}`);
+  rows.push(`  Network     ${describeNetwork(settings)}`);
+  return rows;
+}
+
+function formatSetupSummary(settings, folder) {
+  const lines = ["", "Ready", "", ...setupSummaryRows(settings, folder), ""];
   lines.push("Installing. Compiling the server can take a few minutes.");
   lines.push("");
   return lines.join("\n");
 }
 
-async function promptGuidedSettings(ask, current, pick, log) {
-  const note = (kicker, title, detail) => {
-    log("");
-    log(`  ${kicker}`);
-    log(title);
-    log(detail);
-    log("");
-  };
-  note(
-    "Port",
-    "Which port should the server use?",
-    "Browsers and a reverse proxy connect here. 3000 is fine if it is free.",
-  );
-  const portText = (await ask(`Port [${current.port}] `)).trim();
-  const port = parsePort(portText === "" ? String(current.port) : portText);
-
-  const registration = await pick({
-    title: "Who can create an account?",
-    detail: "The first sign-up becomes the owner either way.",
-    options: [
-      { label: "Only the first account", value: false },
-      { label: "Anyone who can reach the server", value: true },
-    ],
-    selected: current.registration ? 1 : 0,
-  });
-  const emailVerification = await pick({
-    title: "Require an email code for new accounts?",
-    detail: "Without mail, that code is printed in the server log.",
-    options: [
-      { label: "Sign in straight away", value: false },
-      { label: "Send a one-time code first", value: true },
-    ],
-    selected: current.emailVerification ? 1 : 0,
-  });
-
-  note(
-    "Mail",
-    "Where should mail be sent from?",
-    "Empty prints codes in the log. Or use smtp://user:pass@host:587.",
-  );
-  const smtpRaw = (await ask("SMTP URL [empty] ")).trim();
-  const smtp = smtpRaw === "" || smtpRaw === "(empty)" ? "" : smtpRaw;
-  let smtpFrom = current.smtpFrom;
-  if (smtp) {
-    note("Mail", "Which address should people see?", "This is the From line in their inbox.");
-    const fallback = current.smtpFrom || "ordo <noreply@ordo.local>";
-    const fromRaw = (await ask(`From [${fallback}] `)).trim();
-    smtpFrom = fromRaw === "" ? fallback : fromRaw;
+/** The panel shown after a successful install or update. */
+function formatNextSteps({ settings, dbPath, envPath, launch, color = false }) {
+  const p = makePainter(color);
+  const host = settings.listenHost === "0.0.0.0" ? "0.0.0.0" : "127.0.0.1";
+  const lines = ["", p.bold("  Setup finished"), p.dim("  ─────────────"), ""];
+  lines.push(`  Address     http://${host}:${settings.port}`);
+  lines.push(`  Config      ${envPath}`);
+  lines.push(`  Database    ${dbPath}`);
+  if (launch === "detached") lines.push("  Log         apps/server/ordo.log");
+  lines.push("");
+  lines.push(p.dim("  Keep a copy of the config, the database, and the secrets in it."));
+  lines.push("");
+  if (launch === "none") {
+    lines.push("  Start the server");
+    lines.push(p.cyan("    cd apps/server && NODE_ENV=production pnpm start"));
   }
-
-  const behindProxy = await pick({
-    title: "Is a reverse proxy in front of this server?",
-    detail: "nginx, Caddy, or Cloudflare. Then the server trusts their visitor address.",
-    options: [
-      { label: "No proxy", value: false },
-      { label: "A proxy is in front", value: true },
-    ],
-    selected: current.trustProxy > 0 ? 1 : 0,
-  });
-  let trustProxy = 0;
-  let listenHost = "127.0.0.1";
-  if (behindProxy) {
-    note(
-      "Proxy",
-      "How many proxies sit in front?",
-      "1 is a single nginx, Caddy, or Cloudflare. The server stays on localhost.",
-    );
-    const fallback = String(current.trustProxy || 1);
-    const hopsRaw = (await ask(`Hops [${fallback}] `)).trim();
-    trustProxy = parseTrustProxy(hopsRaw === "" ? fallback : hopsRaw);
-  } else {
-    const exposeLan = await pick({
-      title: "Who can open that port?",
-      detail: "Localhost is only this machine. LAN is for a phone on the same Wi-Fi.",
-      options: [
-        { label: "Only this machine", value: false },
-        { label: "This machine and the LAN", value: true },
-      ],
-      selected: current.listenHost === "0.0.0.0" ? 1 : 0,
-    });
-    listenHost = exposeLan ? "0.0.0.0" : "127.0.0.1";
-  }
-
-  return {
-    ...current,
-    port,
-    registration,
-    emailVerification,
-    smtpUrl: smtp,
-    smtpFrom,
-    trustProxy,
-    listenHost,
-  };
+  lines.push("  Check that it answers");
+  lines.push(p.cyan(`    curl http://127.0.0.1:${settings.port}/api/server/info`));
+  lines.push("  Point the app at it");
+  lines.push(p.dim("    Sign in → “Use your own server” → ")
+    + p.cyan(`http://<this-host>:${settings.port}`));
+  lines.push("  Update later");
+  lines.push(p.cyan("    ./scripts/deploy-server update"));
+  lines.push("  Remove everything");
+  lines.push(p.cyan("    ./scripts/deploy-server uninstall"));
+  lines.push("  Full guide");
+  lines.push(p.dim("    docs/SERVER-SETUP.md"));
+  lines.push("");
+  return lines.join("\n");
 }
 
-async function promptSettings(ask, current, choose, pick, log) {
-  if (pick) return promptGuidedSettings(ask, current, pick, log ?? (() => {}));
+/**
+ * The guided, interactive setup wizard. Asks a handful of questions with
+ * explanations, validates answers, shows a summary, and lets the operator
+ * confirm, redo, or cancel before anything is written.
+ */
+async function promptGuidedSettings(ask, current, pick, log, extras = {}) {
+  const color = extras.color ?? false;
+  const p = makePainter(color);
+  const portInUse = extras.portInUse ?? (() => null);
+  const folder = extras.folder ?? "";
+  const TOTAL_STEPS = 5;
+  const header = (step, label) => log(formatStepHeader(step, TOTAL_STEPS, label, color));
+
+  while (true) {
+    // ── Step 1: Port ────────────────────────────────────────────────────────
+    header(1, "Port");
+    log("");
+    log("  Which port should the server listen on?");
+    log(p.dim("  Browsers and reverse proxies connect here. 3000 is fine if it is free."));
+    let portDefault = String(current.port);
+    const busy = await portInUse(current.port);
+    if (busy && busy.kind === "other") {
+      log(p.dim(`  Port ${current.port} is already used by another program on this machine,`));
+      log(p.dim("  so pick another one (3001 and up are usually free)."));
+      portDefault = String(Number(current.port) + 1);
+    }
+    const portText = (await ask(p.bold(`Port [${portDefault}] `))).trim();
+    const port = parsePort(portText === "" ? portDefault : portText);
+
+    // ── Step 2: Accounts ────────────────────────────────────────────────────
+    header(2, "Accounts");
+    const registration = await pick({
+      title: "Who can create an account?",
+      detail: "The first sign-up becomes the owner either way.",
+      options: [
+        { label: "Only the first account", value: false },
+        { label: "Anyone who can reach the server", value: true },
+      ],
+      selected: current.registration ? 1 : 0,
+    });
+
+    // ── Step 3: Sign-up email ───────────────────────────────────────────────
+    header(3, "Sign-up email");
+    const emailVerification = await pick({
+      title: "Require an email code for new accounts?",
+      detail: "With mail configured the code is emailed; without it the code is printed",
+      options: [
+        { label: "Sign in straight away", value: false },
+        { label: "Send a one-time code first", value: true },
+      ],
+      selected: current.emailVerification ? 1 : 0,
+    });
+
+    // ── Step 4: Mail ────────────────────────────────────────────────────────
+    header(4, "Mail");
+    log("");
+    log("  Where should email be sent from?");
+    log(p.dim("  Leave it empty to print one-time codes in the server log instead."));
+    let smtp = "";
+    while (true) {
+      const smtpRaw = (await ask(p.bold("SMTP URL [empty] "))).trim();
+      const error = validateSmtpUrl(smtpRaw);
+      if (!error) {
+        smtp = smtpRaw === "" || smtpRaw === "(empty)" ? "" : smtpRaw;
+        break;
+      }
+      log(`  ${error}`);
+    }
+    let smtpFrom = current.smtpFrom;
+    let smtpRequired = current.smtpRequired;
+    if (smtp) {      log(p.dim("  Which address should people see in their inbox?"));
+      const fallback = current.smtpFrom || "ordo <noreply@ordo.local>";
+      const fromRaw = (await ask(p.bold(`From [${fallback}] `))).trim();
+      smtpFrom = fromRaw === "" ? fallback : fromRaw;
+      smtpRequired = true;
+      log(p.dim("  Codes are only sent by email now — if mail fails, sign-up says so"));
+      log(p.dim("  instead of printing codes to the log. Re-run setup to change that."));
+    } else {
+      smtpRequired = false;
+    }
+
+    // ── Step 5: Network ─────────────────────────────────────────────────────
+    header(5, "Network");
+    const behindProxy = await pick({
+      title: "Is a reverse proxy in front of this server?",
+      detail: "nginx, Caddy, or Cloudflare. The server then trusts their visitor address.",
+      options: [
+        { label: "No proxy", value: false },
+        { label: "A proxy is in front", value: true },
+      ],
+      selected: current.trustProxy > 0 ? 1 : 0,
+    });
+    let trustProxy = 0;
+    let listenHost = "127.0.0.1";
+    if (behindProxy) {
+      log("");
+      log("  How many proxies sit in front?");
+      log(p.dim("  1 for a single nginx, Caddy, or Cloudflare. The server stays on localhost."));
+      const fallback = String(current.trustProxy || 1);
+      const hopsRaw = (await ask(p.bold(`Hops [${fallback}] `))).trim();
+      trustProxy = parseTrustProxy(hopsRaw === "" ? fallback : hopsRaw);
+    } else {
+      const exposeLan = await pick({
+        title: "Who can open that port?",
+        detail: "Localhost is only this machine. LAN is for a phone on the same Wi-Fi.",
+        options: [
+          { label: "Only this machine", value: false },
+          { label: "This machine and the LAN", value: true },
+        ],
+        selected: current.listenHost === "0.0.0.0" ? 1 : 0,
+      });
+      listenHost = exposeLan ? "0.0.0.0" : "127.0.0.1";
+    }
+
+    const next = {
+      ...current,
+      port,
+      registration,
+      emailVerification,
+      smtpUrl: smtp,
+      smtpFrom,
+      smtpRequired,
+      trustProxy,
+      listenHost,
+    };
+
+    // ── Summary + confirm ───────────────────────────────────────────────────
+    log("");
+    log(p.bold("  Ready to install"));
+    log(p.dim("  ─────────────────"));
+    for (const line of setupSummaryRows(next, folder)) log(line);
+    const confirm = await pick({
+      title: "Install with these settings?",
+      detail: "Nothing is written until you confirm.",
+      options: [
+        { label: "Install now", value: "install" },
+        { label: "Answer the questions again", value: "again" },
+        { label: "Cancel setup", value: "cancel" },
+      ],
+      selected: 0,
+    });
+    if (confirm === "install") return next;
+    if (confirm === "cancel") {
+      const error = new Error("Setup cancelled. Nothing was installed.");
+      error.code = "CANCELLED";
+      throw error;
+    }
+    log(p.dim("  Starting over — the previous answers are the new defaults."));
+  }
+}
+
+async function promptSettings(ask, current, choose, pick, log, extras = {}) {
+  if (pick) return promptGuidedSettings(ask, current, pick, log ?? (() => {}), extras);
   const yn = async (question, fallback) => {
     if (choose) return choose(question, fallback);
     const hint = fallback ? "Y/n" : "y/N";
@@ -1185,8 +1460,10 @@ async function promptSettings(ask, current, choose, pick, log) {
   );
   const smtp = smtpUrl === "(empty)" ? "" : smtpUrl;
   let smtpFrom = current.smtpFrom;
+  let smtpRequired = current.smtpRequired;
   if (smtp) {
     smtpFrom = await text("SMTP from address", current.smtpFrom || "ordo <noreply@ordo.local>");
+    smtpRequired = true;
   }
   const behindProxy = await yn("Behind nginx, Caddy, or Cloudflare?", current.trustProxy > 0);
   const trustProxy = behindProxy
@@ -1210,6 +1487,7 @@ async function promptSettings(ask, current, choose, pick, log) {
     emailVerification,
     smtpUrl: smtp,
     smtpFrom,
+    smtpRequired,
     trustProxy,
     listenHost,
   };
@@ -1364,19 +1642,23 @@ async function deploy(options = {}) {
   }
 
   if (interactive && command === "install") {
+    const useColor = Boolean(streamOut.isTTY) && !env.NO_COLOR;
     if (pick) {
-      log("");
-      log("Set up this server");
-      log("");
-      log("  A few questions. The highlighted row is the usual choice.");
-      log("  Arrow keys move. Enter selects. Enter on a blank line keeps the default.");
+      log(formatSetupBanner(useColor));
     } else {
-      log("Ordo backend install\n");
+      log("ordo backend install\n");
     }
-    settings = await promptSettings(ask(), settings, choose, pick, log);
-    if (pick) log(formatSetupSummary(settings, repoRoot));
+    const portInUse = (port) => {
+      if (args.dryRun) return null;
+      return classifyPort(port, serverDir, join(serverDir, ".ordo.pid"), listenSnapshot(port));
+    };
+    settings = await promptSettings(ask(), settings, choose, pick, log, {
+      folder: repoRoot,
+      portInUse,
+      color: useColor,
+    });
   } else if (command === "update") {
-    log("Ordo backend update\n");
+    log("ordo backend update\n");
   }
 
   const dbPath = sqlitePathFromUrl(settings.databaseUrl, serverDir);
@@ -1403,6 +1685,47 @@ async function deploy(options = {}) {
     envDecision = overwrite
       ? { write: true, reason: "Overwriting apps/server/.env." }
       : { write: false, reason: "Leaving existing apps/server/.env in place." };
+  }
+  // An .env from before setup wrote explicit secrets can be moved onto the
+  // documented format without changing a single value.
+  if (
+    envExists &&
+    !envDecision.write &&
+    needsEnvMigration(existingEnv) &&
+    (args.migrateEnv || interactive)
+  ) {
+    let migrate = args.migrateEnv;
+    if (!args.migrateEnv) {
+      migrate = pick
+        ? await pick({
+            title: "Move this .env onto the documented format?",
+            detail: "Every value is kept and the secrets are written out plainly. Recommended.",
+            options: [
+              { label: "Yes, rewrite it", value: true },
+              { label: "Leave the file alone", value: false },
+            ],
+            selected: 0,
+          })
+        : ["y", "yes"].includes(
+            (await ask()("Rewrite apps/server/.env in the documented format? [Y/n] "))
+              .trim()
+              .toLowerCase(),
+          );
+    }
+    if (migrate) {
+      envDecision = {
+        write: true,
+        reason: "Rewriting apps/server/.env in the documented format. Values are kept.",
+      };
+      // The file keeps its own values; only flags passed now override them.
+      settings = settingsFromSources(args, existingEnv);
+    } else {
+      envDecision = {
+        write: false,
+        reason:
+          "Leaving apps/server/.env as is. Pass --migrate-env to rewrite it in the documented format.",
+      };
+    }
   }
 
   const gitPresent = existsSync(join(repoRoot, ".git"));
@@ -1554,49 +1877,86 @@ async function deploy(options = {}) {
     NODE_ENV: env.NODE_ENV === "test" ? env.NODE_ENV : "production",
   };
 
+  // Long steps print a marker up front and a green tick when they finish.
+  const useColor = Boolean(streamOut.isTTY) && !env.NO_COLOR;
+  const painter = makePainter(useColor);
+  const phase = (label) => {
+    log("");
+    log(`${painter.cyan("●")} ${label}`);
+    return (doneLabel, extra) => {
+      log(`${painter.green("✓")} ${doneLabel || label}`);
+      if (extra) log(painter.dim(`  ${extra}`));
+    };
+  };
+
+  let writtenSecrets = null;
   if (envDecision.write) {
+    const done = phase("Writing apps/server/.env");
+    // --jwt-secret (or the existing env) wins; sidecar files carry over; else generate.
+    const secretSource = settings.jwtSecret
+      ? { ...existingEnv, JWT_SECRET: settings.jwtSecret }
+      : existingEnv;
+    writtenSecrets = resolveSetupSecrets(serverDir, secretSource);
+    const preserved = preservedEnvKeys(existingEnv);
     if (!args.dryRun) {
       mkdirSync(serverDir, { recursive: true });
-      writeFileSync(envPath, renderEnv(settings), { encoding: "utf8" });
+      writeFileSync(
+        envPath,
+        renderEnv(settings, { secrets: writtenSecrets, preserved }),
+        { encoding: "utf8" },
+      );
     }
-    log(`Wrote ${envPath}`);
+    done(relative(repoRoot, envPath) || envPath);
+    log(
+      painter.dim(
+        `  Secrets: JWT_SECRET (${writtenSecrets.jwtSource}) and LIBRARY_KEK (${writtenSecrets.kekSource}) are stored in it.`,
+      ),
+    );
   }
 
   if (!args.skipInstall && !dependenciesReady(repoRoot)) {
+    const done = phase("Installing dependencies (can take a few minutes)");
     run(
       "pnpm",
       ["install", "--frozen-lockfile"],
       { cwd: repoRoot, env: childEnv, dryRun: args.dryRun, log },
     );
+    done("Dependencies installed");
   }
 
   if (!args.skipBuild) {
+    const done = phase("Compiling the shared packages");
     run("pnpm", ["--filter", "@ordo/shared", "build"], {
       cwd: repoRoot,
       env: childEnv,
       dryRun: args.dryRun,
       log,
     });
+    done("Shared packages compiled");
   }
 
   const upgradeCli = join(serverDir, "dist", "prisma", "upgrade-cli.js");
 
   if (migrate.action !== "skip") {
+    const done = phase("Generating the database client");
     run("pnpm", ["exec", "prisma", "generate"], {
       cwd: serverDir,
       env: childEnv,
       dryRun: args.dryRun,
       log,
     });
+    done("Database client generated");
   }
 
   if (!args.skipBuild) {
+    const done = phase("Compiling the server");
     run("pnpm", ["--filter", "@ordo/server", "build"], {
       cwd: repoRoot,
       env: childEnv,
       dryRun: args.dryRun,
       log,
     });
+    done("Server compiled");
   } else if (migrate.action !== "skip" && !args.dryRun && !existsSync(upgradeCli)) {
     throw new Error(
       "Server build is missing (dist/prisma/upgrade-cli.js). Drop --skip-build or build @ordo/server first.",
@@ -1612,15 +1972,19 @@ async function deploy(options = {}) {
       stopped = true;
     }
     if (backup) {
+      const done = phase("Backing up the database");
       backupPath = backupSqlite(dbPath, { log, dryRun: args.dryRun });
+      done(`Database backed up to ${backupPath}`);
     }
     if (migrate.action !== "skip") {
+      const done = phase(migrate.action === "setup" ? "Creating the database" : "Applying migrations");
       run("node", ["dist/prisma/upgrade-cli.js"], {
         cwd: serverDir,
         env: childEnv,
         dryRun: args.dryRun,
         log,
       });
+      done(migrate.action === "setup" ? "Database created and migrated" : "Migrations applied");
     }
   } catch (error) {
     if (stopped && start !== false) {
@@ -1639,21 +2003,28 @@ async function deploy(options = {}) {
     throw error instanceof Error ? error : new Error(message);
   }
 
-  log("");
-  log(`Address:  http://${settings.listenHost}:${settings.port}`);
-  log(`Check:    curl http://127.0.0.1:${settings.port}/api/server/info`);
-  if (settings.listenHost === "127.0.0.1") {
-    log("Only this machine can open it. Put nginx or Caddy in front (deploy/nginx.conf.example), or re-run with --public.");
-  } else {
-    log("That port is open on this network. Put a proxy in front if the machine faces the internet.");
-  }
-  log(`Database: ${dbPath}`);
-  log("Secret:   apps/server/.ordo-secret (created on first start if JWT_SECRET is unset)");
-  log("Keep a copy of the database and the secret file.");
-  if (launch === "none") {
+  if (args.dryRun) {
     log("");
-    log("Start with:");
-    log(`  cd apps/server && NODE_ENV=production pnpm start`);
+    log(painter.dim("Dry run complete. Nothing was installed or changed."));
+  } else {
+    log(formatNextSteps({
+      settings,
+      dbPath: relative(repoRoot, dbPath) || dbPath,
+      envPath: relative(repoRoot, envPath) || envPath,
+      launch,
+      color: useColor,
+    }));
+    if (settings.listenHost === "127.0.0.1") {
+      log(
+        painter.dim(
+          "  Only this machine can open that address. Put nginx or Caddy in front for HTTPS",
+        ),
+      );
+      log(painter.dim("  (deploy/nginx.conf.example, deploy/Caddyfile.example), or re-run setup."));
+    } else if (settings.trustProxy === 0) {
+      log(painter.dim("  That port is open on this network. Put a proxy in front if it faces"));
+      log(painter.dim("  the internet."));
+    }
   }
 
   if (launch === "foreground") {
@@ -1700,11 +2071,21 @@ module.exports = {
   parseDotEnv,
   settingsFromSources,
   renderEnv,
+  MANAGED_ENV_KEYS,
+  resolveSetupSecrets,
+  preservedEnvKeys,
+  needsEnvMigration,
+  validateSmtpUrl,
   inspectDatabase,
   migratePlan,
   looksInstalled,
   inferCommand,
+  makePainter,
+  formatSetupBanner,
+  formatStepHeader,
   formatSetupSummary,
+  setupSummaryRows,
+  formatNextSteps,
   promptGuidedSettings,
   isInsideDir,
   assertSafeUninstallRoot,

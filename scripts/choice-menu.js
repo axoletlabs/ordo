@@ -11,6 +11,9 @@ function reduceChoiceMenu(state, key, count) {
   const name = key?.name;
   const sequence = key?.sequence ?? "";
   if (key?.ctrl && name === "c") return { ...state, action: "cancel" };
+  if (name === "escape" || (sequence === "\u001b" && !name)) {
+    return { ...state, action: "cancel" };
+  }
   if (name === "up" || sequence === "\u001b[A" || sequence === "\u001bOA") {
     const last = Math.max(count - 1, 0);
     const selected = state.selected <= 0 ? last : state.selected - 1;
@@ -36,8 +39,8 @@ function renderChoiceMenu(state, { color = false } = {}) {
     lines.push(`  ${marker} ${label}`);
   });
   lines.push("");
-  lines.push(paint("  ↑↓ move    enter select", "2", color));
-  return lines.join("\n");
+  lines.push(paint("  ↑↓ move    enter select    esc cancel", "2", color));
+  return lines.map((line) => (line === "" ? "" : `  ${line}`)).join("\n");
 }
 
 function frameText(frame) {
@@ -51,6 +54,9 @@ async function promptChoiceMenu({ title, detail, options, selected = 0, input, o
   }
   const useColor = color ?? (Boolean(output.isTTY) && !process.env.NO_COLOR);
   readline.emitKeypressEvents(input);
+  // A readline question that just closed (the wizard asks for a port, then
+  // shows menus) leaves stdin paused. Resume so keypresses flow again.
+  if (typeof input.resume === "function") input.resume();
   const wasRaw = Boolean(input.isRaw);
   if (typeof input.setRawMode === "function") input.setRawMode(true);
   if (output.isTTY) output.write("\x1b[?25l");
