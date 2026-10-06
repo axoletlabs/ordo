@@ -10,12 +10,17 @@
 
 Download the Android app from [Releases](https://github.com/axoletlabs/ordo/releases) and sign in. New installs use [ordo Cloud](https://api.ordo.axolet.com).
 
-The app sends anonymous counts to ordo Cloud: installs, opens, sign-ins, registrations, and coarse health, plus platform, version, and whether you use Cloud or a server you host. It does not include your account, server URL, or library. A server you host does not receive these counts.
+The app sends anonymous daily counts to ordo Cloud: an install ID plus opens, timeouts, server errors, and sign-in failures for the day. Nothing else — no account, email, device name, server URL, app version, platform, or hosting mode. A server you host does not receive these counts. See [docs/telemetry.md](docs/telemetry.md) for the exact payload.
 
 To run from source you need Node.js 22.13+ and [pnpm](https://pnpm.io) 11:
 
 ```bash
+pnpm install
+pnpm --filter @ordo/shared build
 pnpm --filter @ordo/mobile start
+
+# Backend (also generate the Prisma client first):
+pnpm --filter @ordo/server db:generate
 pnpm --filter @ordo/server dev
 ```
 
@@ -82,6 +87,16 @@ packages/shared   API contract
 apps/server       NestJS, Prisma, SQLite
 apps/mobile       Expo app
 ```
+
+## Docs
+
+- [docs/telemetry.md](docs/telemetry.md) — exactly what the app reports, and what it deliberately does not
+- [docs/SERVER-SETUP.md](docs/SERVER-SETUP.md) — self-hosting walkthrough: systemd, HTTPS, backups, troubleshooting
+- [docs/RELEASES.md](docs/RELEASES.md) — how releases are built and published
+
+## Reporting security issues
+
+Please report privately through [GitHub security advisories](https://github.com/axoletlabs/ordo/security/advisories/new) rather than opening a public issue.
 
 ## License
 

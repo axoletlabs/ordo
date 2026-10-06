@@ -38,14 +38,17 @@ function parseIgnores(yaml) {
   return ignores;
 }
 
-function run(command, args) {
-  const result = spawnSync(command, args, { encoding: "utf8" });
-  if (result.status !== 0) return null;
-  return result.stdout.trim();
+function fetchAdvisory(id) {
+  const result = spawnSync("gh", ["api", `advisories/${id}`], { encoding: "utf8" });
+  if (result.status === 0) return JSON.parse(result.stdout || "null");
+  const err = `${result.stderr ?? ""}${result.stdout ?? ""}`;
+  if (/Not Found|\b404\b/.test(err)) return null;
+  // Fail closed: a rate limit or auth failure must not look like "no patches".
+  throw new Error(`gh api advisories/${id} failed: ${err.trim().split("\n").pop() ?? result.status}`);
 }
 
 function advisoryPatches(id, { advisory } = {}) {
-  const payload = advisory ?? JSON.parse(run("gh", ["api", `advisories/${id}`]) ?? "null");
+  const payload = advisory ?? fetchAdvisory(id);
   if (!payload) return [];
   return (payload.vulnerabilities ?? [])
     .filter((entry) => entry.first_patched_version)
@@ -53,7 +56,12 @@ function advisoryPatches(id, { advisory } = {}) {
 }
 
 function publishedOnNpm(name, version) {
-  return run("npm", ["view", `${name}@${version}`, "version"]) === version;
+  const result = spawnSync("npm", ["view", `${name}@${version}`, "version"], { encoding: "utf8" });
+  if (result.status === 0) return result.stdout.trim() === version;
+  const err = `${result.stderr ?? ""}${result.stdout ?? ""}`;
+  if (/E404|No match found|not in the registry/i.test(err)) return false;
+  // Fail closed: an unreachable registry must not look like "not published".
+  throw new Error(`npm view ${name}@${version} failed: ${err.trim().split("\n").pop() ?? result.status}`);
 }
 
 function check(ignores, today, deps) {
@@ -77,23 +85,28 @@ function check(ignores, today, deps) {
 }
 
 function main() {
-  const yaml = readFileSync(join(__dirname, "..", "..", "pnpm-workspace.yaml"), "utf8");
-  const ignores = parseIgnores(yaml);
-  if (ignores.length === 0) {
-    console.log("No ignored advisories.");
+  try {
+    const yaml = readFileSync(join(__dirname, "..", "..", "pnpm-workspace.yaml"), "utf8");
+    const ignores = parseIgnores(yaml);
+    if (ignores.length === 0) {
+      console.log("No ignored advisories.");
+      return 0;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const failures = check(ignores, today);
+    for (const { id, comment } of ignores) {
+      console.log(`${id}: ${comment.split("\n").find((line) => line.includes("expires:")) ?? "no expiry"}`);
+    }
+    if (failures.length > 0) {
+      for (const failure of failures) console.error(`::error::${failure}`);
+      return 1;
+    }
+    console.log(`All ${ignores.length} ignored advisory/advisories are current.`);
     return 0;
-  }
-  const today = new Date().toISOString().slice(0, 10);
-  const failures = check(ignores, today);
-  for (const { id, comment } of ignores) {
-    console.log(`${id}: ${comment.split("\n").find((line) => line.includes("expires:")) ?? "no expiry"}`);
-  }
-  if (failures.length > 0) {
-    for (const failure of failures) console.error(`::error::${failure}`);
+  } catch (err) {
+    console.error(`::error::audit-ignore check could not run: ${err.message}`);
     return 1;
   }
-  console.log(`All ${ignores.length} ignored advisory/advisories are current.`);
-  return 0;
 }
 
 module.exports = { parseIgnores, check, advisoryPatches, publishedOnNpm };

@@ -18,7 +18,7 @@ inventory. There is no `apps/web` package in this checkout: Expo serves web.
 
 ```sh
 cd apps/mobile
-node tests/ui-inventory.mjs > /tmp/opencode/ordo-ui-inventory.json
+node tests/ui-inventory.mjs   # writes the inventory JSON to stdout
 ```
 
 The inventory covers **137 files, 31 routes/layouts, 1,617 JSX occurrences and
@@ -173,14 +173,14 @@ four theme/mode combinations, not an app-wide frame pacing guarantee.
 | Small-fixture browser performance samples | 12 recorded; p95 16.7–16.8ms, 0 Long Tasks |
 
 Total: **985 automated tests**, plus browser assertions and the separate rank
-parity experiment. Run artifacts are under `/tmp/opencode/ordo-audit2-*`.
+parity experiment. Run artifacts were ephemeral and are not kept in the repo.
 
 Each scheme completed **226 captures and 36 interaction groups**, including
 both design modes. Compared with the first pass: **412 → 452 captures** and
 **60 → 72 interaction groups**. They include repeated screen/state captures,
 not 452 unique screens, and do not cover every branch in the ledger. Final
-matrix results are in `/tmp/opencode/ordo-audit2-final-dark/results.json` and
-`/tmp/opencode/ordo-audit2-final-light/results.json`; debug runs used the
+matrix results were reviewed at run time (final dark/light `results.json`);
+debug runs used the
 `ORDO_UI_SKIP_SCREEN_MATRIX` shortcut, but these final runs did not.
 
 ## Additional official references

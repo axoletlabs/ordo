@@ -175,7 +175,7 @@ jobs:
         run: pnpm -r lint
 
       - name: Test
-        run: pnpm -r test && pnpm --filter @ordo/mobile test:updates && pnpm test:scripts
+        run: pnpm -r test && pnpm --filter @ordo/mobile test:material && pnpm --filter @ordo/mobile test:performance && pnpm --filter @ordo/mobile test:reader-performance && pnpm --filter @ordo/mobile test:updates && pnpm test:scripts
 
   supply-chain:
     if: '!github.event.deleted'

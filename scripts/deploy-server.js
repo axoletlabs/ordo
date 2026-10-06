@@ -1005,6 +1005,16 @@ function pidAlive(pid) {
 
 function processDetails(pid) {
   try {
+    if (process.platform === "darwin") {
+      // No /proc on macOS; ps + lsof cover the same two facts.
+      const ps = spawnSync("ps", ["-p", String(pid), "-o", "command="], { encoding: "utf8" });
+      const lsof = spawnSync("lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"], { encoding: "utf8" });
+      const cwdLine = (lsof.stdout ?? "").split("\n").find((line) => line.startsWith("n"));
+      const cwd = cwdLine ? cwdLine.slice(1) : "";
+      const cmdline = (ps.stdout ?? "").trim();
+      if (!cmdline && !cwd) return null;
+      return { pid, cmdline, cwd };
+    }
     const cmdline = readFileSync(`/proc/${pid}/cmdline`).toString("utf8").replaceAll("\0", " ").trim();
     const cwd = readlinkSync(`/proc/${pid}/cwd`);
     return { pid, cmdline, cwd };
@@ -1019,7 +1029,7 @@ function isOrdoServer(details, serverDir) {
 }
 
 function classifyPort(port, serverDir, pidPath, ssText) {
-  const pids = new Set(parseSsPids(ssText));
+  const pids = new Set(snapshotPids(ssText));
   const filed = readPidFile(pidPath);
   if (filed) pids.add(filed);
   let ordo = null;
@@ -1030,7 +1040,7 @@ function classifyPort(port, serverDir, pidPath, ssText) {
       ordo = { kind: "ordo", pid, cwd: details.cwd };
       continue;
     }
-    if (parseSsPids(ssText).includes(pid)) {
+    if (snapshotPids(ssText).includes(pid)) {
       return {
         kind: "other",
         pid,
@@ -1083,9 +1093,24 @@ function stopPid(pid, log) {
 }
 
 function listenSnapshot(port) {
-  const result = spawnSync("ss", ["-lptnH", `sport = :${port}`], { encoding: "utf8" });
+  const result =
+    process.platform === "darwin"
+      ? spawnSync("lsof", ["-nP", "-Fp", `-iTCP:${port}`, "-sTCP:LISTEN"], { encoding: "utf8" })
+      : spawnSync("ss", ["-lptnH", `sport = :${port}`], { encoding: "utf8" });
   if (result.status !== 0) return "";
   return result.stdout ?? "";
+}
+
+/** lsof -Fp emits one `p<PID>` line per listener. */
+function parseLsofPids(text) {
+  const pids = [];
+  for (const match of (text ?? "").matchAll(/^p(\d+)$/gm)) pids.push(Number(match[1]));
+  return pids;
+}
+
+/** Listener pids from a listenSnapshot, in this platform's format. */
+function snapshotPids(text) {
+  return process.platform === "darwin" ? parseLsofPids(text) : parseSsPids(text);
 }
 
 function startDetached(serverDir, childEnv, logPath, pidPath, log) {

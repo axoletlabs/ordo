@@ -9,9 +9,9 @@ Compact                         Expanded
 ┌──────────────────────────┐    ┌───────────────────────────────────────────────┐
 │ Search library   × Filter │    │ Search your library                × Filter  │
 │ Library             ⋯ ◉ │    │ Library                                  ⋯ ◉ │
-│ Folder / bookmark list   │    │ Search results       │ Reader / article       │
-│                          │    │                      │                        │
-│             + Save link  │    │                     + Save link              │
+│ Folder / bookmark list   │    │ Folder / bookmark list (one pane, not split)  │
+│                          │    │                                               │
+│             + Save link  │    │                     + Save link               │
 └──────────────────────────┘    └───────────────────────────────────────────────┘
 ```
 
@@ -36,13 +36,13 @@ Left-aligned content, 16dp screen margins, 16dp list padding, and an 8dp spacing
 - Icons: preloaded Material Icons font, fixed em-square and no Android font padding. One renderer preserves tint/alignment consistently and adapts legacy stored folder names.
 - FAB: 56dp container, primary-container/on-primary-container pairing. Library/folder/tag actions reserve a small bottom dock outside the scrolling list instead of a large blank list footer. The dock hides while typing; tap/hold customization is retained.
 - Lists: 56/72/88dp minimum sizing, flexible height for content, consistent leading/trailing slots. Bookmark titles and descriptions use one line each. Domain and age/reading time cannot wrap onto competing baselines; reminders have a separate supporting line. At most two tag chips appear before a labeled overflow count. Expressive segmented rows and selected tonal surfaces.
-- Text fields: 56dp outlined fields with floating labels, 2dp active outlines, supporting/error text, and stable geometry during editing. Outlined fields are distinct from contained search bars by design. Reserve space for label notches, match the surrounding surface, and draw the outline without shifting the input when focus changes.
+- Text fields: 56dp filled fields (`surfaceContainerHighest`), an in-field floating label, supporting/error text, and stable geometry during editing. Filled fields are distinct from contained search bars by design. Match the surrounding surface, and keep the input in place when focus changes.
 - Forms: enter the link/name first, then use full-width tonal picker rows for folder, tags, and icon. Folder/tag pickers have search and virtualized lists; icon selection opens a separate palette instead of filling the form. Show one active surface while keeping the underlying draft mounted; obscured parents do not handle focus or Android back. Overlays preserve stack order when the underlying draft updates. Scheduled opening focus is cancelled on dismissal.
 - Switches: 52×32dp track with a changing handle and a selected checkmark.
 - Menus: surface-container elevation, 48dp rows, tokenized states, selected tonal treatment, retained exit placement, and keyboard navigation.
 - Dialogs: 28dp corners (32dp Expressive), 24dp padding, headline-small title, a small unframed icon when needed, left-aligned supporting text, and trailing actions. Header/actions remain outside the scrolling body in regular windows; shorter/IME-reduced windows scroll the header, and very short windows scroll all content. Android explicitly uses resize and the dialog measures its actual keyboard-avoiding viewport. Retained exit contents, focus containment/restoration, and one-time opening focus. Fingerprint has one Copy action (closes after success) plus a close icon.
 - Changelog: one vertical scroller, natural image aspect ratios, and horizontally scrollable monospaced commands/code. Code indentation survives narrow windows.
-- Reader: preference writes are serialized and older acknowledgements cannot replace newer optimistic selections. Reader themes do not override the OS appearance signal; System resolves directly to the device mode, including after Sepia. Window chrome is restored on exit, never between theme updates.
+- Reader: preference writes are serialized and older acknowledgements cannot replace newer optimistic selections. Reader themes do not override the OS appearance signal; System resolves directly to the device mode. Window chrome is restored on exit, never between theme updates.
 - Navigation: settings and details share one stack; the library shell does not animate or detach/remount hidden tab scenes when a preference changes. Standard page transition duration is 300ms; reduced motion remains immediate.
 - Settings: small top app bars, a neutral account surface, grouped tonal rows with 24dp leading icons, and adaptive trailing controls. Session rows omit redundant device-type copy.
 - Snackbar: inverse-surface/on-inverse-surface with inverse-primary actions.

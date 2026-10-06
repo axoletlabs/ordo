@@ -67,6 +67,8 @@ native fingerprint with no binary.
 Release APKs are signed with one stored upload key (alias `ordo`) from the
 `ANDROID_KEYSTORE_BASE64` and `ANDROID_KEYSTORE_PASSWORD` repository secrets.
 A missing secret fails the build instead of silently minting a new debug key.
+OTA publication and channel management additionally use the `EXPO_TOKEN`
+repository secret (an EAS access token).
 
 EAS CLI is pinned to 24.8.0. Channels are created and linked before first use.
 SDK 57 requires `--environment` on every OTA publication: production uses the
