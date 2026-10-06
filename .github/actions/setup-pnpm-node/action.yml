@@ -1,0 +1,28 @@
+name: Set up pnpm and Node.js
+description: >
+  The shared toolchain bootstrap for CI jobs: pnpm from package.json's
+  packageManager field, then Node.js with an optional pnpm store cache.
+  Jobs that never run `pnpm install` (audit-only) must pass
+  pnpm-cache: false — actions/setup-node would otherwise fail its post
+  step saving a store path that was never created.
+inputs:
+  node-version:
+    description: Node.js version to install.
+    required: false
+    default: '22'
+  pnpm-cache:
+    description: Cache the pnpm store for jobs that install dependencies.
+    required: false
+    default: 'true'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup pnpm
+      uses: pnpm/action-setup@v5
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v5
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: ${{ inputs.pnpm-cache == 'true' && 'pnpm' || '' }}

@@ -58,6 +58,16 @@ Before OTA publication, CI waits for older in-flight APK jobs and resolves the
 runtime cannot turn into an unreachable OTA. Compatible older runtimes are
 also targeted when available. GitHub API failures fail closed.
 
+In-flight baselines must already be ancestors of the commit being tested; a
+later overlapping push is not in the clone and is never used. Concurrency
+groups in CI are per-job, never workflow-wide: a workflow-wide group would
+cancel an in-flight APK when a later JS-only push starts its OTA, leaving that
+native fingerprint with no binary.
+
+Release APKs are signed with one stored upload key (alias `ordo`) from the
+`ANDROID_KEYSTORE_BASE64` and `ANDROID_KEYSTORE_PASSWORD` repository secrets.
+A missing secret fails the build instead of silently minting a new debug key.
+
 EAS CLI is pinned to 24.8.0. Channels are created and linked before first use.
 SDK 57 requires `--environment` on every OTA publication: production uses the
 `production` EAS environment, early access uses `preview`, and development uses
@@ -177,6 +187,7 @@ pnpm test:scripts
 pnpm audit --prod --audit-level=high
 pnpm --filter @ordo/server build
 pnpm test:release-runtime
+shellcheck -S warning .github/scripts/*.sh
 ```
 
 The runtime smoke test prebuilds four channel manifests, checks deterministic

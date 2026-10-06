@@ -14,50 +14,24 @@ on:
         default: 'false'
         type: boolean
 
-# Native GitHub Releases:
-#   Latest (stable): tag vX.Y.Z, "Set as the latest release", pre-release unchecked.
-#   Early: tag vX.Y.Z-alpha.N | -beta.N | -rc.N, "This is a pre-release" checked.
-# Release APKs are signed with one stored upload key (alias `ordo`):
-#   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD. Missing secrets fail
-#   assembleRelease instead of minting a new debug key each run.
-# EAS Update channels (baked into the APK, not switched in-app):
-#   development — `main`
-#   production  — a stable tag published from release/x.y.z
-#   early-access — alpha/beta/rc releases, separate from main
-#   development-<escaped branch> — manually built feature APKs, isolated from main
-# main never publishes a version. Each version is its own branch (release/x.y.z)
-# and its own tag (vX.Y.Z). Push a fix to that branch to change that version.
-# Publishing a release does not create the branch or merge it into main.
-# CI refuses a release whose target is not release/x.y.z, or whose commit is not
-# already on that branch. JS-only pushes on main or release/x.y.z of
-# axoletlabs/ordo OTA when the Android fingerprint matches the last (or
-# in-flight) APK on the same branch. Other branches, including a leftover
-# preview branch, do not OTA. Forks never OTA.
-# Detect ignores packageJson:scripts and extra.ordo so a test-file list edit
-# does not mint a new APK. When those sources still change the raw hash, the
-# OTA job publishes to the last compatible APK runtime instead of --auto
-# (which would mint a runtime no binary exists for). Gradle can still bake a
-# different hash than detect (a native module rewriting its sources during
-# the APK build). Fingerprint hooks plus EXPO_UPDATES_FINGERPRINT_OVERRIDE
-# keep those aligned; if they still differ, extra_runtimes uses the hash
-# actually embedded in the APK, not detect's hash of that commit.
-# In-flight JS-only runs are not a baseline — only an APK-producing run or
-# the last shipped APK.
-# An in-flight SHA must be an ancestor of this commit; a later overlapping
-# push is not in this clone and must not be used as the fingerprint baseline.
-# The OTA job waits for that APK to finish packaging so createdAt is newer
-# than the binary's embedded commitTime; expo-updates ignores older OTAs.
-# Concurrency is per-job, not workflow-wide. A workflow-level group would
-# cancel an in-flight APK when a later JS-only push starts OTA, leaving that
-# native fingerprint with no binary.
-# Server archive (same GitHub Release as the APKs):
-#   package_server compiles @ordo/server, then uploads ordo-server-vX.Y.Z.tar.gz
-#   (the tagged source, plus apps/server/release.json) and a sha256 file.
-#   scripts/deploy-server installs that release instead of pulling a branch.
+# Full release/OTA design: docs/RELEASES.md. Invariants a CI edit must keep:
+# - main never publishes a version; each version is its own release/x.y.z
+#   branch and vX.Y.Z tag, published from that branch (validated below).
+# - OTA (JS-only) runs only on main and release/* of axoletlabs/ordo; every
+#   other event builds an APK or stops. Forks never OTA.
+# - JS-only pushes OTA onto the fingerprint of a shipped (or in-flight) APK
+#   on the same branch; a native fingerprint change mints a new APK.
+# - Concurrency groups are per-job, never workflow-wide: a workflow-level
+#   group would cancel an in-flight APK when a later JS-only push starts an
+#   OTA, leaving that native fingerprint with no binary.
+permissions:
+  contents: read
+
 jobs:
   detect:
     if: github.event_name != 'pull_request' && !github.event.deleted
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: read
       actions: read
@@ -102,16 +76,11 @@ jobs:
             echo "is_release=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Setup pnpm for OTA eligibility check
+      # The eligibility check installs dependencies in two worktrees, so it
+      # needs the pnpm store cache; other detect paths skip setup entirely.
+      - name: Setup pnpm and Node.js for the fingerprint check
         if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
-        uses: pnpm/action-setup@v5
-
-      - name: Setup Node.js for OTA eligibility check
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
-        uses: actions/setup-node@v5
-        with:
-          node-version: '22'
-          cache: 'pnpm'
+        uses: ./.github/actions/setup-pnpm-node
 
       - name: Check Android native fingerprint
         id: eligibility
@@ -121,6 +90,7 @@ jobs:
         timeout-minutes: 8
         env:
           CURRENT_SHA: ${{ github.sha }}
+          EVENT_BEFORE: ${{ github.event.before }}
           GITHUB_RUN_ID: ${{ github.run_id }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Don't wait on a leftover .git/index.lock from a fingerprint child
@@ -129,163 +99,7 @@ jobs:
           ORDO_BUILD_BRANCH: ${{ github.ref_name }}
           EXPO_UPDATES_CHANNEL: ${{ steps.info.outputs.updates_channel }}
           APP_VERSION: ${{ steps.info.outputs.version }}
-        run: |
-          if [[ "${{ github.event.before }}" =~ ^0+$ ]]; then
-            echo "native_changed=true" >> "$GITHUB_OUTPUT"
-            echo "extra_runtime_versions=" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # Compare against an in-flight CI run on this branch (main or
-          # release/*) when one exists (an APK still building, or detect still
-          # running), else the last shipped APK on the same branch. Never
-          # compare one branch's APK to another's — the baked channel differs.
-          # Parent-commit comparison is wrong: a cancelled native bump would
-          # make later JS look unchanged vs parent and OTA a runtime that
-          # never got a binary. An in-flight APK *will* produce that binary,
-          # so a JS-only follow-up should OTA onto it instead of starting a
-          # second APK.
-          BASELINE_SHA="$(bash "$GITHUB_WORKSPACE/.github/scripts/apk-baseline-sha.sh" "$GITHUB_REF_NAME" || true)"
-          if [[ -z "$BASELINE_SHA" ]]; then
-            echo "No APK baseline on ${GITHUB_REF_NAME}; treating as native-incompatible"
-            echo "native_changed=true" >> "$GITHUB_OUTPUT"
-            echo "extra_runtime_versions=" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "Fingerprint baseline SHA: $BASELINE_SHA"
-          echo "baseline_sha=$BASELINE_SHA" >> "$GITHUB_OUTPUT"
-          if [[ "$BASELINE_SHA" == "$CURRENT_SHA" ]]; then
-            echo "This commit is the fingerprint baseline"
-            echo "native_changed=false" >> "$GITHUB_OUTPUT"
-            echo "extra_runtime_versions=" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          if ! git cat-file -e "${BASELINE_SHA}^{commit}" 2>/dev/null; then
-            echo "Baseline ${BASELINE_SHA} is not in this clone; requiring an APK"
-            echo "native_changed=true" >> "$GITHUB_OUTPUT"
-            echo "extra_runtime_versions=" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # Isolated worktree + a wrapper that process.exit()s after JSON so
-          # leftover autolinking children cannot wedge detect.
-          SCRIPT="$GITHUB_WORKSPACE/.github/scripts/generate-android-fingerprint.js"
-          PREV_DIR="${RUNNER_TEMP}/fp-prev"
-          rm -rf "$PREV_DIR"
-          if ! git worktree add --detach "$PREV_DIR" "$BASELINE_SHA"; then
-            echo "Could not check out baseline ${BASELINE_SHA}; requiring an APK"
-            echo "native_changed=true" >> "$GITHUB_OUTPUT"
-            echo "extra_runtime_versions=" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          cleanup() { git worktree remove --force "$PREV_DIR" 2>/dev/null || true; }
-          trap cleanup EXIT
-
-          generate_fingerprint() {
-            local dir="$1"
-            local out="$2"
-            echo "Installing $(git -C "$dir" rev-parse --short HEAD) in $dir"
-            (cd "$dir" && pnpm install --frozen-lockfile)
-            echo "Generating fingerprint for $(git -C "$dir" rev-parse --short HEAD)"
-            # stdin closed: ExpoConfigLoader / autolinking inherit the Actions
-            # pipe and can wait forever for EOF. timeout is a last resort if
-            # createFingerprintAsync itself never resolves.
-            (
-              cd "$dir/apps/mobile"
-              timeout --kill-after=5s 60s node "$SCRIPT" --platform android \
-                < /dev/null > "$out"
-            )
-            echo "Wrote $out ($(wc -c < "$out") bytes)"
-          }
-
-          generate_fingerprint "$PREV_DIR" /tmp/fingerprint-previous.json
-          generate_fingerprint "$GITHUB_WORKSPACE" /tmp/fingerprint-current.json
-
-          NORMALIZE="$GITHUB_WORKSPACE/.github/scripts/normalize-android-fingerprint.jq"
-          normalize_fingerprint() {
-            jq -f "$NORMALIZE" "$1" > "$1.normalized"
-          }
-
-          # extra.ordo and packageJson:scripts change every JS commit / test file
-          # but do not affect native compatibility. Stripping them for routing
-          # avoids minting a new APK (and abandoning the previous runtime).
-          normalize_fingerprint /tmp/fingerprint-previous.json
-          normalize_fingerprint /tmp/fingerprint-current.json
-
-          extra_runtimes=()
-          current_hash="$(jq -r '.hash' /tmp/fingerprint-current.json)"
-          add_extra_runtime() {
-            local runtime="$1"
-            local sha="$2"
-            [[ -z "$runtime" || "$runtime" == "null" ]] && return 0
-            case " ${extra_runtimes[*]} " in
-              *" $runtime "*) return 0 ;;
-            esac
-            echo "Compatible APK runtime ${runtime} from ${sha}"
-            extra_runtimes+=("$runtime")
-          }
-          collect_runtime_if_compatible() {
-            local sha="$1"
-            local fp="$2"
-            local hash embedded
-            hash="$(jq -r '.hash' "$fp")"
-            if [[ -z "$hash" || "$hash" == "null" ]]; then
-              return 0
-            fi
-            # Detect hash matching is not enough: the APK may have baked
-            # Gradle's post-compile fingerprint. Pin to that when it differs.
-            if [[ "$hash" == "$current_hash" ]]; then
-              embedded="$(bash "$GITHUB_WORKSPACE/.github/scripts/apk-embedded-runtime.sh" --sha "$sha" --branch "$GITHUB_REF_NAME" || true)"
-              if [[ -n "$embedded" && "$embedded" != "$current_hash" ]]; then
-                add_extra_runtime "$embedded" "$sha"
-              fi
-              return 0
-            fi
-            normalize_fingerprint "$fp"
-            if cmp -s /tmp/fingerprint-current.json.normalized "$fp.normalized"; then
-              embedded="$(bash "$GITHUB_WORKSPACE/.github/scripts/apk-embedded-runtime.sh" --sha "$sha" --branch "$GITHUB_REF_NAME" || true)"
-              add_extra_runtime "$embedded" "$sha"
-            else
-              echo "Skipping APK ${sha}: native fingerprint differs"
-            fi
-          }
-
-          if cmp -s /tmp/fingerprint-previous.json.normalized /tmp/fingerprint-current.json.normalized; then
-            echo "native_changed=false" >> "$GITHUB_OUTPUT"
-            # Shipped binaries first. An in-flight JS commit can share a
-            # normalized fingerprint but a different raw hash — that hash is
-            # not an APK runtime and must not block the last-APK scan.
-            while read -r apk_sha; do
-              [[ -z "$apk_sha" ]] && continue
-              if [[ "$apk_sha" == "$CURRENT_SHA" || "$apk_sha" == "$BASELINE_SHA" ]]; then
-                continue
-              fi
-              extra_dir="${RUNNER_TEMP}/fp-${apk_sha:0:8}"
-              rm -rf "$extra_dir"
-              if ! git cat-file -e "${apk_sha}^{commit}" 2>/dev/null; then
-                echo "Skipping APK ${apk_sha}: commit is not in this clone"
-                continue
-              fi
-              if ! git worktree add --detach "$extra_dir" "$apk_sha"; then
-                echo "Skipping APK ${apk_sha}: worktree failed"
-                continue
-              fi
-              if generate_fingerprint "$extra_dir" "/tmp/fingerprint-${apk_sha}.json"; then
-                collect_runtime_if_compatible "$apk_sha" "/tmp/fingerprint-${apk_sha}.json"
-              else
-                echo "Skipping APK ${apk_sha}: fingerprint failed"
-              fi
-              git worktree remove --force "$extra_dir" 2>/dev/null || true
-              if (( ${#extra_runtimes[@]} >= 1 )); then
-                break
-              fi
-            done < <(bash "$GITHUB_WORKSPACE/.github/scripts/last-apk-shas.sh" "$GITHUB_REF_NAME" 3 || true)
-            # Upcoming APK (in-flight native bump) if its raw hash differs.
-            collect_runtime_if_compatible "$BASELINE_SHA" /tmp/fingerprint-previous.json
-          else
-            echo "native_changed=true" >> "$GITHUB_OUTPUT"
-          fi
-          echo "extra_runtime_versions=${extra_runtimes[*]}" >> "$GITHUB_OUTPUT"
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/check-android-fingerprint.sh"
 
       - name: Select OTA or APK build
         id: route
@@ -320,6 +134,7 @@ jobs:
       - name: Validate release tag
         if: github.event_name == 'release'
         env:
+          GITHUB_SHA: ${{ github.sha }}
           TAG: ${{ github.event.release.tag_name }}
           TARGET: ${{ github.event.release.target_commitish }}
           VERSION: ${{ steps.info.outputs.version }}
@@ -327,33 +142,22 @@ jobs:
         run: |
           node "$GITHUB_WORKSPACE/.github/scripts/validate-release-tag.js" \
             "$TAG" "$VERSION" "$PRERELEASE"
-          BRANCH=$(node "$GITHUB_WORKSPACE/.github/scripts/validate-release-tag.js" --release-branch "$TAG" "$TARGET")
-          if ! git fetch origin "$BRANCH"; then
-            echo "::error::Branch $BRANCH does not exist. Push the release commit there before publishing $TAG."
-            exit 1
-          fi
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/$BRANCH"; then
-            echo "::error::$GITHUB_SHA is not on $BRANCH. Push that commit to $BRANCH, then publish the tag."
-            exit 1
-          fi
+          bash "$GITHUB_WORKSPACE/.github/scripts/require-release-branch.sh" "$TAG" "$TARGET"
 
   analyze:
     if: '!github.event.deleted'
+    # Unique per run: a later push must never cancel this gate while the
+    # APK it approved is still building (see the header note on concurrency).
     concurrency:
       group: ci-analyze-${{ github.ref }}-${{ github.run_id }}
       cancel-in-progress: false
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: '22'
-          cache: 'pnpm'
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -379,21 +183,21 @@ jobs:
       group: ci-supply-chain-${{ github.ref }}-${{ github.run_id }}
       cancel-in-progress: false
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
+      # Audit does not install, so skip the pnpm store cache: setup-node
+      # would fail its post step saving a store path that does not exist.
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
         with:
-          node-version: '22'
-          # Audit does not install; v5 would otherwise auto-cache pnpm and
-          # fail the post step because the store path does not exist.
-          package-manager-cache: false
+          pnpm-cache: false
+
+      - name: Lint CI shell scripts
+        run: shellcheck -S warning .github/scripts/*.sh
 
       - name: Audit production dependencies
         run: pnpm audit --prod --audit-level=high
@@ -425,6 +229,7 @@ jobs:
       group: ci-ota-${{ github.ref }}-publish
       cancel-in-progress: true
     runs-on: ubuntu-24.04
+    timeout-minutes: 60
     env:
       EXPO_UPDATES_CHANNEL: ${{ needs.detect.outputs.updates_channel }}
       ORDO_BUILD_BRANCH: ${{ github.ref_name }}
@@ -457,14 +262,8 @@ jobs:
           fi
           echo "versions=$RUNTIME $EXTRA_RUNTIMES" >> "$GITHUB_OUTPUT"
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: '22'
-          cache: 'pnpm'
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -538,8 +337,9 @@ jobs:
     needs: [detect, analyze, supply-chain]
     if: github.repository == 'axoletlabs/ordo' && needs.detect.outputs.should_build == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 45
     permissions:
-      contents: write
+      contents: read
     env:
       EXPO_UPDATES_CHANNEL: ${{ needs.detect.outputs.updates_channel }}
       ORDO_BUILD_BRANCH: ${{ github.ref_name }}
@@ -554,14 +354,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: '22'
-          cache: 'pnpm'
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
 
       - name: Setup Java 17
         uses: actions/setup-java@v5
@@ -645,18 +439,7 @@ jobs:
       - name: Restore upload keystore
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        run: |
-          if [ -z "$ANDROID_KEYSTORE_BASE64" ] || [ -z "$ORDO_UPLOAD_STORE_PASSWORD" ]; then
-            echo "::error::Set ANDROID_KEYSTORE_BASE64 and ANDROID_KEYSTORE_PASSWORD repository secrets so release APKs share one upload key."
-            exit 1
-          fi
-          KEYSTORE="$RUNNER_TEMP/ordo-upload.p12"
-          echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$KEYSTORE"
-          if [ ! -s "$KEYSTORE" ]; then
-            echo "::error::Decoded ANDROID_KEYSTORE_BASE64 is empty."
-            exit 1
-          fi
-          echo "ORDO_UPLOAD_STORE_FILE=$KEYSTORE" >> "$GITHUB_ENV"
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/restore-upload-keystore.sh"
 
       - name: Build APK (dev, arm64 only)
         if: needs.detect.outputs.is_release != 'true'
@@ -684,6 +467,8 @@ jobs:
             --version "$VERSION" --base-code "$BASE_CODE" \
             --runtime "$EXPO_UPDATES_FINGERPRINT_OVERRIDE" --channel "$EXPO_UPDATES_CHANNEL" "${args[@]}"
 
+      # apk-embedded-runtime.sh downloads this artifact to route later OTAs;
+      # keep it long enough to cover APKs still in users' hands.
       - name: Upload verified Android runtime version
         uses: actions/upload-artifact@v6
         with:
@@ -692,31 +477,28 @@ jobs:
           retention-days: 90
           overwrite: true
 
+      # Debug APKs are ephemeral; published APKs live on the GitHub Release.
       - name: Upload APK artifact
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: ordo-apk-${{ needs.detect.outputs.updates_channel }}
           path: apps/mobile/android/app/build/outputs/apk/release/*.apk
+          retention-days: 14
           overwrite: true
 
   package_server:
     needs: [detect, analyze, supply-chain]
     if: github.repository == 'axoletlabs/ordo' && needs.detect.outputs.is_release == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v5
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v5
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v5
-        with:
-          node-version: '22'
-          cache: 'pnpm'
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -762,7 +544,7 @@ jobs:
           fi
           {
             echo "## Server archive"
-            ls -1 "$DIR"/ordo-server-v*.tar.gz | sed 's/^/- /'
+            find "$DIR" -maxdepth 1 -name 'ordo-server-v*.tar.gz' -printf '%f\n' | sort | sed 's/^/- /'
           } >> "$GITHUB_STEP_SUMMARY"
 
   release:
@@ -772,6 +554,7 @@ jobs:
     # Early (pre-release): tag vX.Y.Z-(alpha|beta|rc)[.N], pre-release checked.
     if: needs.detect.outputs.is_release == 'true'
     runs-on: ubuntu-24.04
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
@@ -784,28 +567,9 @@ jobs:
           path: apk
 
       - name: Rename APKs
-        run: |
-          VERSION="${{ needs.detect.outputs.version }}"
-          cd apk
-          # universal (all ABIs) -> ordo-vX.Y.Z.apk or ordo-vX.Y.Z-beta.N.apk
-          if [ -f app-universal-release.apk ]; then
-            mv app-universal-release.apk "ordo-v${VERSION}.apk"
-          elif [ -f app-release.apk ]; then
-            mv app-release.apk "ordo-v${VERSION}.apk"
-          fi
-          # per-ABI splits -> ordo-vX.Y.Z[-prerelease]-<abi>.apk
-          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
-            if [ -f "app-${abi}-release.apk" ]; then
-              mv "app-${abi}-release.apk" "ordo-v${VERSION}-${abi}.apk"
-            fi
-          done
-          # A partial split build must not silently become a published release.
-          test -s "ordo-v${VERSION}.apk"
-          for abi in armeabi-v7a arm64-v8a x86 x86_64; do
-            test -s "ordo-v${VERSION}-${abi}.apk"
-          done
-          echo "## APKs to publish:" >> "$GITHUB_STEP_SUMMARY"
-          ls -1 ordo-v*.apk | sed 's/^/- /' >> "$GITHUB_STEP_SUMMARY"
+        env:
+          VERSION: ${{ needs.detect.outputs.version }}
+        run: bash .github/scripts/rename-release-apks.sh apk "$VERSION"
 
       - name: Upload to release
         env:

@@ -3,7 +3,9 @@ name: Release branch
 # A published version must already live on its release/x.y.z branch.
 # This workflow only checks that. It does not create the branch, move it,
 # or merge anything into main. main never publishes a version release.
-# ci.yml runs the same check before it will attach APKs or the server archive.
+# ci.yml runs the same check (via .github/scripts/require-release-branch.sh)
+# before it will attach APKs or the server archive; this guard stands alone
+# so the policy still holds if ci.yml is mid-refactor.
 
 on:
   release:
@@ -18,7 +20,8 @@ concurrency:
 
 jobs:
   guard:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v5
         with:
@@ -26,16 +29,7 @@ jobs:
 
       - name: Require the matching release branch
         env:
+          GITHUB_SHA: ${{ github.sha }}
           TAG: ${{ github.event.release.tag_name }}
           TARGET: ${{ github.event.release.target_commitish }}
-        run: |
-          BRANCH=$(node "$GITHUB_WORKSPACE/.github/scripts/validate-release-tag.js" --release-branch "$TAG" "$TARGET")
-          if ! git fetch origin "$BRANCH"; then
-            echo "::error::Branch $BRANCH does not exist. Push the release commit there before publishing $TAG."
-            exit 1
-          fi
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/$BRANCH"; then
-            echo "::error::$GITHUB_SHA is not on $BRANCH. Push that commit to $BRANCH, then publish the tag."
-            exit 1
-          fi
-          echo "$TAG is on $BRANCH"
+        run: bash .github/scripts/require-release-branch.sh "$TAG" "$TARGET"
