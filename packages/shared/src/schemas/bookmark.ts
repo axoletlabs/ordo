@@ -48,8 +48,6 @@ export const UpdateBookmarkSchema = z
     contentKindOverride: z.enum(["article", "web"]).nullable().optional(),
     /** Unix seconds. `null` clears. A past value stays due until opened or cleared. */
     remindAt: UnixSecondsSchema.nullable().optional(),
-    /** Rejected unless http(s); bookmark URLs are otherwise immutable. */
-    url: url.optional(),
   })
   .refine(
     (v) =>

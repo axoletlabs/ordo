@@ -336,31 +336,6 @@ export function createBookmarkSearchMatcher(query: string, opts: SearchRankOptio
   };
 }
 
-export function bookmarkMatchesQuery(
-  bookmark: SearchableBookmark,
-  query: string,
-  opts: SearchRankOptions = {},
-): boolean {
-  const tokens = tokenizeSearchQuery(query);
-  if (tokens.length === 0) return true;
-  return bookmarkSearchRank(bookmark, query, opts).matched;
-}
-
-/**
- * @deprecated Use `bookmarkSearchRank`. Kept as a coarse 0–3 for older call sites.
- */
-export function bookmarkMatchRank(
-  bookmark: SearchableBookmark,
-  query: string,
-  opts: SearchRankOptions = {},
-): number {
-  const rank = bookmarkSearchRank(bookmark, query, opts);
-  if (!rank.matched) return 0;
-  if (rank.field === "title" && rank.quality === SEARCH_MATCH_QUALITY.starts) return 3;
-  if (rank.field === "title") return 2;
-  return 1;
-}
-
 export function compareBookmarkSearchRanks(a: BookmarkSearchRank, b: BookmarkSearchRank): number {
   if (a.matched !== b.matched) return Number(b.matched) - Number(a.matched);
   if (a.clause !== b.clause) return a.clause === "and" ? -1 : 1;

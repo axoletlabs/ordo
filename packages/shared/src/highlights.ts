@@ -7,7 +7,10 @@
  */
 import type { HighlightDto } from "./types.js";
 
-/** Keep in sync with HIGHLIGHT_MARK_ID_PREFIX / HIGHLIGHT_CONTEXT_LENGTH. */
+// Local copies of HIGHLIGHT_MARK_ID_PREFIX / HIGHLIGHT_CONTEXT_LENGTH: the
+// node test runner loads src/*.ts directly and cannot resolve cross-file
+// value imports with .js specifiers. highlights.test.ts asserts these stay
+// in sync with constants.ts.
 const MARK_ID_PREFIX = "ordo-hl-";
 const DEFAULT_CONTEXT = 32;
 
@@ -133,65 +136,8 @@ export function quoteFromBlock(
   return quoteFromRange(articlePlain, range.start, range.end, context) ?? local;
 }
 
-const QUOTE_MAX = 2000;
-const POINT_WINDOW = 400;
-
-/** Expand a caret in a block to a sentence (or a nearby window if it's huge). */
-export function sentenceRange(text: string, index: number): HighlightRange | null {
-  if (!text) return null;
-  let caret = Math.max(0, Math.min(index, text.length));
-  if (caret === text.length && caret > 0) caret -= 1;
-
-  let start = 0;
-  for (let i = 1; i <= caret; i += 1) {
-    if (isSentenceBreak(text, i)) start = i;
-  }
-  let end = text.length;
-  for (let i = caret + 1; i < text.length; i += 1) {
-    if (isSentenceBreak(text, i)) {
-      end = i;
-      break;
-    }
-  }
-  while (start < end && /\s/.test(text[start] ?? "")) start += 1;
-  while (end > start && /\s/.test(text[end - 1] ?? "")) end -= 1;
-  if (start >= end) return null;
-  if (end - start > QUOTE_MAX) {
-    start = Math.max(0, caret - POINT_WINDOW);
-    end = Math.min(text.length, caret + POINT_WINDOW);
-    while (start < end && /\s/.test(text[start] ?? "")) start += 1;
-    while (end > start && /\s/.test(text[end - 1] ?? "")) end -= 1;
-  }
-  return start < end ? { start, end } : null;
-}
-
-function isSentenceBreak(text: string, i: number): boolean {
-  const prev = text[i - 1];
-  if (prev === "\n") return true;
-  if ((prev === "." || prev === "!" || prev === "?") && (i === text.length || /\s/.test(text[i] ?? ""))) {
-    return true;
-  }
-  return false;
-}
-
-/** Map a press inside a block onto a TextQuoteSelector-style anchor. */
-export function quoteFromCaret(
-  articlePlain: string,
-  blockText: string,
-  index: number,
-  context = DEFAULT_CONTEXT,
-): HighlightAnchor | null {
-  const range = sentenceRange(blockText, index);
-  if (!range) return quoteFromRange(blockText, 0, blockText.length, context);
-  return quoteFromBlock(articlePlain, blockText, range.start, range.end, context);
-}
-
 export function htmlToPlainText(html: string): string {
   return buildPlain(tokenize(html)).plain;
-}
-
-export function canAnchorHighlight(html: string, anchor: HighlightAnchor): boolean {
-  return findHighlightRange(html, anchor) !== null;
 }
 
 export function findHighlightRange(html: string, anchor: HighlightAnchor): HighlightRange | null {
@@ -374,41 +320,6 @@ function coveredLength(selected: HighlightRange, ranges: readonly HighlightRange
     }
   }
   return total;
-}
-
-/**
- * Highlight whose wrapped range fully contains the current selection.
- * Used to offer "Remove highlight" when the user selects already-highlighted text.
- */
-export function findHighlightForSelection(
-  html: string,
-  highlights: readonly HighlightQuote[],
-  selection: HighlightAnchor,
-): string | null {
-  if (highlights.length === 0) return null;
-  if (html) {
-    const selected = findHighlightRange(html, selection);
-    if (selected) {
-      let best: { id: string; span: number } | null = null;
-      for (const highlight of highlights) {
-        const range = findHighlightRange(html, highlight);
-        if (!range) continue;
-        if (selected.start >= range.start && selected.end <= range.end) {
-          const span = range.end - range.start;
-          if (!best || span < best.span) best = { id: highlight.id, span };
-        }
-      }
-      if (best) return best.id;
-    }
-  }
-  const prefix = selection.prefix ?? "";
-  const suffix = selection.suffix ?? "";
-  const tight = highlights.find(
-    (row) => row.exact === selection.exact && row.prefix === prefix && row.suffix === suffix,
-  );
-  if (tight) return tight.id;
-  const sameExact = highlights.filter((row) => row.exact === selection.exact);
-  return sameExact.length === 1 ? sameExact[0]!.id : null;
 }
 
 /** Wrap every anchored highlight in `<mark id="ordo-hl-…">`. Unmatched rows are skipped. */
@@ -662,15 +573,24 @@ function collapseMap(input: string): { text: string; toOrig: number[] } {
 }
 
 function decodeHtml(value: string): string {
-  return value
-    .replace(/&nbsp;/gi, "\u00a0")
-    .replace(/&amp;/gi, "&")
-    .replace(/&lt;/gi, "<")
-    .replace(/&gt;/gi, ">")
-    .replace(/&quot;/gi, '"')
-    .replace(/&#39;|&apos;/gi, "'")
-    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) => codePoint(parseInt(hex, 16)))
-    .replace(/&#(\d+);/g, (_, dec: string) => codePoint(Number(dec)));
+  // One pass over the input so double-escaped text (`&amp;lt;`) decodes to the
+  // literal "&lt;" instead of being re-decoded to "<".
+  return value.replace(
+    /&(?:nbsp|amp|lt|gt|quot|apos|#x[0-9a-f]+|#\d+);/gi,
+    (entity) => {
+      switch (entity.toLowerCase()) {
+        case "&nbsp;": return "\u00a0";
+        case "&amp;": return "&";
+        case "&lt;": return "<";
+        case "&gt;": return ">";
+        case "&quot;": return '"';
+        case "&apos;": return "'";
+      }
+      const body = entity.slice(2, -1);
+      if (body[0] === "x" || body[0] === "X") return codePoint(parseInt(body.slice(1), 16));
+      return codePoint(Number(body));
+    },
+  );
 }
 
 function encodeHtml(value: string): string {

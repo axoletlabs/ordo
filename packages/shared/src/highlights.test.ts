@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   applyHighlightsToHtml,
-  canAnchorHighlight,
   carveHighlight,
-  findHighlightForSelection,
   findHighlightRange,
   formatHighlightQuote,
   highlightIdFromMark,
@@ -12,12 +10,11 @@ import {
   htmlToPlainText,
   planUnhighlight,
   quoteFromBlock,
-  quoteFromCaret,
   quoteFromRange,
   selectionHighlightState,
-  sentenceRange,
   unionWithHighlights,
 } from "./highlights.ts";
+import { HIGHLIGHT_CONTEXT_LENGTH, HIGHLIGHT_MARK_ID_PREFIX } from "./constants.ts";
 
 test("quoteFromRange trims ends and copies nearby context", () => {
   const quote = quoteFromRange("ab  hello world  cd", 4, 15);
@@ -31,24 +28,6 @@ test("quoteFromRange trims ends and copies nearby context", () => {
 test("quoteFromRange collapses newlines and indent in the stored quote", () => {
   const quote = quoteFromRange("graphical\n                interface", 0, 35);
   assert.equal(quote?.exact, "graphical interface");
-});
-
-test("sentenceRange expands a caret to the surrounding sentence", () => {
-  const text = "Hello world. Next one!";
-  assert.deepEqual(sentenceRange(text, 2), { start: 0, end: 12 });
-  assert.deepEqual(sentenceRange(text, 14), { start: 13, end: 22 });
-  assert.deepEqual(sentenceRange("No punctuation here", 4), {
-    start: 0,
-    end: 19,
-  });
-});
-
-test("quoteFromCaret lifts a pressed sentence onto article context", () => {
-  const article = "First paragraph. Second has the word unique here.";
-  const block = "Second has the word unique here.";
-  const quote = quoteFromCaret(article, block, block.indexOf("unique"));
-  assert.equal(quote?.exact, "Second has the word unique here.");
-  assert.ok(quote?.prefix?.includes("paragraph."));
 });
 
 test("quoteFromBlock lifts a mid-article selection onto document context", () => {
@@ -72,7 +51,7 @@ test("quoteFromBlock does not treat HTML indent as part of the selection", () =>
   const start = block.indexOf("browse");
   const quote = quoteFromBlock(article, block, start, start + exact.length);
   assert.equal(quote?.exact, exact);
-  assert.ok(canAnchorHighlight(html, quote!));
+  assert.ok(findHighlightRange(html, quote!) !== null);
   const wrapped = applyHighlightsToHtml(html, [{ id: "h1", ...quote!, href: null }]);
   const marked = wrapped.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
   assert.ok(marked.includes(exact));
@@ -129,36 +108,19 @@ test("skips overlapping highlights and unmatched quotes", () => {
   assert.equal(findHighlightRange(html, { exact: "missing" }), null);
 });
 
-test("finds the highlight that contains a selection", () => {
+test("finds the highlight that overlaps a selection", () => {
   const html = "<p>Hello world today.</p>";
   const highlights = [
     { id: "h1", exact: "world", prefix: "Hello ", suffix: " today", href: null },
     { id: "h2", exact: "Hello", prefix: "", suffix: " world", href: null },
   ];
-  assert.equal(
-    findHighlightForSelection(html, highlights, {
-      exact: "world",
-      prefix: "Hello ",
-      suffix: " today",
-    }),
-    "h1",
-  );
-  assert.equal(
-    findHighlightForSelection(html, highlights, {
-      exact: "orl",
-      prefix: "w",
-      suffix: "d",
-    }),
-    "h1",
-  );
-  assert.equal(
-    findHighlightForSelection(html, highlights, {
-      exact: "Hello world",
-      prefix: "",
-      suffix: " today",
-    }),
-    null,
-  );
+  const state = selectionHighlightState(html, highlights, {
+    exact: "world",
+    prefix: "Hello ",
+    suffix: " today",
+  });
+  assert.deepEqual(state.overlappingIds, ["h1"]);
+  assert.equal(state.canRemove, true);
 });
 
 test("falls back to wrapping a link when the quote moved", () => {
@@ -176,8 +138,18 @@ test("falls back to wrapping a link when the quote moved", () => {
     wrapped,
     '<p>See <a href="https://example.com/x"><mark id="ordo-hl-h1">the docs</mark></a> now.</p>',
   );
-  assert.equal(canAnchorHighlight(html, { exact: "nope", href: "https://example.com/x" }), true);
-  assert.equal(canAnchorHighlight(html, { exact: "nope" }), false);
+  assert.equal(findHighlightRange(html, { exact: "nope", href: "https://example.com/x" }) !== null, true);
+  assert.equal(findHighlightRange(html, { exact: "nope" }) === null, true);
+});
+
+test("mark ids and quote context track constants.ts", () => {
+  const id = highlightMarkId("abc");
+  assert.ok(id.startsWith(HIGHLIGHT_MARK_ID_PREFIX));
+  assert.equal(highlightIdFromMark(id), "abc");
+  const pad = "x".repeat(HIGHLIGHT_CONTEXT_LENGTH + 5);
+  const quote = quoteFromRange(`${pad}needle${pad}`, pad.length, pad.length + 6);
+  assert.equal(quote?.prefix?.length, HIGHLIGHT_CONTEXT_LENGTH);
+  assert.equal(quote?.suffix?.length, HIGHLIGHT_CONTEXT_LENGTH);
 });
 
 test("carveHighlight drops only the selected span of a highlight", () => {

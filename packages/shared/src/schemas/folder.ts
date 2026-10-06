@@ -1,6 +1,9 @@
 import { z } from "zod";
-import { BATCH_ITEM_LIMIT, FOLDER_ICONS } from "../constants.js";
+import { BATCH_ITEM_LIMIT, FOLDER_ICONS, FOLDER_PIN_LENGTHS } from "../constants.js";
 import type { FolderLockType } from "../types.js";
+
+/** One alternative per allowed PIN length (4 or 6 digits). */
+const PIN_PATTERN = new RegExp(`^(?:${FOLDER_PIN_LENGTHS.map((n) => `\\d{${n}}`).join("|")})$`);
 
 const name = z
   .string()
@@ -36,7 +39,7 @@ export const SetFolderPasswordSchema = z
     lockType: FolderLockTypeSchema.default("password"),
   })
   .superRefine(({ password, lockType }, context) => {
-    if (lockType === "pin" && !/^\d{4}$|^\d{6}$/.test(password)) {
+    if (lockType === "pin" && !PIN_PATTERN.test(password)) {
       context.addIssue({ code: "custom", path: ["password"], message: "Use a 4 or 6 digit PIN." });
     } else if (lockType === "pattern") {
       const nodes = password.split("-");

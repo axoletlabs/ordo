@@ -92,7 +92,6 @@ export const AVATAR = {
   MIME: "image/webp",
   ALLOWED_TYPES: ["image/jpeg", "image/png", "image/webp"] as const,
 } as const;
-export type AvatarMime = (typeof AVATAR.ALLOWED_TYPES)[number];
 
 export const DEFAULT_PAGE_SIZE = 20;
 export const MAX_PAGE_SIZE = 100;
@@ -127,7 +126,6 @@ export const HIGHLIGHT_MARK_ID_PREFIX = "ordo-hl-";
 
 export const TAG_NAME_MAX_LENGTH = 40;
 export const MAX_TAGS_PER_BOOKMARK = 20;
-export const MAX_TAG_SUGGESTIONS = 3;
 
 /** Stable semantic keys; clients resolve them against their current theme. */
 export const TAG_COLORS = [
@@ -159,7 +157,7 @@ export const FOLDER_PIN_LENGTHS = [4, 6] as const;
 export type FolderPinLength = (typeof FOLDER_PIN_LENGTHS)[number];
 
 export function isFolderPinLength(value: unknown): value is FolderPinLength {
-  return value === 4 || value === 6;
+  return (FOLDER_PIN_LENGTHS as readonly number[]).includes(Number(value));
 }
 
 /**
@@ -278,12 +276,3 @@ export const EXPORT_MIME: Record<ExportFormat, string> = {
 /** What to do when an imported URL already exists in the account. */
 export const DUPLICATE_POLICIES = ["skip", "update", "copy"] as const;
 export type DuplicatePolicy = (typeof DUPLICATE_POLICIES)[number];
-
-/** Query param keys. */
-export const QUERY = {
-  CURSOR: "cursor",
-  LIMIT: "limit",
-  SEARCH: "q",
-  FOLDER_ID: "folderId",
-  TAG_IDS: "tagIds",
-} as const;
