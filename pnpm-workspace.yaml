@@ -42,6 +42,14 @@ overrides:
   nanoid@3: 3.3.18
   brace-expansion@5: 5.0.12
   deepmerge-ts: 8.0.1
+  # CVE audit floors for transitive deps whose parents have not caught up:
+  # compression DoS (>=1.8.2), source-map-js event-loop DoS (>=1.2.2),
+  # proxy-addr IPv4-mapped IP spoofing (>=2.0.8), shell-quote quote()
+  # command injection (>=1.11.0).
+  compression: 1.8.2
+  source-map-js: 1.2.2
+  proxy-addr: 2.0.8
+  shell-quote: 1.11.0
 
 # Only these packages may run install/postinstall scripts. Do not pass
 # --config.dangerouslyAllowAllBuilds=true; add a package here instead.
