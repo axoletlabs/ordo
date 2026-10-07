@@ -20,9 +20,24 @@ runs:
   steps:
     - name: Setup pnpm
       uses: pnpm/action-setup@v5
+      with:
+        # Audit-only jobs never create a pnpm store; both actions must skip
+        # their store cache or the post steps fail saving a missing path.
+        package-manager-cache: ${{ inputs.pnpm-cache == 'true' }}
 
-    - name: Setup Node.js
+    - name: Setup Node.js (pnpm store cache)
+      if: inputs.pnpm-cache == 'true'
       uses: actions/setup-node@v5
       with:
         node-version: ${{ inputs.node-version }}
-        cache: ${{ inputs.pnpm-cache == 'true' && 'pnpm' || '' }}
+        cache: pnpm
+
+    # When caching is off, `cache` must be omitted entirely. Passing an
+    # expression that evaluates to '' resolves to `cache: false`, and
+    # setup-node's post step still runs the save logic, failing with
+    # "Path Validation Error" on the store that was never created.
+    - name: Setup Node.js
+      if: inputs.pnpm-cache != 'true'
+      uses: actions/setup-node@v5
+      with:
+        node-version: ${{ inputs.node-version }}
