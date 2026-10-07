@@ -230,6 +230,10 @@ async function polishMatrix() {
     await navigate(page, "reader/article");
     assert.equal((await header.boundingBox()).height, 64);
     await hoverControl(button(page, "example.test"), "reader-url-hover");
+    const urlLayer = await button(page, "example.test").getByTestId("material-state-layer").boundingBox();
+    const urlText = await button(page, "example.test").locator("div").first().boundingBox();
+    assert.ok(urlText.x - urlLayer.x >= 11.5 && urlLayer.x + urlLayer.width - (urlText.x + urlText.width) >= 11.5,
+      `URL text must be inset inside the hover cap, not flush: text ${urlText.x}..${urlText.x + urlText.width} vs layer ${urlLayer.x}..${urlLayer.x + urlLayer.width}`);
     await hoverControl(button(page, "More article actions"), "reader-overflow-hover");
     await button(page, "More article actions").click();
     await page.getByRole("menuitem", { name: "Open original", exact: true }).click(); await settle(page);

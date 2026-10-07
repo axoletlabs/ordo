@@ -54,7 +54,7 @@ export function Header({ title, subtitle, showBack, onBack, right, large, safeTo
         {!expanded ? <View style={styles.title}>
           {onTitleLongPress ? <PressableScale onLongPress={onTitleLongPress} accessibilityRole="button"
             accessibilityLabel={title} accessibilityHint={titleAccessibilityHint}
-            style={{ minHeight: 48, justifyContent: "center", borderRadius: variant === "tonal" ? radius.full : radius.sm }}>{titleText}</PressableScale> : titleText}
+            style={{ minHeight: 48, justifyContent: "center", paddingHorizontal: variant === "tonal" ? spacing[12] : spacing[4], borderRadius: variant === "tonal" ? radius.full : radius.sm }}>{titleText}</PressableScale> : titleText}
           {subtitle ? <Text variant="bodySmall" color="secondary" numberOfLines={1}>{subtitle}</Text> : null}
         </View> : <View style={{ flex: 1 }} />}
         {right}

@@ -84,7 +84,7 @@ export const fontWeight = {
 // by name string. "book" (Libron) and "legible" (NV Legible Next) are the
 // reader's reading typefaces; sans/mono drive app UI and code respectively.
 
-export type FontFamily = "display" | "sans" | "mono" | "book" | "legible";
+export type FontFamily = "display" | "sans" | "mono" | "book" | "legible" | "garamond" | "bitter" | "jost";
 
 const FONTS = {
   display: {
@@ -122,6 +122,33 @@ const FONTS = {
     "700": "NVLegibleNext_700Bold",
     "400-italic": "NVLegibleNext_400Regular_Italic",
     "700-italic": "NVLegibleNext_700BoldItalic",
+  },
+  // NV Garamond (EB Garamond) — classic old-style, "premium hardback" feel.
+  garamond: {
+    "400": "NVGaramond_400Regular",
+    "500": "NVGaramond_400Regular",
+    "600": "NVGaramond_700Bold",
+    "700": "NVGaramond_700Bold",
+    "400-italic": "NVGaramond_400Regular_Italic",
+    "700-italic": "NVGaramond_700BoldItalic",
+  },
+  // NV Bitter — contemporary slab serif.
+  bitter: {
+    "400": "NVBitter_400Regular",
+    "500": "NVBitter_700Bold",
+    "600": "NVBitter_700Bold",
+    "700": "NVBitter_700Bold",
+    "400-italic": "NVBitter_400Regular_Italic",
+    "700-italic": "NVBitter_700BoldItalic",
+  },
+  // NV Jost — Futura-like geometric sans.
+  jost: {
+    "400": "NVJost_400Regular",
+    "500": "NVJost_700Bold",
+    "600": "NVJost_700Bold",
+    "700": "NVJost_700Bold",
+    "400-italic": "NVJost_400Regular_Italic",
+    "700-italic": "NVJost_700BoldItalic",
   },
 } as const;
 
@@ -165,6 +192,18 @@ import NVLegibleNext_400Regular from "../../assets/fonts/NVLegibleNext-Regular.t
 import NVLegibleNext_400Regular_Italic from "../../assets/fonts/NVLegibleNext-Italic.ttf";
 import NVLegibleNext_700Bold from "../../assets/fonts/NVLegibleNext-Bold.ttf";
 import NVLegibleNext_700BoldItalic from "../../assets/fonts/NVLegibleNext-BoldItalic.ttf";
+import NVGaramond_400Regular from "../../assets/fonts/NVGaramond-Regular.ttf";
+import NVGaramond_400Regular_Italic from "../../assets/fonts/NVGaramond-Italic.ttf";
+import NVGaramond_700Bold from "../../assets/fonts/NVGaramond-Bold.ttf";
+import NVGaramond_700BoldItalic from "../../assets/fonts/NVGaramond-BoldItalic.ttf";
+import NVBitter_400Regular from "../../assets/fonts/NVBitter-Regular.ttf";
+import NVBitter_400Regular_Italic from "../../assets/fonts/NVBitter-Italic.ttf";
+import NVBitter_700Bold from "../../assets/fonts/NVBitter-Bold.ttf";
+import NVBitter_700BoldItalic from "../../assets/fonts/NVBitter-BoldItalic.ttf";
+import NVJost_400Regular from "../../assets/fonts/NVJost-Regular.ttf";
+import NVJost_400Regular_Italic from "../../assets/fonts/NVJost-Italic.ttf";
+import NVJost_700Bold from "../../assets/fonts/NVJost-Bold.ttf";
+import NVJost_700BoldItalic from "../../assets/fonts/NVJost-BoldItalic.ttf";
 
 export const fontAssets = {
   ...MaterialIcons.font,
@@ -183,6 +222,18 @@ export const fontAssets = {
   NVLegibleNext_400Regular_Italic,
   NVLegibleNext_700Bold,
   NVLegibleNext_700BoldItalic,
+  NVGaramond_400Regular,
+  NVGaramond_400Regular_Italic,
+  NVGaramond_700Bold,
+  NVGaramond_700BoldItalic,
+  NVBitter_400Regular,
+  NVBitter_400Regular_Italic,
+  NVBitter_700Bold,
+  NVBitter_700BoldItalic,
+  NVJost_400Regular,
+  NVJost_400Regular_Italic,
+  NVJost_700Bold,
+  NVJost_700BoldItalic,
 };
 
 /**
