@@ -24,7 +24,9 @@ export const TagChip = React.memo(function TagChip({ name, color, selected = fal
     borderWidth: 0, borderRadius: expressive ? radius.full : radius.sm },
     inline ? { minHeight: 24, paddingHorizontal: 0, backgroundColor: "transparent", maxWidth: 120 } : null];
   return onPress ? <PressableScale accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? name}
-    accessibilityState={{ selected }} hitSlop={{ top: 8, bottom: 8 }} stateLayerColor={fg} style={style}
+    accessibilityState={{ selected }} hitSlop={{ top: 8, bottom: 8 }} stateLayerColor={fg}
+    shape={expressive ? { rest: radius.full, pressed: radius.md } : undefined}
+    style={style}
     onPress={(event) => { event.stopPropagation(); onPress(); }}>{contents}</PressableScale> : <View style={style}>{contents}</View>;
 });
 const styles = StyleSheet.create({

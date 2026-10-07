@@ -18,7 +18,7 @@ import { runPressAction } from "../../lib/press-action";
 import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { RowIconWell } from "../ui/RowIconWell";
 import { ROW_ICON_GLYPH } from "../../theme/alignment";
-import { layout, radius, spacing } from "../../theme/tokens";
+import { layout, spacing } from "../../theme/tokens";
 import { folderKey, SELECTION_LONG_PRESS_MS, useSelectionHoldGuard } from "../../hooks/use-selection";
 import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
 import { prefetchFolderBookmarks } from "../../hooks/use-bookmarks";
@@ -109,8 +109,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
       collapsable={false}
       onLayout={selectionMode ? () => dragRow.bind(rowRef.current) : undefined}
       style={[styles.wrap, fontScale <= 1 ? { height: 72 } : null, { borderBottomWidth: 0,
-         backgroundColor: expressive ? palette.surfaceContainerLow : "transparent", borderRadius: expressive ? radius.lg : 0,
-        marginBottom: expressive ? spacing[2] : 0, minHeight: 72 }, expressive ? listCorners(position, false) : null]}
+        marginBottom: expressive ? spacing[2] : 0, minHeight: 72, overflow: expressive ? "visible" : "hidden" }]}
       {...(Platform.OS === "web"
         ? {
             onMouseEnter: (event: { target?: unknown; currentTarget?: unknown }) => setHovered(rowOwnsHover(event)),
@@ -129,7 +128,8 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
           }
           : nativeHoverEvents({}, setHovered))}
     >
-      <RowHighlight selected={!!selected || !!highlighted} hovered={hovered} pressed={pressed} />
+      <RowHighlight rest={expressive ? listCorners(position, false) : undefined} expressive={expressive}
+        hovered={hovered} pressed={pressed} selected={!!selected || !!highlighted} />
       <SelectionDragHandle
         selectionKey={folderKey(folder.id)}
         selectionMode={!!selectionMode}

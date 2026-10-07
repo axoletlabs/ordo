@@ -175,9 +175,7 @@ export function SelectionTools({
 
   return (
     <>
-      {active ? (
-        <SelectionActionBar actions={actions} bottom={bottom} maxWidth={maxWidth} />
-      ) : null}
+      <SelectionActionBar actions={actions} bottom={bottom} maxWidth={maxWidth} />
 
       <MoveSheet
         visible={moveOpen}

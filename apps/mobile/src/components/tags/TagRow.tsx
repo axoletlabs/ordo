@@ -65,9 +65,8 @@ export const TagRow = React.memo(function TagRow({
     <View
       ref={rowRef}
       collapsable={false}
-      style={[styles.wrap, { borderBottomWidth: 0,
-        backgroundColor: expressive ? palette.surfaceContainerLow : "transparent", borderRadius: expressive ? radius.xl : 0,
-        marginBottom: expressive ? spacing[2] : 0 }]}
+      style={[styles.wrap, { borderBottomWidth: 0, marginBottom: expressive ? spacing[2] : 0,
+        overflow: expressive ? "visible" : "hidden" }]}
       {...(Platform.OS === "web"
         ? {
             onMouseEnter: (event: { target?: unknown; currentTarget?: unknown }) => setHovered(rowOwnsHover(event)),
@@ -82,7 +81,8 @@ export const TagRow = React.memo(function TagRow({
           }
           : nativeHoverEvents({}, setHovered))}
     >
-      <RowHighlight selected={!!highlighted} hovered={hovered} pressed={pressed} />
+      <RowHighlight rest={expressive ? { borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 } : undefined}
+        expressive={expressive} hovered={hovered} pressed={pressed} selected={!!highlighted} hoverRadius={24} pressRadius={28} />
       <ListPressable
         feedback={false}
         accessibilityRole="button"

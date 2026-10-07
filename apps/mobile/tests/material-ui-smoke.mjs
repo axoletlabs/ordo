@@ -218,7 +218,21 @@ async function polishMatrix() {
     await hoverControl(page.getByRole("button", { name: /^Building a more expressive design system, / }), "bookmark-hover");
     const rowFill = page.getByTestId("material-row-state-layer").nth(1);
     const rowClip = await rowFill.evaluate(node => getComputedStyle(node.parentElement).overflow);
-    assert.equal(rowClip, "hidden");
+    assert.equal(rowClip, expressive ? "visible" : "hidden");
+    if (expressive) {
+      const surface = page.getByTestId("material-row-surface").nth(1);
+      const atRestRaw = await surface.evaluate(node => ({ raw: getComputedStyle(node).borderBottomLeftRadius,
+        display: getComputedStyle(node).display, inline: (node.getAttribute("style") || "").slice(0, 120),
+        rect: JSON.stringify(node.getBoundingClientRect()) }));
+      const atRest = parseFloat(atRestRaw.raw);
+      await page.getByRole("button", { name: /^Building a more expressive design system, / }).hover(); await settle(page);
+      const lifted = await surface.evaluate(node => ({ r: getComputedStyle(node).borderBottomLeftRadius,
+        inline: (node.getAttribute("style") || "").match(/border[^;]*;?/g)?.join(" ") ?? "" }));
+      assert.ok(parseFloat(lifted.r) > atRest + 8, `expressive rows must morph under the pointer: rest ${JSON.stringify(atRestRaw)} -> hover ${JSON.stringify(lifted)}`);
+      await page.mouse.move(0, 0); await settle(page);
+      const settled = await surface.evaluate(node => parseFloat(getComputedStyle(node).borderBottomLeftRadius));
+      assert.ok(settled < atRest + 2, `expressive rows must spring back after hover: ${settled}`);
+    }
     await hoverControl(button(page, "Show bookmarks tagged Design"), "nested-tag-hover");
     assert.ok(await rowFill.evaluate(node => +getComputedStyle(node).opacity < 0.001), "Nested chip must not also hover the whole row");
     await navigate(page, "settings");
@@ -283,6 +297,12 @@ async function polishMatrix() {
     const folderRow = page.getByRole("checkbox", { name: /^Design & inspiration, / });
     await sampleToggle(folderRow, "mixed-selection");
     assert.equal(await folderRow.getAttribute("aria-checked"), "true");
+    await sampleToggle(folderRow, "deselect-folder");
+    assert.equal(await folderRow.getAttribute("aria-checked"), "false");
+    await settle(page);
+    const deleteAfterPurge = await deleting.boundingBox();
+    assert.ok(Math.abs(deleteAfterPurge.width - deleteBox.width) < 1.1,
+      `stale toolbar slots must purge after a set change: delete width ${deleteAfterPurge.width} vs ${deleteBox.width}`);
     for (const viewport of [{ name: "portrait", width: 390, height: 844 }, { name: "landscape", width: 1280, height: 800 }, { name: "constrained", width: 320, height: 420 }]) {
       await page.setViewportSize(viewport); await hoverControl(deleting, `selection-delete-hover-${viewport.name}`);
       await capture(page, `${mode}-selection-${viewport.name}`);
