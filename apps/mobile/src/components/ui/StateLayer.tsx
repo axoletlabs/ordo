@@ -6,8 +6,10 @@ import { alphaTint, stateLayerCorners } from "../../theme/state-layer";
 /**
  * Visibility fade for state feedback. The alpha lives in the color, so the
  * element never rests at a sub-1 opacity (which distorts its radius clip).
+ * Use a fixed JS driver when the view also has JS-driven animated styles:
+ * making any part of its Animated graph native promotes the other values too.
  */
-export function useStateVisibility(active: boolean) {
+export function useStateVisibility(active: boolean, useNativeDriver = Platform.OS !== "web") {
   const { reducedMotion } = useMaterialMotion();
   const opacity = useRef(new Animated.Value(active ? 1 : 0)).current;
   const previous = useRef({ active, reducedMotion });
@@ -16,10 +18,10 @@ export function useStateVisibility(active: boolean) {
     previous.current = { active, reducedMotion };
     if (reducedMotion) { opacity.stopAnimation(); opacity.setValue(active ? 1 : 0); return; }
     const animation = Animated.spring(opacity, { toValue: active ? 1 : 0, ...materialMotion.effects.fast,
-      useNativeDriver: Platform.OS !== "web", isInteraction: false });
+      useNativeDriver, isInteraction: false });
     animation.start();
     return () => animation.stop();
-  }, [opacity, reducedMotion, active]);
+  }, [opacity, reducedMotion, active, useNativeDriver]);
   return opacity;
 }
 

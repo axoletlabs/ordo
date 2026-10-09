@@ -18,8 +18,10 @@ export function RowHighlight({ rest, expressive, hovered, pressed, selected, hov
 }) {
   const { palette } = useTheme();
   const { reducedMotion } = useMaterialMotion();
-  const selection = useStateVisibility(selected);
-  const feedback = useStateVisibility(pressed || hovered);
+  // Opacity shares each view's graph with the JS-driven corner morph. Keep
+  // both on JS, even in Standard mode, so toggling Expressive stays safe.
+  const selection = useStateVisibility(selected, false);
+  const feedback = useStateVisibility(pressed || hovered, false);
   const lift = useRowLift({ expressive, hovered, pressed, hoverRadius, pressRadius, reducedMotion });
   const morph = expressive && rest ? rowCornerStyle(lift, rest) : null;
   // Static rest corners under the interpolations: before the first animation
