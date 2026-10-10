@@ -12,7 +12,7 @@ import {
   type ViewStyle,
   type PressableProps,
 } from "react-native";
-import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withDelay, withTiming } from "react-native-reanimated";
+import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useMaterialMotion } from "../../theme/material-motion";
 import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { AppIcon } from "./PinIcon";
@@ -91,43 +91,43 @@ function ContextMenuSurface({
   const contentHeightRef = React.useRef(0);
   const retainedHeight = React.useRef(0);
   const pageProgress = useSharedValue(1);
-  const leavingProgress = useSharedValue(1);
-  // Snapshot of the outgoing page while a fade-through hands off to the
+  const pageLeaving = useSharedValue(0);
+  // Outgoing content held in place while a fade-through hands off to the
   // next page. The menu surface keeps its size; only the content swaps.
-  const [leavingPage, setLeavingPage] = React.useState<React.ReactNode>(null);
-  const leavingPageRef = React.useRef<React.ReactNode>(null);
+  const [displayed, setDisplayed] = React.useState<React.ReactNode>(null);
   const motion = useMaterialMotion();
   const lastPage = React.useRef(pageKey);
+  // Swap the frozen outgoing page for the incoming one only after the
+  // surface has fully faded: the shared value is already applied at 0, so
+  // neither page can flash mid-frame no matter when styles land.
+  const settlePageSwap = React.useCallback((key: string | undefined) => {
+    if (key !== lastPage.current) return;
+    pageLeaving.value = 0;
+    setDisplayed(null);
+    pageProgress.value = 0;
+    pageProgress.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) });
+  }, [pageProgress]);
   React.useLayoutEffect(() => {
     if (!visible || pageKey === lastPage.current) return;
     lastPage.current = pageKey;
     if (motion.reducedMotion) {
+      pageLeaving.value = 0;
       pageProgress.value = 1;
-      leavingPageRef.current = null;
+      setDisplayed(null);
       return;
     }
-    // Material fade-through: the outgoing page fades out in place, then the
-    // new page fades in with a small settle. Direction-free, so opening a
-    // nested page reads the same as coming back.
-    const outgoing = leavingPageRef.current;
-    leavingPageRef.current = null;
-    setLeavingPage(outgoing ?? null);
-    if (outgoing) {
-      leavingProgress.value = 1;
-      leavingProgress.value = withTiming(0, { duration: 100, easing: Easing.in(Easing.quad) }, (finished) => {
-        if (finished) runOnJS(setLeavingPage)(null);
-      });
-    }
-    pageProgress.value = 0;
-    pageProgress.value = withDelay(outgoing ? 100 : 0, withTiming(1, { duration: outgoing ? 200 : 160, easing: Easing.out(Easing.quad) }));
-  }, [visible, pageKey, pageProgress, leavingProgress, motion.reducedMotion]);
+    // Material fade-through: fade the current page out in place, swap to
+    // the next page while the surface is empty, then fade it in with a
+    // small settle. Direction-free, so opening a nested page reads the
+    // same as coming back.
+    pageLeaving.value = 1;
+    pageProgress.value = withTiming(0, { duration: 100, easing: Easing.in(Easing.quad) }, (finished) => {
+      if (finished) runOnJS(settlePageSwap)(pageKey);
+    });
+  }, [visible, pageKey, pageProgress, settlePageSwap, motion.reducedMotion]);
   const pageStyle = useAnimatedStyle(() => ({
     opacity: pageProgress.value,
-    ...(Platform.OS !== "web" ? { transform: [{ translateX: (1 - pageProgress.value) * 8 }] } : {}),
-  }));
-  const leavingStyle = useAnimatedStyle(() => ({
-    opacity: leavingProgress.value,
-    ...(Platform.OS !== "web" ? { transform: [{ translateX: -8 * (1 - leavingProgress.value) }] } : {}),
+    ...(Platform.OS !== "web" ? { transform: [{ translateX: (pageLeaving.value ? -8 : 8) * (1 - pageProgress.value) }] } : {}),
   }));
   const lastPlacement = React.useRef<MenuPlacement | null>(null);
   const placementLock = React.useRef<MenuPlacement | null>(null);
@@ -136,10 +136,10 @@ function ContextMenuSurface({
   const layoutKeyRef = React.useRef("");
   const lastChildren = React.useRef(children);
   const lastPageRender = React.useRef(pageKey);
-  if (visible && pageKey !== lastPageRender.current) {
-    // Snapshot the outgoing page before the children swap so the ghost
-    // layer can fade it out during the page handoff.
-    leavingPageRef.current = lastChildren.current;
+  if (visible && wasVisibleRef.current && pageKey !== lastPageRender.current) {
+    // Freeze the outgoing page in place while the fade-through empties the
+    // surface; the swap to the new page happens in `settlePageSwap`.
+    if (lastChildren.current !== children) setDisplayed(lastChildren.current);
   }
   if (visible) lastChildren.current = children;
   lastPageRender.current = pageKey;
@@ -164,9 +164,10 @@ function ContextMenuSurface({
       sessionSide.current = null;
       if (contentHeight !== 0) setContentHeight(0);
     }
-    // A new open never inherits a page ghost from a previous session.
-    leavingPageRef.current = null;
-    if (leavingPage !== null) setLeavingPage(null);
+    // A new open never inherits a page handoff from a previous session.
+    pageLeaving.value = 0;
+    pageProgress.value = 1;
+    if (displayed !== null) setDisplayed(null);
   }
   wasVisibleRef.current = visible;
 
@@ -274,14 +275,9 @@ function ContextMenuSurface({
             >
               <Animated.View style={[{ flexShrink: 1, ...(pageHeight != null ? { flex: 1 } : {}) }, pageStyle]}>
               {scrollBody ? <ThemedScrollView bounces={false} keyboardShouldPersistTaps="handled" style={pageHeight != null ? { flex: 1 } : { maxHeight: Math.max(48, placed.maxHeight - menuPadding * 2) }}>
-                {visible ? children : lastChildren.current}
-              </ThemedScrollView> : visible ? children : lastChildren.current}
+                {displayed ?? (visible ? children : lastChildren.current)}
+              </ThemedScrollView> : displayed ?? (visible ? children : lastChildren.current)}
               </Animated.View>
-              {leavingPage != null ? (
-                <Animated.View pointerEvents="none" aria-hidden style={[StyleSheet.absoluteFill, leavingStyle]}>
-                  {leavingPage}
-                </Animated.View>
-              ) : null}
             </View>
         </Animated.View>
       </View>
