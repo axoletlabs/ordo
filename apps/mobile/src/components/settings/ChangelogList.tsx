@@ -692,7 +692,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[6],
-    minHeight: 32,
+    minHeight: 48,
     paddingHorizontal: spacing[10],
     borderRadius: radius.full,
     borderWidth: StyleSheet.hairlineWidth,

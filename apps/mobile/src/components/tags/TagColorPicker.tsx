@@ -1,6 +1,7 @@
 /** Grid of curated tag colors (semantic keys from @ordo/shared). */
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
+import { useRadioGroupKeys } from "../../hooks/use-radio-group-keys";
 import { PressableScale } from "../ui/PressableScale";
 import { MaterialIcon } from "../ui/MaterialIcon";
 import { TAG_COLORS, type TagColor } from "@ordo/shared";
@@ -17,17 +18,19 @@ export function TagColorPicker({
   onChange: (color: TagColor) => void;
 }) {
   const { palette, expressive } = useTheme();
+  const keys = useRadioGroupKeys(TAG_COLORS, onChange, 4);
 
   return (
-    <View style={styles.grid}>
+     <View {...keys} accessibilityRole="radiogroup" accessibilityLabel="Tag color" style={styles.grid}>
       {TAG_COLORS.map((color) => {
         const selected = color === value;
         return (
           <PressableScale
             key={color}
-            accessibilityRole="button"
+            accessibilityRole="radio"
             accessibilityLabel={color}
-            accessibilityState={{ selected }}
+            accessibilityState={{ checked: selected }}
+            {...(Platform.OS === "web" ? { tabIndex: selected ? 0 : -1 } : {})}
             onPress={() => {
               haptics.selection();
               onChange(color);

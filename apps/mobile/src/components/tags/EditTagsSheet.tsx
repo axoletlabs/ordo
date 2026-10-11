@@ -11,7 +11,7 @@ import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { PanelActions } from "../ui/SheetActionRow";
 import { Text } from "../ui/Text";
-import { PressableScale } from "../ui/PressableScale";
+import { IconButton } from "../ui/IconButton";
 import { TagChip } from "./TagChip";
 import { TagSelectList } from "./TagSelectList";
 import { CreateTagPanel } from "./CreateTagPanel";
@@ -187,15 +187,7 @@ function PressableIconButton({
   onPress: () => void;
 }) {
   return (
-    <PressableScale
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      onPress={onPress}
-      hitSlop={8}
-      scaleTo={0.85}
-    >
-      <Ionicons name={icon} size={16} color={color} />
-    </PressableScale>
+    <IconButton name={icon} variant="standard" color={color} accessibilityLabel={label} onPress={onPress} />
   );
 }
 
@@ -205,6 +197,7 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: "row", gap: spacing[8], paddingVertical: spacing[6], flexWrap: "wrap" },
   chipWrap: { flexDirection: "row", gap: spacing[8], flexWrap: "wrap", marginTop: spacing[6] },
   suggestionChip: {
+    flexWrap: "wrap",
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[4],

@@ -1,6 +1,6 @@
 /** Shared Material state layer and interruptible Expressive shape morph. */
 import React, { useEffect, useRef, useState } from "react";
-import { Platform, Pressable, StyleSheet, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
+import { Platform, Pressable, StyleSheet, View, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, type AnimatedStyle } from "react-native-reanimated";
 import { useTheme } from "../../theme/ThemeProvider";
 import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
@@ -21,6 +21,8 @@ export type PressableScaleProps = Omit<PressableProps, "style"> & {
   scaleTo?: number;
   dim?: boolean;
   style?: StyleProp<AnimatedStyle<ViewStyle>>;
+  /** Paint a smaller control inside its real (not hitSlop-only) interaction target. */
+  visualStyle?: StyleProp<ViewStyle>;
   /** Explicit shape mapping prevents arbitrary components from morphing. */
   shape?: { rest: CornerShape; pressed: CornerShape };
   stateLayerColor?: string;
@@ -39,7 +41,7 @@ export function PressableScale(props: PressableScaleProps) {
 }
 
 /** Ordinary actions need a state layer, not shared values and mount-time springs. */
-function StatePressable({ style, children, disabled, stateLayerColor, stateLayerInset = 0, focusOnlyVisible = true,
+function StatePressable({ style, visualStyle, children, disabled, stateLayerColor, stateLayerInset = 0, focusOnlyVisible = true,
   onPressIn, onPressOut, onHoverIn, onHoverOut, onFocus, onBlur,
   shape: _shape, scaleTo: _scaleTo, dim: _dim, animated: _animated, ...rest }: PressableScaleProps) {
   const { palette } = useTheme();
@@ -68,14 +70,17 @@ function StatePressable({ style, children, disabled, stateLayerColor, stateLayer
     onBlur={(event) => { setFocused(false); setFocusVisible(false); group?.(false); onBlur?.(event); }}
     style={[style as StyleProp<ViewStyle>, { position: flat?.position ?? "relative" },
       focusVisible && !disabled ? { outlineColor: palette.primary, outlineWidth: 3, outlineOffset: 2, outlineStyle: "solid" } : null]}>
-    {(state) => <>{typeof children === "function" ? children(state) : children}
-      <StateLayer color={tint} surfaceStyle={style as StyleProp<ViewStyle>} inset={stateLayerInset}
-        fraction={stateLayerOpacity({ disabled, pressed: state.pressed, focused: focusLayer, hovered })} /></>}
+    {(state) => {
+      const contents = <>{typeof children === "function" ? children(state) : children}
+        <StateLayer color={tint} surfaceStyle={visualStyle ?? style as StyleProp<ViewStyle>} inset={stateLayerInset}
+          fraction={stateLayerOpacity({ disabled, pressed: state.pressed, focused: focusLayer, hovered })} /></>;
+      return visualStyle ? <View pointerEvents="box-none" style={visualStyle}>{contents}</View> : contents;
+    }}
   </Pressable>;
 }
 
 function AnimatedStatePressable({
-  scaleTo = 1, dim = false, style, children, disabled, onPressIn, onPressOut,
+  scaleTo = 1, dim = false, style, visualStyle, children, disabled, onPressIn, onPressOut,
   onHoverIn, onHoverOut, onFocus, onBlur, shape, stateLayerColor, stateLayerInset = 0, focusOnlyVisible = true, animated: _animated, ...rest
 }: PressableScaleProps) {
   const { palette } = useTheme();
@@ -89,7 +94,8 @@ function AnimatedStatePressable({
   useEffect(() => () => { if (releaseFrame.current != null) cancelAnimationFrame(releaseFrame.current); }, []);
   const progress = useSharedValue(0);
   const layer = useSharedValue(0);
-  const flat = StyleSheet.flatten(style as StyleProp<ViewStyle>);
+  const targetStyle = StyleSheet.flatten(style as StyleProp<ViewStyle>);
+  const flat = StyleSheet.flatten(visualStyle ?? style as StyleProp<ViewStyle>);
   const background = useSharedValue(typeof flat?.backgroundColor === "string" ? flat.backgroundColor : "transparent");
   const backgroundColor = flat?.backgroundColor;
   const focusLayer = focused && (!focusOnlyVisible || Platform.OS !== "web" || focusVisible);
@@ -123,6 +129,12 @@ function AnimatedStatePressable({
     opacity: dim ? 1 - Math.max(0, Math.min(1, progress.value)) * 0.12 : flat?.opacity ?? 1,
   }));
   const layerStyle = useAnimatedStyle(() => ({ opacity: layer.value }));
+  const contents = <>
+    {typeof children === "function" ? children({ pressed: down }) : children}
+    <Animated.View testID="material-state-layer" pointerEvents="none" accessible={false} style={[{ position: "absolute", top: stateLayerInset, bottom: stateLayerInset, left: stateLayerInset, right: stateLayerInset }, stateLayerCorners(flat), {
+      overflow: "hidden", backgroundColor: alphaTint(stateLayerColor ?? palette.onSurface, fraction),
+    }, cornerStyle, layerStyle]} />
+  </>;
   return (
     <AnimatedPressable
       {...rest}
@@ -152,13 +164,9 @@ function AnimatedStatePressable({
         onFocus?.(event);
       }}
       onBlur={(event) => { setFocused(false); setFocusVisible(false); setDown(false); groupInteraction?.(false); onBlur?.(event); }}
-      style={[style, { position: flat?.position ?? "relative" }, Platform.OS === "web" && focusVisible && !disabled ? { outlineColor: palette.primary, outlineWidth: 3, outlineOffset: 2, outlineStyle: "solid" } : null, backgroundStyle, cornerStyle, feedback]}
+       style={[style, { position: targetStyle?.position ?? "relative" }, Platform.OS === "web" && focusVisible && !disabled ? { outlineColor: palette.primary, outlineWidth: 3, outlineOffset: 2, outlineStyle: "solid" } : null, !visualStyle ? backgroundStyle : null, !visualStyle ? cornerStyle : null, feedback]}
     >
-      {typeof children === "function" ? children({ pressed: down }) : children}
-      <Animated.View testID="material-state-layer" pointerEvents="none" accessible={false} style={[{ position: "absolute", top: stateLayerInset, bottom: stateLayerInset, left: stateLayerInset, right: stateLayerInset }, stateLayerCorners(flat), {
-        overflow: "hidden",
-        backgroundColor: alphaTint(stateLayerColor ?? palette.onSurface, fraction),
-      }, cornerStyle, layerStyle]} />
+      {visualStyle ? <Animated.View pointerEvents="box-none" style={[visualStyle, backgroundStyle, cornerStyle]}>{contents}</Animated.View> : contents}
     </AnimatedPressable>
   );
 }

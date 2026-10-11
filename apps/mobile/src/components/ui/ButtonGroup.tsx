@@ -17,7 +17,7 @@ export function ButtonGroup({ children, itemWidth = 48, visualInset = 4, gap = 4
   return <View style={[{ flexDirection: "row", alignItems: "center", gap }, style]}>
     {items.map((child, index) => {
       const neighbors = pressedIndex === 0 || pressedIndex === items.length - 1 ? 1 : 2;
-      const change = !motion.expressive || motion.reducedMotion || pressedIndex == null || items.length < 2 ? 0
+       const change = motion.reducedMotion || pressedIndex == null || items.length < 2 ? 0
         : index === pressedIndex ? growth : Math.abs(index - pressedIndex) === 1 ? -growth / neighbors : 0;
       return <GroupItem key={React.isValidElement(child) ? child.key ?? index : index} width={itemWidth + change}
         onInteraction={(pressed) => setPressedIndex((current) => pressed ? index : current === index ? null : current)}>{child}</GroupItem>;

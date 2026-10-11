@@ -10,9 +10,9 @@ import { radius, spacing } from "../../theme/tokens";
 import { tagColorValue } from "../../lib/tag-colors";
 export interface TagChipProps {
   name: string; color: TagColor; selected?: boolean; count?: number; compact?: boolean; inline?: boolean;
-  onPress?: () => void; accessibilityLabel?: string;
+   onPress?: () => void; accessibilityLabel?: string; selectable?: boolean;
 }
-export const TagChip = React.memo(function TagChip({ name, color, selected = false, count, compact = false, inline = false, onPress, accessibilityLabel }: TagChipProps) {
+export const TagChip = React.memo(function TagChip({ name, color, selected = false, count, compact = false, inline = false, onPress, accessibilityLabel, selectable = false }: TagChipProps) {
   const { palette, expressive } = useTheme();
   const fg = selected ? palette.onSecondaryContainer : palette.onSurfaceVariant;
   const contents = <>
@@ -23,10 +23,11 @@ export const TagChip = React.memo(function TagChip({ name, color, selected = fal
   const style = [styles.chip, { minHeight: compact ? 32 : 40, flexShrink: 1, backgroundColor: selected ? palette.secondaryContainer : palette.surfaceContainerHigh,
     borderWidth: 0, borderRadius: expressive ? radius.full : radius.sm },
     inline ? { minHeight: 24, paddingHorizontal: 0, backgroundColor: "transparent", maxWidth: 120 } : null];
-  return onPress ? <PressableScale accessibilityRole="button" accessibilityLabel={accessibilityLabel ?? name}
-    accessibilityState={{ selected }} hitSlop={{ top: 8, bottom: 8 }} stateLayerColor={fg}
+   return onPress ? <PressableScale accessibilityRole={selectable ? "checkbox" : "button"} accessibilityLabel={accessibilityLabel ?? name}
+     accessibilityState={selectable ? { checked: selected } : undefined} stateLayerColor={fg}
     shape={expressive ? { rest: radius.full, pressed: radius.md } : undefined}
-    style={style}
+     style={{ minHeight: 48, minWidth: 48, maxWidth: inline ? 120 : 200, alignSelf: "flex-start", justifyContent: "center", flexShrink: 1 }}
+     visualStyle={style}
     onPress={(event) => { event.stopPropagation(); onPress(); }}>{contents}</PressableScale> : <View style={style}>{contents}</View>;
 });
 const styles = StyleSheet.create({

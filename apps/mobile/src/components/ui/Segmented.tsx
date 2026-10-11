@@ -27,12 +27,14 @@ export interface SegmentedProps<T extends string> {
   options: readonly { value: T; label: string; accessibilityLabel?: string; labelStyle?: TextStyle }[]; value: T; onChange: (value: T) => void;
   accessibilityLabel?: string;
   orientation?: "horizontal" | "vertical";
+  disabled?: boolean;
 }
-export function Segmented<T extends string>({ options, value, onChange, accessibilityLabel, orientation = "horizontal" }: SegmentedProps<T>) {
+export function Segmented<T extends string>({ options, value, onChange, accessibilityLabel, orientation = "horizontal", disabled = false }: SegmentedProps<T>) {
   const { palette, expressive } = useTheme();
   const vertical = orientation === "vertical";
   const keyboardProps = Platform.OS === "web" ? {
     onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (disabled) return;
       const radios = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]'));
       const focused = radios.indexOf(event.target as HTMLElement);
       if (focused < 0) return;
@@ -55,7 +57,7 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
   }]}>
     {options.map((option, index) => {
       const selected = value === option.value;
-      const fg = selected ? expressive ? palette.onSecondary : palette.onSecondaryContainer : palette.onSurface;
+      const fg = disabled ? `${palette.onSurface}61` : selected ? expressive ? palette.onSecondary : palette.onSecondaryContainer : palette.onSurface;
       const outer = vertical ? 24 : 20;
       const first = index === 0, last = index === options.length - 1;
       const ends = { topLeft: first, bottomLeft: vertical ? last : first, topRight: vertical ? first : last, bottomRight: last };
@@ -66,13 +68,14 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
       const outline = corners(0);
       return <PressableScale key={option.value} accessibilityRole="radio" accessibilityLabel={option.accessibilityLabel ?? option.label}
         {...(Platform.OS === "web" ? { tabIndex: selected ? 0 : -1 } : {})}
-        accessibilityState={{ checked: selected }} onPress={() => { if (!selected) { haptics.selection(); onChange(option.value); } }}
-        stateLayerColor={fg} hitSlop={vertical ? undefined : { top: 4, bottom: 4 }} shape={expressive ? { rest, pressed } : undefined}
-        style={[styles.option, {
+        disabled={disabled} accessibilityState={{ checked: selected, disabled }} onPress={() => { if (!selected && !disabled) { haptics.selection(); onChange(option.value); } }}
+        stateLayerColor={fg} shape={expressive ? { rest, pressed } : undefined}
+        style={[styles.option, vertical ? { flex: 0, width: "100%" } : null]}
+        visualStyle={[styles.visual, {
           height: vertical ? 48 : 40,
           ...(vertical ? { flex: 0, flexShrink: 0, minHeight: 48, width: "100%" as const } : {}),
-          backgroundColor: selected ? expressive ? palette.secondary : palette.secondaryContainer : expressive ? palette.surfaceContainerLow : "transparent",
-          borderColor: palette.outline,
+          backgroundColor: disabled ? selected ? `${palette.onSurface}1f` : "transparent" : selected ? expressive ? palette.secondary : palette.secondaryContainer : expressive ? palette.surfaceContainerLow : "transparent",
+          borderColor: disabled ? `${palette.onSurface}1f` : palette.outline,
           borderTopWidth: expressive || vertical && !first ? 0 : 1, borderBottomWidth: expressive ? 0 : 1,
           borderLeftWidth: expressive || !vertical && !first ? 0 : 1, borderRightWidth: expressive ? 0 : 1,
           ...(!expressive ? { borderTopLeftRadius: outline.topLeft, borderBottomLeftRadius: outline.bottomLeft,
@@ -84,6 +87,7 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
   </View></View>;
 }
 const styles = StyleSheet.create({
-  group: { flexDirection: "row", height: 40 },
-  option: { flex: 1, minWidth: 48, height: 40, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 12 },
+   group: { flexDirection: "row", minHeight: 48 },
+   option: { flex: 1, minWidth: 48, minHeight: 48, justifyContent: "center" },
+   visual: { alignSelf: "stretch", height: 40, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 12 },
 });

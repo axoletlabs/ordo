@@ -16,11 +16,11 @@ export function IconButton({ name, variant = "tonal", color, style, ...props }: 
     : variant === "tonal" ? palette.onSecondaryContainer : color ?? palette.onSurfaceVariant;
   const background = props.disabled && (variant === "filled" || variant === "tonal") ? `${palette.onSurface}1f` : variant === "filled" ? palette.primary
     : variant === "tonal" ? palette.secondaryContainer : "transparent";
-  return <View style={[{ width: grouped ? "100%" : 48, height: 48, padding: 4, flexShrink: 0 }, style]}>
+   return <View style={[{ width: grouped ? "100%" : 48, height: 48, flexShrink: 0 }, style]}>
     <PressableScale {...props} accessibilityRole={props.accessibilityRole ?? "button"}
     stateLayerColor={foreground} shape={{ rest: 20, pressed: expressive ? 8 : 20 }}
-    hitSlop={props.hitSlop ?? 4}
-    style={{ width: "100%", height: 40, borderRadius: 20,
+    style={{ width: "100%", height: 48, borderRadius: 24, justifyContent: "center" }}
+    visualStyle={{ alignSelf: "stretch", marginHorizontal: 4, height: 40, borderRadius: 20,
       backgroundColor: background, borderWidth: variant === "outlined" ? 1 : 0, borderColor: palette.outline,
       alignItems: "center", justifyContent: "center" }}>
     <MaterialIcon name={name} size={24} color={foreground} />

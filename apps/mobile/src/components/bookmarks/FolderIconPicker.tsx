@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
+import { useRadioGroupKeys } from "../../hooks/use-radio-group-keys";
 import { ListPressable } from "../ui/ListPressable";
 import { ThemedFlatList } from "../ui/ThemedScrollView";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
@@ -30,17 +31,18 @@ export function FolderIconPicker({
       icon={value} onPress={() => { dismissKeyboard(); setOpen(true); onOpenChange?.(true); }} />
     <FloatingPanel visible={open} onDismiss={close} scrollBody={false}>
       <PanelHeader title="Folder icon" onClose={close} />
-      <FolderIconGrid value={value} onChange={(icon) => { onChange(icon); close(); }} />
+       <FolderIconGrid value={value} onChange={onChange} onConfirm={close} />
     </FloatingPanel>
     </>
   );
 }
 
-export function FolderIconGrid({ value, onChange }: { value: FolderIcon; onChange: (icon: FolderIcon) => void }) {
+export function FolderIconGrid({ value, onChange, onConfirm }: { value: FolderIcon; onChange: (icon: FolderIcon) => void; onConfirm?: () => void }) {
   const { palette, expressive } = useTheme();
-  return <View accessibilityRole="radiogroup" accessibilityLabel="Folder icon" style={{ flexShrink: 1 }}>
+   const keys = useRadioGroupKeys(FOLDER_ICONS, onChange, 5);
+   return <View {...keys} accessibilityRole="radiogroup" accessibilityLabel="Folder icon" style={{ flexShrink: 1 }}>
       <ThemedFlatList data={FOLDER_ICONS} numColumns={5} keyExtractor={(icon) => icon}
-        extraData={value} initialNumToRender={20} maxToRenderPerBatch={20} windowSize={3}
+         extraData={value} initialNumToRender={Platform.OS === "web" ? FOLDER_ICONS.length : 20} maxToRenderPerBatch={20} windowSize={3}
         style={{ maxHeight: 336, flexShrink: 1 }} keyboardShouldPersistTaps="handled"
         renderItem={({ item: icon }) => {
         const selected = icon === value;
@@ -49,9 +51,11 @@ export function FolderIconGrid({ value, onChange }: { value: FolderIcon; onChang
             accessibilityRole="radio"
             accessibilityLabel={icon.replace(/-outline$/, "").replace(/-/g, " ")}
             accessibilityState={{ checked: selected }}
+            {...(Platform.OS === "web" ? { tabIndex: selected ? 0 : -1 } : {})}
             onPress={() => {
               haptics.selection();
               onChange(icon);
+              onConfirm?.();
             }}
             style={[
               styles.icon,

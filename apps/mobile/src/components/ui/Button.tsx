@@ -7,7 +7,7 @@ import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "tonal" | "elevated";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "danger" | "tonal" | "elevated" | "outlined";
 export type ButtonSize = "xs" | "sm" | "md" | "lg" | "xl";
 const sizes = {
   xs: { height: 32, padding: 12, pressed: 8, font: 14, icon: 18 },
@@ -37,12 +37,12 @@ export function Button({ label, onPress, variant = "primary", size = "sm", loadi
   return <View style={[{ minHeight: 48, minWidth: 48, justifyContent: "center", ...(block ? { width: "100%" as const } : {}) }, style]}>
     <PressableScale testID={testID} disabled={inactive} accessibilityRole="button" accessibilityLabel={label}
       accessibilityState={{ disabled: inactive, busy: loading }} stateLayerColor={foreground}
-      hitSlop={{ top: Math.max(0, (48 - tokens.height) / 2), bottom: Math.max(0, (48 - tokens.height) / 2) }}
       shape={{ rest: tokens.height / 2, pressed: expressive ? tokens.pressed : tokens.height / 2 }}
       onPress={() => { haptics.light(); onPress?.(); }}
-      style={[styles.base, { height: tokens.height, paddingHorizontal: tokens.padding,
+      style={{ minWidth: 48, minHeight: Math.max(48, tokens.height), borderRadius: tokens.height / 2, justifyContent: "center" }}
+      visualStyle={[styles.base, { height: tokens.height, alignSelf: "stretch", paddingHorizontal: size === "sm" && !expressive ? 24 : tokens.padding,
         backgroundColor: surface, borderRadius: tokens.height / 2,
-        borderWidth: 0,
+        borderWidth: variant === "outlined" ? 1 : 0,
         borderColor: inactive ? `${palette.onSurface}1f` : palette.outline },
         variant === "elevated" && !inactive ? shadows.level1 : null]}>
       <View style={styles.content}>
