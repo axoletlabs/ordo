@@ -6,20 +6,24 @@
   "build": {
     "development": {
       "distribution": "internal",
-      "channel": "development"
+      "android": { "buildType": "apk" },
+      "environment": "development",
+      "env": { "ORDO_APP_VARIANT": "development" }
     },
-    "early-access": {
-      "extends": "production",
+    "preview": {
+      "extends": "stable",
       "distribution": "internal",
-      "channel": "early-access",
-      "env": { "EXPO_UPDATES_CHANNEL": "early-access" }
+      "environment": "preview",
+      "channel": "preview",
+      "env": { "ORDO_APP_VARIANT": "preview", "EXPO_UPDATES_CHANNEL": "preview" }
     },
-    "production": {
+    "stable": {
       "android": {
         "buildType": "apk"
       },
-      "channel": "production",
-      "env": { "EXPO_UPDATES_CHANNEL": "production" }
+      "environment": "production",
+      "channel": "stable",
+      "env": { "ORDO_APP_VARIANT": "stable", "EXPO_UPDATES_CHANNEL": "stable" }
     }
   }
 }

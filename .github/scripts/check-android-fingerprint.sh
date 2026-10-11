@@ -7,8 +7,9 @@
 #   EVENT_BEFORE            github.event.before — all zeroes on a new branch
 #   CURRENT_SHA             the commit being tested
 #   GITHUB_RUN_ID           this run, excluded from in-flight baselines
-#   ORDO_BUILD_BRANCH       stream branch (main or release/*)
+#   ORDO_BUILD_BRANCH       release/* stream branch
 #   EXPO_UPDATES_CHANNEL    channel baked into APKs on this stream
+#   ORDO_APP_VARIANT        fixed native identity (stable or preview)
 #   APP_VERSION             app version, for tag lookups on release/*
 #   GITHUB_OUTPUT           step output file
 #   GH_TOKEN, RUNNER_TEMP   provided by the runner
@@ -26,7 +27,7 @@ if [[ "${EVENT_BEFORE:-}" =~ ^0+$ ]]; then
   exit 0
 fi
 
-# Compare against an in-flight CI run on this branch (main or release/*)
+# Compare against an in-flight CI run on this release branch
 # when one exists (an APK still building, or detect still running), else
 # the last shipped APK on the same branch. Never compare one branch's APK
 # to another's — the baked channel differs. Parent-commit comparison is

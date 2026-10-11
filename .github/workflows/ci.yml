@@ -17,7 +17,7 @@ on:
 # Full release/OTA design: docs/RELEASES.md. Invariants a CI edit must keep:
 # - main never publishes a version; each version is its own release/x.y.z
 #   branch and vX.Y.Z tag, published from that branch (validated below).
-# - OTA (JS-only) runs only on main and release/* of axoletlabs/ordo; every
+# - OTA (JS-only) runs only on release/* of axoletlabs/ordo; every
 #   other event builds an APK or stops. Forks never OTA.
 # - JS-only pushes OTA onto the fingerprint of a shipped (or in-flight) APK
 #   on the same branch; a native fingerprint change mints a new APK.
@@ -27,6 +27,9 @@ on:
 permissions:
   contents: read
 
+# Stable (vX.Y.Z) and Preview (vX.Y.Z-preview.N) have separate packages and
+# fixed stable/preview OTA channels. Development is a third package, Actions
+# artifacts only: no OTA, published APK updater, or release runtime baseline.
 jobs:
   detect:
     if: github.event_name != 'pull_request' && !github.event.deleted
@@ -42,6 +45,7 @@ jobs:
       is_release: ${{ steps.info.outputs.is_release }}
       build_ref: ${{ steps.info.outputs.build_ref }}
       updates_channel: ${{ steps.info.outputs.updates_channel }}
+      app_variant: ${{ steps.info.outputs.app_variant }}
       extra_runtime_versions: ${{ steps.eligibility.outputs.extra_runtime_versions }}
       baseline_sha: ${{ steps.eligibility.outputs.baseline_sha }}
     steps:
@@ -59,10 +63,17 @@ jobs:
             # A published tag takes its channel from the version, then the
             # validate step requires it was published from release/x.y.z.
             BRANCH=""
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            BRANCH=main
           fi
           CHANNEL=$(node "$GITHUB_WORKSPACE/.github/scripts/validate-release-tag.js" --channel "$VERSION" --branch "$BRANCH")
+          # Manual Actions builds always produce Development, even when the
+          # selected ref is a release branch. Release pushes retain their app
+          # identity so native changes can be valid baselines for later OTA.
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then CHANNEL=development; fi
           echo "updates_channel=$CHANNEL" >> "$GITHUB_OUTPUT"
-          echo "EAS Update channel: $CHANNEL (branch=${BRANCH:-none})"
+          echo "app_variant=$CHANNEL" >> "$GITHUB_OUTPUT"
+          echo "App variant: $CHANNEL (branch=${BRANCH:-none})"
           # Every APK of the build — universal and all ABI splits — shares the
           # raw run number. Android treats an equal-code install as a replace,
           # and later runs outrank earlier builds because the counter only
@@ -79,12 +90,12 @@ jobs:
       # The eligibility check installs dependencies in two worktrees, so it
       # needs the pnpm store cache; other detect paths skip setup entirely.
       - name: Setup pnpm and Node.js for the fingerprint check
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Check Android native fingerprint
         id: eligibility
-        if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/release/')
         continue-on-error: true
         # Last-resort cap if createFingerprintAsync never resolves.
         timeout-minutes: 8
@@ -98,6 +109,7 @@ jobs:
           GIT_OPTIONAL_LOCKS: '0'
           ORDO_BUILD_BRANCH: ${{ github.ref_name }}
           EXPO_UPDATES_CHANNEL: ${{ steps.info.outputs.updates_channel }}
+          ORDO_APP_VARIANT: ${{ steps.info.outputs.app_variant }}
           APP_VERSION: ${{ steps.info.outputs.version }}
         run: bash "$GITHUB_WORKSPACE/.github/scripts/check-android-fingerprint.sh"
 
@@ -114,7 +126,7 @@ jobs:
           EVENT="$GITHUB_EVENT_NAME"
           stream=false
           case "$REF" in
-            refs/heads/main|refs/heads/release/*) stream=true ;;
+            refs/heads/release/*) stream=true ;;
           esac
           # release/* is included on purpose. A native change on a maintenance
           # branch has to mint an APK. An OTA there would target a runtime
@@ -214,16 +226,14 @@ jobs:
   ota:
     needs: [detect, analyze, supply-chain]
     # Publishes a JS-only update to this stream's channel:
-    #   main       → development (never a version release)
-    #   release/x.y.z → production for stable, early-access for alpha/beta/rc
+    #   release/x.y.z → stable or preview, fixed to the installed package
     # Native fingerprint changes and commits marked -apk build an APK.
     # Feature branches never OTA (last-write-wins would clobber the stream).
     # Forks never OTA even if they have a main branch.
     if: >-
       github.repository == 'axoletlabs/ordo' &&
       github.event_name == 'push' &&
-        (github.ref == 'refs/heads/main' ||
-         startsWith(github.ref, 'refs/heads/release/')) &&
+        startsWith(github.ref, 'refs/heads/release/') &&
         needs.detect.outputs.should_build != 'true'
     concurrency:
       group: ci-ota-${{ github.ref }}-publish
@@ -232,6 +242,7 @@ jobs:
     timeout-minutes: 60
     env:
       EXPO_UPDATES_CHANNEL: ${{ needs.detect.outputs.updates_channel }}
+      ORDO_APP_VARIANT: ${{ needs.detect.outputs.app_variant }}
       ORDO_BUILD_BRANCH: ${{ github.ref_name }}
       APP_VERSION: ${{ needs.detect.outputs.version }}
     permissions:
@@ -299,9 +310,11 @@ jobs:
           EXPO_UPDATES_CHANNEL: ${{ needs.detect.outputs.updates_channel }}
           EXTRA_RUNTIMES: ${{ steps.runtime.outputs.versions }}
         run: |
-          ENVIRONMENT=development
-          if [[ "$CHANNEL" == "production" ]]; then ENVIRONMENT=production; fi
-          if [[ "$CHANNEL" == "early-access" ]]; then ENVIRONMENT=preview; fi
+          case "$CHANNEL" in
+            stable) ENVIRONMENT=production ;;
+            preview) ENVIRONMENT=preview ;;
+            *) echo "::error::Development cannot publish OTA"; exit 1 ;;
+          esac
           # Pin to a shipped APK runtime when detect's hash is not the
           # hash Gradle baked in, or when extra.ordo / scripts drifted.
           # --auto would publish detect's fingerprint — a runtime no
@@ -342,6 +355,7 @@ jobs:
       contents: read
     env:
       EXPO_UPDATES_CHANNEL: ${{ needs.detect.outputs.updates_channel }}
+      ORDO_APP_VARIANT: ${{ needs.detect.outputs.app_variant }}
       ORDO_BUILD_BRANCH: ${{ github.ref_name }}
       ORDO_ENABLE_CCACHE: '1'
       CCACHE_DIR: /home/runner/.ccache
@@ -402,9 +416,11 @@ jobs:
         run: pnpm --filter @ordo/shared build
 
       - name: Install EAS CLI
+        if: needs.detect.outputs.app_variant != 'development'
         run: npm install -g eas-cli@24.8.0
 
       - name: Ensure the updates channel exists
+        if: needs.detect.outputs.app_variant != 'development'
         working-directory: apps/mobile
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
@@ -420,8 +436,12 @@ jobs:
         working-directory: apps/mobile
         run: |
           CHANNEL="${{ needs.detect.outputs.updates_channel }}"
-          grep -q "expo-channel-name" android/app/src/main/AndroidManifest.xml
-          grep -q "$CHANNEL" android/app/src/main/AndroidManifest.xml
+          if [[ "$CHANNEL" == "development" ]]; then
+            ! grep -q "expo-channel-name" android/app/src/main/AndroidManifest.xml
+          else
+            grep -q "expo-channel-name" android/app/src/main/AndroidManifest.xml
+            grep -q "$CHANNEL" android/app/src/main/AndroidManifest.xml
+          fi
 
       # Hash before Gradle compiles. expo-updates otherwise fingerprints
       # after modules like masked-view rewrite their own sources, so the
@@ -441,7 +461,7 @@ jobs:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
         run: bash "$GITHUB_WORKSPACE/.github/scripts/restore-upload-keystore.sh"
 
-      - name: Build APK (dev, arm64 only)
+      - name: Build APK (CI artifact, arm64 only)
         if: needs.detect.outputs.is_release != 'true'
         working-directory: apps/mobile/android
         run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a -Pandroid.versionCode=${{ needs.detect.outputs.version_code }}
@@ -551,7 +571,7 @@ jobs:
     needs: [detect, build_apk, package_server]
     # Attaches APKs to the GitHub Release that triggered this run.
     # Stable (Latest): tag vX.Y.Z, pre-release unchecked.
-    # Early (pre-release): tag vX.Y.Z-(alpha|beta|rc)[.N], pre-release checked.
+    # Preview (pre-release): tag vX.Y.Z-preview.N, pre-release checked.
     if: needs.detect.outputs.is_release == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
@@ -569,11 +589,12 @@ jobs:
       - name: Rename APKs
         env:
           VERSION: ${{ needs.detect.outputs.version }}
-        run: bash .github/scripts/rename-release-apks.sh apk "$VERSION"
+          VARIANT: ${{ needs.detect.outputs.app_variant }}
+        run: bash .github/scripts/rename-release-apks.sh apk "$VERSION" "$VARIANT"
 
       - name: Upload to release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="${{ github.event.release.tag_name }}"
-          bash .github/scripts/upload-release-assets.sh "$TAG" apk/ordo-v*.apk
+          bash .github/scripts/upload-release-assets.sh "$TAG" apk/ordo*.apk

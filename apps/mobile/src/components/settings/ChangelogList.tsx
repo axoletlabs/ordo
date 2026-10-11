@@ -36,7 +36,7 @@ import { radius, resolveFont, spacing } from "../../theme/tokens";
 const MARK_LABEL: Record<ChangelogMark, string> = {
   installed: "Installed",
   available: "Available",
-  early: "Early access",
+  early: "Preview",
 };
 
 type Piece =

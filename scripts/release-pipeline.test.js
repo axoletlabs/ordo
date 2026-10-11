@@ -41,10 +41,17 @@ test("every distributor is gated by tests and dependency audit, including releas
   assert.equal(steps[upload].with.overwrite, true, "a workflow retry must be able to upload its artifact");
 });
 
+test("packaged APK verification rejects cross-package updates and Development OTA", () => {
+  const result = spawnSync("python3", [join(root, ".github/scripts/verify-apks.test.py")], {
+    encoding: "utf8", env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
+  });
+  assert.equal(result.status, 0, result.stderr);
+});
+
 test("routing matrix covers pushes, branches, forced builds and release events", () => {
   for (const [event, ref, native, message, forced, expected] of [
     ["push", "refs/heads/main", "false", "JS fix", "", "false"],
-    ["push", "refs/heads/main", "true", "native fix", "", "true"],
+    ["push", "refs/heads/main", "true", "native fix", "", "false"],
     ["push", "refs/heads/release/0.1.0", "true", "native fix", "", "true"],
     ["push", "refs/heads/feature", "true", "feature fix", "", "false"],
     ["push", "refs/heads/feature", "false", "feature fix -apk", "", "true"],
@@ -81,11 +88,67 @@ test("CI version codes are the raw run number; retries keep one code and splits 
   assert.deepEqual(codes, [400, 400, 401]);
 });
 
+test("manual dispatch on a release ref builds Development and main cannot OTA", () => {
+  const result = runStep("Gather trigger info", {
+    expressions: { "github.run_number": "500", "github.event_name": "workflow_dispatch", "github.sha": "abc" },
+    env: { GITHUB_REF_NAME: "release/0.2.0" },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.output.app_variant, "development");
+  assert.equal(result.output.updates_channel, "development");
+  assert.ok(!workflow.jobs.ota.if.includes("refs/heads/main"));
+  assert.ok(workflow.jobs.ota.if.includes("refs/heads/release/"));
+  const fingerprint = workflow.jobs.detect.steps.find((step) => step.id === "eligibility");
+  assert.equal(fingerprint.run, 'bash "$GITHUB_WORKSPACE/.github/scripts/check-android-fingerprint.sh"');
+  assert.ok(!fingerprint.if.includes("refs/heads/main"));
+  assert.equal(fingerprint.env.ORDO_APP_VARIANT, "${{ steps.info.outputs.app_variant }}");
+  const setup = workflow.jobs.detect.steps.find((step) => step.name === "Setup pnpm and Node.js for the fingerprint check");
+  assert.equal(setup.uses, "./.github/actions/setup-pnpm-node");
+  assert.equal(setup.if, fingerprint.if);
+  for (const name of ["Install EAS CLI", "Ensure the updates channel exists"]) {
+    assert.ok(workflow.jobs.build_apk.steps.find((step) => step.name === name).if.includes("!= 'development'"));
+  }
+});
+
+test("release APK filenames preserve the selected app identity for all ABIs", (t) => {
+  const temp = mkdtempSync(join(tmpdir(), "ordo-apk-names-"));
+  t.after(() => rmSync(temp, { recursive: true, force: true }));
+  const abis = ["armeabi-v7a", "arm64-v8a", "x86", "x86_64"];
+  const step = workflow.jobs.release.steps.find((step) => step.name === "Rename APKs");
+  for (const variant of ["stable", "preview"]) {
+    const dir = join(temp, variant);
+    mkdirSync(join(dir, "apk"), { recursive: true });
+    for (const name of ["universal", ...abis]) writeFileSync(join(dir, "apk", `app-${name}-release.apk`), "apk");
+    const version = variant === "stable" ? "0.2.0" : "0.2.0-preview.1";
+    const run = step.run.replace(".github/scripts/rename-release-apks.sh", join(root, ".github/scripts/rename-release-apks.sh"));
+    const result = spawnSync("bash", ["-e", "-c", run], { cwd: dir, encoding: "utf8",
+      env: { ...process.env, VERSION: version, VARIANT: variant, GITHUB_STEP_SUMMARY: join(dir, "summary") } });
+    assert.equal(result.status, 0, result.stderr);
+    const prefix = variant === "stable" ? "ordo" : "ordo-preview";
+    for (const suffix of ["", ...abis.map((abi) => `-${abi}`)]) {
+      assert.equal(readFileSync(join(dir, "apk", `${prefix}-v${version}${suffix}.apk`), "utf8"), "apk");
+    }
+  }
+});
+
+test("release renaming rejects Development and incomplete split sets", (t) => {
+  const temp = mkdtempSync(join(tmpdir(), "ordo-apk-incomplete-"));
+  t.after(() => rmSync(temp, { recursive: true, force: true }));
+  const script = join(root, ".github/scripts/rename-release-apks.sh");
+  assert.notEqual(spawnSync("bash", [script, temp, "0.2.0", "development"]).status, 0);
+  writeFileSync(join(temp, "app-universal-release.apk"), "apk");
+  writeFileSync(join(temp, "app-arm64-v8a-release.apk"), "apk");
+  assert.notEqual(spawnSync("bash", [script, temp, "0.2.0-preview.1", "preview"], {
+    env: { ...process.env, GITHUB_STEP_SUMMARY: join(temp, "summary") },
+  }).status, 0);
+});
+
 test("CLI and app policy reject malformed tags, release targets and marker drift", () => {
   for (const [tag, version, pre, okay] of [
     ["v0.2.0", "0.2.0", "false", true],
-    ["v0.2.0-beta.1", "0.2.0-beta.1", "true", true],
-    ["v0.2.0-beta.1", "0.2.0-beta.1", "false", false],
+    ["v0.2.0-preview.1", "0.2.0-preview.1", "true", true],
+    ["v0.2.0-preview.1", "0.2.0-preview.1", "false", false],
+    ["v0.2.0-beta.1", "0.2.0-beta.1", "true", false],
     ["v0.2.0", "0.2.0", "true", false],
     ["v0.2.0", "0.1.0", "false", false],
     ["v0.02.0", "0.02.0", "false", false],
@@ -199,17 +262,17 @@ test("embedded runtime is taken from a successful APK artifact and absent runtim
 
 test("published tags count as their release branch's APK baseline and in-flight wait", (t) => {
   const f = apkFixture(t, {});
-  const tagged = { id: 19, head_sha: f.parent, head_branch: "v0.1.1", event: "release", created_at: "2" };
+   const tagged = { id: 19, head_sha: f.parent, head_branch: "v0.1.1", event: "release", created_at: "2" };
   f.update({ branchRuns: {
-    "release/0.1.1": { in_progress: [] },
+    "release/0.1.1": { in_progress: [{ id: 20, head_sha: f.head, event: "workflow_dispatch", created_at: "3" }] },
     "v0.1.1": { in_progress: [tagged] },
-  }, jobs: { 19: [{ name: "build_apk", status: "in_progress" }] } });
+  }, jobs: { 19: [{ name: "build_apk", status: "in_progress" }], 20: [{ name: "build_apk", status: "in_progress" }] } });
   const baseline = f.run("apk-baseline-sha.sh", ["release/0.1.1"], { APP_VERSION: "0.1.1" });
   assert.equal(baseline.status, 0, baseline.stderr);
   assert.equal(baseline.stdout.trim(), f.parent);
   assert.equal(f.run("wait-for-in-flight-apk.sh", ["release/0.1.1"], { APP_VERSION: "0.1.1" }).status, 1);
   f.update({ runs: { completed: [
-    { id: 21, head_sha: f.parent, head_branch: "feature", event: "workflow_dispatch" }, tagged,
+    { id: 21, head_sha: f.parent, head_branch: "release/0.1.1", event: "workflow_dispatch" }, tagged,
   ] }, jobs: {
     21: [{ name: "build_apk", conclusion: "success" }], 19: [{ name: "build_apk", conclusion: "success" }],
   }, runtime: "b".repeat(40) });
@@ -243,7 +306,7 @@ test("publication always sets the SDK 57 environment and deduplicates runtimes",
 require('node:fs').appendFileSync(process.env.EAS_TEST_LOG,JSON.stringify({args:process.argv.slice(2),runtime:process.env.ORDO_OTA_RUNTIME_VERSION})+'\\n');
 `, { mode: 0o755 });
   const step = workflow.jobs.ota.steps.find((step) => step.name === "Publish update");
-  for (const [channel, environment] of [["production", "production"], ["early-access", "preview"], ["development", "development"]]) {
+  for (const [channel, environment] of [["stable", "production"], ["preview", "preview"]]) {
     writeFileSync(log, "");
     const result = spawnSync("bash", ["-e", "-c", step.run], { cwd: root, encoding: "utf8", env: {
       ...process.env, PATH: `${temp}:${process.env.PATH}`, EAS_TEST_LOG: log, CHANNEL: channel,
@@ -260,6 +323,12 @@ require('node:fs').appendFileSync(process.env.EAS_TEST_LOG,JSON.stringify({args:
       assert.match(call.runtime, /^[ab]{40}$/);
     }
   }
+  writeFileSync(log, "");
+  const development = spawnSync("bash", ["-e", "-c", step.run], { env: {
+    ...process.env, PATH: `${temp}:${process.env.PATH}`, EAS_TEST_LOG: log, CHANNEL: "development",
+  } });
+  assert.notEqual(development.status, 0);
+  assert.equal(readFileSync(log, "utf8"), "", "Development must never reach EAS publication");
 });
 
 test("channel initialization reuses an existing channel and links a missing one", (t) => {
@@ -274,12 +343,12 @@ if(a[0]==='channel:view'&&process.env.EAS_TEST_EXISTS!=='true') process.exit(1);
     writeFileSync(log, "");
     const result = spawnSync("bash", [join(root, ".github/scripts/ensure-updates-channel.sh")], { env: {
       ...process.env, PATH: `${temp}:${process.env.PATH}`, EAS_TEST_LOG: log,
-      EAS_TEST_EXISTS: exists, EXPO_UPDATES_CHANNEL: "early-access",
+      EAS_TEST_EXISTS: exists, EXPO_UPDATES_CHANNEL: "preview",
     } });
     assert.equal(result.status, 0);
     const calls = readFileSync(log, "utf8").trim().split("\n").map(JSON.parse);
     assert.equal(calls.length, exists === "true" ? 1 : 2);
-    if (exists === "false") assert.deepEqual(calls[1], ["channel:create", "early-access", "--non-interactive"]);
+    if (exists === "false") assert.deepEqual(calls[1], ["channel:create", "preview", "--non-interactive"]);
   }
 });
 

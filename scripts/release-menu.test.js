@@ -23,7 +23,7 @@ function release(tag, { pre = false, date = "2026-09-01" } = {}) {
 
 const catalog = [
   release("v0.2.0", { date: "2026-09-20" }),
-  release("v0.2.0-rc.1", { pre: true, date: "2026-09-18" }),
+  release("v0.2.0-preview.1", { pre: true, date: "2026-09-18" }),
   release("v0.1.1", { date: "2026-08-02" }),
   release("v0.1.0", { date: "2026-07-01" }),
 ];

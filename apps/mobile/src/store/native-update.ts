@@ -3,13 +3,12 @@ import Constants from "expo-constants";
 import * as Device from "expo-device";
 import * as FileSystem from "expo-file-system/legacy";
 import * as IntentLauncher from "expo-intent-launcher";
-import * as Updates from "expo-updates";
 import { create } from "zustand";
 import { APP_NAME } from "@ordo/shared";
 import {
   classifyReleaseVersion,
   compareReleaseCandidates,
-  isEarlyRelease,
+  releaseMatchesVariant,
   isNewerVersion,
   selectNativeUpdate,
 } from "../lib/app-version";
@@ -20,6 +19,7 @@ import {
 import { apkFileIsComplete, nativeDownloadRatio } from "../lib/native-download-progress";
 import { selectReleaseApk, type GithubApkAsset } from "../lib/native-apk";
 import { prefsGet, prefsSet, StorageKeys } from "../lib/storage";
+import { APP_IDENTITY, APP_VARIANT } from "../lib/app-variant";
 
 const GITHUB_REPO_API = "https://api.github.com/repos/axoletlabs/ordo";
 const GITHUB_HEADERS = { Accept: "application/vnd.github+json" };
@@ -63,7 +63,7 @@ interface GithubRelease {
 
 interface CachedUpdate {
   checkedAt: number;
-  includePrereleases: boolean;
+  variant: typeof APP_VARIANT;
   release: NativeRelease | null;
 }
 
@@ -78,7 +78,6 @@ export type NativeUpdateStatus =
 
 interface NativeUpdateState {
   hydrated: boolean;
-  includePrereleases: boolean;
   status: NativeUpdateStatus;
   release: NativeRelease | null;
   progress: number;
@@ -94,7 +93,6 @@ interface NativeUpdateState {
   error: string | null;
   lastChecked: number | null;
   hydrate: () => Promise<void>;
-  setIncludePrereleases: (enabled: boolean) => Promise<void>;
   check: (force?: boolean) => Promise<NativeRelease | null>;
   downloadAndInstall: () => Promise<void>;
   install: () => Promise<void>;
@@ -104,7 +102,7 @@ interface NativeUpdateState {
 }
 
 function androidPackageName(): string {
-  return Constants.expoConfig?.android?.package ?? "com.axolet.ordo";
+  return APP_IDENTITY.package;
 }
 
 export async function openInstallPermissionSettings(): Promise<void> {
@@ -125,14 +123,14 @@ function releaseVersion(tagName: string): string | null {
 
 function normalizeRelease(release: GithubRelease): NativeRelease | null {
   const version = releaseVersion(release.tag_name ?? "");
-  const apk = version ? selectReleaseApk(release.assets ?? [], version, Device.supportedCpuArchitectures ?? []) : null;
+  const apk = version ? selectReleaseApk(release.assets ?? [], version, Device.supportedCpuArchitectures ?? [], APP_VARIANT) : null;
   if (!version || !apk?.browser_download_url || !release.published_at) return null;
-  return {
+  const normalized: NativeRelease = {
     version,
     tagName: release.tag_name!,
     name: release.name?.trim() || `${APP_NAME} ${release.tag_name}`,
     body: release.body?.trim() ?? "",
-    prerelease: !!release.prerelease || classifyReleaseVersion(version)?.kind === "prerelease",
+    prerelease: !!release.prerelease,
     publishedAt: release.published_at,
     pageUrl: isTrustedGithubReleasePageUrl(release.html_url ?? "")
       ? release.html_url!
@@ -140,6 +138,7 @@ function normalizeRelease(release: GithubRelease): NativeRelease | null {
     apkUrl: apk.browser_download_url,
     apkSize: apk.size ?? 0,
   };
+  return releaseIsEligible(normalized) ? normalized : null;
 }
 
 function currentVersion(): string {
@@ -147,12 +146,18 @@ function currentVersion(): string {
 }
 
 function isSupported(): boolean {
-  // Dev/feature APKs can have a higher versionCode than an already published
-  // stable APK. Offering that APK would end in Android's downgrade rejection.
-  const channel = Updates.channel;
-  return Platform.OS === "android" && !__DEV__ &&
-    (channel === "production" || channel === "early-access" ||
-      (channel === "development" && classifyReleaseVersion(currentVersion())?.kind === "prerelease"));
+  return Platform.OS === "android" && !__DEV__ && APP_VARIANT !== "development";
+}
+
+function releaseIsEligible(release: NativeRelease): boolean {
+  if (!releaseMatchesVariant(release, APP_VARIANT) || !isTrustedGithubAssetUrl(release.apkUrl)) return false;
+  // Cached metadata must not smuggle another app's APK into the installer.
+  let name: string;
+  try {
+    name = decodeURIComponent(new URL(release.apkUrl).pathname.split("/").pop() ?? "");
+  } catch { return false; }
+  return !!selectReleaseApk([{ name, state: "uploaded", size: release.apkSize,
+    browser_download_url: release.apkUrl }], release.version, Device.supportedCpuArchitectures ?? [], APP_VARIANT);
 }
 
 async function fetchGithubReleases(signal: AbortSignal): Promise<GithubRelease[]> {
@@ -205,14 +210,13 @@ async function deleteApk(version: string | undefined): Promise<void> {
 async function saveCache(state: NativeUpdateState): Promise<void> {
   await prefsSet(StorageKeys.NATIVE_UPDATE, {
     checkedAt: state.lastChecked ?? 0,
-    includePrereleases: state.includePrereleases,
+    variant: APP_VARIANT,
     release: state.release,
   } satisfies CachedUpdate);
 }
 
 export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
   hydrated: false,
-  includePrereleases: false,
   status: isSupported() ? "idle" : "disabled",
   release: null,
   progress: 0,
@@ -229,31 +233,26 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
     if (hydration) return hydration;
     hydration = (async () => {
     const cached = await prefsGet<CachedUpdate>(StorageKeys.NATIVE_UPDATE);
-    const includePrereleases = typeof cached?.includePrereleases === "boolean"
-      ? cached.includePrereleases : classifyReleaseVersion(currentVersion())?.kind === "prerelease";
-    const lastChecked = typeof cached?.checkedAt === "number" && Number.isFinite(cached.checkedAt) &&
+    let lastChecked = cached?.variant === APP_VARIANT && typeof cached?.checkedAt === "number" && Number.isFinite(cached.checkedAt) &&
       cached.checkedAt >= 0 && cached.checkedAt <= Date.now() ? cached.checkedAt : null;
     let release =
-      cached?.release && typeof cached.release.version === "string" &&
+      cached?.variant === APP_VARIANT && cached?.release && typeof cached.release.version === "string" &&
       typeof cached.release.apkUrl === "string" &&
       classifyReleaseVersion(cached.release.version) &&
       Number.isSafeInteger(cached.release.apkSize) && cached.release.apkSize > 0 &&
       isNewerVersion(cached.release.version, currentVersion())
         ? cached.release
         : null;
-    if (release && !includePrereleases && isEarlyRelease(release)) {
-      await deleteApk(release.version);
+    if (release && !releaseIsEligible(release)) {
       release = null;
     }
-    if (release && !isTrustedGithubAssetUrl(release.apkUrl)) {
-      await deleteApk(release.version);
-      release = null;
+    if (cached?.release && !release) {
+      await deleteApk(cached.release.version);
+      lastChecked = null;
     }
-    if (cached?.release && !release) await deleteApk(cached.release.version);
     if (!isSupported()) {
       set({
         hydrated: true,
-        includePrereleases,
         release: null,
         lastChecked,
         downloadedUri: null,
@@ -267,7 +266,6 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
     const downloadedUri = await resolveLocalApk(release);
     set({
       hydrated: true,
-      includePrereleases,
       release,
       lastChecked,
       downloadedUri,
@@ -279,32 +277,6 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
     });
     })().finally(() => { hydration = null; });
     return hydration;
-  },
-
-  setIncludePrereleases: async (enabled) => {
-    await get().hydrate();
-    checkEpoch += 1;
-    const current = get().release;
-    if (!enabled && current && isEarlyRelease(current)) {
-      get().cancelDownload();
-      await cancellation;
-      await deleteApk(current.version);
-      set({
-        includePrereleases: false,
-        lastChecked: null,
-        release: null,
-        downloadedUri: null,
-        progress: 0,
-        status: isSupported() ? "idle" : "disabled",
-      });
-    } else {
-      set({
-        includePrereleases: enabled, lastChecked: null,
-        status: get().status === "checking" ? (current ? "available" : "idle") : get().status,
-      });
-    }
-    await saveCache(get());
-    await get().check(true).catch(() => {});
   },
 
   check: async (force = false) => {
@@ -350,7 +322,6 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
       const timeout = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
       try {
         const releases = await fetchGithubReleases(controller.signal);
-        const includePrereleases = get().includePrereleases;
         const current = currentVersion();
         const versionEligible = releases.flatMap((item) => {
           if (item.draft || !item.published_at) return [];
@@ -358,19 +329,19 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
           if (!version) return [];
           const meta = {
             version,
-            prerelease: !!item.prerelease || classifyReleaseVersion(version)?.kind === "prerelease",
+            prerelease: !!item.prerelease,
             publishedAt: item.published_at,
             github: item,
           };
-          if (!includePrereleases && isEarlyRelease(meta)) return [];
+          if (!releaseMatchesVariant(meta, APP_VARIANT)) return [];
           if (!isNewerVersion(version, current)) return [];
           return [meta];
         });
         const candidates = versionEligible
           .map((item) => normalizeRelease(item.github))
           .filter((item): item is NativeRelease => item != null);
-        const release = selectNativeUpdate(candidates, current, includePrereleases);
-        const newestEligible = selectNativeUpdate(versionEligible, current, includePrereleases);
+        const release = selectNativeUpdate(candidates, current, APP_VARIANT);
+        const newestEligible = selectNativeUpdate(versionEligible, current, APP_VARIANT);
         const waitingForApk =
           !!newestEligible &&
           (!release || compareReleaseCandidates(newestEligible, release) > 0);
@@ -392,14 +363,11 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
         if (waitingForApk) {
           await prefsSet(StorageKeys.NATIVE_UPDATE, {
             checkedAt: 0,
-            includePrereleases,
+            variant: APP_VARIANT,
             release,
           } satisfies CachedUpdate);
         } else {
           await saveCache(get());
-        }
-        if (get().includePrereleases !== includePrereleases) {
-          return get().check(true);
         }
         return release;
       } finally {
@@ -432,13 +400,14 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
 
   downloadAndInstall: async () => {
     await cancellation;
+    if (!isSupported()) return;
     if (get().status === "downloading" || get().installing) return;
     checkEpoch += 1;
     const epoch = ++downloadEpoch;
     const release = get().release;
     if (!release) return;
-    if (!isTrustedGithubAssetUrl(release.apkUrl)) {
-      throw new Error("The update download URL is not a trusted GitHub release asset");
+    if (!releaseIsEligible(release)) {
+      throw new Error("The update APK does not belong to this app variant");
     }
     const destination = apkDestination(release.version);
     if (!destination) return;
@@ -539,6 +508,7 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
   install: async () => {
     const epoch = downloadEpoch;
     if (get().installing || !isSupported()) return;
+    if (!get().release || !releaseIsEligible(get().release!)) return;
     set({ installing: true });
     const release = get().release;
     const currentUri = get().downloadedUri;

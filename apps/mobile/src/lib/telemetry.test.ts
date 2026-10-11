@@ -13,9 +13,10 @@ import {
   telemetryHeartbeat,
 } from "./telemetry-policy.ts";
 
-test("pings only on the production channel outside development", () => {
-  assert.equal(telemetryEnabled(true, "production"), false);
-  assert.equal(telemetryEnabled(false, "production"), true);
+test("pings only on the Stable channel outside development", () => {
+  assert.equal(telemetryEnabled(true, "stable"), false);
+  assert.equal(telemetryEnabled(false, "stable"), true);
+  assert.equal(telemetryEnabled(false, "production"), false);
   assert.equal(telemetryEnabled(false, "preview"), false);
   assert.equal(telemetryEnabled(false, "development"), false);
   assert.equal(telemetryEnabled(false, null), false);

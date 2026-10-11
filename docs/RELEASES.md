@@ -1,10 +1,11 @@
-# Ordo releases: development, early access, APKs and OTA
+# Ordo releases: Stable, Preview, Development, APKs and OTA
 
 ## Version sources
 
 - `apps/mobile/app.config.js`'s `version` is the native app version. A release
   tag must be exactly `v<version>`. Versions are `X.Y.Z` or
-  `X.Y.Z-(alpha|beta|rc)[.N]`, without leading zeroes or build metadata.
+  `X.Y.Z-preview[.N]`, without leading zeroes or build metadata. Increment the
+  Preview sequence for each new preview APK; there are no alpha/beta/RC releases.
 - `apps/server/release.json` records the installed server's version, tag,
   commit and archive. CI creates it; the installer retains its source-file
   ownership list to remove stale files on later archive installs.
@@ -16,29 +17,40 @@
 
 ## Streams and channels
 
-| Branch/version | Update channel | Automatic distribution |
-| --- | --- | --- |
-| `main` | `development` | OTA for JS-only changes; APK artifact for native changes |
-| `release/x.y.z`, stable version | `production` | OTA for compatible JS changes; APK artifact for native changes |
-| `release/x.y.z`, alpha/beta/rc | `early-access` | Same behavior, isolated from main and stable |
-| Feature branch | `development-<escaped branch>` | Checks only; APK via dispatch or a commit headline ending in `-apk` |
+Exactly three native variants share the source tree, not app storage or update
+subscriptions. They can all be installed side by side.
 
-Feature channels escape branch punctuation without collisions. For example,
-`t3code/material-three-redesign` uses
-`development-t3code-2Fmaterial-2Dthree-2Dredesign`. A feature APK cannot be
-overwritten by main's OTA even when their native dependencies match. Feature
-pushes do not publish OTA; publish manually to their own channel if needed.
+| Variant / launcher name | Android package | OTA channel | Native updater |
+| --- | --- | --- | --- |
+| Stable / `ordo` | `com.axolet.ordo` | `stable` | Stable releases only |
+| Preview / `ordo-preview` | `com.axolet.ordo.preview` | `preview` | Preview releases only |
+| Development / `ordo-development` | `com.axolet.ordo.development` | None; OTA disabled natively | Disabled |
 
-Channels are baked into APKs. The early-access toggle controls **GitHub APK
-selection**, not the OTA channel. Beta installs default that toggle on when no
-preference exists; an explicit saved preference is retained. Taking the matching
-stable APK moves a beta install onto production. Existing APKs with old channel
-headers need a new APK to adopt the new stream layout.
+There is no early-access preference or stream-switching UI. Preview never
+installs Stable, including when the same version graduates to Stable. The
+updater reads the installed native application ID, not a mutable OTA manifest.
+Stable retains the original package ID. Preview starts with separate local
+storage; no migration assistance is provided. Existing APKs need replacement
+APKs to adopt this layout; OTA cannot change an application ID.
 
-Local prebuilds infer the channel from the git branch and version. Detached local
-checkouts default to development. `ORDO_BUILD_BRANCH` and `EXPO_UPDATES_CHANNEL`
-can set the build context explicitly. A release branch/version mismatch fails.
-The manifest plugin preserves other update headers, including signing headers.
+| Trigger | Distribution |
+| --- | --- |
+| Published `vX.Y.Z` from `release/x.y.z` | Stable release APKs and server archive |
+| Published `vX.Y.Z-preview.N` from `release/x.y.z` | Preview release APKs and server archive |
+| Push on matching `release/x.y.z` | Same variant: compatible JS → OTA; native changes → APK artifact |
+| `main` / feature push | Checks only; headline ending in `-apk` → Development artifact |
+| Actions dispatch with `build_apk=true`, on any branch | Development artifact only |
+
+Manual Development runs are excluded from release OTA baselines, including
+dispatches on release branches. There are no per-feature variants or channels.
+
+Local builds infer the variant from branch/version; detached checkouts default
+to Development. `ORDO_APP_VARIANT=stable|preview|development` explicitly selects
+the identity (also used by the three same-named EAS profiles). Release variants
+must match the version suffix. `EXPO_UPDATES_CHANNEL`, if supplied, must match
+the variant; it cannot redirect an app. `ORDO_BUILD_BRANCH` sets branch context.
+The manifest plugin preserves signing headers for release variants and removes
+update request headers entirely for Development.
 
 ## CI gates and native compatibility
 
@@ -71,10 +83,10 @@ OTA publication and channel management additionally use the `EXPO_TOKEN`
 repository secret (an EAS access token).
 
 EAS CLI is pinned to 24.8.0. Channels are created and linked before first use.
-SDK 57 requires `--environment` on every OTA publication: production uses the
-`production` EAS environment, early access uses `preview`, and development uses
-`development`. Native prebuild, fingerprinting and publication all receive the
-same channel. EAS build profiles use local version sources; the GitHub/Gradle
+SDK 57 requires `--environment` on every OTA publication: Stable uses the
+`production` EAS environment and Preview uses `preview`. Development cannot
+publish OTA. Native prebuild, fingerprinting and publication all receive the
+same variant. EAS build profiles use local version sources; the GitHub/Gradle
 pipeline is the canonical release APK builder and signing authority.
 
 The C++ layer dominates APK build time and would recompile from scratch on
@@ -91,11 +103,9 @@ published assets with different bytes. The single published release (v0.1.0)
 is the only APK generation under this scheme, so the run counter is the only
 ordering that remains.
 
-Development APKs do not offer published-release APK updates: their code can
-already exceed a published release, which Android rejects as a downgrade.
-They receive OTA on their own channel and native APKs as CI artifacts. Switching
-to an older published APK may require removing the development install first;
-export your library before removing local app data.
+Development APKs are updated manually from Actions artifacts. They cannot
+receive OTA or published-release APK updates. Installing Stable or Preview
+does not replace Development because each has a different package ID.
 
 ## Ship a version
 
@@ -103,11 +113,13 @@ export your library before removing local app data.
    `apps/mobile/app.config.js` to that exact version (or its prerelease).
 2. Commit and push the release branch before creating the tag.
 3. Tag that commit, push the tag, and publish its GitHub Release with target
-   **`release/x.y.z`**. Stable tags use the stable release marker; alpha/beta/rc
+   **`release/x.y.z`**. Stable tags use the stable release marker; Preview
    tags use the prerelease marker. Publishing from main is rejected, even if
    the commit also exists on a release branch.
 4. Wait for CI. It compiles the server, uploads its source archive and checksum,
-   and attaches a universal APK plus all four signed ABI splits. Missing gates
+   and attaches a universal APK plus all four signed ABI splits. Stable assets
+   are `ordo-vX.Y.Z[-<abi>].apk`; Preview assets are
+   `ordo-preview-vX.Y.Z-preview.N[-<abi>].apk`. Missing gates
    or a missing ABI fail the release job. Clients ignore incomplete APK assets
    and retry discovery when a newer release is still waiting for its APKs.
 
@@ -122,9 +134,11 @@ git push origin v0.2.0
 gh release create v0.2.0 --target release/0.2.0 --title "0.2.0" --generate-notes --latest
 ```
 
-`v0.2.0-beta.1` uses `release/0.2.0` too; publish with `--prerelease` and without
+`v0.2.0-preview.1` uses `release/0.2.0` too; publish with `--prerelease` and without
 `--latest`. Promotion sets the branch's version to `0.2.0` and publishes a new
-`v0.2.0` tag. The changed native version/channel requires a new APK.
+`v0.2.0` tag. This produces a separate Stable app; Preview users remain on
+Preview and only receive later Preview releases. The changed identity, native
+version and channel require a new APK.
 
 Published assets are immutable. Upload retries reuse identical digest-matching
 bytes; different bytes fail instead of clobbering a user's in-flight download
@@ -195,7 +209,8 @@ pnpm test:release-runtime
 shellcheck -S warning .github/scripts/*.sh
 ```
 
-The runtime smoke test prebuilds four channel manifests, checks deterministic
+The runtime smoke test prebuilds all three variant manifests, checks independent
+package IDs, OTA enablement, fixed channels, deterministic
 fingerprints, runtime pinning and JS/native routing, then exports Android JS and
 Hermes bytecode. Use `--no-bytecode` only for a host whose x86 Hermes compiler
 cannot run correctly; that verifies JS export, not bytecode or an APK. A full

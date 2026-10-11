@@ -3,8 +3,28 @@
 // One policy for CI, Expo config, the app updater, and self-hosted releases.
 const NUMBER = "(?:0|[1-9][0-9]*)";
 const RELEASE_VERSION_RE = new RegExp(
-  `^v?(${NUMBER}\\.${NUMBER}\\.${NUMBER})(?:-(alpha|beta|rc)(?:\\.(${NUMBER}))?)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$`,
+  `^v?(${NUMBER}\\.${NUMBER}\\.${NUMBER})(?:-(preview)(?:\\.(${NUMBER}))?)?(?:\\+[0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*)?$`,
 );
+
+// Fixed native identities. Never choose an app's update stream from a preference
+// or from an OTA manifest: it belongs to the installed binary.
+const APP_VARIANTS = {
+  stable: { name: "ordo", package: "com.axolet.ordo", channel: "stable", apkPrefix: "ordo" },
+  preview: { name: "ordo-preview", package: "com.axolet.ordo.preview", channel: "preview", apkPrefix: "ordo-preview" },
+  development: { name: "ordo-development", package: "com.axolet.ordo.development", channel: null, apkPrefix: "ordo-development" },
+};
+
+function appVariantForPackage(packageName) {
+  return Object.keys(APP_VARIANTS).find((variant) => APP_VARIANTS[variant].package === packageName) ?? null;
+}
+
+function releaseMatchesVariant(release, variant) {
+  const classified = classifyReleaseVersion(release.version);
+  if (!classified || variant === "development") return false;
+  return variant === "preview"
+    ? classified.channel === "preview" && !!release.prerelease
+    : variant === "stable" && classified.kind === "stable" && !release.prerelease;
+}
 
 function classifyReleaseVersion(value) {
   if (typeof value !== "string") return null;
@@ -60,7 +80,7 @@ function isNewerVersion(candidate, current) {
 
 function easUpdatesChannel(version) {
   const classified = classifyReleaseVersion(version);
-  return classified ? (classified.kind === "stable" ? "production" : "early-access") : null;
+  return classified ? (classified.kind === "stable" ? "stable" : "preview") : null;
 }
 
 function releaseLineBranch(version) {
@@ -76,9 +96,7 @@ function resolveUpdatesChannel(version, branch) {
   if (branch.startsWith("release/")) {
     return branch === releaseLineBranch(version) ? easUpdatesChannel(version) : null;
   }
-  // Escape '-' too, so feat/foo and feat-2Ffoo cannot collide. Feature APKs
-  // never subscribe to main, even when they share a native fingerprint.
-  return `development-${encodeURIComponent(branch).replace(/-/g, "%2D").replace(/%/g, "-")}`;
+  return "development";
 }
 
 function validateReleaseBranch(tag, target) {
@@ -93,8 +111,8 @@ function validateReleaseBranch(tag, target) {
 function validateReleaseTag(tag, version, prerelease) {
   if (tag !== `v${version}`) return `Release tag '${tag}' does not match app version 'v${version}'`;
   const classified = classifyReleaseVersion(version);
-  if (!classified || classified.version !== version) return `App version '${version}' must be X.Y.Z or X.Y.Z-(alpha|beta|rc)[.N]`;
-  if (prerelease && classified.kind !== "prerelease") return `GitHub pre-releases must use an alpha, beta, or RC tag (got '${version}')`;
+  if (!classified || classified.version !== version) return `App version '${version}' must be X.Y.Z or X.Y.Z-preview[.N]`;
+  if (prerelease && classified.kind !== "prerelease") return `GitHub pre-releases must use a preview tag (got '${version}')`;
   if (!prerelease && classified.kind !== "stable") return `Stable GitHub releases must use a plain X.Y.Z tag (got '${version}')`;
   return null;
 }
@@ -110,11 +128,10 @@ function compareReleaseCandidates(left, right) {
   return (Date.parse(left.publishedAt) || 0) - (Date.parse(right.publishedAt) || 0);
 }
 
-function selectNativeUpdate(releases, current, includePrereleases) {
+function selectNativeUpdate(releases, current, variant) {
   let best = null;
   for (const release of releases) {
-    if (!classifyReleaseVersion(release.version)) continue;
-    if (!includePrereleases && isEarlyRelease(release)) continue;
+    if (!releaseMatchesVariant(release, variant)) continue;
     if (!isNewerVersion(release.version, current)) continue;
     if (!best || compareReleaseCandidates(release, best) > 0) best = release;
   }
@@ -122,6 +139,7 @@ function selectNativeUpdate(releases, current, includePrereleases) {
 }
 
 module.exports = {
+  APP_VARIANTS, appVariantForPackage, releaseMatchesVariant,
   classifyReleaseVersion, parseVersion, compareVersions, isNewerVersion,
   easUpdatesChannel, releaseLineBranch, resolveUpdatesChannel,
   validateReleaseBranch, validateReleaseTag, isEarlyRelease,

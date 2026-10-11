@@ -11,6 +11,7 @@ import { AppState } from "react-native";
 import * as Updates from "expo-updates";
 import { restartForUpdate } from "../store/update-restart";
 import { resolveOtaStatus, type OtaStatus } from "../lib/ota-update-state";
+import { APP_IDENTITY, APP_VARIANT } from "../lib/app-variant";
 
 export type { OtaStatus } from "../lib/ota-update-state";
 
@@ -46,7 +47,7 @@ const FOREGROUND_RECHECK_MS = 60 * 60 * 1000;
 let lastForegroundCheck = 0;
 
 export function useOtaUpdate(): UseOtaUpdate {
-  const enabled = Updates.isEnabled;
+  const enabled = Updates.isEnabled && APP_VARIANT !== "development" && Updates.channel === APP_IDENTITY.channel;
   const {
     currentlyRunning,
     isChecking,

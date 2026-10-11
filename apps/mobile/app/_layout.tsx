@@ -19,6 +19,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider, useTheme } from "../src/theme/ThemeProvider";
 import { queryClient } from "../src/lib/query-client";
+import { APP_IDENTITY } from "../src/lib/app-variant";
 import {
   discardQueryCache,
   prepareLaunchLibrary,
@@ -266,7 +267,7 @@ export default function RootLayout() {
 
   return (
     <ShareIntentProvider
-      options={{ scheme: "com.axolet.ordo", resetOnBackground: false }}
+      options={{ scheme: APP_IDENTITY.package, resetOnBackground: false }}
     >
       <GestureHandlerRootView
         style={{ flex: 1, backgroundColor: restartCover?.background }}

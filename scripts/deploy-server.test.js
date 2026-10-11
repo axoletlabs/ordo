@@ -385,7 +385,7 @@ test("update --yes --dry-run keeps .env, installs the latest stable release, and
     repoRoot: root,
     env: { ...process.env, CI: "1" },
     releases: [
-      publishedRelease("v0.2.0-beta.1", { prerelease: true, published_at: "2026-09-20T00:00:00Z" }),
+      publishedRelease("v0.2.0-preview.1", { prerelease: true, published_at: "2026-09-20T00:00:00Z" }),
       publishedRelease("v0.1.1", { published_at: "2026-09-02T00:00:00Z" }),
     ],
     log: (line) => lines.push(String(line)),

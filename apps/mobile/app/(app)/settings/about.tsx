@@ -9,7 +9,6 @@ import { PanelActions } from "../../../src/components/ui/SheetActionRow";
 import { FloatingPanel } from "../../../src/components/ui/FloatingPanel";
 import { PanelHeader } from "../../../src/components/ui/PanelHeader";
 import { OtaUpdateCard } from "../../../src/components/ui/OtaUpdater";
-import { Toggle } from "../../../src/components/ui/Toggle";
 import { toast } from "../../../src/components/ui/toast-store";
 import {
   SettingsGroup,
@@ -19,6 +18,7 @@ import {
 import { useBuildInfo } from "../../../src/hooks/use-build-info";
 import { useOtaUpdate } from "../../../src/hooks/use-ota-update";
 import { useNativeUpdateStore } from "../../../src/store/native-update";
+import { APP_VARIANT } from "../../../src/lib/app-variant";
 import { haptics } from "../../../src/lib/haptics";
 import { CLOUD_WEBSITE_URL } from "../../../src/lib/hosting";
 import { useTheme } from "../../../src/theme/ThemeProvider";
@@ -82,6 +82,7 @@ export default function AboutScreen() {
           footer={build.gitDirty ? "Built from a working copy with uncommitted changes." : undefined}
         >
           <SettingRow icon="pricetag-outline" label="Version" value={`v${build.version}`} />
+          <SettingRow icon="flask-outline" label="Variant" value={APP_VARIANT === "stable" ? "Stable" : APP_VARIANT === "preview" ? "Preview" : "Development"} />
           <SettingRow
             icon="git-commit-outline"
             label="Commit"
@@ -114,23 +115,11 @@ export default function AboutScreen() {
 
         <SettingsGroup
           label="Updates"
-          footer={ota.channel?.startsWith("development") && !build.version.includes("-")
-            ? "Development APKs use branch updates. Install a published APK separately to switch to a release; Android may require uninstalling the development build first."
+          footer={APP_VARIANT === "development"
+            ? "Development builds are installed manually from GitHub Actions. OTA and in-app updates are disabled."
             : undefined}
         >
-          <OtaUpdateCard />
-          <SettingRow
-            icon="flask-outline"
-            label="Early access updates"
-            right={
-              <Toggle
-                value={nativeUpdate.includePrereleases}
-                disabled={nativeUpdate.status === "disabled" || nativeUpdate.status === "checking" || nativeUpdate.status === "downloading" || nativeUpdate.installing}
-                onValueChange={(enabled) => void nativeUpdate.setIncludePrereleases(enabled)}
-              />
-            }
-            rightFit="content"
-          />
+          {APP_VARIANT !== "development" ? <OtaUpdateCard /> : null}
           <SettingRow
             icon="newspaper-outline"
             label="Changelog"

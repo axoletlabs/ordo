@@ -24,7 +24,9 @@ def verify(apk, *, aapt, apksigner, version, base, runtime, channel, certificate
     badging = output(aapt, "dump", "badging", str(apk))
     package = re.search(r"package: name='([^']+)' versionCode='(\d+)' versionName='([^']+)'", badging)
     # Every APK of the build — universal and all splits — shares the run number.
-    if not package or package.groups() != ("com.axolet.ordo", str(base), version):
+    package_name = {"stable": "com.axolet.ordo", "preview": "com.axolet.ordo.preview",
+                    "development": "com.axolet.ordo.development"}[channel]
+    if not package or package.groups() != (package_name, str(base), version):
         raise ValueError(f"{apk.name}: wrong package, native version or versionCode")
     resources = output(aapt, "dump", "--values", "resources", str(apk))
     value = re.search(r'\bstring/expo_runtime_version\b(?:(?!\bresource\b).)*?\(string(?:8|16)\)\s+"([^"]+)"', resources, re.S)
@@ -40,8 +42,18 @@ def verify(apk, *, aapt, apksigner, version, base, runtime, channel, certificate
     header_block = next((block for block in re.split(r"\n\s*E: meta-data[^\n]*\n", manifest)
                          if "expo.modules.updates.UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY" in block), None)
     header_value = re.search(r'android:value[^\n]*=("(?:\\.|[^"\\])*")', header_block or "")
-    if not header_value or json.loads(json.loads(header_value.group(1))).get("expo-channel-name") != channel:
-        raise ValueError(f"{apk.name}: embedded update channel does not match the selected stream")
+    enabled_block = next((block for block in re.split(r"\n\s*E: meta-data[^\n]*\n", manifest)
+                          if '"expo.modules.updates.ENABLED"' in block), "")
+    enabled_value = re.search(r'android:value[^\n]*=([^\n]+)', enabled_block)
+    enabled = enabled_value.group(1) if enabled_value else ""
+    if channel == "development":
+        if header_block or not re.search(r'(?:0x0\b|"false")', enabled):
+            raise ValueError(f"{apk.name}: Development must disable OTA and omit update headers")
+    else:
+        if not re.search(r'(?:0xffffffff\b|0x1\b|"true")', enabled):
+            raise ValueError(f"{apk.name}: release app must enable OTA")
+        if not header_value or json.loads(json.loads(header_value.group(1))).get("expo-channel-name") != channel:
+            raise ValueError(f"{apk.name}: embedded update channel does not match the selected stream")
     print(f"Verified {apk.name}: version={version}, code={base}, channel={channel}, runtime={runtime}")
 
 
@@ -51,7 +63,7 @@ def main():
     parser.add_argument("--version", required=True)
     parser.add_argument("--base-code", type=int, required=True)
     parser.add_argument("--runtime", required=True)
-    parser.add_argument("--channel", required=True)
+    parser.add_argument("--channel", required=True, choices=["stable", "preview", "development"])
     parser.add_argument("--release", action="store_true")
     args = parser.parse_args()
     sdk = Path(os.environ.get("ANDROID_HOME") or os.environ["ANDROID_SDK_ROOT"])

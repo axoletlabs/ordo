@@ -80,7 +80,7 @@ ordo_normalize_tag() {
     latest-pre) return 2 ;;
   esac
   [[ "$tag" == v* ]] || tag="v${tag}"
-  if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)(\.[0-9]+)?)?$ ]]; then
+  if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-preview(\.[0-9]+)?)?$ ]]; then
     return 3
   fi
   printf '%s\n' "$tag"
@@ -281,9 +281,9 @@ ordo_latest_pre_tag() {
     let text = "";
     process.stdin.on("data", (chunk) => { text += chunk; });
     process.stdin.on("end", () => {
-      const re = /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-(alpha|beta|rc)(?:\.(0|[1-9][0-9]*))?)?$/;
+      const re = /^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-(preview)(?:\.(0|[1-9][0-9]*))?)?$/;
       const rows = JSON.parse(text).filter((r) => !r.draft && r.published_at && re.test(r.tag_name));
-      const rank = (r) => { const m = r.tag_name.match(re); return [Number(m[1]), Number(m[2]), Number(m[3]), m[4] ? ["alpha", "beta", "rc"].indexOf(m[4]) : 3, m[5] == null ? -1 : Number(m[5])]; };
+      const rank = (r) => { const m = r.tag_name.match(re); return [Number(m[1]), Number(m[2]), Number(m[3]), m[4] ? 0 : 1, m[5] == null ? -1 : Number(m[5])]; };
       rows.sort((a,b) => { const x=rank(a), y=rank(b); for(let i=0;i<x.length;i++) { if(x[i]!==y[i]) return y[i]-x[i]; } return 0; });
       if (!rows.length) { console.error("No published Ordo releases found."); process.exit(1); }
       console.log(rows[0].tag_name);

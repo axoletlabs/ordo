@@ -15,4 +15,5 @@ if [[ "$BRANCH" == release/* ]]; then
   tag_query="$(jq -rn --arg tag "$tag" '$tag | @uri')"
   tag_runs="$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?branch=$tag_query&status=$STATUS&per_page=$SIZE&page=$PAGE" --jq '.workflow_runs')"
 fi
-jq -s 'add | unique_by(.id) | sort_by(.id) | reverse' <<<"$branch_runs $tag_runs"
+# A manual build on a release ref is Development, never that release's binary.
+jq -s --arg branch "$BRANCH" 'add | map(select(($branch | startswith("release/")) == false or .event == "push" or .event == "release")) | unique_by(.id) | sort_by(.id) | reverse' <<<"$branch_runs $tag_runs"

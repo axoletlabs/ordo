@@ -22,5 +22,13 @@ test("ignores incomplete, wrong-version, unofficial, and untrusted assets", () =
     apk("ordo-v0.2.0.apk", { size: 0 }), apk("ordo-v0.2.0.apk", { browser_download_url: "https://evil.test/app.apk" })]) {
     assert.equal(selectReleaseApk([invalid], "0.2.0", []), null);
   }
-  assert.equal(selectReleaseApk([apk("ordo-v0.2.0-beta.2-arm64-v8a.apk")], "0.2.0-beta.2", ["arm64-v8a"])?.name, "ordo-v0.2.0-beta.2-arm64-v8a.apk");
+});
+test("Preview assets have a separate prefix and cannot be exchanged with Stable", () => {
+  const version = "0.2.0-preview.2";
+  const stable = apk(`ordo-v${version}-arm64-v8a.apk`);
+  const preview = apk(`ordo-preview-v${version}-arm64-v8a.apk`);
+  assert.equal(selectReleaseApk([stable, preview], version, ["arm64-v8a"], "preview")?.name, preview.name);
+  assert.equal(selectReleaseApk([stable], version, ["arm64-v8a"], "preview"), null);
+  assert.equal(selectReleaseApk([preview], version, ["arm64-v8a"], "stable"), null);
+  assert.equal(selectReleaseApk([stable, preview], version, ["arm64-v8a"], "development"), null);
 });
