@@ -53,7 +53,9 @@ regressions without the base route screenshot catalogue; omit it for the full ru
 - TalkBack/VoiceOver, IME/autofill, physical touch hit-testing and large OS fonts
   still require on-device verification.
 - Android JavaScript export passes. The attempted Hermes bytecode export exited
-  with code 128; no passing APK/production bytecode build is claimed.
+  with code 128. The installed compiler is x86-64 on this ARM build box, and even
+  `hermesc --version` exits with 128; no passing APK/production bytecode build is
+  claimed from this local toolchain.
 - Existing deliberate customization is retained: filled fields use `outline`
   per app policy; reader scroll/refresh indicators, status pills and OTP/pattern
   controls remain custom. Unused navigation bars, rails, sheets, sliders and
