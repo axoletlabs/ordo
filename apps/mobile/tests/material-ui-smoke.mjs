@@ -3,10 +3,12 @@
  * PLAYWRIGHT_CHROMIUM=/path/to/chromium
  * ORDO_UI_URL=http://127.0.0.1:8235 ORDO_UI_OUTPUT=/tmp/opencode/ordo-ui node tests/material-ui-smoke.mjs
  * ORDO_UI_OVERLAY_LAYOUT_ONLY=1 checks nested menu sizing and reader contents across themes/layouts.
+ * ORDO_UI_READER_SETTINGS_ONLY=1 checks stable reader settings geometry and typography controls.
  */
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { accessibilityMatrix } from "./material-accessibility.mjs";
+import { readerSettingsLayoutMatrix } from "./reader-settings-layout.mjs";
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? "playwright");
 const base = process.env.ORDO_UI_URL ?? "http://127.0.0.1:8235";
 const output = process.env.ORDO_UI_OUTPUT ?? "/tmp/opencode/ordo-material-ui";
@@ -592,6 +594,7 @@ async function overlayLayoutMatrix() {
 
 try {
   if (process.env.ORDO_UI_ACCESSIBILITY_ONLY) await accessibilityMatrix({ browser, base, fixture, user, button, settle, capture, results });
+  else if (process.env.ORDO_UI_READER_SETTINGS_ONLY) await readerSettingsLayoutMatrix({ browser, fixture, login, navigate, button, settle, capture, results });
   else if (process.env.ORDO_UI_OVERLAY_LAYOUT_ONLY) await overlayLayoutMatrix();
   else if (process.env.ORDO_UI_READER_ONLY) await readerMatrix();
   else if (process.env.ORDO_UI_SELECTION_PERF) await selectionPerformance();

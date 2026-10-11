@@ -1,5 +1,5 @@
 /**
- * Reader appearance controls: a live type specimen, text size, typeface,
+ * Reader appearance controls: text size, typeface,
  * line spacing, theme (system/light/dark) and — when the effective theme is
  * dark — the AMOLED pure-black toggle. Presented as a FloatingPanel so it
  * matches the app's existing menu/sheet language on phones and tablets alike.
@@ -11,12 +11,8 @@ import { PanelHeader } from "../ui/PanelHeader";
 import { Segmented } from "../ui/Segmented";
 import { Text } from "../ui/Text";
 import { Toggle } from "../ui/Toggle";
-import { radius, spacing } from "../../theme/tokens";
-import {
-  READER_BODY_SIZE,
-  readerLineHeight,
-  resolveReaderFont,
-} from "./reader-typography";
+import { spacing } from "../../theme/tokens";
+import { resolveReaderFont } from "./reader-typography";
 import type {
   ReaderFontFamily,
   ReaderFontSize,
@@ -25,7 +21,6 @@ import type {
   ReaderTheme,
   UpdateReaderPreferencesInput,
 } from "@ordo/shared";
-import { useTheme } from "../../theme/ThemeProvider";
 
 const sizeOptions: readonly { value: ReaderFontSize; label: string; accessibilityLabel: string }[] = [
   { value: "small", label: "S", accessibilityLabel: "Small" },
@@ -98,35 +93,15 @@ export const ReaderControlsSheet = React.memo(function ReaderControlsSheet({
   onUpdate,
   effectiveDark,
 }: ReaderControlsSheetProps) {
-  const { palette } = useTheme();
   const { width, fontScale } = useWindowDimensions();
   const orientation = width < 360 || fontScale > 1.3 ? "vertical" : "horizontal";
-  const bodySize = READER_BODY_SIZE[preferences.fontSize];
-  const specimen = {
-    fontFamily: resolveReaderFont(preferences.fontFamily),
-    fontSize: bodySize,
-    lineHeight: readerLineHeight(bodySize, preferences.lineSpacing ?? "default"),
-    color: palette.onSurface,
-  };
   return (
     <FloatingPanel visible={visible} onDismiss={onDismiss}>
       <PanelHeader title="Reader" onClose={onDismiss} />
 
-      <View style={styles.body}>
-      <View
-        accessibilityRole="text"
-        accessibilityLabel="Type specimen"
-        style={[styles.specimen, { backgroundColor: palette.surfaceContainerLow }]}
-      >
-        <Text variant="label" color="tertiary" style={styles.specimenKicker}>
-          Preview
-        </Text>
-        <Text style={[specimen, styles.specimenBody]} numberOfLines={3}>
-          The quiet habit of reading well is mostly the habit of returning —
-          to the page, to the passage, to the sentence that started it.
-        </Text>
-      </View>
-
+      {/* Only the article uses reading size/spacing; controls keep UI metrics.
+          Typeface labels preview each font without resizing the panel. */}
+      <View>
       <ControlGroup label="Text size" accessibilityHint="Changes the article text size.">
         <Segmented
           accessibilityLabel="Text size"
@@ -188,14 +163,6 @@ export const ReaderControlsSheet = React.memo(function ReaderControlsSheet({
 });
 
 const styles = StyleSheet.create({
-  body: {},
-  specimen: {
-    borderRadius: radius.md,
-    padding: spacing[16],
-    marginBottom: spacing[24],
-  },
-  specimenKicker: { marginBottom: spacing[6] },
-  specimenBody: {},
   group: { marginBottom: spacing[24] },
   groupControl: { marginTop: spacing[8] },
   amoledRow: {
