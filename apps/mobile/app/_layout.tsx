@@ -72,7 +72,7 @@ SplashScreen.setOptions(
 // Brand beat: the logo stays up for at least this long, measured from
 // process start so the beat overlaps hydration instead of extending the
 // launch by a full beat after hydration finishes.
-const MIN_SPLASH_MS = 600;
+const MIN_SPLASH_MS = 400;
 const LAUNCH_STARTED_AT = Date.now();
 
 // Sign-out crossfade budget: the outgoing library keeps its painted data
