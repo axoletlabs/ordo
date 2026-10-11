@@ -70,6 +70,7 @@ module.exports = {
   runtimeVersion: otaRuntime || { policy: "fingerprint" },
   plugins: [
     "expo-asset",
+    "expo-localization",
     [
       "expo-local-authentication",
       {

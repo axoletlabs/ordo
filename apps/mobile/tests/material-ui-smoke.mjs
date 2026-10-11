@@ -5,6 +5,7 @@
  */
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
+import { accessibilityMatrix } from "./material-accessibility.mjs";
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? "playwright");
 const base = process.env.ORDO_UI_URL ?? "http://127.0.0.1:8235";
 const output = process.env.ORDO_UI_OUTPUT ?? "/tmp/opencode/ordo-material-ui";
@@ -350,9 +351,9 @@ async function checkTagDialogSizes(page, mode, name, value) {
     assert.ok(rect.y >= 0 && rect.y + rect.height <= viewport.height, `${name}: dialog viewport`);
     assert.equal(await page.getByRole("textbox", { name: "Tag name", exact: true }).inputValue(), value);
     if (viewport.name === "constrained") {
-      await button(page, "pink").click();
-      assert.equal(await button(page, "pink").getAttribute("aria-selected"), "true");
-      const target = await button(page, "pink").boundingBox();
+      await page.getByRole("radio", { name: "pink", exact: true }).click();
+      assert.equal(await page.getByRole("radio", { name: "pink", exact: true }).getAttribute("aria-checked"), "true");
+      const target = await page.getByRole("radio", { name: "pink", exact: true }).boundingBox();
       assert.ok(target.y >= rect.y && target.y + target.height <= rect.y + rect.height, `${name}: last color is reachable`);
       await capture(page, `${mode}-constrained-${name}-last-color`);
     }
@@ -519,7 +520,8 @@ async function readerMatrix() {
   }
 }
 try {
-  if (process.env.ORDO_UI_READER_ONLY) await readerMatrix();
+  if (process.env.ORDO_UI_ACCESSIBILITY_ONLY) await accessibilityMatrix({ browser, base, fixture, user, button, settle, capture, results });
+  else if (process.env.ORDO_UI_READER_ONLY) await readerMatrix();
   else if (process.env.ORDO_UI_SELECTION_PERF) await selectionPerformance();
   else if (process.env.ORDO_UI_POLISH_ONLY) await polishMatrix();
   else for (const theme of process.env.ORDO_UI_THEME ? [process.env.ORDO_UI_THEME] : ["light", "dark"]) for (const expressive of process.env.ORDO_UI_EXPRESSIVE ? [process.env.ORDO_UI_EXPRESSIVE === "true"] : [false, true]) {
@@ -587,7 +589,7 @@ try {
     await page.getByRole("checkbox").click(); await button(page, "Continue").click();
     const address = page.getByRole("textbox", { name: "Server address", exact: true });
     await address.fill("https://reachable.example.test");
-    await page.getByText("Reachable · ordo v0.1.0", { exact: true }).waitFor();
+    await page.getByText(/^Reachable · ordo v0\.1\.0/).waitFor();
     assert.equal(await button(page, "Connect").isEnabled(), true);
     await address.fill("https://offline.example.test");
     assert.equal(await button(page, "Connect").isDisabled(), true, "A new address must not reuse the previous server's verification");
@@ -703,7 +705,7 @@ try {
     await capture(page, `${mode}-portrait-custom-reminder-dialog`);
     await page.setViewportSize({ width: 1280, height: 800 });
     await capture(page, `${mode}-landscape-custom-reminder-dialog`);
-    const dates = page.getByRole("dialog").getByRole("button").filter({ hasText: /^\d{1,2}$/ });
+    const dates = page.getByRole("radiogroup", { name: "Reminder date", exact: true }).getByRole("radio");
     for (const date of await dates.all()) { const target = await date.boundingBox(); if (target) assert.ok(target.width >= 48 && target.height >= 48); }
     await page.setViewportSize({ width: 390, height: 844 });
     await page.keyboard.press("Escape"); await settle(page); await page.keyboard.press("Escape"); await settle(page);
@@ -719,7 +721,7 @@ try {
     const selectedSize = page.getByRole("radio", { name: "Extra large", exact: true });
     assert.equal(await selectedSize.getAttribute("aria-checked"), "true");
     assert.equal(await selectedSize.getByTestId("material-segment-check").count(), 1);
-    assert.equal(await selectedSize.evaluate(el => getComputedStyle(el).borderTopWidth), expressive ? "0px" : "1px");
+    assert.equal(await selectedSize.evaluate(el => getComputedStyle(el.firstElementChild).borderTopWidth), expressive ? "0px" : "1px");
     const readerThemes = page.getByRole("radiogroup", { name: "Reader theme", exact: true });
     assert.equal(await readerThemes.getByRole("radio").count(), 3);
     await readerThemes.getByRole("radio", { name: "Light", exact: true }).click(); await settle(page);

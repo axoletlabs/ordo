@@ -9,8 +9,9 @@ import type { MenuAnchorRect } from "../../lib/menu-anchor";
 import { radius, spacing } from "../../theme/tokens";
 import { OverlayPortal } from "./overlay-host";
 import { Text } from "./Text";
-export function PlainTooltip({ visible, anchor, label, onDismiss }: {
-  visible: boolean; anchor: MenuAnchorRect | null; label: string; onDismiss: () => void;
+export function PlainTooltip({ id, visible, anchor, label, onDismiss, onHoverIn, onHoverOut }: {
+   id?: string; visible: boolean; anchor: MenuAnchorRect | null; label: string; onDismiss: () => void;
+   onHoverIn?: () => void; onHoverOut?: () => void;
 }) {
   const { palette } = useTheme();
   const { width, height } = useWindowDimensions();
@@ -26,8 +27,8 @@ export function PlainTooltip({ visible, anchor, label, onDismiss }: {
   const left = Math.max(insets.left + 8, Math.min(origin.x + origin.width / 2 - w / 2, width - insets.right - w - 8));
   const below = origin.y + origin.height + 8;
   const top = below + size.height <= height - insets.bottom - 8 ? below : Math.max(insets.top + 8, origin.y - size.height - 8);
-  return <OverlayPortal><View pointerEvents="none" style={StyleSheet.absoluteFill}>
-    <Animated.View role="tooltip" onLayout={(event) => setSize(event.nativeEvent.layout)}
+   return <OverlayPortal><View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
+     <Animated.View nativeID={id} role="tooltip" onPointerEnter={onHoverIn} onPointerLeave={onHoverOut} onLayout={(event) => setSize(event.nativeEvent.layout)}
       style={[styles.tooltip, { left, top, backgroundColor: palette.inverseSurface }, fade]}>
       <Text variant="bodySmall" style={{ color: palette.inverseOnSurface }}>{label}</Text>
     </Animated.View>

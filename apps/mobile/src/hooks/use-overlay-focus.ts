@@ -1,9 +1,10 @@
 /** Web focus containment, menu keyboard navigation, Escape, and trigger restoration. */
 import { useEffect, useRef } from "react";
 import { Platform, type View } from "react-native";
+import { isolateModal } from "../lib/modal-isolation";
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
-export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "dialog" | "menu", dismissible = true) {
+export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "dialog" | "menu", dismissible = true, isolateBackground = false) {
   const ref = useRef<View>(null);
   const dismissRef = useRef(onDismiss);
   dismissRef.current = onDismiss;
@@ -11,11 +12,14 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
     if (!active || Platform.OS !== "web" || typeof document === "undefined") return;
     const previous = document.activeElement as HTMLElement | null;
     const node = () => ref.current as unknown as HTMLElement | null;
+    let releaseIsolation: (() => void) | undefined;
     const items = () => Array.from(node()?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []).filter((item) =>
       item.getAttribute("aria-disabled") !== "true" && item.getClientRects().length > 0);
     let frame = requestAnimationFrame(() => {
       // Portal publication happens in a layout effect; allow the host to attach.
       frame = requestAnimationFrame(() => {
+        const root = node();
+        if (isolateBackground && root) releaseIsolation = isolateModal(root);
         // Returning from a dropdown should preserve its restored trigger focus.
         if (node()?.contains(document.activeElement) && document.activeElement !== node()) return;
         const preferred = kind === "dialog" ? node()?.querySelector<HTMLElement>('input:not([disabled]), textarea:not([disabled])') : null;
@@ -26,7 +30,7 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
       const root = node();
       if (!root) return;
       const overlays = document.querySelectorAll('[data-material-overlay="true"]');
-      if (overlays[overlays.length - 1] !== root) return;
+      if (!isolateBackground && overlays[overlays.length - 1] !== root) return;
       if (event.key === "Escape" && dismissible) {
         event.preventDefault(); event.stopPropagation(); dismissRef.current(); return;
       }
@@ -47,12 +51,19 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
       if (target >= 0) { event.preventDefault(); rows[target].focus(); }
     };
     document.addEventListener("keydown", key, true);
+    const containFocus = (event: FocusEvent) => {
+      const root = node();
+      if (isolateBackground && root && !root.contains(event.target as Node)) (items()[0] ?? root).focus();
+    };
+    document.addEventListener("focusin", containFocus, true);
     return () => {
       cancelAnimationFrame(frame);
       document.removeEventListener("keydown", key, true);
+      document.removeEventListener("focusin", containFocus, true);
+      releaseIsolation?.();
       const root = node();
       if (previous?.isConnected && (root?.contains(document.activeElement) || document.activeElement === document.body)) previous.focus();
     };
-  }, [active, kind, dismissible]);
+  }, [active, kind, dismissible, isolateBackground]);
   return ref;
 }

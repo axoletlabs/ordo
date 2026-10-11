@@ -354,7 +354,7 @@ export function ContextMenuItem({
         Platform.OS === "web" ? styles.itemWeb : null,
         inactive && styles.itemDisabled,
         { backgroundColor: selected ? palette.secondaryContainer : "transparent" },
-        { borderRadius: expressive ? radius.md : radius.xs, marginHorizontal: spacing[8], overflow: "hidden" },
+        { borderRadius: expressive ? radius.md : radius.xs, marginHorizontal: expressive ? spacing[8] : 0, paddingHorizontal: expressive ? spacing[16] : spacing[12], overflow: "hidden" },
       ]}
     >
       <View style={styles.iconSlot}>

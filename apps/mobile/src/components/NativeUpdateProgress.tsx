@@ -7,6 +7,7 @@ import { Text } from "./ui/Text";
 import { Button } from "./ui/Button";
 import { PanelActions } from "./ui/SheetActionRow";
 import { Spinner } from "./ui/Spinner";
+import { LinearProgress } from "./ui/LinearProgress";
 import { toast } from "./ui/toast-store";
 import {
   openInstallPermissionSettings,
@@ -15,10 +16,9 @@ import {
 import {
   downloadPercentLabel,
   downloadProgressLabel,
-  downloadTrackPercent,
 } from "../lib/native-download-progress";
 import { useTheme } from "../theme/ThemeProvider";
-import { layout, radius, spacing } from "../theme/tokens";
+import { layout, spacing } from "../theme/tokens";
 
 export function NativeUpdateProgress() {
   const { palette } = useTheme();
@@ -34,7 +34,6 @@ export function NativeUpdateProgress() {
   const installUnfinished = !downloading && !downloadFailed && !!update.error;
   const starting = downloading && update.receivedBytes <= 0;
   const percentLabel = downloadPercentLabel(update.progress);
-  const trackPercent = downloadTrackPercent(update.progress, update.receivedBytes);
   const amountLabel = downloadProgressLabel(
     update.receivedBytes,
     update.release?.apkSize ?? 0,
@@ -95,19 +94,7 @@ export function NativeUpdateProgress() {
               </Text>
             )}
           </View>
-          <View
-            accessibilityRole="progressbar"
-            accessibilityLabel={starting ? "Starting download" : amountLabel}
-            accessibilityValue={
-              starting ? undefined : { min: 0, max: 100, now: Math.round(update.progress * 100) }
-            }
-            style={[styles.progressTrack, { backgroundColor: palette.background }]}
-          >
-            {trackPercent > 0 ? (
-              <View style={[styles.progressFill, { flex: trackPercent, backgroundColor: palette.accent }]} />
-            ) : null}
-            <View style={{ flex: Math.max(0.001, 100 - trackPercent) }} />
-          </View>
+          <LinearProgress label={starting ? "Starting download" : amountLabel} value={starting ? undefined : update.progress} />
           <Button
             label="Cancel"
             variant="secondary"
@@ -180,17 +167,8 @@ const styles = StyleSheet.create({
     marginBottom: spacing[8],
   },
   amount: { flex: 1 },
-  progressTrack: {
-    height: 3,
-    width: "100%",
-    borderRadius: radius.full,
-    overflow: "hidden",
-    flexDirection: "row",
-  },
-  progressFill: { height: 3 },
   cancel: { marginTop: spacing[12] },
   actions: { gap: spacing[4] },
   error: { marginBottom: spacing[12] },
   permissionButton: { width: "100%", marginBottom: spacing[8] },
 });
-

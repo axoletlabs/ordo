@@ -1,6 +1,6 @@
 /** Material small / large top app bars with shared 48dp action targets. */
 import React from "react";
-import { StyleSheet, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
+import { Platform, StyleSheet, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { useAppRouter as useRouter } from "../../hooks/use-app-router";
 import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -79,6 +79,10 @@ export function HeaderIconButton({ name, color, variant = "standard", onPress, a
   const grouped = useButtonGroupInteraction() != null;
   const ref = React.useRef<View>(null);
   const [tooltip, setTooltip] = React.useState<MenuAnchorRect | null>(null);
+  const tooltipId = React.useId();
+  const hovered = React.useRef(false);
+  const focused = React.useRef(false);
+  const tooltipHovered = React.useRef(false);
   const timer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const generation = React.useRef(0);
   const dismissTooltip = React.useCallback(() => {
@@ -86,31 +90,46 @@ export function HeaderIconButton({ name, color, variant = "standard", onPress, a
     if (timer.current) clearTimeout(timer.current);
     setTooltip(null);
   }, []);
-  const showTooltip = () => {
+  const showTooltip = (transient = false) => {
     const token = ++generation.current;
     if (timer.current) clearTimeout(timer.current);
     measureAnchor(ref.current, (anchor) => {
       if (generation.current !== token) return;
       setTooltip(anchor);
-      timer.current = setTimeout(() => setTooltip(null), 2000);
+      if (transient) timer.current = setTimeout(dismissTooltip, 2000);
     });
   };
   const scheduleTooltip = () => {
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(showTooltip, 500);
+    timer.current = setTimeout(() => showTooltip(), 500);
   };
+  const hideIfInactive = () => {
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => { if (!hovered.current && !focused.current && !tooltipHovered.current) dismissTooltip(); }, 200);
+  };
+  React.useEffect(() => {
+    if (!tooltip || Platform.OS !== "web") return;
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") { event.preventDefault(); dismissTooltip(); } };
+    document.addEventListener("keydown", escape, true);
+    return () => document.removeEventListener("keydown", escape, true);
+  }, [tooltip, dismissTooltip]);
   React.useEffect(() => () => { generation.current += 1; if (timer.current) clearTimeout(timer.current); }, []);
   return <><View ref={ref} collapsable={false} style={grouped ? { width: "100%" } : undefined}>
     <IconButton name={name} variant={variant} color={color} accessibilityLabel={accessibilityLabel}
-      accessibilityHint={accessibilityHint} onHoverIn={scheduleTooltip} onFocus={scheduleTooltip}
-      onHoverOut={dismissTooltip} onBlur={dismissTooltip} onLongPress={showTooltip}
+      aria-describedby={tooltip ? tooltipId : undefined}
+      accessibilityHint={accessibilityHint}
+      onHoverIn={() => { hovered.current = true; scheduleTooltip(); }} onFocus={() => { focused.current = true; scheduleTooltip(); }}
+      onHoverOut={() => { hovered.current = false; hideIfInactive(); }} onBlur={() => { focused.current = false; hideIfInactive(); }}
+      onLongPress={() => showTooltip(Platform.OS !== "web")}
       onPress={(event) => {
         dismissTooltip();
         const invoke = (anchor: MenuAnchorRect) => runPressAction(() => onPress(anchor), haptics.light);
         if (measureOnPress) measureAnchor(ref.current, invoke, event);
         else invoke({ x: 0, y: 0, width: 1, height: 1 });
       }} />
-  </View><PlainTooltip visible={!!tooltip} anchor={tooltip} label={accessibilityLabel} onDismiss={dismissTooltip} /></>;
+   </View><PlainTooltip id={tooltipId} visible={!!tooltip} anchor={tooltip} label={accessibilityLabel} onDismiss={dismissTooltip}
+     onHoverIn={() => { tooltipHovered.current = true; if (timer.current) clearTimeout(timer.current); }}
+     onHoverOut={() => { tooltipHovered.current = false; hideIfInactive(); }} /></>;
 }
 const styles = StyleSheet.create({
   bar: { minHeight: 64, flexDirection: "row", alignItems: "center", gap: spacing[8] },

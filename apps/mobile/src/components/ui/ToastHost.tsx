@@ -4,8 +4,8 @@
  * inline action. Driven by two shared values (enter + swipe offset) so the
  * enter/exit and swipe animations never fight.
  */
-import React, { useCallback, useEffect, useRef } from "react";
-import { Platform, StyleSheet } from "react-native";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { AccessibilityInfo, Platform, StyleSheet } from "react-native";
 import { MaterialIcon } from "./MaterialIcon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -22,7 +22,7 @@ import { PressableScale } from "./PressableScale";
 import { useTheme } from "../../theme/ThemeProvider";
 import { SCREEN_RAIL, contentInset } from "../../theme/alignment";
 import { useSceneColumnInsets } from "../../hooks/use-scene-column-insets";
-import { radius, springs, spacing } from "../../theme/tokens";
+import { radius, spacing } from "../../theme/tokens";
 import { useFloatingDockMetrics } from "../../hooks/use-floating-dock-metrics";
 import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 import { useFloatingActions } from "../../store/floating-actions";
@@ -37,6 +37,8 @@ function ToastItem({ toast }: { toast: Toast }) {
   const motion = useMaterialMotion();
   const dismiss = useToastStore((s) => s.dismiss);
   const dismissed = useRef(false);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
 
   // 0 → 1 enter/exit; horizontal px for swipe.
   const enter = useSharedValue(0);
@@ -53,10 +55,15 @@ function ToastItem({ toast }: { toast: Toast }) {
   // be read and tapped. Web keeps the close button and gains the same timer.
   useEffect(() => {
     enter.value = motion.reducedMotion ? 1 : withSpring(1, materialMotion.effects.spatial);
+    if (hovered || focused) return;
     const duration = toast.action ? Math.max(toast.duration, ACTION_TOAST_FLOOR_MS) : toast.duration;
-    const timer = setTimeout(animateOut, duration);
-    return () => clearTimeout(timer);
-  }, [toast.id, toast.duration, toast.action, enter, animateOut, motion.spatial, motion.reducedMotion]);
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = (timeout: number) => { if (active) timer = setTimeout(animateOut, Math.max(duration, timeout)); };
+    if (Platform.OS === "android") AccessibilityInfo.getRecommendedTimeoutMillis(duration).then(schedule, () => schedule(duration));
+    else schedule(duration);
+    return () => { active = false; if (timer) clearTimeout(timer); };
+  }, [toast.id, toast.duration, toast.action, enter, animateOut, motion.reducedMotion, hovered, focused]);
 
   const pan = Gesture.Pan()
     .enabled(toast.swipeable)
@@ -67,9 +74,10 @@ function ToastItem({ toast }: { toast: Toast }) {
       const past = Math.abs(offsetX.value) > SWIPE_THRESHOLD || Math.abs(e.velocityX) > SWIPE_VELOCITY;
       if (past) {
         const dir = Math.sign(offsetX.value) || 1;
-        offsetX.value = withSpring(dir * 500, springs.snappy, () => runOnJS(animateOut)());
+        if (motion.reducedMotion) runOnJS(animateOut)();
+        else offsetX.value = withSpring(dir * 500, materialMotion.effects.spatial, () => runOnJS(animateOut)());
       } else {
-        offsetX.value = withSpring(0, springs.gentle);
+        offsetX.value = motion.reducedMotion ? 0 : withSpring(0, materialMotion.effects.spatial);
       }
     });
 
@@ -81,6 +89,10 @@ function ToastItem({ toast }: { toast: Toast }) {
   return (
     <GestureDetector gesture={pan}>
       <Animated.View
+        onPointerEnter={(event) => { if (event.nativeEvent.pointerType !== "touch") setHovered(true); }}
+        onPointerLeave={() => setHovered(false)}
+        onFocus={() => setFocused(true)}
+        onBlur={(event) => { if (Platform.OS !== "web" || !(event.currentTarget as unknown as HTMLElement).contains((event as unknown as { relatedTarget: Node }).relatedTarget)) setFocused(false); }}
         accessibilityRole="alert"
         accessibilityLiveRegion={toast.tone === "danger" ? "assertive" : "polite"}
         testID="material-snackbar"
@@ -160,12 +172,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[16],
     marginTop: spacing[8],
     minHeight: 48,
+    minWidth: 48,
   },
   message: { flex: 1, minWidth: 0, includeFontPadding: false, paddingVertical: spacing[14] },
   // Actions retain a full touch target without making the container taller.
   actionHit: {
     flexShrink: 0,
     minHeight: 48,
+    minWidth: 48,
+    alignItems: "center",
     justifyContent: "center",
   },
   action: { includeFontPadding: false },

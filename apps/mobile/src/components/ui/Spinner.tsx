@@ -6,18 +6,22 @@ import React, { useEffect } from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, {
   Easing,
+  ReduceMotion,
   cancelAnimation,
   useAnimatedStyle,
+  useAnimatedProps,
   useSharedValue,
   withRepeat,
   withTiming,
-  useReducedMotion,
 } from "react-native-reanimated";
 import Svg, { Circle, Path } from "react-native-svg";
 import { useTheme } from "../../theme/ThemeProvider";
 import { radius } from "../../theme/tokens";
+import { useMaterialMotion } from "../../theme/material-motion";
 
 const SIZES = { sm: 16, md: 20, lg: 24 } as const;
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 export type SpinnerSize = keyof typeof SIZES;
 
@@ -39,7 +43,7 @@ export function Spinner({
   spinning?: boolean;
 }) {
   const { palette, expressive } = useTheme();
-  const reducedMotion = useReducedMotion();
+  const { reducedMotion } = useMaterialMotion();
   const extent = spinnerExtent(size);
   const rotation = useSharedValue(0);
 
@@ -51,9 +55,11 @@ export function Spinner({
     }
     rotation.value = 0;
     rotation.value = withRepeat(
-      withTiming(360, { duration: 750, easing: Easing.linear }),
+      withTiming(360, { duration: 1333, easing: Easing.linear, reduceMotion: ReduceMotion.Never }),
       -1,
       false,
+      undefined,
+      ReduceMotion.Never,
     );
     return () => cancelAnimation(rotation);
   }, [rotation, spinning, reducedMotion]);
@@ -76,6 +82,11 @@ export function Spinner({
     for (let i = 1; i < points.length; i++) length += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
     return { path: points.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(3)},${point.y.toFixed(3)}`).join(" "), length };
   }, [extent, radiusPx]);
+  const arc = useAnimatedProps(() => {
+    const fraction = !spinning || reducedMotion ? 0.25 : 0.1 + 0.65 * (1 - Math.cos(rotation.value * Math.PI / 180)) / 2;
+    const length = expressive ? wave.length : circumference;
+    return { strokeDasharray: [length * fraction, length], strokeDashoffset: -length * rotation.value / 720 };
+  });
 
   return (
     <Animated.View
@@ -86,15 +97,14 @@ export function Spinner({
       style={[{ width: extent, height: extent }, spinStyle, style]}
     >
       <Svg width={extent} height={extent} viewBox={`0 0 ${extent} ${extent}`}>
-        {expressive ? <Path d={wave.path} stroke={color ?? palette.primary} strokeWidth={stroke}
-          strokeLinecap="round" strokeLinejoin="round" strokeDasharray={`${wave.length * 0.72} ${wave.length}`} fill="none" /> : <Circle
+        {expressive ? <AnimatedPath animatedProps={arc} d={wave.path} stroke={color ?? palette.primary} strokeWidth={stroke}
+          strokeLinecap="round" strokeLinejoin="round" fill="none" /> : <AnimatedCircle animatedProps={arc}
           cx={extent / 2}
           cy={extent / 2}
           r={radiusPx}
           stroke={color ?? palette.accent}
           strokeWidth={stroke}
           strokeLinecap="round"
-          strokeDasharray={`${circumference * 0.72} ${circumference}`}
           fill="none"
         />}
       </Svg>

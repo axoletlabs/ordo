@@ -1,5 +1,5 @@
 /** Material spring tokens. Damping = 2 × dampingRatio × sqrt(stiffness × mass). */
-import { useReducedMotion } from "react-native-reanimated";
+import { useReducedMotionPreference } from "../hooks/use-reduced-motion-preference";
 import { useSettingsStore } from "../store/settings";
 
 const spring = (stiffness: number, ratio: number) => ({
@@ -24,6 +24,6 @@ export const materialMotion = {
 
 export function useMaterialMotion() {
   const expressive = useSettingsStore((s) => s.expressive);
-  const reducedMotion = useReducedMotion();
+  const reducedMotion = useReducedMotionPreference();
   return { ...materialMotion[expressive ? "expressive" : "standard"], expressive, reducedMotion };
 }
