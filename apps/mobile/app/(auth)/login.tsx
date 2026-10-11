@@ -121,6 +121,8 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
       >
         <Input
           label="Email"
+          required maxLength={254}
+          disabled={login.isPending}
           value={identifier}
           onChangeText={setIdentifier}
           placeholder="you@example.com"
@@ -139,6 +141,8 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
           ref={passwordRef}
           key={screenFocused ? "password" : "password-locked"}
           label="Password"
+          required
+          disabled={login.isPending}
           value={passwordField.value}
           onChangeText={setPassword}
           placeholder="••••••••"

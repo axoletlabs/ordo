@@ -115,7 +115,7 @@ export default function VerifyEmailScreen() {
       <Input
         label="Email"
         value={email}
-        editable={false}
+        readOnly
         placeholder="you@example.com"
         keyboardType="email-address"
         textContentType="emailAddress"

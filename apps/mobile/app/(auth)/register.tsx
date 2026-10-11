@@ -157,6 +157,8 @@ export default function RegisterScreen() {
         <>
           <Input
             label="Display name"
+            required maxLength={64} showCounter
+            disabled={register.isPending}
             value={displayName}
             onChangeText={setDisplayName}
             placeholder="Your name"
@@ -173,6 +175,8 @@ export default function RegisterScreen() {
           <Input
             ref={emailRef}
             label="Email"
+            required maxLength={254}
+            disabled={register.isPending}
             value={email}
             onChangeText={setEmail}
             placeholder="you@example.com"
@@ -189,6 +193,8 @@ export default function RegisterScreen() {
           <View style={{ height: spacing[16] }} />
           <Input
             label="Password"
+            required maxLength={256}
+            disabled={register.isPending}
             ref={passwordRef}
             value={password}
             onChangeText={setPassword}
@@ -207,6 +213,8 @@ export default function RegisterScreen() {
           <View style={{ height: spacing[16] }} />
           <Input
             label="Confirm password"
+            required maxLength={256}
+            disabled={register.isPending}
             ref={confirmRef}
             value={confirm}
             onChangeText={setConfirm}

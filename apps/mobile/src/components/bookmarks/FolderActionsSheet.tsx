@@ -422,6 +422,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
           <PanelHeader title="Rename folder" />
           <Input
             label="Name"
+            required maxLength={100} showCounter
             value={name}
             onChangeText={setName}
             autoFocus
@@ -505,6 +506,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             <>
               <Input
                 label="Password"
+                required
                 value={password}
                 onChangeText={setPassword}
                 placeholder="At least 4 characters"
@@ -517,6 +519,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
               />
               <Input
                 label="Confirm password"
+                required
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
                 placeholder="Enter password again"
@@ -603,6 +606,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
           ) : (
             <Input
               label="Folder password"
+              required
               value={password}
               onChangeText={setPassword}
               placeholder="Folder password"
@@ -652,6 +656,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
           />
           <Input
             label="Account password"
+            required
             value={accountPassword}
             onChangeText={setAccountPassword}
             placeholder="Your account password"

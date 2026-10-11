@@ -94,6 +94,7 @@ export default function ChangePasswordScreen() {
             <SettingsForm key={mfaOpen ? "mfa-locked" : "editable"}>
               <Input
                 label="Current password"
+                required
                 value={currentField.value}
                 onChangeText={setCurrentPassword}
                 placeholder="Enter your current password"
@@ -104,6 +105,7 @@ export default function ChangePasswordScreen() {
               />
               <Input
                 label="New password"
+                required maxLength={256}
                 value={newField.value}
                 onChangeText={setNewPassword}
                 placeholder="At least 8 characters"
@@ -113,6 +115,7 @@ export default function ChangePasswordScreen() {
               />
               <Input
                 label="Confirm new password"
+                required maxLength={256}
                 error={errorField === "confirm" ? formError : undefined}
                 value={confirmField.value}
                 onChangeText={setConfirm}

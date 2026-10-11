@@ -333,6 +333,7 @@ function ServerEditPanel({
           <Input
             ref={nameRef}
             label="Name"
+            maxLength={64} showCounter
             value={name}
             onChangeText={(next) => {
               setNameError("");
@@ -341,7 +342,8 @@ function ServerEditPanel({
             placeholder={APP_NAME}
             autoCapitalize="words"
             autoComplete="off"
-            editable={canRename && !busy && !rename.isPending}
+            readOnly={!canRename}
+            disabled={busy || rename.isPending}
             error={nameError || undefined}
             helper={
               !nameError && !canRename ? "Only the server owner can rename this instance." : undefined
@@ -351,6 +353,7 @@ function ServerEditPanel({
           <Input
             ref={urlRef}
             label="Address"
+            required
             value={url}
             onChangeText={setUrl}
             placeholder="https://ordo.example.com"
@@ -362,7 +365,7 @@ function ServerEditPanel({
             importantForAutofill="no"
             spellCheck={false}
             mono
-            editable={!busy && !rename.isPending}
+            disabled={busy || rename.isPending}
             error={probeCopy.error}
             helper={probeCopy.helper}
             onSubmitEditing={() => void submit()}

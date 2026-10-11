@@ -167,7 +167,7 @@ export default function ResetPasswordScreen() {
           <Input
             label="Email"
             value={email}
-            editable={false}
+            readOnly
             onChangeText={() => {}}
             showSoftInputOnFocus={false}
             caretHidden
@@ -179,6 +179,7 @@ export default function ResetPasswordScreen() {
           <View style={{ height: spacing[16] }} />
           <Input
             label="New password"
+            required maxLength={256}
             value={newPassword}
             onChangeText={setNewPassword}
             placeholder="At least 8 characters"
@@ -195,6 +196,7 @@ export default function ResetPasswordScreen() {
           <Input
             ref={confirmRef}
             label="Confirm new password"
+            required maxLength={256}
             value={confirm}
             onChangeText={setConfirm}
             placeholder="Re-enter your new password"

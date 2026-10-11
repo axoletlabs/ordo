@@ -54,6 +54,7 @@ export default function ChangeDisplayNameScreen() {
             <SettingsForm>
               <Input
                 label="Display name"
+                required maxLength={64} showCounter
                 value={displayName}
                 onChangeText={setDisplayName}
                 placeholder="Your name"

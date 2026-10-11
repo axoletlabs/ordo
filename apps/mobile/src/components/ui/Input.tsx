@@ -18,6 +18,7 @@ import { caretAfterKey, shouldCorrectWebCaret } from "../../lib/web-input-caret"
 import { useMaterialMotion } from "../../theme/material-motion";
 import { InputSurfaceContext } from "./input-surface";
 import { nativeInputEdit } from "../../lib/native-input-edit";
+import { alphaTint } from "../../theme/state-layer";
 const AnimatedLabel = Animated.createAnimatedComponent(Text);
 
 type WebCaretNode = TextInput & {
@@ -54,6 +55,11 @@ export interface InputProps extends Omit<TextInputProps, "style"> {
   mono?: boolean;
   variant?: "filled" | "outlined" | "search";
   containerStyle?: ViewStyle;
+  disabled?: boolean;
+  readOnly?: boolean;
+  required?: boolean;
+  showCounter?: boolean;
+  reserveSupportingSpace?: boolean;
 }
 
 export const Input = React.forwardRef<TextInput, InputProps>(function Input({
@@ -76,6 +82,11 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   keyboardType,
   value,
   editable = true,
+  disabled = false,
+  readOnly = false,
+  required = false,
+  showCounter = false,
+  reserveSupportingSpace = !!label,
   ...rest
 }, ref) {
   const { palette } = useTheme();
@@ -83,9 +94,16 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   const fieldSurface = React.useContext(InputSurfaceContext) ?? palette.surface;
   const motion = useMaterialMotion();
   const [focused, setFocused] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const inactive = disabled || (!editable && !readOnly);
+  const canEdit = !inactive && !readOnly;
+  const displayLabel = label && required ? `${label} *` : label;
+  const support = error ?? (helper ? required ? `${helper} * Required` : helper : required ? "* Required" : undefined);
+  const foreground = inactive ? alphaTint(palette.onSurface, 0.38) : palette.onSurface;
   const [hasText, setHasText] = useState(!!value);
   const [overlayWidth, setOverlayWidth] = useState(0);
   const inputRef = useRef<TextInput>(null);
+  const accessoryRef = useRef<View>(null);
   const pendingCaret = useRef<number | null>(null);
   const focusedRef = useRef(false);
   const lastAppliedValue = useRef(value);
@@ -108,6 +126,10 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
     restoreWebCaret(webCaretNode(inputRef.current), start);
     pendingCaret.current = null;
   });
+  useLayoutEffect(() => {
+    // aria-hidden alone doesn't remove trailing actions from keyboard navigation.
+    if (Platform.OS === "web" && accessoryRef.current) (accessoryRef.current as unknown as HTMLElement).inert = inactive;
+  }, [inactive, rightAccessory]);
 
   useLayoutEffect(() => {
     if (!androidUncontrolled) return;
@@ -127,8 +149,8 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   const filled = variant === "filled";
   const leadingIcon = React.isValidElement<React.ComponentProps<typeof MaterialIcon>>(icon) && icon.type === MaterialIcon
     ? React.cloneElement(icon, { size: 24, style: [icon.props.style, { width: 24, height: 24 }] }) : icon;
-  const borderColor = search ? "transparent" : error ? palette.error : focused ? palette.primary : palette.outline;
-  const borderWidth = search ? 0 : focused ? 2 : 1;
+  const borderColor = inactive ? alphaTint(palette.onSurface, 0.12) : error ? palette.error : focused ? palette.primary : hovered ? palette.onSurface : palette.outline;
+  const borderWidth = search ? 0 : focused && !inactive ? 2 : 1;
   const floating = focused || hasText || !!value;
   const floatProgress = useSharedValue(floating ? 1 : 0);
   useEffect(() => {
@@ -143,7 +165,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
     : mono && Platform.OS !== "android"
       ? resolveFont("mono", "400")
       : resolveFont("sans", "400");
-  const overlay = overlayRightAccessory && !!rightAccessory;
+  const overlay = overlayRightAccessory && !!rightAccessory && !error;
   const padRight =
     overlayPaddingRight != null
       ? overlayPaddingRight
@@ -166,41 +188,53 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   return (
     <View style={[label && !filled && !search ? { paddingTop: 8 } : null, containerStyle]}>
       <View
+        onPointerEnter={(event) => { if (event.nativeEvent.pointerType !== "touch") setHovered(true); }}
+        onPointerLeave={() => setHovered(false)}
+        onPointerDown={(event) => { if (!inactive && event.target === event.currentTarget) inputRef.current?.focus(); }}
+        onStartShouldSetResponder={(event) => !inactive && event.target === event.currentTarget}
+        onResponderRelease={() => { if (!inactive) inputRef.current?.focus(); }}
         style={[
           styles.box,
           {
-            backgroundColor: search ? palette.surfaceContainerHigh : filled ? palette.surfaceContainerHighest : fieldSurface,
+            backgroundColor: inactive && filled ? alphaTint(palette.onSurface, 0.04) : search ? palette.surfaceContainerHigh : filled ? palette.surfaceContainerHighest : fieldSurface,
             paddingHorizontal: icon && !search ? spacing[12] : spacing[16],
             borderRadius: search ? radius.full : filled ? 0 : radius.sm,
             ...(filled ? { borderTopLeftRadius: radius.xs, borderTopRightRadius: radius.xs } : {}),
           },
         ]}
       >
+        {hovered && !inactive ? <View testID="material-field-hover" pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: alphaTint(palette.onSurface, 0.08), borderRadius: search ? radius.full : filled ? 0 : radius.sm,
+          ...(filled ? { borderTopLeftRadius: radius.xs, borderTopRightRadius: radius.xs } : {}) }]} /> : null}
+        {search && focused ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderColor, borderWidth: 2, borderRadius: radius.full }]} /> : null}
         {filled ? <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: borderWidth, backgroundColor: borderColor }} />
           : !search ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderColor, borderWidth, borderRadius: radius.sm }]} /> : null}
         {label ? <Animated.View pointerEvents="none" style={[styles.floatingLabel, {
           left: icon ? 48 : 12,
           backgroundColor: filled || search ? "transparent" : fieldSurface,
         }, labelPosition]}>
-          <AnimatedLabel variant="bodyLarge" style={[{ color: error ? palette.error : focused ? palette.primary : palette.onSurfaceVariant }, labelType]}>{label}</AnimatedLabel>
+          <AnimatedLabel variant="bodyLarge" style={[{ color: inactive ? foreground : error ? palette.error : focused ? palette.primary : palette.onSurfaceVariant }, labelType]}>{displayLabel}</AnimatedLabel>
         </Animated.View> : null}
-        {icon ? <View style={styles.icon}>{leadingIcon}</View> : null}
+        {icon ? <View pointerEvents="none" style={[styles.icon, inactive ? { opacity: 0.38 } : null]}>{leadingIcon}</View> : null}
         <TextInput
           ref={setInputRef}
           key={androidUncontrolled ? `android-field-${androidEpoch}` : undefined}
-          placeholderTextColor={palette.onSurfaceVariant}
+           placeholderTextColor={inactive ? foreground : palette.onSurfaceVariant}
           autoCorrect={false}
           autoCapitalize="none"
           secureTextEntry={secureTextEntry}
           keyboardType={resolvedKeyboardType}
           underlineColorAndroid="transparent"
-          editable={editable}
+          editable={canEdit}
           accessibilityLabel={rest.accessibilityLabel ?? label ?? rest.placeholder}
           selectionColor={palette.primary}
           cursorColor={palette.primary}
           keyboardAppearance={palette.mode}
           {...rest}
-          {...(Platform.OS === "web" ? { "aria-invalid": !!error, "aria-describedby": error || helper ? messageId : undefined } : null)}
+          accessibilityState={{ ...rest.accessibilityState, disabled: inactive }}
+          accessibilityHint={rest.accessibilityHint ?? (readOnly ? "Read only." : required ? "Required." : undefined)}
+          // RN-web promotes even aria-readonly=false to HTML readOnly=true.
+          // Omit that attribute for editable fields; native readOnly remains authoritative.
+          {...(Platform.OS === "web" ? { disabled: inactive, readOnly, "aria-readonly": readOnly ? true : undefined, "aria-required": required ? true : undefined, "aria-invalid": !!error, "aria-describedby": support ? messageId : undefined } : null)}
           placeholder={label && !floating ? undefined : rest.placeholder}
           {...(Platform.OS === "web" ? { dir: "ltr" as const } : null)}
           {...(androidUncontrolled
@@ -244,19 +278,19 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
             const target = (event.target ?? event.nativeEvent?.target) as WebCaretNode | undefined;
             // Autofill writes locked fields even when they aren't focused.
             // Put the controlled value back so the DOM can't drift.
-            if (!editable && target && typeof value === "string" && target.value !== value) {
+            if (!canEdit && target && typeof value === "string" && target.value !== value) {
               target.value = value;
             }
             restoreWebCaret(webCaretNode(target), pendingCaret.current);
           }}
-          onChangeText={editable ? (text) => {
+          onChangeText={canEdit ? (text) => {
             if (androidUncontrolled) lastAppliedValue.current = text;
             setHasText(text.length > 0); onChangeText?.(text);
           } : undefined}
           style={[
             styles.input,
             {
-              color: palette.text,
+              color: foreground,
               fontFamily,
               writingDirection: "ltr",
             },
@@ -266,9 +300,14 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
             filled && label ? { paddingTop: spacing[24], paddingBottom: spacing[8] } : null,
           ]}
         />
+        {error && !inactive ? <View testID="material-field-error-icon" pointerEvents="none" style={{ marginLeft: 8 }}><MaterialIcon name="alert-circle" size={24} color={palette.error} accessible={false} /></View> : null}
         {rightAccessory ? (
           <View
-            pointerEvents={overlay ? "box-none" : "auto"}
+            ref={accessoryRef}
+            pointerEvents={inactive ? "none" : overlay ? "box-none" : "auto"}
+            accessibilityElementsHidden={inactive}
+            importantForAccessibility={inactive ? "no-hide-descendants" : "auto"}
+            aria-hidden={inactive}
             onLayout={
               overlay && overlayPaddingRight == null
                 ? (event) => {
@@ -277,21 +316,17 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
                   }
                 : undefined
             }
-            style={overlay ? styles.rightOverlay : styles.right}
+            style={[overlay ? styles.rightOverlay : styles.right, inactive ? { opacity: 0.38 } : null]}
           >
             {rightAccessory}
           </View>
         ) : null}
       </View>
-      {error ? (
-        <Text nativeID={messageId} variant="bodySmall" color="danger" accessibilityLiveRegion="polite" style={styles.msg}>
-          {error}
-        </Text>
-      ) : helper ? (
-        <Text nativeID={messageId} variant="bodySmall" color="secondary" style={styles.msg}>
-          {helper}
-        </Text>
-      ) : null}
+      {support || reserveSupportingSpace || showCounter ? <View style={[styles.msg, { minHeight: 16, flexDirection: "row", gap: 8 }]}>
+        <Text nativeID={messageId} variant="bodySmall" color={error ? "danger" : "secondary"}
+          accessibilityRole={error ? "alert" : undefined} accessibilityLiveRegion={error ? "polite" : "none"} style={[{ flex: 1 }, inactive ? { color: foreground } : null]}>{support ?? " "}</Text>
+        {showCounter && rest.maxLength != null ? <Text variant="bodySmall" color="secondary" accessibilityLabel={`${value?.length ?? 0} of ${rest.maxLength} characters`}>{value?.length ?? 0}/{rest.maxLength}</Text> : null}
+      </View> : null}
     </View>
   );
 });

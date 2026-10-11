@@ -91,6 +91,7 @@ export default function DeleteAccountScreen() {
               </Text>
               <Input
                 label="Password"
+                required
                 value={passwordField.value}
                 onChangeText={setCurrentPassword}
                 placeholder="Enter your password"
@@ -100,6 +101,7 @@ export default function DeleteAccountScreen() {
               />
               <Input
                 label="Confirmation"
+                required
                 value={confirmation}
                 onChangeText={setConfirmation}
                 placeholder={DELETE_ACCOUNT_CONFIRMATION}

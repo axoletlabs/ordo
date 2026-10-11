@@ -173,6 +173,7 @@ export function SelfHostFlow({
               <Input
                 ref={inputRef}
                 label="Server address"
+                required
                 value={url}
                 onChangeText={setUrl}
                 placeholder="https://ordo.example.com"

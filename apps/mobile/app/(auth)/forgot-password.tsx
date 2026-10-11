@@ -61,6 +61,8 @@ export default function ForgotPasswordScreen() {
       <OtpDeliveryHint smtpConfigured={smtpConfigured} />
       <Input
         label="Email"
+        required maxLength={254}
+        disabled={forgot.isPending}
         value={email}
         onChangeText={setEmail}
         placeholder="you@example.com"

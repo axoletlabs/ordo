@@ -3,7 +3,7 @@
  */
 import React, { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { DEFAULT_TAG_COLOR, type TagColor, type TagDto } from "@ordo/shared";
+import { DEFAULT_TAG_COLOR, TAG_NAME_MAX_LENGTH, type TagColor, type TagDto } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
@@ -58,6 +58,7 @@ export function CreateTagPanel({ visible, onDismiss, onCreated }: CreateTagPanel
       <View style={styles.body}>
         <Input
           label="Tag name"
+          required maxLength={TAG_NAME_MAX_LENGTH} showCounter
           value={name}
           onChangeText={setName}
           placeholder="Tag name"

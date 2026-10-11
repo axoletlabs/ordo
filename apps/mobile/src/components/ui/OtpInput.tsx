@@ -34,6 +34,7 @@ import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
 import { useMaterialMotion } from "../../theme/material-motion";
 import { haptics } from "../../lib/haptics";
 import { InputSurfaceContext } from "./input-surface";
+import { alphaTint } from "../../theme/state-layer";
 
 export type OtpStatus = "idle" | "loading" | "success" | "error";
 
@@ -91,6 +92,7 @@ export function OtpInput({
       ? value.replace(/[^a-zA-Z0-9]/g, "").toLowerCase().slice(0, length)
       : value.replace(/\D/g, "").slice(0, length);
   const locked = !editable || status === "loading" || status === "success";
+  const inactive = !editable || status === "loading";
   const activeIndex = Math.min(chars.length, length - 1);
   const showCaret = focused && !locked && status === "idle" && chars.length < length;
   // A kept-alive screen can remount this field already filled (previous OTP).
@@ -163,6 +165,7 @@ export function OtpInput({
   }));
 
   const setCode = (raw: string) => {
+    if (locked) return;
     const next =
       kind === "backup"
         ? raw.replace(/[^a-zA-Z0-9]/g, "").toLowerCase().slice(0, length)
@@ -174,9 +177,9 @@ export function OtpInput({
   const messageDanger = Boolean(error);
   const compact = kind === "backup";
   const boxPalette = {
-    text: palette.text,
-    border: palette.outline,
-    borderStrong: palette.borderStrong,
+    text: inactive ? alphaTint(palette.onSurface, 0.38) : palette.text,
+    border: inactive ? alphaTint(palette.onSurface, 0.12) : palette.outline,
+    borderStrong: inactive ? alphaTint(palette.onSurface, 0.12) : palette.borderStrong,
     accent: palette.accent,
     background: fieldSurface,
     surface: palette.surfaceElevated,
@@ -250,8 +253,9 @@ export function OtpInput({
           keyboardAppearance={palette.mode === "dark" ? "dark" : "light"}
           maxLength={kind === "backup" ? length * 2 : length}
           accessibilityLabel={label ?? (purpose === "pin" ? "PIN" : "Verification code")}
+          accessibilityState={{ disabled: inactive, busy: status === "loading" }}
           accessibilityValue={{ text: chars }}
-          {...(Platform.OS === "web" ? { "aria-invalid": !!error, "aria-describedby": message ? messageId : undefined } : null)}
+          {...(Platform.OS === "web" ? { disabled: inactive, readOnly: locked, "aria-required": true, "aria-invalid": !!error, "aria-describedby": message ? messageId : undefined } : null)}
           style={[
             styles.hiddenInput,
             Platform.OS === "web"
@@ -262,7 +266,7 @@ export function OtpInput({
       </Pressable>
 
       {message ? (
-        <Text nativeID={messageId} variant="bodySmall" color={messageDanger ? "danger" : "secondary"} accessibilityLiveRegion={messageDanger ? "polite" : "none"} style={styles.msg}>
+        <Text nativeID={messageId} variant="bodySmall" color={messageDanger ? "danger" : "secondary"} accessibilityRole={messageDanger ? "alert" : undefined} accessibilityLiveRegion={messageDanger ? "polite" : "none"} style={styles.msg}>
           {message}
         </Text>
       ) : null}

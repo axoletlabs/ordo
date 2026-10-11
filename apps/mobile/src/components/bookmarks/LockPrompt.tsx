@@ -243,6 +243,7 @@ export function UnlockForm({
       ) : (
         <Input
           label="Password"
+          required disabled={unlock.isPending}
           value={password}
           onChangeText={(value) => {
             setPassword(value);

@@ -117,13 +117,14 @@ function ChangeEmailForm() {
                 label="Current email"
                 value={user?.email ?? ""}
                 onChangeText={() => {}}
-                editable={false}
+                readOnly
                 autoComplete="off"
                 textContentType="none"
                 importantForAutofill="no"
               />
               <Input
                 label="New email"
+                required maxLength={254}
                 value={newEmail}
                 onChangeText={setNewEmail}
                 placeholder="you@example.com"
@@ -136,6 +137,7 @@ function ChangeEmailForm() {
               />
               <Input
                 label="Current password"
+                required
                 value={passwordField.value}
                 onChangeText={setCurrentPassword}
                 placeholder="Enter your current password"
