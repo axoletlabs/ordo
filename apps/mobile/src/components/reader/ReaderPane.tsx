@@ -91,7 +91,8 @@ import { useSettingsStore } from "../../store/settings";
 import { domainFromUrl, formatDate } from "../../lib/format";
 import { errorMessage, folderProtectedId, isFolderProtected } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
-import { layout, spacing } from "../../theme/tokens";
+import { layout, radius, spacing } from "../../theme/tokens";
+import { listCorners, listPosition } from "../../theme/list-shape";
 import { toast } from "../ui/toast-store";
 import { isMenuAnchorRect, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { BookmarkBrowser, type BookmarkBrowserHandle } from "../browser/BookmarkBrowser";
@@ -205,7 +206,7 @@ function ReaderPaneInner({
   onUpdatePreferences,
   readerPalette,
 }: ReaderPaneInnerProps) {
-  const { palette: appPalette } = useTheme();
+  const { palette: appPalette, expressive } = useTheme();
   const forceWebsiteDark = useSettingsStore((s) => s.forceWebsiteDark);
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -337,6 +338,7 @@ function ReaderPaneInner({
   const readerFont = resolveReaderFont(contentPreferences.fontFamily);
   const readerBoldFont = resolveReaderFont(contentPreferences.fontFamily, "700");
   const articleHeadings = headingState.bookmarkId === bookmark?.id ? headingState.headings : [];
+  const contentsBaseLevel = articleHeadings.reduce((level, heading) => Math.min(level, heading.level), 6);
   const highlights = detail.data?.highlights ?? EMPTY_HIGHLIGHTS;
 
   const handleHeadingsChange = useCallback(
@@ -1374,12 +1376,17 @@ function ReaderPaneInner({
       <FloatingPanel visible={actionPanel === "contents"} onDismiss={() => setActionPanel(null)}>
         <PanelHeader title="Table of contents" />
         <ThemedScrollView style={styles.tocList}>
-          {articleHeadings.map((heading) => (
+          {articleHeadings.map((heading, index) => (
             <PressableScale
               key={heading.id}
               style={[
                 styles.tocRow,
-                { paddingLeft: (heading.level - 1) * spacing[16] },
+                { paddingLeft: spacing[16] + (heading.level - contentsBaseLevel) * spacing[16] },
+                expressive ? {
+                  ...listCorners(listPosition(index, articleHeadings.length), false),
+                  backgroundColor: readerPalette.surfaceContainerLow,
+                  marginBottom: spacing[2],
+                } : null,
               ]}
               onPress={() => handleHeadingSelect(heading.id)}
               accessibilityRole="button"
@@ -1388,7 +1395,6 @@ function ReaderPaneInner({
               <Text
                 variant={heading.level === 1 ? "bodyStrong" : "body"}
                 numberOfLines={2}
-                style={styles.actionLabel}
               >
                 {heading.text}
               </Text>
@@ -1529,9 +1535,15 @@ const styles = StyleSheet.create({
   description: { marginTop: spacing[8] },
   byline: { marginTop: spacing[6] },
   content: { marginTop: spacing[24] },
-  actionLabel: { flex: 1 },
   tocList: { maxHeight: 420 },
-  tocRow: { minHeight: 48, justifyContent: "center" },
+  tocRow: {
+    minHeight: 48,
+    justifyContent: "center",
+    paddingHorizontal: spacing[16],
+    paddingVertical: spacing[8],
+    borderRadius: radius.xs,
+    overflow: "hidden",
+  },
   highlightList: { maxHeight: 420 },
   highlightRow: {
     minHeight: 48,

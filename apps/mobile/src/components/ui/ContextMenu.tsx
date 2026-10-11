@@ -29,6 +29,7 @@ import { dismissKeyboard, useKeyboardViewportHeight } from "../../hooks/use-keyb
 import { haptics } from "../../lib/haptics";
 import {
   CONTEXT_MENU_WIDTH,
+  CONTEXT_MENU_EDGE,
   isMenuAnchorRect,
   placeMenu,
   type MenuAnchorRect,
@@ -51,7 +52,7 @@ export interface ContextMenuProps {
   sessionKey?: string | number | null;
   scrollBody?: boolean;
   keyboardDismiss?: boolean;
-  /** Nested pages share the first page's viewport and transition in place. */
+  /** Nested pages share an origin and transition in place, sizing to their contents. */
   pageKey?: string;
 }
 
@@ -89,11 +90,10 @@ function ContextMenuSurface({
   const menuRef = useOverlayFocus(visible && rendered && backdrop, hideAndDismiss, "menu");
   const [contentHeight, setContentHeight] = React.useState(0);
   const contentHeightRef = React.useRef(0);
-  const retainedHeight = React.useRef(0);
   const pageProgress = useSharedValue(1);
   const pageLeaving = useSharedValue(0);
   // Outgoing content held in place while a fade-through hands off to the
-  // next page. The menu surface keeps its size; only the content swaps.
+  // next page. The origin stays fixed; size follows the displayed page.
   const [displayed, setDisplayed] = React.useState<React.ReactNode>(null);
   const motion = useMaterialMotion();
   const lastPage = React.useRef(pageKey);
@@ -147,7 +147,6 @@ function ContextMenuSurface({
   if (visible && sessionKeyRef.current !== sessionKey) {
     sessionKeyRef.current = sessionKey;
     contentHeightRef.current = 0;
-    retainedHeight.current = 0;
     placementLock.current = null;
     sessionSide.current = null;
     if (contentHeight !== 0) setContentHeight(0);
@@ -159,7 +158,6 @@ function ContextMenuSurface({
     const continueSession = sessionKey != null && placementLock.current != null;
     if (!continueSession) {
       contentHeightRef.current = 0;
-      retainedHeight.current = 0;
       placementLock.current = null;
       sessionSide.current = null;
       if (contentHeight !== 0) setContentHeight(0);
@@ -209,8 +207,12 @@ function ContextMenuSurface({
     }
   }
   const placed = lastPlacement.current;
-  const pageHeight = pageKey != null && retainedHeight.current > 0 && placed
-    ? Math.min(retainedHeight.current, placed.maxHeight - menuPadding * 2) : undefined;
+  // A taller nested page may scroll, but must not grow below the viewport
+  // while the session's origin stays locked.
+  const heightLimit = placed ? placementLock.current
+    ? Math.min(placed.maxHeight, windowHeight - insets.bottom - CONTEXT_MENU_EDGE - placed.top)
+    : placed.maxHeight : 0;
+  const bodyHeightLimit = Math.max(0, heightLimit - menuPadding * 2);
   const fromY = placed?.placement === "above" ? 6 : -6;
   const awaitingMeasure = visible && measuredHeight <= 0;
 
@@ -250,8 +252,7 @@ function ContextMenuSurface({
               left: placed.left,
               top: placed.top,
               width: menuWidth,
-              maxHeight: placed.maxHeight,
-              height: pageHeight != null ? pageHeight + menuPadding * 2 : undefined,
+              maxHeight: heightLimit,
               backgroundColor: palette.surfaceContainerHigh,
               borderRadius: expressive ? radius.xl : radius.xs,
               paddingVertical: menuPadding,
@@ -262,19 +263,17 @@ function ContextMenuSurface({
         >
             <View
               collapsable={false}
-              style={{ height: pageHeight, maxHeight: Math.max(48, placed.maxHeight - menuPadding * 2), flexShrink: 1 }}
+              style={{ maxHeight: bodyHeightLimit, flexShrink: 1 }}
               onLayout={(event) => {
-                if (!visible || placementLock.current) return;
-                const actual = event.nativeEvent.layout.height;
-                const next = pageKey != null ? retainedHeight.current || Math.max(144, actual) : actual;
+                if (!visible) return;
+                const next = event.nativeEvent.layout.height;
                 if (next <= 0 || Math.abs(next - contentHeightRef.current) < 1) return;
                 contentHeightRef.current = next;
-                if (pageKey != null && retainedHeight.current === 0) retainedHeight.current = next;
                 setContentHeight(next);
               }}
             >
-              <Animated.View style={[{ flexShrink: 1, ...(pageHeight != null ? { flex: 1 } : {}) }, pageStyle]}>
-              {scrollBody ? <ThemedScrollView bounces={false} keyboardShouldPersistTaps="handled" style={pageHeight != null ? { flex: 1 } : { maxHeight: Math.max(48, placed.maxHeight - menuPadding * 2) }}>
+              <Animated.View style={[{ flexShrink: 1 }, pageStyle]}>
+              {scrollBody ? <ThemedScrollView bounces={false} keyboardShouldPersistTaps="handled" style={{ maxHeight: bodyHeightLimit }}>
                 {displayed ?? (visible ? children : lastChildren.current)}
               </ThemedScrollView> : displayed ?? (visible ? children : lastChildren.current)}
               </Animated.View>

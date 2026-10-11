@@ -2,6 +2,7 @@
  * PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs
  * PLAYWRIGHT_CHROMIUM=/path/to/chromium
  * ORDO_UI_URL=http://127.0.0.1:8235 ORDO_UI_OUTPUT=/tmp/opencode/ordo-ui node tests/material-ui-smoke.mjs
+ * ORDO_UI_OVERLAY_LAYOUT_ONLY=1 checks nested menu sizing and reader contents across themes/layouts.
  */
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -33,6 +34,9 @@ const readerHtml = `<h2>Reading with purpose</h2>
   <figure><img src="https://example.test/reader-illustration.svg" width="1600" height="600" alt="A reading-library illustration"/><figcaption>Images stay inside the reading column.</figcaption></figure>
   <h3>Keep exploring</h3><p>${"A library grows one thoughtful read at a time. ".repeat(24)}</p>`;
 const readerHighlight = { id: "saved-highlight", exact: "durable library", prefix: "A ", suffix: " makes reading easier.", href: null, createdAt: stamp };
+const contentsHtml = `<h2>Join the mailing list and follow the reviews</h2><p>Reader introduction.</p>
+  <h2>Reacting to comments, issuing new license versions</h2><p>Reader section.</p>
+  <h3>Nested section</h3><p>Nested section text.</p><h3>Further details</h3><p>Details.</p>`;
 const authResponse = { user, tokens: { accessToken: "fixture-access", refreshToken: "fixture-refresh", expiresIn: 3600 } };
 const results = { screens: [], interactions: [], errors: [], performanceSamples: [] };
 let activePage;
@@ -95,7 +99,7 @@ async function fixture(page, scenario = {}) {
       ...Array.from({ length: Math.max(0, (scenario.bookmarkCount ?? 1) - 1) }, (_, index) => ({ ...bookmark, id: `saved-${index}`, title: `Saved reading ${index + 1}`, tags: [], createdAt: new Date(Date.parse(stamp) - (index + 1) * 60000).toISOString() }))], nextCursor: null, hasMore: false };
     else if (path.startsWith("/api/bookmarks/article/highlights") && request.method() === "DELETE") { scenario.highlightRemoved = true; body = { success: true }; }
     else if (path.startsWith("/api/bookmarks/article")) body = { ...bookmark,
-      contentHtml: scenario.richReader ? readerHtml : "<h2>Reading with purpose</h2><p>Saved ideas make a useful library.</p>",
+      contentHtml: scenario.contentsLayout ? contentsHtml : scenario.richReader ? readerHtml : "<h2>Reading with purpose</h2><p>Saved ideas make a useful library.</p>",
       highlights: scenario.richReader && !scenario.highlightRemoved ? [readerHighlight] : [] };
     else if (url.hostname === "api.github.com") body = [];
     if (url.hostname === "www.google.com") return route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect width="24" height="24" rx="4" fill="#006a60"/></svg>' });
@@ -519,8 +523,76 @@ async function readerMatrix() {
     await context.close();
   }
 }
+async function overlayLayoutMatrix() {
+  const check = (condition, message) => {
+    if (!process.env.ORDO_UI_OVERLAY_BASELINE) assert.ok(condition, message);
+  };
+  results.overlayMeasurements = [];
+  for (const theme of ["light", "dark"]) for (const expressive of [false, true]) {
+    const context = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: theme });
+    await context.addInitScript(({ theme, expressive }) => localStorage.setItem("ordo.settings", JSON.stringify({ themeMode: theme, expressive, materialYouColors: false })), { theme, expressive });
+    const page = await context.newPage(); activePage = page;
+    await fixture(page, { contentsLayout: true, readerPreferences: { theme } }); await login(page);
+    for (const viewport of [{ name: "portrait", width: 390, height: 844 }, { name: "landscape", width: 1280, height: 800 }, { name: "constrained", width: 320, height: 420 }]) {
+      await page.setViewportSize(viewport); await settle(page);
+      const mode = `${theme}-${expressive ? "expressive" : "standard"}-${viewport.name}`;
+      const row = page.getByRole("button", { name: /^Building a more expressive design system,/ });
+      await row.click({ button: "right" }); await settle(page);
+      const menu = page.getByRole("menu"), original = await menu.boundingBox();
+      await page.getByRole("menuitem", { name: "Remind", exact: true }).click(); await settle(page);
+      const remind = await menu.boundingBox(), last = await page.getByRole("menuitem", { name: "Custom…", exact: true }).boundingBox();
+      const bottomGap = remind.y + remind.height - last.y - last.height;
+      check(remind.y >= 12 && remind.y + remind.height <= viewport.height - 12, `${mode}: reminder stays inside viewport`);
+      check(bottomGap <= 9, `${mode}: reminder bottom gap ${bottomGap}px should be only 8px padding`);
+      check(Math.abs(remind.x - original.x) < 1 && Math.abs(remind.y - original.y) < 1, `${mode}: nested page must keep its origin`);
+      await capture(page, `${mode}-reminder`);
+      await page.getByRole("menuitem", { name: "Back", exact: true }).click(); await settle(page);
+      const restored = await menu.boundingBox();
+      check(Math.abs(restored.height - original.height) < 1, `${mode}: Back restores action menu height`);
+      await page.keyboard.press("Escape"); await settle(page);
+      await navigate(page, "reader/article");
+      await button(page, "Table of contents").waitFor(); await button(page, "Table of contents").click(); await settle(page);
+      const targets = page.getByRole("button", { name: /^Go to / });
+      const headingMeasurements = await targets.evaluateAll(nodes => nodes.map(node => {
+        const rect = node.getBoundingClientRect(), text = node.firstElementChild.getBoundingClientRect();
+        const layer = node.querySelector('[data-testid="material-state-layer"]'), style = getComputedStyle(node);
+        return { height: rect.height, left: rect.left, textInset: text.left - rect.left, textFlexGrow: +getComputedStyle(node.firstElementChild).flexGrow,
+          centerOffset: Math.abs((text.top + text.height / 2) - (rect.top + rect.height / 2)), radius: parseFloat(style.borderTopLeftRadius),
+          layerMatches: layer && Math.abs(layer.getBoundingClientRect().width - rect.width) < 1 };
+      }));
+      check(headingMeasurements.every(row => row.height >= 48 && row.centerOffset < 1 && row.textFlexGrow === 0 && row.layerMatches), `${mode}: contents rows must center non-stretching text within bounded 48px targets`);
+      check(headingMeasurements[0].textInset === 16 && headingMeasurements[1].textInset === 16 && headingMeasurements[2].textInset === 32 && headingMeasurements[3].textInset === 32,
+        `${mode}: heading hierarchy uses relative 16px indents`);
+      check(headingMeasurements[0].radius > 0, `${mode}: contents hover must have a Material shape`);
+      const before = await targets.first().boundingBox(); await targets.first().hover(); await settle(page);
+      const hovered = await targets.first().boundingBox();
+      check(["x", "y", "width", "height"].every(key => Math.abs(before[key] - hovered[key]) < 0.5), `${mode}: hover must not shift contents`);
+      await auditStateLayers(page, mode); await capture(page, `${mode}-contents-hover`);
+      results.overlayMeasurements.push({ mode, reminderBottomGapPx: bottomGap, actionHeight: original.height, reminderHeight: remind.height, headingMeasurements });
+      await targets.last().focus(); await page.keyboard.press("Enter"); await settle(page);
+      assert.equal(await page.getByRole("dialog").count(), 0, "Keyboard heading activation dismisses contents");
+      // Jumping to a heading collapses reader chrome in a short viewport.
+      await page.getByText(bookmark.title, { exact: true }).last().scrollIntoViewIfNeeded(); await settle(page);
+      await navigate(page, "");
+    }
+    await page.emulateMedia({ reducedMotion: "reduce" }); await settle(page);
+    await page.getByRole("button", { name: /^Building a more expressive design system,/ }).click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Remind", exact: true }).click(); await settle(page);
+    await page.getByRole("menuitem", { name: "Custom…", exact: true }).click(); await settle(page);
+    await page.getByRole("dialog").waitFor(); await page.keyboard.press("Escape"); await settle(page);
+    await page.getByRole("menuitem", { name: "Custom…", exact: true }).waitFor();
+    const menu = await page.getByRole("menu").boundingBox(), last = await page.getByRole("menuitem", { name: "Custom…", exact: true }).boundingBox();
+    check(menu.y + menu.height - last.y - last.height <= 9, "Returning from custom reminder keeps presets compact");
+    await page.keyboard.press("Escape"); await settle(page);
+    assert.equal(await page.getByRole("menu").count(), 0);
+    results.interactions.push(`${theme}-${expressive}: compact nested menus, stable origin, centered contents, hierarchy, keyboard and reduced motion`);
+    await context.close();
+  }
+}
+
 try {
   if (process.env.ORDO_UI_ACCESSIBILITY_ONLY) await accessibilityMatrix({ browser, base, fixture, user, button, settle, capture, results });
+  else if (process.env.ORDO_UI_OVERLAY_LAYOUT_ONLY) await overlayLayoutMatrix();
   else if (process.env.ORDO_UI_READER_ONLY) await readerMatrix();
   else if (process.env.ORDO_UI_SELECTION_PERF) await selectionPerformance();
   else if (process.env.ORDO_UI_POLISH_ONLY) await polishMatrix();
