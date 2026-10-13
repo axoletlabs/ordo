@@ -29,8 +29,12 @@ export function StateLayer({ color, fraction, surfaceStyle, inset = 0, testID = 
   color: string; fraction: number; surfaceStyle?: StyleProp<ViewStyle>; inset?: number; testID?: string;
 }) {
   const opacity = useStateVisibility(fraction > 0);
+  // Keep ink through exit. Clearing its alpha on release used to make the
+  // fade animate an already-invisible layer (a one-frame feedback blink).
+  const ink = useRef(fraction);
+  if (fraction > 0) ink.current = fraction;
   return <Animated.View testID={testID} pointerEvents="none" accessible={false}
     style={[{ position: "absolute", top: inset, bottom: inset, left: inset, right: inset },
       stateLayerCorners(StyleSheet.flatten(surfaceStyle)),
-      { overflow: "hidden", backgroundColor: alphaTint(color, fraction), opacity }]} />;
+      { overflow: "hidden", backgroundColor: alphaTint(color, ink.current), opacity }]} />;
 }

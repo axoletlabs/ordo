@@ -12,7 +12,7 @@ import {
   type ViewStyle,
   type PressableProps,
 } from "react-native";
-import Animated, { Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { cancelAnimation, Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useMaterialMotion } from "../../theme/material-motion";
 import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { AppIcon } from "./PinIcon";
@@ -84,12 +84,14 @@ function ContextMenuSurface({
     if (backdrop && keyboardDismiss) dismissKeyboard();
     onDismiss();
   }, [backdrop, keyboardDismiss, onDismiss]);
-  const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, {
-    dismissKeyboard: backdrop && keyboardDismiss,
-  });
-  const menuRef = useOverlayFocus(visible && rendered && backdrop, hideAndDismiss, "menu");
   const [contentHeight, setContentHeight] = React.useState(0);
   const contentHeightRef = React.useRef(0);
+  const bodyRef = React.useRef<View>(null);
+  const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, {
+    dismissKeyboard: backdrop && keyboardDismiss,
+    ready: contentHeight > 0,
+  });
+  const menuRef = useOverlayFocus(visible && rendered && backdrop, hideAndDismiss, "menu");
   const pageProgress = useSharedValue(1);
   const pageLeaving = useSharedValue(0);
   // Outgoing content held in place while a fade-through hands off to the
@@ -97,25 +99,41 @@ function ContextMenuSurface({
   const [displayed, setDisplayed] = React.useState<React.ReactNode>(null);
   const motion = useMaterialMotion();
   const lastPage = React.useRef(pageKey);
+  const visibleRef = React.useRef(visible);
+  visibleRef.current = visible;
+  const pageWasVisible = React.useRef(false);
+  const [pageCommit, setPageCommit] = React.useState(0);
   // Swap the frozen outgoing page for the incoming one only after the
   // surface has fully faded: the shared value is already applied at 0, so
   // neither page can flash mid-frame no matter when styles land.
   const settlePageSwap = React.useCallback((key: string | undefined) => {
-    if (key !== lastPage.current) return;
+    if (!visibleRef.current || key !== lastPage.current) return;
     pageLeaving.value = 0;
     setDisplayed(null);
     pageProgress.value = 0;
-    pageProgress.value = withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) });
-  }, [pageProgress]);
+    setPageCommit((value) => value + 1);
+  }, [pageLeaving, pageProgress]);
   React.useLayoutEffect(() => {
-    if (!visible || pageKey === lastPage.current) return;
-    lastPage.current = pageKey;
+    if (!pageCommit || !visible || displayed !== null) return;
+    // Begin the incoming fade only once React has committed the new contents.
+    pageProgress.value = motion.reducedMotion ? 1 : withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) });
+  }, [pageCommit, displayed, visible, motion.reducedMotion, pageProgress]);
+  React.useLayoutEffect(() => {
+    if (!visible) {
+      cancelAnimation(pageProgress);
+      lastPage.current = pageKey;
+      return;
+    }
     if (motion.reducedMotion) {
+      cancelAnimation(pageProgress);
+      lastPage.current = pageKey;
       pageLeaving.value = 0;
       pageProgress.value = 1;
       setDisplayed(null);
       return;
     }
+    if (pageKey === lastPage.current) return;
+    lastPage.current = pageKey;
     // Material fade-through: fade the current page out in place, swap to
     // the next page while the surface is empty, then fade it in with a
     // small settle. Direction-free, so opening a nested page reads the
@@ -124,7 +142,7 @@ function ContextMenuSurface({
     pageProgress.value = withTiming(0, { duration: 100, easing: Easing.in(Easing.quad) }, (finished) => {
       if (finished) runOnJS(settlePageSwap)(pageKey);
     });
-  }, [visible, pageKey, pageProgress, settlePageSwap, motion.reducedMotion]);
+  }, [visible, pageKey, pageLeaving, pageProgress, settlePageSwap, motion.reducedMotion]);
   const pageStyle = useAnimatedStyle(() => ({
     opacity: pageProgress.value,
     ...(Platform.OS !== "web" ? { transform: [{ translateX: (pageLeaving.value ? -8 : 8) * (1 - pageProgress.value) }] } : {}),
@@ -162,12 +180,32 @@ function ContextMenuSurface({
       sessionSide.current = null;
       if (contentHeight !== 0) setContentHeight(0);
     }
-    // A new open never inherits a page handoff from a previous session.
-    pageLeaving.value = 0;
-    pageProgress.value = 1;
     if (displayed !== null) setDisplayed(null);
   }
   wasVisibleRef.current = visible;
+  React.useLayoutEffect(() => {
+    if (!visible || contentHeightRef.current > 0) return;
+    let cancelled = false;
+    // A quick reopen can reuse the exiting tree at exactly the same size.
+    // ResizeObserver/onLayout then has no change to report: explicitly measure
+    // that retained body rather than waiting forever behind the readiness gate.
+    bodyRef.current?.measure((_x, _y, _width, measured) => {
+      if (cancelled || measured <= 0) return;
+      contentHeightRef.current = measured;
+      setContentHeight(measured);
+    });
+    return () => { cancelled = true; };
+  }, [visible, sessionKey]);
+  React.useLayoutEffect(() => {
+    const opening = visible && !pageWasVisible.current;
+    pageWasVisible.current = visible;
+    if (!opening) return;
+    // Shared values are updated at commit, never during a speculative render.
+    cancelAnimation(pageProgress);
+    lastPage.current = pageKey;
+    pageLeaving.value = 0;
+    pageProgress.value = 1;
+  }, [visible, pageKey, pageLeaving, pageProgress]);
 
   const menuWidth = Math.min(width, Math.max(160, windowWidth - spacing[32]));
   const menuPadding = spacing[8];
@@ -214,10 +252,8 @@ function ContextMenuSurface({
     : placed.maxHeight : 0;
   const bodyHeightLimit = Math.max(0, heightLimit - menuPadding * 2);
   const fromY = placed?.placement === "above" ? 6 : -6;
-  const awaitingMeasure = visible && measuredHeight <= 0;
-
   const menuStyle = useAnimatedStyle(() => ({
-    opacity: awaitingMeasure ? 0 : progress.value,
+    opacity: progress.value,
     transform: [{ translateY: interpolate(spatial.value, [0, 1], [fromY * 2, 0]) }],
   }));
 
@@ -262,6 +298,7 @@ function ContextMenuSurface({
           ]}
         >
             <View
+              ref={bodyRef}
               collapsable={false}
               style={{ maxHeight: bodyHeightLimit, flexShrink: 1 }}
               onLayout={(event) => {
