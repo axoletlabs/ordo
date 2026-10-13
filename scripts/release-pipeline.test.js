@@ -33,7 +33,11 @@ test("every distributor is gated by tests and dependency audit, including releas
   assert.ok(workflow.jobs.release.needs.includes("package_server"));
   assert.ok(workflow.on.pull_request != null || "pull_request" in workflow.on);
   assert.ok(!workflow.jobs.analyze.if.includes("event_name"), "release checks cannot be skipped");
-  assert.equal(workflow.jobs.analyze.concurrency["cancel-in-progress"], false, "later JS pushes must not kill an APK's gate");
+  assert.equal(workflow.concurrency, undefined, "later JS pushes must not cancel an in-flight APK's workflow");
+  for (const name of ["analyze", "supply-chain", "build_apk"]) {
+    assert.equal(workflow.jobs[name].concurrency, undefined, `${name} must run independently without cancelling earlier gates or APKs`);
+  }
+  assert.equal(workflow.jobs.ota.concurrency["cancel-in-progress"], true, "only superseded OTA publication is cancelled");
   const steps = workflow.jobs.build_apk.steps;
   const verify = steps.findIndex((step) => step.name === "Verify packaged APK signing, versions, runtime and channel");
   const upload = steps.findIndex((step) => step.name === "Upload verified Android runtime version");
@@ -41,11 +45,46 @@ test("every distributor is gated by tests and dependency audit, including releas
   assert.equal(steps[upload].with.overwrite, true, "a workflow retry must be able to upload its artifact");
 });
 
+test("toolchain setup uses supported inputs and explicitly disables audit-job caching", () => {
+  const action = yaml.load(readFileSync(join(root, ".github/actions/setup-pnpm-node/action.yml"), "utf8"));
+  const [pnpm, cached, uncached] = action.runs.steps;
+  assert.equal(pnpm.uses, "pnpm/action-setup@v5");
+  assert.equal(pnpm.with, undefined, "do not pass setup-node inputs to pnpm/action-setup");
+  for (const step of [cached, uncached]) {
+    assert.equal(step.uses, "actions/setup-node@v5");
+    assert.deepEqual(Object.keys(step.with).sort(), step === cached
+      ? ["cache", "node-version"] : ["node-version", "package-manager-cache"]);
+  }
+  assert.equal(cached.if, "inputs.pnpm-cache == 'true'");
+  assert.equal(cached.with.cache, "pnpm");
+  assert.equal(uncached.if, "inputs.pnpm-cache != 'true'");
+  assert.equal(uncached.with["package-manager-cache"], false);
+  assert.equal(workflow.jobs["supply-chain"].steps.find((step) => step.uses === "./.github/actions/setup-pnpm-node").with["pnpm-cache"], false);
+});
+
 test("packaged APK verification rejects cross-package updates and Development OTA", () => {
   const result = spawnSync("python3", [join(root, ".github/scripts/verify-apks.test.py")], {
     encoding: "utf8", env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
   });
   assert.equal(result.status, 0, result.stderr);
+});
+
+test("prebuild verification fails when Development embeds an OTA channel", (t) => {
+  const temp = mkdtempSync(join(tmpdir(), "ordo-channel-manifest-"));
+  t.after(() => rmSync(temp, { recursive: true, force: true }));
+  const dir = join(temp, "android/app/src/main");
+  mkdirSync(dir, { recursive: true });
+  const manifest = join(dir, "AndroidManifest.xml");
+  const step = workflow.jobs.build_apk.steps.find((step) => step.name === "Verify OTA channel embedded");
+  const run = step.run.replace("${{ needs.detect.outputs.updates_channel }}", "development");
+  for (const [contents, expected] of [["<manifest/>", 0], ['<meta-data value="expo-channel-name: stable"/>', 1]]) {
+    writeFileSync(manifest, contents);
+    const result = spawnSync("bash", ["-e", "-c", run], { cwd: temp, encoding: "utf8" });
+    assert.equal(result.status, expected, result.stderr);
+  }
+  const steps = workflow.jobs.build_apk.steps;
+  assert.ok(steps.findIndex((step) => step.name === "Show ccache stats") >
+    steps.findIndex((step) => step.name === "Build APKs (release, per-ABI splits + universal)"));
 });
 
 test("routing matrix covers pushes, branches, forced builds and release events", () => {
@@ -241,6 +280,23 @@ test("last APK scan uses job success even if another job failed and deduplicates
   assert.equal(result.stdout.trim(), `${f.head}\n${f.parent}`);
 });
 
+test("completed baseline includes published tags but excludes manual Development APKs", (t) => {
+  const f = apkFixture(t, {});
+  const tag = { id: 17, head_sha: f.parent, head_branch: "v0.1.1", event: "release" };
+  f.update({ branchRuns: {
+    "release/0.1.1": { completed: [{ id: 19, head_sha: f.head, event: "workflow_dispatch" }] },
+    "v0.1.1": { completed: [tag] },
+  }, jobs: {
+    19: [{ name: "build_apk", conclusion: "success" }],
+    17: [{ name: "build_apk", conclusion: "success" }],
+  }, shas: { 19: f.head, 17: f.parent } });
+  const result = f.run("apk-baseline-sha.sh", ["release/0.1.1"], { APP_VERSION: "0.1.1" });
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(result.stdout.trim(), f.parent, "use the published release, not a manual Development build");
+  f.update({ fail: true });
+  assert.notEqual(f.run("apk-baseline-sha.sh", ["release/0.1.1"]).status, 0, "API failure must not silently select a baseline");
+});
+
 test("APK wait ignores newer runs, blocks pending binaries and fails closed on API failure", (t) => {
   const f = apkFixture(t, { runs: { in_progress: [{ id: 21 }] }, jobs: {} });
   assert.equal(f.run("wait-for-in-flight-apk.sh", ["main"]).status, 0);
@@ -329,6 +385,15 @@ require('node:fs').appendFileSync(process.env.EAS_TEST_LOG,JSON.stringify({args:
   } });
   assert.notEqual(development.status, 0);
   assert.equal(readFileSync(log, "utf8"), "", "Development must never reach EAS publication");
+  for (const runtimes of ["", " \n ", "invalid", `${"a".repeat(40)} invalid`]) {
+    writeFileSync(log, "");
+    const result = spawnSync("bash", ["-e", "-c", step.run], { env: {
+      ...process.env, PATH: `${temp}:${process.env.PATH}`, EAS_TEST_LOG: log,
+      CHANNEL: "stable", EXTRA_RUNTIMES: runtimes,
+    } });
+    assert.notEqual(result.status, 0, `reject unverified runtimes: ${JSON.stringify(runtimes)}`);
+    assert.equal(readFileSync(log, "utf8"), "", "invalid lists must fail before any publication");
+  }
 });
 
 test("channel initialization reuses an existing channel and links a missing one", (t) => {

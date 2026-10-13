@@ -43,7 +43,6 @@ jobs:
       version_code: ${{ steps.info.outputs.version_code }}
       should_build: ${{ steps.route.outputs.should_build }}
       is_release: ${{ steps.info.outputs.is_release }}
-      build_ref: ${{ steps.info.outputs.build_ref }}
       updates_channel: ${{ steps.info.outputs.updates_channel }}
       app_variant: ${{ steps.info.outputs.app_variant }}
       extra_runtime_versions: ${{ steps.eligibility.outputs.extra_runtime_versions }}
@@ -79,7 +78,6 @@ jobs:
           # and later runs outrank earlier builds because the counter only
           # grows. A workflow re-run reuses its own code.
           echo "version_code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
-          echo "build_ref=${{ github.sha }}" >> "$GITHUB_OUTPUT"
 
           if [ "${{ github.event_name }}" = "release" ]; then
             echo "is_release=true" >> "$GITHUB_OUTPUT"
@@ -158,11 +156,6 @@ jobs:
 
   analyze:
     if: '!github.event.deleted'
-    # Unique per run: a later push must never cancel this gate while the
-    # APK it approved is still building (see the header note on concurrency).
-    concurrency:
-      group: ci-analyze-${{ github.ref }}-${{ github.run_id }}
-      cancel-in-progress: false
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -186,14 +179,25 @@ jobs:
       - name: Lint
         run: pnpm -r lint
 
-      - name: Test
-        run: pnpm -r test && pnpm --filter @ordo/mobile test:material && pnpm --filter @ordo/mobile test:performance && pnpm --filter @ordo/mobile test:reader-performance && pnpm --filter @ordo/mobile test:updates && pnpm test:scripts
+      - name: Workspace tests
+        run: pnpm -r test
+
+      - name: Material UI tests
+        run: pnpm --filter @ordo/mobile test:material
+
+      - name: Performance tests
+        run: |
+          pnpm --filter @ordo/mobile test:performance
+          pnpm --filter @ordo/mobile test:reader-performance
+
+      - name: Updater tests
+        run: pnpm --filter @ordo/mobile test:updates
+
+      - name: CI and installer tests
+        run: pnpm test:scripts
 
   supply-chain:
     if: '!github.event.deleted'
-    concurrency:
-      group: ci-supply-chain-${{ github.ref }}-${{ github.run_id }}
-      cancel-in-progress: false
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -287,8 +291,6 @@ jobs:
       # OTA update gets a different runtime version than the installed binary.
       - name: Expo prebuild
         working-directory: apps/mobile
-        env:
-          EXPO_UPDATES_CHANNEL: ${{ needs.detect.outputs.updates_channel }}
         run: pnpm exec expo prebuild --platform android --no-install
 
       # Install eas-cli via npm to avoid pnpm's unapproved-build-script gate
@@ -307,7 +309,6 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           CHANNEL: ${{ needs.detect.outputs.updates_channel }}
-          EXPO_UPDATES_CHANNEL: ${{ needs.detect.outputs.updates_channel }}
           EXTRA_RUNTIMES: ${{ steps.runtime.outputs.versions }}
         run: |
           case "$CHANNEL" in
@@ -319,32 +320,26 @@ jobs:
           # hash Gradle baked in, or when extra.ordo / scripts drifted.
           # --auto would publish detect's fingerprint — a runtime no
           # installed binary uses — and devices would never see it.
-          if [[ -n "$EXTRA_RUNTIMES" ]]; then
-            first=1
-            declare -A published=()
-            for runtime in $EXTRA_RUNTIMES; do
-              [[ -n "${published[$runtime]+x}" ]] && continue
-              [[ "$runtime" =~ ^[a-f0-9]{40}$ ]] || exit 1
-              published[$runtime]=1
-              if [[ "$first" -eq 1 ]]; then
-                echo "Publishing JS to APK runtime ${runtime}"
-                ORDO_OTA_RUNTIME_VERSION="$runtime" eas update \
-                  --channel "$CHANNEL" --platform android --non-interactive \
-                  --environment "$ENVIRONMENT" \
-                  --message "JS for APK runtime ${runtime}"
-                first=0
-              else
-                echo "Reusing bundle for APK runtime ${runtime}"
-                ORDO_OTA_RUNTIME_VERSION="$runtime" eas update \
-                  --channel "$CHANNEL" --platform android --skip-bundler --non-interactive \
-                  --environment "$ENVIRONMENT" \
-                  --message "Same JS for APK runtime ${runtime}"
-              fi
-            done
-          else
-            eas update \
-              --channel "$CHANNEL" --platform android --non-interactive --auto --environment "$ENVIRONMENT"
+          if [[ -z "${EXTRA_RUNTIMES//[[:space:]]/}" ]]; then
+            echo "::error::No verified APK runtime; refusing an unreachable OTA"
+            exit 1
           fi
+          # Validate the entire list before publishing any update.
+          for runtime in $EXTRA_RUNTIMES; do
+            [[ "$runtime" =~ ^[a-f0-9]{40}$ ]] || exit 1
+          done
+          declare -A published=()
+          bundle_args=()
+          for runtime in $EXTRA_RUNTIMES; do
+            [[ -n "${published[$runtime]+x}" ]] && continue
+            published[$runtime]=1
+            echo "Publishing JS to APK runtime ${runtime}"
+            ORDO_OTA_RUNTIME_VERSION="$runtime" eas update \
+              --channel "$CHANNEL" --platform android --non-interactive \
+              --environment "$ENVIRONMENT" "${bundle_args[@]}" \
+              --message "JS for APK runtime ${runtime}"
+            bundle_args=(--skip-bundler)
+          done
 
   build_apk:
     needs: [detect, analyze, supply-chain]
@@ -428,8 +423,6 @@ jobs:
 
       - name: Prebuild (generate native Android project)
         working-directory: apps/mobile
-        env:
-          EXPO_UPDATES_CHANNEL: ${{ needs.detect.outputs.updates_channel }}
         run: pnpm exec expo prebuild --platform android --no-install
 
       - name: Verify OTA channel embedded
@@ -437,7 +430,10 @@ jobs:
         run: |
           CHANNEL="${{ needs.detect.outputs.updates_channel }}"
           if [[ "$CHANNEL" == "development" ]]; then
-            ! grep -q "expo-channel-name" android/app/src/main/AndroidManifest.xml
+            if grep -q "expo-channel-name" android/app/src/main/AndroidManifest.xml; then
+              echo "::error::Development APK must not contain an OTA channel"
+              exit 1
+            fi
           else
             grep -q "expo-channel-name" android/app/src/main/AndroidManifest.xml
             grep -q "$CHANNEL" android/app/src/main/AndroidManifest.xml
@@ -466,14 +462,14 @@ jobs:
         working-directory: apps/mobile/android
         run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a -Pandroid.versionCode=${{ needs.detect.outputs.version_code }}
 
-      - name: Show ccache stats
-        if: always()
-        run: ccache --show-stats
-
       - name: Build APKs (release, per-ABI splits + universal)
         if: needs.detect.outputs.is_release == 'true'
         working-directory: apps/mobile/android
         run: ./gradlew assembleRelease -Pandroid.buildAbiSplits=true -Pandroid.versionCode=${{ needs.detect.outputs.version_code }}
+
+      - name: Show ccache stats
+        if: always()
+        run: if command -v ccache >/dev/null; then ccache --show-stats; fi
 
       - name: Verify packaged APK signing, versions, runtime and channel
         env:
@@ -497,7 +493,7 @@ jobs:
           retention-days: 90
           overwrite: true
 
-      # Debug APKs are ephemeral; published APKs live on the GitHub Release.
+      # CI APKs are ephemeral; published APKs live on the GitHub Release.
       - name: Upload APK artifact
         if: always()
         uses: actions/upload-artifact@v6

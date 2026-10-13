@@ -28,11 +28,9 @@ runs:
         node-version: ${{ inputs.node-version }}
         cache: pnpm
 
-    # Audit-only jobs never create a pnpm store, so both caching layers must
-    # stay off: `cache` omitted entirely (an empty string still makes the
-    # post step attempt a save and fail with a Path Validation Error) and
-    # package-manager-cache off (the packageManager-field auto cache, whose
-    # post step would otherwise save the store that was never created).
+    # Audit-only jobs never create a pnpm store. Omit the explicit cache and
+    # disable setup-node's automatic cache; this input belongs to setup-node,
+    # not pnpm/action-setup.
     - name: Setup Node.js
       if: inputs.pnpm-cache != 'true'
       uses: actions/setup-node@v5
