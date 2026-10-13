@@ -1,5 +1,5 @@
 /**
- * Expressive rows lift their corners under the pointer: rest → hover → press.
+ * Expressive rows lift their corners: rest → hover → press/selection.
  * A single spring drives every corner; each corner clamps at its group-silhouette
  * radius, so segment edges stay aligned while the inner corners round. Standard
  * mode never lifts (state layers only).
@@ -10,11 +10,12 @@ import { materialMotion } from "./material-motion";
 
 export type CornerRadii = { borderTopLeftRadius: number; borderTopRightRadius: number; borderBottomLeftRadius: number; borderBottomRightRadius: number };
 
-export function useRowLift({ expressive, hovered, pressed, hoverRadius = 16, pressRadius = 20, reducedMotion }: {
-  expressive: boolean; hovered: boolean; pressed?: boolean; hoverRadius?: number; pressRadius?: number; reducedMotion: boolean;
+export function useRowLift({ expressive, hovered, pressed, selected = false, hoverRadius = 16, pressRadius = 20, reducedMotion }: {
+  expressive: boolean; hovered: boolean; pressed?: boolean; selected?: boolean; hoverRadius?: number; pressRadius?: number; reducedMotion: boolean;
 }) {
-  const lift = useRef(new Animated.Value(0)).current;
-  const target = !expressive ? 0 : pressed ? pressRadius : hovered ? hoverRadius : 0;
+  const target = !expressive ? 0 : pressed || selected ? pressRadius : hovered ? hoverRadius : 0;
+  // Recycled/already-selected rows must paint the right shape on their first frame.
+  const lift = useRef(new Animated.Value(target)).current;
   const previous = useRef({ target, reducedMotion });
   useEffect(() => {
     if (previous.current.target === target && previous.current.reducedMotion === reducedMotion) return;

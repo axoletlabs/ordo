@@ -22,7 +22,7 @@ export function RowHighlight({ rest, expressive, hovered, pressed, selected, hov
   // both on JS, even in Standard mode, so toggling Expressive stays safe.
   const selection = useStateVisibility(selected, false);
   const feedback = useStateVisibility(pressed || hovered, false);
-  const lift = useRowLift({ expressive, hovered, pressed, hoverRadius, pressRadius, reducedMotion });
+  const lift = useRowLift({ expressive, hovered, pressed, selected, hoverRadius, pressRadius, reducedMotion });
   const morph = expressive && rest ? rowCornerStyle(lift, rest) : null;
   // Static rest corners under the interpolations: before the first animation
   // frame RN-web has not written the dynamic style yet, and the surface must

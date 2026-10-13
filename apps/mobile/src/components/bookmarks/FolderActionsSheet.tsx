@@ -84,15 +84,16 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
   if (folder) folderRef.current = folder;
   const displayFolder = folder ?? folderRef.current;
 
-  React.useEffect(() => {
-    if (!visible || !folder) return;
-    const key = folderKey(folder.id);
+  const highlightId = displayFolder?.id;
+  React.useLayoutEffect(() => {
+    if (!visible || !highlightId) return;
+    const key = folderKey(highlightId);
     useMenuHighlightStore.getState().set(key);
     return () => {
       const store = useMenuHighlightStore.getState();
       if (store.key === key) store.set(null);
     };
-  }, [visible, folder]);
+  }, [visible, highlightId]);
 
   React.useEffect(() => {
     if (!visible) return;

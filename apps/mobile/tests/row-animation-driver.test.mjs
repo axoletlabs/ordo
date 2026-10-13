@@ -140,4 +140,25 @@ for (const platform of ["android", "ios", "web"]) {
     control.standalone(false); control.standalone(true);
     assert.equal(control.animations.at(-1).useNativeDriver, platform !== "web");
   });
+
+  test(`${platform}: a selected row keeps its held shape after release and pointer leave`, () => {
+    const row = harness(platform);
+    row.render();
+    row.render({ hovered: true, pressed: true, selected: true });
+    const before = row.animations.length;
+    row.render({ selected: true });
+    // Selection/feedback opacity may change, but the corner target must not.
+    assert.ok(row.animations.slice(before).every(config => config.toValue === 0 || config.toValue === 1));
+    const styles = row.render({ selected: true }, { reducedMotion: true });
+    assert.equal(styles[0].borderBottomLeftRadius, 20);
+    row.render({}, { reducedMotion: true });
+    assert.equal(row.render({}, { reducedMotion: true })[0].borderBottomLeftRadius, 4);
+  });
+
+  test(`${platform}: mounting an already-selected virtualized row starts at the selected shape`, () => {
+    const row = harness(platform);
+    const styles = row.render({ selected: true }, { reducedMotion: true });
+    assert.equal(styles[0].borderBottomLeftRadius, 20);
+    assert.equal(row.animations.length, 0);
+  });
 }

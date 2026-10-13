@@ -1,4 +1,4 @@
-import React, { useEffect } from "react";
+import React, { useLayoutEffect } from "react";
 import { useAppRouter as useRouter } from "../../hooks/use-app-router";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
@@ -68,15 +68,16 @@ export function BookmarkActionsSheet({
     [visible, mode, displayBookmark?.id, displayBookmark?.remindAt],
   );
 
-  useEffect(() => {
-    if (!visible || !displayBookmark) return;
-    const key = bookmarkKey(displayBookmark.id);
+  const highlightId = displayBookmark?.id;
+  useLayoutEffect(() => {
+    if (!visible || !highlightId) return;
+    const key = bookmarkKey(highlightId);
     useMenuHighlightStore.getState().set(key);
     return () => {
       const store = useMenuHighlightStore.getState();
       if (store.key === key) store.set(null);
     };
-  }, [visible, displayBookmark]);
+  }, [visible, highlightId]);
 
   if (!displayBookmark) return null;
 
