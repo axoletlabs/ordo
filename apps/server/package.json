@@ -1,6 +1,6 @@
 {
   "name": "@ordo/server",
-  "version": "0.1.0",
+  "version": "0.2.0-preview.1",
   "private": true,
   "description": "ordo backend — NestJS + Prisma (SQLite)",
   "license": "AGPL-3.0",
