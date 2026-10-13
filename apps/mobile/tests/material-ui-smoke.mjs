@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { accessibilityMatrix } from "./material-accessibility.mjs";
 import { readerSettingsLayoutMatrix } from "./reader-settings-layout.mjs";
+import { reminderPickerMatrix } from "./reminder-picker.mjs";
 import { progressMatrix } from "./material-progress-ui.mjs";
 import { selectionActionMotionMatrix } from "./selection-action-motion.mjs";
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? "playwright");
@@ -595,7 +596,8 @@ async function overlayLayoutMatrix() {
 }
 
 try {
-  if (process.env.ORDO_UI_PROGRESS_ONLY) await progressMatrix({ browser, fixture, login, navigate, button, settle, capture, results, bookmark });
+  if (process.env.ORDO_UI_REMINDER_ONLY) await reminderPickerMatrix({ browser, fixture, login, button, settle, capture, results });
+  else if (process.env.ORDO_UI_PROGRESS_ONLY) await progressMatrix({ browser, fixture, login, navigate, button, settle, capture, results, bookmark });
   else if (process.env.ORDO_UI_SELECTION_MOTION_ONLY) await selectionActionMotionMatrix({ browser, fixture, login, button, settle, capture, results });
   else if (process.env.ORDO_UI_ACCESSIBILITY_ONLY) await accessibilityMatrix({ browser, base, fixture, user, button, settle, capture, results });
   else if (process.env.ORDO_UI_READER_SETTINGS_ONLY) await readerSettingsLayoutMatrix({ browser, fixture, login, navigate, button, settle, capture, results });
@@ -776,11 +778,14 @@ try {
     if (await button(page, "Dismiss notification").count()) await button(page, "Dismiss notification").click();
     await articleRow.click({ button: "right" }); await page.getByRole("menuitem", { name: "Remind", exact: true }).click();
     await capture(page, `${mode}-reminder-menu`); await page.getByRole("menuitem", { name: "Custom…", exact: true }).click();
+    await page.getByRole("radiogroup", { name: "Reminder date", exact: true }).waitFor();
+    await button(page, "Enter date").click();
     await page.getByRole("textbox", { name: "Reminder date", exact: true }).waitFor();
     await page.getByRole("textbox", { name: "Reminder date", exact: true }).fill("2026-02-31");
     assert.equal(await button(page, "Remind").isDisabled(), true);
     await page.getByRole("textbox", { name: "Reminder date", exact: true }).fill("2099-10-12");
     assert.equal(await button(page, "Remind").isEnabled(), true);
+    await button(page, "Show calendar").click();
     await capture(page, `${mode}-portrait-custom-reminder-dialog`);
     await page.setViewportSize({ width: 1280, height: 800 });
     await capture(page, `${mode}-landscape-custom-reminder-dialog`);

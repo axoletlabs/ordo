@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Platform, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Platform, ScrollView, StyleSheet, View } from "react-native";
 import { Button } from "../ui/Button";
 import { PressableScale } from "../ui/PressableScale";
 import { Input } from "../ui/Input";
+import { IconButton } from "../ui/IconButton";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { unixSeconds } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
@@ -16,9 +17,11 @@ import { radius, spacing } from "../../theme/tokens";
 import {
   applyLocalDate,
   applyLocalTime,
+  MINUTE_STEPS,
   defaultCustomReminderAt,
   formatMonthTitle,
   formatReminderFull,
+  hour12To24,
   localTimeParts,
   reminderMonthGrid,
   shiftCalendarMonth,
@@ -57,11 +60,10 @@ function ReminderCustomPanelContent({
   busy?: boolean;
 }) {
   const { palette } = useTheme();
-  const { width } = useWindowDimensions();
   const [at, setAt] = useState(() => seedUnix(initialUnix));
   const [dateInput, setDateInput] = useState(() => formatCalendarInput(seedUnix(initialUnix)));
   const [dateMode, setDateMode] = useState<"calendar" | "input">("calendar");
-  const [yearInput, setYearInput] = useState(() => String(localTimeParts(seedUnix(initialUnix)).year));
+  const [timeMode, setTimeMode] = useState<"buttons" | "input">("buttons");
   const hour12 = useHourCycle();
   const hour12Ref = useRef(hour12);
   const previousHour12 = useRef(hour12);
@@ -81,7 +83,8 @@ function ReminderCustomPanelContent({
     const parts = localTimeParts(next);
     setAt(next);
     setDateInput(formatCalendarInput(next));
-    setYearInput(String(parts.year));
+    setDateMode("calendar");
+    setTimeMode("buttons");
     setHourInput(String(hour12Ref.current ? parts.hour12 : new Date(next * 1000).getHours()));
     setMinuteInput(String(parts.minute).padStart(2, "0"));
     setView({ year: parts.year, month: parts.month });
@@ -96,9 +99,11 @@ function ReminderCustomPanelContent({
   const now = useMemo(() => new Date(), [visible]);
   const parts = localTimeParts(at);
   const future = at > unixSeconds();
-  // Seven independent 48dp dates need 336dp inside the dialog. Use Material's
-  // text-entry alternative rather than overlapping hitSlop in compact windows.
-  const calendarVisible = width >= 416 && dateMode === "calendar";
+  const calendarVisible = dateMode === "calendar";
+  const toggleDateMode = () => {
+    setDateInput(formatCalendarInput(at));
+    setDateMode(calendarVisible ? "input" : "calendar");
+  };
   const inputDate = parseCalendarInput(dateInput);
   const dateValid = calendarVisible || inputDate !== null;
   const cells = useMemo(
@@ -107,14 +112,19 @@ function ReminderCustomPanelContent({
   );
   const weekdays = useMemo(() => weekdayNarrowLabels(), []);
   const nowMonth = now.getFullYear() === view.year && now.getMonth() === view.month;
-  useEffect(() => setYearInput(String(view.year)), [view.year]);
 
   const inputTime = parseTimeInput(hourInput, minuteInput, hour12, parts.period);
   const setTime = (hour: string, minute: string, period = parts.period) => {
     const parsed = parseTimeInput(hour, minute, hour12, period);
     if (parsed) setAt((current) => applyLocalTime(current, parsed.hour, parsed.minute));
   };
+  const pickTime = (hour: number, minute: number, period = parts.period) => {
+    setAt((current) => applyLocalTime(current, hour12 ? hour12To24(hour, period) : hour, minute));
+    setHourInput(String(hour));
+    setMinuteInput(String(minute).padStart(2, "0"));
+  };
   useEffect(() => {
+    if (!visible || !calendarVisible) { focusDate.current = null; return; }
     if (!focusDate.current || Platform.OS !== "web") return;
     const date = focusDate.current;
     const frame = requestAnimationFrame(() => {
@@ -122,7 +132,7 @@ function ReminderCustomPanelContent({
       focusDate.current = null;
     });
     return () => cancelAnimationFrame(frame);
-  }, [at, view.year, view.month]);
+  }, [at, view.year, view.month, visible, calendarVisible]);
   const calendarKeys = Platform.OS === "web" ? { onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (busy) return;
     const raw = (event.target as HTMLElement).dataset.calendarDate;
@@ -143,18 +153,16 @@ function ReminderCustomPanelContent({
   } } : {};
 
   return (
-    <FloatingPanel visible={visible} onDismiss={onDismiss} dismissible={!busy} maxWidth={384}>
+    <FloatingPanel visible={visible} onDismiss={onDismiss} dismissible={!busy} maxWidth={384} style={styles.panel}>
       <PanelHeader
-          icon="alarm-outline"
-          iconColor={palette.accent}
           title="Custom reminder"
           subtitle={formatReminderFull(at)}
+          style={styles.header}
         />
       <View>
-        {width >= 416 ? <Button label={calendarVisible ? "Enter date" : "Show calendar"} variant="ghost"
-          disabled={busy}
-          onPress={() => { if (!calendarVisible) setDateInput(formatCalendarInput(at)); setDateMode(calendarVisible ? "input" : "calendar"); }} /> : null}
-        {calendarVisible ? <><View style={styles.monthNav}>
+        {!calendarVisible ? <Button label="Show calendar" variant="ghost" disabled={busy} onPress={toggleDateMode} /> : null}
+        {calendarVisible ? <ScrollView horizontal contentContainerStyle={styles.calendarScroll}>
+        <View style={styles.calendar}><View style={styles.monthNav}>
           <MonthChevrons
             label="Previous month"
             icon="chevron-back"
@@ -170,11 +178,8 @@ function ReminderCustomPanelContent({
             icon="chevron-forward"
             onPress={() => setView((current) => shiftCalendarMonth(current.year, current.month, 1))}
           />
+          <IconButton name="create-outline" variant="standard" accessibilityLabel="Enter date" disabled={busy} onPress={toggleDateMode} />
         </View>
-        <Input label="Year" accessibilityLabel="Calendar year" value={yearInput} maxLength={4} keyboardType="number-pad" inputMode="numeric"
-          disabled={busy}
-          reserveSupportingSpace={false} error={/^\d{4}$/.test(yearInput) && Number(yearInput) >= now.getFullYear() ? undefined : `Enter a year from ${now.getFullYear()}.`}
-          onChangeText={(text) => { setYearInput(text); if (/^\d{4}$/.test(text) && Number(text) >= now.getFullYear()) setView((current) => ({ ...current, year: Number(text) })); }} />
         <View style={styles.weekdays}>
           {weekdays.map((label, index) => (
             <View key={`${label}-${index}`} style={styles.weekday}>
@@ -225,13 +230,29 @@ function ReminderCustomPanelContent({
               </PressableScale>
             );
           })}
-        </View></> : <Input label="Date" value={dateInput} placeholder="YYYY-MM-DD" helper="Year-month-day, for example 2026-10-12."
+        </View></View></ScrollView> : <Input label="Date" value={dateInput} placeholder="YYYY-MM-DD" helper="Year-month-day, for example 2026-10-12."
            accessibilityLabel="Reminder date" autoCapitalize="none" autoCorrect={false} required disabled={busy}
           error={inputDate ? undefined : "Enter a valid date as YYYY-MM-DD."}
           onChangeText={(text) => { setDateInput(text); const date = parseCalendarInput(text);
             if (date) { setAt((current) => applyLocalDate(current, date.year, date.month, date.day)); setView({ year: date.year, month: date.month }); } }} />}
         <View style={[styles.rule, { backgroundColor: palette.outlineVariant }]} />
-        <View style={{ flexDirection: "row", gap: 16 }}>
+        <View style={styles.timeHeader}>
+        {hour12 ? <View style={styles.period}><Segmented
+          disabled={busy}
+          options={PERIODS}
+          accessibilityLabel="Day period"
+          value={parts.period}
+          onChange={(period) => timeMode === "input" ? setTime(hourInput, minuteInput, period) : pickTime(parts.hour12, parts.minute, period)}
+        /></View> : <Text variant="titleSmall" style={styles.period}>Time</Text>}
+        <IconButton name={timeMode === "buttons" ? "create-outline" : "apps-outline"} variant="standard"
+          accessibilityLabel={timeMode === "buttons" ? "Enter time" : "Show time buttons"} disabled={busy}
+          onPress={() => {
+            setHourInput(String(hour12 ? parts.hour12 : new Date(at * 1000).getHours()));
+            setMinuteInput(String(parts.minute).padStart(2, "0"));
+            setTimeMode(timeMode === "buttons" ? "input" : "buttons");
+          }} />
+        </View>
+        {timeMode === "input" ? <View style={styles.timeInputs}>
           <Input label="Hour" accessibilityLabel="Reminder hour" value={hourInput} keyboardType="number-pad" inputMode="numeric" maxLength={2}
             containerStyle={{ flex: 1 }} disabled={busy} required helper={hour12 ? "1–12" : "0–23"}
             error={parseTimeInput(hourInput, "00", hour12, parts.period) ? undefined : hour12 ? "Enter 1–12." : "Enter 0–23."}
@@ -240,14 +261,17 @@ function ReminderCustomPanelContent({
             containerStyle={{ flex: 1 }} disabled={busy} required helper="0–59"
             error={/^\d{1,2}$/.test(minuteInput) && Number(minuteInput) <= 59 ? undefined : "Enter 0–59."}
             onChangeText={(minute) => { setMinuteInput(minute); setTime(hourInput, minute); }} />
-        </View>
-        {hour12 ? <Segmented
-          disabled={busy}
-          options={PERIODS}
-          accessibilityLabel="Day period"
-          value={parts.period}
-          onChange={(period) => setTime(hourInput, minuteInput, period)}
-        /> : null}
+        </View> : null}
+        {timeMode === "buttons" ? <>
+          <TimeButtons label="Reminder hour" values={Array.from({ length: hour12 ? 12 : 24 }, (_, index) => hour12 ? index + 1 : index)}
+            value={hour12 ? parts.hour12 : new Date(at * 1000).getHours()} disabled={busy}
+            format={(hour) => hour12 ? String(hour) : String(hour).padStart(2, "0")}
+            describe={(hour) => `${hour} o'clock`} onChange={(hour) => pickTime(hour, parts.minute)} />
+          <View style={[styles.rule, { backgroundColor: palette.outlineVariant }]} />
+          <TimeButtons label="Reminder minute" values={MINUTE_STEPS} value={parts.minute} disabled={busy}
+            format={(minute) => `:${String(minute).padStart(2, "0")}`} describe={(minute) => `${minute} minutes`}
+            onChange={(minute) => pickTime(hour12 ? parts.hour12 : new Date(at * 1000).getHours(), minute)} />
+        </> : null}
         {!future ? (
           <Text variant="footnote" color="danger" align="center" style={styles.hint}>
             Pick a time in the future.
@@ -259,10 +283,52 @@ function ReminderCustomPanelContent({
         onConfirm={() => onConfirm(at)}
         onCancel={onDismiss}
         loading={busy}
-        confirmDisabled={!future || !dateValid || !inputTime || busy}
+        confirmDisabled={!future || !dateValid || (timeMode === "input" && !inputTime) || busy}
       />
     </FloatingPanel>
   );
+}
+
+function TimeButtons({ label, values, value, disabled, format, describe, onChange }: {
+  label: string;
+  values: readonly number[];
+  value: number;
+  disabled?: boolean;
+  format: (value: number) => string;
+  describe: (value: number) => string;
+  onChange: (value: number) => void;
+}) {
+  const { palette, expressive } = useTheme();
+  const keyboardProps = Platform.OS === "web" ? {
+    onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (disabled) return;
+      const radios = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]'));
+      const index = radios.indexOf(event.target as HTMLElement);
+      if (index < 0) return;
+      const step = event.key === "ArrowRight" ? 1 : event.key === "ArrowLeft" ? -1 : event.key === "ArrowDown" ? 6 : event.key === "ArrowUp" ? -6 : null;
+      if (step == null && event.key !== "Home" && event.key !== "End") return;
+      event.preventDefault();
+      event.stopPropagation();
+      const next = event.key === "Home" ? 0 : event.key === "End" ? values.length - 1 : (index + step! + values.length) % values.length;
+      haptics.selection();
+      onChange(values[next]!);
+      radios[next]?.focus();
+    },
+  } : {};
+  return <View accessibilityRole="radiogroup" accessibilityLabel={label} {...keyboardProps} style={styles.timeButtons}>
+    {values.map((option, index) => {
+      const selected = option === value;
+      return <PressableScale key={option} accessibilityRole="radio" accessibilityLabel={describe(option)} disabled={disabled}
+        accessibilityState={{ checked: selected, disabled: !!disabled }}
+        {...(Platform.OS === "web" ? { tabIndex: selected || !values.includes(value) && index === 0 ? 0 : -1 } : {})}
+        stateLayerColor={selected ? palette.onSecondaryContainer : palette.onSurface}
+        style={[styles.padCell, { backgroundColor: selected ? palette.secondaryContainer : "transparent", opacity: disabled ? 0.38 : 1 }]}
+        shape={expressive ? { rest: selected ? radius.full : radius.sm, pressed: radius.sm } : undefined}
+        onPress={() => { haptics.selection(); onChange(option); }}>
+        <Text variant="labelLarge" align="center" style={{ color: selected ? palette.onSecondaryContainer : palette.onSurface }}>{format(option)}</Text>
+      </PressableScale>;
+    })}
+  </View>;
 }
 
 function MonthChevrons({
@@ -297,6 +363,17 @@ function MonthChevrons({
 }
 
 const styles = StyleSheet.create({
+  // Keep seven non-overlapping 48dp dates on a 390dp phone. Narrower windows
+  // scroll the calendar, rather than silently replacing it with a text field.
+  panel: { paddingHorizontal: spacing[8] },
+  header: { marginHorizontal: spacing[16] },
+  calendarScroll: { flexGrow: 1, justifyContent: "center" },
+  calendar: { width: 336 },
+  timeInputs: { flexDirection: "row", gap: spacing[16] },
+  timeHeader: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
+  period: { flex: 1 },
+  timeButtons: { flexDirection: "row", flexWrap: "wrap" },
+  padCell: { width: "16.666666%", minWidth: 48, height: 48, borderRadius: radius.sm, alignItems: "center", justifyContent: "center" },
   monthNav: {
     flexDirection: "row",
     alignItems: "center",
@@ -333,7 +410,7 @@ const styles = StyleSheet.create({
   },
   rule: {
     height: StyleSheet.hairlineWidth,
-    marginVertical: spacing[12],
+    marginVertical: spacing[8],
   },
   hint: { marginTop: spacing[12] },
 });
