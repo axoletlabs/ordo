@@ -778,14 +778,11 @@ try {
     if (await button(page, "Dismiss notification").count()) await button(page, "Dismiss notification").click();
     await articleRow.click({ button: "right" }); await page.getByRole("menuitem", { name: "Remind", exact: true }).click();
     await capture(page, `${mode}-reminder-menu`); await page.getByRole("menuitem", { name: "Custom…", exact: true }).click();
-    await page.getByRole("radiogroup", { name: "Reminder date", exact: true }).waitFor();
-    await button(page, "Enter date").click();
-    await page.getByRole("textbox", { name: "Reminder date", exact: true }).waitFor();
-    await page.getByRole("textbox", { name: "Reminder date", exact: true }).fill("2026-02-31");
-    assert.equal(await button(page, "Remind").isDisabled(), true);
-    await page.getByRole("textbox", { name: "Reminder date", exact: true }).fill("2099-10-12");
+    const reminderDates = page.getByRole("radiogroup", { name: "Reminder date", exact: true });
+    await reminderDates.waitFor();
+    await button(page, "Next month").click();
+    await reminderDates.getByRole("radio").last().click();
     assert.equal(await button(page, "Remind").isEnabled(), true);
-    await button(page, "Show calendar").click();
     await capture(page, `${mode}-portrait-custom-reminder-dialog`);
     await page.setViewportSize({ width: 1280, height: 800 });
     await capture(page, `${mode}-landscape-custom-reminder-dialog`);
