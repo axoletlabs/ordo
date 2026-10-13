@@ -9,7 +9,6 @@ import { UnlockForm } from "./LockPrompt";
 import { FolderLockIcon } from "./FolderLockIcon";
 import { Text } from "../ui/Text";
 import { ContextMenuItem } from "../ui/ContextMenu";
-import { BookmarkMoveIndicator } from "./BookmarkMoveIndicator";
 import { ThemedFlatList } from "../ui/ThemedScrollView";
 import { useFolders } from "../../hooks/queries";
 import { useFolderTokenStore } from "../../store/folder-tokens";
@@ -20,7 +19,6 @@ import { movedBookmarksToast } from "../../lib/copy";
 import { useTheme } from "../../theme/ThemeProvider";
 import { spacing } from "../../theme/tokens";
 import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
-import { useMaterialMotion } from "../../theme/material-motion";
 import { DEFAULT_FOLDER_ICON, type BookmarkDto, type FolderDto } from "@ordo/shared";
 import { useMoveBookmark, useBatchBookmarks } from "../../hooks/use-bookmarks";
 
@@ -54,14 +52,12 @@ export function MoveSheet({
   const { data: folders } = useFolders();
   const move = useMoveBookmark(fromFolderId);
   const batch = useBatchBookmarks();
-  const motion = useMaterialMotion();
   const [pickedId, setPickedId] = useState<string | null | undefined>(undefined);
-  const [completed, setCompleted] = useState<{ count: number; name: string } | null>(null);
   const inFlight = React.useRef(false);
   const session = React.useRef(0);
   const active = React.useRef(visible);
   active.current = visible;
-  const busy = move.isPending || batch.isPending || Boolean(completed);
+  const busy = move.isPending || batch.isPending;
   const { height } = useResponsiveLayout();
   const [error, setError] = useState("");
   const [lockedTarget, setLockedTarget] = useState<FolderDto | null>(null);
@@ -79,25 +75,9 @@ export function MoveSheet({
       setError("");
       setLockedTarget(null);
       setPickedId(undefined);
-      setCompleted(null);
     }
     return () => { session.current += 1; };
   }, [visible]);
-
-  const finishRef = React.useRef(() => {});
-  finishRef.current = () => {
-    if (!completed || !active.current) return;
-    toast.success(movedBookmarksToast(completed.count, completed.name));
-    onMoved?.();
-    onDismiss();
-  };
-  useEffect(() => {
-    if (!visible || !completed) return;
-    if (motion.reducedMotion) { finishRef.current(); return; }
-    // Let the shared spatial/effects springs settle before the panel exits.
-    const timer = setTimeout(() => finishRef.current(), 600);
-    return () => clearTimeout(timer);
-  }, [visible, completed, motion.reducedMotion]);
 
   // Offer the unfiled root as a destination only when currently inside a folder.
   const destinations: Destination[] = (folders ?? []).filter((f) => f.id !== fromFolderId);
@@ -130,7 +110,9 @@ export function MoveSheet({
       }
       if (!active.current || session.current !== epoch) return;
       haptics.success();
-      setCompleted({ count, name });
+      toast.success(movedBookmarksToast(count, name));
+      onMoved?.();
+      onDismiss();
     } catch (e) {
       if (!active.current || session.current !== epoch) return;
       inFlight.current = false;
@@ -186,9 +168,6 @@ export function MoveSheet({
                   role="button"
                   icon={isRootDestination(item) ? "bookmark-outline" : (item.icon ?? DEFAULT_FOLDER_ICON)}
                   label={isRootDestination(item) ? "Bookmarks" : item.name}
-                  selected={Boolean(completed) && pickedId === (isRootDestination(item) ? null : item.id)}
-                  leading={completed && pickedId === (isRootDestination(item) ? null : item.id)
-                    ? <BookmarkMoveIndicator icon={isRootDestination(item) ? "bookmark-outline" : (item.icon ?? DEFAULT_FOLDER_ICON)} destination={completed.name} /> : undefined}
                   trailing={
                     isRootDestination(item) ? undefined : (
                       <>
@@ -199,8 +178,8 @@ export function MoveSheet({
                     )
                   }
                   onPress={() => void pick(item)}
-                  disabled={busy && !(completed && pickedId === (isRootDestination(item) ? null : item.id))}
-                  busy={!completed && busy && pickedId === (isRootDestination(item) ? null : item.id)}
+                  disabled={busy}
+                  busy={busy && pickedId === (isRootDestination(item) ? null : item.id)}
                 />
               )}
               style={{ maxHeight: Math.min(320, height * 0.5) }}
