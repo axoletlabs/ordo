@@ -30,10 +30,6 @@ function startOfLocalDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-export function formatLocalTime(unix: number): string {
-  return padTime(new Date(unix * 1000));
-}
-
 export function reminderPresetAt(id: ReminderPresetId, now = new Date()): number {
   if (id === "1h") return unixSeconds(now.getTime() + 60 * 60 * 1000);
   if (id === "3h") return unixSeconds(now.getTime() + 3 * 60 * 60 * 1000);
@@ -508,10 +504,3 @@ export function shiftCalendarMonth(
   return { year: date.getFullYear(), month: date.getMonth() };
 }
 
-export function formatCustomDate(unix: number): string {
-  return new Date(unix * 1000).toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-  });
-}

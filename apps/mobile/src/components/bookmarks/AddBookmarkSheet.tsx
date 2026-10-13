@@ -2,26 +2,27 @@
  * Floating dialog to validate and save a new URL.
  */
 import React, { useState } from "react";
-import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { StyleSheet, View, type TextInput } from "react-native";
+import * as Clipboard from "expo-clipboard";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
+import { IconButton } from "../ui/IconButton";
+import { extractSharedUrl } from "../../lib/shared-url";
 import { Text } from "../ui/Text";
 import { PressableScale } from "../ui/PressableScale";
+import { PickerField } from "../ui/PickerField";
+import { FolderPickerMenu } from "./FolderPickerMenu";
+import { ContextMenu, type MenuAnchorRect } from "../ui/ContextMenu";
 import { PanelActions } from "../ui/SheetActionRow";
 import { UnlockForm } from "./LockPrompt";
 import { CreateFolderPanel } from "./CreateFolderPanel";
-import {
-  SettingsSelect,
-  type SettingsSelectOption,
-} from "../settings/SettingsSelect";
 import { useCreateBookmark } from "../../hooks/use-bookmarks";
 import { useFolders } from "../../hooks/queries";
 import { useFolderTokenStore } from "../../store/folder-tokens";
 import { useTags } from "../../hooks/use-tags";
-import { TagChip } from "../tags/TagChip";
 import { TagSelectList } from "../tags/TagSelectList";
 import { CreateTagPanel } from "../tags/CreateTagPanel";
 import { errorMessage, isFolderProtected } from "../../lib/error-message";
@@ -54,7 +55,6 @@ export interface AddBookmarkSheetProps {
 }
 
 const ROOT_DESTINATION = "__bookmarks__";
-const NEW_FOLDER_DESTINATION = "__new_folder__";
 /** Stable identity so the sheet's reset effect doesn't fire on parent renders. */
 const NO_TAGS: string[] = [];
 
@@ -80,11 +80,18 @@ export function AddBookmarkSheet({
   const { data: folders } = useFolders();
   const { data: tags } = useTags();
   const [url, setUrl] = useState("");
+  const urlRef = React.useRef<TextInput>(null);
+  const pasteEpoch = React.useRef(0);
+  const active = React.useRef(visible);
+  active.current = visible;
   const [error, setError] = useState("");
   const [lockedFolderId, setLockedFolderId] = useState<string | null>(null);
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
+  const [destinationOpen, setDestinationOpen] = useState(false);
   const [createTagOpen, setCreateTagOpen] = useState(false);
   const [showTagPicker, setShowTagPicker] = useState(false);
+  const [destinationAnchor, setDestinationAnchor] = useState<MenuAnchorRect | null>(null);
+  const [tagAnchor, setTagAnchor] = useState<MenuAnchorRect | null>(null);
   const [urlEditing, setUrlEditing] = useState(false);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>(initialTagIds);
   const [selectedDestination, setSelectedDestination] = useState(folderId ?? ROOT_DESTINATION);
@@ -94,27 +101,12 @@ export function AddBookmarkSheet({
     selectedFolderId,
     allowFolderSelection ? selectedFolder?.name : folderName,
   );
-  const destinationOptions: SettingsSelectOption<string>[] = [
-    { value: ROOT_DESTINATION, label: "Bookmarks", icon: "bookmark-outline" },
-    ...(folders ?? []).map((folder) => ({
-      value: folder.id,
-      label: folder.name,
-      icon: folder.icon,
-    })),
-    { value: NEW_FOLDER_DESTINATION, label: "New folder", icon: "add" },
-  ];
-
-  const chooseDestination = (value: string) => {
-    if (value === NEW_FOLDER_DESTINATION) {
-      setCreateFolderOpen(true);
-      return;
-    }
-    setSelectedDestination(value);
-  };
 
   React.useEffect(() => {
     if (!visible) {
+      pasteEpoch.current += 1;
       setCreateFolderOpen(false);
+      setDestinationOpen(false);
       setCreateTagOpen(false);
       setLockedFolderId(null);
       setShowTagPicker(false);
@@ -147,7 +139,7 @@ export function AddBookmarkSheet({
   };
 
   const close = () => {
-    reset();
+    // FloatingPanel retains the draft through its exit transition.
     onDismiss();
   };
 
@@ -197,6 +189,21 @@ export function AddBookmarkSheet({
 
   const lockedFolder = folders?.find((folder) => folder.id === lockedFolderId);
 
+  const pasteLink = async () => {
+    const epoch = ++pasteEpoch.current;
+    try {
+      const clipboard = await Clipboard.getStringAsync();
+      if (!active.current || epoch !== pasteEpoch.current) return;
+      const next = extractSharedUrl(undefined, clipboard) ?? clipboard.trim();
+      if (!next) { setError("Clipboard is empty. Copy a link first."); return; }
+      setUrl(next);
+      setError("");
+      requestAnimationFrame(() => { if (active.current && epoch === pasteEpoch.current) urlRef.current?.focus(); });
+    } catch {
+      if (active.current && epoch === pasteEpoch.current) setError("Clipboard access is blocked. Paste the link manually.");
+    }
+  };
+
   const unlocking = Boolean(lockedFolderId);
   const showUrlPreview = shareIntake && !urlEditing && Boolean(url.trim());
 
@@ -204,7 +211,9 @@ export function AddBookmarkSheet({
     <>
       <FloatingPanel
         visible={visible}
-        dismissible={!shareIntake}
+        obscured={createFolderOpen || createTagOpen}
+        interactive={!destinationOpen && !showTagPicker}
+        dismissible={!shareIntake && !create.isPending}
         onDismiss={() => {
           if (unlocking) setLockedFolderId(null);
           else close();
@@ -225,24 +234,8 @@ export function AddBookmarkSheet({
           />
         ) : (
           <>
-            <PanelHeader title="Save bookmark" />
+            <PanelHeader title="Save bookmark" subtitle="Add a link to your library." onClose={!shareIntake && !create.isPending ? close : undefined} />
             <View style={styles.body}>
-            {allowFolderSelection ? (
-              <View style={styles.destinationRow}>
-                <Text variant="label" color="tertiary">Destination</Text>
-                <SettingsSelect
-                  value={selectedDestination}
-                  options={destinationOptions}
-                  onChange={chooseDestination}
-                  title="Save to"
-                />
-              </View>
-            ) : destination ? (
-              <Text variant="footnote" color="secondary" style={{ marginBottom: spacing[8] }}>
-                Saving to <Text variant="footnote" color="accent">{destination}</Text>
-              </Text>
-            ) : null}
-
             {showUrlPreview ? (
               <PressableScale
                 accessibilityRole="button"
@@ -251,17 +244,17 @@ export function AddBookmarkSheet({
                 style={[
                   styles.urlPreview,
                   {
-                    borderColor: error ? palette.danger : palette.border,
-                    backgroundColor: palette.background,
+                    borderColor: error ? palette.error : palette.outlineVariant,
+                    backgroundColor: palette.surfaceContainerHighest,
                   },
                 ]}
               >
                 <Ionicons name="link-outline" size={18} color={palette.textTertiary} style={iconGlyphStyle(18)} />
                 <View style={styles.urlPreviewText}>
-                  <Text variant="bodyStrong" numberOfLines={1}>
+                  <Text variant="titleMedium" numberOfLines={1}>
                     {domainFromUrl(url) || url}
                   </Text>
-                  <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
+                  <Text variant="bodySmall" color="secondary" numberOfLines={2}>
                     {url}
                   </Text>
                 </View>
@@ -269,9 +262,13 @@ export function AddBookmarkSheet({
               </PressableScale>
             ) : (
               <Input
+                ref={urlRef}
+                label="Link"
+                variant="outlined"
                 value={url}
-                onChangeText={setUrl}
+                onChangeText={(next) => { setUrl(next); if (error) setError(""); }}
                 placeholder="Paste a link"
+                helper="Paste a URL or use the clipboard button."
                 keyboardType="url"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -280,6 +277,8 @@ export function AddBookmarkSheet({
                 icon={<Ionicons name="link-outline" size={18} color={palette.textTertiary} style={iconGlyphStyle(18)} />}
                 onSubmitEditing={() => void submit()}
                 returnKeyType="done"
+                overlayRightAccessory overlayPaddingRight={56}
+                rightAccessory={<IconButton name="clipboard-outline" variant="standard" accessibilityLabel="Paste link from clipboard" onPress={() => void pasteLink()} />}
               />
             )}
             {showUrlPreview && error ? (
@@ -288,58 +287,15 @@ export function AddBookmarkSheet({
               </Text>
             ) : null}
 
-            <View style={styles.tagsRow}>
-              <Text variant="label" color="tertiary">Tags</Text>
-              <PressableScale
-                accessibilityRole="button"
-                accessibilityLabel={showTagPicker ? "Hide tag picker" : "Show tag picker"}
-                onPress={() => setShowTagPicker((v) => !v)}
-                hitSlop={8}
-              >
-                <Ionicons
-                  name={showTagPicker ? "chevron-up" : "chevron-down"}
-                  size={16}
-                  color={palette.textTertiary}
-                  style={iconGlyphStyle(16)}
-                />
-              </PressableScale>
-            </View>
-            {selectedTagIds.length > 0 ? (
-              <View style={styles.selectedTagWrap}>
-                {selectedTagIds.map((tagId) => {
-                  const tag = tags?.find((t) => t.id === tagId);
-                  if (!tag) return null;
-                  return (
-                    <TagChip
-                      key={tagId}
-                      name={tag.name}
-                      color={tag.color}
-                      selected
-                      compact
-                      onPress={() =>
-                        setSelectedTagIds((prev) => prev.filter((id) => id !== tagId))
-                      }
-                      accessibilityLabel={`Remove tag ${tag.name}`}
-                    />
-                  );
-                })}
-              </View>
-            ) : null}
-            {showTagPicker ? (
-              <TagSelectList
-                selectedIds={selectedTagIds}
-                onToggle={(tagId) =>
-                  setSelectedTagIds((prev) =>
-                    prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
-                  )
-                }
-                maxHeight={200}
-                onRequestCreateTag={() => setCreateTagOpen(true)}
-              />
-            ) : null}
+            {allowFolderSelection ? <PickerField label="Folder" value={destination ?? "Bookmarks"} dropdown expanded={destinationOpen}
+              icon={selectedFolder?.icon ?? "bookmark-outline"} onPress={(anchor) => { setDestinationAnchor(anchor); setDestinationOpen(true); }} />
+              : destination ? <Text variant="bodyMedium" color="secondary">Saving to {destination}</Text> : null}
+            <PickerField label="Tags" icon="pricetags-outline" dropdown expanded={showTagPicker}
+              value={selectedTagIds.length ? selectedTagIds.map((id) => tags?.find((tag) => tag.id === id)?.name).filter(Boolean).join(", ") || `${selectedTagIds.length} tags selected` : "Add tags"}
+              onPress={(anchor) => { setTagAnchor(anchor); setShowTagPicker(true); }} />
             </View>
             <PanelActions
-              confirmLabel="Save"
+              confirmLabel="Save bookmark"
               onConfirm={() => void submit()}
               onCancel={close}
               loading={create.isPending}
@@ -347,6 +303,16 @@ export function AddBookmarkSheet({
           </>
         )}
       </FloatingPanel>
+      <FolderPickerMenu visible={destinationOpen} onDismiss={() => setDestinationOpen(false)} folders={folders ?? []} anchor={destinationAnchor}
+        value={selectedFolderId} onChange={(id) => setSelectedDestination(id ?? ROOT_DESTINATION)}
+        onCreate={() => { setDestinationOpen(false); setCreateFolderOpen(true); }} />
+      <ContextMenu visible={showTagPicker && !createTagOpen} onDismiss={() => setShowTagPicker(false)} anchor={tagAnchor} width={tagAnchor?.width} scrollBody={false} keyboardDismiss={false} estimatedHeight={280}>
+        <View style={{ paddingHorizontal: spacing[8], flexShrink: 1 }}>
+        <TagSelectList selectedIds={selectedTagIds}
+          onToggle={(tagId) => setSelectedTagIds((previous) => previous.includes(tagId) ? previous.filter((id) => id !== tagId) : [...previous, tagId])}
+          menu maxHeight={240} onRequestCreateTag={() => { setShowTagPicker(false); setCreateTagOpen(true); }} />
+        </View>
+      </ContextMenu>
       <CreateFolderPanel
         visible={createFolderOpen}
         onDismiss={() => setCreateFolderOpen(false)}
@@ -363,37 +329,17 @@ export function AddBookmarkSheet({
 }
 
 const styles = StyleSheet.create({
-  body: {},
-  destinationRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: spacing[12],
-    marginBottom: spacing[8],
-  },
+  body: { gap: spacing[16] },
   urlPreview: {
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[8],
-    minHeight: 46,
-    paddingHorizontal: spacing[12],
-    paddingVertical: spacing[8],
+    minHeight: 72,
+    paddingHorizontal: spacing[16],
+    paddingVertical: spacing[16],
     borderWidth: 1,
-    borderRadius: radius.sm,
+    borderRadius: radius.lg,
   },
   urlPreviewText: { flex: 1, minWidth: 0, gap: spacing[2] },
   urlPreviewError: { marginTop: spacing[6] },
-  tagsRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: spacing[10],
-    marginBottom: spacing[4],
-  },
-  selectedTagWrap: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: spacing[6],
-    marginBottom: spacing[6],
-  },
 });

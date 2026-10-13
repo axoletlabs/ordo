@@ -17,6 +17,7 @@ import { toast } from "../components/ui/toast-store";
 import { bookmarksApi } from "./api/bookmarks";
 import { foldersApi } from "./api/folders";
 import { tagsApi } from "./api/tags";
+import { sortFoldersDefault, sortTagsDefault } from "./list-sort";
 import { qk, tagsAnyAccess } from "./api/query-keys";
 import {
   bumpFolderCount,
@@ -60,15 +61,11 @@ function isBookmarkRecord(data: unknown): data is BookmarkDto {
 }
 
 function sortFolders(folders: FolderDto[]) {
-  return [...folders].sort(
-    (a, b) => Number(b.pinned) - Number(a.pinned) || a.createdAt.localeCompare(b.createdAt),
-  );
+  return sortFoldersDefault(folders);
 }
 
 function sortTags(tags: TagDto[]) {
-  return [...tags].sort(
-    (a, b) => b.bookmarkCount - a.bookmarkCount || a.name.localeCompare(b.name),
-  );
+  return sortTagsDefault(tags);
 }
 
 function tagSummary(tag: TagDto): TagSummaryDto {
@@ -359,13 +356,19 @@ async function commitFolderDeletes(folders: FolderDto[], contained: BookmarkDto[
 
 async function commitTagDeletes(tags: TagDto[]) {
   if (tags.length === 0) return;
-  for (const tag of tags) {
-    await tagsApi.remove(tag.id);
-    pendingTagIds.delete(tag.id);
+  try {
+    // No batch endpoint for tags; delete sequentially.
+    for (const tag of tags) {
+      await tagsApi.remove(tag.id);
+      pendingTagIds.delete(tag.id);
+    }
+  } finally {
+    // A partial failure must not leave the cache showing already-deleted tags
+    // (the undo restore re-inserts all of them); refetch the server truth.
+    void queryClient.invalidateQueries({ queryKey: tagsAnyAccess });
+    void queryClient.invalidateQueries({ queryKey: ["bookmarks", "tagged"] });
+    void queryClient.invalidateQueries({ queryKey: ["bookmarks", "search"] });
   }
-  void queryClient.invalidateQueries({ queryKey: tagsAnyAccess });
-  void queryClient.invalidateQueries({ queryKey: ["bookmarks", "tagged"] });
-  void queryClient.invalidateQueries({ queryKey: ["bookmarks", "search"] });
 }
 
 function toastMessage(bookmarks: number, folders: number, tags: readonly TagDto[]): string {

@@ -1,19 +1,8 @@
-/**
- * Shared branded scaffold for auth screens (login/register/verify).
- * Scrollable, safe-area aware, with the content centered (matching the old
- * app's Center + SingleChildScrollView + Column layout) and a footer slot.
- */
+/** Adaptive Material authentication scaffold, shared by every account flow. */
 import React from "react";
-import {
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  View,
-  type ViewStyle,
-} from "react-native";
+import { KeyboardAvoidingView, Platform, StyleSheet, View, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "../ui/Text";
-import { AUTH_LOGO_WIDTH, Logo } from "../ui/Logo";
 import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { useTheme } from "../../theme/ThemeProvider";
 import { layout, spacing } from "../../theme/tokens";
@@ -24,118 +13,57 @@ export interface AuthShellProps {
   subtitle?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  secondaryFooter?: React.ReactNode;
   style?: ViewStyle;
 }
-
-export function AuthShell({ title, subtitle, children, footer, style }: AuthShellProps) {
-  const { palette } = useTheme();
+export function AuthShell({ title, subtitle, children, footer, secondaryFooter, style }: AuthShellProps) {
+  const { palette, expressive } = useTheme();
   const insets = useSafeAreaInsets();
-  const { width, isLandscape, isTablet } = useResponsiveLayout();
-  const isWideLayout = width >= 960;
-  const compactLandscape = isLandscape && !isTablet && !isWideLayout;
-  const topPadding = insets.top + (compactLandscape ? spacing[16] : spacing[24]);
-  const bottomPadding = insets.bottom + (compactLandscape ? spacing[16] : spacing[24]);
-  const contentTopMargin = compactLandscape ? spacing[16] : spacing[24];
-  const footerTopMargin = compactLandscape ? spacing[16] : spacing[20];
-  const titleTopMargin = compactLandscape ? spacing[12] : spacing[16];
-  const subtitleTopMargin = compactLandscape ? spacing[4] : spacing[6];
-  const horizontalPadding = isWideLayout ? spacing[32] : spacing[24];
-
-  const brandHeader = (
-    <>
-      <Logo width={AUTH_LOGO_WIDTH} />
-      <Text variant="header" align="center" style={{ marginTop: titleTopMargin }}>
-        {title}
-      </Text>
-      {subtitle ? (
-        <Text
-          variant="footnote"
-          color="secondary"
-          align="center"
-          style={{ marginTop: subtitleTopMargin }}
-        >
-          {subtitle}
-        </Text>
-      ) : null}
-    </>
-  );
-
-  const formBody = (
-    <>
-      <View style={{ marginTop: contentTopMargin }}>{children}</View>
-      {footer ? <View style={[styles.footer, { marginTop: footerTopMargin }]}>{footer}</View> : null}
-    </>
-  );
-
+  const { compactHeight: compact } = useResponsiveLayout();
   return (
     <View style={[styles.root, { backgroundColor: palette.background }]}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={styles.root}
-      >
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : undefined} style={styles.root}>
         <ThemedScrollView
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           style={styles.root}
           contentContainerStyle={[
             styles.container,
-            isWideLayout ? styles.wideContainer : compactLandscape ? styles.compactContainer : styles.centeredContainer,
             {
-              paddingTop: topPadding,
-              paddingBottom: bottomPadding,
-              paddingLeft: insets.left + horizontalPadding,
-              paddingRight: insets.right + horizontalPadding,
+              justifyContent: compact ? "flex-start" : "center",
+              paddingTop: insets.top + (compact ? spacing[16] : spacing[32]),
+              paddingBottom: insets.bottom + (compact ? spacing[16] : spacing[32]),
+              paddingLeft: Math.max(insets.left, layout.screenHorizontalPad),
+              paddingRight: Math.max(insets.right, layout.screenHorizontalPad),
             },
           ]}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
         >
-          {isWideLayout ? (
-            <View style={styles.wideShell}>
-              <View style={styles.brandPane}>{brandHeader}</View>
-              <View style={styles.formPane}>
-                <View style={[styles.formInner, style]}>{formBody}</View>
+          <View style={[styles.form, style]}>
+            <View testID="auth-brand" style={{ marginBottom: compact ? spacing[16] : spacing[24] }}>
+              <Text variant="titleMedium" color="secondary">ordo</Text>
+            </View>
+            <View testID="auth-header" style={styles.heading}>
+              <Text variant={compact ? "headlineSmall" : expressive ? "displaySmall" : "headlineLarge"} accessibilityRole="header">{title}</Text>
+              {subtitle ? <Text variant="bodyMedium" color="secondary">{subtitle}</Text> : null}
+            </View>
+            <View style={{ marginTop: compact ? spacing[16] : spacing[24] }}>{children}</View>
+            {footer ? <View style={styles.footer}>{footer}</View> : null}
+            {secondaryFooter ? (
+              <View style={styles.secondaryFooter}>
+                {secondaryFooter}
               </View>
-            </View>
-          ) : (
-            <View style={[styles.inner, { maxWidth: layout.maxFormWidth }, style]}>
-              {brandHeader}
-              {formBody}
-            </View>
-          )}
+            ) : null}
+          </View>
         </ThemedScrollView>
       </KeyboardAvoidingView>
     </View>
   );
 }
-
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  container: {
-    flexGrow: 1,
-    alignItems: "center",
-  },
-  centeredContainer: { justifyContent: "center" },
-  compactContainer: { justifyContent: "flex-start" },
-  wideContainer: { justifyContent: "center" },
-  inner: { width: "100%", alignSelf: "center" },
-  wideShell: {
-    width: "100%",
-    maxWidth: layout.maxLibraryWidth,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[32],
-  },
-  brandPane: {
-    flex: 1,
-    minWidth: 0,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  formPane: {
-    flex: 1,
-    minWidth: 0,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  formInner: { width: "100%", maxWidth: layout.maxFormWidth },
-  footer: {},
+  container: { flexGrow: 1, alignItems: "center" },
+  form: { width: "100%", maxWidth: layout.maxFormWidth, minWidth: 0 },
+  heading: { gap: spacing[8] },
+  footer: { marginTop: spacing[16], alignItems: "center" },
+  secondaryFooter: { marginTop: spacing[8], alignItems: "center" },
 });

@@ -8,11 +8,45 @@
  */
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
+
+/**
+ * expo-secure-store is a no-op stub on web (its web module exports `{}`), so
+ * sessions silently vanish on every reload. Mirror the secure keys into
+ * localStorage there — same keys, same JSON envelopes — so sign-in survives
+ * a refresh. Browsers sandbox per-origin, which is the web-app equivalent of
+ * the keychain's app scoping.
+ */
+function webSecureGet(key: string): string | null {
+  try {
+    return window.localStorage.getItem(`secure.${key}`);
+  } catch {
+    return null;
+  }
+}
+
+function webSecureSet(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(`secure.${key}`, value);
+  } catch {
+    /* ignore — private-mode quirk */
+  }
+}
+
+function webSecureDelete(key: string): void {
+  try {
+    window.localStorage.removeItem(`secure.${key}`);
+  } catch {
+    /* ignore */
+  }
+}
+
+const isWeb = Platform.OS === "web";
 
 /** Read a JSON-serializable value from the secure store. */
 export async function secureGet<T = any>(key: string): Promise<T | null> {
   try {
-    const raw = await SecureStore.getItem(key);
+    const raw = isWeb ? webSecureGet(key) : await SecureStore.getItem(key);
     return raw == null ? null : (JSON.parse(raw) as T);
   } catch {
     return null;
@@ -22,6 +56,10 @@ export async function secureGet<T = any>(key: string): Promise<T | null> {
 /** Write a JSON-serializable value to the secure store. */
 export async function secureSet(key: string, value: unknown): Promise<void> {
   try {
+    if (isWeb) {
+      webSecureSet(key, JSON.stringify(value));
+      return;
+    }
     await SecureStore.setItemAsync(key, JSON.stringify(value), {
       keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
     });
@@ -33,6 +71,10 @@ export async function secureSet(key: string, value: unknown): Promise<void> {
 /** Delete a secure-store key. */
 export async function secureDelete(key: string): Promise<void> {
   try {
+    if (isWeb) {
+      webSecureDelete(key);
+      return;
+    }
     await SecureStore.deleteItemAsync(key);
   } catch {
     /* ignore */

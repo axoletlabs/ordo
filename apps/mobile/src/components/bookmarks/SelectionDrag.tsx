@@ -32,6 +32,8 @@ import {
   type SelectionRowFrame,
 } from "../../lib/selection-drag";
 import { SELECTION_LONG_PRESS_MS, type SelectionKey } from "../../hooks/use-selection";
+import { SelectionStateContext } from "../../hooks/selection-state-context";
+import type { SelectionStore } from "../../lib/selection-state";
 
 /** Native activation distance. Smaller than Android's scroll touch-slop so the mark wins first. */
 const MARK_ACTIVATE_PX = 4;
@@ -56,6 +58,8 @@ type DragSession = {
   baseline: ReadonlySet<string>;
   applied: Set<string>;
   pointerY: number;
+  originY: number;
+  moved: boolean;
   lastIndex: number;
 };
 
@@ -83,7 +87,7 @@ export function useSelectionDragRow(key: string | null) {
 
   const consumePress = useCallback(() => ctx?.consumePress() ?? false, [ctx]);
 
-  return { bind, consumePress };
+  return useMemo(() => ({ bind, consumePress }), [bind, consumePress]);
 }
 
 /**
@@ -241,7 +245,9 @@ export function useSelectionDrag({
         return;
       }
       nodes.current.set(key, node);
-      measureNode(key, node);
+      // Beginning a drag already measures every registered row. Normal taps
+      // must not enqueue native measurements or force web layout per row.
+      if (dragRef.current) measureNode(key, node);
     },
     [measureNode],
   );
@@ -308,6 +314,10 @@ export function useSelectionDrag({
   const tick = useCallback(() => {
     const session = dragRef.current;
     if (!session) return;
+    if (!session.moved) {
+      rafRef.current = requestAnimationFrame(tick);
+      return;
+    }
     const { top, bottom } = viewportRef.current;
     const step = autoScrollStep(session.pointerY, top, bottom);
     if (step !== 0 && maxOffsetRef.current > 0) {
@@ -363,6 +373,8 @@ export function useSelectionDrag({
         baseline,
         applied: new Set(baseline),
         pointerY: y,
+        originY: y,
+        moved: false,
         lastIndex: anchorIndex,
       };
       // Stop the list from also scrolling or arming pull-to-refresh under this finger.
@@ -371,7 +383,12 @@ export function useSelectionDrag({
         remeasureAll(() => {
           if (!dragRef.current) return;
           replaceFrames.current = false;
-          applyAt(y);
+          const session = dragRef.current;
+          const next = keysAfterDrag(keysRef.current, session.baseline, session.anchorKey, anchorIndex, session.mode);
+          if (next && !sameSelection(session.applied, next)) {
+            session.applied = new Set(next);
+            onChangeRef.current(next as SelectionKey[]);
+          }
           stopLoop();
           rafRef.current = requestAnimationFrame(tick);
         });
@@ -381,7 +398,8 @@ export function useSelectionDrag({
           const session = dragRef.current;
           if (!session) return;
           session.pointerY = event.clientY;
-          applyAt(event.clientY);
+          session.moved ||= Math.abs(event.clientY - session.originY) > MARK_ACTIVATE_PX;
+          if (session.moved) applyAt(event.clientY);
         };
         const up = () => endDrag();
         window.addEventListener("pointermove", move);
@@ -402,7 +420,8 @@ export function useSelectionDrag({
       const session = dragRef.current;
       if (!session) return;
       session.pointerY = y;
-      applyAt(y);
+      session.moved ||= Math.abs(y - session.originY) > MARK_ACTIVATE_PX;
+      if (session.moved) applyAt(y);
     },
     [applyAt],
   );
@@ -442,7 +461,7 @@ export function useSelectionDrag({
       frame.bottom -= delta;
     }
     const session = dragRef.current;
-    if (session) applyAt(session.pointerY);
+    if (session?.moved) applyAt(session.pointerY);
   }, [applyAt]);
 
   const onContentSizeChange = useCallback((_width: number, height: number) => {
@@ -451,7 +470,7 @@ export function useSelectionDrag({
   }, []);
 
   const onHostLayout = useCallback(() => {
-    measureHost();
+    if (dragRef.current) measureHost();
   }, [measureHost]);
 
   return {
@@ -469,11 +488,14 @@ export function useSelectionDrag({
 export function SelectionDragFrame({
   drag,
   children,
+  selectionStore,
 }: {
   drag: ReturnType<typeof useSelectionDrag>;
   children: React.ReactNode;
+  selectionStore?: SelectionStore;
 }) {
   return (
+    <SelectionStateContext.Provider value={selectionStore ?? null}>
     <SelectionDragContext.Provider value={drag.context}>
       <View
         ref={drag.hostRef}
@@ -485,6 +507,7 @@ export function SelectionDragFrame({
         {children}
       </View>
     </SelectionDragContext.Provider>
+    </SelectionStateContext.Provider>
   );
 }
 

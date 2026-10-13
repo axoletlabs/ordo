@@ -4,9 +4,9 @@
  * inline action. Driven by two shared values (enter + swipe offset) so the
  * enter/exit and swipe animations never fight.
  */
-import React, { useCallback, useEffect, useRef } from "react";
-import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import React, { useCallback, useEffect, useRef, useState } from "react";
+import { AccessibilityInfo, Platform, StyleSheet } from "react-native";
+import { MaterialIcon } from "./MaterialIcon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -21,19 +21,24 @@ import { Text } from "./Text";
 import { PressableScale } from "./PressableScale";
 import { useTheme } from "../../theme/ThemeProvider";
 import { SCREEN_RAIL, contentInset } from "../../theme/alignment";
-import { iconGlyphStyle } from "../../theme/icon-glyph";
-import { FOOTNOTE_LINE_BOX } from "../../theme/type-metrics";
 import { useSceneColumnInsets } from "../../hooks/use-scene-column-insets";
-import { radius, springs, spacing } from "../../theme/tokens";
+import { radius, spacing } from "../../theme/tokens";
 import { useFloatingDockMetrics } from "../../hooks/use-floating-dock-metrics";
+import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
+import { useFloatingActions } from "../../store/floating-actions";
 
 const SWIPE_THRESHOLD = 80;
 const SWIPE_VELOCITY = 600;
+/** Action toasts never auto-dismiss faster than this. */
+const ACTION_TOAST_FLOOR_MS = 8_000;
 
 function ToastItem({ toast }: { toast: Toast }) {
   const { palette, shadows } = useTheme();
+  const motion = useMaterialMotion();
   const dismiss = useToastStore((s) => s.dismiss);
   const dismissed = useRef(false);
+  const [hovered, setHovered] = useState(false);
+  const [focused, setFocused] = useState(false);
 
   // 0 → 1 enter/exit; horizontal px for swipe.
   const enter = useSharedValue(0);
@@ -42,15 +47,27 @@ function ToastItem({ toast }: { toast: Toast }) {
   const animateOut = useCallback(() => {
     if (dismissed.current) return;
     dismissed.current = true;
-    enter.value = withTiming(0, { duration: 220 }, () => runOnJS(dismiss)(toast.id));
-  }, [dismiss, enter, toast.id]);
+    enter.value = withTiming(0, { duration: motion.reducedMotion ? 0 : 200 }, (finished) => { if (finished) runOnJS(dismiss)(toast.id); });
+  }, [dismiss, enter, toast.id, motion.reducedMotion]);
 
-  // Enter, then schedule an auto-dismiss.
+  // Enter, then schedule an auto-dismiss. Action toasts keep their explicit
+  // close button but still time out — with a longer floor so the action can
+  // be read and tapped. Web keeps the close button and gains the same timer.
   useEffect(() => {
-    enter.value = withSpring(1, springs.gentle);
-    const timer = setTimeout(animateOut, toast.duration);
-    return () => clearTimeout(timer);
-  }, [toast.id, toast.duration, enter, animateOut]);
+    if (dismissed.current) return;
+    enter.value = motion.reducedMotion ? 1 : withSpring(1, materialMotion.effects.spatial);
+  }, [enter, motion.reducedMotion]);
+  useEffect(() => {
+    // Hover/focus may pause the timer, but must never restart an exit fade.
+    if (dismissed.current || hovered || focused) return;
+    const duration = toast.action ? Math.max(toast.duration, ACTION_TOAST_FLOOR_MS) : toast.duration;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const schedule = (timeout: number) => { if (active) timer = setTimeout(animateOut, Math.max(duration, timeout)); };
+    if (Platform.OS === "android") AccessibilityInfo.getRecommendedTimeoutMillis(duration).then(schedule, () => schedule(duration));
+    else schedule(duration);
+    return () => { active = false; if (timer) clearTimeout(timer); };
+  }, [toast.id, toast.duration, toast.action, animateOut, hovered, focused]);
 
   const pan = Gesture.Pan()
     .enabled(toast.swipeable)
@@ -61,9 +78,10 @@ function ToastItem({ toast }: { toast: Toast }) {
       const past = Math.abs(offsetX.value) > SWIPE_THRESHOLD || Math.abs(e.velocityX) > SWIPE_VELOCITY;
       if (past) {
         const dir = Math.sign(offsetX.value) || 1;
-        offsetX.value = withSpring(dir * 500, springs.snappy, () => runOnJS(animateOut)());
+        if (motion.reducedMotion) runOnJS(animateOut)();
+        else offsetX.value = withSpring(dir * 500, materialMotion.effects.spatial, (finished) => { if (finished) runOnJS(animateOut)(); });
       } else {
-        offsetX.value = withSpring(0, springs.gentle);
+        offsetX.value = motion.reducedMotion ? 0 : withSpring(0, materialMotion.effects.spatial);
       }
     });
 
@@ -72,41 +90,34 @@ function ToastItem({ toast }: { toast: Toast }) {
     transform: [{ translateX: offsetX.value }, { translateY: (1 - enter.value) * 20 }],
   }));
 
-  const iconName =
-    toast.tone === "success"
-      ? "checkmark-circle"
-      : toast.tone === "danger"
-        ? "alert-circle"
-        : "information-circle";
-  const iconColor =
-    toast.tone === "success" ? palette.green : toast.tone === "danger" ? palette.coral : palette.blue;
-
   return (
     <GestureDetector gesture={pan}>
       <Animated.View
+        onPointerEnter={(event) => { if (event.nativeEvent.pointerType !== "touch") setHovered(true); }}
+        onPointerLeave={() => setHovered(false)}
+        onFocus={() => setFocused(true)}
+        onBlur={(event) => { if (Platform.OS !== "web" || !(event.currentTarget as unknown as HTMLElement).contains((event as unknown as { relatedTarget: Node }).relatedTarget)) setFocused(false); }}
+        accessibilityRole="alert"
+        accessibilityLiveRegion={toast.tone === "danger" ? "assertive" : "polite"}
+        testID="material-snackbar"
         style={[
           styles.toast,
           {
-            backgroundColor:
-              toast.tone === "danger"
-                ? palette.dangerSoft
-                : palette.surfaceElevated,
-            borderColor: palette.borderStrong,
-            borderRadius: radius.xl,
+            backgroundColor: palette.inverseSurface,
+            borderRadius: radius.xs,
           },
           shadows.level2,
           animStyle,
         ]}
       >
-        <View style={styles.icon}>
-          <Ionicons name={iconName as any} size={16} color={iconColor} style={iconGlyphStyle(16)} />
-        </View>
-        <Text variant="footnote" style={[styles.message, { color: palette.text }]}>
+        <Text variant="bodyMedium" style={[styles.message, { color: palette.inverseOnSurface }]}>
           {toast.message}
         </Text>
         {toast.action ? (
           <PressableScale
-            scaleTo={0.92}
+            accessibilityRole="button"
+            accessibilityLabel={toast.action.label}
+            stateLayerColor={palette.inversePrimary}
             hitSlop={6}
             onPress={() => {
               toast.action!.onPress();
@@ -114,11 +125,15 @@ function ToastItem({ toast }: { toast: Toast }) {
             }}
             style={styles.actionHit}
           >
-            <Text variant="label" color="accent" numberOfLines={1} style={styles.action}>
+            <Text variant="labelLarge" numberOfLines={1} style={[styles.action, { color: palette.inversePrimary }]}>
               {toast.action.label}
             </Text>
           </PressableScale>
         ) : null}
+        {toast.action || Platform.OS === "web" ? <PressableScale accessibilityRole="button" accessibilityLabel="Dismiss notification"
+          stateLayerColor={palette.inverseOnSurface} onPress={animateOut} style={{ minWidth: 48, minHeight: 48, alignItems: "center", justifyContent: "center" }}>
+          <MaterialIcon name="close" color={palette.inverseOnSurface} />
+        </PressableScale> : null}
       </Animated.View>
     </GestureDetector>
   );
@@ -127,6 +142,7 @@ function ToastItem({ toast }: { toast: Toast }) {
 export function ToastHost() {
   const toasts = useToastStore((s) => s.toasts);
   const { overlayClearance } = useFloatingDockMetrics();
+  const hasFab = useFloatingActions((state) => state.ids.length > 0);
   const insets = useSafeAreaInsets();
   const { lead } = useSceneColumnInsets();
   return (
@@ -135,13 +151,13 @@ export function ToastHost() {
       style={[
         styles.host,
         {
-          paddingBottom: overlayClearance,
+          paddingBottom: overlayClearance + (hasFab ? 72 : 0),
           paddingLeft: lead > 0 ? lead + SCREEN_RAIL : contentInset(insets.left),
           paddingRight: contentInset(insets.right),
         },
       ]}
     >
-      {toasts.map((t) => (
+      {toasts.slice(0, 1).map((t) => (
         <ToastItem key={t.id} toast={t} />
       ))}
     </Animated.View>
@@ -155,25 +171,20 @@ const styles = StyleSheet.create({
     maxWidth: 560,
     alignSelf: "center",
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: spacing[8],
-    paddingHorizontal: spacing[14],
-    paddingVertical: spacing[12],
-    marginTop: spacing[8],
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  icon: {
-    width: 16,
-    height: FOOTNOTE_LINE_BOX,
     alignItems: "center",
-    justifyContent: "center",
+    gap: spacing[8],
+    paddingHorizontal: spacing[16],
+    marginTop: spacing[8],
+    minHeight: 48,
+    minWidth: 48,
   },
-  message: { flex: 1, minWidth: 0, includeFontPadding: false },
-  // Same first-line box as the icon, but the label keeps its own width.
-  // The icon slot is 16px; putting Download / Restart in it clipped them.
+  message: { flex: 1, minWidth: 0, includeFontPadding: false, paddingVertical: spacing[14] },
+  // Actions retain a full touch target without making the container taller.
   actionHit: {
     flexShrink: 0,
-    minHeight: FOOTNOTE_LINE_BOX,
+    minHeight: 48,
+    minWidth: 48,
+    alignItems: "center",
     justifyContent: "center",
   },
   action: { includeFontPadding: false },

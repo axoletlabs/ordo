@@ -21,10 +21,11 @@ interface OrdoExtra {
 
 export function useBuildInfo(): BuildInfo {
   const extra = (Constants.expoConfig?.extra as { ordo?: OrdoExtra } | undefined)?.ordo;
+  const version = Constants.nativeAppVersion ?? Constants.expoConfig?.version;
   return {
-    version: Constants.nativeAppVersion ?? Constants.expoConfig?.version ?? "—",
-    gitHash: extra?.gitHash ?? null,
-    gitHashShort: extra?.gitHashShort ?? null,
-    gitDirty: extra?.gitDirty ?? false,
+    version: typeof version === "string" && version.length > 0 ? version : "—",
+    gitHash: typeof extra?.gitHash === "string" && extra.gitHash.length > 0 ? extra.gitHash : null,
+    gitHashShort: typeof extra?.gitHashShort === "string" && extra.gitHashShort.length > 0 ? extra.gitHashShort : null,
+    gitDirty: extra?.gitDirty === true,
   };
 }

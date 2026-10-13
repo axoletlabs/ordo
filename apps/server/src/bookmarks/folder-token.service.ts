@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, type OnApplicationBootstrap, type OnModuleDestroy } from "@nestjs/common";
 import bcrypt from "bcryptjs";
 import type { Folder } from "../prisma/client.js";
 import { ErrorCode, TOKEN_TTL, isFolderPinLength, type FolderLockType } from "@ordo/shared";
@@ -7,14 +7,29 @@ import { AppError } from "../common/errors/app-error.js";
 import { TokenService } from "../auth/token.service.js";
 
 const FOLDER_BCRYPT_COST = 10;
+/** Expired unlock tokens are pruned on this cadence so the table stays small. */
+const FOLDER_TOKEN_SWEEP_MS = 60 * 60 * 1000;
 
 /** Manages folder password protection and short-lived folder unlock tokens. */
 @Injectable()
-export class FolderTokenService {
+export class FolderTokenService implements OnApplicationBootstrap, OnModuleDestroy {
+  private sweepTimer: ReturnType<typeof setInterval> | null = null;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly tokens: TokenService,
   ) {}
+
+  onApplicationBootstrap(): void {
+    void this.sweepExpired();
+    this.sweepTimer = setInterval(() => void this.sweepExpired(), FOLDER_TOKEN_SWEEP_MS);
+    this.sweepTimer.unref?.();
+  }
+
+  onModuleDestroy(): void {
+    if (this.sweepTimer) clearInterval(this.sweepTimer);
+    this.sweepTimer = null;
+  }
 
   async setPassword(folderId: string, password: string, lockType: FolderLockType): Promise<void> {
     const passwordHash = await bcrypt.hash(password, FOLDER_BCRYPT_COST);
@@ -62,17 +77,11 @@ export class FolderTokenService {
     return { token, expiresIn: Math.round(TOKEN_TTL.FOLDER_MS / 1000) };
   }
 
-  /** Verify a folder token is valid for the given folder. */
-  async verify(folderId: string, token: string): Promise<boolean> {
-    const record = await this.prisma.folderToken.findFirst({
-      where: { tokenHash: { in: this.tokens.lookupHashes(token) } },
-    });
-    if (!record || record.folderId !== folderId) return false;
-    if (record.expiresAt < new Date()) {
-      await this.prisma.folderToken.delete({ where: { id: record.id } }).catch(() => undefined);
-      return false;
-    }
-    return true;
+  /** Delete unlock tokens whose TTL has passed. */
+  private async sweepExpired(): Promise<void> {
+    await this.prisma.folderToken
+      .deleteMany({ where: { expiresAt: { lt: new Date() } } })
+      .catch(() => undefined);
   }
 
   /** Resolve which folder IDs the given (untrusted) tokens validly unlock. */

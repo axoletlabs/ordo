@@ -3,8 +3,8 @@
  * read as one library, not two stacked features.
  */
 import React from "react";
-import { Platform, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Platform, StyleSheet, View, useWindowDimensions } from "react-native";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { ListPressable } from "../ui/ListPressable";
 import { PinIcon } from "../ui/PinIcon";
 import { Text } from "../ui/Text";
@@ -12,9 +12,10 @@ import { Badge } from "../ui/Badge";
 import { RowHighlight } from "./RowHighlight";
 import { SelectionMark } from "./SelectionMark";
 import { SelectionDragHandle, useSelectionDragRow } from "./SelectionDrag";
-import { useTheme } from "../../theme/ThemeProvider";
+import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
-import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
+import { runPressAction } from "../../lib/press-action";
+import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { RowIconWell } from "../ui/RowIconWell";
 import { ROW_ICON_GLYPH } from "../../theme/alignment";
 import { layout, spacing } from "../../theme/tokens";
@@ -25,20 +26,27 @@ import { useFolderUnlocked } from "../../hooks/use-folders";
 import { DEFAULT_FOLDER_ICON, type FolderDto } from "@ordo/shared";
 import { FolderLockIcon } from "./FolderLockIcon";
 import { RowStatusSlot, ROW_STATUS_ICON_SIZE } from "./RowStatusIcon";
+import { listCorners, type ListPosition } from "../../theme/list-shape";
+import { useRowSelection } from "../../hooks/selection-state-context";
+import { rowOwnsHover } from "../../lib/row-hover";
+import { nativeHoverEvents } from "../../lib/pointer-hover";
 
 export interface FolderRowProps {
   folder: FolderDto;
-  onPress: (f: FolderDto) => void;
+  onPress: (f: FolderDto) => void | boolean;
   onMore?: (f: FolderDto, anchor: MenuAnchorRect) => void;
   /** Press-and-hold on the folder icon enters selection with this folder. */
   onEnterSelection?: (f: FolderDto) => void;
   selected?: boolean;
   selectionMode?: boolean;
   highlighted?: boolean;
+  position?: ListPosition;
 }
 
-export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore, onEnterSelection, selected, selectionMode, highlighted: highlightedProp }: FolderRowProps) {
-  const { palette } = useTheme();
+export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore, onEnterSelection, selected: selectedProp, selectionMode: selectionModeProp, highlighted: highlightedProp, position = "only" }: FolderRowProps) {
+  const { selected, selectionMode } = useRowSelection(folderKey(folder.id), { selected: selectedProp, selectionMode: selectionModeProp });
+  const { palette: basePalette, expressive } = useTheme();
+  const { fontScale } = useWindowDimensions();
   const rowRef = React.useRef<View>(null);
   const dragRow = useSelectionDragRow(folderKey(folder.id));
   const bodyStartY = React.useRef(0);
@@ -62,9 +70,15 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
     hold.reset();
   }
   const [hovered, setHovered] = React.useState(false);
+  const [pressed, setPressed] = React.useState(false);
   const menuKey = folderKey(folder.id);
   const highlightedFromMenu = useMenuHighlightStore((s) => s.key === menuKey);
   const highlighted = highlightedProp ?? highlightedFromMenu;
+  const palette = React.useMemo(() => selected || highlighted ? {
+    ...basePalette, onSurface: basePalette.onSecondaryContainer, onSurfaceVariant: basePalette.onSecondaryContainer,
+    text: basePalette.onSecondaryContainer, textSecondary: basePalette.onSecondaryContainer,
+    textTertiary: basePalette.onSecondaryContainer, textFaint: basePalette.onSecondaryContainer,
+  } : basePalette, [basePalette, selected, highlighted]);
   const unread = folder.unreadCount > 0;
   const sessionUnlocked = useFolderUnlocked(folder.protected ? folder.id : null);
   const countLabel = `${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}`;
@@ -76,8 +90,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
       onPress(folder);
       return;
     }
-    haptics.light();
-    onPress(folder);
+    runPressAction(() => onPress(folder), haptics.light);
   };
 
   const warmFolder = () => {
@@ -88,21 +101,19 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
     haptics.light();
     measureAnchor(rowRef.current, (anchor) => onMore?.(folder, anchor), event);
   };
-  const rowFill = selected || highlighted
-    ? palette.surfaceSecondary
-    : hovered
-      ? menuHoverFill(palette.mode)
-      : "transparent";
 
   return (
+    <ThemeOverrideProvider palette={palette}>
     <View
       ref={setRowRef}
       collapsable={false}
-      onLayout={() => dragRow.bind(rowRef.current)}
-      style={[styles.wrap, { borderBottomColor: palette.border }]}
+      onLayout={selectionMode ? () => dragRow.bind(rowRef.current) : undefined}
+      style={[styles.wrap, fontScale <= 1 ? { height: 72 } : null, { borderBottomWidth: 0,
+        marginBottom: expressive ? spacing[2] : 0, minHeight: 72, overflow: expressive ? "visible" : "hidden" }]}
       {...(Platform.OS === "web"
         ? {
-            onMouseEnter: () => setHovered(true),
+            onMouseEnter: (event: { target?: unknown; currentTarget?: unknown }) => setHovered(rowOwnsHover(event)),
+            onMouseMove: (event: { target?: unknown; currentTarget?: unknown }) => setHovered(rowOwnsHover(event)),
             onMouseLeave: () => setHovered(false),
             onContextMenu:
               onMore && !selectionMode
@@ -111,10 +122,14 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
                     openMore();
                   }
                 : undefined,
+            onKeyDown: onMore && !selectionMode ? (event: { key: string; shiftKey: boolean; preventDefault: () => void }) => {
+              if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); openMore(); }
+            } : undefined,
           }
-        : null)}
+          : nativeHoverEvents({}, setHovered))}
     >
-      <RowHighlight color={rowFill} />
+      <RowHighlight rest={expressive ? listCorners(position, false) : undefined} expressive={expressive}
+        hovered={hovered} pressed={pressed} selected={!!selected || !!highlighted} />
       <SelectionDragHandle
         selectionKey={folderKey(folder.id)}
         selectionMode={!!selectionMode}
@@ -130,6 +145,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
         style={styles.leadingHit}
       >
       <ListPressable
+        feedback={false}
         accessibilityRole="button"
         accessibilityLabel={`Select ${folder.name}`}
         accessibilityHint="Press and hold to select"
@@ -144,10 +160,11 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
           if (Math.abs(event.nativeEvent.pageY - leadStartY.current) > 10) leadMoved.current = true;
         }}
         onPressIn={() => {
+          setPressed(true);
           hold.pressIn();
           warmFolder();
         }}
-        onPressOut={() => hold.pressOut()}
+        onPressOut={() => { setPressed(false); hold.pressOut(); }}
         onPress={() => {
           if (leadMoved.current) return;
           openFolder();
@@ -158,7 +175,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
           <SelectionMark selected={!!selected} />
         ) : (
           <RowIconWell>
-            <Ionicons name={folder.icon ?? DEFAULT_FOLDER_ICON} size={ROW_ICON_GLYPH} color={palette.accent} />
+            <Ionicons name={folder.icon ?? DEFAULT_FOLDER_ICON} size={ROW_ICON_GLYPH} color={palette.onSecondaryContainer} />
           </RowIconWell>
         )}
         </View>
@@ -166,6 +183,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
       </SelectionDragHandle>
 
       <ListPressable
+        feedback={false}
         accessibilityRole={selectionMode ? "checkbox" : "button"}
         accessibilityLabel={`${folder.name}, ${countLabel}${folder.pinned ? ", pinned" : ""}${lockLabel}${unread ? `, ${folder.unreadCount} unread` : ""}`}
         accessibilityState={selectionMode ? { checked: !!selected } : undefined}
@@ -197,10 +215,11 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
           if (Math.abs(event.nativeEvent.pageY - bodyStartY.current) > 10) bodyMoved.current = true;
         }}
         onPressIn={() => {
+          setPressed(true);
           hold.pressIn();
           warmFolder();
         }}
-        onPressOut={() => hold.pressOut()}
+        onPressOut={() => { setPressed(false); hold.pressOut(); }}
         onPress={() => {
           if (bodyMoved.current) return;
           openFolder();
@@ -209,32 +228,19 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         <View style={styles.content}>
-          <View style={styles.titleRow}>
-            <View style={styles.titleWrap}>
-              <Text variant="headline" numberOfLines={1}>
-                {folder.name}
-              </Text>
-            </View>
-            {folder.pinned ? (
-              <RowStatusSlot>
-                <PinIcon size={ROW_STATUS_ICON_SIZE} color={palette.textTertiary} filled={false} />
-              </RowStatusSlot>
-            ) : null}
-            {folder.protected ? (
-              <RowStatusSlot>
-                <FolderLockIcon unlocked={sessionUnlocked} outline />
-              </RowStatusSlot>
-            ) : null}
-          </View>
+          <Text variant="headline" numberOfLines={1}>{folder.name}</Text>
           <View style={styles.metaRow}>
-            <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.count}>
+            {folder.protected ? <RowStatusSlot><FolderLockIcon unlocked={sessionUnlocked} outline /></RowStatusSlot> : null}
+            <Text variant="bodyMedium" color="tertiary" numberOfLines={1} style={styles.count}>
               {countLabel}
             </Text>
+            {folder.pinned ? <RowStatusSlot><PinIcon size={ROW_STATUS_ICON_SIZE} color={palette.textTertiary} /></RowStatusSlot> : null}
           </View>
         </View>
         {unread && !selectionMode ? <Badge tone="accent">{folder.unreadCount}</Badge> : null}
       </ListPressable>
     </View>
+    </ThemeOverrideProvider>
   );
 });
 
@@ -247,6 +253,7 @@ const styles = StyleSheet.create({
     flexGrow: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
     paddingRight: layout.rowInset,
+    overflow: "hidden",
   },
   leadingHit: {
     alignSelf: "stretch",
@@ -255,7 +262,7 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: spacing[8],
+    paddingVertical: spacing[12],
     paddingLeft: layout.rowInset,
     ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
   },
@@ -264,13 +271,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[12],
-    paddingVertical: spacing[8],
-    paddingLeft: spacing[12],
+    paddingVertical: spacing[12],
+    paddingLeft: spacing[16],
     paddingRight: spacing[8],
   },
   content: { flex: 1, minWidth: 0 },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[6] },
-  titleWrap: { flexShrink: 1, minWidth: 0 },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[6], marginTop: spacing[6] },
+  metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[8], marginTop: spacing[2] },
   count: { flexShrink: 1 },
 });

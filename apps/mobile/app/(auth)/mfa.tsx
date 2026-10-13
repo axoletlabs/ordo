@@ -1,7 +1,7 @@
 /**
  * Second step of login when TOTP is enabled.
  */
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { AuthShell } from "../../src/components/auth/AuthShell";
@@ -41,8 +41,13 @@ export default function LoginMfaScreen() {
   const [otpStatus, setOtpStatus] = useState<OtpStatus>("idle");
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
+  const inFlight = useRef(false);
+  const busy = sending || otpStatus === "loading" || otpStatus === "success";
+  const backToSignIn = () => router.replace("/(auth)/login");
 
   const submitCode = async (code: string) => {
+    if (inFlight.current || otpStatus === "success") return;
+    inFlight.current = true;
     setError("");
     setOtpStatus("loading");
     try {
@@ -53,24 +58,32 @@ export default function LoginMfaScreen() {
       setOtpStatus("error");
       haptics.error();
       setError(errorMessage(e));
+    } finally {
+      inFlight.current = false;
     }
   };
 
   const requestEmail = async () => {
+    if (inFlight.current || otpStatus === "success") return;
+    inFlight.current = true;
     setError("");
     setSending(true);
     try {
       await authApi.loginMfaEmail({ challengeToken });
       setMode("email");
+      setOtpStatus("idle");
       toast.success(info?.smtpConfigured === false ? "Code printed in the server console" : "Sign-in code sent");
     } catch (e) {
       setError(errorMessage(e));
     } finally {
       setSending(false);
+      inFlight.current = false;
     }
   };
 
   const submitEmail = async (token: string) => {
+    if (inFlight.current || otpStatus === "success") return;
+    inFlight.current = true;
     setError("");
     setOtpStatus("loading");
     try {
@@ -82,14 +95,20 @@ export default function LoginMfaScreen() {
       setOtpStatus("error");
       haptics.error();
       setError(errorMessage(e));
+    } finally {
+      inFlight.current = false;
     }
   };
 
   return (
-    <AuthShell title="Check your authenticator">
+    <AuthShell title={mode === "backup" ? "Use a backup code" : mode === "email" ? "Check your email" : "Check your authenticator"}
+      subtitle={mode === "backup" ? "Enter one of the backup codes you saved when setting up your authenticator." : mode === "email" ? "Enter the sign-in code sent to your email." : "Enter the code shown in your authenticator app."}
+      footer={<Button label="Back to sign in" variant="ghost" block onPress={backToSignIn} disabled={busy} />}>
       {mode === "totp" ? (
         <>
           <OtpInput
+            key="totp"
+            editable={!sending}
             value={totp}
             onChange={(next) => {
               setTotp(next);
@@ -105,6 +124,7 @@ export default function LoginMfaScreen() {
           <Button
             label="Use a backup code"
             variant="ghost"
+            disabled={busy}
             onPress={() => {
               setError("");
               setOtpStatus("idle");
@@ -115,17 +135,18 @@ export default function LoginMfaScreen() {
             <Button
               label="Email me a sign-in code"
               variant="ghost"
+              disabled={busy}
               loading={sending}
               onPress={requestEmail}
             />
           ) : null}
-          <Button label="Back to sign in" variant="ghost" onPress={() => router.back()} />
         </>
       ) : null}
 
       {mode === "backup" ? (
         <>
           <OtpInput
+            key="backup"
             kind="backup"
             value={backup}
             onChange={(next) => {
@@ -142,6 +163,7 @@ export default function LoginMfaScreen() {
           <Button
             label="Use an authenticator code"
             variant="ghost"
+            disabled={busy}
             onPress={() => {
               setError("");
               setOtpStatus("idle");
@@ -155,8 +177,9 @@ export default function LoginMfaScreen() {
         <>
           <OtpDeliveryHint smtpConfigured={info?.smtpConfigured} />
           <OtpInput
+            key="email"
             value={emailCode}
-            onChange={setEmailCode}
+            onChange={(next) => { setEmailCode(next); setError(""); if (otpStatus === "error") setOtpStatus("idle"); }}
             onComplete={submitEmail}
             status={otpStatus}
             error={error || undefined}
@@ -169,6 +192,7 @@ export default function LoginMfaScreen() {
           <Button
             label="Use an authenticator code"
             variant="ghost"
+            disabled={busy}
             onPress={() => {
               setError("");
               setOtpStatus("idle");

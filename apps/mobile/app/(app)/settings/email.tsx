@@ -18,6 +18,7 @@ import {
 } from "../../../src/components/settings/SettingsPage";
 import { Input } from "../../../src/components/ui/Input";
 import { Button } from "../../../src/components/ui/Button";
+import { FormError } from "../../../src/components/ui/FormError";
 import { EyeToggle } from "../../../src/components/ui/EyeToggle";
 import { useRequestEmailChange } from "../../../src/hooks/use-auth-actions";
 import { useAuthStore } from "../../../src/store/auth";
@@ -47,6 +48,7 @@ function ChangeEmailForm() {
   const [newEmail, setNewEmail] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [formError, setFormError] = useState("");
+  const [errorField, setErrorField] = useState<string | null>(null);
   const [mfaOpen, setMfaOpen] = useState(false);
   const submittedRef = useRef({ currentPassword: "", newEmail: "" });
 
@@ -79,9 +81,11 @@ function ChangeEmailForm() {
 
   const submit = async () => {
     setFormError("");
+    setErrorField(null);
     const parsed = parsedBody();
     if (!parsed.success) {
       setFormError(parsed.error.issues[0]?.message || "Please check your input.");
+      setErrorField(String(parsed.error.issues[0]?.path[0] ?? ""));
       return;
     }
     submittedRef.current = parsed.data;
@@ -113,13 +117,14 @@ function ChangeEmailForm() {
                 label="Current email"
                 value={user?.email ?? ""}
                 onChangeText={() => {}}
-                editable={false}
+                readOnly
                 autoComplete="off"
                 textContentType="none"
                 importantForAutofill="no"
               />
               <Input
                 label="New email"
+                required maxLength={254}
                 value={newEmail}
                 onChangeText={setNewEmail}
                 placeholder="you@example.com"
@@ -128,22 +133,25 @@ function ChangeEmailForm() {
                 textContentType="none"
                 importantForAutofill="no"
                 autoCapitalize="none"
+                error={errorField === "newEmail" ? formError : undefined}
               />
               <Input
                 label="Current password"
+                required
                 value={passwordField.value}
                 onChangeText={setCurrentPassword}
                 placeholder="Enter your current password"
                 secureTextEntry={passwordField.secureTextEntry}
                 {...passwordAutofillProps("password", mfaOpen)}
-                error={formError || undefined}
+                error={errorField === "currentPassword" ? formError : undefined}
                 rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
               />
 
+              <FormError message={errorField ? undefined : formError} />
               <Button
                 label="Send code"
                 block
-                size="lg"
+                size="md"
                 onPress={submit}
                 loading={requestEmailChange.isPending && !mfaOpen}
               />

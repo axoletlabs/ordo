@@ -36,6 +36,8 @@ export interface UnlockFormProps {
    * Off by default so locking a folder does not immediately ask to unlock it.
    */
   autoPromptDevice?: boolean;
+  /** Whether the hosting panel is actually shown; the OS prompt only fires while visible. */
+  presented?: boolean;
 }
 
 export interface LockPromptProps extends UnlockFormProps {
@@ -59,6 +61,7 @@ export function UnlockForm({
   onCancel,
   cancelLabel = "Cancel",
   autoPromptDevice = false,
+  presented = true,
 }: UnlockFormProps) {
   const unlock = useUnlockFolder();
   const [focused, setFocused] = useState(true);
@@ -171,11 +174,11 @@ export function UnlockForm({
   };
 
   useEffect(() => {
-    if (!autoPromptDevice || !folderId || !focused || lockType !== "device" || deviceAttempted.current) return;
+    if (!autoPromptDevice || !presented || !folderId || !focused || lockType !== "device" || deviceAttempted.current) return;
     if (Platform.OS === "web") return;
     deviceAttempted.current = true;
     void submitDeviceLock();
-  }, [autoPromptDevice, focused, lockType, folderId]);
+  }, [autoPromptDevice, presented, focused, lockType, folderId]);
 
   const isPassword = lockType !== "device" && lockType !== "pattern" && lockType !== "pin";
   const knownPinLength = pinLength === 4 || pinLength === 6;
@@ -189,7 +192,7 @@ export function UnlockForm({
         <Button
           label="Use device lock"
           block
-          size="lg"
+          size="md"
           onPress={submitDeviceLock}
           loading={unlock.isPending}
         />
@@ -208,6 +211,7 @@ export function UnlockForm({
         <View>
           {knownPinLength ? null : (
             <Segmented
+              accessibilityLabel="PIN length"
               options={[
                 { value: "4", label: "4 digits" },
                 { value: "6", label: "6 digits" },
@@ -239,6 +243,7 @@ export function UnlockForm({
       ) : (
         <Input
           label="Password"
+          required disabled={unlock.isPending}
           value={password}
           onChangeText={(value) => {
             setPassword(value);
@@ -318,6 +323,7 @@ export function LockPrompt({
           lockType={lockType}
           pinLength={pinLength}
           autoPromptDevice
+          presented={active}
           onUnlocked={onUnlocked}
           onCancel={close}
         />

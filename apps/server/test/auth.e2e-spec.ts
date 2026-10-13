@@ -260,6 +260,7 @@ describe("Auth (e2e)", () => {
       expect(res.body.preferences).toEqual({
         fontFamily: "serif",
         fontSize: "medium",
+        lineSpacing: "default",
         theme: "system",
         amoled: false,
       });
@@ -734,29 +735,45 @@ describe("Auth (e2e)", () => {
 
         const first = await agent
           .patch("/api/auth/preferences")
-          .send({ theme: "sepia" })
+          .send({ theme: "dark" })
           .expect(200);
         expect(first.body.preferences).toEqual({
           fontFamily: "serif",
           fontSize: "medium",
-          theme: "sepia",
+          lineSpacing: "default",
+          theme: "dark",
           amoled: false,
         });
 
         const second = await agent
           .patch("/api/auth/preferences")
-          .send({ fontFamily: "serif", fontSize: "large", amoled: true })
+          .send({ fontFamily: "garamond", fontSize: "large", lineSpacing: "relaxed", amoled: true })
           .expect(200);
         expect(second.body.preferences).toEqual({
-          fontFamily: "serif",
+          fontFamily: "garamond",
           fontSize: "large",
-          theme: "sepia",
+          lineSpacing: "relaxed",
+          theme: "dark",
           amoled: true,
         });
 
         // persisted — /auth/me reports the same synced preferences
         const me = await agent.get("/api/auth/me").expect(200);
         expect(me.body.preferences).toEqual(second.body.preferences);
+      });
+
+      it("maps legacy Sepia and Mono preferences to System and Sans", async () => {
+        const agent = await authedAgent(pctx.app, "legacy-reader@ordo.app");
+        await pctx.prisma.user.update({ where: { email: "legacy-reader@ordo.app" }, data: {
+          preferences: JSON.stringify({ theme: "sepia", fontFamily: "mono", fontSize: "large", amoled: true }),
+        } });
+        const legacy = await agent.get("/api/auth/me").expect(200);
+        expect(legacy.body.preferences).toEqual({ theme: "system", fontFamily: "sans", fontSize: "large", lineSpacing: "default", amoled: true });
+        const result = await agent.patch("/api/auth/preferences")
+          .send({ theme: "sepia", fontFamily: "mono", fontSize: "large", amoled: true }).expect(200);
+        expect(result.body.preferences).toEqual({ theme: "system", fontFamily: "sans", fontSize: "large", lineSpacing: "default", amoled: true });
+        const me = await agent.get("/api/auth/me").expect(200);
+        expect(me.body.preferences).toEqual(result.body.preferences);
       });
 
       it("validates preference values and requires a field", async () => {
@@ -789,6 +806,7 @@ describe("Auth (e2e)", () => {
         expect(after.body.preferences).toEqual({
           fontFamily: "serif",
           fontSize: "medium",
+          lineSpacing: "default",
           theme: "system",
           amoled: false,
         });
@@ -801,6 +819,7 @@ describe("Auth (e2e)", () => {
         expect(patched.body.preferences).toEqual({
           fontFamily: "serif",
           fontSize: "medium",
+          lineSpacing: "default",
           theme: "dark",
           amoled: false,
         });

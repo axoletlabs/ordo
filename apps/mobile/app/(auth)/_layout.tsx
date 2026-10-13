@@ -4,15 +4,17 @@
 import React from "react";
 import { Stack } from "expo-router";
 import { useTheme } from "../../src/theme/ThemeProvider";
+import { useReducedMotionPreference } from "../../src/hooks/use-reduced-motion-preference";
 
 export default function AuthLayout() {
   const { palette } = useTheme();
+  const reducedMotion = useReducedMotionPreference();
   return (
     <Stack
       screenOptions={{
         headerShown: false,
         contentStyle: { backgroundColor: palette.background },
-        animation: "fade",
+        animation: reducedMotion ? "none" : "fade",
       }}
     >
       <Stack.Screen name="login" />

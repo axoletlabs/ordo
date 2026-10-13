@@ -51,3 +51,28 @@ export function listRefreshOverscrollDy(contentOffsetY: number): number {
 export function listIsAtTop(contentOffsetY: number): boolean {
   return contentOffsetY <= 1;
 }
+
+export interface RefreshPull {
+  x: number;
+  y: number;
+  eligible: boolean;
+  distance: number;
+}
+
+export function beginRefreshPull(x: number, y: number, offset: number, enabled: boolean): RefreshPull {
+  return { x, y, eligible: enabled && listIsAtTop(offset), distance: 0 };
+}
+
+/** Observe the existing scroll gesture; never claim its responder. */
+export function moveRefreshPull(pull: RefreshPull, x: number, y: number, offset: number, touches = 1): RefreshPull {
+  if (!pull.eligible) return pull;
+  const dy = y - pull.y;
+  if (touches !== 1 || !listIsAtTop(offset) || Math.abs(x - pull.x) > Math.max(12, Math.abs(dy))) {
+    return { ...pull, eligible: false, distance: 0 };
+  }
+  return { ...pull, distance: Math.max(0, dy) };
+}
+
+export function finishRefreshPull(pull: RefreshPull | null, refreshing: boolean): boolean {
+  return !!pull?.eligible && shouldCommitPtr(pull.distance, refreshing);
+}

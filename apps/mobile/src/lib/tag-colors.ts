@@ -33,7 +33,3 @@ export function tagColorValue(color: TagColor): TagColorValue {
   return TAG_COLOR_VALUES[color] ?? TAG_COLOR_VALUES.blue;
 }
 
-/** Resolve chip text color for the current theme mode. */
-export function tagFg(color: TagColor, dark: boolean): string {
-  return dark ? tagColorValue(color).fgDark : tagColorValue(color).fgLight;
-}

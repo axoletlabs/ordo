@@ -1,6 +1,6 @@
 /**
- * Client/UI settings store: server URL, theme mode, AMOLED, navigation,
- * haptics, website-browser, in-app force-dark, and share-sheet preferences.
+ * Client/UI settings store: server URL, theme mode, AMOLED, haptics,
+ * website-browser, in-app force-dark, and share-sheet preferences.
  * Persisted to AsyncStorage (non-secret). Hydrated explicitly on app start.
  */
 import { create } from "zustand";
@@ -11,8 +11,7 @@ import { prefsGet, prefsSet, StorageKeys } from "../lib/storage";
 import type { ThemeMode } from "../theme/theme";
 
 export { DEFAULT_SERVER_URL } from "../lib/hosting";
-export type NavigationStyle = "docked" | "floating";
-/** How pages enter and leave, including tab switches. */
+/** How pages enter and leave. */
 export type NavigationAnimation = "slide" | "fade" | "instant";
 export type CreateButtonAction = "menu" | "bookmark" | "folder";
 export type CreateButtonHoldAction = CreateButtonAction | "none";
@@ -35,9 +34,10 @@ export interface SettingsState {
   serverUrl: string;
   themeMode: ThemeMode;
   amoled: boolean;
-  navigationStyle: NavigationStyle;
+  expressive: boolean;
+  materialYouColors: boolean;
+  themeContrast: 0 | 0.5 | 1;
   navigationAnimation: NavigationAnimation;
-  showNavigationLabels: boolean;
   createButtonTapAction: CreateButtonAction;
   createButtonHoldAction: CreateButtonHoldAction;
   websiteBrowser: WebsiteBrowser;
@@ -56,9 +56,10 @@ export interface SettingsState {
   setServerUrl: (url: string) => Promise<void>;
   setThemeMode: (mode: ThemeMode) => void;
   setAmoled: (on: boolean) => void;
-  setNavigationStyle: (style: NavigationStyle) => void;
+  setExpressive: (on: boolean) => void;
+  setMaterialYouColors: (on: boolean) => void;
+  setThemeContrast: (contrast: 0 | 0.5 | 1) => void;
   setNavigationAnimation: (animation: NavigationAnimation) => void;
-  setShowNavigationLabels: (show: boolean) => void;
   setCreateButtonTapAction: (action: CreateButtonAction) => void;
   setCreateButtonHoldAction: (action: CreateButtonHoldAction) => void;
   setWebsiteBrowser: (browser: WebsiteBrowser) => void;
@@ -73,11 +74,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   serverUrl: DEFAULT_SERVER_URL,
   themeMode: "system",
   amoled: false,
-  navigationStyle: "docked",
+  expressive: true,
+  materialYouColors: false,
+  themeContrast: 0,
   navigationAnimation: "slide",
-  showNavigationLabels: true,
-  createButtonTapAction: "menu",
-  createButtonHoldAction: "bookmark",
+  createButtonTapAction: "bookmark",
+  createButtonHoldAction: "menu",
   websiteBrowser: "ordo",
   forceWebsiteDark: false,
   shareQuickBookmark: false,
@@ -88,25 +90,23 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   hydrate: async () => {
     const saved = await prefsGet<Partial<SettingsState>>(StorageKeys.SETTINGS);
-    const savedStyle: string | undefined = saved?.navigationStyle;
-    const navigationStyle: NavigationStyle =
-      savedStyle === "floating" || savedStyle === "compactFloating" ? "floating" : "docked";
     set({
       serverUrl: resolvePersistedServerUrl(saved?.serverUrl),
       themeMode: saved?.themeMode ?? "system",
       amoled: saved?.amoled ?? false,
-      navigationStyle,
+      expressive: saved?.expressive !== false,
+      materialYouColors: saved?.materialYouColors === true,
+      themeContrast: saved?.themeContrast === 0.5 || saved?.themeContrast === 1 ? saved.themeContrast : 0,
       navigationAnimation: isNavigationAnimation(saved?.navigationAnimation)
         ? saved.navigationAnimation
         : "slide",
-      showNavigationLabels: saved?.showNavigationLabels !== false,
       createButtonTapAction: isCreateButtonAction(saved?.createButtonTapAction)
         ? saved.createButtonTapAction
-        : "menu",
+        : "bookmark",
       createButtonHoldAction:
         saved?.createButtonHoldAction === "none" || isCreateButtonAction(saved?.createButtonHoldAction)
           ? saved.createButtonHoldAction
-          : "bookmark",
+          : "menu",
       websiteBrowser: isWebsiteBrowser(saved?.websiteBrowser) ? saved.websiteBrowser : "ordo",
       forceWebsiteDark: saved?.forceWebsiteDark === true,
       shareQuickBookmark: saved?.shareQuickBookmark === true,
@@ -117,8 +117,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       hydrated: true,
     });
     applyHapticsEnabled(get().hapticsEnabled);
-    if (savedStyle === "compactFloating") {
-      void prefsSet(StorageKeys.SETTINGS, { ...get(), navigationStyle: "floating" });
+    if (saved && ("navigationStyle" in saved || "showNavigationLabels" in saved)) {
+      // One-release cleanup: drop keys from the removed navigation-style
+      // settings so the persisted blob reflects the live shape.
+      const { navigationStyle: _s, showNavigationLabels: _l, ...rest } = saved as Record<string, unknown>;
+      void prefsSet(StorageKeys.SETTINGS, { ...get(), ...rest });
     }
     void syncQuickShareFlags({
       quickBookmark: get().shareQuickBookmark,
@@ -140,17 +143,21 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     set({ amoled: on });
     void prefsSet(StorageKeys.SETTINGS, { ...get(), amoled: on });
   },
-  setNavigationStyle: (navigationStyle) => {
-    set({ navigationStyle });
-    void prefsSet(StorageKeys.SETTINGS, { ...get(), navigationStyle });
+  setExpressive: (expressive) => {
+    set({ expressive });
+    void prefsSet(StorageKeys.SETTINGS, { ...get(), expressive });
+  },
+  setMaterialYouColors: (materialYouColors) => {
+    set({ materialYouColors });
+    void prefsSet(StorageKeys.SETTINGS, { ...get(), materialYouColors });
+  },
+  setThemeContrast: (themeContrast) => {
+    set({ themeContrast });
+    void prefsSet(StorageKeys.SETTINGS, { ...get(), themeContrast });
   },
   setNavigationAnimation: (navigationAnimation) => {
     set({ navigationAnimation });
     void prefsSet(StorageKeys.SETTINGS, { ...get(), navigationAnimation });
-  },
-  setShowNavigationLabels: (showNavigationLabels) => {
-    set({ showNavigationLabels });
-    void prefsSet(StorageKeys.SETTINGS, { ...get(), showNavigationLabels });
   },
   setCreateButtonTapAction: (createButtonTapAction) => {
     set({ createButtonTapAction });

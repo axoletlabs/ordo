@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { Button, type ButtonVariant } from "./Button";
 import { ContextMenuItem } from "./ContextMenu";
 import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
@@ -11,11 +11,12 @@ export const sheetMenuStyles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "stretch",
+    justifyContent: "flex-end",
     gap: spacing[8],
-    marginTop: spacing[12],
+    marginTop: spacing[24],
   },
   action: {
-    flex: 1,
+    flexShrink: 1,
     minWidth: 0,
   },
   cancel: { marginTop: spacing[8] },
@@ -34,7 +35,7 @@ export function PanelActions({
 }: {
   confirmLabel: string;
   onConfirm: () => void;
-  onCancel: () => void;
+  onCancel?: () => void;
   cancelLabel?: string;
   loading?: boolean;
   confirmDisabled?: boolean;
@@ -43,16 +44,16 @@ export function PanelActions({
 }) {
   return (
     <View style={sheetMenuStyles.row}>
-      <Button
+      {onCancel ? <Button
         label={cancelLabel}
-        variant="secondary"
+        variant="ghost"
         onPress={() => {
           dismissKeyboard();
           onCancel();
         }}
-        disabled={cancelDisabled}
+        disabled={cancelDisabled ?? loading}
         style={sheetMenuStyles.action}
-      />
+      /> : null}
       <Button
         label={confirmLabel}
         variant={confirmVariant}
@@ -69,20 +70,14 @@ export function PanelActions({
 }
 
 /** Shrink-wraps action rows to the longest label and centers that column. */
-export function SheetMenu({ children }: { children: React.ReactNode }) {
-  return (
-    <View style={styles.menu}>
-      <View>{children}</View>
-    </View>
-  );
-}
-
 export function SheetActionRow({
   icon,
   label,
   tone,
   trailing,
   onPress,
+  disabled,
+  busy,
 }: {
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
@@ -90,12 +85,10 @@ export function SheetActionRow({
   trailing?: React.ReactNode;
   divider?: boolean;
   onPress: () => void;
+  disabled?: boolean;
+  busy?: boolean;
 }) {
   return (
-    <ContextMenuItem icon={icon} label={label} tone={tone} trailing={trailing} onPress={onPress} />
+    <ContextMenuItem role="button" icon={icon} label={label} tone={tone} trailing={trailing} onPress={onPress} disabled={disabled} busy={busy} />
   );
 }
-
-const styles = StyleSheet.create({
-  menu: { width: "100%", alignItems: "center" },
-});

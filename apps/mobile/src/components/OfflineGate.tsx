@@ -4,7 +4,8 @@
  * be changed.
  */
 import React, { useEffect, useRef } from "react";
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
+import { useOverlayFocus } from "../hooks/use-overlay-focus";
 import { useRouter, useSegments } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { useOnline } from "../lib/online";
@@ -46,9 +47,15 @@ export function OfflineGate() {
     });
   }, [qc, serverUrl]);
 
-  if (!online) {
+   const serverDown = authStatus === "authenticated" && !onServerSettings &&
+     (isServerUnreachable(serverInfo.error) || confirmedDown.current);
+   const focusRef = useOverlayFocus(!online || serverDown, () => {}, "dialog", false, true);
+
+   if (!online) {
     return (
       <View
+        ref={focusRef}
+        {...(Platform.OS === "web" ? { tabIndex: -1, "aria-modal": true, role: "alertdialog" as const, dataSet: { materialOverlay: "true" } } : {})}
         accessibilityViewIsModal
         accessibilityRole="alert"
         accessibilityLabel="You're offline. Connect to a network to use ordo."
@@ -64,11 +71,6 @@ export function OfflineGate() {
     );
   }
 
-  const serverDown =
-    authStatus === "authenticated" &&
-    !onServerSettings &&
-    (isServerUnreachable(serverInfo.error) || confirmedDown.current);
-
   if (!serverDown) return null;
 
   const cloud = isCloudServerUrl(serverUrl);
@@ -79,6 +81,8 @@ export function OfflineGate() {
 
   return (
     <View
+      ref={focusRef}
+      {...(Platform.OS === "web" ? { tabIndex: -1, "aria-modal": true, role: "alertdialog" as const, dataSet: { materialOverlay: "true" } } : {})}
       accessibilityViewIsModal
       accessibilityRole="alert"
       accessibilityLabel={title}

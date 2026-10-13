@@ -30,8 +30,11 @@ import Animated, {
 import { EMAIL_OTP, MFA } from "@ordo/shared";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
-import { fontSize, radius, resolveFont, spacing, springs } from "../../theme/tokens";
+import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
+import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 import { haptics } from "../../lib/haptics";
+import { InputSurfaceContext } from "./input-surface";
+import { alphaTint } from "../../theme/state-layer";
 
 export type OtpStatus = "idle" | "loading" | "success" | "error";
 
@@ -76,6 +79,9 @@ export function OtpInput({
   style,
 }: OtpInputProps) {
   const { palette } = useTheme();
+  const fieldSurface = React.useContext(InputSurfaceContext) ?? palette.surface;
+  const messageId = React.useId();
+  const motion = useMaterialMotion();
   const inputRef = useRef<TextInput>(null);
   const completedRef = useRef<string | null>(null);
   const prevLen = useRef(0);
@@ -86,6 +92,7 @@ export function OtpInput({
       ? value.replace(/[^a-zA-Z0-9]/g, "").toLowerCase().slice(0, length)
       : value.replace(/\D/g, "").slice(0, length);
   const locked = !editable || status === "loading" || status === "success";
+  const inactive = !editable || status === "loading";
   const activeIndex = Math.min(chars.length, length - 1);
   const showCaret = focused && !locked && status === "idle" && chars.length < length;
   // A kept-alive screen can remount this field already filled (previous OTP).
@@ -96,10 +103,10 @@ export function OtpInput({
   const pulse = useSharedValue(1);
 
   useEffect(() => {
-    if (!autoFocus) return;
+    if (!autoFocus || locked) return;
     const t = setTimeout(() => inputRef.current?.focus(), 280);
     return () => clearTimeout(t);
-  }, [autoFocus]);
+  }, [autoFocus, locked]);
 
   useEffect(() => {
     if (chars.length > prevLen.current) haptics.selection();
@@ -114,17 +121,18 @@ export function OtpInput({
     }
     if (skipRestoredComplete.current) return;
     if (completedRef.current === chars) return;
-    if (status === "loading" || status === "success" || !onComplete) return;
+    if (locked || !onComplete) return;
     const t = setTimeout(() => {
       completedRef.current = chars;
       onComplete(chars);
     }, 80);
     return () => clearTimeout(t);
-  }, [chars, length, onComplete, status]);
+  }, [chars, length, onComplete, locked]);
 
   useEffect(() => {
-    if (status !== "error") return;
+    cancelAnimation(shake);
     shake.value = 0;
+    if (status !== "error" || motion.reducedMotion) return;
     shake.value = withSequence(
       withTiming(1, { duration: 42, easing: Easing.out(Easing.quad) }),
       withTiming(-1, { duration: 42 }),
@@ -133,10 +141,11 @@ export function OtpInput({
       withTiming(0.36, { duration: 38 }),
       withTiming(0, { duration: 90, easing: Easing.out(Easing.cubic) }),
     );
-  }, [status, shake]);
+    return () => cancelAnimation(shake);
+  }, [status, shake, motion.reducedMotion]);
 
   useEffect(() => {
-    if (status === "loading") {
+    if (status === "loading" && !motion.reducedMotion) {
       pulse.value = withRepeat(
         withSequence(
           withTiming(0.7, { duration: 540, easing: Easing.inOut(Easing.ease) }),
@@ -148,9 +157,9 @@ export function OtpInput({
       return () => cancelAnimation(pulse);
     }
     cancelAnimation(pulse);
-    pulse.value = withTiming(1, { duration: 160 });
+    pulse.value = motion.reducedMotion ? 1 : withTiming(1, { duration: 160 });
     return undefined;
-  }, [status, pulse]);
+  }, [status, pulse, motion.reducedMotion]);
 
   const rowMotion = useAnimatedStyle(() => ({
     opacity: pulse.value,
@@ -158,6 +167,7 @@ export function OtpInput({
   }));
 
   const setCode = (raw: string) => {
+    if (locked) return;
     const next =
       kind === "backup"
         ? raw.replace(/[^a-zA-Z0-9]/g, "").toLowerCase().slice(0, length)
@@ -169,16 +179,16 @@ export function OtpInput({
   const messageDanger = Boolean(error);
   const compact = kind === "backup";
   const boxPalette = {
-    text: palette.text,
-    border: palette.border,
-    borderStrong: palette.borderStrong,
+    text: inactive ? alphaTint(palette.onSurface, 0.38) : palette.text,
+    border: inactive ? alphaTint(palette.onSurface, 0.12) : palette.outline,
+    borderStrong: inactive ? alphaTint(palette.onSurface, 0.12) : palette.borderStrong,
     accent: palette.accent,
-    background: palette.background,
+    background: fieldSurface,
     surface: palette.surfaceElevated,
-    danger: palette.danger,
+    danger: palette.onErrorContainer,
     dangerSoft: palette.dangerSoft,
-    success: palette.success,
-    successSoft: palette.mode === "dark" ? "rgba(138,170,90,0.16)" : "rgba(108,143,58,0.12)",
+    success: palette.onPrimaryContainer,
+    successSoft: palette.primaryContainer,
   };
 
   const renderBox = (i: number) => (
@@ -210,7 +220,7 @@ export function OtpInput({
         }}
         style={styles.hit}
       >
-        <Animated.View style={[styles.row, rowMotion]}>
+        <Animated.View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" aria-hidden style={[styles.row, rowMotion]}>
           {compact && length === MFA.BACKUP_CODE_LENGTH ? (
             <>
               <View style={styles.group}>{Array.from({ length: 4 }, (_, i) => renderBox(i))}</View>
@@ -245,7 +255,9 @@ export function OtpInput({
           keyboardAppearance={palette.mode === "dark" ? "dark" : "light"}
           maxLength={kind === "backup" ? length * 2 : length}
           accessibilityLabel={label ?? (purpose === "pin" ? "PIN" : "Verification code")}
+          accessibilityState={{ disabled: inactive, busy: status === "loading" }}
           accessibilityValue={{ text: chars }}
+          {...(Platform.OS === "web" ? { disabled: inactive, readOnly: locked, "aria-required": true, "aria-invalid": !!error, "aria-describedby": message ? messageId : undefined } : null)}
           style={[
             styles.hiddenInput,
             Platform.OS === "web"
@@ -256,7 +268,7 @@ export function OtpInput({
       </Pressable>
 
       {message ? (
-        <Text variant="footnote" color={messageDanger ? "danger" : "tertiary"} style={styles.msg}>
+        <Text nativeID={messageId} variant="bodySmall" color={messageDanger ? "danger" : "secondary"} accessibilityRole={messageDanger ? "alert" : undefined} accessibilityLiveRegion={messageDanger ? "polite" : "none"} style={styles.msg}>
           {message}
         </Text>
       ) : null}
@@ -296,40 +308,52 @@ const DigitBox = React.memo(function DigitBox({
   compact?: boolean;
   palette: BoxPalette;
 }) {
+  const motion = useMaterialMotion();
   const mood = useSharedValue(status === "error" ? 1 : status === "success" ? 2 : 0);
   const focusAmt = useSharedValue(focused ? 1 : 0);
   const appear = useSharedValue(filled ? 1 : 0);
   const pop = useSharedValue(1);
+  const successPop = useSharedValue(1);
   const caret = useSharedValue(active ? 1 : 0);
+  const previousFilled = useRef(filled);
+  const lastDigit = useRef(digit);
+  if (digit) lastDigit.current = digit;
 
   useEffect(() => {
     mood.value = withTiming(status === "error" ? 1 : status === "success" ? 2 : 0, {
-      duration: 220,
+      duration: motion.reducedMotion ? 0 : 200,
     });
-  }, [status, mood]);
+  }, [status, mood, motion.reducedMotion]);
 
   useEffect(() => {
-    focusAmt.value = withSpring(focused ? 1 : 0, springs.snappy);
-  }, [focused, focusAmt]);
+    focusAmt.value = motion.reducedMotion ? +focused : withSpring(+focused, motion.fast);
+  }, [focused, focusAmt, motion.fast, motion.reducedMotion]);
 
   useEffect(() => {
+    const changed = previousFilled.current !== filled;
+    previousFilled.current = filled;
+    if (motion.reducedMotion) { appear.value = +filled; pop.value = 1; return; }
+    if (!changed) return;
     if (filled) {
-      appear.value = withSpring(1, springs.snappy);
+      appear.value = withSpring(1, materialMotion.effects.fast);
       pop.value = 0.62;
-      pop.value = withSpring(1, springs.snappy);
+      pop.value = withSpring(1, motion.fast);
     } else {
       appear.value = withTiming(0, { duration: 90 });
       pop.value = withTiming(1, { duration: 90 });
     }
-  }, [filled, appear, pop]);
+  }, [filled, appear, pop, motion.fast, motion.reducedMotion]);
 
   useEffect(() => {
-    if (status !== "success") return;
-    pop.value = withDelay(
+    cancelAnimation(successPop);
+    successPop.value = 1;
+    if (status !== "success" || motion.reducedMotion) return;
+    successPop.value = withDelay(
       index * 48,
-      withSequence(withSpring(1.14, springs.bouncy), withSpring(1, springs.snappy)),
+      withSequence(withSpring(1.14, motion.spatial), withSpring(1, motion.fast)),
     );
-  }, [status, index, pop]);
+    return () => cancelAnimation(successPop);
+  }, [status, index, successPop, motion.spatial, motion.fast, motion.reducedMotion]);
 
   useEffect(() => {
     if (!active) {
@@ -337,6 +361,7 @@ const DigitBox = React.memo(function DigitBox({
       caret.value = 0;
       return;
     }
+    if (motion.reducedMotion) { cancelAnimation(caret); caret.value = 1; return; }
     caret.value = withRepeat(
       withSequence(
         withTiming(1, { duration: 0 }),
@@ -348,7 +373,7 @@ const DigitBox = React.memo(function DigitBox({
       false,
     );
     return () => cancelAnimation(caret);
-  }, [active, caret]);
+  }, [active, caret, motion.reducedMotion]);
 
   const boxStyle = useAnimatedStyle(() => {
     const idleBorder = interpolateColor(
@@ -372,11 +397,11 @@ const DigitBox = React.memo(function DigitBox({
       borderWidth: interpolate(
         Math.max(focusAmt.value, mood.value === 0 ? 0 : 1),
         [0, 1],
-        [1, 1.5],
+        [1, 2],
         Extrapolation.CLAMP,
       ),
       transform: [
-        { scale: interpolate(focusAmt.value, [0, 1], [1, 1.04]) * pop.value },
+        { scale: motion.reducedMotion ? 1 : interpolate(focusAmt.value, [0, 1], [1, 1.04]) * pop.value * successPop.value },
       ],
     };
   });
@@ -389,7 +414,7 @@ const DigitBox = React.memo(function DigitBox({
     );
     return {
       color,
-      opacity: appear.value,
+      opacity: Math.max(0, Math.min(1, appear.value)),
       transform: [{ scale: interpolate(appear.value, [0, 1], [0.7, 1]) }],
     };
   });
@@ -406,32 +431,29 @@ const DigitBox = React.memo(function DigitBox({
         boxStyle,
       ]}
     >
-      {digit ? (
         <Animated.Text
           style={[
             compact ? styles.digitCompact : styles.digit,
-            { fontFamily: resolveFont("mono", "600") },
+            { position: "absolute", fontFamily: resolveFont("mono", "600") },
             digitStyle,
           ]}
         >
-          {digit}
+          {digit || lastDigit.current}
         </Animated.Text>
-      ) : (
         <Animated.View
           style={[
             compact ? styles.caretCompact : styles.caret,
-            { backgroundColor: palette.accent },
+            { position: "absolute", backgroundColor: palette.accent },
             caretStyle,
           ]}
         />
-      )}
     </Animated.View>
   );
 });
 
 const styles = StyleSheet.create({
   label: { marginBottom: spacing[8] },
-  hit: { position: "relative" },
+  hit: { position: "relative", minHeight: 48, justifyContent: "center" },
   row: {
     flexDirection: "row",
     alignItems: "center",
@@ -449,7 +471,7 @@ const styles = StyleSheet.create({
   box: {
     flex: 1,
     maxWidth: 48,
-    height: 48,
+    height: 56,
     alignItems: "center",
     justifyContent: "center",
   },

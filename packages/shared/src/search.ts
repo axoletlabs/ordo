@@ -1,5 +1,5 @@
 /**
- * Bookmark search. Default matching is a case-insensitive word prefix
+ * Bookmark search. Default matching is a case- and Latin-accent-insensitive word prefix
  * (hel → hello, help, helpful; not shelf). Fuzzy (edit distance 1) is opt-in.
  *
  * Ranking, best first:
@@ -54,9 +54,9 @@ export interface SearchRankOptions {
   allowSecondary?: boolean;
 }
 
-/** Trim, collapse whitespace, and lowercase. */
+/** Trim, collapse whitespace, lowercase, and fold Latin accents. */
 export function normalizeSearchQuery(query: string): string {
-  return query.trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
+  return fold(query.trim().replace(/\s+/g, " "));
 }
 
 export function tokenizeSearchQuery(query: string): string[] {
@@ -84,7 +84,9 @@ const PRIMARY_FIELDS: ReadonlySet<SearchMatchField> = new Set(["title", "domain"
 /** Characters that start a new URL / title token for SQL prefix recall. */
 export const SEARCH_BOUNDARY_CHARS = [" ", ".", "-", "_", "/", "?", "=", "#", ":", "@", "&", "+", "[", "(", '"', "'"] as const;
 
-const WORD_PATTERN = "[\\p{L}\\p{N}]+";
+const WORD_PATTERN = "[\\p{L}\\p{N}][\\p{L}\\p{N}\\p{M}]*";
+const LATIN_CLUSTER = /\p{Script=Latin}\p{M}*/gu;
+const TEXT_CLUSTER = /[^\p{M}]\p{M}*|\p{M}+/gu;
 
 export function tokensAllowArticleText(tokens: readonly string[]): boolean {
   return tokens.length > 0 && tokens.every((token) => token.length >= MIN_ARTICLE_TEXT_QUERY_LENGTH);
@@ -95,7 +97,11 @@ export function isPrimarySearchField(field: SearchMatchField): boolean {
 }
 
 function fold(value: string | null | undefined): string {
-  return (value ?? "").toLocaleLowerCase("en-US");
+  const lower = (value ?? "").toLocaleLowerCase("en-US");
+  if (!/[^\x00-\x7f]/.test(lower)) return lower;
+  // FTS5's unicode61 tokenizer folds Latin accents. Do not strip marks
+  // globally: vowel signs and voiced kana distinguish words in other scripts.
+  return lower.replace(LATIN_CLUSTER, (cluster) => cluster.normalize("NFD").replace(/\p{M}/gu, ""));
 }
 
 function omitSet(omitTagIds: SearchRankOptions["omitTagIds"]): ReadonlySet<string> {
@@ -174,12 +180,37 @@ export function withinOneEdit(a: string, b: string): boolean {
   return true;
 }
 
-function qualityAgainstText(text: string | null | undefined, token: string, fuzzy: boolean): SearchMatchQuality {
+type IndexedField = { folded: string; words: readonly string[] };
+const documents = new WeakMap<SearchableBookmark, ReturnType<typeof indexDocument>>();
+function indexField(text: string | null | undefined): IndexedField {
   const folded = fold(text);
+  return { folded, words: folded.match(new RegExp(WORD_PATTERN, "gu")) ?? [] };
+}
+function indexDocument(bookmark: SearchableBookmark) {
+  return {
+    title: indexField(bookmark.title), domain: indexField(bookmark.domain), url: indexField(bookmark.url),
+    tags: namedTags(bookmark.tags, emptyOmit).map((tag) => ({ ...tag, indexed: indexField(tag.name) })),
+    description: indexField(`${bookmark.description ?? ""} ${bookmark.author ?? ""}`),
+    // Reader details can contain megabytes of text. A metadata/title query
+    // must not tokenize that body before the five-letter secondary-field gate.
+    body: undefined as IndexedField | undefined,
+  };
+}
+/** DTOs are immutable: retain tokenized fields until that record is replaced. */
+function indexedDocument(bookmark: SearchableBookmark) {
+  let indexed = documents.get(bookmark);
+  if (!indexed) { indexed = indexDocument(bookmark); documents.set(bookmark, indexed); }
+  return indexed;
+}
+export function prepareBookmarkSearch(bookmark: SearchableBookmark): void {
+  indexedDocument(bookmark);
+}
+
+function qualityAgainstText({ folded, words }: IndexedField, token: string, fuzzy: boolean): SearchMatchQuality {
   if (!folded || !token) return SEARCH_MATCH_QUALITY.none;
   if (folded.startsWith(token)) return SEARCH_MATCH_QUALITY.starts;
   let best: SearchMatchQuality = SEARCH_MATCH_QUALITY.none;
-  for (const word of searchWords(folded)) {
+  for (const word of words) {
     if (word === token) return SEARCH_MATCH_QUALITY.exact;
     if (word.startsWith(token)) {
       if (best < SEARCH_MATCH_QUALITY.prefix) best = SEARCH_MATCH_QUALITY.prefix;
@@ -200,7 +231,7 @@ function qualityAgainstText(text: string | null | undefined, token: string, fuzz
 function namedTags(
   tags: SearchableBookmark["tags"] | unknown,
   omit: ReadonlySet<string>,
-): { name: string }[] {
+): { id?: string; name: string }[] {
   if (!Array.isArray(tags)) return [];
   return tags.filter(
     (tag): tag is { id?: string; name: string } =>
@@ -210,56 +241,41 @@ function namedTags(
   );
 }
 
-function pickBestField(
-  candidates: readonly { field: SearchMatchField; quality: SearchMatchQuality }[],
-): { field: SearchMatchField; quality: SearchMatchQuality; usedFuzzy: boolean } | null {
-  let bestField: SearchMatchField | null = null;
-  let bestQuality: SearchMatchQuality = SEARCH_MATCH_QUALITY.none;
-  for (const candidate of candidates) {
-    if (candidate.quality === SEARCH_MATCH_QUALITY.none) continue;
-    if (
-      !bestField ||
-      FIELD_SCORE[candidate.field] > FIELD_SCORE[bestField] ||
-      (candidate.field === bestField && candidate.quality > bestQuality)
-    ) {
-      bestField = candidate.field;
-      bestQuality = candidate.quality;
-    }
-  }
-  if (!bestField) return null;
-  return { field: bestField, quality: bestQuality, usedFuzzy: bestQuality === SEARCH_MATCH_QUALITY.fuzzy };
+function fieldMatch(field: SearchMatchField, quality: SearchMatchQuality) {
+  return { field, quality, usedFuzzy: quality === SEARCH_MATCH_QUALITY.fuzzy };
 }
 
 function bestFieldForToken(
-  bookmark: SearchableBookmark,
+  bookmark: ReturnType<typeof indexDocument>,
+  source: SearchableBookmark,
   token: string,
   fuzzy: boolean,
   allowSecondary: boolean,
   omit: ReadonlySet<string>,
 ): { field: SearchMatchField; quality: SearchMatchQuality; usedFuzzy: boolean } | null {
   const titleQ = qualityAgainstText(bookmark.title, token, fuzzy);
+  if (titleQ) return fieldMatch("title", titleQ);
   const domainQ = qualityAgainstText(bookmark.domain, token, fuzzy);
+  if (domainQ) return fieldMatch("domain", domainQ);
   const urlQ = qualityAgainstText(bookmark.url, token, fuzzy);
+  if (urlQ) return fieldMatch("url", urlQ);
   let tagQ: SearchMatchQuality = SEARCH_MATCH_QUALITY.none;
-  for (const tag of namedTags(bookmark.tags, omit)) {
-    const next = qualityAgainstText(tag.name, token, fuzzy);
+  for (const tag of bookmark.tags) {
+    if (tag.id && omit.has(tag.id)) continue;
+    const next = qualityAgainstText(tag.indexed, token, fuzzy);
     if (next > tagQ) tagQ = next;
     if (tagQ === SEARCH_MATCH_QUALITY.starts) break;
   }
 
-  const candidates: { field: SearchMatchField; quality: SearchMatchQuality }[] = [
-    { field: "title", quality: titleQ },
-    { field: "domain", quality: domainQ },
-    { field: "url", quality: urlQ },
-    { field: "tag", quality: tagQ },
-  ];
+  if (tagQ) return fieldMatch("tag", tagQ);
   if (allowSecondary) {
-    candidates.push(
-      { field: "description", quality: qualityAgainstText(`${bookmark.description ?? ""} ${bookmark.author ?? ""}`, token, fuzzy) },
-      { field: "body", quality: qualityAgainstText(bookmark.contentText, token, fuzzy) },
-    );
+    const descriptionQ = qualityAgainstText(bookmark.description, token, fuzzy);
+    if (descriptionQ) return fieldMatch("description", descriptionQ);
+    bookmark.body ??= indexField(source.contentText);
+    const bodyQ = qualityAgainstText(bookmark.body, token, fuzzy);
+    if (bodyQ) return fieldMatch("body", bodyQ);
   }
-  return pickBestField(candidates);
+  return null;
 }
 
 function weakerField(a: SearchMatchField, b: SearchMatchField): SearchMatchField {
@@ -271,73 +287,59 @@ export function bookmarkSearchRank(
   query: string,
   opts: SearchRankOptions = {},
 ): BookmarkSearchRank {
+  return createBookmarkSearchMatcher(query, opts)(bookmark);
+}
+
+/** Compile the query once, not once per row on every key press. */
+export function createBookmarkSearchMatcher(query: string, opts: SearchRankOptions = {}) {
   const tokens = tokenizeSearchQuery(query);
-  if (tokens.length === 0) return { ...UNMATCHED, matched: true, clause: "and", field: "title", hits: 0 };
   const fuzzy = !!opts.fuzzy;
   const omit = omitSet(opts.omitTagIds);
   const allowSecondary = opts.allowSecondary ?? tokensAllowArticleText(tokens);
+  const full = tokens.join(" ");
+  return (source: SearchableBookmark): BookmarkSearchRank => {
+    if (tokens.length === 0) return { ...UNMATCHED, matched: true, clause: "and", field: "title", hits: 0 };
+    const bookmark = indexedDocument(source);
 
-  const perToken = tokens.map((token) => bestFieldForToken(bookmark, token, fuzzy, allowSecondary, omit));
-  const hits = perToken.filter((row): row is NonNullable<typeof row> => row != null);
-  if (hits.length === 0) return UNMATCHED;
+    let count = 0;
+    let weakestField: SearchMatchField = "title";
+    let strongestField: SearchMatchField = "body";
+    let lowestQuality: SearchMatchQuality = SEARCH_MATCH_QUALITY.starts;
+    let highestQuality: SearchMatchQuality = SEARCH_MATCH_QUALITY.none;
+    let usedFuzzy = false;
+    for (const token of tokens) {
+      const hit = bestFieldForToken(bookmark, source, token, fuzzy, allowSecondary, omit);
+      if (!hit) continue;
+      count++;
+      weakestField = weakerField(weakestField, hit.field);
+      if (FIELD_SCORE[hit.field] > FIELD_SCORE[strongestField]) strongestField = hit.field;
+      lowestQuality = Math.min(lowestQuality, hit.quality) as SearchMatchQuality;
+      highestQuality = Math.max(highestQuality, hit.quality) as SearchMatchQuality;
+      usedFuzzy ||= hit.usedFuzzy;
+    }
+    if (count === 0) return UNMATCHED;
 
-  const all = hits.length === tokens.length;
-  const clause: SearchMatchClause = all ? "and" : "or";
-  if (!all && tokens.length < 2) return UNMATCHED;
+    const all = count === tokens.length;
+    const clause: SearchMatchClause = all ? "and" : "or";
+    if (!all && tokens.length < 2) return UNMATCHED;
 
-  let field = hits[0]!.field;
-  let quality: SearchMatchQuality = hits[0]!.quality;
-  let usedFuzzy = hits[0]!.usedFuzzy;
-  for (let i = 1; i < hits.length; i++) {
-    const row = hits[i]!;
-    field = all ? weakerField(field, row.field) : FIELD_SCORE[row.field] > FIELD_SCORE[field] ? row.field : field;
-    if (all) quality = Math.min(quality, row.quality) as SearchMatchQuality;
-    else if (row.quality > quality) quality = row.quality;
-    usedFuzzy = usedFuzzy || row.usedFuzzy;
-  }
+    let field = all ? weakestField : strongestField;
+    let quality = all ? lowestQuality : highestQuality;
 
-  if (all) {
-    const full = tokens.join(" ");
-    const titleStarts = fold(bookmark.title).startsWith(full);
-    if (titleStarts) {
+    if (all && bookmark.title.folded.startsWith(full)) {
       field = "title";
       quality = SEARCH_MATCH_QUALITY.starts;
     }
-  }
 
-  return {
-    matched: true,
-    clause,
-    field,
-    quality,
-    hits: hits.length,
-    usedFuzzy: usedFuzzy && quality === SEARCH_MATCH_QUALITY.fuzzy,
+    return {
+      matched: true,
+      clause,
+      field,
+      quality,
+      hits: count,
+      usedFuzzy: usedFuzzy && quality === SEARCH_MATCH_QUALITY.fuzzy,
+    };
   };
-}
-
-export function bookmarkMatchesQuery(
-  bookmark: SearchableBookmark,
-  query: string,
-  opts: SearchRankOptions = {},
-): boolean {
-  const tokens = tokenizeSearchQuery(query);
-  if (tokens.length === 0) return true;
-  return bookmarkSearchRank(bookmark, query, opts).matched;
-}
-
-/**
- * @deprecated Use `bookmarkSearchRank`. Kept as a coarse 0–3 for older call sites.
- */
-export function bookmarkMatchRank(
-  bookmark: SearchableBookmark,
-  query: string,
-  opts: SearchRankOptions = {},
-): number {
-  const rank = bookmarkSearchRank(bookmark, query, opts);
-  if (!rank.matched) return 0;
-  if (rank.field === "title" && rank.quality === SEARCH_MATCH_QUALITY.starts) return 3;
-  if (rank.field === "title") return 2;
-  return 1;
 }
 
 export function compareBookmarkSearchRanks(a: BookmarkSearchRank, b: BookmarkSearchRank): number {
@@ -366,8 +368,9 @@ export function rankSearchResults<T extends SearchableBookmark>(
   if (!q) {
     return [...items].sort(compareByDateThenId);
   }
+  const match = createBookmarkSearchMatcher(q, opts);
   const ranked = items
-    .map((item) => ({ item, rank: bookmarkSearchRank(item, q, opts) }))
+    .map((item) => ({ item, rank: match(item) }))
     .filter((row) => row.rank.matched);
   ranked.sort((a, b) => {
     const byRank = compareBookmarkSearchRanks(a.rank, b.rank);
@@ -389,17 +392,27 @@ export function firstSearchHighlight(
   const token = tokenizeSearchQuery(query)[0];
   if (!token || !text) return null;
   const folded = fold(text);
-  if (folded.startsWith(token)) return { start: 0, end: token.length };
+  if (folded.startsWith(token)) return { start: 0, end: originalPrefixEnd(text, token.length) };
   const wordRe = new RegExp(WORD_PATTERN, "gu");
   let match: RegExpExecArray | null;
   while ((match = wordRe.exec(text))) {
     const word = fold(match[0]);
     if (word.startsWith(token)) {
-      return { start: match.index, end: match.index + token.length };
+      return { start: match.index, end: match.index + originalPrefixEnd(match[0], token.length) };
     }
     if (fuzzy && token.length >= MIN_FUZZY_TOKEN_LENGTH && withinOneEdit(word, token)) {
       return { start: match.index, end: match.index + match[0].length };
     }
   }
   return null;
+}
+
+/** Folding can shorten a word; highlights still use original UTF-16 offsets. */
+function originalPrefixEnd(text: string, foldedLength: number): number {
+  let length = 0;
+  for (const match of text.matchAll(TEXT_CLUSTER)) {
+    length += fold(match[0]).length;
+    if (length >= foldedLength) return match.index + match[0].length;
+  }
+  return text.length;
 }

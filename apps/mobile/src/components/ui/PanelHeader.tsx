@@ -1,16 +1,18 @@
 /**
  * Title block for floating panels and dialogs. Centered, using the same
- * uppercase Inter Tight as screen headers so overlays sit in the same type
- * system as the rest of the app. An optional icon stacks above the title.
+ * Material headline-small role. An optional icon stacks above the title.
  */
 import React from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { Text, type TextVariant } from "./Text";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
-import { radius, spacing } from "../../theme/tokens";
+import { spacing } from "../../theme/tokens";
+import { useTheme } from "../../theme/ThemeProvider";
+import { PanelTitleContext } from "./panel-title";
+import { IconButton } from "./IconButton";
 
-const ICON_SIZE = 36;
+const ICON_SIZE = 24;
 
 export function PanelHeader({
   title,
@@ -18,10 +20,11 @@ export function PanelHeader({
   icon,
   iconColor,
   iconBackground,
-  titleVariant = "header",
-  subtitleVariant = "footnote",
+   titleVariant = "headlineSmall",
+  subtitleVariant = "bodyMedium",
   numberOfLines = 3,
   accessory,
+  onClose,
   style,
 }: {
   title: string;
@@ -33,32 +36,42 @@ export function PanelHeader({
   subtitleVariant?: TextVariant;
   numberOfLines?: number;
   accessory?: React.ReactNode;
+  onClose?: () => void;
   style?: StyleProp<ViewStyle>;
 }) {
+  const { palette } = useTheme();
+  const titleId = React.useContext(PanelTitleContext);
+  const resolvedIconColor = iconBackground === palette.primaryContainer && (!iconColor || iconColor === palette.primary)
+    ? palette.primary : iconBackground === palette.errorContainer && (!iconColor || iconColor === palette.error)
+      ? palette.error : iconColor ?? palette.secondary;
   return (
     <View style={[styles.wrap, style]}>
+      {onClose ? <View style={{ position: "absolute", right: -spacing[8], top: -spacing[8], zIndex: 2 }}>
+        <IconButton name="close" variant="standard" accessibilityLabel="Close dialog" onPress={onClose} />
+      </View> : null}
       {icon ? (
         <View
           style={[
             styles.icon,
-            iconBackground ? { backgroundColor: iconBackground } : null,
           ]}
         >
           <Ionicons
             name={icon}
-            size={18}
-            color={iconColor}
+            size={24}
+            color={resolvedIconColor}
             accessible={false}
-            style={iconGlyphStyle(18)}
+            style={iconGlyphStyle(24)}
           />
         </View>
       ) : null}
       <View style={styles.copy}>
         <Text
           variant={titleVariant}
-          align="center"
+          nativeID={titleId}
+          accessibilityRole="header"
+          align={icon ? "center" : "left"}
           numberOfLines={numberOfLines}
-          style={styles.title}
+          style={[styles.title, onClose && !icon ? { paddingRight: 40 } : null]}
         >
           {title}
         </Text>
@@ -67,7 +80,7 @@ export function PanelHeader({
           <Text
             variant={subtitleVariant}
             color="secondary"
-            align="center"
+            align="left"
             numberOfLines={4}
             style={styles.subtitle}
           >
@@ -82,16 +95,15 @@ export function PanelHeader({
 const styles = StyleSheet.create({
   wrap: {
     alignItems: "center",
-    marginBottom: spacing[12],
+    marginBottom: spacing[24],
   },
   icon: {
     width: ICON_SIZE,
     height: ICON_SIZE,
-    borderRadius: radius.md,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-    marginBottom: spacing[12],
+    marginBottom: spacing[16],
   },
   copy: {
     width: "100%",
@@ -107,7 +119,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   subtitle: {
-    marginTop: spacing[6],
+    marginTop: spacing[16],
     width: "100%",
     includeFontPadding: false,
   },

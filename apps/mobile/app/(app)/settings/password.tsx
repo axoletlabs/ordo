@@ -10,7 +10,7 @@ import {
 import { Input } from "../../../src/components/ui/Input";
 import { Button } from "../../../src/components/ui/Button";
 import { EyeToggle } from "../../../src/components/ui/EyeToggle";
-import { Text } from "../../../src/components/ui/Text";
+import { FormError } from "../../../src/components/ui/FormError";
 import { useChangePassword } from "../../../src/hooks/use-auth-actions";
 import { errorMessage, isMfaRequiredError } from "../../../src/lib/error-message";
 import { haptics } from "../../../src/lib/haptics";
@@ -28,6 +28,7 @@ export default function ChangePasswordScreen() {
   const [confirm, setConfirm] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [formError, setFormError] = useState("");
+  const [errorField, setErrorField] = useState<string | null>(null);
   const [mfaOpen, setMfaOpen] = useState(false);
   const submittedRef = useRef({ currentPassword: "", newPassword: "" });
 
@@ -50,13 +51,16 @@ export default function ChangePasswordScreen() {
 
   const submit = async () => {
     setFormError("");
+    setErrorField(null);
     if (newPassword !== confirm) {
       setFormError("New passwords don't match.");
+      setErrorField("confirm");
       return;
     }
     const parsed = ChangePasswordSchema.safeParse({ currentPassword, newPassword });
     if (!parsed.success) {
       setFormError(parsed.error.issues[0]?.message || "Please check your input.");
+      setErrorField(String(parsed.error.issues[0]?.path[0] ?? ""));
       return;
     }
     submittedRef.current = {
@@ -90,23 +94,29 @@ export default function ChangePasswordScreen() {
             <SettingsForm key={mfaOpen ? "mfa-locked" : "editable"}>
               <Input
                 label="Current password"
+                required
                 value={currentField.value}
                 onChangeText={setCurrentPassword}
                 placeholder="Enter your current password"
                 secureTextEntry={currentField.secureTextEntry}
                 {...passwordAutofillProps("current-password", mfaOpen)}
+                error={errorField === "currentPassword" ? formError : undefined}
                 rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
               />
               <Input
                 label="New password"
+                required maxLength={256}
                 value={newField.value}
                 onChangeText={setNewPassword}
                 placeholder="At least 8 characters"
                 secureTextEntry={newField.secureTextEntry}
                 {...passwordAutofillProps("new-password", mfaOpen)}
+                error={errorField === "newPassword" ? formError : undefined}
               />
               <Input
                 label="Confirm new password"
+                required maxLength={256}
+                error={errorField === "confirm" ? formError : undefined}
                 value={confirmField.value}
                 onChangeText={setConfirm}
                 placeholder="Re-enter your new password"
@@ -114,18 +124,14 @@ export default function ChangePasswordScreen() {
                 {...passwordAutofillProps("new-password", mfaOpen)}
               />
 
+              <FormError message={errorField ? undefined : formError} />
               <Button
                 label="Change password"
                 block
-                size="lg"
+                size="md"
                 onPress={submit}
                 loading={changePassword.isPending && !mfaOpen}
               />
-              {formError ? (
-                <Text variant="footnote" color="danger" style={styles.formError}>
-                  {formError}
-                </Text>
-              ) : null}
             </SettingsForm>
           </SettingsGroup>
         </SettingsScrollView>
@@ -150,7 +156,3 @@ export default function ChangePasswordScreen() {
     </SettingsPage>
   );
 }
-
-const styles = {
-  formError: { textAlign: "center" as const },
-};

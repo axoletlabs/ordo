@@ -5,13 +5,14 @@
  * the mark to the vertical center of the paragraph.
  */
 import React from "react";
-import { Pressable, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { StyleSheet, View } from "react-native";
+import { PressableScale } from "./PressableScale";
+import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { CHECK_GLYPH, FOOTNOTE_LINE_BOX } from "../../theme/type-metrics";
-import { spacing } from "../../theme/tokens";
+import { radius, spacing } from "../../theme/tokens";
 
 export function CheckLine({
   checked,
@@ -27,12 +28,12 @@ export function CheckLine({
 }) {
   const { palette } = useTheme();
   return (
-    <Pressable
+    <PressableScale
       accessibilityRole="checkbox"
       accessibilityState={{ checked }}
       accessibilityLabel={label}
       onPress={onPress}
-      hitSlop={8}
+      stateLayerColor={palette.primary}
       style={styles.row}
     >
       <View style={styles.box} pointerEvents="none">
@@ -46,16 +47,19 @@ export function CheckLine({
       <Text variant="footnote" style={styles.label}>
         {children ?? label}
       </Text>
-    </Pressable>
+    </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
   row: {
+    borderRadius: radius.sm,
     flexDirection: "row",
     alignItems: "flex-start",
     gap: spacing[8],
     alignSelf: "stretch",
+    minHeight: 48,
+    paddingVertical: spacing[12],
   },
   box: {
     width: FOOTNOTE_LINE_BOX,

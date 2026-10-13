@@ -702,7 +702,7 @@ export function versionsMatch(left: string, right: string): boolean {
 
 /**
  * Installed wins over an offered update. An offered newer build is Available.
- * Other pre-releases stay Early access. An unreadable current version matches nothing.
+ * Other pre-releases stay Preview. An unreadable current version matches nothing.
  */
 export function changelogMark(
   release: Pick<ChangelogRelease, "version" | "prerelease">,

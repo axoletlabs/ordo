@@ -1,5 +1,5 @@
 /**
- * Workspace-wide ESLint flat config (ESLint 9). Both the server and mobile
+ * Workspace-wide ESLint flat config (ESLint 10). Both the server and mobile
  * `lint` scripts resolve this via ancestor lookup. Uses the non-type-checked
  * typescript-eslint recommended ruleset so no tsconfig project wiring is needed.
  */

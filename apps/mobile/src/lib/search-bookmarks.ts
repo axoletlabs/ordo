@@ -2,10 +2,10 @@
  * Client-side search: sanitize route params, merge cached bookmarks with the
  * server result, and filter as you type with word-prefix matching.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
-  bookmarkSearchRank,
   compareBookmarkSearchRanks,
+  createBookmarkSearchMatcher,
   firstSearchHighlight as highlightSearchText,
   isPrimarySearchField,
   reminderStatus,
@@ -80,34 +80,6 @@ export function searchFiltersEqual(a: SearchFilters, b: SearchFilters): boolean 
   );
 }
 
-/**
- * Commit a value after the current native press/layout has finished.
- * FlashList freezes when its data and a sibling layout change in the same
- * event (the search field already defers keystrokes for the same reason).
- */
-export function useDeferredLayoutValue<T>(value: T, equal?: (a: T, b: T) => boolean): T {
-  const [committed, setCommitted] = useState(value);
-  const valueRef = useRef(value);
-  const committedRef = useRef(committed);
-  valueRef.current = value;
-  committedRef.current = committed;
-  const isEqual = equal ?? Object.is;
-  useEffect(() => {
-    if (isEqual(value, committedRef.current)) return;
-    let inner = 0;
-    const outer = requestAnimationFrame(() => {
-      inner = requestAnimationFrame(() => {
-        setCommitted(valueRef.current);
-      });
-    });
-    return () => {
-      cancelAnimationFrame(outer);
-      if (inner) cancelAnimationFrame(inner);
-    };
-  }, [isEqual, value]);
-  return committed;
-}
-
 function isArticleBookmark(bookmark: BookmarkDto): boolean {
   if (bookmark.contentKind === "article") return true;
   if (bookmark.contentKind === "web" || bookmark.contentKind === "media" || bookmark.contentKind === "file") {
@@ -122,8 +94,10 @@ function namedTags(tags: BookmarkDto["tags"] | unknown): { id?: string; name: st
 }
 
 export function bookmarkPassesSearchFilters(bookmark: BookmarkDto, filters: SearchFilters): boolean {
-  const tags = namedTags(bookmark.tags);
-  if (filters.tagIds.some((id) => !tags.some((tag) => tag.id === id))) return false;
+  if (filters.tagIds.length > 0) {
+    const tags = namedTags(bookmark.tags);
+    if (filters.tagIds.some((id) => !tags.some((tag) => tag.id === id))) return false;
+  }
   if (filters.folderIds.length > 0 || filters.unfiled) {
     const inFolder = bookmark.folderId
       ? filters.folderIds.includes(bookmark.folderId)
@@ -147,40 +121,25 @@ const BODY_ONLY_RANK: BookmarkSearchRank = {
   usedFuzzy: false,
 };
 
-function rankFor(
-  bookmark: BookmarkDto,
-  query: string,
-  filters: SearchFilters,
-): BookmarkSearchRank {
-  return bookmarkSearchRank(
-    { ...bookmark, tags: namedTags(bookmark.tags) },
-    query,
-    { fuzzy: filters.fuzzy, omitTagIds: filters.tagIds },
-  );
-}
-
 function passesTextQuery(
   bookmark: BookmarkDto,
-  query: string,
   tokens: readonly string[],
   allowBodyOnlyHit: boolean,
   filters: SearchFilters,
+  match: ReturnType<typeof createBookmarkSearchMatcher>,
+  matchIncludingTags: ReturnType<typeof createBookmarkSearchMatcher>,
 ): { ok: boolean; rank: BookmarkSearchRank } {
   if (tokens.length === 0) {
     return { ok: true, rank: { ...BODY_ONLY_RANK, field: "title", hits: 0, quality: 0 } };
   }
-  const rank = rankFor(bookmark, query, filters);
+  const rank = match(bookmark);
   if (rank.matched) return { ok: true, rank };
   if (!allowBodyOnlyHit || !tokensAllowArticleText(tokens) || !isArticleBookmark(bookmark)) {
     return { ok: false, rank };
   }
   // Server rows that only matched the active tag's name are not article-body hits.
   if (filters.tagIds.length > 0) {
-    const withTagNames = bookmarkSearchRank(
-      { ...bookmark, tags: namedTags(bookmark.tags) },
-      query,
-      { fuzzy: filters.fuzzy, omitTagIds: [] },
-    );
+    const withTagNames = matchIncludingTags(bookmark);
     if (withTagNames.matched && isPrimarySearchField(withTagNames.field)) {
       return { ok: false, rank };
     }
@@ -203,17 +162,26 @@ export function compileSearchResults({
   serverMatchesQuery: boolean;
 }): BookmarkDto[] {
   const tokens = tokenizeSearchQuery(query);
+  const match = createBookmarkSearchMatcher(query, { fuzzy: filters.fuzzy, omitTagIds: filters.tagIds });
+  const matchIncludingTags = createBookmarkSearchMatcher(query, { fuzzy: filters.fuzzy });
   const byId = new Map<string, { bookmark: BookmarkDto; rank: BookmarkSearchRank }>();
+  // Local typing commonly has no server rows yet. Avoid an O(n) lookup map
+  // and its temporary tuple array unless remote rows actually need merging.
+  const cachedById = new Map<string, BookmarkDto>();
+  if (serverItems.length > 0) for (const bookmark of cachedItems) cachedById.set(bookmark.id, bookmark);
 
   const consider = (bookmark: BookmarkDto, allowBodyOnlyHit: boolean) => {
     if (byId.has(bookmark.id)) return;
     if (!bookmarkPassesSearchFilters(bookmark, filters)) return;
-    const { ok, rank } = passesTextQuery(bookmark, query, tokens, allowBodyOnlyHit, filters);
+    const { ok, rank } = passesTextQuery(bookmark, tokens, allowBodyOnlyHit, filters, match, matchIncludingTags);
     if (!ok) return;
     byId.set(bookmark.id, { bookmark, rank });
   };
 
-  for (const bookmark of serverItems) consider(bookmark, serverMatchesQuery);
+  for (const bookmark of serverItems) {
+    const cached = cachedById.get(bookmark.id);
+    consider(cached && (cached.updatedAt ?? "") >= (bookmark.updatedAt ?? "") ? cached : bookmark, serverMatchesQuery);
+  }
   for (const bookmark of cachedItems) consider(bookmark, false);
 
   const merged = [...byId.values()];
@@ -236,7 +204,13 @@ export function reuseSearchResults(
   for (let i = 0; i < next.length; i++) {
     const a = previous[i]!;
     const b = next[i]!;
-    if (a.id !== b.id || a.updatedAt !== b.updatedAt || a.isRead !== b.isRead) return next;
+    if (a === b) continue;
+    if (a.id !== b.id || a.updatedAt !== b.updatedAt || a.isRead !== b.isRead ||
+      a.title !== b.title || a.url !== b.url || a.domain !== b.domain || a.description !== b.description ||
+      a.folderId !== b.folderId || a.remindAt !== b.remindAt || a.fetchStatus !== b.fetchStatus ||
+      a.contentKind !== b.contentKind || a.contentKindOverride !== b.contentKindOverride ||
+      a.readingTimeMinutes !== b.readingTimeMinutes || JSON.stringify(a.tags) !== JSON.stringify(b.tags) ||
+      JSON.stringify(a.suggestedTags) !== JSON.stringify(b.suggestedTags)) return next;
   }
   return previous as BookmarkDto[];
 }
@@ -248,6 +222,19 @@ export function firstSearchHighlight(
   fuzzy = false,
 ): { start: number; end: number } | null {
   return highlightSearchText(text, query, fuzzy);
+}
+
+/** Highlight every typed term without changing the label's geometry. */
+export function searchHighlightRanges(text: string, query: string, fuzzy = false): { start: number; end: number }[] {
+  const spans = tokenizeSearchQuery(query).map((token) => highlightSearchText(text, token, fuzzy))
+    .filter((span): span is { start: number; end: number } => span != null).sort((a, b) => a.start - b.start);
+  const merged: { start: number; end: number }[] = [];
+  for (const span of spans) {
+    const last = merged.at(-1);
+    if (last && span.start <= last.end) last.end = Math.max(last.end, span.end);
+    else merged.push({ ...span });
+  }
+  return merged;
 }
 
 export function useDebouncedValue<T>(value: T, delay: number): T {

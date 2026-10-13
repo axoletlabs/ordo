@@ -1,4 +1,5 @@
 import { isTrustedGithubAssetUrl } from "./github-asset-url";
+import { APP_VARIANTS, type AppVariant } from "./app-version";
 
 export interface GithubApkAsset {
   name?: string;
@@ -8,8 +9,9 @@ export interface GithubApkAsset {
 }
 
 /** Select only this version's official APKs, in the device's ABI order. */
-export function selectReleaseApk(assets: GithubApkAsset[], version: string, architectures: string[]): GithubApkAsset | null {
-  const prefix = `ordo-v${version}`;
+export function selectReleaseApk(assets: GithubApkAsset[], version: string, architectures: string[], variant: AppVariant = "stable"): GithubApkAsset | null {
+  if (variant === "development") return null;
+  const prefix = `${APP_VARIANTS[variant].apkPrefix}-v${version}`;
   const uploaded = assets.filter((asset) =>
     asset.state === "uploaded" && typeof asset.browser_download_url === "string" &&
     isTrustedGithubAssetUrl(asset.browser_download_url) &&

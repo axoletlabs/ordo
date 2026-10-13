@@ -14,9 +14,9 @@ test("list pages use the server maximum so a typical folder is one request", () 
   assert.ok(LIST_END_REACHED_THRESHOLD < 0.4);
 });
 
-test("FAB list clearance is a corner inset, not the full button height", () => {
-  assert.equal(FAB_LIST_CLEARANCE, 36);
-  assert.ok(FAB_LIST_CLEARANCE < 48);
+test("list clearance leaves the last row above the extended Material FAB", () => {
+  assert.equal(FAB_LIST_CLEARANCE, 96);
+  assert.ok(FAB_LIST_CLEARANCE >= 56 + 16 + 16);
 });
 
 test("shouldFetchNextPage refuses a fetch while busy, locked, or stalled", () => {

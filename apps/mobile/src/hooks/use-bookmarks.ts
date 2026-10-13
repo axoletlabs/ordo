@@ -121,7 +121,7 @@ export function useInfiniteSearch(
   const enabled = opts.enabled ?? true;
   return useInfiniteQuery({
     queryKey: qk.search(term, tagIds, unread, folderIds, unfiled, fuzzy, reminder),
-    queryFn: ({ pageParam }) =>
+    queryFn: ({ pageParam, signal }) =>
       bookmarksApi.search(
         term,
         pageParam ?? undefined,
@@ -132,6 +132,7 @@ export function useInfiniteSearch(
         unfiled,
         fuzzy,
         reminder,
+        signal,
       ),
     initialPageParam: null as string | null,
     getNextPageParam: nextPageCursor,
@@ -179,6 +180,8 @@ export function useCreateBookmark() {
     onSuccess: (bookmark) => {
       insertCreatedBookmark(qc, bookmark);
       bumpFolderCount(qc, bookmark.folderId, +1, bookmark.isRead ? 0 : +1);
+      // The progress query stops polling at zero; a new save must wake it up.
+      void qc.invalidateQueries({ queryKey: qk.extractionProgress });
       if (bookmark.tags.length > 0) {
         void qc.invalidateQueries({ queryKey: ["tags"] });
       }
@@ -205,19 +208,6 @@ export function useToggleRead(folderId: string | null) {
     onSuccess: (updated) => {
       // Reconcile every other view (tag lists, search, detail) with the server.
       updateBookmarkEverywhere(qc, updated.id, (bookmark) => ({ ...bookmark, ...updated }));
-    },
-  });
-}
-
-/** Mark a bookmark read when its folder is only known at tap time (search). */
-export function useMarkBookmarkRead() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, folderId }: { id: string; folderId: string | null }) =>
-      bookmarksApi.update(id, { isRead: true }, { folderId }),
-    onSuccess: (updated) => {
-      updateBookmarkEverywhere(qc, updated.id, (bookmark) => ({ ...bookmark, ...updated }));
-      void qc.invalidateQueries({ queryKey: qk.folders });
     },
   });
 }
@@ -274,6 +264,13 @@ export function useSetContentKind() {
         ...("contentHtml" in bookmark && updated.fetchStatus !== "ok" ? { contentHtml: null } : {}),
       }));
       void qc.invalidateQueries({ queryKey: qk.bookmark(updated.id) });
+      void qc.invalidateQueries({ queryKey: qk.extractionProgress });
+    },
+    onError: (_e, { id }) => {
+      // The optimistic override was never persisted; refetch the truth. The
+      // prefix key also heals the detail query.
+      void qc.invalidateQueries({ queryKey: qk.bookmark(id) });
+      void qc.invalidateQueries({ queryKey: ["bookmarks"] });
     },
   });
 }
@@ -386,7 +383,7 @@ export function useMarkAllRead(folderId: string | null) {
       );
       // Zero out the folder's unread count (unfiled root has no folder cache entry).
       if (folderId) {
-        queryClient.setQueryData<FolderDto[]>(qk.folders, (old) =>
+        qc.setQueryData<FolderDto[]>(qk.folders, (old) =>
           (old ?? []).map((f) => (f.id === folderId ? { ...f, unreadCount: 0 } : f)),
         );
       }
@@ -398,7 +395,7 @@ export function useMarkAllRead(folderId: string | null) {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: qk.bookmarks(folderId) });
-      void queryClient.refetchQueries({ queryKey: qk.folders });
+      void qc.refetchQueries({ queryKey: qk.folders });
     },
   });
 }

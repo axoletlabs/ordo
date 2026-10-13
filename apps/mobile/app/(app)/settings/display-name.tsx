@@ -54,6 +54,7 @@ export default function ChangeDisplayNameScreen() {
             <SettingsForm>
               <Input
                 label="Display name"
+                required maxLength={64} showCounter
                 value={displayName}
                 onChangeText={setDisplayName}
                 placeholder="Your name"
@@ -65,7 +66,7 @@ export default function ChangeDisplayNameScreen() {
               <Button
                 label="Save"
                 block
-                size="lg"
+                size="md"
                 onPress={submit}
                 loading={changeName.isPending}
                 disabled={!displayName.trim() || unchanged}

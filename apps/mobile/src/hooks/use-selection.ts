@@ -4,13 +4,15 @@
  * exits without acting.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BackHandler } from "react-native";
+import { BackHandler, Platform } from "react-native";
 import { useFocusEffect } from "expo-router";
-import { create } from "zustand";
+import { create, useStore } from "zustand";
+import { commitSelection, createSelectionState, toggleSelection, type SelectionKey } from "../lib/selection-state";
 import { haptics } from "../lib/haptics";
+import { dismissKeyboard } from "./use-keyboard-visible";
 import { createSelectionHoldGuard } from "../lib/selection-hold-guard";
 
-export type SelectionKey = `bookmark:${string}` | `folder:${string}`;
+export type { SelectionKey } from "../lib/selection-state";
 
 export function bookmarkKey(id: string): SelectionKey {
   return `bookmark:${id}`;
@@ -32,18 +34,16 @@ export function useSelectionHoldGuard() {
 export const useSelectionUiStore = create<{ active: boolean }>(() => ({ active: false }));
 
 export function useSelectionMode() {
-  const [active, setActive] = useState(false);
-  const [ids, setIds] = useState<ReadonlySet<SelectionKey>>(() => new Set());
-  const [revision, setRevision] = useState(0);
+  const [store] = useState(createSelectionState);
+  const { active, ids, revision } = useStore(store);
 
   const bump = useCallback((next: ReadonlySet<SelectionKey>, nextActive: boolean) => {
-    setIds(next);
-    setActive(nextActive);
-    setRevision((value) => value + 1);
-  }, []);
+    commitSelection(store, next, nextActive);
+  }, [store]);
 
   const enter = useCallback(
     (key?: SelectionKey) => {
+      dismissKeyboard();
       haptics.medium();
       bump(key ? new Set([key]) : new Set(), true);
     },
@@ -54,16 +54,10 @@ export function useSelectionMode() {
     bump(new Set(), false);
   }, [bump]);
 
-  const idsRef = useRef(ids);
-  idsRef.current = ids;
-
   const toggle = useCallback((key: SelectionKey) => {
     haptics.selection();
-    const next = new Set(idsRef.current);
-    if (next.has(key)) next.delete(key);
-    else next.add(key);
-    bump(next, true);
-  }, [bump]);
+    toggleSelection(store, key);
+  }, [store]);
 
   const replace = useCallback(
     (keys: readonly SelectionKey[]) => {
@@ -94,20 +88,26 @@ export function useSelectionMode() {
     useCallback(() => {
       focusedRef.current = true;
       useSelectionUiStore.setState({ active: activeRef.current });
-      const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      const subscription = Platform.OS === "android" ? BackHandler.addEventListener("hardwareBackPress", () => {
         if (!activeRef.current) return false;
         exit();
         return true;
-      });
+      }) : null;
+      const onKey = (event: KeyboardEvent) => {
+        if (event.key === "Escape" && !event.defaultPrevented && activeRef.current) exit();
+      };
+      if (Platform.OS === "web") document.addEventListener("keydown", onKey);
       return () => {
         focusedRef.current = false;
-        subscription.remove();
+        subscription?.remove();
+        if (Platform.OS === "web") document.removeEventListener("keydown", onKey);
         useSelectionUiStore.setState({ active: false });
       };
     }, [exit]),
   );
 
   return {
+    store,
     active,
     ids,
     count: ids.size,

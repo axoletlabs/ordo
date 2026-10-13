@@ -62,8 +62,4 @@ export class AppError extends HttpException {
     this.code = code;
     this.details = details;
   }
-
-  static from(code: ErrorCode, message: string, details?: unknown): AppError {
-    return new AppError(code, message, details);
-  }
 }

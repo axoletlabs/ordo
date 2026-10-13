@@ -9,7 +9,7 @@
  * is no artifact; consumers treat a null hash as "—".
  */
 const { execSync } = require("node:child_process");
-const { resolveUpdatesChannel } = require("../../scripts/release-policy.js");
+const { APP_VARIANTS, easUpdatesChannel, resolveUpdatesChannel } = require("../../scripts/release-policy.js");
 
 /** Run a git subcommand, returning "" when git or the repo is unavailable. */
 function git(args) {
@@ -33,31 +33,44 @@ const gitDirty = git("status --porcelain").length > 0;
 // CI extra-publishes the same JS onto older APK fingerprints. eas update has
 // no --runtime-version flag, so the job sets this to that APK's raw hash.
 const otaRuntime = process.env.ORDO_OTA_RUNTIME_VERSION;
-const version = "0.1.0";
+const version = "0.2.0-preview.1";
 const branch = process.env.ORDO_BUILD_BRANCH || git("branch --show-current") || "main";
-const updatesChannel = process.env.EXPO_UPDATES_CHANNEL || resolveUpdatesChannel(version, branch);
-if (!updatesChannel) throw new Error(`Version ${version} does not match branch ${branch}`);
+const variant = process.env.ORDO_APP_VARIANT || resolveUpdatesChannel(version, branch);
+if (!variant || !Object.hasOwn(APP_VARIANTS, variant)) throw new Error(`Invalid app variant or version ${version} for branch ${branch}`);
+if (variant !== "development" && easUpdatesChannel(version) !== variant) {
+  throw new Error(`Version ${version} cannot build the ${variant} app`);
+}
+const identity = APP_VARIANTS[variant];
+if (process.env.EXPO_UPDATES_CHANNEL && process.env.EXPO_UPDATES_CHANNEL !== variant) {
+  throw new Error(`Update channel must match the ${variant} app variant`);
+}
+const updatesChannel = identity.channel;
+// Native resources must be static. These are the generated surface roles for
+// the app's default source (#006A60); JS restores saved/device theming.
+const materialLaunch = { light: "#F4FBF8", dark: "#0E1513", primary: "#006A60" };
 
 /** @type {import('expo/config').ExpoConfig} */
 module.exports = {
-  name: "ordo",
+  name: identity.name,
   slug: "ordo",
+  scheme: identity.package,
   version,
   orientation: "default",
   userInterfaceStyle: "automatic",
   icon: "./assets/icon.png",
-  backgroundColor: "#EFE7D2",
+  backgroundColor: materialLaunch.light,
   // Translucent so a JS reload cannot restore an opaque light status bar
   // over a dark window. Color matches the light splash; night uses the
   // splashscreen_background resource from the Android config plugin.
   androidStatusBar: {
     barStyle: "dark-content",
-    backgroundColor: "#EFE7D2",
+    backgroundColor: materialLaunch.light,
     translucent: true,
   },
   newArchEnabled: true,
   updates: {
-    requestHeaders: { "expo-channel-name": updatesChannel },
+    enabled: variant !== "development",
+    ...(updatesChannel ? { requestHeaders: { "expo-channel-name": updatesChannel } } : {}),
     url: "https://u.expo.dev/c044b586-2816-42c7-b564-bef8556e21da",
     // Custom Check / Download / Restart UI owns the fetch. Native ON_LOAD
     // would race that JS path (pending bundle vs advertised update).
@@ -67,6 +80,7 @@ module.exports = {
   runtimeVersion: otaRuntime || { policy: "fingerprint" },
   plugins: [
     "expo-asset",
+    "expo-localization",
     [
       "expo-local-authentication",
       {
@@ -77,7 +91,7 @@ module.exports = {
       "expo-notifications",
       {
         icon: "./assets/logo-mark.png",
-        color: "#1A1A16",
+        color: materialLaunch.primary,
         defaultChannel: "reminders",
       },
     ],
@@ -101,16 +115,17 @@ module.exports = {
         image: "./assets/logo-mark.png",
         imageWidth: 120,
         resizeMode: "contain",
-        backgroundColor: "#EFE7D2",
+        backgroundColor: materialLaunch.light,
         dark: {
           image: "./assets/logo-mark.png",
-          backgroundColor: "#1A1A16",
+          backgroundColor: materialLaunch.dark,
         },
       },
     ],
     "./plugins/with-updates-channel.js",
     "./plugins/with-android-build.js",
     "./plugins/with-high-refresh-rate.js",
+    "./plugins/with-pointer-hover.js",
     "./plugins/with-uitextview-selection.js",
     "./plugins/with-selectable-text.js",
   ],
@@ -126,7 +141,8 @@ module.exports = {
   },
   owner: "imlucki",
   android: {
-    package: "com.axolet.ordo",
+    package: identity.package,
+    softwareKeyboardLayoutMode: "resize",
     permissions: [
       "android.permission.REQUEST_INSTALL_PACKAGES",
       "android.permission.POST_NOTIFICATIONS",
@@ -136,10 +152,11 @@ module.exports = {
     usesCleartextTraffic: true,
     adaptiveIcon: {
       foregroundImage: "./assets/adaptive-icon-foreground.png",
-      backgroundColor: "#EFE7D2",
+      backgroundColor: materialLaunch.light,
     },
   },
   ios: {
+    bundleIdentifier: identity.package,
     infoPlist: {
       // Third-party apps stay at 60fps on ProMotion iPhones unless this is set.
       // The flag only *allows* the panel rate; 60Hz hardware stays at 60.

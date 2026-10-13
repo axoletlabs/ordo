@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { applyDotEnvFile, loadConfig, parseDotEnv, resolveDatabaseUrl } from "./configuration.js";
@@ -126,6 +126,52 @@ describe("loadConfig library wrapping key", () => {
   it("derives a 32-byte key from a passphrase", () => {
     process.env.LIBRARY_KEK = "not-hex";
     expect(loadConfig().libraryKek).toMatch(/^[0-9a-f]{64}$/);
+  });
+});
+
+describe("loadConfig implicit-secret warning in production", () => {
+  const original = {
+    NODE_ENV: process.env.NODE_ENV,
+    JWT_SECRET: process.env.JWT_SECRET,
+    LIBRARY_KEK: process.env.LIBRARY_KEK,
+  };
+
+  afterEach(() => {
+    restore("NODE_ENV", original.NODE_ENV);
+    restore("JWT_SECRET", original.JWT_SECRET);
+    restore("LIBRARY_KEK", original.LIBRARY_KEK);
+  });
+
+  it("warns when production runs without explicit secrets", () => {
+    delete process.env.JWT_SECRET;
+    delete process.env.LIBRARY_KEK;
+    process.env.NODE_ENV = "production";
+    // Production mode persists sidecar secret files; clean up what this test makes.
+    const sidecars = [join(process.cwd(), ".ordo-secret"), join(process.cwd(), ".ordo-library-key")];
+    const existed = new Set(sidecars.filter((p) => existsSync(p)));
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      loadConfig();
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toMatch(/JWT_SECRET and LIBRARY_KEK/);
+      expect(warn.mock.calls[0][0]).toMatch(/scripts\/deploy-server/);
+    } finally {
+      warn.mockRestore();
+      for (const path of sidecars) if (!existed.has(path) && existsSync(path)) rmSync(path);
+    }
+  });
+
+  it("stays quiet when both secrets are explicit", () => {
+    process.env.NODE_ENV = "production";
+    process.env.JWT_SECRET = "explicit";
+    process.env.LIBRARY_KEK = "aa".repeat(32);
+    const warn = jest.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      loadConfig();
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 });
 

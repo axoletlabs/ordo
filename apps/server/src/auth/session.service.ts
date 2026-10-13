@@ -122,14 +122,6 @@ export class SessionService {
     });
   }
 
-  /** Revoke every session for a user except the one identified by `keepSessionId`. */
-  async revokeAllExcept(userId: string, keepSessionId: string): Promise<number> {
-    const result = await this.prisma.session.deleteMany({
-      where: { userId, id: { not: keepSessionId } },
-    });
-    return result.count;
-  }
-
   /** Revoke every session for a user. */
   async revokeAll(userId: string): Promise<number> {
     const result = await this.prisma.session.deleteMany({
@@ -177,8 +169,12 @@ export class SessionService {
 
     const pair = this.tokens.generatePair();
     const wraps = dek ? this.crypto.wrapForSession(dek, pair) : { dekWrapped: null, dekRefreshWrapped: null };
-    const updated = await this.prisma.session.update({
-      where: { id: session.id },
+    // Guard the update on the hash we matched so two concurrent refreshes
+    // with the same token can't both succeed (the loser would orphan the
+    // winner's brand-new refresh token). A zero-count update means another
+    // request already rotated this session — treat the token as used.
+    const rotation = await this.prisma.session.updateMany({
+      where: { id: session.id, refreshTokenHash: session.refreshTokenHash },
       data: {
         accessTokenHash: pair.accessHash,
         accessTokenExpiresAt: pair.accessTokenExpiresAt,
@@ -195,6 +191,13 @@ export class SessionService {
         }),
       },
     });
+    if (rotation.count === 0) {
+      throw new AppError(ErrorCode.SESSION_REVOKED, "Your session has ended. Please sign in again.");
+    }
+    const updated = await this.prisma.session.findUnique({ where: { id: session.id } });
+    if (!updated) {
+      throw new AppError(ErrorCode.SESSION_REVOKED, "Your session has ended. Please sign in again.");
+    }
     return { session: updated, tokens: pair };
   }
 

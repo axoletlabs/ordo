@@ -4,9 +4,8 @@
  * when the account is still unverified.
  */
 import React, { useEffect, useRef, useState } from "react";
-import { Pressable, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { iconGlyphStyle } from "../../src/theme/icon-glyph";
+import { View } from "react-native";
+import { IconButton } from "../../src/components/ui/IconButton";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { EMAIL_OTP } from "@ordo/shared";
 import { AuthShell } from "../../src/components/auth/AuthShell";
@@ -19,7 +18,6 @@ import { useServerInfo } from "../../src/hooks/queries";
 import { errorMessage } from "../../src/lib/error-message";
 import { otpEnterHelper, otpSentToast, otpVerifySubtitle } from "../../src/lib/otp-copy";
 import { haptics } from "../../src/lib/haptics";
-import { useTheme } from "../../src/theme/ThemeProvider";
 import { spacing } from "../../src/theme/tokens";
 import { toast } from "../../src/components/ui/toast-store";
 
@@ -29,7 +27,6 @@ function routeParam(value: string | string[] | undefined): string {
 }
 
 export default function VerifyEmailScreen() {
-  const { palette } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ email?: string; sent?: string }>();
   const verify = useVerifyEmail();
@@ -118,7 +115,7 @@ export default function VerifyEmailScreen() {
       <Input
         label="Email"
         value={email}
-        editable={false}
+        readOnly
         placeholder="you@example.com"
         keyboardType="email-address"
         textContentType="emailAddress"
@@ -126,20 +123,7 @@ export default function VerifyEmailScreen() {
         autoCorrect={false}
         error={emailError || undefined}
         rightAccessory={
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Edit email"
-            hitSlop={8}
-            onPress={editEmail}
-            style={styles.edit}
-          >
-            <Ionicons
-              name="pencil-outline"
-              size={18}
-              color={palette.textTertiary}
-              style={iconGlyphStyle(18)}
-            />
-          </Pressable>
+          <IconButton name="pencil-outline" variant="standard" accessibilityLabel="Edit email" onPress={editEmail} />
         }
       />
       <View style={{ height: spacing[16] }} />
@@ -160,7 +144,7 @@ export default function VerifyEmailScreen() {
       <Button
         label="Verify"
         block
-        size="lg"
+        size="md"
         onPress={() => void submit()}
         loading={otpStatus === "loading" || otpStatus === "success"}
       />
@@ -178,7 +162,3 @@ export default function VerifyEmailScreen() {
     </AuthShell>
   );
 }
-
-const styles = StyleSheet.create({
-  edit: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
-});

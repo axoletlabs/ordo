@@ -85,4 +85,4 @@ if [[ -n "$in_flight" && "$in_flight" != "null" && "$in_flight" != "[]" ]]; then
   done < <(jq -r '.[] | "\(.id) \(.head_sha // empty)"' <<<"$in_flight")
 fi
 
-bash "$SCRIPT_DIR/last-successful-apk-sha.sh" "$BRANCH"
+bash "$SCRIPT_DIR/last-apk-shas.sh" "$BRANCH" 1

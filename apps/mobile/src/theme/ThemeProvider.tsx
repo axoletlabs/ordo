@@ -9,7 +9,6 @@ import { Appearance, Platform, View, useColorScheme } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useSettingsStore } from "../store/settings";
 import {
-  appearanceOverride,
   resolvePalette,
   resolveShadows,
   type Palette,
@@ -17,10 +16,13 @@ import {
 } from "./theme";
 import { pinWindowBackground } from "./pin-system-chrome";
 import { scrollbarColors, WEB_SCROLLBAR_CSS } from "./scrollbar";
+import { MATERIAL_ROLES } from "./material-colors";
+import { useDeviceColors } from "./device-colors";
 
 interface ThemeContextValue {
   palette: Palette;
   shadows: Shadows;
+  expressive: boolean;
 }
 
 const ThemeContext = createContext<ThemeContextValue | null>(null);
@@ -32,6 +34,9 @@ function applyWebScrollbarTheme(palette: Palette) {
   const { thumb, track } = scrollbarColors(palette);
   const root = document.documentElement;
   root.style.colorScheme = palette.mode === "dark" ? "dark" : "light";
+  for (const role of MATERIAL_ROLES) {
+    root.style.setProperty(`--md-sys-color-${role.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`)}`, palette[role]);
+  }
   root.style.setProperty("--ordo-scrollbar-thumb", thumb);
   root.style.setProperty("--ordo-scrollbar-track", track);
   if (!document.getElementById(WEB_SCROLLBAR_STYLE_ID)) {
@@ -45,17 +50,23 @@ function applyWebScrollbarTheme(palette: Palette) {
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const themeMode = useSettingsStore((s) => s.themeMode);
   const amoled = useSettingsStore((s) => s.amoled);
+  const expressive = useSettingsStore((s) => s.expressive);
+  const materialYouColors = useSettingsStore((s) => s.materialYouColors);
+  const deviceColors = useDeviceColors();
+  const contrast = useSettingsStore((s) => s.themeContrast);
   const systemScheme = useColorScheme();
 
   const value = useMemo<ThemeContextValue>(() => {
-    const palette = resolvePalette(themeMode, amoled, systemScheme);
-    return { palette, shadows: resolveShadows(palette) };
-  }, [themeMode, amoled, systemScheme]);
+    const palette = resolvePalette(themeMode, amoled, systemScheme, undefined, expressive, contrast, materialYouColors ? deviceColors : null);
+    return { palette, shadows: resolveShadows(palette), expressive };
+  }, [themeMode, amoled, systemScheme, deviceColors, materialYouColors, expressive, contrast]);
 
   useEffect(() => {
     if (typeof Appearance.setColorScheme !== "function") return;
-    Appearance.setColorScheme(appearanceOverride(themeMode));
-  }, [themeMode]);
+    // Palettes theme the app; Appearance remains the actual OS signal. An
+    // override makes "System" read our forced mode instead of the device.
+    Appearance.setColorScheme("unspecified");
+  }, []);
 
   useEffect(() => {
     applyWebScrollbarTheme(value.palette);
@@ -95,9 +106,10 @@ export function ThemeOverrideProvider({
   palette: Palette;
   children: React.ReactNode;
 }) {
+  const expressive = useSettingsStore((s) => s.expressive);
   const value = useMemo<ThemeContextValue>(
-    () => ({ palette, shadows: resolveShadows(palette) }),
-    [palette],
+    () => ({ palette, shadows: resolveShadows(palette), expressive }),
+    [palette, expressive],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

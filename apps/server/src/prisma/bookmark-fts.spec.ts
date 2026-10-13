@@ -1,8 +1,14 @@
 import { ftsBodyQuery, ftsPrefixQuery } from "./bookmark-fts.js";
+import { tokenizeSearchQuery } from "@ordo/shared";
 
 describe("bookmark FTS query builder", () => {
   it("builds a prefix MATCH across title/url/domain", () => {
     expect(ftsPrefixQuery(["hel"])).toBe("{title url domain} : hel*");
+  });
+
+  it("folds composed and decomposed Latin accents consistently with ranking", () => {
+    expect(ftsPrefixQuery(tokenizeSearchQuery("CAFÉ re\u0301sume\u0301"))).toBe("{title url domain} : (cafe* AND resume*)");
+    expect(ftsBodyQuery(tokenizeSearchQuery("RÉSUMÉ"))).toBe("{body} : resume*");
   });
 
   it("ANDs dotted tokens and includes body when hidden fields are allowed", () => {

@@ -1,37 +1,20 @@
-# Mobile UI
+# Material 3 UI
 
-Don’t invent type or overlay chrome. Use `Text` variants and the overlay primitives.
+The app follows Material 3 and has a persisted Material 3 Expressive mode.
+Use shared primitives; do not introduce screen-specific visual systems.
 
-**Alignment**
-Similar things share one edge. Do not invent a new inset for a screen, row, or header control.
-
-- Screen rail (`columnContentInset` / `layout.screenHorizontalPad`): section labels, list hairlines, header text actions, and the back chevron’s tip. A cutout replaces the rail where the column does not already clear it. Never add the safe area on top of the rail.
-- Title line: the back button and trailing header icons center on the title. A subtitle does not move them.
-- Row inset (`layout.rowInset`): the leading icon inside a list row, measured from that row’s edge. It is not the same x as the back chevron.
-- Header icon buttons share one hit target. Ordinary glyphs stay centered in it. Only the back chevron is shifted, so its tip meets the rail.
-- Forms add their own interior padding on top of the safe area. Menu rows pad inside the panel. Neither is the screen rail.
-- Landscape and wide web: measure the scene beside the side rail (`useColumnPadding` / `sceneLeadingChrome`), not the window. The rail already clears the leading cutout. A pane inside that column (`alignTo="parent"`, the embedded reader) uses the parent rail. A full-window overlay (`alignTo="window"`) ignores the rail.
-
-**Surfaces**
-Bookmark, folder, tag, settings, and session rows are one list. Do not invent a second row or wrap those rows in a card.
-
-- Leading well: `RowIconWell` (`ROW_ICON_FRAME` 36, `radius.sm`, hairline, `surfaceSecondary`) with an `ROW_ICON_GLYPH` (18) icon. Selection marks use the same footprint.
-- The row name is `headline`. Support is `footnote` or `monoSmall`.
-- Rows sit on the page and close with a hairline. Section labels sit on the screen rail; wells sit one `layout.rowInset` in.
-- `SettingsForm` pads by `layout.rowInset`, so fields line up with those wells.
-- Filled chrome is for floating panels, menus, toasts, the dock, and the selection bar.
-
-**Type**
-- `header` — screen titles, buttons, overlay titles
-- `label` — field labels, section labels, compact actions
-- `headline` — names on list rows (bookmark, folder, tag, setting, session)
-- `title2` — empty states (sentence case)
-- `body` / `bodyStrong` / `footnote` — prose and supporting text. `bodyStrong` is emphasis, not a row title
-- `monoSmall` — URLs, hosts, counts, times
-- Tabs use `NAV_CHROME_TEXT`. Segmented matches `label`. Setting values are `footnote`.
-
-**Overlays**
-- Dialogs: `FloatingPanel` + `PanelHeader` + `PanelActions`
-- Confirms: `ConfirmDialog` (including deletes from a context menu)
-- Menus: `ContextMenu`. Rows fill the panel: `overlayMenuPadding` is 0, no gap between rows, hover is a full-bleed rectangle (first touches the top, last the bottom, left and right meet the edge). The menu's `overflow: hidden` clips the first/last hover to the panel radius. Comfort is the row's inner padding, not inset chrome around the buttons. Draw the panel with a 1px `palette.outline` stroke — quiet, theme-aware, not a separator hairline.
-- Center the overlay title. Stack the icon above it. Cancel and confirm are equal.
+- Color comes from `Palette` Material roles, generated with Google's Material color utilities. Pair each container with its `on*` role. Dividers use `outlineVariant`, fields use `outline`.
+- Typography uses the Roboto Material type scale through `Text` variants. Sentence case throughout. Reader content may retain the user's chosen reading font.
+- Layout uses an 8dp grid, a shared 16dp screen rail, safe-area-aware columns, and minimum 48dp interactive targets. Every orientation uses one constrained content pane; bookmarks open a full-screen reader with Back returning to the originating list. Landscape uses a compact search app bar, not a list/detail split.
+- The library is home. One unified search app bar serves every orientation: idle shows Library, overflow, and account; active search shows Back, clear, and filters instead. Android Back (including IME dismissal) exits search before navigation, preserving the query. No separate title row. Search filters and reorders its existing list in place; account/settings opens from the top-right icon. There is no separate search screen or persistent navigation bar or rail.
+- Keep filters inside the search bar. Sorting/tag management use library overflow; folder creation belongs to the customizable Create menu. Search uses pre-indexed cached metadata immediately and remote matches asynchronously; global indexes must respect folder access and stay off disk.
+- App colors retain a single identity in both design modes. Material You reads Android 12+ system tonal palettes; do not offer preset app colors or equate Expressive components with the Expressive color variant.
+- Standard button groups use the Material 15% pressed-width expansion and adjacent compression. Connected toggle groups use shape changes only. Hover uses state layers, not layout motion.
+- Standard lists use Material list sizing and alignment. Expressive lists use segmented tonal surfaces and stronger selected states. Do not wrap list items in additional cards.
+- Use `PressableScale` for actions, `ListPressable` for virtualized lists, and the shared Material spatial/effects motion schemes. Shape morphing is for Expressive controls. Honor reduced motion.
+- Dialogs use `FloatingPanel`, `PanelHeader`, and `PanelActions`; destructive confirmations use `ConfirmDialog`. Menus use `ContextMenu`. All overlays retain their contents and placement during exit, support keyboard/back dismissal, and manage web focus.
+- Picker dialogs own their virtualized list (`scrollBody={false}`). Form fields reserve space for floating labels and use the dialog's surface. Keep header/actions visible above the keyboard when space allows; do not fill creation forms with an icon grid.
+- Obscure parent dialogs during sibling pickers (`obscured`) while preserving draft state. Only the active surface handles focus/back. Cancel delayed opening focus on dismissal; put potentially long picker headers inside the virtualized list.
+- Reader palettes must not override `Appearance`: System must always read the device's real scheme. Serialize preference writes and preserve newer optimistic choices while earlier requests finish.
+- Material icons are rendered through `MaterialIcon`. Stored folder icon names remain compatible with existing data.
+- Verify mobile and wide web layouts, both color schemes, both design modes, keyboard interaction, and reduced motion when changing shared UI.

@@ -1,10 +1,11 @@
-/** Friendly empty state — warm, line-driven. */
+/** Material empty/error state with tonal illustration and a clear next action. */
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { radius, spacing } from "../../theme/tokens";
+import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
 
 export interface EmptyStateProps {
   icon: keyof typeof Ionicons.glyphMap;
@@ -16,15 +17,16 @@ export interface EmptyStateProps {
 }
 
 export function EmptyState({ icon, title, message, action, compact }: EmptyStateProps) {
-  const { palette } = useTheme();
+  const { palette, expressive } = useTheme();
+  const { compactHeight } = useResponsiveLayout();
   return (
-    <View style={[styles.wrap, compact && styles.compact]}>
-      <View style={[styles.iconCircle, { backgroundColor: palette.surfaceSecondary, borderColor: palette.border }]}>
-        <Ionicons name={icon} size={26} color={palette.textTertiary} />
+    <View style={[styles.wrap, compact && styles.compact, compactHeight && styles.short]}>
+      <View style={[styles.iconCircle, compactHeight ? { width: 48, height: 48 } : null, { backgroundColor: palette.tertiaryContainer, borderRadius: expressive ? radius["2xl"] : radius.full }]}>
+        <Ionicons name={icon} size={compactHeight ? 24 : 40} color={palette.onTertiaryContainer} />
       </View>
-      <Text variant="title2" align="center" style={{ marginTop: spacing[12] }}>{title}</Text>
+      <Text variant={compactHeight ? "titleLarge" : "headlineSmall"} align="center" style={{ marginTop: compactHeight ? spacing[8] : spacing[24] }}>{title}</Text>
       {message ? (
-        <Text variant="footnote" color="secondary" align="center" style={{ marginTop: spacing[4] }}>
+        <Text variant="bodyMedium" color="secondary" align="center" style={{ marginTop: spacing[8] }}>
           {message}
         </Text>
       ) : null}
@@ -47,5 +49,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[20],
     paddingHorizontal: spacing[16],
   },
-  iconCircle: { width: 60, height: 60, borderRadius: radius.lg, borderWidth: 1, alignItems: "center", justifyContent: "center" },
+  short: { paddingVertical: spacing[16] },
+  iconCircle: { width: 88, height: 88, alignItems: "center", justifyContent: "center" },
 });

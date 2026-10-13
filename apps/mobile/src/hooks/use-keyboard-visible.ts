@@ -56,3 +56,19 @@ export function useKeyboardVisible() {
 
   return visible;
 }
+
+/** Visible window edge for anchored overlays, including non-resizing iOS IME. */
+export function useKeyboardViewportHeight(windowHeight: number, active: boolean) {
+  const [top, setTop] = useState<number | null>(null);
+  useEffect(() => {
+    if (!active || Platform.OS === "web") return;
+    const metrics = Keyboard.metrics();
+    setTop(metrics?.height ? metrics.screenY : null);
+    const show = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillChangeFrame" : "keyboardDidShow", (event) => {
+      setTop(event.endCoordinates.height > 0 ? event.endCoordinates.screenY : null);
+    });
+    const hide = Keyboard.addListener(Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide", () => setTop(null));
+    return () => { show.remove(); hide.remove(); };
+  }, [active]);
+  return Math.min(windowHeight, active ? top ?? windowHeight : windowHeight);
+}

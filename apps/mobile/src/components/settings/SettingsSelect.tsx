@@ -1,8 +1,9 @@
 import React from "react";
-import { Keyboard, Pressable, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Keyboard, StyleSheet, View, useWindowDimensions } from "react-native";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { Text } from "../ui/Text";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
+import { PressableScale } from "../ui/PressableScale";
 import { haptics } from "../../lib/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
@@ -28,6 +29,7 @@ export function SettingsSelect<T extends string>({
   title: string;
 }) {
   const { palette } = useTheme();
+  const { width } = useWindowDimensions();
   const anchorRef = React.useRef<View>(null);
   const [open, setOpen] = React.useState(false);
   const [anchor, setAnchor] = React.useState<MenuAnchorRect | null>(null);
@@ -49,37 +51,38 @@ export function SettingsSelect<T extends string>({
 
   return (
     <>
-      <View ref={anchorRef} collapsable={false} style={styles.anchor}>
-        <Pressable
+      <View ref={anchorRef} collapsable={false} style={[styles.anchor, { width: width < 380 ? 112 : layout.settingsControlWidth }]}>
+        <PressableScale
           accessibilityRole="button"
           accessibilityLabel={`${title}, ${selected?.label ?? value}`}
           accessibilityState={{ expanded: open }}
+          aria-haspopup="menu"
+          stateLayerColor={palette.onSecondaryContainer}
           onPress={show}
           hitSlop={{ top: 4, bottom: 4 }}
-          style={({ pressed }) => [
+          style={[
             styles.trigger,
-            { borderColor: palette.borderStrong, backgroundColor: palette.surfaceSecondary },
-            pressed && styles.pressed,
+            { borderColor: "transparent", backgroundColor: palette.secondaryContainer },
           ]}
         >
-          {selected?.icon ? (
+          {selected?.icon && width >= 380 ? (
             <Ionicons
               name={selected.icon}
               size={16}
-              color={palette.textTertiary}
+              color={palette.onSecondaryContainer}
               style={[styles.triggerIcon, iconGlyphStyle(16)]}
             />
           ) : null}
-          <Text variant="footnote" numberOfLines={1} ellipsizeMode="tail" style={styles.triggerLabel}>
+          <Text variant="labelLarge" numberOfLines={1} ellipsizeMode="tail" style={[styles.triggerLabel, { color: palette.onSecondaryContainer }]}>
             {selected?.shortLabel ?? selected?.label ?? value}
           </Text>
           <Ionicons
             name="chevron-down"
             size={14}
-            color={palette.textTertiary}
+            color={palette.onSecondaryContainer}
             style={[styles.triggerChevron, iconGlyphStyle(14)]}
           />
-        </Pressable>
+        </PressableScale>
       </View>
 
       <ContextMenu visible={open} onDismiss={() => setOpen(false)} anchor={anchor} width={300}>
@@ -89,6 +92,7 @@ export function SettingsSelect<T extends string>({
             icon={option.icon}
             label={option.label}
             selected={option.value === value}
+            selectionRole="menuitemradio"
             onPress={() => choose(option.value)}
           />
         ))}
@@ -99,22 +103,19 @@ export function SettingsSelect<T extends string>({
 
 const styles = StyleSheet.create({
   anchor: {
-    width: layout.settingsControlWidth,
-    minWidth: layout.settingsControlWidth,
-    maxWidth: layout.settingsControlWidth,
     flexGrow: 0,
     flexShrink: 0,
   },
   trigger: {
-    width: layout.settingsControlWidth,
-    minHeight: 36,
+    width: "100%",
+    minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "stretch",
     gap: spacing[6],
     paddingHorizontal: spacing[10],
     borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.md,
+    borderRadius: radius.full,
     overflow: "hidden",
   },
   triggerIcon: { flexShrink: 0 },
@@ -126,5 +127,4 @@ const styles = StyleSheet.create({
     minWidth: 0,
     includeFontPadding: false,
   },
-  pressed: { opacity: 0.72 },
 });

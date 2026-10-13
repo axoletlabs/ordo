@@ -1,21 +1,21 @@
 /** A setting list row: same well, title, and hairline as a library row. */
 import React from "react";
-import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { StyleSheet, View, useWindowDimensions } from "react-native";
+import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { PressableScale } from "./PressableScale";
-import { RowIconWell } from "./RowIconWell";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
+import { runPressAction } from "../../lib/press-action";
 import { ROW_ICON_GLYPH } from "../../theme/alignment";
-import { layout, spacing } from "../../theme/tokens";
+import { layout, radius, spacing } from "../../theme/tokens";
 
 export interface SettingRowProps {
   icon?: keyof typeof Ionicons.glyphMap;
   label: string;
   description?: string;
   value?: string;
-  onPress?: () => void;
+  onPress?: () => void | boolean | Promise<unknown>;
   right?: React.ReactNode;
   /** `column` (default) reserves the settings picker width so labels align. */
   rightFit?: "column" | "content";
@@ -24,6 +24,9 @@ export interface SettingRowProps {
   iconColor?: string;
   showChevron?: boolean;
   divider?: boolean;
+  position?: "first" | "middle" | "last" | "only";
+  selectionRole?: "radio" | "checkbox";
+  checked?: boolean;
 }
 
 export function SettingRow({
@@ -37,25 +40,38 @@ export function SettingRow({
   destructive,
   iconColor,
   showChevron,
-  divider = true,
+  divider = false,
+  position = "only",
+  selectionRole,
+  checked,
 }: SettingRowProps) {
-  const { palette } = useTheme();
-  const tint = destructive ? palette.danger : iconColor ?? palette.accent;
+  const { palette, expressive } = useTheme();
+  const { width } = useWindowDimensions();
+  const tint = destructive ? palette.error : iconColor ?? palette.onSurfaceVariant;
   const valueColor = destructive ? palette.danger : palette.textTertiary;
+  const rowStyle = [styles.row, { borderBottomColor: palette.outlineVariant,
+    backgroundColor: palette.surfaceContainerLow,
+    borderRadius: expressive ? radius.xs : 0,
+    borderTopLeftRadius: position === "first" || position === "only" ? expressive ? radius.xl : radius.lg : undefined,
+    borderTopRightRadius: position === "first" || position === "only" ? expressive ? radius.xl : radius.lg : undefined,
+    borderBottomLeftRadius: position === "last" || position === "only" ? expressive ? radius.xl : radius.lg : undefined,
+    borderBottomRightRadius: position === "last" || position === "only" ? expressive ? radius.xl : radius.lg : undefined,
+    marginBottom: expressive ? spacing[2] : 0,
+    borderBottomWidth: expressive || !divider ? 0 : StyleSheet.hairlineWidth }];
 
   const content = (
-    <View style={[styles.row, { borderBottomColor: palette.border }, !divider && styles.noDivider]}>
+    <>
       {icon ? (
-        <RowIconWell>
+        <View style={styles.icon}>
           <Ionicons name={icon} size={ROW_ICON_GLYPH} color={tint} />
-        </RowIconWell>
+        </View>
       ) : null}
       <View style={styles.body}>
-        <Text variant="headline" numberOfLines={1} color={destructive ? "danger" : "primary"}>
+        <Text variant="bodyLarge" numberOfLines={2} color={destructive ? "danger" : "primary"}>
           {label}
         </Text>
         {description ? (
-          <Text variant="footnote" color="tertiary" numberOfLines={2} style={styles.description}>
+          <Text variant="footnote" color="tertiary" style={styles.description}>
             {description}
           </Text>
         ) : null}
@@ -66,20 +82,25 @@ export function SettingRow({
         </Text>
       ) : null}
       {right ? (
-        <View style={rightFit === "content" ? styles.trailingHug : styles.trailing}>{right}</View>
+        <View style={rightFit === "content" ? styles.trailingHug : [styles.trailing, { width: width < 380 ? 112 : layout.settingsControlWidth }]}>
+          {React.isValidElement(right) ? React.cloneElement(right as React.ReactElement<{ accessibilityLabel?: string }>, { accessibilityLabel: label }) : right}
+        </View>
       ) : null}
       {showChevron ? (
         <Ionicons name="chevron-forward" size={ROW_ICON_GLYPH} color={palette.textFaint} />
       ) : null}
-    </View>
+    </>
   );
 
-  if (!onPress) return content;
+  if (!onPress) return <View style={rowStyle}>{content}</View>;
   return (
     <PressableScale
+      accessibilityRole={selectionRole ?? "button"}
+      accessibilityState={selectionRole ? { checked: !!checked } : undefined}
+      accessibilityLabel={description ? `${label}, ${description}` : label}
+      style={rowStyle}
       onPress={() => {
-        haptics.light();
-        onPress();
+        runPressAction(onPress, haptics.light);
       }}
     >
       {content}
@@ -92,12 +113,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "nowrap",
     alignItems: "center",
-    gap: spacing[12],
+    gap: spacing[16],
     paddingHorizontal: layout.rowInset,
-    paddingVertical: spacing[8],
+    paddingVertical: spacing[12],
+    minHeight: 72,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  noDivider: { borderBottomWidth: 0 },
+  icon: { width: 24, height: 24, alignItems: "center", justifyContent: "center" },
   body: { flex: 1, flexBasis: 0, minWidth: 0 },
   description: { marginTop: spacing[2] },
   value: { maxWidth: layout.settingsControlWidth, flexShrink: 0, textAlign: "right" },

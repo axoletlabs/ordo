@@ -7,7 +7,7 @@ import {
   EXTRACTION_VERSION,
   MAX_PAGE_SIZE,
   MAX_TAGS_PER_BOOKMARK,
-  MIN_FUZZY_TOKEN_LENGTH,
+  createBookmarkSearchMatcher,
   READ_COMPLETION_THRESHOLD,
   parseBookmarkListSort,
   rankSearchResults,
@@ -302,7 +302,7 @@ export class BookmarksService implements OnApplicationBootstrap {
       orMatch
         ? findFtsBookmarkIds(this.prisma, { userId, match: orMatch, limit: SEARCH_OR_POOL_SIZE })
         : Promise.resolve([] as string[]),
-      Promise.all(tokens.map((token) => this.tagMatchIds(userId, token, tagIds, fuzzy))),
+      this.tagMatchIdsByToken(userId, tokens, tagIds, fuzzy),
     ]);
 
     const candidateIds = uniqueIds([
@@ -413,7 +413,7 @@ export class BookmarksService implements OnApplicationBootstrap {
     } = {};
     if (changes.isRead !== undefined) {
       data.isRead = changes.isRead;
-      if (!changes.isRead) data.completedAt = null;
+      data.completedAt = changes.isRead ? (bookmark.completedAt ?? new Date()) : null;
     }
     if (changes.readProgress !== undefined) {
       // Clamp defensively even though the schema already bounds it to 0..1.
@@ -569,7 +569,8 @@ export class BookmarksService implements OnApplicationBootstrap {
   async markAllRead(userId: string, folder: Folder | null): Promise<number> {
     const result = await this.prisma.bookmark.updateMany({
       where: { userId, folderId: folder ? folder.id : null, isRead: false },
-      data: { isRead: true },
+      // Unread rows carry completedAt = null by invariant, so this only fills it in.
+      data: { isRead: true, completedAt: new Date() },
     });
     return result.count;
   }
@@ -600,7 +601,8 @@ export class BookmarksService implements OnApplicationBootstrap {
     if (input.action === "markRead") {
       const result = await this.prisma.bookmark.updateMany({
         where: { id: { in: targetIds }, userId, isRead: false },
-        data: { isRead: true },
+        // Unread rows carry completedAt = null by invariant, so this only fills it in.
+        data: { isRead: true, completedAt: new Date() },
       });
       return { updated: result.count };
     }
@@ -874,46 +876,37 @@ export class BookmarksService implements OnApplicationBootstrap {
     };
   }
 
-  private async tagMatchIds(
+  private async tagMatchIdsByToken(
     userId: string,
-    token: string,
+    tokens: string[],
     omitTagIds: string[],
     fuzzy: boolean,
-  ): Promise<string[]> {
-    const stems = [token];
-    if (fuzzy && token.length >= MIN_FUZZY_TOKEN_LENGTH) stems.push(token.slice(0, -1));
-    const clauses = stems
-      .map((stem) => tagNamePrefixWhere(stem, omitTagIds))
-      .filter((clause): clause is Prisma.BookmarkWhereInput => clause != null);
-    if (clauses.length === 0) return [];
-    const rows = await this.prisma.bookmark.findMany({
-      where: { userId, OR: clauses },
-      select: { id: true },
-      take: SEARCH_AND_POOL_SIZE,
+  ): Promise<string[][]> {
+    // SQLite LIKE does not fold accents. Match this user's tag names once
+    // with the same word-prefix rules used for final ranking, then recall by id.
+    const tags = await this.prisma.tag.findMany({
+      where: { userId, ...(omitTagIds.length ? { id: { notIn: omitTagIds } } : {}) },
+      select: { id: true, name: true },
     });
-    return rows.map((row) => row.id);
+    const documents = tags.map((tag) => ({
+      id: tag.id, title: tag.name, domain: "", url: "", description: null, tags: [], createdAt: "",
+    }));
+    return Promise.all(tokens.map(async (token) => {
+      const matches = createBookmarkSearchMatcher(token, { fuzzy, allowSecondary: false });
+      const ids = documents.filter(matches).map((tag) => tag.id);
+      if (ids.length === 0) return [];
+      const rows = await this.prisma.bookmark.findMany({
+        where: { userId, tags: { some: { tagId: { in: ids } } } },
+        select: { id: true },
+        take: SEARCH_AND_POOL_SIZE,
+      });
+      return rows.map((row) => row.id);
+    }));
   }
 }
 
 function uniqueIds(ids: readonly string[]): string[] {
   return [...new Set(ids)];
-}
-
-function tagNamePrefixWhere(token: string, omitTagIds: string[]): Prisma.BookmarkWhereInput | null {
-  const { startsWith, contains } = searchTokenPrefixPatterns(token);
-  if (!startsWith) return null;
-  const nameOr = [
-    { name: { startsWith } },
-    ...contains.map((needle) => ({ name: { contains: needle } })),
-  ];
-  return {
-    tags: {
-      some: {
-        ...(omitTagIds.length > 0 ? { tagId: { notIn: omitTagIds } } : {}),
-        tag: { OR: nameOr },
-      },
-    },
-  };
 }
 
 interface ArticleUndoSnapshot {

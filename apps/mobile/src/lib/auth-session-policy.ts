@@ -9,6 +9,8 @@
  * requests then come back as 401 `unauthorized` (hash miss) rather than
  * `token_expired`. Those must refresh, not sign the user out.
  */
+import { ErrorCode } from "@ordo/shared";
+
 export const ACCESS_REFRESH_LEAD_MS = 60_000;
 
 export function accessExpiresAtFromNow(expiresInSec: number, now = Date.now()): number {
@@ -34,8 +36,8 @@ export function shouldRetryRequestWithRefresh(
   opts: { auth: boolean; retried: boolean },
 ): boolean {
   if (!opts.auth || opts.retried) return false;
-  if (err.code === "token_expired") return true;
-  return err.status === 401 && err.code === "unauthorized";
+  if (err.code === ErrorCode.TOKEN_EXPIRED) return true;
+  return err.status === 401 && err.code === ErrorCode.UNAUTHORIZED;
 }
 
 /**
@@ -43,9 +45,9 @@ export function shouldRetryRequestWithRefresh(
  * a timeout, or a 5xx must not sign the user out.
  */
 export function isDefiniteRefreshRejection(err: { status: number; code: string }): boolean {
-  if (err.code === "session_revoked" || err.code === "email_not_verified") return true;
+  if (err.code === ErrorCode.SESSION_REVOKED || err.code === ErrorCode.EMAIL_NOT_VERIFIED) return true;
   if (err.status !== 401) return false;
-  return err.code === "unauthorized" || err.code === "token_expired";
+  return err.code === ErrorCode.UNAUTHORIZED || err.code === ErrorCode.TOKEN_EXPIRED;
 }
 
 /** Don't drop a newly rotated session because an in-flight request used the old access token. */
@@ -53,8 +55,8 @@ export function shouldClearSessionForError(
   err: { status: number; code: string },
   opts: { sentAccessToken?: string | null; currentAccessToken?: string | null },
 ): boolean {
-  if (err.code === "email_not_verified") return true;
-  if (err.code !== "session_revoked") return false;
+  if (err.code === ErrorCode.EMAIL_NOT_VERIFIED) return true;
+  if (err.code !== ErrorCode.SESSION_REVOKED) return false;
   if (!opts.currentAccessToken || !opts.sentAccessToken) return true;
   return opts.sentAccessToken === opts.currentAccessToken;
 }

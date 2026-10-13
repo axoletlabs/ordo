@@ -19,6 +19,7 @@ import {
   CLIENT_TYPE_MOBILE,
   DEVICE_NAME_HEADER,
   DEVICE_TYPE_HEADER,
+  ErrorCode,
   FOLDER_TOKEN_HEADER,
   FOLDER_TOKENS_HEADER,
   REFRESH_TOKEN_HEADER,
@@ -71,11 +72,11 @@ export class ApiClientError extends Error {
 
   /** True when the access token has expired and a refresh should be attempted. */
   get tokenExpired() {
-    return this.status === 401 && this.code === "token_expired";
+    return this.status === 401 && this.code === ErrorCode.TOKEN_EXPIRED;
   }
   /** True when the session is gone and the user must re-authenticate. */
   get sessionGone() {
-    return this.code === "session_revoked";
+    return this.code === ErrorCode.SESSION_REVOKED;
   }
 }
 
@@ -91,8 +92,6 @@ export interface RequestOptions<B = unknown> {
   auth?: boolean;
   /** If set (non-null), attach the cached folder unlock token for this folder (if any). */
   folderId?: string | null;
-  /** If true, attach every cached folder unlock token (global tag/search scope). */
-  folderTokens?: boolean;
   /** Extra headers merged into the request (e.g. x-folder-tokens). */
   headers?: Record<string, string>;
   /** Per-attempt timeout override in ms (large transfers). */
@@ -359,7 +358,7 @@ async function request<T>(
       if (refresh === "ok") return request<T>(path, options, true);
       noteApiFailure(err);
       if (refresh === "rejected") {
-        throw new ApiClientError(401, { code: "session_revoked", message: "Your session has ended. Please sign in again." });
+        throw new ApiClientError(401, { code: ErrorCode.SESSION_REVOKED, message: "Your session has ended. Please sign in again." });
       }
       noteUnreachable(url);
       throw new ApiClientError(0, {

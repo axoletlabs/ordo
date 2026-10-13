@@ -10,6 +10,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { LIST_PAGE_SIZE } from "../lib/list-pagination";
+import { sortTagsDefault } from "../lib/list-sort";
 import { type TagColor, type TagDto } from "@ordo/shared";
 import { tagsApi } from "../lib/api/tags";
 import { queryClient } from "../lib/query-client";
@@ -20,9 +21,7 @@ import { mapCachedBookmarks, updateBookmarkEverywhere } from "../lib/cache-helpe
 import { deleteUndoable } from "../lib/undoable-delete";
 
 function sortTags(tags: TagDto[]) {
-  return [...tags].sort(
-    (a, b) => b.bookmarkCount - a.bookmarkCount || a.name.localeCompare(b.name),
-  );
+  return sortTagsDefault(tags);
 }
 
 export function useTags() {

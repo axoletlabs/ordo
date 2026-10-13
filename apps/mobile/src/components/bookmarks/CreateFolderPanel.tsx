@@ -3,12 +3,11 @@
  * Shared by the library home header action and the save-bookmark sheet.
  */
 import React, { useState } from "react";
-import { StyleSheet, View, type TextInput } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
-import { Text } from "../ui/Text";
 import { FolderIconPicker } from "./FolderIconPicker";
 import { PanelActions } from "../ui/SheetActionRow";
 import { useCreateFolder } from "../../hooks/use-folders";
@@ -30,7 +29,7 @@ export function CreateFolderPanel({
   const [name, setName] = useState("");
   const [icon, setIcon] = useState<FolderIcon>(DEFAULT_FOLDER_ICON);
   const [error, setError] = useState("");
-  const nameRef = React.useRef<TextInput>(null);
+  const [iconOpen, setIconOpen] = useState(false);
 
   const close = () => {
     setName("");
@@ -59,15 +58,15 @@ export function CreateFolderPanel({
   return (
     <FloatingPanel
       visible={visible}
+      obscured={iconOpen}
       onDismiss={close}
-      onShow={() => setTimeout(() => nameRef.current?.focus(), 100)}
     >
       <ThemedScrollView keyboardShouldPersistTaps="handled">
         <PanelHeader title="New folder" />
         <View style={styles.body}>
           <Input
-            ref={nameRef}
             label="Name"
+            required maxLength={100} showCounter
             value={name}
             onChangeText={setName}
             placeholder="e.g. Recipes"
@@ -75,8 +74,7 @@ export function CreateFolderPanel({
             error={error || undefined}
             onSubmitEditing={submit}
           />
-          <Text variant="label" color="tertiary" style={styles.iconLabel}>Icon</Text>
-          <FolderIconPicker value={icon} onChange={setIcon} />
+          <FolderIconPicker value={icon} onChange={setIcon} onOpenChange={setIconOpen} />
         </View>
         <PanelActions
           confirmLabel="Create folder"
@@ -90,6 +88,5 @@ export function CreateFolderPanel({
 }
 
 const styles = StyleSheet.create({
-  body: {},
-  iconLabel: { marginTop: spacing[10], marginBottom: spacing[6] },
+  body: { gap: spacing[16] },
 });

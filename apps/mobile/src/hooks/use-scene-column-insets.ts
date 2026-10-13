@@ -1,73 +1,22 @@
-/**
- * Column padding for the navigation scene.
- *
- * Landscape and wide web put a side rail over the leading edge. The scene
- * is the width beside that rail. Callers used to measure the window, which
- * invents margin the scene does not have and lets a trailing cutout cover
- * the column.
- */
+/** Safe-area-aware Material content rails for full-window and embedded layouts. */
 import { useWindowDimensions } from "react-native";
-import { useSegments } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useSettingsStore } from "../store/settings";
-import {
-  SCREEN_RAIL,
-  columnContentInset,
-  sceneEdgeInsets,
-  sceneLeadingChrome,
-} from "../theme/alignment";
-import { layout, spacing } from "../theme/tokens";
-import { useResponsiveLayout } from "./use-responsive-layout";
-
-/** `scene` sits beside the rail. `window` is a full-window overlay. `parent` is already inside a padded column. */
+import { SCREEN_RAIL, columnContentInset } from "../theme/alignment";
 export type ColumnAlign = "scene" | "window" | "parent";
-
-export function navigationRailWidth(showLabels: boolean): number {
-  return showLabels ? layout.navigationRailWidth : spacing[56];
-}
-
-export function useSceneColumnInsets(alignTo: ColumnAlign = "scene") {
+export function useSceneColumnInsets(_alignTo: ColumnAlign = "scene") {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
-  const { useSideNavigation } = useResponsiveLayout();
-  const segments = useSegments();
-  const navigationStyle = useSettingsStore((s) => s.navigationStyle);
-  const showLabels = useSettingsStore((s) => s.showNavigationLabels);
-  const floating = navigationStyle !== "docked";
-  // The rail is mounted only on the authenticated app stack. Landscape auth
-  // screens must not leave a gap for a rail that is not there.
-  const railMounted = segments[0] === "(app)";
-  const respectRail = alignTo === "scene" && useSideNavigation && railMounted;
-  const lead = sceneLeadingChrome({
-    sideNavigation: respectRail,
-    floating,
-    railWidth: navigationRailWidth(showLabels),
-    safeLeading: insets.left,
-  });
-  const sceneWidth = Math.max(0, width - lead);
-  const edges = sceneEdgeInsets(respectRail, insets.left, insets.right);
-
   return {
-    sceneWidth,
-    lead,
-    leading(maxWidth: number) {
-      return columnContentInset(edges.leading, sceneWidth, maxWidth);
-    },
-    trailing(maxWidth: number) {
-      return columnContentInset(edges.trailing, sceneWidth, maxWidth);
-    },
+    sceneWidth: width, lead: 0,
+    leading(maxWidth: number) { return columnContentInset(insets.left, width, maxWidth); },
+    trailing(maxWidth: number) { return columnContentInset(insets.right, width, maxWidth); },
   };
 }
-
 export function useColumnPadding(maxWidth: number, alignTo: ColumnAlign = "scene") {
   const scene = useSceneColumnInsets(alignTo);
-  if (alignTo === "parent") {
-    return { left: SCREEN_RAIL, right: SCREEN_RAIL, sceneWidth: scene.sceneWidth, lead: scene.lead };
-  }
   return {
-    left: scene.leading(maxWidth),
-    right: scene.trailing(maxWidth),
-    sceneWidth: scene.sceneWidth,
-    lead: scene.lead,
+    left: alignTo === "parent" ? SCREEN_RAIL : scene.leading(maxWidth),
+    right: alignTo === "parent" ? SCREEN_RAIL : scene.trailing(maxWidth),
+    sceneWidth: scene.sceneWidth, lead: 0,
   };
 }

@@ -59,9 +59,9 @@ test("normalizeReleaseSpec accepts latest and tags", () => {
   assert.deepEqual(normalizeReleaseSpec("latest", { pre: true }), { kind: "latest", pre: true });
   assert.deepEqual(normalizeReleaseSpec("latest-pre"), { kind: "latest", pre: true });
   assert.deepEqual(normalizeReleaseSpec("0.1.0"), { kind: "tag", tag: "v0.1.0", pre: false });
-  assert.deepEqual(normalizeReleaseSpec("v0.2.0-beta.1"), {
+  assert.deepEqual(normalizeReleaseSpec("v0.2.0-preview.1"), {
     kind: "tag",
-    tag: "v0.2.0-beta.1",
+    tag: "v0.2.0-preview.1",
     pre: false,
   });
   assert.throws(() => normalizeReleaseSpec("main"), /--release/);
@@ -69,13 +69,13 @@ test("normalizeReleaseSpec accepts latest and tags", () => {
 
 test("selectRelease prefers the newest stable release", () => {
   const catalog = [
-    release("v0.2.0-beta.1", { prerelease: true, published_at: "2026-09-20T00:00:00Z" }),
+    release("v0.2.0-preview.1", { prerelease: true, published_at: "2026-09-20T00:00:00Z" }),
     release("v0.1.1", { published_at: "2026-09-02T00:00:00Z" }),
     release("v0.1.0", { published_at: "2026-08-01T00:00:00Z" }),
     release("v0.0.9", { draft: true, published_at: "2026-09-21T00:00:00Z" }),
   ];
   assert.equal(selectRelease(catalog, { kind: "latest", pre: false }).tag_name, "v0.1.1");
-  assert.equal(selectRelease(catalog, { kind: "latest", pre: true }).tag_name, "v0.2.0-beta.1");
+  assert.equal(selectRelease(catalog, { kind: "latest", pre: true }).tag_name, "v0.2.0-preview.1");
   assert.equal(selectRelease(catalog, { kind: "tag", tag: "v0.1.0" }).tag_name, "v0.1.0");
   assert.throws(() => selectRelease(catalog, { kind: "tag", tag: "v9.9.9" }), /not found/);
   assert.throws(
@@ -88,19 +88,19 @@ test("release ordering is semver-based and suffix-only prereleases stay hidden",
   const catalog = [
     release("v0.1.9", { published_at: "2026-09-30T00:00:00Z" }),
     release("v0.2.0", { published_at: "2026-09-01T00:00:00Z" }),
-    release("v0.3.0-beta.1", { prerelease: false }),
+    release("v0.3.0-preview.1", { prerelease: false }),
     release("dev"),
   ];
   assert.equal(selectRelease(catalog, { kind: "latest", pre: false }).tag_name, "v0.2.0");
-  assert.equal(selectRelease(catalog, { kind: "latest", pre: true }).tag_name, "v0.3.0-beta.1");
+  assert.equal(selectRelease(catalog, { kind: "latest", pre: true }).tag_name, "v0.3.0-preview.1");
   assert.equal(visibleReleases(catalog).length, 2);
-  assert.equal(chooseListedRelease(catalog, "latest-pre").tag_name, "v0.3.0-beta.1");
+  assert.equal(chooseListedRelease(catalog, "latest-pre").tag_name, "v0.3.0-preview.1");
   assert.equal(pickServerAsset(release("v0.2.0", { assets: [{ name: "ordo-server-v0.1.0.tar.gz", browser_download_url: "https://example.test/wrong.tar.gz" }] })), null);
 });
 
 test("the menu numbers stable releases and can select one", () => {
   const catalog = [
-    release("v0.2.0-rc.1", { prerelease: true, published_at: "2026-09-03T00:00:00Z" }),
+    release("v0.2.0-preview.1", { prerelease: true, published_at: "2026-09-03T00:00:00Z" }),
     release("v0.1.0", { published_at: "2026-09-01T00:00:00Z" }),
   ];
   const menu = formatReleaseMenu(catalog, { installedTag: "v0.1.0" });
@@ -109,12 +109,12 @@ test("the menu numbers stable releases and can select one", () => {
   assert.match(menu, /1 pre-release hidden/);
   assert.equal(chooseListedRelease(catalog, "", {}).tag_name, "v0.1.0");
   assert.equal(chooseListedRelease(catalog, "1", {}).tag_name, "v0.1.0");
-  assert.equal(chooseListedRelease(catalog, "v0.2.0-rc.1", {}).tag_name, "v0.2.0-rc.1");
+  assert.equal(chooseListedRelease(catalog, "v0.2.0-preview.1", {}).tag_name, "v0.2.0-preview.1");
   assert.throws(() => chooseListedRelease(catalog, "v9.9.9", {}), (error) => {
     assert.equal(error.fetchTag, "v9.9.9");
     return true;
   });
-  assert.equal(chooseListedRelease(catalog, "1", { pre: true }).tag_name, "v0.2.0-rc.1");
+  assert.equal(chooseListedRelease(catalog, "1", { pre: true }).tag_name, "v0.2.0-preview.1");
 });
 
 test("an official archive is preferred over checking out the tag", () => {
@@ -138,6 +138,7 @@ test("an official archive is preferred over checking out the tag", () => {
 test("preserved paths are the live database, secrets, and avatars", () => {
   assert.equal(isPreserved("apps/server/.env"), true);
   assert.equal(isPreserved("apps/server/.ordo-secret"), true);
+  assert.equal(isPreserved("apps/server/setup.log"), true);
   assert.equal(isPreserved("apps/server/prisma/ordo.db"), true);
   assert.equal(isPreserved("apps/server/prisma/ordo.db.bak-2026"), true);
   assert.equal(isPreserved("apps/server/prisma/ordo-avatars/user.webp"), true);

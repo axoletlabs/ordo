@@ -3,10 +3,9 @@
  */
 import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { normalizeFolderIcon } from "@ordo/shared";
 import { authApi } from "../lib/api/auth";
 import { serverApi } from "../lib/api/server";
-import { foldersApi } from "../lib/api/folders";
+import { fetchFoldersNormalized } from "../lib/api/folders";
 import { qk } from "../lib/api/query-keys";
 import { PERSISTED_QUERY_GC_TIME_MS } from "../lib/query-persist";
 import { useAuthStore } from "../store/auth";
@@ -23,15 +22,6 @@ export function useServerInfo() {
     staleTime: 60_000,
     retry: 1,
     networkMode: "always",
-  });
-}
-
-/** Current user. Enabled only when authenticated. */
-export function useMe() {
-  return useQuery({
-    queryKey: qk.me,
-    queryFn: () => authApi.me(),
-    enabled: false, // invoked manually on bootstrap; see useValidateSession
   });
 }
 
@@ -68,14 +58,7 @@ export function useSessions() {
 export function useFolders() {
   return useQuery({
     queryKey: qk.folders,
-    queryFn: async () => {
-      const folders = await foldersApi.list();
-      return folders.map((folder) => ({
-        ...folder,
-        icon: normalizeFolderIcon(folder.icon),
-        pinned: folder.pinned ?? false,
-      }));
-    },
+    queryFn: fetchFoldersNormalized,
     staleTime: 30_000,
     gcTime: PERSISTED_QUERY_GC_TIME_MS,
   });

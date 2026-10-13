@@ -33,8 +33,8 @@ test("a centered column does not pad for a cutout it already clears", () => {
 
 test("list rows share one well, one glyph, and one inset", () => {
   assert.equal(ROW_INSET, SCREEN_RAIL);
-  assert.equal(ROW_ICON_FRAME, 36);
-  assert.equal(ROW_ICON_GLYPH, 18);
+  assert.equal(ROW_ICON_FRAME, 40);
+  assert.equal(ROW_ICON_GLYPH, 24);
 });
 
 test("a side rail narrows the scene and clears the leading cutout", () => {

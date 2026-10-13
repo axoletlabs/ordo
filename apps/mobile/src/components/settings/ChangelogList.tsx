@@ -2,15 +2,16 @@
  * One release at a time, in a panel. Version chips along the bottom swap
  * the notes. The opening paragraph leads; commands sit in a recessed line.
  */
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Image, Linking, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Image, Linking, ScrollView, StyleSheet, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { Text, type TextColor } from "../ui/Text";
 import { PressableScale } from "../ui/PressableScale";
 import { Button } from "../ui/Button";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
+import { PanelActions } from "../ui/SheetActionRow";
+import { IconButton } from "../ui/IconButton";
 import { Spinner } from "../ui/Spinner";
 import { toast } from "../ui/toast-store";
 import {
@@ -30,12 +31,12 @@ import { useBuildInfo } from "../../hooks/use-build-info";
 import { useNativeUpdateStore } from "../../store/native-update";
 import { useTheme } from "../../theme/ThemeProvider";
 import { AppIcon } from "../ui/PinIcon";
-import { layout, radius, resolveFont, spacing } from "../../theme/tokens";
+import { radius, resolveFont, spacing } from "../../theme/tokens";
 
 const MARK_LABEL: Record<ChangelogMark, string> = {
   installed: "Installed",
   available: "Available",
-  early: "Early access",
+  early: "Preview",
 };
 
 type Piece =
@@ -100,13 +101,11 @@ function failureMessage(status: number | null): string {
 
 function MarkChip({ mark }: { mark: ChangelogMark }) {
   const { palette } = useTheme();
-  // Old-design soft tints, matching the OtpInput status rgba pattern.
-  const blueSoft = palette.mode === "dark" ? "rgba(125,174,163,0.16)" : "rgba(79,125,166,0.12)";
   const tone =
     mark === "installed"
-      ? { bg: palette.accentSoft, fg: palette.accent }
+      ? { bg: palette.primaryContainer, fg: palette.onPrimaryContainer }
       : mark === "available"
-        ? { bg: blueSoft, fg: palette.blue }
+        ? { bg: palette.secondaryContainer, fg: palette.onSecondaryContainer }
         : { bg: palette.surfaceSecondary, fg: palette.textSecondary };
 
   return (
@@ -137,14 +136,11 @@ function CommandLine({ text }: { text: string }) {
 
   return (
     <View style={[styles.command, { backgroundColor: palette.background, borderColor: palette.border }]}>
-      <Text variant="mono" color="primary" selectable style={styles.commandText}>
-        {text}
-      </Text>
-      <PressableScale
-        accessibilityRole="button"
+      <ScrollView horizontal style={{ flex: 1, minWidth: 0 }} contentContainerStyle={{ paddingVertical: spacing[12], paddingRight: spacing[8] }}>
+        <Text variant="bodyMedium" color="primary" selectable style={styles.codeText}>{text}</Text>
+      </ScrollView>
+      <IconButton variant="standard" name={copied ? "checkmark" : "copy-outline"}
         accessibilityLabel={copied ? "Copied" : "Copy command"}
-        scaleTo={0.92}
-        hitSlop={6}
         onPress={() => {
           haptics.light();
           void Clipboard.setStringAsync(text).then(() => {
@@ -152,16 +148,10 @@ function CommandLine({ text }: { text: string }) {
             toast.success("Copied");
             if (copiedTimer.current) clearTimeout(copiedTimer.current);
             copiedTimer.current = setTimeout(() => setCopied(false), 1600);
-          });
+           }).catch(() => toast.error("Couldn't copy the command."));
         }}
-        style={styles.copy}
-      >
-        <AppIcon
-          name={copied ? "checkmark" : "copy-outline"}
-          size={18}
-          color={copied ? palette.accent : palette.textTertiary}
-        />
-      </PressableScale>
+        color={copied ? palette.primary : palette.onSurfaceVariant}
+      />
     </View>
   );
 }
@@ -265,7 +255,14 @@ function InlineRun({ inlines, variant }: { inlines: ChangelogInline[]; variant: 
 
 function NoteImage({ alt, href }: { alt: string; href: string }) {
   const [failed, setFailed] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState(16 / 9);
   const { palette } = useTheme();
+  useEffect(() => {
+    let active = true;
+    setFailed(false);
+    Image.getSize(href, (width, height) => { if (active && width > 0 && height > 0) setAspectRatio(width / height); }, () => {});
+    return () => { active = false; };
+  }, [href]);
   if (failed) {
     return (
       <Text variant="footnote" color="tertiary">
@@ -279,7 +276,7 @@ function NoteImage({ alt, href }: { alt: string; href: string }) {
       accessibilityLabel={alt || "Image"}
       resizeMode="contain"
       onError={() => setFailed(true)}
-      style={[styles.image, { backgroundColor: palette.background, borderColor: palette.border }]}
+      style={[styles.image, { aspectRatio, backgroundColor: palette.surfaceContainerLowest }]}
     />
   );
 }
@@ -402,15 +399,12 @@ function CodeBlock({ text, lang }: { text: string; lang: string }) {
             {lang}
           </Text>
         ) : null}
-        <Text variant="mono" color="primary" selectable>
-          {text}
-        </Text>
+        <ScrollView horizontal contentContainerStyle={{ paddingVertical: spacing[8], paddingRight: spacing[8] }}>
+          <Text variant="bodyMedium" color="primary" selectable style={styles.codeText}>{text}</Text>
+        </ScrollView>
       </View>
-      <PressableScale
-        accessibilityRole="button"
+      <IconButton variant="standard" name={copied ? "checkmark" : "copy-outline"}
         accessibilityLabel={copied ? "Copied" : "Copy code"}
-        scaleTo={0.92}
-        hitSlop={6}
         onPress={() => {
           haptics.light();
           void Clipboard.setStringAsync(text).then(() => {
@@ -418,16 +412,11 @@ function CodeBlock({ text, lang }: { text: string; lang: string }) {
             toast.success("Copied");
             if (copiedTimer.current) clearTimeout(copiedTimer.current);
             copiedTimer.current = setTimeout(() => setCopied(false), 1600);
-          });
+           }).catch(() => toast.error("Couldn't copy the code."));
         }}
-        style={styles.copy}
-      >
-        <AppIcon
-          name={copied ? "checkmark" : "copy-outline"}
-          size={18}
-          color={copied ? palette.accent : palette.textTertiary}
-        />
-      </PressableScale>
+        color={copied ? palette.primary : palette.onSurfaceVariant}
+        style={{ alignSelf: "flex-start", marginTop: spacing[4] }}
+      />
     </View>
   );
 }
@@ -496,7 +485,7 @@ function VersionPill({
   onPress: () => void;
 }) {
   const { palette } = useTheme();
-  const fg = selected ? palette.accent : palette.text;
+  const fg = selected ? palette.onPrimaryContainer : palette.onSurface;
   return (
     <PressableScale
       accessibilityRole="button"
@@ -511,7 +500,7 @@ function VersionPill({
         },
       ]}
     >
-      {marked ? <View style={[styles.dot, { backgroundColor: palette.accent }]} /> : null}
+      {marked ? <View style={[styles.dot, { backgroundColor: selected ? fg : palette.primary }]} /> : null}
       <Text variant="label" style={{ color: fg }}>
         {label}
       </Text>
@@ -523,16 +512,15 @@ function ReleaseBody({
   release,
   currentVersion,
   availableVersion,
-  notesMaxHeight,
 }: {
   release: ChangelogRelease;
   currentVersion: string;
   availableVersion: string | null;
-  notesMaxHeight: number;
 }) {
   const mark = changelogMark(release, currentVersion, availableVersion);
   const date = releaseDate(release.publishedAt);
   const { palette } = useTheme();
+  const blocks = useMemo(() => parseChangelogBody(release.body), [release.body]);
 
   return (
     <>
@@ -545,14 +533,12 @@ function ReleaseBody({
         subtitle={date || undefined}
         accessory={mark ? <MarkChip mark={mark} /> : undefined}
       />
-      <ScrollView
+      <View
         key={release.tagName}
-        style={[styles.notesScroll, { maxHeight: notesMaxHeight }]}
-        contentContainerStyle={styles.notesContent}
-        showsVerticalScrollIndicator={false}
+        style={styles.notesContent}
       >
-        <Notes blocks={parseChangelogBody(release.body)} />
-      </ScrollView>
+        <Notes blocks={blocks} />
+      </View>
     </>
   );
 }
@@ -565,8 +551,6 @@ function ChangelogSheetBody({
   onDismiss: () => void;
 }) {
   const { palette } = useTheme();
-  const { height } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
   const build = useBuildInfo();
   const changelog = useChangelog();
   const availableVersion = useNativeUpdateStore((state) => state.release?.version ?? null);
@@ -576,9 +560,6 @@ function ChangelogSheetBody({
   const selected =
     releases?.find((release) => release.tagName === tag) ?? releases?.[0] ?? null;
 
-  const panelInner =
-    height - insets.top - insets.bottom - spacing[48] - layout.overlayPadding * 2;
-  const notesMaxHeight = Math.max(160, Math.min(440, panelInner - 250));
 
   let body: ReactNode;
   if (releases == null) {
@@ -615,7 +596,6 @@ function ChangelogSheetBody({
           release={selected}
           currentVersion={build.version}
           availableVersion={availableVersion}
-          notesMaxHeight={notesMaxHeight}
         />
         {releases.length > 1 ? (
           <View style={styles.versions}>
@@ -652,7 +632,7 @@ function ChangelogSheetBody({
   return (
     <FloatingPanel visible={visible} onDismiss={onDismiss} maxWidth={480}>
       {body}
-      <Button label="Done" block size="lg" onPress={onDismiss} style={styles.done} />
+      <PanelActions confirmLabel="Done" onConfirm={onDismiss} />
     </FloatingPanel>
   );
 }
@@ -678,31 +658,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  notesScroll: { flexGrow: 0, overflow: "hidden" },
   notesContent: { paddingBottom: spacing[4] },
   notes: { gap: spacing[12] },
   prose: { gap: spacing[10] },
   command: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     borderRadius: radius.sm,
     borderWidth: StyleSheet.hairlineWidth,
     paddingLeft: spacing[12],
     paddingVertical: spacing[4],
   },
-  commandText: {
-    flex: 1,
-    minWidth: 0,
-    paddingVertical: spacing[8],
-    lineHeight: 20,
-  },
-  copy: {
-    width: 40,
-    height: 40,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
+  codeText: { fontFamily: resolveFont("mono", "400"), lineHeight: 20, letterSpacing: 0 },
   chip: {
     borderRadius: radius.full,
     borderWidth: StyleSheet.hairlineWidth,
@@ -725,7 +692,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[6],
-    minHeight: 32,
+    minHeight: 48,
     paddingHorizontal: spacing[10],
     borderRadius: radius.full,
     borderWidth: StyleSheet.hairlineWidth,
@@ -757,7 +724,6 @@ const styles = StyleSheet.create({
   },
   image: {
     width: "100%",
-    height: 180,
     borderRadius: radius.sm,
   },
   nestedList: { marginTop: spacing[8] },
@@ -768,5 +734,4 @@ const styles = StyleSheet.create({
     gap: spacing[4],
   },
   dot: { width: 6, height: 6, borderRadius: radius.full },
-  done: { marginTop: spacing[16] },
 });

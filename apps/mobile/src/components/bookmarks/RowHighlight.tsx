@@ -1,32 +1,40 @@
 /**
- * Inset squircle behind a library row for hover, the open row, and multi-select.
- * A full-bleed rectangle reads as a hard slab; the curve stays visible against
- * the page because the fill is inset from the row edges.
+ * Full-bleed feedback behind a library row: the tonal surface, the selection
+ * tone and the hover/press state layer. In Expressive mode the surface's
+ * corners lift under the pointer (see useRowLift) — the row container stops
+ * clipping so the morph is visible; in Standard mode everything is static.
  */
 import React from "react";
-import { StyleSheet, View } from "react-native";
-import { radius, spacing } from "../../theme/tokens";
+import { Animated, StyleSheet } from "react-native";
+import { useTheme } from "../../theme/ThemeProvider";
+import { alphaTint } from "../../theme/state-layer";
+import { useMaterialMotion } from "../../theme/material-motion";
+import { rowCornerStyle, useRowLift, type CornerRadii } from "../../theme/row-shape";
+import { useStateVisibility } from "../ui/StateLayer";
 
-export function RowHighlight({ color }: { color: string }) {
-  if (color === "transparent") return null;
-  return (
-    <View
-      pointerEvents="none"
-      style={[
-        styles.fill,
-        { backgroundColor: color },
-      ]}
-    />
-  );
+export function RowHighlight({ rest, expressive, hovered, pressed, selected, hoverRadius, pressRadius }: {
+  rest?: CornerRadii; expressive: boolean; hovered: boolean; pressed: boolean; selected: boolean;
+  hoverRadius?: number; pressRadius?: number;
+}) {
+  const { palette } = useTheme();
+  const { reducedMotion } = useMaterialMotion();
+  // Opacity shares each view's graph with the JS-driven corner morph. Keep
+  // both on JS, even in Standard mode, so toggling Expressive stays safe.
+  const selection = useStateVisibility(selected, false);
+  const feedback = useStateVisibility(pressed || hovered, false);
+  const lift = useRowLift({ expressive, hovered, pressed, selected, hoverRadius, pressRadius, reducedMotion });
+  const morph = expressive && rest ? rowCornerStyle(lift, rest) : null;
+  // Static rest corners under the interpolations: before the first animation
+  // frame RN-web has not written the dynamic style yet, and the surface must
+  // still render its group silhouette.
+  const restStyle = rest ? { ...rest } : null;
+  return <>
+    {expressive && rest ? <Animated.View testID="material-row-surface" pointerEvents="none" accessible={false}
+      style={[StyleSheet.absoluteFill, restStyle, morph, { backgroundColor: palette.surfaceContainerLow }]} /> : null}
+    <Animated.View testID="material-row-selection" pointerEvents="none" accessible={false}
+      style={[StyleSheet.absoluteFill, restStyle, morph, { backgroundColor: palette.secondaryContainer, opacity: selection }]} />
+    <Animated.View testID="material-row-state-layer" pointerEvents="none" accessible={false}
+      style={[StyleSheet.absoluteFill, restStyle, morph, { backgroundColor: alphaTint(palette.onSurface, pressed ? 0.1 : 0.08), opacity: feedback }]} />
+  </>
+  ;
 }
-
-const styles = StyleSheet.create({
-  fill: {
-    position: "absolute",
-    left: spacing[8],
-    right: spacing[8],
-    top: spacing[4],
-    bottom: spacing[4],
-    borderRadius: radius.sm,
-  },
-});

@@ -1,6 +1,5 @@
 /**
- * Branded pull-to-refresh chip for the in-app website. Lists use a themed
- * native RefreshControl so scrolling and the overlay scrollbar stay intact.
+ * Shared Material pull-to-refresh chip for lists and the in-app website.
  */
 import React, { useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
@@ -14,7 +13,8 @@ import Animated, {
 } from "react-native-reanimated";
 import { PTR_MAX_FOLLOW, PTR_THRESHOLD } from "../../lib/pull-refresh";
 import { useTheme } from "../../theme/ThemeProvider";
-import { springs, spacing, timing } from "../../theme/tokens";
+import { spacing, timing } from "../../theme/tokens";
+import { useMaterialMotion } from "../../theme/material-motion";
 import { ReloadSpinner } from "./Spinner";
 
 export function RefreshHud({
@@ -25,6 +25,7 @@ export function RefreshHud({
   refreshing: boolean;
 }) {
   const { palette } = useTheme();
+  const motion = useMaterialMotion();
   const pull = useSharedValue(0);
   const refreshingSv = useSharedValue(refreshing);
   const [mounted, setMounted] = useState(dy > 0 || refreshing);
@@ -37,16 +38,16 @@ export function RefreshHud({
     if (refreshing || dy > 0) {
       setMounted(true);
       if (refreshing) {
-        pull.value = withSpring(PTR_THRESHOLD, springs.snappy);
+        pull.value = motion.reducedMotion ? PTR_THRESHOLD : withSpring(PTR_THRESHOLD, motion.fast);
       } else {
         pull.value = dy;
       }
       return;
     }
-    pull.value = withTiming(0, { duration: timing.normal, easing: Easing.out(Easing.cubic) }, (finished) => {
+    pull.value = withTiming(0, { duration: motion.reducedMotion ? 0 : timing.normal, easing: Easing.out(Easing.cubic) }, (finished) => {
       if (finished) runOnJS(setMounted)(false);
     });
-  }, [dy, pull, refreshing]);
+  }, [dy, pull, refreshing, motion.fast, motion.reducedMotion]);
 
   const hudStyle = useAnimatedStyle(() => {
     const raw = Math.max(0, pull.value);
@@ -58,7 +59,8 @@ export function RefreshHud({
     const rotate = refreshingSv.value ? 0 : progress * 270;
     return {
       opacity: Math.min(1, progress / 0.32),
-      transform: [{ translateY }, { scale: 0.4 + progress * 0.6 }, { rotate: `${rotate}deg` }],
+      transform: [{ translateY: motion.reducedMotion ? PTR_THRESHOLD * 0.55 : translateY },
+        { scale: motion.reducedMotion ? 1 : 0.4 + progress * 0.6 }, { rotate: `${motion.reducedMotion ? 0 : rotate}deg` }],
     };
   });
 
@@ -73,9 +75,9 @@ export function RefreshHud({
     >
       <ReloadSpinner
         spinning={refreshing}
-        color={palette.accent}
-        backgroundColor={palette.surfaceElevated}
-        borderColor={palette.borderStrong}
+        color={palette.primary}
+        backgroundColor={palette.surfaceContainerHigh}
+        borderColor={palette.outlineVariant}
       />
     </Animated.View>
   );

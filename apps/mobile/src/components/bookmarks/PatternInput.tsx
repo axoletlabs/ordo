@@ -15,6 +15,10 @@ import Svg, { Line } from "react-native-svg";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
 import { radius } from "../../theme/tokens";
+import { PressableScale } from "../ui/PressableScale";
+import { Button } from "../ui/Button";
+import { Text } from "../ui/Text";
+import { appendPatternNode } from "../../lib/pattern-input";
 
 const NODES = 9;
 const COLS = 3;
@@ -34,32 +38,6 @@ function nodeCenter(index: number): { x: number; y: number } {
 }
 
 const CENTERS = Array.from({ length: NODES }, (_, i) => nodeCenter(i));
-
-function gcd(a: number, b: number): number {
-  let x = Math.abs(a);
-  let y = Math.abs(b);
-  while (y) {
-    const t = y;
-    y = x % y;
-    x = t;
-  }
-  return x || 1;
-}
-
-/** Dots that lie on the grid line between two nodes (Android skip-fill). */
-function intermediates(from: number, to: number): number[] {
-  const fr = Math.floor(from / COLS);
-  const fc = from % COLS;
-  const tr = Math.floor(to / COLS);
-  const tc = to % COLS;
-  const steps = gcd(tr - fr, tc - fc);
-  if (steps <= 1) return [];
-  const out: number[] = [];
-  for (let i = 1; i < steps; i++) {
-    out.push(Math.round((fr + ((tr - fr) / steps) * i) * COLS + (fc + ((tc - fc) / steps) * i)));
-  }
-  return out;
-}
 
 function hitIndex(x: number, y: number, used: ReadonlySet<number>): number | null {
   const r2 = HIT_RADIUS * HIT_RADIUS;
@@ -109,6 +87,7 @@ export function PatternInput({
   disabled?: boolean;
 }) {
   const { palette } = useTheme();
+  const [buttonEntry, setButtonEntry] = useState(false);
   const [stroke, setStroke] = useState<number[] | null>(null);
   const [finger, setFinger] = useState<{ x: number; y: number } | null>(null);
   const boardRef = useRef<View>(null);
@@ -140,13 +119,7 @@ export function PatternInput({
   const addNode = (node: number) => {
     const current = strokeRef.current;
     if (current.includes(node)) return;
-    const next = [...current];
-    if (next.length > 0) {
-      for (const mid of intermediates(next[next.length - 1], node)) {
-        if (!next.includes(mid)) next.push(mid);
-      }
-    }
-    next.push(node);
+    const next = appendPatternNode(current, node);
     strokeRef.current = next;
     setStroke(next);
     onChangeRef.current(next);
@@ -216,6 +189,25 @@ export function PatternInput({
 
   const last = shown.length > 0 ? CENTERS[shown[shown.length - 1]] : null;
 
+  if (buttonEntry) return <View style={{ gap: 8 }}>
+    <Text variant="bodyMedium">Choose dots in order. Dots between two choices are added automatically.</Text>
+    <View accessibilityLabel="Pattern dots" style={{ flexDirection: "row", flexWrap: "wrap", width: 240, alignSelf: "center", gap: 8 }}>
+      {CENTERS.map((_, node) => <PressableScale key={node} accessibilityRole="button"
+        accessibilityLabel={`Dot ${node + 1}, row ${Math.floor(node / 3) + 1}, column ${node % 3 + 1}`}
+        accessibilityState={{ disabled: disabled || value.includes(node) }} disabled={disabled || value.includes(node)}
+        style={{ width: 72, height: 72, borderRadius: radius.full, alignItems: "center", justifyContent: "center", backgroundColor: value.includes(node) ? palette.secondaryContainer : palette.surfaceContainerHigh }}
+        onPress={() => { strokeRef.current = value; addNode(node); setStroke(null); }}>
+        <Text variant="titleLarge" style={{ color: value.includes(node) ? palette.onSecondaryContainer : palette.onSurface }}>{node + 1}</Text>
+      </PressableScale>)}
+    </View>
+    <Text variant="bodySmall" accessibilityLiveRegion="polite">{value.length} dots selected</Text>
+    <Button label="Clear pattern" variant="ghost" disabled={disabled || !value.length}
+      onPress={() => { strokeRef.current = []; setStroke(null); onChange([]); }} />
+    <Button label="Submit pattern" disabled={disabled || !value.length}
+      onPress={() => { strokeRef.current = value; finishStroke(); }} />
+    <Button label="Draw pattern instead" variant="ghost" disabled={disabled} onPress={() => setButtonEntry(false)} />
+  </View>;
+
   const webPointerProps =
     Platform.OS === "web"
       ? ({
@@ -235,7 +227,7 @@ export function PatternInput({
         } as object)
       : null;
 
-  return (
+   return (<View style={{ gap: 8 }}>
     <View
       ref={boardRef}
       collapsable={false}
@@ -303,6 +295,8 @@ export function PatternInput({
           </View>
         );
       })}
+    </View>
+    <Button label="Use buttons to enter pattern" variant="ghost" disabled={disabled} onPress={() => { setStroke(null); setFinger(null); setButtonEntry(true); }} />
     </View>
   );
 }

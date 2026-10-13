@@ -26,7 +26,6 @@ import {
   BROWSER_PTR_THRESHOLD,
   browserBlankCoverVisible,
   browserInjectedJavaScript,
-  browserProgressBarWidth,
   parseBrowserPtrMessage,
   shouldCommitBrowserPtr,
   webViewRequestAction,
@@ -37,11 +36,12 @@ import { haptics } from "../../lib/haptics";
 import { WEBSITE_FORCE_DARK_SCRIPT } from "../../lib/website-force-dark";
 import { useSettingsStore } from "../../store/settings";
 import { useTheme } from "../../theme/ThemeProvider";
-import { resolvePalette } from "../../theme/theme";
+import { currentAppPalette } from "../../theme/current-app-palette";
 import { spacing } from "../../theme/tokens";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 import { RefreshHud } from "../ui/RefreshHud";
+import { LinearProgress } from "../ui/LinearProgress";
 
 export interface BookmarkBrowserProps {
   url: string;
@@ -60,7 +60,6 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
   function BookmarkBrowser({ url, active = true, onPageHost }, ref) {
     const { palette } = useTheme();
     const forceWebsiteDark = useSettingsStore((s) => s.forceWebsiteDark);
-    const amoled = useSettingsStore((s) => s.amoled);
     const webRef = useRef<WebView>(null);
     const canGoBackRef = useRef(false);
     const ptrDyRef = useRef(0);
@@ -73,7 +72,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     const [ptrDy, setPtrDy] = useState(0);
     const source = useMemo(() => ({ uri: url }), [url]);
     const chromeBackground = forceWebsiteDark
-      ? resolvePalette("dark", amoled, "dark").background
+      ? currentAppPalette("dark").background
       : palette.background;
     const injected = useMemo(
       () =>
@@ -83,7 +82,6 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
         ),
       [forceWebsiteDark, chromeBackground],
     );
-    const barWidth = browserProgressBarWidth(progress, loading && !error);
     const coverBlank = browserBlankCoverVisible(loading, progress, !!error);
 
     const finishLoad = useCallback(() => {
@@ -139,7 +137,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     }, [url, forceWebsiteDark, beginLoad]);
 
     useEffect(() => {
-      if (!active) return;
+      if (!active || Platform.OS !== "android") return;
       const sub = BackHandler.addEventListener("hardwareBackPress", () => {
         if (!canGoBackRef.current) return false;
         webRef.current?.goBack();
@@ -246,7 +244,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     }, []);
 
     return (
-      <View collapsable={false} style={[styles.wrap, { backgroundColor: chromeBackground }]}>
+      <View testID="bookmark-browser" collapsable={false} style={[styles.wrap, { backgroundColor: chromeBackground }]}>
         <WebView
           ref={webRef}
           key={`${url}:${forceWebsiteDark ? "dark" : "auto"}`}
@@ -287,6 +285,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           mediaPlaybackRequiresUserAction={false}
           automaticallyAdjustContentInsets={false}
           contentInsetAdjustmentBehavior="never"
+          contentInset={{ top: 0, left: 0, bottom: 0, right: 0 }}
           hideKeyboardAccessoryView
           showsHorizontalScrollIndicator={false}
           originWhitelist={["http://*", "https://*", "about:blank"]}
@@ -302,20 +301,12 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           />
         ) : null}
         <RefreshHud dy={ptrDy} refreshing={refreshing} />
-        {barWidth > 0 ? (
+        {loading && !error ? (
           <View
             pointerEvents="none"
             style={styles.progressTrack}
-            accessibilityRole="progressbar"
-            accessibilityLabel="Page load"
-            accessibilityValue={{ min: 0, max: 100, now: Math.round(barWidth * 100) }}
           >
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${barWidth * 100}%`, backgroundColor: palette.accent },
-              ]}
-            />
+            <LinearProgress label="Page load" value={progress > 0 ? progress : undefined} />
           </View>
         ) : null}
         {error ? (
@@ -334,18 +325,17 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
 );
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1 },
-  web: { flex: 1, ...(Platform.OS === "web" ? ({ height: "100%" } as const) : null) },
+  wrap: { flex: 1, minHeight: 0, overflow: "hidden" },
+  web: { flex: 1, margin: 0, padding: 0, ...(Platform.OS === "web" ? ({ height: "100%" } as const) : null) },
   blankCover: { ...StyleSheet.absoluteFill },
   progressTrack: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    height: 2,
+    height: 4,
     overflow: "hidden",
   },
-  progressFill: { height: 2, alignSelf: "flex-start" },
   error: {
     ...StyleSheet.absoluteFill,
     alignItems: "center",

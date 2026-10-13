@@ -120,11 +120,11 @@ export function shouldFlushTelemetry(input: {
 }
 
 /**
- * Stable production builds only. Dev sessions and any channel other than
- * `production` (preview, development) never ping or store counters.
+ * Stable builds only. Dev sessions and any channel other than
+ * `stable` (preview, development) never ping or store counters.
  */
 export function telemetryEnabled(dev: boolean, channel: string | null): boolean {
-  return !dev && channel === "production";
+  return !dev && channel === "stable";
 }
 
 export function needsTelemetryRegistration(savedRevision: number | undefined, revision: number): boolean {

@@ -79,6 +79,11 @@ export class RateLimitInterceptor implements NestInterceptor {
         if (userId) this.rateLimit.consumeExport(userId);
         return;
       }
+      case "password-confirm": {
+        const userId = req.user?.userId;
+        if (userId) this.rateLimit.consumePasswordConfirm(userId);
+        return;
+      }
     }
   }
 }

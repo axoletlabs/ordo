@@ -1,6 +1,7 @@
 import { BackHandler, Platform, ToastAndroid } from "react-native";
 import { bookmarksApi } from "./api/bookmarks";
 import { insertCreatedBookmark } from "./cache-helpers";
+import { qk } from "./api/query-keys";
 import { queryClient } from "./query-client";
 import { moveAppToBackground } from "./share-targets";
 
@@ -21,6 +22,8 @@ export function returnToShareSender(message?: string): void {
 export async function saveUnfiledBookmark(url: string): Promise<void> {
   const bookmark = await bookmarksApi.create(url, null);
   insertCreatedBookmark(queryClient, bookmark);
+  // Wake the extraction poller so the pending row reconciles without a refresh.
+  void queryClient.invalidateQueries({ queryKey: qk.extractionProgress });
   if (bookmark.tags.length > 0) {
     void queryClient.invalidateQueries({ queryKey: ["tags"] });
   }

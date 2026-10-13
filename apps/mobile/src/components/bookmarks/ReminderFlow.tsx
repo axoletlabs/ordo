@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import type { BookmarkDto } from "@ordo/shared";
 import { ContextMenu, ContextMenuItem, type MenuAnchorRect } from "../ui/ContextMenu";
 import { useSetBookmarkReminder } from "../../hooks/use-bookmarks";

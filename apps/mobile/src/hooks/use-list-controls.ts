@@ -14,9 +14,17 @@ type PageChunk = { items: unknown[] };
 
 export function usePullToRefresh(refetch: () => Promise<unknown>) {
   const [refreshing, setRefreshing] = useState(false);
+  const refreshingRef = useRef(false);
   const onRefresh = useCallback(() => {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
     setRefreshing(true);
-    void Promise.resolve(refetch()).finally(() => setRefreshing(false));
+    void Promise.resolve().then(refetch).catch(() => {
+      // React Query owns the error state; never leak an unhandled rejection.
+    }).finally(() => {
+      refreshingRef.current = false;
+      setRefreshing(false);
+    });
   }, [refetch]);
   return { refreshing, onRefresh };
 }

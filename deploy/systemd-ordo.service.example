@@ -1,0 +1,35 @@
+# systemd unit for a self-hosted ordo server.
+#
+#   sudo cp deploy/systemd-ordo.service.example /etc/systemd/system/ordo.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ordo
+#
+# Adjust User, Group, and the paths to your install (default: ~/ordo).
+# The unit runs the compiled server directly, so re-run
+# ./scripts/deploy-server update after Ordo releases for new code.
+
+[Unit]
+Description=ordo bookmark server
+Documentation=https://github.com/axoletlabs/ordo/blob/main/docs/SERVER-SETUP.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ordo
+Group=ordo
+WorkingDirectory=/home/ordo/ordo/apps/server
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node dist/main.js
+Restart=on-failure
+RestartSec=5
+
+# Hardening; loosen if your setup needs more.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/ordo/ordo/apps/server
+
+[Install]
+WantedBy=multi-user.target

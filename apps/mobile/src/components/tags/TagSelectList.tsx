@@ -3,17 +3,20 @@
  * inline "New tag" affordance. Shared by the save sheet and edit-tags sheet.
  */
 import React, { useMemo, useState } from "react";
-import { FlatList, Keyboard, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { Keyboard, Platform, StyleSheet, View, type PressableProps } from "react-native";
+import { ThemedFlatList } from "../ui/ThemedScrollView";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { type TagColor } from "@ordo/shared";
 import { Text } from "../ui/Text";
 import { Input } from "../ui/Input";
 import { PressableScale } from "../ui/PressableScale";
 import { useTags, useCreateTag } from "../../hooks/use-tags";
 import { useTheme } from "../../theme/ThemeProvider";
-import { spacing } from "../../theme/tokens";
+import { radius, spacing } from "../../theme/tokens";
 import { tagColorValue } from "../../lib/tag-colors";
 import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
+import { toast } from "../ui/toast-store";
+import { errorMessage } from "../../lib/error-message";
 
 export interface TagSelectListProps {
   /** Currently selected tag ids (assignment or draft). */
@@ -28,6 +31,8 @@ export interface TagSelectListProps {
    * create-tag panel is still rendered by the caller so the list stays simple.
    */
   onRequestCreateTag?: () => void;
+  header?: React.ReactNode;
+  menu?: boolean;
 }
 
 export function TagSelectList({
@@ -37,6 +42,8 @@ export function TagSelectList({
   maxHeight,
   autoCreate = true,
   onRequestCreateTag,
+  header,
+  menu = false,
 }: TagSelectListProps) {
   const { palette } = useTheme();
   const { height } = useResponsiveLayout();
@@ -55,6 +62,7 @@ export function TagSelectList({
       ? all.filter((t) => t.name.toLocaleLowerCase("en-US").includes(q))
       : all;
     return {
+      all: filtered,
       selected: filtered.filter((t) => selectedIds.includes(t.id)),
       unselected: filtered.filter((t) => !selectedIds.includes(t.id)),
     };
@@ -69,33 +77,37 @@ export function TagSelectList({
       const tag = await create.mutateAsync({ name });
       onToggle(tag.id);
       setQuery("");
-    } catch {
-      // Best-effort quick create; failures surface via the host sheet's toast.
+    } catch (error) {
+      toast.error(errorMessage(error, "Couldn't create the tag. Try again."));
     }
   };
 
   const renderRow = (tag: { id: string; name: string; color: TagColor }, selected: boolean) => (
     <PressableScale
       key={tag.id}
-      accessibilityRole="button"
-      accessibilityLabel={`${tag.name}${selected ? ", selected" : ""}`}
-      accessibilityState={{ selected }}
-      style={styles.row}
+      accessibilityRole="checkbox"
+      {...(menu && Platform.OS === "web" ? { role: "menuitemcheckbox" as PressableProps["role"] } : null)}
+      accessibilityLabel={tag.name}
+      accessibilityState={{ checked: selected }}
+      stateLayerColor={selected ? palette.onSecondaryContainer : palette.onSurface}
+      style={[styles.row, { backgroundColor: selected ? palette.secondaryContainer : "transparent" }]}
       onPress={() => onToggle(tag.id)}
     >
       <View style={[styles.dot, { backgroundColor: tagColorValue(tag.color).dot }]} />
-      <Text variant="body" numberOfLines={1} style={{ flex: 1 }}>
+      <Text variant="bodyLarge" numberOfLines={1} style={{ flex: 1, color: selected ? palette.onSecondaryContainer : palette.onSurface }}>
         {tag.name}
       </Text>
-      {selected ? <Ionicons name="checkmark" size={18} color={palette.accent} /> : null}
+      {selected ? <Ionicons name="checkmark" size={24} color={palette.onSecondaryContainer} /> : null}
     </PressableScale>
   );
 
   const createRow =
     autoCreate && query.trim() ? (
       <PressableScale
-        accessibilityRole="button"
+        accessibilityRole={menu ? "menuitem" : "button"}
         accessibilityLabel={`Create tag ${query.trim()}`}
+        disabled={create.isPending}
+        accessibilityState={{ busy: create.isPending }}
         style={styles.row}
         onPress={() => void createAndSelect(query.trim())}
       >
@@ -105,9 +117,9 @@ export function TagSelectList({
         </Text>
         <Ionicons name="add" size={18} color={palette.accent} />
       </PressableScale>
-    ) : autoCreate ? (
+    ) : autoCreate && onRequestCreateTag ? (
       <PressableScale
-        accessibilityRole="button"
+        accessibilityRole={menu ? "menuitem" : "button"}
         accessibilityLabel="New tag"
         style={styles.row}
         onPress={() => {
@@ -124,23 +136,17 @@ export function TagSelectList({
     ) : null;
 
   return (
-    <FlatList
-      data={[...tags.selected, ...tags.unselected]}
+    <View style={{ flexShrink: 1, gap: spacing[8] }}>
+      <Input value={query} onChangeText={setQuery} variant="search" placeholder="Find a tag" accessibilityLabel="Find a tag"
+        containerStyle={{ flexShrink: 0 }} icon={<Ionicons name="search-outline" size={24} color={palette.onSurfaceVariant} />} />
+    <ThemedFlatList animateChanges
+      data={menu ? tags.all : [...tags.selected, ...tags.unselected]}
       keyExtractor={(t) => t.id}
       renderItem={({ item }) => renderRow(item, selectedIds.includes(item.id))}
-      style={{ maxHeight: listHeight }}
+      style={{ maxHeight: listHeight, flexShrink: 1 }}
       keyboardShouldPersistTaps="always"
       keyboardDismissMode="none"
-      ListHeaderComponent={
-        <Input
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Filter tags…"
-          autoCapitalize="none"
-          autoCorrect={false}
-          icon={<Ionicons name="search-outline" size={18} color={palette.textTertiary} />}
-        />
-      }
+      ListHeaderComponent={header ? <View>{header}</View> : undefined}
       ListEmptyComponent={
         <Text variant="footnote" color="secondary" style={styles.empty}>
           {query ? `No tags match "${query}".` : "No tags yet."}
@@ -148,6 +154,7 @@ export function TagSelectList({
       }
       ListFooterComponent={createRow}
     />
+    </View>
   );
 }
 
@@ -156,7 +163,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[12],
-    minHeight: 44,
+    minHeight: 48,
+    borderRadius: radius.sm,
+    paddingHorizontal: spacing[8],
     paddingVertical: spacing[8],
   },
   dot: { width: 7, height: 7, borderRadius: 9999 },

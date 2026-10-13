@@ -5,11 +5,7 @@ import { TagRoutes, buildPath, type TagColor } from "@ordo/shared";
 import { api } from "./client";
 
 export const tagsApi = {
-  list: () =>
-    api.get<typeof TagRoutes.list.response>(TagRoutes.list.path, {
-      // global scope: include any cached folder unlock tokens
-      folderTokens: true,
-    }),
+  list: () => api.get<typeof TagRoutes.list.response>(TagRoutes.list.path),
 
   create: (name: string, color?: TagColor) =>
     api.post<typeof TagRoutes.create.response>(TagRoutes.create.path, { name, color }),

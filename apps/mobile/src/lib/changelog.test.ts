@@ -228,7 +228,7 @@ test("blank notes produce no blocks", () => {
 test("orders published versions and drops drafts and other tags", () => {
   const notes: GithubReleaseNote[] = [
     { tag_name: "v0.1.0", published_at: "2026-09-26T18:15:57Z", body: "First", prerelease: false },
-    { tag_name: "v0.2.0-beta.1", published_at: "2026-09-27T00:00:00Z", body: "Beta", prerelease: true },
+    { tag_name: "v0.2.0-preview.1", published_at: "2026-09-27T00:00:00Z", body: "Preview", prerelease: true },
     { tag_name: "v0.1.1", published_at: "2026-09-27T16:49:10Z", body: "Rows", prerelease: false },
     { tag_name: "dev", published_at: "2026-09-28T00:00:00Z", body: "Skip" },
     { tag_name: "v0.3.0", draft: true, published_at: "2026-09-28T00:00:00Z", body: "Hidden" },
@@ -237,11 +237,11 @@ test("orders published versions and drops drafts and other tags", () => {
   const releases = changelogFromGithubPayload(notes);
   assert.deepEqual(
     releases.map((release) => release.version),
-    ["0.2.0-beta.1", "0.1.1", "0.1.0"],
+    ["0.2.0-preview.1", "0.1.1", "0.1.0"],
   );
   assert.equal(releases[1]?.body, "Rows, revised");
   assert.equal(releases[0]?.prerelease, true);
-  assert.equal(releases[0]?.tagName, "v0.2.0-beta.1");
+  assert.equal(releases[0]?.tagName, "v0.2.0-preview.1");
 });
 
 test("a suffix-less GitHub pre-release is still early", () => {
@@ -251,14 +251,14 @@ test("a suffix-less GitHub pre-release is still early", () => {
   assert.equal(release?.prerelease, true);
 });
 
-test("marks the installed build, then an offered update, then early access", () => {
+test("marks the installed build, then an offered update, then Preview", () => {
   const stable = { version: "0.1.0", prerelease: false };
   const next = { version: "0.1.1", prerelease: false };
-  const beta = { version: "0.2.0-beta.1", prerelease: true };
+  const preview = { version: "0.2.0-preview.1", prerelease: true };
   assert.equal(changelogMark(stable, "0.1.0", "0.1.1"), "installed");
   assert.equal(changelogMark(next, "0.1.0", "0.1.1"), "available");
-  assert.equal(changelogMark(beta, "0.1.0", "0.1.1"), "early");
-  assert.equal(changelogMark(beta, "0.2.0-beta.1", null), "installed");
+  assert.equal(changelogMark(preview, "0.1.0", "0.1.1"), "early");
+  assert.equal(changelogMark(preview, "0.2.0-preview.1", null), "installed");
   assert.equal(changelogMark(next, "—", null), null);
   assert.equal(changelogMark(stable, "0.1.0", "0.1.0"), "installed");
 });

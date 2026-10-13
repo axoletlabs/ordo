@@ -3,7 +3,8 @@
  * and eye-off (visible) for a smooth morph.
  */
 import React, { useEffect } from "react";
-import { Pressable, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
+import { PressableScale } from "./PressableScale";
 import Animated, {
   Extrapolation,
   interpolate,
@@ -11,9 +12,9 @@ import Animated, {
   useSharedValue,
   withSpring,
 } from "react-native-reanimated";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { useTheme } from "../../theme/ThemeProvider";
-import { springs } from "../../theme/tokens";
+import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 import { haptics } from "../../lib/haptics";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
 
@@ -24,14 +25,15 @@ export interface EyeToggleProps {
   size?: number;
 }
 
-export function EyeToggle({ visible, onPress, size = 18 }: EyeToggleProps) {
+export function EyeToggle({ visible, onPress, size = 24 }: EyeToggleProps) {
   const { palette } = useTheme();
+  const motion = useMaterialMotion();
   // 0 = masked (eye shown), 1 = visible (eye-off shown)
   const v = useSharedValue(visible ? 1 : 0);
 
   useEffect(() => {
-    v.value = withSpring(visible ? 1 : 0, springs.snappy);
-  }, [visible, v]);
+    v.value = motion.reducedMotion ? +visible : withSpring(+visible, materialMotion.effects.fast);
+  }, [visible, v, motion.reducedMotion]);
 
   const eyeStyle = useAnimatedStyle(() => ({
     opacity: interpolate(v.value, [0, 1], [1, 0], Extrapolation.CLAMP),
@@ -44,7 +46,7 @@ export function EyeToggle({ visible, onPress, size = 18 }: EyeToggleProps) {
   }));
 
   return (
-    <Pressable
+    <PressableScale
       onPress={() => {
         haptics.selection();
         onPress();
@@ -60,11 +62,11 @@ export function EyeToggle({ visible, onPress, size = 18 }: EyeToggleProps) {
       <Animated.View style={[styles.icon, eyeOffStyle]} pointerEvents="none">
         <Ionicons name="eye-off-outline" size={size} color={palette.textTertiary} style={iconGlyphStyle(size)} />
       </Animated.View>
-    </Pressable>
+    </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { width: 32, height: 32, alignItems: "center", justifyContent: "center" },
+  wrap: { width: 48, height: 48, borderRadius: 24, alignItems: "center", justifyContent: "center" },
   icon: { position: "absolute" },
 });

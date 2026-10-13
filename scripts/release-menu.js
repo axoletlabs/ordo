@@ -1,6 +1,7 @@
 "use strict";
 
 const readline = require("node:readline");
+const { terminalLines, eraseFrame, wrap } = require("./terminal-ui.js");
 const { normalizeReleaseSpec, visibleReleases, isPrerelease } = require("./server-release.js");
 
 function releaseMenuRows(releases, { installedTag = null, pre = false } = {}) {
@@ -33,7 +34,9 @@ function reduceReleaseMenu(state, key, rows) {
   const name = key?.name;
   const sequence = key?.sequence ?? "";
   if (key?.ctrl && name === "c") return { ...state, action: "cancel" };
-  if (name === "escape") return { ...state, query: "", selected: 0, action: "redraw" };
+  if (name === "escape") return state.query
+    ? { ...state, query: "", selected: 0, action: "redraw" }
+    : { ...state, action: "cancel" };
   if (name === "up" || sequence === "\u001b[A") {
     const last = Math.max(rows.length - 1, 0);
     const selected = state.selected <= 0 ? last : state.selected - 1;
@@ -59,25 +62,29 @@ function paint(text, code, color) {
   return `\x1b[${code}m${text}\x1b[0m`;
 }
 
-function renderReleaseMenu(state, { color = false, hiddenPre = 0 } = {}) {
+function renderReleaseMenu(state, { color = false, hiddenPre = 0, columns = 80, maxRows = 8 } = {}) {
   const rows = state.rows ?? [];
-  const lines = [paint("Choose a release", "1", color), ""];
+  const lines = [paint("  Choose a release", "1", color), ""];
   if (rows.length === 0) {
     lines.push(paint("  No matching release", "2", color));
   }
-  rows.forEach((row, index) => {
+  const start = Math.max(0, Math.min(state.selected - Math.floor(maxRows / 2), rows.length - maxRows));
+  rows.slice(start, start + maxRows).forEach((row, offset) => {
+    const index = start + offset;
     const on = index === state.selected;
     const marker = on ? paint("›", "36", color) : " ";
-    const tag = paint(row.tag.padEnd(18), on ? "1" : "2", color);
-    const rest = `${row.channel.padEnd(12)} ${row.date.padEnd(12)}${row.marks.join(", ")}`;
+    const tag = paint(row.tag, on ? "1" : "2", color);
+    const rest = [row.channel === "stable" ? "" : row.channel, ...row.marks].filter(Boolean).join(" · ");
     lines.push(`  ${marker} ${tag} ${on ? rest : paint(rest, "2", color)}`);
   });
+  if (rows.length > maxRows) lines.push(paint(`  ${state.selected + 1} of ${rows.length}`, "2", color));
   lines.push("");
-  lines.push(`  ${paint("version", "2", color)}  ${state.query ?? ""}`);
-  lines.push(paint("  ↑↓ move    enter select    type a version", "2", color));
+  if (state.query) lines.push(`  ${paint("version", "2", color)}  ${state.query}`);
+  lines.push(paint(wrap("↑↓ move  ·  enter select  ·  type a version", columns), "2", color));
+  lines.push(paint("  esc clears search or cancels", "2", color));
   if (hiddenPre > 0) {
     const noun = hiddenPre === 1 ? "pre-release" : "pre-releases";
-    lines.push(paint(`  ${hiddenPre} ${noun} hidden. Re-run with --pre to include them.`, "2", color));
+    lines.push(paint(wrap(`${hiddenPre} ${noun} hidden. Use --pre to include them.`, columns), "2", color));
   }
   return lines.join("\n");
 }
@@ -89,32 +96,40 @@ function frameText(frame) {
 async function promptReleaseMenu({ rows, hiddenPre = 0, input, output, color } = {}) {
   if (!input || !output) throw new Error("promptReleaseMenu needs input and output streams.");
   const useColor = color ?? (Boolean(output.isTTY) && !process.env.NO_COLOR);
+  const wasFlowing = input.readableFlowing;
   readline.emitKeypressEvents(input);
+  // Menus after a closed readline question need stdin flowing again.
+  if (typeof input.resume === "function") input.resume();
   const wasRaw = Boolean(input.isRaw);
   if (typeof input.setRawMode === "function") input.setRawMode(true);
   if (output.isTTY) output.write("\x1b[?25l");
 
   let drawn = 0;
+  let finished = false;
   let view = { query: "", selected: 0, rows };
 
   const draw = () => {
     const shown = filterReleaseRows(rows, view.query);
     const selected = shown.length === 0 ? 0 : Math.min(view.selected, shown.length - 1);
     view = { ...view, selected, rows: shown };
-    const text = frameText(renderReleaseMenu(view, { color: useColor, hiddenPre }));
-    if (drawn > 0) output.write(`\x1b[${drawn}A\x1b[J`);
+    const text = frameText(renderReleaseMenu(view, {
+      color: useColor, hiddenPre, columns: output.columns,
+      maxRows: Math.max(1, Math.min(8, (output.rows || 24) - 10)),
+    }));
+    eraseFrame(output, drawn);
     output.write(text);
-    drawn = text.split("\n").length - 1;
+    drawn = terminalLines(text, output.columns);
   };
 
   const cleanup = () => {
     input.off("keypress", onKey);
     if (typeof input.setRawMode === "function") input.setRawMode(wasRaw);
     if (output.isTTY) output.write("\x1b[?25h");
+    if (wasFlowing !== true && typeof input.pause === "function") input.pause();
   };
 
   function onKey(_ch, key) {
-    if (!key) return;
+    if (!key || finished) return;
     const shown = filterReleaseRows(rows, view.query);
     const next = reduceReleaseMenu({ query: view.query, selected: view.selected }, key, shown);
     if (next.action === "cancel") {
@@ -172,6 +187,11 @@ async function promptReleaseMenu({ rows, hiddenPre = 0, input, output, color } =
   try {
     return await new Promise((resolve, reject) => {
       finish = (error, value) => {
+        finished = true;
+        if (value) {
+          eraseFrame(output, drawn);
+          output.write(`  ${paint("✓", "32", useColor)} Release  ${paint(value.tag_name, "1", useColor)}\n\n`);
+        }
         if (error) reject(error);
         else resolve(value);
       };

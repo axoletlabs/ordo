@@ -1,6 +1,6 @@
 /**
  * Seats for the small list glyphs (reminder, article, lock, pin, website-open).
- * They sit immediately after the title, in the same 16px cell.
+ * Supporting metadata shares a centered 16px cell, not a trailing title badge.
  */
 import React from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";

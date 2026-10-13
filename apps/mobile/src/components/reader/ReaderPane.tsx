@@ -7,24 +7,26 @@
  * open according to the website-browser setting; "Read in ordo" appears when
  * extraction actually produced an article.
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Appearance,
+  findNodeHandle,
   Platform,
   ScrollView,
   Share,
   StyleSheet,
+  UIManager,
   View,
   type LayoutChangeEvent,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
 } from "react-native";
-import { useColorScheme, useWindowDimensions } from "react-native";
+import { useWindowDimensions } from "react-native";
+import { useSystemColorScheme } from "../../theme/use-system-color-scheme";
 import { useSceneColumnInsets } from "../../hooks/use-scene-column-insets";
 import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { StatusBar, setStatusBarStyle } from "expo-status-bar";
-import { useRouter } from "expo-router";
+import { useAppRouter as useRouter } from "../../hooks/use-app-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   APP_NAME,
@@ -55,7 +57,8 @@ import { PanelHeader } from "../ui/PanelHeader";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
 import { sheetMenuStyles } from "../ui/SheetActionRow";
 import { FAB, FABLayer } from "../ui/FAB";
-import { ArticleHtml, type ArticleHeading } from "./ArticleHtml";
+import type { ArticleHeading } from "./ArticleHtml";
+import { ReaderArticle } from "./ReaderArticle";
 import type { HighlightSelectDraft } from "./article-highlight-ui";
 import { ReaderControlsSheet } from "./ReaderControlsSheet";
 import { EditTagsSheet } from "../tags/EditTagsSheet";
@@ -65,11 +68,12 @@ import { ReminderPresetItems, useSaveReminder } from "../bookmarks/ReminderFlow"
 import { formatReminderWhen } from "../../lib/bookmark-reminders";
 import { READER_BODY_SIZE, resolveReaderFont } from "./reader-typography";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
-import { readerColorSchemeOverride } from "../../theme/reader-color-scheme";
 import { resolveReaderPalette } from "../../theme/reader-theme";
 import { pinSystemChrome } from "../../theme/pin-system-chrome";
-import { appearanceOverride, resolvePalette, type Palette } from "../../theme/theme";
-import { scrollbarColors } from "../../theme/scrollbar";
+import type { Palette } from "../../theme/theme";
+import { currentAppPalette } from "../../theme/current-app-palette";
+import { useDeviceColors } from "../../theme/device-colors";
+import { LinearProgress } from "../ui/LinearProgress";
 import { queryClient } from "../../lib/query-client";
 import { bookmarksApi } from "../../lib/api/bookmarks";
 import { findBookmarkInCache, updateBookmarkEverywhere } from "../../lib/cache-helpers";
@@ -82,11 +86,13 @@ import {
 import * as bookmarkHooks from "../../hooks/use-bookmarks";
 import { useFolders, useServerInfo } from "../../hooks/queries";
 import { useReaderPreferences } from "../../hooks/use-reader-preferences";
+import { useCollapsingFab } from "../../hooks/use-collapsing-fab";
 import { useSettingsStore } from "../../store/settings";
 import { domainFromUrl, formatDate } from "../../lib/format";
 import { errorMessage, folderProtectedId, isFolderProtected } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
-import { layout, spacing } from "../../theme/tokens";
+import { layout, radius, spacing } from "../../theme/tokens";
+import { listCorners, listPosition } from "../../theme/list-shape";
 import { toast } from "../ui/toast-store";
 import { isMenuAnchorRect, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { BookmarkBrowser, type BookmarkBrowserHandle } from "../browser/BookmarkBrowser";
@@ -123,9 +129,7 @@ export interface ReaderPaneProps {
 const PROGRESS_DELTA = 0.08;
 /** Trailing idle window before a progress write is flushed. */
 const PROGRESS_DEBOUNCE_MS = 1_500;
-const CONTENTS_IDLE_DELAY_MS = 450;
-const SELECT_OPEN_MS = 280;
-const SELECT_CLOSE_MS = 140;
+const SELECT_OPEN_MS = 280;const SELECT_CLOSE_MS = 140;
 
 /** Collapse whitespace/newlines so stored titles render as one line-ish. */
 function normalizeTitle(raw: string | null | undefined): string {
@@ -151,19 +155,24 @@ const EMPTY_HIGHLIGHTS: HighlightDto[] = [];
  * them, independent of the app theme.
  */
 export function ReaderPane(props: ReaderPaneProps) {
-  const systemScheme = useColorScheme();
+  const systemScheme = useSystemColorScheme();
   const { preferences, setPreferences } = useReaderPreferences();
+  const materialYouColors = useSettingsStore((s) => s.materialYouColors);
+  const deviceColors = useDeviceColors();
+  const expressive = useSettingsStore((s) => s.expressive);
+  const contrast = useSettingsStore((s) => s.themeContrast);
   const readerPalette = useMemo(
-    () => resolveReaderPalette(preferences.theme, preferences.amoled, systemScheme),
-    [preferences.theme, preferences.amoled, systemScheme],
+    () => resolveReaderPalette(preferences.theme, preferences.amoled, systemScheme, { expressive, contrast, deviceColors: materialYouColors ? deviceColors : null }),
+    [preferences.theme, preferences.amoled, systemScheme, deviceColors, materialYouColors, expressive, contrast],
   );
+  // Commit control feedback first; let a long article reflow at interruptible priority.
+  const contentPreferences = useDeferredValue(preferences);
 
   // The reader surface owns the status bar (full-screen stack usage only);
   // on unmount, restore the style the app theme expects.
   useEffect(() => {
     return () => {
-      const { themeMode, amoled } = useSettingsStore.getState();
-      const appMode = resolvePalette(themeMode, amoled, Appearance.getColorScheme()).mode;
+      const appMode = currentAppPalette().mode;
       setStatusBarStyle(appMode === "dark" ? "light" : "dark");
     };
   }, []);
@@ -172,6 +181,7 @@ export function ReaderPane(props: ReaderPaneProps) {
     <ReaderPaneInner
       {...props}
       preferences={preferences}
+      contentPreferences={contentPreferences}
       onUpdatePreferences={setPreferences}
       readerPalette={readerPalette}
     />
@@ -180,6 +190,7 @@ export function ReaderPane(props: ReaderPaneProps) {
 
 interface ReaderPaneInnerProps extends ReaderPaneProps {
   preferences: ReaderPreferences;
+  contentPreferences: ReaderPreferences;
   onUpdatePreferences: (patch: UpdateReaderPreferencesInput) => void;
   readerPalette: Palette;
 }
@@ -191,12 +202,12 @@ function ReaderPaneInner({
   safeBottom = !embedded,
   initialSurface = "auto",
   preferences,
+  contentPreferences,
   onUpdatePreferences,
   readerPalette,
 }: ReaderPaneInnerProps) {
-  const { palette: appPalette } = useTheme();
+  const { palette: appPalette, expressive } = useTheme();
   const forceWebsiteDark = useSettingsStore((s) => s.forceWebsiteDark);
-  const settingsAmoled = useSettingsStore((s) => s.amoled);
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { height: windowHeight } = useWindowDimensions();
@@ -234,6 +245,7 @@ function ReaderPaneInner({
     !!detail.error;
 
   const [controlsOpen, setControlsOpen] = useState(false);
+  const closeControls = useCallback(() => setControlsOpen(false), []);
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [actionPanel, setActionPanel] = useState<
     "actions" | "contents" | "highlights" | "remind" | "remind-custom" | null
@@ -250,7 +262,6 @@ function ReaderPaneInner({
     bookmarkId: string;
     headings: readonly ArticleHeading[];
   }>({ bookmarkId: "", headings: [] });
-  const [contentsShortcutVisible, setContentsShortcutVisible] = useState(false);
   const [articleWidth, setArticleWidth] = useState(0);
   const [progress, setProgress] = useState(0);
   const [surface, setSurface] = useState<"auto" | "reader" | "browser">(
@@ -273,6 +284,17 @@ function ReaderPaneInner({
   const browserRef = useRef<BookmarkBrowserHandle>(null);
   const scrollRef = useRef<ScrollView>(null);
   const offsetRef = useRef(0);
+  // Chrome (header + progress rule) overlays the article and slides away on
+  // real user drags only; programmatic scrolls (position restore, TOC jumps)
+  // never yank it around. The article scrolls underneath the overlay.
+  const userScrollingRef = useRef(false);
+  const collapsingFab = useCollapsingFab(48);
+  const chromeHeightRef = useRef(0);
+  const chromeHeightSV = useSharedValue(0);
+  const [chromeHeight, setChromeHeight] = useState(0);
+  const chromeShiftStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: -chromeHeightSV.value * (1 - collapsingFab.expansion.spatial.value) }],
+  }));
   const websiteViewRef = useRef(false);
   const [keptBrowserId, setKeptBrowserId] = useState<string | null>(null);
   const [pageHost, setPageHost] = useState<string | null>(null);
@@ -307,19 +329,16 @@ function ReaderPaneInner({
     ? [
         bookmark.author?.trim() || null,
         bookmark.publishedAt ? formatDate(bookmark.publishedAt) : null,
+        bookmark.readingTimeMinutes ? `${bookmark.readingTimeMinutes} min read` : null,
       ]
         .filter(Boolean)
         .join(" · ")
     : "";
-  const headerSubtitle = bookmark
-    ? bookmark.readingTimeMinutes
-      ? `${bookmark.readingTimeMinutes} min read`
-      : undefined
-    : undefined;
-  const readerBodySize = READER_BODY_SIZE[preferences.fontSize];
-  const readerFont = resolveReaderFont(preferences.fontFamily);
-  const readerBoldFont = resolveReaderFont(preferences.fontFamily, "700");
+  const readerBodySize = READER_BODY_SIZE[contentPreferences.fontSize];
+  const readerFont = resolveReaderFont(contentPreferences.fontFamily);
+  const readerBoldFont = resolveReaderFont(contentPreferences.fontFamily, "700");
   const articleHeadings = headingState.bookmarkId === bookmark?.id ? headingState.headings : [];
+  const contentsBaseLevel = articleHeadings.reduce((level, heading) => Math.min(level, heading.level), 6);
   const highlights = detail.data?.highlights ?? EMPTY_HIGHLIGHTS;
 
   const handleHeadingsChange = useCallback(
@@ -330,12 +349,11 @@ function ReaderPaneInner({
   );
 
   const handleBack = () => {
-    if (websiteViewRef.current && browserRef.current?.goBack()) return;
+    if (websiteViewRef.current && browserRef.current?.goBack()) return true;
     if (onBack) {
-      onBack();
-      return;
+      return onBack();
     }
-    if (router.canGoBack()) router.back();
+    return router.canGoBack() ? router.back() : router.replace("/");
   };
 
   const handleOpenOriginal = () => {
@@ -384,7 +402,22 @@ function ReaderPaneInner({
     const open = () => {
       if (!isMenuAnchorRect(draft.anchor)) return;
       menuScrollY.current = offsetRef.current;
-      setSelectionMenu({ draft, anchor: draft.anchor });
+      // A tap on a saved highlight addresses the whole highlight: resolve the
+      // stored quote so copy/remove operate on it, not the tapped fragment.
+      let resolved = draft;
+      if (draft.whole && draft.highlightId) {
+        const record = highlights.find((row) => row.id === draft.highlightId);
+        if (record) {
+          resolved = {
+            ...draft,
+            exact: record.exact,
+            prefix: record.prefix ?? "",
+            suffix: record.suffix ?? "",
+            href: record.href ?? null,
+          };
+        }
+      }
+      setSelectionMenu({ draft: resolved, anchor: draft.anchor });
       setActionPanel(null);
     };
     if (selectionMenuRef.current) {
@@ -395,7 +428,7 @@ function ReaderPaneInner({
       selectTimer.current = null;
       open();
     }, SELECT_OPEN_MS);
-  }, []);
+  }, [highlights]);
 
   const dismissSelectionMenu = useCallback(() => {
     if (selectTimer.current) {
@@ -440,14 +473,13 @@ function ReaderPaneInner({
         },
         {
           onSuccess: () => {
-            dismissSelectionMenu();
             toast.success(absorbIds.length > 0 ? "Highlight updated" : "Highlighted");
           },
           onError: (err) => toast.error(errorMessage(err, "Couldn't save the highlight.")),
         },
       );
     },
-    [bookmark, createHighlight, detail.data?.contentHtml, dismissSelectionMenu, highlights],
+    [bookmark, createHighlight, detail.data?.contentHtml, highlights],
   );
 
   const dropHighlight = useCallback(
@@ -477,6 +509,7 @@ function ReaderPaneInner({
     if (!bookmark || !selectionMenu) return;
     const html = detail.data?.contentHtml;
     if (!html) return;
+    haptics.light();
     const plan = planUnhighlight(html, highlights, selectionMenu.draft);
     if (plan.kind === "none") {
       toast.error("Couldn't update the highlight.");
@@ -487,6 +520,7 @@ function ReaderPaneInner({
       return;
     }
     try {
+      dismissSelectionMenu();
       for (const row of plan.updates) {
         await updateHighlight.mutateAsync({
           id: bookmark.id,
@@ -515,7 +549,6 @@ function ReaderPaneInner({
           folderId: bookmark.folderId,
         });
       }
-      dismissSelectionMenu();
       const removedOnly = plan.deleteIds.length > 0 && plan.updates.length === 0 && plan.creates.length === 0;
       toast.success(removedOnly ? "Highlight removed" : "Highlight updated");
     } catch (err) {
@@ -570,45 +603,35 @@ function ReaderPaneInner({
   websiteViewRef.current = showWebsiteView;
   const palette = showWebsiteView ? appPalette : readerPalette;
   const websiteChrome = forceWebsiteDark
-    ? resolvePalette("dark", settingsAmoled, "dark").background
+    ? currentAppPalette("dark").background
     : palette.background;
   const effectiveDark = palette.mode === "dark";
-
-  // Full-screen reader: pin a fixed light/dark scheme so Android night-mode
-  // force-dark cannot invert parchment. System stays unspecified — pinning the
-  // resolved mode feeds useColorScheme and flashes light/dark after sepia.
-  // Restore the app scheme only when leaving the reader, not on palette changes.
-  useEffect(() => {
-    if (embedded || showWebsiteView) return;
-    if (typeof Appearance.setColorScheme === "function") {
-      Appearance.setColorScheme(readerColorSchemeOverride(preferences.theme));
-    }
-  }, [embedded, showWebsiteView, preferences.theme]);
-
-  useEffect(() => {
-    if (embedded || showWebsiteView) return;
-    return () => {
-      if (typeof Appearance.setColorScheme !== "function") return;
-      const { themeMode } = useSettingsStore.getState();
-      Appearance.setColorScheme(appearanceOverride(themeMode));
-    };
-  }, [embedded, showWebsiteView]);
 
   useEffect(() => {
     if (embedded || showWebsiteView) return;
     void pinSystemChrome(readerPalette).catch(() => {});
+  }, [embedded, showWebsiteView, readerPalette]);
+
+  // Restore on exit only. Restoring between palette updates flashes app
+  // chrome through the reader's new theme and races asynchronous window writes.
+  useEffect(() => {
+    if (embedded || showWebsiteView) return;
     return () => {
-      const { themeMode, amoled } = useSettingsStore.getState();
-      const app = resolvePalette(themeMode, amoled, Appearance.getColorScheme());
+      const app = currentAppPalette();
       void pinSystemChrome(app).catch(() => {});
       setStatusBarStyle(app.mode === "dark" ? "light" : "dark");
     };
-  }, [embedded, showWebsiteView, readerPalette]);
+  }, [embedded, showWebsiteView]);
 
   useEffect(() => {
     setSurface(initialSurface === "browser" ? "browser" : "auto");
     setPageHost(null);
   }, [bookmarkId, initialSurface]);
+
+  // The website view sits below the app header: never leave it half-hidden.
+  useEffect(() => {
+    if (showWebsiteView) collapsingFab.expand(offsetRef.current);
+  }, [collapsingFab, showWebsiteView]);
 
   useEffect(() => {
     if (showWebsiteView && bookmarkId) setKeptBrowserId(bookmarkId);
@@ -627,9 +650,6 @@ function ReaderPaneInner({
   const contentHeightRef = useRef(0);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const headingRefs = useRef(new Map<string, View>());
-  const articleHeaderHeightRef = useRef(0);
-  const contentsShortcutVisibleRef = useRef(false);
-  const contentsShortcutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleHeadingRef = useCallback((id: string, view: View | null) => {
     if (view) headingRefs.current.set(id, view);
@@ -638,59 +658,60 @@ function ReaderPaneInner({
 
   const handleHeadingSelect = useCallback((id: string) => {
     const heading = headingRefs.current.get(id);
-    const scrollContent = scrollRef.current?.getInnerViewNode();
-    if (!heading || !scrollContent) return;
-    heading.measureLayout(
-      scrollContent,
-      (_x, y) => {
-        haptics.light();
-        setActionPanel(null);
-        scrollRef.current?.scrollTo({ y: Math.max(0, y - spacing[16]), animated: true });
+    const scroll = scrollRef.current;
+    if (!heading || !scroll) return;
+    haptics.light();
+    setActionPanel(null);
+    // Re-sync the chrome machine with the current offset so the jump's own
+    // scroll deltas don't toggle the header mid-flight.
+    collapsingFab.expand(offsetRef.current);
+    const jump = (contentY: number) => {
+      if (!Number.isFinite(contentY)) return;
+      scroll.scrollTo({ y: Math.max(0, contentY - spacing[16]), animated: true });
+    };
+    // Content-space Y = heading window Y - content-origin window Y, measured
+    // in the same frame. measureLayout against the inner view silently no-ops
+    // under Fabric; view-level window measurement works on Fabric and web
+    // (RN-web attaches measureInWindow to host nodes).
+    const withWindowY = (view: unknown) =>
+      new Promise<number | null>((resolve) => {
+        let settled = false;
+        const done = (value: number | null) => {
+          if (!settled) {
+            settled = true;
+            resolve(value);
+          }
+        };
+        setTimeout(() => done(null), 200);
+        const finish = (_x: number, y: number, width: number, height: number) => {
+          done(!Number.isFinite(y) || (width === 0 && height === 0) ? null : y);
+        };
+        const measurable = view as {
+          measureInWindow?: (cb: (x: number, y: number, width: number, height: number) => void) => void;
+        } | null;
+        if (typeof measurable?.measureInWindow === "function") {
+          measurable.measureInWindow(finish);
+          return;
+        }
+        try {
+          const handle = findNodeHandle(view as View);
+          if (handle != null && typeof UIManager.measureInWindow === "function") {
+            UIManager.measureInWindow(handle, finish);
+            return;
+          }
+        } catch {
+          // web: findNodeHandle is unsupported; host nodes carry measureInWindow.
+        }
+        done(null);
+      });
+    const inner = scroll.getInnerViewNode?.();
+    void Promise.all([withWindowY(heading), withWindowY(inner)]).then(
+      ([headingY, originY]) => {
+        if (headingY == null || originY == null) return;
+        jump(headingY - originY);
       },
-      () => {},
     );
-  }, []);
-
-  const syncContentsShortcut = useCallback(
-    (offset: number, headerHeight = articleHeaderHeightRef.current, defer = false) => {
-      if (contentsShortcutTimerRef.current) {
-        clearTimeout(contentsShortcutTimerRef.current);
-        contentsShortcutTimerRef.current = null;
-      }
-      const eligible =
-        hasHtml && articleHeadings.length >= 3 && offset >= headerHeight + spacing[16];
-      const updateVisibility = (visible: boolean) => {
-        if (visible === contentsShortcutVisibleRef.current) return;
-        contentsShortcutVisibleRef.current = visible;
-        setContentsShortcutVisible(visible);
-      };
-      if (!eligible) {
-        updateVisibility(false);
-        return;
-      }
-      if (!defer) {
-        updateVisibility(true);
-        return;
-      }
-      updateVisibility(false);
-      contentsShortcutTimerRef.current = setTimeout(() => {
-        contentsShortcutTimerRef.current = null;
-        updateVisibility(true);
-      }, CONTENTS_IDLE_DELAY_MS);
-    },
-    [articleHeadings.length, hasHtml],
-  );
-
-  useEffect(() => {
-    syncContentsShortcut(offsetRef.current);
-  }, [syncContentsShortcut]);
-
-  useEffect(
-    () => () => {
-      if (contentsShortcutTimerRef.current) clearTimeout(contentsShortcutTimerRef.current);
-    },
-    [],
-  );
+  }, [collapsingFab]);
 
   const persistProgress = useCallback(
     (id: string, folderId: string | null, value: number) => {
@@ -732,10 +753,6 @@ function ReaderPaneInner({
   }, [persistProgress]);
 
   const progressSV = useSharedValue(0);
-  const trackWidthSV = useSharedValue(0);
-  const progressFillStyle = useAnimatedStyle(() => ({
-    width: Math.max(0, trackWidthSV.value * progressSV.value),
-  }));
 
   const handleFraction = useCallback(
     (fraction: number) => {
@@ -767,15 +784,11 @@ function ReaderPaneInner({
     restoredRef.current = false;
     htmlReadyRef.current = false;
     offsetRef.current = 0;
-    articleHeaderHeightRef.current = 0;
+    userScrollingRef.current = false;
+    collapsingFab.expand(0);
+    chromeHeightSV.value = chromeHeightRef.current;
     progressSV.value = baseline;
     setProgress(baseline);
-    if (contentsShortcutTimerRef.current) {
-      clearTimeout(contentsShortcutTimerRef.current);
-      contentsShortcutTimerRef.current = null;
-    }
-    contentsShortcutVisibleRef.current = false;
-    setContentsShortcutVisible(false);
     if (selectTimer.current) {
       clearTimeout(selectTimer.current);
       selectTimer.current = null;
@@ -784,7 +797,7 @@ function ReaderPaneInner({
     return () => {
       flushProgress();
     };
-  }, [bookmark?.id]);
+  }, [bookmark?.id, chromeHeightSV, collapsingFab]);
 
   // Restore the saved reading position once layout + content size are known.
   const maybeRestore = useCallback(() => {
@@ -804,9 +817,8 @@ function ReaderPaneInner({
       const y = target * scrollable;
       scrollRef.current?.scrollTo({ y, animated: false });
       offsetRef.current = y;
-      syncContentsShortcut(y);
     }
-  }, [hasHtml, syncContentsShortcut]);
+  }, [hasHtml]);
 
   const handleArticleReady = useCallback(() => {
     htmlReadyRef.current = true;
@@ -826,6 +838,11 @@ function ReaderPaneInner({
       offsetRef.current = contentOffset.y;
       viewHeightRef.current = layoutMeasurement.height;
       contentHeightRef.current = contentSize.height;
+      // Chrome follows user drags on native (programmatic scrolls — position
+      // restore, TOC jumps — never yank it around). Web wheel scrolling has no
+      // drag events, so there the chrome simply follows the scroll.
+      if (selectionMenuRef.current) collapsingFab.expand(offsetRef.current);
+      else if (Platform.OS === "web" || userScrollingRef.current) collapsingFab.onScroll(event);
       const menu = selectionMenuRef.current;
       if (menu) {
         const dy = contentOffset.y - menuScrollY.current;
@@ -839,15 +856,21 @@ function ReaderPaneInner({
           }
         }
       }
-      syncContentsShortcut(contentOffset.y, articleHeaderHeightRef.current, true);
       if (contentSize.height <= 0 || layoutMeasurement.height <= 0) return;
       if (hasHtml && !htmlReadyRef.current) return;
       handleFraction(
         scrollReadingProgress(contentOffset.y, layoutMeasurement.height, contentSize.height),
       );
     },
-    [handleFraction, hasHtml, syncContentsShortcut, windowHeight],
+    [collapsingFab, handleFraction, hasHtml, windowHeight],
   );
+
+  const handleScrollBeginDrag = useCallback(() => {
+    userScrollingRef.current = true;
+  }, []);
+  const handleScrollEnd = useCallback(() => {
+    userScrollingRef.current = false;
+  }, []);
 
   // Recompute when content settles/grows (images loading, HTML rendering).
   const onContentSizeChange = useCallback(
@@ -871,7 +894,9 @@ function ReaderPaneInner({
 
   /* ---------------------------------- render ---------------------------------- */
 
-  const fallbackArticleWidth = Math.min(sceneWidth, layout.maxContentWidth) - spacing[16] * 2;
+  const fallbackArticleWidth = Math.min(sceneWidth, layout.maxReaderWidth) - spacing[16] * 2;
+  // Non-scrolling states keep their content below the chrome overlay.
+  const chromePad = useMemo(() => ({ paddingTop: chromeHeight }), [chromeHeight]);
 
   const rightActions = bookmark ? (
     <HeaderActions>
@@ -882,6 +907,7 @@ function ReaderPaneInner({
           onPress={() => setControlsOpen(true)}
           accessibilityLabel="Reader settings"
           accessibilityHint="Adjust text size, typeface, and reading theme."
+          measureOnPress={false}
         />
       )}
       <HeaderIconButton
@@ -950,56 +976,43 @@ function ReaderPaneInner({
         <StatusBar style={readerPalette.mode === "dark" ? "light" : "dark"} />
       ) : null}
     <View style={[styles.container, { backgroundColor: palette.background }]}>
+      <Animated.View
+        style={[styles.chromeOverlay, chromeShiftStyle]}
+        onLayout={(event) => {
+          const height = event.nativeEvent.layout.height;
+          chromeHeightRef.current = height;
+          chromeHeightSV.value = height;
+          setChromeHeight((prev) => (Math.abs(prev - height) < 0.5 ? prev : height));
+        }}
+      >
       <Header
         title={bookmark ? (showWebsiteView && pageHost ? pageHost : domain) : "Reader"}
-        subtitle={showWebsiteView ? "Website" : headerSubtitle}
+        variant="tonal"
         showBack={!embedded}
         onBack={!embedded ? handleBack : undefined}
         safeTop={!embedded}
         alignTo={embedded ? "parent" : "scene"}
-        maxWidth={layout.maxContentWidth}
-        divider
+        maxWidth={layout.maxReaderWidth}
         right={rightActions}
         onTitleLongPress={bookmark ? handleCopyLink : undefined}
         titleAccessibilityHint={bookmark ? "Copies the link." : undefined}
       />
 
       {hasContent && !showWebsiteView ? (
-        <View
-          style={[
-            styles.progressTrack,
-            {
-              backgroundColor: scrollbarColors(palette).track,
-              maxWidth: layout.maxContentWidth,
-              alignSelf: "center",
-            },
-          ]}
-          accessibilityRole="progressbar"
-          accessibilityLabel="Reading progress"
-          accessibilityValue={{ min: 0, max: 100, now: Math.round(progress * 100) }}
-          onLayout={(event) => {
-            trackWidthSV.value = event.nativeEvent.layout.width;
-          }}
-        >
-          <Animated.View
-            style={[
-              styles.progressFill,
-              { backgroundColor: palette.accent },
-              progressFillStyle,
-            ]}
-          />
-        </View>
+        <LinearProgress label="Reading progress" value={progress} animatedValue={progressSV}
+          style={{ maxWidth: layout.maxReaderWidth, alignSelf: "center" }} />
       ) : null}
+      </Animated.View>
 
       {loading ? (
-        <ScreenContent alignTo={embedded ? "parent" : "scene"} style={styles.stateBody}>
+        <ScreenContent alignTo={embedded ? "parent" : "scene"} style={[styles.stateBody, chromePad]}>
           <Skeleton width="80%" height={28} />
           <Skeleton width="100%" height={16} style={{ marginTop: spacing[16] }} />
           <Skeleton width="100%" height={16} style={{ marginTop: spacing[8] }} />
           <Skeleton width="65%" height={16} style={{ marginTop: spacing[8] }} />
         </ScreenContent>
       ) : protectedDetail ? (
-        <ScreenContent alignTo={embedded ? "parent" : "scene"} style={styles.stateCenter}>
+        <ScreenContent alignTo={embedded ? "parent" : "scene"} style={[styles.stateCenter, chromePad]}>
           <EmptyState
             icon="lock-closed-outline"
             title="This folder is locked"
@@ -1012,7 +1025,7 @@ function ReaderPaneInner({
           />
         </ScreenContent>
       ) : !bookmark ? (
-        <ScreenContent alignTo={embedded ? "parent" : "scene"} style={styles.stateCenter}>
+        <ScreenContent alignTo={embedded ? "parent" : "scene"} style={[styles.stateCenter, chromePad]}>
           <EmptyState
             icon="cloud-offline-outline"
             title="Couldn't load this bookmark"
@@ -1033,7 +1046,7 @@ function ReaderPaneInner({
           collapsable={false}
           style={[
             styles.browserPane,
-            { backgroundColor: websiteChrome },
+            { backgroundColor: websiteChrome, paddingLeft: insets.left, paddingRight: insets.right, paddingTop: chromeHeight },
             !showWebsiteView && styles.browserParked,
           ]}
           pointerEvents={showWebsiteView ? "auto" : "none"}
@@ -1059,34 +1072,28 @@ function ReaderPaneInner({
             onLayout={onScrollViewLayout}
             onContentSizeChange={onContentSizeChange}
             onScroll={onScroll}
+            onScrollBeginDrag={handleScrollBeginDrag}
+            onMomentumScrollEnd={handleScrollEnd}
             scrollEventThrottle={16}
             contentContainerStyle={{
-              // Inset under the progress rule. The header row gap is separate,
-              // so tightening that chrome does not pull the title into the rule.
-              paddingTop: spacing[12],
+              // The chrome is an overlay: pad the content so it starts below
+              // the bar and scrolls underneath it once the bar slides away.
+              paddingTop: chromeHeight + spacing[12],
               paddingBottom: spacing[16] + (safeBottom ? insets.bottom : 0),
             }}
           >
-            <ScreenContent alignTo={embedded ? "parent" : "scene"} style={styles.body}>
+            <ScreenContent maxWidth={layout.maxReaderWidth} alignTo={embedded ? "parent" : "scene"} style={styles.body}>
               <View
                 style={styles.articleColumn}
                 onLayout={(e) => setArticleWidth(e.nativeEvent.layout.width)}
               >
-                <View
-                  onLayout={(event) => {
-                    const height = event.nativeEvent.layout.height;
-                    articleHeaderHeightRef.current = height;
-                    syncContentsShortcut(offsetRef.current, height);
-                  }}
-                >
-                  {articleHead}
-                </View>
+                {articleHead}
 
                 {hasHtml ? (
                 <View style={styles.content}>
-                  <ArticleHtml
+                  <ReaderArticle
                     html={detail.data?.contentHtml ?? ""}
-                    preferences={preferences}
+                    preferences={contentPreferences}
                     contentWidth={articleWidth || fallbackArticleWidth}
                     highlights={highlights}
                     onTextSelect={handleTextSelect}
@@ -1159,16 +1166,18 @@ function ReaderPaneInner({
         </>
       )}
 
-      {contentsShortcutVisible && actionPanel === null && !controlsOpen && !showWebsiteView && !selectionMenu ? (
-        <FABLayer maxWidth={layout.maxContentWidth}>
+      {articleHeadings.length >= 3 && hasContent && !showWebsiteView && !selectionMenu && actionPanel !== "contents" ? (
+        <FABLayer maxWidth={layout.maxReaderWidth}>
           <FAB
             icon="list-outline"
+            label="Contents"
+            expansion={collapsingFab.expansion}
             accessibilityLabel="Table of contents"
             accessibilityHint="Jump to a section in this article."
             onPress={() => {
               setActionPanel("contents");
             }}
-            maxContentWidth={layout.maxContentWidth}
+            maxContentWidth={layout.maxReaderWidth}
             alignTo={embedded ? "parent" : "scene"}
             bottom={spacing[20] + (safeBottom ? insets.bottom : 0)}
           />
@@ -1177,7 +1186,7 @@ function ReaderPaneInner({
 
       <ReaderControlsSheet
         visible={controlsOpen}
-        onDismiss={() => setControlsOpen(false)}
+        onDismiss={closeControls}
         preferences={preferences}
         onUpdate={onUpdatePreferences}
         effectiveDark={effectiveDark}
@@ -1192,6 +1201,7 @@ function ReaderPaneInner({
         onDismiss={closeActions}
         anchor={actionsAnchor}
         sessionKey={actionPanel ? bookmark?.id : undefined}
+        pageKey={actionPanel === "remind" ? "remind" : "actions"}
       >
         {actionPanel === "remind" && bookmark ? (
           <ReminderPresetItems
@@ -1340,12 +1350,17 @@ function ReaderPaneInner({
       <FloatingPanel visible={actionPanel === "contents"} onDismiss={() => setActionPanel(null)}>
         <PanelHeader title="Table of contents" />
         <ThemedScrollView style={styles.tocList}>
-          {articleHeadings.map((heading) => (
+          {articleHeadings.map((heading, index) => (
             <PressableScale
               key={heading.id}
               style={[
                 styles.tocRow,
-                { paddingLeft: (heading.level - 1) * spacing[16] },
+                { paddingLeft: spacing[16] + (heading.level - contentsBaseLevel) * spacing[16] },
+                expressive ? {
+                  ...listCorners(listPosition(index, articleHeadings.length), false),
+                  backgroundColor: readerPalette.surfaceContainerLow,
+                  marginBottom: spacing[2],
+                } : null,
               ]}
               onPress={() => handleHeadingSelect(heading.id)}
               accessibilityRole="button"
@@ -1354,7 +1369,6 @@ function ReaderPaneInner({
               <Text
                 variant={heading.level === 1 ? "bodyStrong" : "body"}
                 numberOfLines={2}
-                style={styles.actionLabel}
               >
                 {heading.text}
               </Text>
@@ -1433,6 +1447,8 @@ function ReaderPaneInner({
             }
             onPress={() => {
               if (!selectionMenu) return;
+              haptics.light();
+              dismissSelectionMenu();
               saveHighlight(selectionMenu.draft);
             }}
           />
@@ -1477,47 +1493,47 @@ function ReaderPaneInner({
   );
 }
 
-export function ReaderPanePlaceholder() {
-  return (
-    <View style={styles.stateCenter}>
-      <EmptyState
-        icon="reader-outline"
-        title="Select a bookmark"
-        message="Choose a bookmark from the list."
-      />
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  chromeOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 2,
+    backgroundColor: "transparent",
+  },
   scrollViewport: { flex: 1 },
   body: { width: "100%" },
   articleColumn: { width: "100%" },
   description: { marginTop: spacing[8] },
   byline: { marginTop: spacing[6] },
   content: { marginTop: spacing[24] },
-  actionLabel: { flex: 1 },
   tocList: { maxHeight: 420 },
-  tocRow: { minHeight: 44, justifyContent: "center" },
+  tocRow: {
+    minHeight: 48,
+    justifyContent: "center",
+    paddingHorizontal: spacing[16],
+    paddingVertical: spacing[8],
+    borderRadius: radius.xs,
+    overflow: "hidden",
+  },
   highlightList: { maxHeight: 420 },
   highlightRow: {
-    minHeight: 44,
+    minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[8],
     paddingVertical: spacing[8],
   },
-  highlightBody: { flex: 1, minWidth: 0 },
+  highlightBody: { flex: 1, minWidth: 0, minHeight: 48, justifyContent: "center" },
   highlightMeta: { marginTop: spacing[4] },
   removeHit: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
   },
-  progressTrack: { height: 2, width: "100%", overflow: "hidden" },
-  progressFill: { height: 2, alignSelf: "flex-start" },
   stateBody: {
     flex: 1,
     width: "100%",

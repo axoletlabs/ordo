@@ -6,16 +6,24 @@ const { join } = require("node:path");
 const { test } = require("node:test");
 const {
   HELP,
+  DEFAULTS,
   parseArgs,
   isInteractive,
   sqlitePathFromUrl,
   settingsFromSources,
   renderEnv,
+  MANAGED_ENV_KEYS,
+  resolveSetupSecrets,
+  preservedEnvKeys,
+  needsEnvMigration,
+  validateSmtpUrl,
   inspectDatabase,
   migratePlan,
   looksInstalled,
   inferCommand,
   formatSetupSummary,
+  formatSetupBanner,
+  formatNextSteps,
   promptGuidedSettings,
   installProcess,
   backupSqlite,
@@ -80,6 +88,7 @@ test("parseArgs reads long flags, equals form, and booleans", () => {
     "--no-start",
     "--no-pull",
     "--dry-run",
+    "--verbose",
   ]);
   assert.equal(args.command, "update");
   assert.equal(args.yes, true);
@@ -92,6 +101,7 @@ test("parseArgs reads long flags, equals form, and booleans", () => {
   assert.equal(args.pull, false);
   assert.equal(args.noRelease, true);
   assert.equal(args.dryRun, true);
+  assert.equal(args.verbose, true);
 });
 
 test("parseArgs reads a release and rejects mixing it with git pull", () => {
@@ -161,7 +171,7 @@ test("--public binds 0.0.0.0 even when .env says localhost", () => {
   assert.equal(settings.listenHost, "0.0.0.0");
 });
 
-test("renderEnv quotes values that need it and comments unset secrets", () => {
+test("renderEnv writes a complete, documented file with explicit secrets", () => {
   const text = renderEnv({
     port: 3000,
     databaseUrl: "file:./ordo.db",
@@ -174,13 +184,89 @@ test("renderEnv quotes values that need it and comments unset secrets", () => {
     jwtSecret: "",
     smtpUrl: "smtp://user:p@ss@mail:587",
     smtpFrom: "ordo <noreply@example.com>",
+    smtpRequired: true,
+  }, {
+    stamp: "2026-10-06",
+    secrets: { jwtSecret: "a".repeat(96), libraryKek: "b".repeat(64) },
   });
   assert.match(text, /PORT=3000/);
   assert.match(text, /LISTEN_HOST=127.0.0.1/);
   assert.ok(text.includes('DATABASE_URL="file:./ordo.db"'));
   assert.match(text, /TRUST_PROXY=1/);
-  assert.match(text, /JWT_SECRET auto-generates/);
-  assert.match(text, /SMTP_URL="smtp:\/\/user:p@ss@mail:587"/);
+  assert.match(text, /RATE_LIMIT_ENABLED=true/);
+  assert.match(text, /SMTP_REQUIRED=true/);
+  assert.ok(text.includes(`JWT_SECRET=${"a".repeat(96)}`));
+  assert.ok(text.includes(`LIBRARY_KEK=${"b".repeat(64)}`));
+  assert.doesNotMatch(text, /auto-generates/);
+  // Every managed key is present, as an assignment or a documented comment.
+  for (const key of MANAGED_ENV_KEYS) {
+    assert.match(text, new RegExp(`^(# )?${key}=`, "m"), `${key} missing`);
+  }
+});
+
+test("renderEnv keeps custom keys from a previous .env and notes missing secrets", () => {
+  const text = renderEnv({ ...DEFAULTS }, { preserved: { AVATAR_DIR: "/srv/avatars" } });
+  assert.match(text, /Preserved from your previous \.env/);
+  assert.match(text, /AVATAR_DIR=\/srv\/avatars/);
+  assert.match(text, /# JWT_SECRET=   # run scripts\/deploy-server to generate one/);
+  assert.match(text, /# LIBRARY_KEK=   # run scripts\/deploy-server to generate one/);
+});
+
+test("resolveSetupSecrets prefers env, then the sidecar files, then generates", () => {
+  const root = tempRepo();
+  const serverDir = join(root, "apps", "server");
+  mkdirSync(serverDir, { recursive: true });
+
+  const generated = resolveSetupSecrets(serverDir, {}, { randomBytesFn: (n) => Buffer.alloc(n, 7) });
+  assert.equal(generated.jwtSecret.length, 96);
+  assert.equal(generated.libraryKek.length, 64);
+  assert.equal(generated.jwtSource, "generated");
+  assert.equal(generated.kekSource, "generated");
+
+  writeFileSync(join(serverDir, ".ordo-secret"), "legacy-secret\n");
+  writeFileSync(join(serverDir, ".ordo-library-key"), "legacy-kek\n");
+  const fromFiles = resolveSetupSecrets(serverDir, {});
+  assert.equal(fromFiles.jwtSecret, "legacy-secret");
+  assert.equal(fromFiles.libraryKek, "legacy-kek");
+  assert.equal(fromFiles.jwtSource, "file");
+
+  const fromEnv = resolveSetupSecrets(serverDir, {
+    JWT_SECRET: "env-secret",
+    LIBRARY_KEK: "env-kek",
+  });
+  assert.equal(fromEnv.jwtSecret, "env-secret");
+  assert.equal(fromEnv.libraryKek, "env-kek");
+  assert.equal(fromEnv.jwtSource, "env");
+  assert.equal(fromEnv.kekSource, "env");
+});
+
+test("preservedEnvKeys and needsEnvMigration find pre-explicit .env files", () => {
+  assert.deepEqual(preservedEnvKeys({ PORT: "3000", AVATAR_DIR: "/a" }), { AVATAR_DIR: "/a" });
+  assert.equal(needsEnvMigration({ JWT_SECRET: "x", LIBRARY_KEK: "y" }), false);
+  assert.equal(needsEnvMigration({ JWT_SECRET: "x" }), true);
+  assert.equal(needsEnvMigration({}), true);
+});
+
+test("validateSmtpUrl accepts smtp URLs and rejects the rest", () => {
+  assert.equal(validateSmtpUrl(""), null);
+  assert.equal(validateSmtpUrl("(empty)"), null);
+  assert.equal(validateSmtpUrl("smtp://user:pass@smtp.example.com:587"), null);
+  assert.equal(validateSmtpUrl("smtps://smtp.example.com"), null);
+  assert.match(validateSmtpUrl("nope"), /not a URL/);
+  assert.match(validateSmtpUrl("http://example.com"), /smtp:\/\//);
+  assert.match(validateSmtpUrl("smtp://"), /mail host/);
+});
+
+test("an explicit --smtp-url fails closed without --smtp-required", () => {
+  const flagged = settingsFromSources(parseArgs(["--smtp-url", "smtp://m:587"]), {});
+  assert.equal(flagged.smtpRequired, true);
+  const explicitOff = settingsFromSources(
+    parseArgs(["--smtp-url", "smtp://m:587", "--smtp-required", "false"]),
+    {},
+  );
+  assert.equal(explicitOff.smtpRequired, false);
+  const fromEnv = settingsFromSources(parseArgs([]), { SMTP_URL: "smtp://m:587" });
+  assert.equal(fromEnv.smtpRequired, false);
 });
 
 test("inspectDatabase and migratePlan cover missing, migrated, and legacy files", () => {
@@ -301,7 +387,7 @@ test("update --yes --dry-run keeps .env, installs the latest stable release, and
     repoRoot: root,
     env: { ...process.env, CI: "1" },
     releases: [
-      publishedRelease("v0.2.0-beta.1", { prerelease: true, published_at: "2026-09-20T00:00:00Z" }),
+      publishedRelease("v0.2.0-preview.1", { prerelease: true, published_at: "2026-09-20T00:00:00Z" }),
       publishedRelease("v0.1.1", { published_at: "2026-09-02T00:00:00Z" }),
     ],
     log: (line) => lines.push(String(line)),
@@ -341,7 +427,7 @@ test("update --from-git still plans a fast-forward pull", async () => {
 
 test("interactive dry-run uses prompt answers", async () => {
   const root = tempRepo();
-  const answers = ["8080", "n", "n", "", "y", "1", "1", "n"];
+  const answers = ["1", "8080", "n", "n", "", "y", "1", "n"];
   let i = 0;
   const result = await deploy({
     argv: ["install", "--dry-run", "--skip-install", "--skip-build", "--skip-migrate"],
@@ -374,6 +460,10 @@ test("dirty worktree blocks pull, and a new HEAD re-execs once", () => {
   assert.deepEqual(reexecArgs(["update", "--yes"]), ["update", "--yes", "--no-pull"]);
   assert.deepEqual(reexecArgs(["update", "--no-pull"]), ["update", "--no-pull"]);
   assert.deepEqual(reexecArgs(["update", "--yes"], "release"), ["update", "--yes", "--no-release"]);
+  const resumed = reexecArgs(["install", "--release", "v0.2.0", "--repo=owner/repo", "--pre", "--port", "8080"], "release");
+  assert.deepEqual(resumed, ["install", "--port", "8080", "--no-release"]);
+  assert.equal(parseArgs(resumed).port, 8080);
+  assert.deepEqual(reexecArgs(["update", "--from-git", "--pull"]), ["update", "--no-pull"]);
 });
 
 test("matching lockfiles skip install", () => {
@@ -388,6 +478,68 @@ test("matching lockfiles skip install", () => {
   assert.equal(dependenciesReady(root), true);
   writeFileSync(installed, "different\n");
   assert.equal(dependenciesReady(root), false);
+});
+
+test("release re-exec happens before settings/restart prompts and resumed flags parse cleanly", async (t) => {
+  const { createHash } = require("node:crypto");
+  const { readFileSync } = require("node:fs");
+  const { Readable } = require("node:stream");
+  const root = tempRepo();
+  const packed = tempRepo();
+  t.after(() => {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(packed, { recursive: true, force: true });
+  });
+  mkdirSync(join(root, "scripts"));
+  mkdirSync(join(packed, "scripts"));
+  writeFileSync(join(root, "scripts/deploy-server.js"), "// old installer\n");
+  writeFileSync(join(packed, "scripts/deploy-server.js"), "// new installer\n");
+  writeFileSync(join(root, "apps/server/.env"), "PORT=3215\nJWT_SECRET=kept\nLIBRARY_KEK=kept\n");
+  const archivePath = join(packed, "release.tar.gz");
+  assert.equal(spawnSync("tar", ["-czf", archivePath, "-C", packed, "apps", "scripts", "package.json", "pnpm-workspace.yaml"]).status, 0);
+  const bytes = readFileSync(archivePath);
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  const release = publishedRelease("v0.2.0");
+  release.assets.push({ name: "ordo-server-v0.2.0.tar.gz.sha256", browser_download_url: "https://example.test/server.sha256" });
+  const asks = [];
+  let resumed;
+  const result = await deploy({
+    argv: ["update", "--release=v0.2.0", "--skip-install", "--skip-build", "--skip-migrate"],
+    repoRoot: root, interactive: true, env: process.env, releases: [release],
+    fetch: async (url) => ({ ok: true, status: 200,
+      body: Readable.toWeb(Readable.from([url.endsWith(".sha256") ? Buffer.from(hash) : bytes])),
+    }),
+    ask: async (question) => { asks.push(question); return "n"; },
+    listener: { kind: "ordo", pid: 42 }, log: () => {},
+    reexec: (_root, argv, _stamp, _env, mode) => {
+      resumed = reexecArgs(argv, mode);
+      return 0;
+    },
+  });
+  assert.equal(result.reexec, true);
+  assert.deepEqual(asks, [], "re-exec must not discard answers or repeat questions");
+  assert.equal(parseArgs(resumed).noRelease, true);
+  await deploy({
+    argv: resumed, repoRoot: root, interactive: true,
+    env: { ...process.env, ORDO_SETUP_CONTINUING: "1" },
+    listener: { kind: "ordo", pid: 42 }, log: () => {},
+    ask: async (question) => { asks.push(question); return "n"; },
+  });
+  assert.equal(asks.length, 1);
+  assert.match(asks[0], /Restart the running server/);
+});
+
+test("keeping an existing config also keeps its effective port, not discarded wizard answers", async () => {
+  const root = tempRepo();
+  writeFileSync(join(root, "apps/server/.env"), "PORT=3217\nJWT_SECRET=kept\nLIBRARY_KEK=kept\n");
+  const answers = ["3218", "n", "n", "", "n", "n", "n", "n"];
+  const result = await deploy({
+    argv: ["install", "--no-release", "--dry-run", "--skip-install", "--skip-build", "--skip-migrate"],
+    repoRoot: root, interactive: true, env: process.env,
+    ask: async () => answers.shift(), log: () => {},
+  });
+  assert.equal(result.envDecision.write, false);
+  assert.equal(result.settings.port, 3217);
 });
 
 test("port listeners and restart choice", () => {
@@ -442,7 +594,7 @@ test("a foreign process on the port aborts before install", async () => {
   );
 });
 
-test("guided setup keeps the usual choices and explains them", async () => {
+test("guided setup keeps the usual choices, validates, and confirms first", async () => {
   const seen = [];
   const pick = async (spec) => {
     seen.push(`${spec.title}\n${spec.detail}`);
@@ -453,20 +605,129 @@ test("guided setup keeps the usual choices and explains them", async () => {
     return "";
   };
   const { DEFAULTS } = require("./deploy-server.js");
-  const settings = await promptGuidedSettings(ask, DEFAULTS, pick, () => {});
+  const logged = [];
+  const settings = await promptGuidedSettings(ask, DEFAULTS, pick, (l) => logged.push(String(l)));
   assert.equal(settings.port, 3000);
   assert.equal(settings.registration, false);
   assert.equal(settings.emailVerification, false);
   assert.equal(settings.smtpUrl, "");
+  assert.equal(settings.smtpRequired, false);
   assert.equal(settings.listenHost, "127.0.0.1");
   assert.equal(settings.trustProxy, 0);
   assert.match(seen.join("\n"), /The first sign-up becomes the owner either way/);
   assert.match(seen.join("\n"), /Port \[3000\]/);
+  const wizardLog = logged.join("\n");
+  assert.match(wizardLog, /1\/5 Port/);
+  assert.match(wizardLog, /5\/5 Network/);
+  assert.match(wizardLog, /Ready to install/);
+  assert.match(seen.join("\n"), /Install with these settings\?/);
   const summary = formatSetupSummary(settings, "/home/ubuntu/ordo");
   assert.match(summary, /Only the first account/);
   assert.match(summary, /http:\/\/127\.0\.0\.1:3000/);
   assert.match(summary, /Codes in the server log/);
   assert.match(summary, /Compiling the server can take a few minutes/);
+});
+
+test("guided setup re-asks a bad SMTP URL and confirms codes by email only", async () => {
+  const answers = ["", "not a url", "smtp://user:pass@mail.example.com:587", "Ordo <no-reply@example.com>"];
+  let asked = 0;
+  const ask = async () => answers[asked++ % answers.length];
+  const pick = async (spec) => spec.options[spec.selected].value;
+  const lines = [];
+  const settings = await promptGuidedSettings(ask, { ...DEFAULTS }, pick, (l) => lines.push(String(l)));
+  assert.equal(settings.smtpUrl, "smtp://user:pass@mail.example.com:587");
+  assert.equal(settings.smtpFrom, "Ordo <no-reply@example.com>");
+  assert.equal(settings.smtpRequired, true);
+  assert.match(lines.join("\n"), /not a URL/);
+  assert.match(formatSetupSummary(settings), /SMTP, email only/);
+});
+
+test("guided setup can be replayed or cancelled from the summary", async () => {
+  let confirms = 0;
+  const pick = async (spec) => {
+    if (spec.title === "Install with these settings?") {
+      confirms += 1;
+      return confirms >= 2 ? "install" : "again";
+    }
+    return spec.options[spec.selected].value;
+  };
+  const ask = async () => "";
+  const lines = [];
+  const settings = await promptGuidedSettings(ask, { ...DEFAULTS }, pick, (l) => lines.push(String(l)));
+  assert.equal(settings.port, 3000);
+  assert.equal(confirms, 2);
+  assert.match(lines.join("\n"), /Starting over/);
+
+  await assert.rejects(
+    () =>
+      promptGuidedSettings(
+        ask,
+        { ...DEFAULTS },
+        async (spec) =>
+          spec.title === "Install with these settings?" ? "cancel" : spec.options[spec.selected].value,
+        () => {},
+      ),
+     (error) => error.code === "CANCELLED" && /No settings or database changes/.test(error.message),
+  );
+});
+
+test("replaying the wizard keeps port and SMTP answers as defaults without displaying credentials", async () => {
+  let prompts = 0;
+  let confirms = 0;
+  const seen = [];
+  const settings = await promptGuidedSettings(async (question) => {
+    seen.push(question);
+    return ["3216", "smtp://user:password@mail.example.com:587", "", "", "", ""][prompts++] || "";
+  }, DEFAULTS, async (spec) => {
+    if (spec.title === "Install with these settings?") return ++confirms === 1 ? "again" : "install";
+    return spec.options[spec.selected].value;
+  }, () => {});
+  assert.equal(settings.port, 3216);
+  assert.equal(settings.smtpUrl, "smtp://user:password@mail.example.com:587");
+  assert.match(seen.join("\n"), /Port \[3216\]/);
+  assert.doesNotMatch(seen.join("\n"), /password/);
+});
+
+test("guided setup suggests the next port when the default is taken", async () => {
+  const ask = async (question) => {
+    if (/^\s*Port /.test(question)) {
+      assert.match(question, /\[3001\]/, "should suggest 3001");
+    }
+    return "";
+  };
+  const pick = async (spec) => spec.options[spec.selected].value;
+  const lines = [];
+  const settings = await promptGuidedSettings(
+    ask,
+    { ...DEFAULTS },
+    pick,
+    (l) => lines.push(String(l)),
+    { portInUse: () => ({ kind: "other", pid: 1, command: "python http.server" }) },
+  );
+  assert.equal(settings.port, 3001);
+  assert.match(lines.join("\n"), /already used by another program/);
+});
+
+test("the banner and next-steps panel document what setup does", () => {
+  const banner = formatSetupBanner(false);
+  assert.match(banner, /ordo · self-hosted server/);
+  assert.match(banner, /Settings, secure keys, and database/);
+  assert.match(banner, /Esc cancels/);
+  const panel = formatNextSteps({
+    settings: { ...DEFAULTS },
+    dbPath: "apps/server/prisma/ordo.db",
+    envPath: "apps/server/.env",
+    launch: "none",
+  });
+  assert.match(panel, /Setup finished/);
+  assert.match(panel, /NODE_ENV=production pnpm start/);
+  assert.match(panel, /api\/server\/info/);
+  assert.match(panel, /Use your own server/);
+  assert.match(panel, /setup\.log/);
+  assert.match(panel, /SERVER-SETUP\.md/);
+  const update = formatNextSteps({ settings: DEFAULTS, launch: "detached", command: "update" });
+  assert.match(update, /Update complete/);
+  assert.doesNotMatch(update, /Use your own server|Check that it answers/);
 });
 
 test("installProcess matches this server and not another cwd", () => {

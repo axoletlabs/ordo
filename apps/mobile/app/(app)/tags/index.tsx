@@ -4,9 +4,9 @@
  */
 import React, { useCallback, useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useAppRouter as useRouter } from "../../../src/hooks/use-app-router";
 import { Header } from "../../../src/components/ui/Header";
-import { FAB, FABLayer } from "../../../src/components/ui/FAB";
+import { FAB, FABDock } from "../../../src/components/ui/FAB";
 import { ScreenContent } from "../../../src/components/ui/ScreenContent";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
 import { EmptyState } from "../../../src/components/ui/EmptyState";
@@ -19,15 +19,16 @@ import { useTags } from "../../../src/hooks/use-tags";
 import { usePullToRefresh } from "../../../src/hooks/use-list-controls";
 import { errorMessage } from "../../../src/lib/error-message";
 import { useTheme } from "../../../src/theme/ThemeProvider";
+import { useFloatingDockMetrics } from "../../../src/hooks/use-floating-dock-metrics";
 import { ROW_ICON_FRAME } from "../../../src/theme/alignment";
 import { layout, spacing } from "../../../src/theme/tokens";
-import { FAB_LIST_CLEARANCE } from "../../../src/lib/list-pagination";
 import type { TagDto } from "@ordo/shared";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
 
 export default function TagsScreen() {
   const { palette } = useTheme();
   const router = useRouter();
+  const { listOverlayClearance } = useFloatingDockMetrics();
   const { data: tags, isLoading, error, refetch } = useTags();
   const { refreshing, onRefresh } = usePullToRefresh(() => refetch());
 
@@ -39,7 +40,7 @@ export default function TagsScreen() {
 
   const onPressTag = useCallback(
     (tag: TagDto) => {
-      router.push(`/tags/${tag.id}`);
+      return router.push(`/tags/${tag.id}`);
     },
     [router],
   );
@@ -62,8 +63,8 @@ export default function TagsScreen() {
   );
 
   const listContentStyle = useMemo(
-    () => ({ paddingBottom: FAB_LIST_CLEARANCE }),
-    [],
+    () => ({ paddingBottom: listOverlayClearance }),
+    [listOverlayClearance],
   );
 
   return (
@@ -115,13 +116,13 @@ export default function TagsScreen() {
       </ScreenContent>
 
       {items.length > 0 ? (
-        <FABLayer maxWidth={layout.maxContentWidth}>
+        <FABDock maxWidth={layout.maxContentWidth}>
           <FAB
             onPress={() => setCreateOpen(true)}
             accessibilityLabel="New tag"
             maxContentWidth={layout.maxContentWidth}
           />
-        </FABLayer>
+        </FABDock>
       ) : null}
 
       <CreateTagPanel visible={createOpen} onDismiss={() => setCreateOpen(false)} />

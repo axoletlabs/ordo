@@ -5,13 +5,13 @@
  */
 import React, { useEffect, useMemo, useState, type ComponentProps } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { type BookmarkDto, type TagSummaryDto } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { PanelActions } from "../ui/SheetActionRow";
 import { Text } from "../ui/Text";
-import { PressableScale } from "../ui/PressableScale";
+import { IconButton } from "../ui/IconButton";
 import { TagChip } from "./TagChip";
 import { TagSelectList } from "./TagSelectList";
 import { CreateTagPanel } from "./CreateTagPanel";
@@ -97,9 +97,10 @@ export function EditTagsSheet({ visible, onDismiss, bookmark }: EditTagsSheetPro
 
   return (
     <>
-      <FloatingPanel visible={visible} onDismiss={onDismiss}>
+      <FloatingPanel visible={visible} obscured={createTagOpen} onDismiss={onDismiss} scrollBody={false}>
         <PanelHeader title="Edit tags" />
-        <View style={styles.body}>
+        <TagSelectList selectedIds={selectedIds} onToggle={toggle} extraTags={bookmark.tags}
+          onRequestCreateTag={() => setCreateTagOpen(true)} header={<View style={styles.body}>
       {assigned.length > 0 ? (
         <ScrollView
           horizontal
@@ -150,22 +151,12 @@ export function EditTagsSheet({ visible, onDismiss, bookmark }: EditTagsSheetPro
         </View>
       ) : null}
 
-      <View style={styles.section}>
-        <Text variant="label" color="tertiary">Tags</Text>
-        <TagSelectList
-          selectedIds={selectedIds}
-          onToggle={toggle}
-          extraTags={bookmark.tags}
-          onRequestCreateTag={() => setCreateTagOpen(true)}
-        />
-      </View>
-
       {error ? (
         <Text variant="footnote" color="danger" style={styles.error}>
           {error}
         </Text>
       ) : null}
-        </View>
+        </View>} />
 
       <PanelActions
         confirmLabel="Save"
@@ -196,29 +187,22 @@ function PressableIconButton({
   onPress: () => void;
 }) {
   return (
-    <PressableScale
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      onPress={onPress}
-      hitSlop={8}
-      scaleTo={0.85}
-    >
-      <Ionicons name={icon} size={16} color={color} />
-    </PressableScale>
+    <IconButton name={icon} variant="standard" color={color} accessibilityLabel={label} onPress={onPress} />
   );
 }
 
 const styles = StyleSheet.create({
-  body: {},
+  body: { flexShrink: 1 },
   hint: { marginBottom: spacing[6] },
   chipRow: { flexDirection: "row", gap: spacing[8], paddingVertical: spacing[6], flexWrap: "wrap" },
   chipWrap: { flexDirection: "row", gap: spacing[8], flexWrap: "wrap", marginTop: spacing[6] },
   suggestionChip: {
+    flexWrap: "wrap",
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[4],
   },
   suggestionActions: { flexDirection: "row", gap: spacing[2] },
-  section: { marginTop: spacing[10] },
+  section: { marginTop: spacing[10], flexShrink: 1 },
   error: { marginTop: spacing[8] },
 });

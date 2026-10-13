@@ -1,6 +1,6 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { type ButtonVariant } from "./Button";
 import { PanelHeader } from "./PanelHeader";
 import { FloatingPanel } from "./FloatingPanel";
@@ -25,7 +25,7 @@ export function ConfirmDialog({
 }: {
   visible: boolean;
   onDismiss: () => void;
-  icon: keyof typeof Ionicons.glyphMap;
+  icon?: keyof typeof Ionicons.glyphMap;
   tone?: "danger" | "accent";
   title: string;
   message: string;

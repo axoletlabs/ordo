@@ -1,7 +1,8 @@
 /** Account identity and security settings. */
 import React, { useState } from "react";
-import { Pressable, View } from "react-native";
-import { useRouter } from "expo-router";
+import { View } from "react-native";
+import { PressableScale } from "../../../src/components/ui/PressableScale";
+import { useAppRouter as useRouter } from "../../../src/hooks/use-app-router";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
 import {
@@ -21,7 +22,7 @@ import { errorMessage } from "../../../src/lib/error-message";
 import { formatDate } from "../../../src/lib/format";
 import { haptics } from "../../../src/lib/haptics";
 import { measureAnchor, type MenuAnchorRect } from "../../../src/lib/menu-anchor";
-import { spacing } from "../../../src/theme/tokens";
+import { radius, spacing } from "../../../src/theme/tokens";
 
 export default function AccountScreen() {
   const router = useRouter();
@@ -119,8 +120,8 @@ export default function AccountScreen() {
   return (
     <SettingsPage title="Account">
       <SettingsScrollView>
-        <View ref={avatarRef} collapsable={false} style={{ alignSelf: "center" }}>
-          <Pressable
+        <View ref={avatarRef} collapsable={false} style={{ alignSelf: "center", marginBottom: spacing[16] }}>
+          <PressableScale
             onPress={(event) => {
               if (busy) return;
               measureAnchor(avatarRef.current, (anchor) => {
@@ -132,12 +133,12 @@ export default function AccountScreen() {
             accessibilityRole="button"
             accessibilityLabel="Profile picture"
             style={{
-              paddingBottom: spacing[16],
+              borderRadius: radius.full,
               opacity: busy ? 0.6 : 1,
             }}
           >
             <UserAvatar user={user} size={72} />
-          </Pressable>
+          </PressableScale>
         </View>
 
         <SettingsGroup compact>

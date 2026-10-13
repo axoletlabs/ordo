@@ -1,6 +1,6 @@
 /**
- * Bookmark/folder row height math. Kept for tests and any layout that still
- * needs an estimate; lists size rows from content.
+ * Shared row geometry. Standard font sizes use exact layout offsets, avoiding
+ * per-cell native/web measurements. Scaled accessibility text remains intrinsic.
  */
 import type { BookmarkDto } from "@ordo/shared";
 
@@ -32,12 +32,17 @@ export function bookmarkListItemType(bookmark: BookmarkDto | null | undefined): 
   return "bookmark";
 }
 
-export function estimateBookmarkRowSize(bookmark: BookmarkDto | null | undefined): number {
+export function estimateBookmarkRowSize(bookmark: BookmarkDto | null | undefined, omitTagIds?: readonly string[]): number {
   if (!bookmark) return BOOKMARK_ROW_BASE_SIZE;
-  const { hasDescription, hasTags, hasSuggestions } = bookmarkRowFlags(bookmark);
-  let size = BOOKMARK_ROW_BASE_SIZE;
-  if (hasDescription) size += 18;
-  if (hasTags) size += 24;
-  if (hasSuggestions) size += 18;
-  return size;
+  const hasTags = bookmark.tags?.some((tag) => !omitTagIds?.includes(tag.id));
+  return hasTags || bookmark.remindAt != null || bookmark.suggestedTags?.length ? 96 : BOOKMARK_ROW_BASE_SIZE;
+}
+
+export function listRowLayouts(heights: readonly number[]) {
+  let offset = 0;
+  return heights.map((length, index) => {
+    const row = { length, offset, index };
+    offset += length;
+    return row;
+  });
 }

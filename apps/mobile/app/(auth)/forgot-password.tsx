@@ -4,7 +4,8 @@
  */
 import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { Link, useRouter } from "expo-router";
+import { useRouter } from "expo-router";
+import { AuthLink } from "../../src/components/auth/AuthLink";
 import { ForgotPasswordSchema } from "@ordo/shared";
 import { AuthShell } from "../../src/components/auth/AuthShell";
 import { OtpDeliveryHint } from "../../src/components/auth/OtpDeliveryHint";
@@ -53,15 +54,15 @@ export default function ForgotPasswordScreen() {
       footer={
         <View style={styles.row}>
           <Text variant="footnote" color="secondary">Remembered it? </Text>
-          <Link href="/(auth)/login" asChild replace>
-            <Text variant="footnote" color="accent" style={styles.link}>Sign in</Text>
-          </Link>
+          <AuthLink href="/(auth)/login" label="Sign in" replace />
         </View>
       }
     >
       <OtpDeliveryHint smtpConfigured={smtpConfigured} />
       <Input
         label="Email"
+        required maxLength={254}
+        disabled={forgot.isPending}
         value={email}
         onChangeText={setEmail}
         placeholder="you@example.com"
@@ -70,14 +71,16 @@ export default function ForgotPasswordScreen() {
         autoCapitalize="none"
         autoCorrect={false}
         error={formError || undefined}
+        autoComplete="email"
+        returnKeyType="send"
+        onSubmitEditing={() => { if (!forgot.isPending) void submit(); }}
       />
       <View style={{ height: spacing[24] }} />
-      <Button label="Send reset code" block size="lg" onPress={submit} loading={forgot.isPending} />
+      <Button label="Send reset code" block size="md" onPress={submit} loading={forgot.isPending} />
     </AuthShell>
   );
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", justifyContent: "center" },
-  link: { textDecorationLine: "underline" },
+  row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center" },
 });

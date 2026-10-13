@@ -14,15 +14,15 @@ export function Badge({ children, tone = "neutral" }: BadgeProps) {
   const { palette } = useTheme();
   const { bg, fg } = {
     neutral: { bg: palette.surfaceSecondary, fg: palette.textTertiary },
-    accent: { bg: palette.accentSoft, fg: palette.accent },
-    green: { bg: "rgba(108,143,58,0.14)", fg: palette.green },
-    blue: { bg: "rgba(79,125,166,0.14)", fg: palette.blue },
-    danger: { bg: palette.dangerSoft, fg: palette.danger },
+    accent: { bg: palette.primaryContainer, fg: palette.onPrimaryContainer },
+    green: { bg: palette.primaryContainer, fg: palette.onPrimaryContainer },
+    blue: { bg: palette.secondaryContainer, fg: palette.onSecondaryContainer },
+    danger: { bg: palette.errorContainer, fg: palette.onErrorContainer },
   }[tone];
 
   return (
     <View style={[styles.badge, { backgroundColor: bg, borderRadius: radius.full }]}>
-      <Text variant="monoSmall" color="primary" style={{ color: fg }}>
+      <Text variant="labelSmall" style={{ color: fg }}>
         {children}
       </Text>
     </View>
@@ -30,5 +30,5 @@ export function Badge({ children, tone = "neutral" }: BadgeProps) {
 }
 
 const styles = StyleSheet.create({
-  badge: { paddingHorizontal: spacing[8], paddingVertical: spacing[4], minWidth: 20, alignItems: "center" },
+  badge: { paddingHorizontal: spacing[4], minHeight: 16, minWidth: 16, alignItems: "center", justifyContent: "center" },
 });

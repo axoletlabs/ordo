@@ -12,7 +12,10 @@ import {
 } from "../lib/runtime-restart";
 import { pinSystemChrome } from "../theme/pin-system-chrome";
 import { resolvePalette } from "../theme/theme";
+import { currentDeviceColors } from "../theme/device-colors";
 import { useSettingsStore } from "./settings";
+import { singleFlight } from "../lib/single-flight";
+import { useNativeUpdateStore } from "./native-update";
 
 const SPLASH_PRESENT_TIMEOUT_MS = 1500;
 const COVER_KEY = "restartCover";
@@ -62,8 +65,8 @@ export function markRestartSplashPresented(): void {
 }
 
 function currentPalette() {
-  const { themeMode, amoled } = useSettingsStore.getState();
-  return resolvePalette(themeMode, amoled, Appearance.getColorScheme());
+  const { themeMode, amoled, expressive, themeContrast, materialYouColors } = useSettingsStore.getState();
+  return resolvePalette(themeMode, amoled, Appearance.getColorScheme(), undefined, expressive, themeContrast, materialYouColors ? currentDeviceColors() : null);
 }
 
 function nextFrame(): Promise<void> {
@@ -131,6 +134,10 @@ export async function restartRuntime(beforeReload?: () => Promise<void>): Promis
   }
 }
 
-export function restartForUpdate(): Promise<void> {
-  return restartRuntime();
-}
+export const restartForUpdate = singleFlight(async () => {
+  const native = useNativeUpdateStore.getState();
+  if (native.status === "downloading" || native.installing) {
+    throw new Error("Finish or cancel the app install before restarting");
+  }
+  await restartRuntime();
+});

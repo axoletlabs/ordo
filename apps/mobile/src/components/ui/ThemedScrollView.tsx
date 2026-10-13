@@ -7,7 +7,6 @@ import React from "react";
 import {
   FlatList,
   Platform,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   View,
@@ -17,6 +16,9 @@ import {
   type ViewStyle,
 } from "react-native";
 import { type FlashListProps } from "@shopify/flash-list";
+import { GestureDetector } from "react-native-gesture-handler";
+import Animated, { LinearTransition } from "react-native-reanimated";
+import { useMaterialMotion } from "../../theme/material-motion";
 import {
   chainHandlers,
   splitScrollLayoutStyle,
@@ -25,28 +27,9 @@ import {
   type ScrollBarInsets,
 } from "./ScrollBar";
 import { scrollViewShouldFill } from "../../theme/scrollbar";
-import { useTheme } from "../../theme/ThemeProvider";
+import { useMaterialRefresh } from "../../hooks/use-material-refresh";
+import { RefreshHud } from "./RefreshHud";
 import { LIST_END_REACHED_THRESHOLD } from "../../lib/list-pagination";
-
-/** Native pull-to-refresh with the branded coral-on-chip colors. */
-function useThemedRefreshControl(
-  refreshing: boolean | null | undefined,
-  onRefresh: (() => void) | null | undefined,
-  refreshControl?: React.ReactElement,
-) {
-  const { palette } = useTheme();
-  if (refreshControl) return refreshControl;
-  if (refreshing == null && onRefresh == null) return undefined;
-  return (
-    <RefreshControl
-      refreshing={!!refreshing}
-      onRefresh={onRefresh ?? undefined}
-      tintColor={palette.accent}
-      colors={[palette.accent]}
-      progressBackgroundColor={palette.surfaceElevated}
-    />
-  );
-}
 
 export type ThemedScrollViewProps = ScrollViewProps & {
   scrollBarInsets?: ScrollBarInsets;
@@ -54,10 +37,13 @@ export type ThemedScrollViewProps = ScrollViewProps & {
 
 export type ThemedFlashListProps<T> = FlashListProps<T> & {
   scrollBarInsets?: ScrollBarInsets;
+  animateChanges?: boolean;
+  getItemLayout?: FlatListProps<T>["getItemLayout"];
 };
 
 export type ThemedFlatListProps<T> = FlatListProps<T> & {
   scrollBarInsets?: ScrollBarInsets;
+  animateChanges?: boolean;
 };
 
 const nativeScrollBarProps = {
@@ -169,10 +155,13 @@ export const ThemedFlashList = React.forwardRef(function ThemedFlashList<T>(
   return (
     <ThemedFlatList
       ref={ref}
+      animateChanges={false}
       removeClippedSubviews={false}
       initialNumToRender={12}
       maxToRenderPerBatch={8}
-      windowSize={7}
+      // Exact offsets make overscan eligible immediately. Seven screens mounted
+      // an entire 40-row folder during navigation; keep one screen on each side.
+      windowSize={3}
       updateCellsBatchingPeriod={50}
       onEndReachedThreshold={LIST_END_REACHED_THRESHOLD}
       {...(flatListProps as ThemedFlatListProps<T>)}
@@ -196,46 +185,60 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
     refreshing,
     onRefresh,
     refreshControl,
+    onTouchStart, onTouchMove, onTouchEnd, onTouchCancel, onScrollEndDrag,
     scrollBarInsets,
     contentContainerStyle,
     data,
+    animateChanges = false,
     ...rest
   } = props;
   const bar = useVerticalScrollBar(scrollBarInsets);
   const { wrapper, inner } = splitScrollLayoutStyle(style);
-  const themedRefresh = useThemedRefreshControl(refreshing, onRefresh, refreshControl);
+  const customRefresh = !refreshControl && !!onRefresh;
+  const refresh = useMaterialRefresh(!!refreshing, onRefresh, customRefresh && rest.scrollEnabled !== false);
   const fill = wrapper?.flex == null && wrapper?.maxHeight == null && wrapper?.height == null;
   const itemCount = Array.isArray(data) ? data.length : data == null ? 0 : 1;
+  const motion = useMaterialMotion();
+  const transition = React.useMemo(() => LinearTransition.springify().mass(motion.fast.mass)
+    .stiffness(motion.fast.stiffness).damping(motion.fast.damping), [motion.fast]);
+  const List = (animateChanges ? Animated.FlatList : FlatList) as typeof FlatList;
 
+  const list = (
+    <List
+      ref={ref}
+      data={data}
+      {...rest}
+      {...(animateChanges && !motion.reducedMotion ? { itemLayoutAnimation: transition } : {})}
+      {...nativeScrollBarProps}
+      showsVerticalScrollIndicator={
+        Platform.OS === "web" ? (showsVerticalScrollIndicator ?? true) : false
+      }
+      indicatorStyle={bar.indicatorStyle}
+      refreshControl={refreshControl}
+      removeClippedSubviews={false}
+      contentContainerStyle={[
+        { flexGrow: itemCount === 0 ? 1 : 0 },
+        contentContainerStyle,
+      ]}
+      style={[fill ? styles.fill : null, inner]}
+      onScroll={chainHandlers(bar.onScroll, refresh.onScroll, onScroll)}
+      onTouchStart={chainHandlers(Platform.OS === "web" ? refresh.onTouchStart : undefined, onTouchStart)}
+      onTouchMove={chainHandlers(Platform.OS === "web" ? refresh.onTouchMove : undefined, onTouchMove)}
+      onTouchEnd={chainHandlers(Platform.OS === "web" ? refresh.onTouchEnd : undefined, onTouchEnd)}
+      onTouchCancel={chainHandlers(Platform.OS === "web" ? refresh.onTouchCancel : undefined, onTouchCancel)}
+      onScrollEndDrag={chainHandlers(Platform.OS === "web" ? refresh.onScrollEndDrag : undefined, onScrollEndDrag)}
+      onContentSizeChange={chainHandlers(bar.onContentSizeChange, onContentSizeChange)}
+      scrollEventThrottle={scrollEventThrottle ?? 16}
+    />
+  );
   return (
     <View
       style={[styles.host, fill ? styles.fill : null, wrapper]}
       onLayout={chainHandlers(bar.onLayout, onLayout)}
     >
-      {/* Native list. The gesture-handler list keeps the refresh gesture
-          open after the finger lifts, so the spinner sits there until the
-          next touch. */}
-      <FlatList
-        ref={ref}
-        data={data}
-        {...rest}
-        {...nativeScrollBarProps}
-        showsVerticalScrollIndicator={
-          Platform.OS === "web" ? (showsVerticalScrollIndicator ?? true) : false
-        }
-        indicatorStyle={bar.indicatorStyle}
-        refreshControl={themedRefresh}
-        removeClippedSubviews={false}
-        contentContainerStyle={[
-          { flexGrow: itemCount === 0 ? 1 : 0 },
-          contentContainerStyle,
-        ]}
-        style={[fill ? styles.fill : null, inner]}
-        onScroll={chainHandlers(bar.onScroll, onScroll)}
-        onContentSizeChange={chainHandlers(bar.onContentSizeChange, onContentSizeChange)}
-        scrollEventThrottle={scrollEventThrottle ?? 16}
-      />
+      {customRefresh && refresh.gesture ? <GestureDetector gesture={refresh.gesture}>{list}</GestureDetector> : list}
       {bar.overlay}
+      {customRefresh ? <RefreshHud dy={refresh.dy} refreshing={!!refreshing} /> : null}
     </View>
   );
 }) as <T>(props: ThemedFlatListProps<T> & { ref?: React.Ref<FlatList<T>> }) => React.ReactElement;

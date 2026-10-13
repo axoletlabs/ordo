@@ -4,14 +4,15 @@
  * reset code would otherwise rewrite the new-password boxes.
  */
 import React, { useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
-import { Link, useLocalSearchParams, useRouter } from "expo-router";
+import { StyleSheet, View, type TextInput } from "react-native";
+import { FormError } from "../../src/components/ui/FormError";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { AuthLink } from "../../src/components/auth/AuthLink";
 import { EMAIL_OTP, ResetPasswordSchema } from "@ordo/shared";
 import { AuthShell } from "../../src/components/auth/AuthShell";
 import { OtpDeliveryHint } from "../../src/components/auth/OtpDeliveryHint";
 import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
-import { Text } from "../../src/components/ui/Text";
 import { EyeToggle } from "../../src/components/ui/EyeToggle";
 import { OtpInput, holdOtpSuccess, type OtpStatus } from "../../src/components/ui/OtpInput";
 import { useForgotPassword, useResetPassword } from "../../src/hooks/use-auth-actions";
@@ -38,6 +39,8 @@ export default function ResetPasswordScreen() {
   const [confirm, setConfirm] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [formError, setFormError] = useState("");
+  const [fieldError, setFieldError] = useState<{ field: "newPassword" | "confirm"; message: string } | null>(null);
+  const confirmRef = useRef<TextInput>(null);
   const [otpError, setOtpError] = useState("");
   const [otpStatus, setOtpStatus] = useState<OtpStatus>("idle");
   const inFlight = useRef(false);
@@ -51,6 +54,7 @@ export default function ResetPasswordScreen() {
 
   const goToCode = () => {
     setFormError("");
+    setFieldError(null);
     setOtpStatus("idle");
     setStage("code");
   };
@@ -58,9 +62,10 @@ export default function ResetPasswordScreen() {
   const submit = async () => {
     if (inFlight.current || otpStatus === "success") return;
     setFormError("");
+    setFieldError(null);
     setOtpError("");
     if (newPassword !== confirm) {
-      setFormError("New passwords don't match.");
+      setFieldError({ field: "confirm", message: "New passwords don't match." });
       return;
     }
     const parsed = ResetPasswordSchema.safeParse({
@@ -74,6 +79,8 @@ export default function ResetPasswordScreen() {
       if (issue?.path[0] === "token") {
         setOtpError(message);
         setStage("code");
+      } else if (issue?.path[0] === "newPassword") {
+        setFieldError({ field: "newPassword", message });
       } else {
         setFormError(message);
       }
@@ -118,9 +125,7 @@ export default function ResetPasswordScreen() {
       subtitle={stage === "code" ? otpEnterHelper(smtpConfigured, email || undefined) : undefined}
       footer={
         <View style={styles.row}>
-          <Link href="/(auth)/login" asChild replace>
-            <Text variant="footnote" color="accent" style={styles.link}>Back to sign in</Text>
-          </Link>
+          <AuthLink href="/(auth)/login" label="Back to sign in" replace />
         </View>
       }
     >
@@ -143,7 +148,7 @@ export default function ResetPasswordScreen() {
           <Button
             label="Continue"
             block
-            size="lg"
+            size="md"
             onPress={() => goToPassword(token)}
             disabled={!codeReady}
           />
@@ -162,6 +167,7 @@ export default function ResetPasswordScreen() {
           <Input
             label="Email"
             value={email}
+            readOnly
             onChangeText={() => {}}
             showSoftInputOnFocus={false}
             caretHidden
@@ -173,6 +179,7 @@ export default function ResetPasswordScreen() {
           <View style={{ height: spacing[16] }} />
           <Input
             label="New password"
+            required maxLength={256}
             value={newPassword}
             onChangeText={setNewPassword}
             placeholder="At least 8 characters"
@@ -180,23 +187,32 @@ export default function ResetPasswordScreen() {
             {...passwordAutofillProps("new-password")}
             passwordRules="minlength: 8;"
             rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
+            error={fieldError?.field === "newPassword" ? fieldError.message : undefined}
+            returnKeyType="next"
+            submitBehavior="submit"
+            onSubmitEditing={() => confirmRef.current?.focus()}
           />
           <View style={{ height: spacing[16] }} />
           <Input
+            ref={confirmRef}
             label="Confirm new password"
+            required maxLength={256}
             value={confirm}
             onChangeText={setConfirm}
             placeholder="Re-enter your new password"
             secureTextEntry={!showPwd}
             {...passwordAutofillProps("new-password")}
             passwordRules="minlength: 8;"
-            error={formError || undefined}
+            error={fieldError?.field === "confirm" ? fieldError.message : undefined}
+            returnKeyType="done"
+            onSubmitEditing={() => void submit()}
           />
           <View style={{ height: spacing[24] }} />
+          <FormError message={formError || undefined} />
           <Button
             label="Reset password"
             block
-            size="lg"
+            size="md"
             onPress={() => void submit()}
             loading={busy}
           />
@@ -215,6 +231,5 @@ export default function ResetPasswordScreen() {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", justifyContent: "center" },
-  link: { textDecorationLine: "underline" },
+  row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center" },
 });

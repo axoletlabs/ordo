@@ -5,12 +5,14 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { useAppRouter as useRouter } from "../../../src/hooks/use-app-router";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
 import { Header, HeaderActions, HeaderIconButton } from "../../../src/components/ui/Header";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
-import { FAB, FABLayer } from "../../../src/components/ui/FAB";
+import { FAB, FABDock } from "../../../src/components/ui/FAB";
+import { listPosition } from "../../../src/theme/list-shape";
 import { Button } from "../../../src/components/ui/Button";
 import { ScreenContent } from "../../../src/components/ui/ScreenContent";
 import { EmptyState } from "../../../src/components/ui/EmptyState";
@@ -24,7 +26,6 @@ import { BookmarkActionsSheet } from "../../../src/components/bookmarks/Bookmark
 import { FolderActionsSheet } from "../../../src/components/bookmarks/FolderActionsSheet";
 import { SortMenu } from "../../../src/components/bookmarks/SortMenu";
 import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
-import { ReaderPane, ReaderPanePlaceholder } from "../../../src/components/reader/ReaderPane";
 import { useFolders } from "../../../src/hooks/queries";
 import { useListSortStore } from "../../../src/store/list-sort";
 import { useFolderUnlocked } from "../../../src/hooks/use-folders";
@@ -34,7 +35,7 @@ import {
   useDeleteBookmark,
   useMarkAllRead,
 } from "../../../src/hooks/use-bookmarks";
-import { useResponsiveLayout } from "../../../src/hooks/use-responsive-layout";
+import { useLegacyReaderLink } from "../../../src/hooks/use-legacy-reader-link";
 import { bookmarkKey, useSelectionMode } from "../../../src/hooks/use-selection";
 import { SelectionDragFrame, useSelectionDrag } from "../../../src/components/bookmarks/SelectionDrag";
 import { useFloatingDockMetrics } from "../../../src/hooks/use-floating-dock-metrics";
@@ -45,23 +46,22 @@ import { markedAsReadToast } from "../../../src/lib/copy";
 import { errorMessage, isFolderProtected } from "../../../src/lib/error-message";
 import { flattenPages } from "../../../src/lib/api/query-keys";
 import { sortBookmarksBy } from "../../../src/lib/list-sort";
-import { layout, radius, spacing } from "../../../src/theme/tokens";
-import { FAB_LIST_CLEARANCE } from "../../../src/lib/list-pagination";
+import { layout } from "../../../src/theme/tokens";
 import { DEFAULT_BOOKMARK_LIST_SORT, type BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 import { useLoadMore, usePullToRefresh } from "../../../src/hooks/use-list-controls";
 import { ListLoadingFooter } from "../../../src/components/ui/ListLoadingFooter";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
+import { useBookmarkListLayout } from "../../../src/hooks/use-bookmark-list-layout";
 
 export default function FolderDetailScreen() {
   const { palette } = useTheme();
   const router = useRouter();
-  const { hasDetailPane } = useResponsiveLayout();
-  const pageMax = hasDetailPane ? layout.maxLibraryWidth : layout.maxContentWidth;
-  const { bottom: dockInset, selectionClearance } = useFloatingDockMetrics();
+  const pageMax = layout.maxContentWidth;
+  const { bottom: dockInset, selectionClearance, listOverlayClearance } = useFloatingDockMetrics();
   const { id, bookmark } = useLocalSearchParams<{ id: string; bookmark?: string }>();
   const routeId = Array.isArray(id) ? id[0] : id;
-  const selectedBookmarkId = Array.isArray(bookmark) ? bookmark[0] : bookmark;
+  useLegacyReaderLink(bookmark);
   /** "root" (or a missing param) maps to the unfiled list; otherwise a real folder id. */
   const isRoot = routeId === "root";
   const folderId = isRoot || !routeId ? null : routeId;
@@ -85,6 +85,8 @@ export default function FolderDetailScreen() {
   const [bookmarkAnchor, setBookmarkAnchor] = useState<MenuAnchorRect | null>(null);
   const [editTagsBm, setEditTagsBm] = useState<BookmarkDto | null>(null);
   const [unlockOpen, setUnlockOpen] = useState(false);
+  /** Skips auto-opening the unlock sheet once, right after a lock is applied here. */
+  const skipAutoUnlockRef = useRef(false);
   const [folderActions, setFolderActions] = useState(false);
   const [folderAnchor, setFolderAnchor] = useState<MenuAnchorRect | null>(null);
   const [sortOpen, setSortOpen] = useState(false);
@@ -101,6 +103,12 @@ export default function FolderDetailScreen() {
   const protectedError = !!bookmarks.error && isFolderProtected(bookmarks.error) && !unlocked;
   const showLocked = locked || protectedError;
   useEffect(() => {
+    // A lock just applied from the folder actions sheet shouldn't immediately
+    // prompt to unlock (the gate's Unlock button is there when actually wanted).
+    if (showLocked && skipAutoUnlockRef.current) {
+      skipAutoUnlockRef.current = false;
+      return;
+    }
     setUnlockOpen(showLocked);
   }, [showLocked]);
   const loadFailed = !!bookmarks.error && !showLocked && !bookmarks.data;
@@ -113,27 +121,19 @@ export default function FolderDetailScreen() {
     [items, selection],
   );
   const selectableKeys = useMemo(() => items.map((bookmark) => bookmarkKey(bookmark.id)), [items]);
+  const getItemLayout = useBookmarkListLayout(items);
   const isEmpty = !foldersLoading && !bookmarks.isLoading && !showLocked && !loadFailed && items.length === 0;
   // Root isn't a folder row, so derive unread state from the loaded items.
   const hasUnread = folder ? folder.unreadCount > 0 : items.some((b) => !b.isRead);
 
   const openReader = useCallback((b: BookmarkDto) => {
-    openListBookmark(b, () => {
-      if (hasDetailPane) {
-        router.push({
-          pathname: "/folder/[id]",
-          params: { id: folderId ?? "root", bookmark: b.id },
-        });
-        return;
-      }
-      router.push(`/reader/${b.id}`);
-    });
-  }, [hasDetailPane, folderId, router]);
+    return openListBookmark(b, () => router.push(`/reader/${b.id}`));
+  }, [router]);
 
   const onPressBookmark = useCallback((bookmark: BookmarkDto) => {
     const sel = selectionRef.current;
     if (sel.active) sel.toggle(bookmarkKey(bookmark.id));
-    else openReader(bookmark);
+    else return openReader(bookmark);
   }, [openReader]);
 
   const onMoreBookmark = useCallback((b: BookmarkDto, anchor: MenuAnchorRect) => {
@@ -152,24 +152,19 @@ export default function FolderDetailScreen() {
     onSelectedChange: selection.assign,
   });
 
-  const selectionActive = selection.active;
-  const selectionRevision = selection.revision;
+  const openTag = useCallback((tagId: string) => router.push(`/tags/${tagId}`), [router]);
   const renderBookmark = useCallback(
-    ({ item }: { item: BookmarkDto }) => (
+    ({ item, index }: { item: BookmarkDto; index: number }) => (
       <BookmarkRow
         bookmark={item}
-        selectionMode={selectionActive}
-        selected={
-          selectionActive
-            ? selectionRef.current.has(bookmarkKey(item.id))
-            : hasDetailPane && item.id === selectedBookmarkId
-        }
+        position={listPosition(index, items.length)}
         onPress={onPressBookmark}
+        onTagPress={openTag}
         onEnterSelection={onEnterSelection}
         onMore={onMoreBookmark}
       />
     ),
-    [hasDetailPane, onEnterSelection, onMoreBookmark, onPressBookmark, selectedBookmarkId, selectionActive, selectionRevision],
+    [onEnterSelection, onMoreBookmark, onPressBookmark, items.length, openTag],
   );
 
   const { onEndReached, loadingMore, resetPaging } = useLoadMore({
@@ -191,13 +186,7 @@ export default function FolderDetailScreen() {
 
   const onDelete = (b: BookmarkDto) => {
     haptics.medium();
-    deleteBm.mutate(b, {
-      onDeleted: () => {
-        if (selectedBookmarkId === b.id) {
-          router.replace({ pathname: "/folder/[id]", params: { id: folderId ?? "root" } });
-        }
-      },
-    });
+    deleteBm.mutate(b);
   };
 
   const onMarkAllRead = () => {
@@ -208,17 +197,18 @@ export default function FolderDetailScreen() {
     });
   };
 
-  const listContentPadding = selection.active ? selectionClearance : FAB_LIST_CLEARANCE;
+  const listContentPadding = selection.active ? selectionClearance : listOverlayClearance;
   const listPane = (
-    <SelectionDragFrame drag={drag}>
+    <SelectionDragFrame drag={drag} selectionStore={selection.store}>
     <ThemedFlashList
       ref={drag.listRef}
       onScroll={drag.onScroll}
       onContentSizeChange={drag.onContentSizeChange}
       scrollEventThrottle={drag.scrollEventThrottle}
       data={items}
-      extraData={`${selectionRevision}:${selectedBookmarkId ?? ""}:${bookmarkSort}`}
-      key={`folder:${folderId ?? "root"}:${bookmarkSort}`}
+      extraData={bookmarkSort}
+      getItemLayout={getItemLayout}
+      key={`folder:${folderId ?? "root"}`}
       keyExtractor={(b: BookmarkDto) => b.id}
       renderItem={renderBookmark}
       contentContainerStyle={{ paddingBottom: listContentPadding }}
@@ -322,57 +312,16 @@ export default function FolderDetailScreen() {
           maxWidth={pageMax}
           style={styles.content}
         >
-          {hasDetailPane ? (
-            <View style={styles.splitPane}>
-              <View style={styles.listPane}>
-                <BookmarkListSkeleton />
-              </View>
-              <View style={[styles.readerPane, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-                <ReaderPanePlaceholder />
-              </View>
-            </View>
-          ) : (
-            <View style={styles.singlePane}>
-              <BookmarkListSkeleton />
-            </View>
-          )}
-        </ScreenContent>
-      ) : hasDetailPane ? (
-        <ScreenContent maxWidth={layout.maxLibraryWidth} style={styles.content}>
-          <View style={styles.splitPane}>
-            <View style={styles.listPane}>
-              {listPane}
-              {selection.active ? null : (
-              <FAB
-                onPress={() => setAddOpen(true)}
-                accessibilityLabel="Save bookmark"
-                testID="add-bookmark-fab"
-                right={layout.screenHorizontalPad}
-              />
-              )}
-            </View>
-            <View style={[styles.readerPane, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-              {selectedBookmarkId ? (
-                <ReaderPane
-                  bookmarkId={selectedBookmarkId}
-                  embedded
-                  safeBottom={false}
-                  onBack={() => router.setParams({ bookmark: undefined })}
-                />
-              ) : (
-                <ReaderPanePlaceholder />
-              )}
-            </View>
-          </View>
+          <BookmarkListSkeleton />
         </ScreenContent>
       ) : (
         <ScreenContent maxWidth={pageMax} style={styles.content}>
-          <View style={styles.singlePane}>{listPane}</View>
+          {listPane}
         </ScreenContent>
       )}
 
-      {!showLocked && !loadFailed && !hasDetailPane && !selection.active ? (
-        <FABLayer maxWidth={pageMax}>
+      {!showLocked && !loadFailed && !selection.active ? (
+        <FABDock maxWidth={pageMax}>
           <FAB
             onPress={() => setAddOpen(true)}
             accessibilityLabel="Save bookmark"
@@ -380,7 +329,7 @@ export default function FolderDetailScreen() {
             testID="add-bookmark-fab"
             maxContentWidth={pageMax}
           />
-        </FABLayer>
+        </FABDock>
       ) : null}
 
       <AddBookmarkSheet
@@ -446,6 +395,9 @@ export default function FolderDetailScreen() {
         folder={folder ?? null}
         anchor={folderAnchor}
         onDismiss={() => setFolderActions(false)}
+        onLockSet={() => {
+          skipAutoUnlockRef.current = true;
+        }}
         onDeleted={() => {
           setFolderActions(false);
           router.replace("/");
@@ -456,12 +408,7 @@ export default function FolderDetailScreen() {
         active={selection.active}
         bookmarks={selectedBookmarks}
         fromFolderId={folderId}
-        onFinished={() => {
-          if (hasDetailPane && selectedBookmarkId && selection.has(bookmarkKey(selectedBookmarkId))) {
-            router.replace({ pathname: "/folder/[id]", params: { id: folderId ?? "root" } });
-          }
-          selection.exit();
-        }}
+        onFinished={selection.exit}
         bottom={dockInset}
         maxWidth={pageMax}
       />
@@ -473,14 +420,4 @@ export default function FolderDetailScreen() {
 const styles = StyleSheet.create({
   content: { flex: 1, width: "100%" },
   center: { flex: 1, width: "100%", justifyContent: "center" },
-  singlePane: { flex: 1, width: "100%" },
-  splitPane: { flex: 1, width: "100%", flexDirection: "row", gap: spacing[16], paddingBottom: spacing[8] },
-  listPane: { width: 380, flexShrink: 0 },
-  readerPane: {
-    flex: 1,
-    minWidth: 0,
-    borderWidth: 1,
-    borderRadius: radius.lg,
-    overflow: "hidden",
-  },
 });

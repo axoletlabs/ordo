@@ -14,7 +14,7 @@ import { EyeToggle } from "../ui/EyeToggle";
 import { PressableScale } from "../ui/PressableScale";
 import { Segmented } from "../ui/Segmented";
 import { OtpInput } from "../ui/OtpInput";
-import { FolderIconPicker } from "./FolderIconPicker";
+import { FolderIconGrid } from "./FolderIconPicker";
 import { PatternInput } from "./PatternInput";
 import { useTheme } from "../../theme/ThemeProvider";
 import { spacing } from "../../theme/tokens";
@@ -51,9 +51,11 @@ export interface FolderActionsSheetProps {
   folder: FolderDto | null;
   anchor?: MenuAnchorRect | null;
   onDeleted?: (id: string) => void;
+  /** Called after a lock is applied, so hosts can skip immediately prompting to unlock. */
+  onLockSet?: () => void;
 }
 
-export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDeleted }: FolderActionsSheetProps) {
+export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDeleted, onLockSet }: FolderActionsSheetProps) {
   const { palette } = useTheme();
   const serverInfo = useServerInfo();
   /** Older servers drop lockType and silently store every lock as a password. */
@@ -82,15 +84,16 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
   if (folder) folderRef.current = folder;
   const displayFolder = folder ?? folderRef.current;
 
-  React.useEffect(() => {
-    if (!visible || !folder) return;
-    const key = folderKey(folder.id);
+  const highlightId = displayFolder?.id;
+  React.useLayoutEffect(() => {
+    if (!visible || !highlightId) return;
+    const key = folderKey(highlightId);
     useMenuHighlightStore.getState().set(key);
     return () => {
       const store = useMenuHighlightStore.getState();
       if (store.key === key) store.set(null);
     };
-  }, [visible, folder]);
+  }, [visible, highlightId]);
 
   React.useEffect(() => {
     if (!visible) return;
@@ -236,6 +239,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
       });
       clearToken(folder.id);
       invalidateBookmarks();
+      onLockSet?.();
       haptics.success();
       toast.success("Folder locked");
       onDismiss();
@@ -263,6 +267,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
       patchFolderLock(folder.id, { protected: true, lockType: "device" });
       clearToken(folder.id);
       invalidateBookmarks();
+      onLockSet?.();
       haptics.success();
       toast.success("Folder locked");
       onDismiss();
@@ -376,7 +381,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
 
   return (
     <>
-      <ContextMenu visible={menuOpen} onDismiss={onDismiss} anchor={anchor ?? null}>
+      <ContextMenu visible={menuOpen} onDismiss={onDismiss} anchor={anchor ?? null} pageKey={mode} sessionKey={displayFolder?.id}>
         {displayFolder && mode === "menu" ? (
           <>
             {error ? <ContextMenuNote tone="danger">{error}</ContextMenuNote> : null}
@@ -418,6 +423,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
           <PanelHeader title="Rename folder" />
           <Input
             label="Name"
+            required maxLength={100} showCounter
             value={name}
             onChangeText={setName}
             autoFocus
@@ -469,6 +475,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             <View>
               {savedPin ? null : (
                 <Segmented
+                  accessibilityLabel="PIN length"
                   options={[
                     { value: "4", label: "4 digits" },
                     { value: "6", label: "6 digits" },
@@ -500,6 +507,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             <>
               <Input
                 label="Password"
+                required
                 value={password}
                 onChangeText={setPassword}
                 placeholder="At least 4 characters"
@@ -512,6 +520,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
               />
               <Input
                 label="Confirm password"
+                required
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
                 placeholder="Enter password again"
@@ -566,6 +575,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             <View>
               {folder.pinLength ? null : (
                 <Segmented
+                  accessibilityLabel="PIN length"
                   options={[
                     { value: "4", label: "4 digits" },
                     { value: "6", label: "6 digits" },
@@ -597,6 +607,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
           ) : (
             <Input
               label="Folder password"
+              required
               value={password}
               onChangeText={setPassword}
               placeholder="Folder password"
@@ -616,7 +627,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             onPress={() => showMode("removePasswordAccount")}
             style={styles.forgot}
           >
-            <Text variant="footnote" color="accent">Use account password</Text>
+            <Text variant="labelLarge" color="accent">Use account password</Text>
           </PressableScale>
           <View style={sheetMenuStyles.stack}>
             {(folder.lockType ?? "password") === "pattern" || (folder.lockType ?? "password") === "pin" ? (
@@ -646,6 +657,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
           />
           <Input
             label="Account password"
+            required
             value={accountPassword}
             onChangeText={setAccountPassword}
             placeholder="Your account password"
@@ -666,7 +678,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             onPress={() => showMode("removePassword")}
             style={styles.forgot}
           >
-            <Text variant="footnote" color="accent">
+            <Text variant="labelLarge" color="accent">
               {(folder.lockType ?? "password") === "device"
                 ? "Use device lock"
                 : (folder.lockType ?? "password") === "pattern"
@@ -691,7 +703,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
         <>
           <PanelHeader title="Choose an icon" />
           <View>
-            <FolderIconPicker value={icon} onChange={setIcon} />
+            <FolderIconGrid value={icon} onChange={setIcon} />
             {error ? <Text variant="footnote" color="danger" style={styles.error}>{error}</Text> : null}
           </View>
           <PanelActions
@@ -724,7 +736,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
 
 const styles = StyleSheet.create({
   error: { marginTop: spacing[8] },
-  forgot: { alignSelf: "center", marginTop: spacing[8] },
+  forgot: { alignSelf: "center", minHeight: 48, justifyContent: "center", paddingHorizontal: spacing[16], borderRadius: 24, marginTop: spacing[8] },
   confirmInput: { marginTop: spacing[12] },
   pinBoxes: { marginTop: spacing[12] },
 });

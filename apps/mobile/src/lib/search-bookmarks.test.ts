@@ -10,6 +10,7 @@ import {
   searchFiltersActive,
   searchFiltersEqual,
   searchScopeActive,
+  searchHighlightRanges,
   type SearchFilters,
 } from "./search-bookmarks.ts";
 
@@ -40,6 +41,22 @@ function bookmark(partial: Partial<BookmarkDto> & Pick<BookmarkDto, "id" | "titl
 }
 
 const none: SearchFilters = { ...EMPTY_SEARCH_FILTERS };
+
+test("accented cached and remote results use the same matching and original highlight offsets", () => {
+  const cached = bookmark({ id: "cached", title: "Cafe\u0301 reading" });
+  const remote = bookmark({ id: "remote", title: "Café guide" });
+  const tagged = bookmark({ id: "tagged", title: "Notes", tags: [{ id: "coffee", name: "Café", color: "amber" }] });
+  for (const query of ["cafe", "CAFÉ", "cafe\u0301"]) {
+    const rows = compileSearchResults({ query, filters: none, cachedItems: [cached, tagged],
+      serverItems: [remote], serverMatchesQuery: true });
+    assert.deepEqual(rows.map((row) => row.id), ["cached", "remote", "tagged"]);
+    for (const row of [cached, remote]) {
+      const span = firstSearchHighlight(row.title, query);
+      assert.ok(span);
+      assert.equal(row.title.slice(span.start, span.end), row.id === "cached" ? "Cafe\u0301" : "Café");
+    }
+  }
+});
 
 test("sanitizeRouteParam treats Expo's stringified undefined as empty", () => {
   assert.equal(sanitizeRouteParam("undefined"), "");
@@ -536,4 +553,22 @@ test("reuseSearchResults keeps the same array when order is unchanged", () => {
     first,
   ]);
   assert.notEqual(reordered, compiled);
+});
+
+test("each typed word is highlighted, with overlapping prefixes merged", () => {
+  assert.deepEqual(searchHighlightRanges("React Native animation", "react native"), [{ start: 0, end: 5 }, { start: 6, end: 12 }]);
+  assert.deepEqual(searchHighlightRanges("React Native", "rea react"), [{ start: 0, end: 5 }]);
+});
+
+test("optimistic reminder/tag changes are visible even before updatedAt changes", () => {
+  const row = bookmark({ id: "reminder", title: "Read later" });
+  assert.notEqual(reuseSearchResults([row], [{ ...row, remindAt: 1_800_000_000 }])[0], row);
+  assert.notEqual(reuseSearchResults([row], [{ ...row, tags: [{ id: "tag", name: "Reading", color: "green" }] }])[0], row);
+});
+
+test("fresh cached metadata wins over an older server page when applying filters", () => {
+  const server = bookmark({ id: "read", title: "React notes", isRead: false });
+  const cached = { ...server, isRead: true };
+  assert.deepEqual(compileSearchResults({ query: "react", filters: { ...none, status: "unread" },
+    serverItems: [server], cachedItems: [cached], serverMatchesQuery: true }), []);
 });

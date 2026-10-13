@@ -8,9 +8,8 @@
  * is purely presentation: token-driven typography scaled by the reader
  * preferences, responsive images, select-to-highlight text, and external links.
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import {
-  InteractionManager,
   Linking,
   StyleSheet,
   Text,
@@ -30,9 +29,14 @@ import RenderHTML, {
 import { useTheme } from "../../theme/ThemeProvider";
 import type { Palette } from "../../theme/theme";
 import { radius, resolveFont, spacing, type FontFamily } from "../../theme/tokens";
-import type { HighlightDto, ReaderPreferences } from "@ordo/shared";
-import { applyHighlightsToHtml } from "@ordo/shared";
-import { READER_BODY_SIZE, resolveReaderFontFamily } from "./reader-typography";
+import type { HighlightDto, ReaderLineSpacing, ReaderPreferences } from "@ordo/shared";
+import { applyHighlightsToHtml, htmlToPlainText } from "@ordo/shared";
+import { readerArticleColors, READER_IGNORED_INLINE_STYLES } from "./reader-article-colors";
+import {
+  READER_BODY_SIZE,
+  readerLineHeight,
+  resolveReaderFontFamily,
+} from "./reader-typography";
 import {
   collectTableRows,
   plainTextFromNode,
@@ -44,7 +48,6 @@ import {
   SelectablePhrase,
   asHtmlNode,
   anchorRenderer,
-  highlightHandlersFromHtml,
   ignoreTextSelect,
   markRenderer,
   selectableBlockRenderer,
@@ -54,21 +57,33 @@ import {
 /** Custom fonts loaded via useFonts must be registered to avoid warnings. */
 const SYSTEM_FONTS = [
   ...defaultSystemFonts,
-  "Inter_400Regular",
-  "Inter_500Medium",
-  "Inter_600SemiBold",
-  "Inter_700Bold",
-  "InterTight_400Regular",
-  "InterTight_500Medium",
-  "InterTight_600SemiBold",
-  "InterTight_700Bold",
+  "Roboto_400Regular",
+  "Roboto_500Medium",
+  "Roboto_700Bold",
   "JetBrainsMono_400Regular",
   "JetBrainsMono_500Medium",
   "JetBrainsMono_600SemiBold",
   "JetBrainsMono_700Bold",
-  "PlayfairDisplay_400Regular",
-  "PlayfairDisplay_700Bold",
-  "PlayfairDisplay_400Regular_Italic",
+  "Libron_400Regular",
+  "Libron_400Regular_Italic",
+  "Libron_700Bold",
+  "Libron_700BoldItalic",
+  "NVLegibleNext_400Regular",
+  "NVLegibleNext_400Regular_Italic",
+  "NVLegibleNext_700Bold",
+  "NVLegibleNext_700BoldItalic",
+  "NVGaramond_400Regular",
+  "NVGaramond_400Regular_Italic",
+  "NVGaramond_700Bold",
+  "NVGaramond_700BoldItalic",
+  "NVBitter_400Regular",
+  "NVBitter_400Regular_Italic",
+  "NVBitter_700Bold",
+  "NVBitter_700BoldItalic",
+  "NVJost_400Regular",
+  "NVJost_400Regular_Italic",
+  "NVJost_700Bold",
+  "NVJost_700BoldItalic",
 ];
 
 /** Only http(s)/mailto may leave the app; everything else is ignored. */
@@ -84,9 +99,12 @@ function buildTagsStyles(
   palette: Palette,
   family: FontFamily,
   base: number,
+  lineSpacing: ReaderLineSpacing,
 ): MixedStyleRecord {
+  const colors = readerArticleColors(palette);
   const bodyFont = (weight = "400") => resolveFont(family, weight);
   const monoSize = Math.max(12, base - 2);
+  const bodyLineHeight = readerLineHeight(base, lineSpacing);
   const cell = {
     paddingVertical: spacing[6],
     paddingHorizontal: spacing[10],
@@ -97,8 +115,8 @@ function buildTagsStyles(
   const body = {
     fontFamily: bodyFont(),
     fontSize: base,
-    lineHeight: Math.round(base * 1.65),
-    color: palette.textSecondary,
+    lineHeight: bodyLineHeight,
+    color: colors.body,
   };
 
   return {
@@ -141,11 +159,11 @@ function buildTagsStyles(
     strong: { fontFamily: bodyFont("700"), color: palette.text },
     b: { fontFamily: bodyFont("700"), color: palette.text },
     em: {
-      fontFamily: family === "serif" ? resolveFont(family, "400", true) : undefined,
+      fontFamily: resolveFont(family, "400", true),
       fontStyle: "italic",
     },
     i: {
-      fontFamily: family === "serif" ? resolveFont(family, "400", true) : undefined,
+      fontFamily: resolveFont(family, "400", true),
       fontStyle: "italic",
     },
     a: { color: palette.accent, textDecorationLine: "underline" },
@@ -154,35 +172,35 @@ function buildTagsStyles(
     li: {
       fontFamily: bodyFont(),
       fontSize: base,
-      lineHeight: Math.round(base * 1.6),
-      color: palette.textSecondary,
+      lineHeight: Math.round(bodyLineHeight * 0.97),
+      color: colors.body,
       marginBottom: spacing[6],
     },
     blockquote: {
       borderLeftWidth: 3,
       borderLeftColor: palette.accent,
-      backgroundColor: palette.surfaceSecondary,
-      paddingHorizontal: spacing[14],
-      paddingVertical: spacing[10],
-      borderRadius: 6,
+      backgroundColor: colors.block,
+      paddingHorizontal: spacing[16],
+      paddingVertical: spacing[12],
+      borderRadius: radius.sm,
       marginTop: spacing[16],
     },
     pre: {
       fontFamily: resolveFont("mono", "400"),
       fontSize: monoSize,
       lineHeight: Math.round(monoSize * 1.55),
-      color: palette.textSecondary,
-      backgroundColor: palette.surfaceSecondary,
-      paddingHorizontal: spacing[14],
+      color: colors.body,
+      backgroundColor: colors.block,
+      paddingHorizontal: spacing[16],
       paddingVertical: spacing[12],
-      borderRadius: 10,
+      borderRadius: radius.sm,
       marginTop: spacing[16],
     },
     code: {
       fontFamily: resolveFont("mono", "400"),
       fontSize: monoSize,
       color: palette.text,
-      backgroundColor: palette.surfaceSecondary,
+      backgroundColor: colors.block,
     },
     figure: { marginTop: spacing[20], alignItems: "center" },
     figcaption: {
@@ -193,7 +211,7 @@ function buildTagsStyles(
       textAlign: "center",
       marginTop: spacing[6],
     },
-    img: { borderRadius: 8 },
+    img: { borderRadius: radius.sm },
     picture: { marginTop: spacing[16] },
     table: { marginTop: spacing[16] },
     th: {
@@ -214,8 +232,8 @@ function buildTagsStyles(
       marginVertical: spacing[20],
     },
     mark: {
-      backgroundColor: palette.mode === "dark" ? "rgba(217,168,58,0.32)" : "rgba(217,168,58,0.48)",
-      color: palette.text,
+      backgroundColor: colors.highlight,
+      color: colors.onHighlight,
     },
     small: { fontSize: Math.max(11, base - 3) },
   };
@@ -307,7 +325,7 @@ const tableRenderer: CustomBlockRenderer = ({ tnode, TNodeChildrenRenderer }) =>
     <View
       style={[
         styles.table,
-        { borderColor: palette.border, backgroundColor: palette.surfaceSecondary },
+        { borderColor: palette.outlineVariant, backgroundColor: palette.surfaceContainerLow },
       ]}
     >
       {records.map((row, rowIndex) => (
@@ -396,77 +414,56 @@ export const ArticleHtml = React.memo(function ArticleHtml({
   onReady,
 }: ArticleHtmlProps) {
   const { palette } = useTheme();
+  const colors = readerArticleColors(palette);
   const family = resolveReaderFontFamily(preferences.fontFamily);
   const base = READER_BODY_SIZE[preferences.fontSize];
+  const lineSpacing: ReaderLineSpacing = preferences.lineSpacing ?? "default";
   const highlightedHtml = useMemo(
     () => applyHighlightsToHtml(html, highlights ?? EMPTY_HIGHLIGHTS),
     [html, highlights],
   );
-  const paintedSourceRef = useRef<string | null>(null);
-  const [ready, setReady] = useState(false);
-
-  // Let the reader chrome commit (and the push animation run) before building
-  // a native view tree. Large tables otherwise freeze the JS thread on open.
-  // Highlight updates keep the same source HTML, so skip the skeleton flash.
+  const source = useMemo(() => ({ html: highlightedHtml }), [highlightedHtml]);
   useEffect(() => {
-    if (paintedSourceRef.current === html) {
-      setReady(true);
-      return;
-    }
-    setReady(false);
-    let cancelled = false;
-    const handle = InteractionManager.runAfterInteractions(() => {
-      requestAnimationFrame(() => {
-        if (cancelled) return;
-        paintedSourceRef.current = html;
-        setReady(true);
-      });
-    });
-    return () => {
-      cancelled = true;
-      handle.cancel();
-    };
-  }, [html]);
-
-  useEffect(() => {
-    if (!ready) return;
     const frame = requestAnimationFrame(() => onReady?.());
     return () => cancelAnimationFrame(frame);
-  }, [ready, onReady]);
+  }, [html, onReady]);
 
   const tagsStyles = useMemo(
-    () => buildTagsStyles(palette, family, base),
-    [palette, family, base],
+    () => buildTagsStyles(palette, family, base, lineSpacing),
+    [palette, family, base, lineSpacing],
   );
-  // Default RN text follows the activity (often night-mode white). Untagged
-  // nodes would then paint white ink on parchment. Pin every run of text to
-  // the reader palette so light/sepia never mix with the app's dark scheme.
+  // Pin untagged text to the reader, not the app/activity appearance.
   const baseStyle = useMemo(
     () => ({
-      color: palette.textSecondary,
+      color: palette.onSurface,
       fontFamily: resolveFont(family),
       fontSize: base,
-      lineHeight: Math.round(base * 1.65),
+      lineHeight: readerLineHeight(base, lineSpacing),
     }),
-    [palette.textSecondary, family, base],
+    [palette.onSurface, family, base, lineSpacing],
   );
   const defaultTextProps = useMemo(
     () => ({
       selectable: false as const,
-      selectionColor: palette.mustard,
-      style: { color: palette.textSecondary },
+      selectionColor: colors.selection,
+      style: { color: palette.onSurface },
     }),
-    [palette.mustard, palette.textSecondary],
+    [colors.selection, palette.onSurface],
   );
   const onTextSelectRef = useRef(onTextSelect);
   onTextSelectRef.current = onTextSelect;
+  // Parsing the article is independent of colors/font size. Keep it warm when
+  // controls change rather than rescanning a long document on every reflow.
+  const articlePlain = useMemo(() => htmlToPlainText(html), [html]);
   const highlightUi = useMemo(
-    () =>
-      highlightHandlersFromHtml(html, palette.mustard, {
-        textStyle: baseStyle,
-        onTextSelect: (draft) => (onTextSelectRef.current ?? ignoreTextSelect)(draft),
-      }),
-    [baseStyle, html, palette.mustard],
+    () => ({
+      articlePlain,
+      selectionColor: colors.selection,
+      highlightStyle: { color: colors.onHighlight, backgroundColor: colors.highlight },
+      textStyle: baseStyle,
+      onTextSelect: (draft) => (onTextSelectRef.current ?? ignoreTextSelect)(draft),
+    }) satisfies HighlightUiHandlers,
+    [baseStyle, articlePlain, colors.highlight, colors.onHighlight, colors.selection],
   );
 
   // List markers should match the article's font (and accent color).
@@ -515,32 +512,11 @@ export const ArticleHtml = React.memo(function ArticleHtml({
   );
 
   if (contentWidth <= 0) return null;
-  if (!ready) {
-    return (
-      <View>
-        <View style={[styles.placeholder, { backgroundColor: palette.surfaceSecondary }]} />
-        <View
-          style={[
-            styles.placeholder,
-            styles.placeholderShort,
-            { backgroundColor: palette.surfaceSecondary },
-          ]}
-        />
-        <View
-          style={[
-            styles.placeholder,
-            styles.placeholderMid,
-            { backgroundColor: palette.surfaceSecondary },
-          ]}
-        />
-      </View>
-    );
-  }
 
   return (
     <HighlightUiContext.Provider value={highlightUi}>
     <RenderHTML
-      source={{ html: highlightedHtml }}
+      source={source}
       contentWidth={contentWidth}
       baseStyle={baseStyle}
       tagsStyles={tagsStyles}
@@ -550,6 +526,7 @@ export const ArticleHtml = React.memo(function ArticleHtml({
       onTTreeChange={handleTreeChange}
       systemFonts={SYSTEM_FONTS}
       defaultTextProps={defaultTextProps}
+      ignoredStyles={READER_IGNORED_INLINE_STYLES}
     />
     </HighlightUiContext.Provider>
   );
@@ -567,11 +544,4 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[10],
     gap: spacing[8],
   },
-  placeholder: {
-    height: 16,
-    borderRadius: radius.xs,
-    marginTop: spacing[14],
-  },
-  placeholderShort: { width: "92%" },
-  placeholderMid: { width: "68%" },
 });

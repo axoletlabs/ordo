@@ -1,13 +1,19 @@
 /** Bookmarks home: folders and unfiled bookmarks in one library list. */
 import React, { useCallback, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { useAppRouter as useRouter } from "../../../src/hooks/use-app-router";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
-import { Header, HeaderActions, HeaderIconButton } from "../../../src/components/ui/Header";
+import { HeaderActions, HeaderIconButton } from "../../../src/components/ui/Header";
+import { LibraryHeader } from "../../../src/components/bookmarks/LibraryHeader";
+import { LibraryFilters } from "../../../src/components/bookmarks/LibraryFilters";
+import { SearchFilterMenu } from "../../../src/components/bookmarks/SearchFilterMenu";
+import { useLibrarySearch } from "../../../src/hooks/use-library-search";
+import { useLegacyReaderLink } from "../../../src/hooks/use-legacy-reader-link";
+import { searchScopeActive } from "../../../src/lib/search-bookmarks";
 import { ListLoadingFooter } from "../../../src/components/ui/ListLoadingFooter";
-import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
-import { FAB, FABLayer } from "../../../src/components/ui/FAB";
+import { FAB, FABDock } from "../../../src/components/ui/FAB";
 import { ContextMenu, ContextMenuItem } from "../../../src/components/ui/ContextMenu";
 import { Button } from "../../../src/components/ui/Button";
 import { ScreenContent } from "../../../src/components/ui/ScreenContent";
@@ -52,10 +58,13 @@ import {
   type CreateButtonHoldAction,
 } from "../../../src/store/settings";
 import { layout, spacing } from "../../../src/theme/tokens";
-import { FAB_LIST_CLEARANCE } from "../../../src/lib/list-pagination";
 import { type BookmarkDto, type FolderDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
+import { listPosition } from "../../../src/theme/list-shape";
+import { useOverlaySessionMode } from "../../../src/lib/overlay-session-mode";
+import { useCollapsingFab } from "../../../src/hooks/use-collapsing-fab";
+import { useBookmarkListLayout } from "../../../src/hooks/use-bookmark-list-layout";
 
 type LibraryItem =
   | { type: "folder"; folder: FolderDto }
@@ -64,7 +73,10 @@ type LibraryItem =
 export default function BookmarksScreen() {
   const { palette } = useTheme();
   const router = useRouter();
-  const { visible: floatingNavigation, clearance: bottomClearance, bottom: dockInset, selectionClearance } = useFloatingDockMetrics();
+  const params = useLocalSearchParams<{ bookmark?: string; focus?: string }>();
+  useLegacyReaderLink(params.bookmark);
+  const contentWidth = layout.maxContentWidth;
+   const { bottom: dockInset, selectionClearance, listOverlayClearance } = useFloatingDockMetrics();
   const folders = useFolders();
   const tags = useTags();
   const folderSort = useListSortStore((state) => state.folderSort);
@@ -82,8 +94,12 @@ export default function BookmarksScreen() {
   const [createOpen, setCreateOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [createAnchor, setCreateAnchor] = useState<MenuAnchorRect | null>(null);
-  const [sortOpen, setSortOpen] = useState(false);
-  const [sortAnchor, setSortAnchor] = useState<MenuAnchorRect | null>(null);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [toolsPage, setToolsPage] = useOverlaySessionMode<"actions" | "sort" | "sort:folders" | "sort:bookmarks">(toolsOpen, "actions");
+  const [toolsAnchor, setToolsAnchor] = useState<MenuAnchorRect | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [filterAnchor, setFilterAnchor] = useState<MenuAnchorRect | null>(null);
+  const [filterUnlock, setFilterUnlock] = useState<FolderDto | null>(null);
   const [unlockFolder, setUnlockFolder] = useState<FolderDto | null>(null);
   const [actionsFolder, setActionsFolder] = useState<FolderDto | null>(null);
   const [folderAnchor, setFolderAnchor] = useState<MenuAnchorRect | null>(null);
@@ -95,16 +111,23 @@ export default function BookmarksScreen() {
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
 
-  const items = useMemo(
+  const homeItems = useMemo(
     () => sortBookmarksBy(flattenPages(bookmarks.data?.pages ?? []), unfiledSort),
     [bookmarks.data, unfiledSort],
   );
-  const hasUnread = items.some((bookmark) => !bookmark.isRead);
-  const folderItems = useMemo(
+   const search = useLibrarySearch(homeItems, folders.data ?? []);
+  const items = search.active ? search.items : homeItems;
+  const hasUnread = homeItems.some((bookmark) => !bookmark.isRead);
+  const sortedFolders = useMemo(
     () => sortFoldersBy(folders.data ?? [], folderSort),
     [folders.data, folderSort],
   );
-  const tagCount = tags.data?.length ?? 0;
+  const folderItems = useMemo(() => {
+    if (!search.active) return sortedFolders;
+    if (searchScopeActive(search.listFilters)) return [];
+    const terms = search.trimmed.toLocaleLowerCase().split(/\s+/).filter(Boolean);
+    return sortedFolders.filter((folder) => terms.every((term) => folder.name.toLocaleLowerCase().split(/\s+/).some((word) => word.startsWith(term))));
+  }, [sortedFolders, search.active, search.trimmed, search.listFilters]);
   const libraryItems = useMemo<LibraryItem[]>(
     () => [
       ...folderItems.map((folder) => ({ type: "folder" as const, folder })),
@@ -112,10 +135,11 @@ export default function BookmarksScreen() {
     ],
     [folderItems, items],
   );
+  const getItemLayout = useBookmarkListLayout(items, folderItems.length, search.listFilters.tagIds);
   // Folders return first. Keep the skeleton until the unfiled page is in
   // too, so a cold start never paints folders and then pops bookmarks in.
   const libraryLoading =
-    (folders.isPending && !folders.isError) || (bookmarks.isPending && !bookmarks.isError);
+    !search.active && ((folders.isPending && !folders.isError) || (bookmarks.isPending && !bookmarks.isError));
   const selectedBookmarks = useMemo(
     () => items.filter((bookmark) => selection.has(bookmarkKey(bookmark.id))),
     [items, selection],
@@ -155,19 +179,17 @@ export default function BookmarksScreen() {
   });
   const refreshAll = useCallback(async () => {
     resetPaging();
-    await Promise.all([bookmarks.refetch(), folders.refetch(), tags.refetch()]);
-  }, [bookmarks.refetch, folders.refetch, tags.refetch, resetPaging]);
+    await Promise.all([bookmarks.refetch(), folders.refetch(), tags.refetch(), ...(search.active ? [search.search.refetch()] : [])]);
+  }, [bookmarks.refetch, folders.refetch, tags.refetch, resetPaging, search.active, search.search.refetch]);
   const { refreshing, onRefresh } = usePullToRefresh(refreshAll);
 
   const openBookmark = useCallback((bookmark: BookmarkDto) => {
-    openListBookmark(bookmark, () => {
-      router.push(`/reader/${bookmark.id}`);
-    });
+    return openListBookmark(bookmark, () => router.push(`/reader/${bookmark.id}`));
   }, [router]);
 
   const enterFolder = useCallback((folder: FolderDto) => {
     void prefetchFolderBookmarks(folder.id);
-    router.push(`/folder/${folder.id}`);
+    return router.push(`/folder/${folder.id}`);
   }, [router]);
 
   const openFolder = useCallback((folder: FolderDto) => {
@@ -175,7 +197,7 @@ export default function BookmarksScreen() {
       setUnlockFolder(folder);
       return;
     }
-    enterFolder(folder);
+    return enterFolder(folder);
   }, [enterFolder]);
 
   const onPressFolder = useCallback((selectedFolder: FolderDto) => {
@@ -184,7 +206,7 @@ export default function BookmarksScreen() {
       sel.toggle(folderKey(selectedFolder.id));
       return;
     }
-    openFolder(selectedFolder);
+    return openFolder(selectedFolder);
   }, [openFolder]);
 
   const onMoreFolder = useCallback((selectedFolder: FolderDto, anchor: MenuAnchorRect) => {
@@ -195,7 +217,7 @@ export default function BookmarksScreen() {
   const onPressLibraryBookmark = useCallback((bookmark: BookmarkDto) => {
     const sel = selectionRef.current;
     if (sel.active) sel.toggle(bookmarkKey(bookmark.id));
-    else openBookmark(bookmark);
+    else return openBookmark(bookmark);
   }, [openBookmark]);
 
   const onMoreBookmark = useCallback((bookmark: BookmarkDto, anchor: MenuAnchorRect) => {
@@ -217,17 +239,22 @@ export default function BookmarksScreen() {
     selected: selection.ids,
     onSelectedChange: selection.assign,
   });
+  const collapsingFab = useCollapsingFab();
+  const onLibraryScroll = useCallback((event: Parameters<typeof drag.onScroll>[0]) => {
+    drag.onScroll(event);
+    collapsingFab.onScroll(event);
+  }, [drag.onScroll, collapsingFab.onScroll]);
 
-  const selectionActive = selection.active;
-  const selectionRevision = selection.revision;
+  const toggleTag = useCallback((tagId: string) => search.setFilters((previous) => ({ ...previous,
+    tagIds: previous.tagIds.includes(tagId) ? previous.tagIds.filter((id) => id !== tagId) : [...previous.tagIds, tagId] })), [search.setFilters]);
+  const openTag = useCallback((tagId: string) => router.push(`/tags/${tagId}`), [router]);
   const renderLibraryItem = useCallback(
-    ({ item }: { item: LibraryItem }) => {
+    ({ item, index }: { item: LibraryItem; index: number }) => {
       if (item.type === "folder") {
         return (
           <FolderRow
             folder={item.folder}
-            selectionMode={selectionActive}
-            selected={selectionRef.current.has(folderKey(item.folder.id))}
+            position={listPosition(index, folderItems.length)}
             onPress={onPressFolder}
             onEnterSelection={onEnterFolder}
             onMore={onMoreFolder}
@@ -237,8 +264,11 @@ export default function BookmarksScreen() {
       return (
         <BookmarkRow
           bookmark={item.bookmark}
-          selectionMode={selectionActive}
-          selected={selectionRef.current.has(bookmarkKey(item.bookmark.id))}
+          position={listPosition(index - folderItems.length, items.length)}
+          searchQuery={search.trimmed}
+          searchFuzzy={search.listFilters.fuzzy}
+          omitTagIds={search.listFilters.tagIds}
+          onTagPress={search.active ? toggleTag : openTag}
           onPress={onPressLibraryBookmark}
           onEnterSelection={onEnterBookmark}
           onMore={onMoreBookmark}
@@ -252,8 +282,8 @@ export default function BookmarksScreen() {
       onMoreFolder,
       onPressFolder,
       onPressLibraryBookmark,
-      selectionActive,
-      selectionRevision,
+        search.trimmed, search.listFilters.fuzzy, search.listFilters.tagIds, search.active, toggleTag,
+        folderItems.length, items.length, openTag,
     ],
   );
   const libraryKeyExtractor = useCallback(
@@ -264,13 +294,9 @@ export default function BookmarksScreen() {
   // first row's own padding sits inside that.
   const listContentStyle = useMemo(
     () => ({
-      paddingBottom: selection.active
-        ? selectionClearance
-        : floatingNavigation
-          ? bottomClearance
-          : FAB_LIST_CLEARANCE,
+      paddingBottom: selection.active ? selectionClearance : listOverlayClearance,
     }),
-    [bottomClearance, floatingNavigation, selection.active, selectionClearance],
+    [selection.active, selectionClearance, listOverlayClearance],
   );
 
   const runCreateAction = (action: CreateButtonHoldAction, anchor?: MenuAnchorRect) => {
@@ -294,61 +320,56 @@ export default function BookmarksScreen() {
     return "create a folder";
   };
 
+  const createFab = !selection.active ? (
+    <FABDock maxWidth={contentWidth}>
+      <FAB
+        onPress={(anchor) => runCreateAction(createButtonTapAction, anchor)}
+        onLongPress={(anchor) => {
+          if (createButtonHoldAction !== "none") haptics.medium();
+          runCreateAction(createButtonHoldAction, anchor);
+        }}
+        accessibilityLabel={createActionLabel(createButtonTapAction)}
+        accessibilityHint={
+          createButtonHoldAction === "none"
+            ? `Tap to ${createActionDescription(createButtonTapAction)}. Press and hold is disabled.`
+            : `Tap to ${createActionDescription(createButtonTapAction)}. Press and hold to ${createActionDescription(createButtonHoldAction)}.`
+        }
+        testID="add-bookmark-fab"
+        label={createActionLabel(createButtonTapAction)}
+        expansion={collapsingFab.expansion}
+        bottom={spacing[16]}
+        maxContentWidth={contentWidth}
+      />
+    </FABDock>
+  ) : null;
+
   const headerRight = (
     <HeaderActions>
-      {hasUnread ? (
-        <HeaderIconButton
-          name="checkmark-done"
-          color={palette.accent}
-          onPress={onMarkAllRead}
-          accessibilityLabel="Mark all as read"
-        />
-      ) : null}
-      <HeaderIconButton
-        name="swap-vertical-outline"
-        color={palette.text}
-        onPress={(anchor) => {
-          setSortAnchor(anchor);
-          setSortOpen(true);
-        }}
-        accessibilityLabel="Sort"
-        accessibilityHint="Change how folders and bookmarks are ordered."
-      />
-      <HeaderIconButton
-        name="pricetags-outline"
-        color={palette.text}
-        onPress={() => router.push("/tags")}
-        accessibilityLabel={`Tags, ${tagCount} ${tagCount === 1 ? "tag" : "tags"}`}
-        accessibilityHint="Browse and manage tags."
-      />
+      <HeaderIconButton name="ellipsis-horizontal" variant="standard" color={palette.onSurface}
+        onPress={(anchor) => { setToolsAnchor(anchor); setToolsOpen(true); }} accessibilityLabel="Library actions" />
     </HeaderActions>
   );
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.background }}>
-      {selection.active ? (
-        <SelectionHeader
-          count={selection.count}
-          selectableCount={selectableKeys.length}
-          onCancel={selection.exit}
-          onToggleSelectAll={() => {
+      <LibraryHeader tools={headerRight} query={search.query} onQueryChange={search.setQuery} filterOpen={filterOpen}
+        onFilter={(anchor) => { setFilterAnchor(anchor); setFilterOpen(true); }} filtersOn={search.filtersOn}
+        autoFocusSearch={params.focus === "1"} maxWidth={contentWidth}
+        resultLabel={search.active ? `${libraryItems.length}${search.search.hasNextPage ? "+" : ""} ${libraryItems.length === 1 ? "result" : "results"}` : undefined}
+        filters={search.filtersOn ? <LibraryFilters filters={search.filters} folders={folders.data ?? []} tags={tags.data ?? []} onChange={search.setFilters} /> : undefined}
+        selection={selection.active ? {
+          count: selection.count,
+          selectableCount: selectableKeys.length,
+          onCancel: selection.exit,
+          onToggleSelectAll: () => {
             if (selection.count === selectableKeys.length) selection.replace([]);
             else selection.replace(selectableKeys);
-          }}
-          maxWidth={layout.maxContentWidth}
-        />
-      ) : (
-      <Header
-        title="Bookmarks"
-        large
-        maxWidth={layout.maxContentWidth}
-        right={headerRight}
-      />
-      )}
+          },
+        } : undefined} />
 
       <ExtractionProgressLine />
 
-      {bookmarks.error && !bookmarks.data && folderItems.length === 0 && !folders.isLoading ? (
+      {!search.active && bookmarks.error && !bookmarks.data && folderItems.length === 0 && !folders.isLoading ? (
         <ScreenContent maxWidth={layout.maxContentWidth} style={styles.center}>
           <EmptyState
             icon="cloud-offline-outline"
@@ -358,21 +379,28 @@ export default function BookmarksScreen() {
           />
         </ScreenContent>
       ) : (
-        <ScreenContent maxWidth={layout.maxContentWidth} style={styles.content}>
-          <SelectionDragFrame drag={drag}>
+        <ScreenContent maxWidth={contentWidth} style={styles.content}>
+          <SelectionDragFrame drag={drag} selectionStore={selection.store}>
           <ThemedFlashList
             ref={drag.listRef}
-            onScroll={drag.onScroll}
+            onScroll={onLibraryScroll}
             onContentSizeChange={drag.onContentSizeChange}
             scrollEventThrottle={drag.scrollEventThrottle}
             data={libraryLoading ? [] : libraryItems}
-            extraData={`${selectionRevision}:${folderSort}:${unfiledSort}`}
-            key={`home:${folderSort}:${unfiledSort}`}
+            extraData={`${folderSort}:${unfiledSort}`}
             keyExtractor={libraryKeyExtractor}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
             renderItem={renderLibraryItem}
+            getItemLayout={getItemLayout}
             ListEmptyComponent={
               libraryLoading ? (
                 <BookmarkListSkeleton />
+              ) : search.active ? (
+                <View style={styles.emptyBookmarks}><EmptyState icon="search-outline"
+                  title={search.searching ? "Searching…" : search.searchError ? "Couldn't search bookmarks" : "No results"}
+                  message={search.searching ? "Checking the rest of your library…" : search.searchError ? errorMessage(search.searchError) : search.trimmed ? `No saved items match “${search.trimmed}”.` : "No bookmarks match these filters."}
+                  action={search.searchError ? <Button label="Retry" onPress={() => search.search.refetch()} /> : undefined} /></View>
               ) : (
                 <View style={styles.emptyBookmarks}>
                   <EmptyState
@@ -384,51 +412,34 @@ export default function BookmarksScreen() {
                 </View>
               )
             }
-            ListFooterComponent={loadingMore ? <ListLoadingFooter /> : null}
+            ListFooterComponent={(search.active ? search.loadingMore : loadingMore) ? <ListLoadingFooter /> : null}
             contentContainerStyle={listContentStyle}
             refreshing={refreshing}
             onRefresh={onRefresh}
             scrollEnabled={drag.scrollEnabled}
-            onEndReached={onEndReached}
+            onEndReached={search.active ? search.onEndReached : onEndReached}
           />
           </SelectionDragFrame>
         </ScreenContent>
       )}
 
-      {!selection.active ? (
-      <FABLayer maxWidth={layout.maxContentWidth}>
-        <FAB
-          onPress={(anchor) => runCreateAction(createButtonTapAction, anchor)}
-          onLongPress={(anchor) => {
-            if (createButtonHoldAction !== "none") haptics.medium();
-            runCreateAction(createButtonHoldAction, anchor);
-          }}
-          accessibilityLabel={createActionLabel(createButtonTapAction)}
-          accessibilityHint={
-            createButtonHoldAction === "none"
-              ? `Tap to ${createActionDescription(createButtonTapAction)}. Press and hold is disabled.`
-              : `Tap to ${createActionDescription(createButtonTapAction)}. Press and hold to ${createActionDescription(createButtonHoldAction)}.`
-          }
-          testID="add-bookmark-fab"
-          bottom={floatingNavigation ? bottomClearance : spacing[20]}
-          maxContentWidth={layout.maxContentWidth}
-        />
-      </FABLayer>
-      ) : null}
+      {createFab}
 
-      <SortMenu
-        visible={sortOpen}
-        onDismiss={() => {
-          setSortOpen(false);
-          setSortAnchor(null);
-        }}
-        anchor={sortAnchor}
-        variant="home"
-        folderSort={folderSort}
-        bookmarkSort={unfiledSort}
-        onFolderSort={setFolderSort}
-        onBookmarkSort={setUnfiledSort}
-      />
+      <ContextMenu visible={toolsOpen} onDismiss={() => setToolsOpen(false)} anchor={toolsAnchor} pageKey={toolsPage}>
+        {toolsPage === "actions" ? <>
+          <ContextMenuItem icon="swap-vertical-outline" label="Sort library" onPress={() => setToolsPage("sort")} />
+          <ContextMenuItem icon="checkmark-done" label="Mark all as read" disabled={!hasUnread} onPress={() => { setToolsOpen(false); onMarkAllRead(); }} />
+          <ContextMenuItem icon="pricetags-outline" label="Manage tags" onPress={() => { setToolsOpen(false); router.push("/tags"); }} />
+        </> : <SortMenu embedded visible={toolsOpen} onDismiss={() => setToolsOpen(false)} anchor={toolsAnchor} variant="home"
+          folderSort={folderSort} bookmarkSort={unfiledSort} onFolderSort={setFolderSort} onBookmarkSort={setUnfiledSort}
+          onBack={() => setToolsPage("actions")} onPageChange={(page) => setToolsPage(page === "root" ? "sort" : `sort:${page}`)} />}
+      </ContextMenu>
+      <SearchFilterMenu visible={filterOpen} onDismiss={() => setFilterOpen(false)} anchor={filterAnchor}
+        tags={tags.data ?? []} folders={folders.data ?? []} filters={search.filters} onChange={search.setFilters}
+        onUnlockFolder={(folder) => { setFilterOpen(false); setFilterUnlock(folder); }} />
+      <LockPrompt visible={!!filterUnlock} folderId={filterUnlock?.id ?? ""} folderName={filterUnlock?.name}
+        lockType={filterUnlock?.lockType} pinLength={filterUnlock?.pinLength} onDismiss={() => setFilterUnlock(null)}
+        onUnlocked={() => { if (filterUnlock) search.setFilters((previous) => ({ ...previous, folderIds: [...new Set([...previous.folderIds, filterUnlock.id])] })); setFilterUnlock(null); }} />
 
       <ContextMenu visible={createMenuOpen} onDismiss={() => setCreateMenuOpen(false)} anchor={createAnchor}>
         <ContextMenuItem
@@ -479,7 +490,7 @@ export default function BookmarksScreen() {
       <MoveSheet
         visible={!!moveTarget}
         bookmark={moveTarget}
-        fromFolderId={null}
+        fromFolderId={moveTarget?.folderId ?? null}
         onDismiss={() => setMoveTarget(null)}
       />
 

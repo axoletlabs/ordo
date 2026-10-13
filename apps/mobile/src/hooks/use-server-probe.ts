@@ -14,6 +14,7 @@ const PROBE_DEBOUNCE_MS = 900;
 export function useServerProbe(url: string, currentUrl: string, active: boolean) {
   const [probing, setProbing] = useState(false);
   const [up, setUp] = useState(false);
+  const [checkedUrl, setCheckedUrl] = useState<string | null>(null);
   const [probeDetail, setProbeDetail] = useState<string | null>(null);
   const [probeInfo, setProbeInfo] = useState<Pick<ServerInfoDto, "name" | "version"> | null>(
     null,
@@ -24,6 +25,7 @@ export function useServerProbe(url: string, currentUrl: string, active: boolean)
     if (!active) return;
     let cancelled = false;
     const normalized = normalizeServerUrl(url);
+    setCheckedUrl(null);
     if (!normalized || normalized === normalizeServerUrl(currentUrl)) {
       setUp(false);
       setProbeDetail(null);
@@ -41,6 +43,7 @@ export function useServerProbe(url: string, currentUrl: string, active: boolean)
       void probeServer(url).then((result) => {
         if (cancelled) return;
         setProbing(false);
+        setCheckedUrl(normalized);
         setUp(result.status === "up");
         setProbeDetail(result.detail ?? null);
         setProbeInfo(result.info ?? null);
@@ -53,19 +56,23 @@ export function useServerProbe(url: string, currentUrl: string, active: boolean)
   }, [active, currentUrl, url]);
 
   const normalized = normalizeServerUrl(url);
-  const isUnchanged = !normalized || normalized === normalizeServerUrl(currentUrl);
+  const isUnchanged = normalized === normalizeServerUrl(currentUrl);
+  // A successful response belongs only to the address it checked. During the
+  // debounce, the previous result must never enable a different destination.
+  const verified = normalized !== null && checkedUrl === normalized;
+  const pending = active && Boolean(normalized) && !isUnchanged && (!verified || probing);
   const probeCopy = describeProbeField({
-    idle: isUnchanged,
-    probing,
-    reachable: up,
-    detail: probeDetail,
-    info: probeInfo,
+    idle: !url.trim() || isUnchanged,
+    probing: pending,
+    reachable: verified && up,
+    detail: normalized ? probeDetail : "Invalid URL",
+    info: verified ? probeInfo : null,
   });
-  const canChange = Boolean(normalized) && !isUnchanged && up && !probing;
+  const canChange = active && verified && !isUnchanged && up && !probing;
 
   return {
-    probing,
-    up,
+    probing: pending,
+    up: verified && up,
     probeDetail,
     probeInfo,
     probeCopy,

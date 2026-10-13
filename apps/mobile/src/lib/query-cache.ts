@@ -1,7 +1,9 @@
 /**
  * Persist folders + public bookmark lists to MMKV across process death.
- * Restore during splash, and only after the server answers, so a cold start
- * paints the last library together — never a down host's stale rows.
+ * The snapshot is restored during splash with no network dependency, so the
+ * last library paints immediately and a slow or down host can never hold the
+ * launch. Refreshes settle after the UI is up; the offline gate covers a
+ * confirmed-down host once the probe answers.
  */
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import {
@@ -10,10 +12,10 @@ import {
   type PersistedClient,
   type Persister,
 } from "@tanstack/react-query-persist-client";
-import { DEFAULT_BOOKMARK_LIST_SORT, normalizeFolderIcon } from "@ordo/shared";
+import { DEFAULT_BOOKMARK_LIST_SORT } from "@ordo/shared";
 import { createMMKV, type MMKV } from "react-native-mmkv";
 import { bookmarksApi } from "./api/bookmarks";
-import { foldersApi } from "./api/folders";
+import { fetchFoldersNormalized } from "./api/folders";
 import { nextPageCursor, qk } from "./api/query-keys";
 import { serverApi } from "./api/server";
 import { LIST_PAGE_SIZE } from "./list-pagination";
@@ -28,7 +30,7 @@ import {
   shouldPersistQueryKey,
   type PersistedClientSnapshot,
 } from "./query-persist";
-import { isServerUnreachable } from "./server-availability";
+import { raceDeadline } from "./fetch-timeout";
 import { useAuthStore } from "../store/auth";
 import { useSettingsStore } from "../store/settings";
 
@@ -149,16 +151,12 @@ async function fetchHomeLibrary(): Promise<void> {
   await Promise.all([
     queryClient.fetchQuery({
       queryKey: qk.folders,
-      queryFn: async () => {
-        const folders = await foldersApi.list();
-        return folders.map((folder) => ({
-          ...folder,
-          icon: normalizeFolderIcon(folder.icon),
-          pinned: folder.pinned ?? false,
-        }));
-      },
+      queryFn: fetchFoldersNormalized,
       staleTime: 30_000,
       gcTime: PERSISTED_QUERY_GC_TIME_MS,
+      // Launch fetches never retry: the splash deadline (below) is the only
+      // budget they get, and mounted observers retry with their own policy.
+      retry: false,
     }),
     queryClient.fetchInfiniteQuery({
       queryKey: qk.bookmarks(null, DEFAULT_BOOKMARK_LIST_SORT),
@@ -173,14 +171,37 @@ async function fetchHomeLibrary(): Promise<void> {
       getNextPageParam: nextPageCursor,
       staleTime: 30_000,
       gcTime: PERSISTED_QUERY_GC_TIME_MS,
+      retry: false,
     }),
   ]);
 }
 
+/** Warm the MFA/offline signals without ever gating the launch on them. */
+async function prefetchServerInfo(serverUrl: string): Promise<void> {
+  try {
+    await queryClient.fetchQuery({
+      queryKey: qk.serverInfo(serverUrl),
+      queryFn: () => serverApi.info(),
+      staleTime: 60_000,
+      retry: false,
+    });
+  } catch {
+    /* the mounted probe + offline gate own the retry story */
+  }
+}
+
 /**
- * Confirm the server, restore folders and unfiled bookmarks together, and
- * fill a cold cache before the home screen mounts. A dead host skips the
- * snapshot so the offline gate is what the user sees.
+ * How long a cold-cache launch may hold the splash on the network. Past the
+ * deadline the app continues (skeletons cover the gap) while the fetches keep
+ * running and paint the library the moment they land.
+ */
+const LAUNCH_FETCH_DEADLINE_MS = 3_500;
+
+/**
+ * Restore the disk snapshot, then fill a cold cache before the home screen
+ * mounts. The snapshot restore is local-only and always runs first; a dead or
+ * slow host can add at most LAUNCH_FETCH_DEADLINE_MS to the launch, never the
+ * per-request timeout stack.
  */
 export async function prepareLaunchLibrary(): Promise<void> {
   const auth = useAuthStore.getState();
@@ -189,20 +210,22 @@ export async function prepareLaunchLibrary(): Promise<void> {
     return;
   }
   const serverUrl = useSettingsStore.getState().serverUrl;
-  try {
-    await queryClient.fetchQuery({
-      queryKey: qk.serverInfo(serverUrl),
-      queryFn: () => serverApi.info(),
-      staleTime: 60_000,
-    });
-  } catch (error) {
-    if (isServerUnreachable(error)) return;
-  }
+
   await restoreQueryPersistence(auth.user.id, serverUrl);
-  if (homeLibraryCached()) return;
-  try {
-    await fetchHomeLibrary();
-  } catch (error) {
-    console.warn("Launch library fetch failed", error);
+
+  if (homeLibraryCached()) {
+    void prefetchServerInfo(serverUrl);
+    return;
   }
+
+  const fill = Promise.allSettled([prefetchServerInfo(serverUrl), fetchHomeLibrary()]).then(
+    (results) => {
+      for (const result of results) {
+        if (result.status === "rejected") {
+          console.warn("Launch library fetch failed", result.reason);
+        }
+      }
+    },
+  );
+  await raceDeadline(fill, LAUNCH_FETCH_DEADLINE_MS);
 }

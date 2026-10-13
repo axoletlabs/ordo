@@ -1,109 +1,71 @@
-/**
- * Animated toggle switch faithful to ordo: coral track when on, surface knob.
- */
-import React, { useCallback } from "react";
-import { StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import Animated, {
-  interpolateColor,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
+/** Material switch: 52×32 track, 16/24dp handle, selected checkmark. */
+import React, { useEffect, useRef } from "react";
+import { Platform, StyleSheet } from "react-native";
+import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import { MaterialIcon } from "./MaterialIcon";
 import { PressableScale } from "./PressableScale";
 import { useTheme } from "../../theme/ThemeProvider";
+import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 import { haptics } from "../../lib/haptics";
-import { springs } from "../../theme/tokens";
-
-const TRACK_W = 52;
-const TRACK_H = 30;
-const KNOB = 22;
-const PADDING = (TRACK_H - KNOB) / 2;
-const TRAVEL = TRACK_W - KNOB - PADDING * 2;
-
-export interface ToggleProps {
-  value: boolean;
-  onValueChange: (v: boolean) => void;
-  disabled?: boolean;
-}
-
-export function Toggle({ value, onValueChange, disabled }: ToggleProps) {
+import { radius } from "../../theme/tokens";
+import { stateLayerOpacity } from "../../theme/state-layer";
+export interface ToggleProps { value: boolean; onValueChange: (value: boolean) => void; disabled?: boolean; accessibilityLabel?: string }
+export function Toggle({ value, onValueChange, disabled, accessibilityLabel }: ToggleProps) {
   const { palette } = useTheme();
-  const pressed = useSharedValue(value ? 1 : 0);
-  const offFill = useSharedValue(palette.surfaceSecondary);
-  const onFill = useSharedValue(palette.accent);
-  const offBorder = useSharedValue(palette.borderStrong);
-  offFill.value = palette.surfaceSecondary;
-  onFill.value = palette.accent;
-  offBorder.value = palette.borderStrong;
-
-  React.useEffect(() => {
-    pressed.value = withSpring(value ? 1 : 0, springs.snappy);
-  }, [value, pressed]);
-
-  const onToggle = useCallback(() => {
-    if (disabled) return;
-    haptics.selection();
-    onValueChange(!value);
-  }, [disabled, onValueChange, value]);
-
-  const trackStyle = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(pressed.value, [0, 1], [offFill.value, onFill.value]),
-    borderColor: interpolateColor(pressed.value, [0, 1], [offBorder.value, onFill.value]),
+  const motion = useMaterialMotion();
+  const position = useSharedValue(value ? 1 : 0);
+  const effect = useSharedValue(value ? 1 : 0);
+  const pressed = useSharedValue(0);
+  const state = useSharedValue(0);
+  const interaction = useRef({ pressed: false, focused: false, hovered: false });
+  const updateHalo = () => {
+    const active = stateLayerOpacity({ ...interaction.current, disabled }) > 0;
+    state.value = motion.reducedMotion ? (active ? 1 : 0) : withSpring(active ? 1 : 0, materialMotion.effects.fast);
+  };
+  useEffect(() => {
+    position.value = motion.reducedMotion ? +value : withSpring(+value, motion.fast);
+    effect.value = motion.reducedMotion ? +value : withSpring(+value, materialMotion.effects.fast);
+  }, [value, motion.fast, motion.reducedMotion, position, effect]);
+  useEffect(() => {
+    const active = stateLayerOpacity({ ...interaction.current, disabled }) > 0;
+    state.value = motion.reducedMotion ? +active : withSpring(+active, materialMotion.effects.fast);
+    if (disabled) interaction.current.pressed = false;
+    if (disabled || motion.reducedMotion) pressed.value = motion.reducedMotion ? +interaction.current.pressed : withSpring(0, motion.fast);
+  }, [disabled, motion.reducedMotion, motion.fast, pressed, state]);
+  const track = useAnimatedStyle(() => ({
+    backgroundColor: disabled ? value ? `${palette.onSurface}1f` : `${palette.surfaceContainerHighest}1f`
+      : interpolateColor(effect.value, [0, 1], [palette.surfaceContainerHighest, palette.primary]),
+    borderColor: disabled ? `${palette.onSurface}1f` : interpolateColor(effect.value, [0, 1], [palette.outline, palette.primary]),
   }));
-
-  const knobStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: pressed.value * TRAVEL }],
-  }));
-
-  return (
-    <PressableScale
-      scaleTo={0.92}
-      dim={false}
-      disabled={disabled}
-      onPress={onToggle}
-      accessibilityRole="switch"
-      accessibilityState={{ checked: value, disabled: !!disabled }}
-      hitSlop={6}
-    >
-      <Animated.View
-        style={[styles.track, { opacity: disabled ? 0.55 : 1 }, trackStyle]}
-        pointerEvents="none"
-      >
-        <View style={[styles.stateIcon, value ? styles.stateIconLeft : styles.stateIconRight]}>
-          <Ionicons
-            name={disabled ? "lock-closed" : value ? "checkmark" : "close"}
-            size={12}
-            color={value ? palette.onAccent : palette.textTertiary}
-          />
-        </View>
-        <Animated.View style={[styles.knob, { backgroundColor: palette.onAccent }, knobStyle]} />
+  const handle = useAnimatedStyle(() => {
+    const diameter = 16 + effect.value * 8 + pressed.value * (12 - effect.value * 8);
+    return { left: 14 + position.value * 20 - diameter / 2, width: diameter, height: diameter,
+      backgroundColor: disabled ? value ? palette.surface : `${palette.onSurface}61`
+        : interpolateColor(effect.value, [0, 1], [palette.outline, palette.onPrimary]) };
+  });
+  const halo = useAnimatedStyle(() => ({ left: -6 + position.value * 20,
+    backgroundColor: interpolateColor(state.value, [0, 1], [`${value ? palette.primary : palette.onSurface}00`, `${value ? palette.primary : palette.onSurface}14`]) }));
+  const check = useAnimatedStyle(() => ({ opacity: effect.value }));
+  return <PressableScale accessibilityRole="switch" accessibilityLabel={accessibilityLabel}
+    accessibilityState={{ checked: value, disabled: !!disabled }} disabled={disabled}
+    stateLayerColor="transparent"
+    onPressIn={() => { pressed.value = motion.reducedMotion ? 1 : withSpring(1, motion.fast); interaction.current.pressed = true; updateHalo(); }}
+    onPressOut={() => { pressed.value = motion.reducedMotion ? 0 : withSpring(0, motion.fast); interaction.current.pressed = false; updateHalo(); }}
+    onHoverIn={() => { interaction.current.hovered = true; updateHalo(); }} onHoverOut={() => { interaction.current.hovered = false; updateHalo(); }}
+    onFocus={event => { interaction.current.focused = Platform.OS !== "web" || !!(event.currentTarget as unknown as HTMLElement)?.matches?.(":focus-visible"); updateHalo(); }}
+    onBlur={() => { pressed.value = 0; interaction.current.focused = false; interaction.current.pressed = false; updateHalo(); }}
+    style={styles.target} onPress={() => { haptics.selection(); onValueChange(!value); }}>
+    <Animated.View pointerEvents="none" style={[styles.track, track]}>
+      <Animated.View style={[styles.halo, halo]} />
+      <Animated.View testID="material-switch-handle" style={[styles.handle, handle]}>
+        <Animated.View style={check}><MaterialIcon name="checkmark" size={16} color={disabled ? `${palette.onSurface}61` : palette.onPrimaryContainer} /></Animated.View>
       </Animated.View>
-    </PressableScale>
-  );
+    </Animated.View>
+  </PressableScale>;
 }
-
 const styles = StyleSheet.create({
-  track: {
-    width: TRACK_W,
-    height: TRACK_H,
-    borderRadius: TRACK_H / 2,
-    borderWidth: 1,
-    justifyContent: "center",
-  },
-  stateIcon: { position: "absolute", width: TRACK_W / 2, alignItems: "center" },
-  stateIconLeft: { left: 0 },
-  stateIconRight: { right: 0 },
-  knob: {
-    position: "absolute",
-    left: PADDING,
-    width: KNOB,
-    height: KNOB,
-    borderRadius: KNOB / 2,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 2,
-    shadowOffset: { width: 0, height: 1 },
-    elevation: 2,
-  },
+  target: { width: 56, minHeight: 48, alignItems: "center", justifyContent: "center", borderRadius: 28 },
+  track: { width: 52, height: 32, borderRadius: 16, borderWidth: 2, justifyContent: "center" },
+  handle: { position: "absolute", borderRadius: radius.full, alignItems: "center", justifyContent: "center" },
+  halo: { position: "absolute", top: -6, width: 40, height: 40, borderRadius: radius.full },
 });

@@ -4,26 +4,28 @@
  */
 import React from "react";
 import { Platform, StyleSheet, View } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { ListPressable } from "../ui/ListPressable";
+import { PressableScale } from "../ui/PressableScale";
 import { Text } from "../ui/Text";
-import { useTheme } from "../../theme/ThemeProvider";
+import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
-import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
+import { runPressAction } from "../../lib/press-action";
+import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { SELECTION_LONG_PRESS_MS } from "../../hooks/use-selection";
 import { prefetchTaggedBookmarks } from "../../hooks/use-tags";
 import { tagColorValue } from "../../lib/tag-colors";
 import { RowIconWell } from "../ui/RowIconWell";
 import { ROW_ICON_GLYPH } from "../../theme/alignment";
-import { layout, spacing } from "../../theme/tokens";
+import { layout, radius, spacing } from "../../theme/tokens";
 import { RowHighlight } from "../bookmarks/RowHighlight";
 import type { TagDto } from "@ordo/shared";
-
-export const TAG_ROW_SIZE = 72;
+import { rowOwnsHover } from "../../lib/row-hover";
+import { nativeHoverEvents } from "../../lib/pointer-hover";
 
 export interface TagRowProps {
   tag: TagDto;
-  onPress: (tag: TagDto) => void;
+  onPress: (tag: TagDto) => void | boolean;
   onMore?: (tag: TagDto, anchor: MenuAnchorRect) => void;
   highlighted?: boolean;
 }
@@ -34,14 +36,19 @@ export const TagRow = React.memo(function TagRow({
   onMore,
   highlighted,
 }: TagRowProps) {
-  const { palette } = useTheme();
+  const { palette: basePalette, expressive } = useTheme();
+  const palette = React.useMemo(() => highlighted ? {
+    ...basePalette, onSurface: basePalette.onSecondaryContainer, onSurfaceVariant: basePalette.onSecondaryContainer,
+    text: basePalette.onSecondaryContainer, textSecondary: basePalette.onSecondaryContainer,
+    textTertiary: basePalette.onSecondaryContainer, textFaint: basePalette.onSecondaryContainer,
+  } : basePalette, [basePalette, highlighted]);
   const rowRef = React.useRef<View>(null);
   const [hovered, setHovered] = React.useState(false);
+  const [pressed, setPressed] = React.useState(false);
   const countLabel = `${tag.bookmarkCount} ${tag.bookmarkCount === 1 ? "bookmark" : "bookmarks"}`;
 
   const openTag = () => {
-    haptics.light();
-    onPress(tag);
+    runPressAction(() => onPress(tag), haptics.light);
   };
 
   const warmTag = () => {
@@ -53,20 +60,17 @@ export const TagRow = React.memo(function TagRow({
     measureAnchor(rowRef.current, (anchor) => onMore?.(tag, anchor), event);
   };
 
-  const rowFill = highlighted
-    ? palette.surfaceSecondary
-    : hovered
-      ? menuHoverFill(palette.mode)
-      : "transparent";
-
   return (
+    <ThemeOverrideProvider palette={palette}>
     <View
       ref={rowRef}
       collapsable={false}
-      style={[styles.wrap, { borderBottomColor: palette.border }]}
+      style={[styles.wrap, { borderBottomWidth: 0, marginBottom: expressive ? spacing[2] : 0,
+        overflow: expressive ? "visible" : "hidden" }]}
       {...(Platform.OS === "web"
         ? {
-            onMouseEnter: () => setHovered(true),
+            onMouseEnter: (event: { target?: unknown; currentTarget?: unknown }) => setHovered(rowOwnsHover(event)),
+            onMouseMove: (event: { target?: unknown; currentTarget?: unknown }) => setHovered(rowOwnsHover(event)),
             onMouseLeave: () => setHovered(false),
             onContextMenu: onMore
               ? (event: { preventDefault?: () => void }) => {
@@ -75,10 +79,12 @@ export const TagRow = React.memo(function TagRow({
                 }
               : undefined,
           }
-        : null)}
+          : nativeHoverEvents({}, setHovered))}
     >
-      <RowHighlight color={rowFill} />
+      <RowHighlight rest={expressive ? { borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 } : undefined}
+        expressive={expressive} hovered={hovered} pressed={pressed} selected={!!highlighted} hoverRadius={24} pressRadius={28} />
       <ListPressable
+        feedback={false}
         accessibilityRole="button"
         accessibilityLabel={`${tag.name}, ${countLabel}`}
         accessibilityHint={onMore ? "Press and hold for more actions" : undefined}
@@ -91,13 +97,14 @@ export const TagRow = React.memo(function TagRow({
             : undefined
         }
         style={styles.press}
-        onPressIn={warmTag}
+        onPressIn={() => { setPressed(true); warmTag(); }}
+        onPressOut={() => setPressed(false)}
         onPress={openTag}
         onLongPress={onMore ? (event) => openMore(event) : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         <RowIconWell>
-          <Ionicons name="pricetag-outline" size={ROW_ICON_GLYPH} color={palette.accent} />
+          <Ionicons name="pricetag-outline" size={ROW_ICON_GLYPH} color={palette.onSecondaryContainer} />
         </RowIconWell>
         <View style={styles.content}>
           <View style={styles.titleRow}>
@@ -106,24 +113,34 @@ export const TagRow = React.memo(function TagRow({
               {tag.name}
             </Text>
           </View>
-          <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.count}>
+          <Text variant="bodyMedium" color="tertiary" numberOfLines={1} style={styles.count}>
             {countLabel}
           </Text>
         </View>
       </ListPressable>
+      {onMore ? <PressableScale accessibilityRole="button" accessibilityLabel={`More actions for ${tag.name}`}
+        onPress={(event) => openMore(event)} style={{ width: 48, height: 48, borderRadius: radius.full, alignItems: "center", justifyContent: "center" }}>
+        <Ionicons name="ellipsis-vertical" size={24} color={palette.onSurfaceVariant} />
+      </PressableScale> : null}
     </View>
+    </ThemeOverrideProvider>
   );
 });
 
 const styles = StyleSheet.create({
   wrap: {
+    flexDirection: "row",
+    alignItems: "center",
     borderBottomWidth: StyleSheet.hairlineWidth,
+    overflow: "hidden",
   },
   press: {
+    flex: 1,
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[12],
-    paddingVertical: spacing[8],
+    paddingVertical: spacing[12],
+    minHeight: 72,
     paddingLeft: layout.rowInset,
     paddingRight: layout.rowInset,
     ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
@@ -132,5 +149,5 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
   title: { flex: 1, minWidth: 0 },
   dot: { width: 7, height: 7, borderRadius: 9999, flexShrink: 0 },
-  count: { marginTop: spacing[6] },
+  count: { marginTop: spacing[4] },
 });

@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, type OnApplicationBootstrap, type OnModuleDestroy } from "@nestjs/common";
 import bcrypt from "bcryptjs";
 import { randomUUID } from "node:crypto";
-import type { Session, User } from "../prisma/client.js";
+import { Prisma, type Session, type User } from "../prisma/client.js";
 import {
   EMAIL_OTP,
   EMAIL_OTP_PURPOSE,
@@ -101,18 +101,30 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
       throw new AppError(ErrorCode.EMAIL_ALREADY_EXISTS, "An account with this email already exists.");
     }
 
-    const user = await this.prisma.user.create({
-      data: {
-        id: randomUUID(),
-        displayName,
-        email,
-        passwordHash,
-        dekKdfSalt: keyMaterial.dekKdfSalt,
-        dekPasswordWrapped: keyMaterial.dekPasswordWrapped,
-        dekServerWrapped: keyMaterial.dekServerWrapped,
-        dataEncryptionVersion: keyMaterial.dataEncryptionVersion,
-      },
-    });
+    let user: User;
+    try {
+      user = await this.prisma.user.create({
+        data: {
+          id: randomUUID(),
+          displayName,
+          email,
+          passwordHash,
+          dekKdfSalt: keyMaterial.dekKdfSalt,
+          dekPasswordWrapped: keyMaterial.dekPasswordWrapped,
+          dekServerWrapped: keyMaterial.dekServerWrapped,
+          dataEncryptionVersion: keyMaterial.dataEncryptionVersion,
+        },
+      });
+    } catch (err) {
+      // Two concurrent signups with the same email race past the findUnique.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        if (this.cfg.emailVerificationRequired) {
+          return { pendingEmailVerification: true };
+        }
+        throw new AppError(ErrorCode.EMAIL_ALREADY_EXISTS, "An account with this email already exists.");
+      }
+      throw err;
+    }
     await claimInstanceOwner(this.prisma, user.id);
 
     if (this.cfg.emailVerificationRequired) {
@@ -211,8 +223,9 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
     if (accessToken) {
       // revoke by access hash covers the rotating-token case robustly
       await this.sessions.revokeByAccessToken(accessToken).catch(() => undefined);
-      return;
     }
+    // The access token can be stale after a concurrent refresh rotated it out;
+    // always drop the session row too so logout can't silently no-op.
     await this.prisma.session.delete({ where: { id: sessionId } }).catch(() => undefined);
   }
 
@@ -477,6 +490,9 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
       }
     } catch (err) {
       this.logger.error(`Failed to send ${purpose} email: ${(err as Error).message}`);
+      // With SMTP_REQUIRED the user cannot proceed without the code; failing
+      // beats reporting success for an email that was never delivered.
+      if (this.cfg.smtpRequired) throw err;
     }
   }
 

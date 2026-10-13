@@ -48,9 +48,12 @@ function OverlayLayers({ dispatchRef }: { dispatchRef: React.MutableRefObject<Ov
   dispatchRef.current = {
     upsert: (id, node) => {
       setLayers((prev) => {
-        const without = prev.filter((layer) => layer.id !== id);
-        if (node == null) return without;
-        return [...without, { id, node }];
+        const index = prev.findIndex((layer) => layer.id === id);
+        if (node == null) return index < 0 ? prev : prev.filter((layer) => layer.id !== id);
+        if (index < 0) return [...prev, { id, node }];
+        // Updating a parent form must not raise it above its open picker.
+        if (prev[index]?.node === node) return prev;
+        return prev.map((layer, i) => i === index ? { id, node } : layer);
       });
     },
   };

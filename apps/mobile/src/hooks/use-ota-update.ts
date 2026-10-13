@@ -11,6 +11,8 @@ import { AppState } from "react-native";
 import * as Updates from "expo-updates";
 import { restartForUpdate } from "../store/update-restart";
 import { resolveOtaStatus, type OtaStatus } from "../lib/ota-update-state";
+import { APP_IDENTITY, APP_VARIANT } from "../lib/app-variant";
+import { singleFlight } from "../lib/single-flight";
 
 export type { OtaStatus } from "../lib/ota-update-state";
 
@@ -36,7 +38,8 @@ export interface UseOtaUpdate {
   availableUpdateCreatedAt: Date | null;
   /** When we last checked for an update this session. */
   lastChecked: Date | null;
-  check: () => Promise<void>;
+  downloadProgress: number | undefined;
+  check: () => Promise<boolean>;
   download: () => Promise<void>;
   restart: () => Promise<void>;
 }
@@ -44,9 +47,11 @@ export interface UseOtaUpdate {
 /** Minimum gap between automatic foreground checks. */
 const FOREGROUND_RECHECK_MS = 60 * 60 * 1000;
 let lastForegroundCheck = 0;
+const checkOta = singleFlight(() => Updates.checkForUpdateAsync());
+const downloadOta = singleFlight(() => Updates.fetchUpdateAsync());
 
 export function useOtaUpdate(): UseOtaUpdate {
-  const enabled = Updates.isEnabled;
+  const enabled = Updates.isEnabled && APP_VARIANT !== "development" && Updates.channel === APP_IDENTITY.channel;
   const {
     currentlyRunning,
     isChecking,
@@ -58,6 +63,7 @@ export function useOtaUpdate(): UseOtaUpdate {
     checkError,
     downloadError,
     lastCheckForUpdateTimeSinceRestart,
+    downloadProgress,
   } = Updates.useUpdates();
 
   // Auto-check on first mount and when the app returns to the foreground
@@ -69,7 +75,7 @@ export function useOtaUpdate(): UseOtaUpdate {
       const now = Date.now();
       if (now - lastForegroundCheck < FOREGROUND_RECHECK_MS) return;
       lastForegroundCheck = now;
-      Updates.checkForUpdateAsync().catch(() => {});
+      checkOta().catch(() => { lastForegroundCheck = 0; });
     };
 
     runCheck();
@@ -98,13 +104,14 @@ export function useOtaUpdate(): UseOtaUpdate {
     checkError?.message ?? downloadError?.message ?? null;
 
   const check = useCallback(async () => {
-    if (!enabled) return;
-    await Updates.checkForUpdateAsync();
+    if (!enabled) return false;
+    const result = await checkOta();
+    return result.isAvailable || result.isRollBackToEmbedded;
   }, [enabled]);
 
   const download = useCallback(async () => {
     if (!enabled) return;
-    await Updates.fetchUpdateAsync();
+    await downloadOta();
   }, [enabled]);
 
   const restart = useCallback(async () => {
@@ -113,12 +120,16 @@ export function useOtaUpdate(): UseOtaUpdate {
     await restartForUpdate();
   }, [enabled]);
 
+  // Web config can expose an unresolved fingerprint policy object despite
+  // expo-updates' string type. Only resolved strings are displayable metadata.
+  const runtime = currentlyRunning.runtimeVersion ?? Updates.runtimeVersion;
+  const channel = currentlyRunning.channel ?? Updates.channel;
   return {
     enabled,
     status,
     message,
-    channel: currentlyRunning.channel ?? Updates.channel ?? null,
-    runtimeVersion: currentlyRunning.runtimeVersion ?? Updates.runtimeVersion ?? null,
+    channel: typeof channel === "string" && channel.length > 0 ? channel : null,
+    runtimeVersion: typeof runtime === "string" && runtime.length > 0 ? runtime : null,
     isEmbeddedLaunch: currentlyRunning.isEmbeddedLaunch,
     runningUpdateId: currentlyRunning.updateId ?? null,
     runningUpdateCreatedAt: currentlyRunning.createdAt ?? null,
@@ -127,6 +138,7 @@ export function useOtaUpdate(): UseOtaUpdate {
     availableUpdateId: availableUpdate?.updateId ?? null,
     availableUpdateCreatedAt: availableUpdate?.createdAt ?? null,
     lastChecked: lastCheckForUpdateTimeSinceRestart ?? null,
+    downloadProgress,
     check,
     download,
     restart,

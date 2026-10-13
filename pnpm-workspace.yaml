@@ -25,6 +25,14 @@ auditConfig:
     # expires: 2026-11-01 — the audit-ignore watchdog fails CI on this date
     # or the day a patched node-forge is published, whichever comes first.
     - GHSA-86w9-cpqp-85rv
+    # braces recursive AST stack-exhaustion DoS (GHSA-vfj7-8cjw-p6xm).
+    # npm still publishes only <=3.0.3; the audit's suggested 3.0.4 does not
+    # exist, and GitHub lists no patched release. Our production dependency
+    # paths are Metro/micromatch build tooling, not APK or backend execution.
+    # Glob patterns come from developer-controlled build configuration;
+    # saved URLs and article content are never passed to this parser.
+    # expires: 2026-11-01 — remove when an upstream patch is published.
+    - GHSA-vfj7-8cjw-p6xm
 
 overrides:
   js-yaml: 4.3.2
@@ -34,6 +42,14 @@ overrides:
   nanoid@3: 3.3.18
   brace-expansion@5: 5.0.12
   deepmerge-ts: 8.0.1
+  # CVE audit floors for transitive deps whose parents have not caught up:
+  # compression DoS (>=1.8.2), source-map-js event-loop DoS (>=1.2.2),
+  # proxy-addr IPv4-mapped IP spoofing (>=2.0.8), shell-quote quote()
+  # command injection (>=1.11.0).
+  compression: 1.8.2
+  source-map-js: 1.2.2
+  proxy-addr: 2.0.8
+  shell-quote: 1.11.0
 
 # Only these packages may run install/postinstall scripts. Do not pass
 # --config.dangerouslyAllowAllBuilds=true; add a package here instead.

@@ -1,9 +1,7 @@
-/**
- * Themed text input faithful to ordo-archive: tiny uppercase label, 1px line
- * border, coral 1.5px focus ring, radius 8. URLs/mono handled by the caller via
- * a `mono` flag (JetBrains Mono).
- */
-import React, { useLayoutEffect, useRef, useState } from "react";
+/** Material filled / outlined / search fields, preserving native editing and autofill. */
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { StateLayer } from "./StateLayer";
 import {
   Platform,
   StyleSheet,
@@ -14,9 +12,15 @@ import {
   type ViewStyle,
 } from "react-native";
 import { Text } from "./Text";
+import { MaterialIcon } from "./MaterialIcon";
 import { useTheme } from "../../theme/ThemeProvider";
 import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
 import { caretAfterKey, shouldCorrectWebCaret } from "../../lib/web-input-caret";
+import { useMaterialMotion } from "../../theme/material-motion";
+import { InputSurfaceContext } from "./input-surface";
+import { nativeInputEdit } from "../../lib/native-input-edit";
+import { alphaTint } from "../../theme/state-layer";
+const AnimatedLabel = Animated.createAnimatedComponent(Text);
 
 type WebCaretNode = TextInput & {
   selectionStart?: number | null;
@@ -50,7 +54,17 @@ export interface InputProps extends Omit<TextInputProps, "style"> {
   /** Skip measuring the overlay; avoids TextInput padding jumps while typing. */
   overlayPaddingRight?: number;
   mono?: boolean;
+  variant?: "filled" | "outlined" | "search";
+  /** Embedded search bars let their enclosing surface own the focus outline. */
+  showFocusIndicator?: boolean;
   containerStyle?: ViewStyle;
+  disabled?: boolean;
+  readOnly?: boolean;
+  required?: boolean;
+  /** Hide repeated visual markers when every field in the form is required. Semantics remain required. */
+  showRequiredIndicator?: boolean;
+  showCounter?: boolean;
+  reserveSupportingSpace?: boolean;
 }
 
 export const Input = React.forwardRef<TextInput, InputProps>(function Input({
@@ -62,6 +76,8 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   overlayRightAccessory,
   overlayPaddingRight,
   mono,
+  variant = "filled",
+  showFocusIndicator = true,
   containerStyle,
   onFocus,
   onBlur,
@@ -72,12 +88,30 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   keyboardType,
   value,
   editable = true,
+  disabled = false,
+  readOnly = false,
+  required = false,
+  showRequiredIndicator = true,
+  showCounter = false,
+  reserveSupportingSpace = !!label,
   ...rest
 }, ref) {
   const { palette } = useTheme();
+  const messageId = React.useId();
+  const fieldSurface = React.useContext(InputSurfaceContext) ?? palette.surface;
+  const motion = useMaterialMotion();
   const [focused, setFocused] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const inactive = disabled || (!editable && !readOnly);
+  const canEdit = !inactive && !readOnly;
+  const indicateRequired = required && showRequiredIndicator;
+  const displayLabel = label && indicateRequired ? `${label} *` : label;
+  const support = error ?? (helper ? indicateRequired ? `${helper} * Required` : helper : indicateRequired ? "* Required" : undefined);
+  const foreground = inactive ? alphaTint(palette.onSurface, 0.38) : palette.onSurface;
+  const [hasText, setHasText] = useState(!!value);
   const [overlayWidth, setOverlayWidth] = useState(0);
   const inputRef = useRef<TextInput>(null);
+  const accessoryRef = useRef<View>(null);
   const pendingCaret = useRef<number | null>(null);
   const focusedRef = useRef(false);
   const lastAppliedValue = useRef(value);
@@ -100,17 +134,38 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
     restoreWebCaret(webCaretNode(inputRef.current), start);
     pendingCaret.current = null;
   });
+  useLayoutEffect(() => {
+    // aria-hidden alone doesn't remove trailing actions from keyboard navigation.
+    if (Platform.OS === "web" && accessoryRef.current) (accessoryRef.current as unknown as HTMLElement).inert = inactive;
+  }, [inactive, rightAccessory]);
 
   useLayoutEffect(() => {
     if (!androidUncontrolled) return;
-    if (focusedRef.current) return;
-    if (value === lastAppliedValue.current) return;
+    const edit = nativeInputEdit(value, lastAppliedValue.current, focusedRef.current);
+    if (edit === "none") return;
     lastAppliedValue.current = value;
-    setAndroidEpoch((n) => n + 1);
+    setHasText(!!value);
+    if (edit === "replace") {
+      // Clipboard/clear actions are external edits, not another controlled echo
+      // of the keystroke. Apply them without remounting or dismissing the IME.
+      const text = value ?? "";
+      inputRef.current?.setNativeProps({ text, selection: { start: text.length, end: text.length } });
+    } else setAndroidEpoch((n) => n + 1);
   }, [androidUncontrolled, value]);
 
-  const borderColor = error ? palette.danger : focused ? palette.accent : palette.border;
-  const borderWidth = error ? 1 : focused ? 1.5 : 1;
+  const search = variant === "search";
+  const filled = variant === "filled";
+  const leadingIcon = React.isValidElement<React.ComponentProps<typeof MaterialIcon>>(icon) && icon.type === MaterialIcon
+    ? React.cloneElement(icon, { size: 24, style: [icon.props.style, { width: 24, height: 24 }] }) : icon;
+  const borderColor = inactive ? alphaTint(palette.onSurface, 0.12) : error ? palette.error : focused ? palette.primary : hovered ? palette.onSurface : palette.outline;
+  const borderWidth = search ? 0 : focused && !inactive ? 2 : 1;
+  const floating = focused || hasText || !!value;
+  const floatProgress = useSharedValue(floating ? 1 : 0);
+  useEffect(() => {
+    floatProgress.value = withTiming(floating ? 1 : 0, { duration: motion.reducedMotion ? 0 : 150 });
+  }, [floating, floatProgress, motion.reducedMotion]);
+  const labelPosition = useAnimatedStyle(() => ({ top: 16 - (filled ? 8 : 24) * floatProgress.value }));
+  const labelType = useAnimatedStyle(() => ({ fontSize: 16 - 4 * floatProgress.value, lineHeight: 24 - 8 * floatProgress.value }));
   // iOS Password AutoFill silently ignores secure fields that use a custom
   // font. Use the system face while the value is masked.
   const fontFamily = secureTextEntry
@@ -118,7 +173,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
     : mono && Platform.OS !== "android"
       ? resolveFont("mono", "400")
       : resolveFont("sans", "400");
-  const overlay = overlayRightAccessory && !!rightAccessory;
+  const overlay = overlayRightAccessory && !!rightAccessory && !error;
   const padRight =
     overlayPaddingRight != null
       ? overlayPaddingRight
@@ -139,35 +194,57 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
       : null;
 
   return (
-    <View style={containerStyle}>
-      {label ? (
-        <Text variant="label" color={error ? "danger" : "tertiary"} style={styles.label}>
-          {label}
-        </Text>
-      ) : null}
+    <View style={[label && !filled && !search ? { paddingTop: 8 } : null, containerStyle]}>
       <View
+        onPointerEnter={(event) => { if (event.nativeEvent.pointerType !== "touch") setHovered(true); }}
+        onPointerLeave={() => setHovered(false)}
+        onPointerDown={(event) => { if (!inactive && event.target === event.currentTarget) inputRef.current?.focus(); }}
+        onStartShouldSetResponder={(event) => !inactive && event.target === event.currentTarget}
+        onResponderRelease={() => { if (!inactive) inputRef.current?.focus(); }}
         style={[
           styles.box,
           {
-            backgroundColor: palette.background,
-            borderColor,
-            borderWidth,
-            borderRadius: radius.sm,
+            backgroundColor: inactive && filled ? alphaTint(palette.onSurface, 0.04) : search ? palette.surfaceContainerHigh : filled ? palette.surfaceContainerHighest : fieldSurface,
+            paddingHorizontal: icon && !search ? spacing[12] : spacing[16],
+            borderRadius: search ? radius.full : filled ? 0 : radius.sm,
+            ...(filled ? { borderTopLeftRadius: radius.xs, borderTopRightRadius: radius.xs } : {}),
           },
         ]}
       >
-        {icon ? <View style={styles.icon}>{icon}</View> : null}
+        <StateLayer testID="material-field-hover" color={palette.onSurface} fraction={hovered && !inactive ? 0.08 : 0}
+          surfaceStyle={{ borderRadius: search ? radius.full : filled ? 0 : radius.sm,
+            ...(filled ? { borderTopLeftRadius: radius.xs, borderTopRightRadius: radius.xs } : {}) }} />
+        {search && focused && showFocusIndicator ? <View testID="material-search-focus-ring" pointerEvents="none" style={[StyleSheet.absoluteFill, { borderColor, borderWidth: 2, borderRadius: radius.full }]} /> : null}
+        {filled ? <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: borderWidth, backgroundColor: borderColor }} />
+          : !search ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderColor, borderWidth, borderRadius: radius.sm }]} /> : null}
+        {label ? <Animated.View pointerEvents="none" style={[styles.floatingLabel, {
+          left: icon ? 48 : 12,
+          backgroundColor: filled || search ? "transparent" : fieldSurface,
+        }, labelPosition]}>
+          <AnimatedLabel variant="bodyLarge" style={[{ color: inactive ? foreground : error ? palette.error : focused ? palette.primary : palette.onSurfaceVariant }, labelType]}>{displayLabel}</AnimatedLabel>
+        </Animated.View> : null}
+        {icon ? <View pointerEvents="none" style={[styles.icon, inactive ? { opacity: 0.38 } : null]}>{leadingIcon}</View> : null}
         <TextInput
           ref={setInputRef}
           key={androidUncontrolled ? `android-field-${androidEpoch}` : undefined}
-          placeholderTextColor={palette.textFaint}
+           placeholderTextColor={inactive ? foreground : palette.onSurfaceVariant}
           autoCorrect={false}
           autoCapitalize="none"
           secureTextEntry={secureTextEntry}
           keyboardType={resolvedKeyboardType}
           underlineColorAndroid="transparent"
-          editable={editable}
+          editable={canEdit}
+          accessibilityLabel={rest.accessibilityLabel ?? label ?? rest.placeholder}
+          selectionColor={palette.primary}
+          cursorColor={palette.primary}
+          keyboardAppearance={palette.mode}
           {...rest}
+          accessibilityState={{ ...rest.accessibilityState, disabled: inactive }}
+          accessibilityHint={rest.accessibilityHint ?? (readOnly ? "Read only." : required ? "Required." : undefined)}
+          // RN-web promotes even aria-readonly=false to HTML readOnly=true.
+          // Omit that attribute for editable fields; native readOnly remains authoritative.
+          {...(Platform.OS === "web" ? { disabled: inactive, readOnly, "aria-readonly": readOnly ? true : undefined, "aria-required": required ? true : undefined, "aria-invalid": !!error, "aria-describedby": support ? messageId : undefined } : null)}
+          placeholder={label && !floating ? undefined : rest.placeholder}
           {...(Platform.OS === "web" ? { dir: "ltr" as const } : null)}
           {...(androidUncontrolled
             ? { defaultValue: typeof value === "string" ? value : undefined }
@@ -210,26 +287,36 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
             const target = (event.target ?? event.nativeEvent?.target) as WebCaretNode | undefined;
             // Autofill writes locked fields even when they aren't focused.
             // Put the controlled value back so the DOM can't drift.
-            if (!editable && target && typeof value === "string" && target.value !== value) {
+            if (!canEdit && target && typeof value === "string" && target.value !== value) {
               target.value = value;
             }
             restoreWebCaret(webCaretNode(target), pendingCaret.current);
           }}
-          onChangeText={editable ? onChangeText : undefined}
+          onChangeText={canEdit ? (text) => {
+            if (androidUncontrolled) lastAppliedValue.current = text;
+            setHasText(text.length > 0); onChangeText?.(text);
+          } : undefined}
           style={[
             styles.input,
             {
-              color: palette.text,
+              color: foreground,
               fontFamily,
               writingDirection: "ltr",
             },
             webCaretFix,
+            Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0, boxShadow: "none" } as unknown as TextStyle : null,
             padRight != null ? { paddingRight: padRight } : null,
+            filled && label ? { paddingTop: spacing[24], paddingBottom: spacing[8] } : null,
           ]}
         />
+        {error && !inactive ? <View testID="material-field-error-icon" pointerEvents="none" style={{ marginLeft: 8 }}><MaterialIcon name="alert-circle" size={24} color={palette.error} accessible={false} /></View> : null}
         {rightAccessory ? (
           <View
-            pointerEvents={overlay ? "box-none" : "auto"}
+            ref={accessoryRef}
+            pointerEvents={inactive ? "none" : overlay ? "box-none" : "auto"}
+            accessibilityElementsHidden={inactive}
+            importantForAccessibility={inactive ? "no-hide-descendants" : "auto"}
+            aria-hidden={inactive}
             onLayout={
               overlay && overlayPaddingRight == null
                 ? (event) => {
@@ -238,38 +325,36 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
                   }
                 : undefined
             }
-            style={overlay ? styles.rightOverlay : styles.right}
+            style={[overlay ? styles.rightOverlay : styles.right, inactive ? { opacity: 0.38 } : null]}
           >
             {rightAccessory}
           </View>
         ) : null}
       </View>
-      {error ? (
-        <Text variant="footnote" color="danger" style={styles.msg}>
-          {error}
-        </Text>
-      ) : helper ? (
-        <Text variant="footnote" color="tertiary" style={styles.msg}>
-          {helper}
-        </Text>
-      ) : null}
+      {support || reserveSupportingSpace || showCounter ? <View style={[styles.msg, { minHeight: 16, flexDirection: "row", gap: 8 }]}>
+        <Text nativeID={messageId} variant="bodySmall" color={error ? "danger" : "secondary"}
+          accessibilityRole={error ? "alert" : undefined} accessibilityLiveRegion={error ? "polite" : "none"} style={[{ flex: 1 }, inactive ? { color: foreground } : null]}>{support ?? " "}</Text>
+        {showCounter && rest.maxLength != null ? <Text variant="bodySmall" color="secondary" accessibilityLabel={`${value?.length ?? 0} of ${rest.maxLength} characters`}>{value?.length ?? 0}/{rest.maxLength}</Text> : null}
+      </View> : null}
     </View>
   );
 });
 
 const styles = StyleSheet.create({
-  label: { marginBottom: spacing[6] },
-  box: {
+  floatingLabel: { position: "absolute", paddingHorizontal: spacing[4], zIndex: 1 },
+   box: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: spacing[12],
-    minHeight: 46,
+      minHeight: 56,
   },
-  icon: { marginRight: spacing[8] },
+   icon: { width: 24, height: 24, marginRight: spacing[16], alignItems: "center", justifyContent: "center" },
   input: {
     flex: 1,
-    paddingVertical: spacing[10],
+    minWidth: 0,
+    borderWidth: 0,
+    paddingVertical: spacing[16],
     fontSize: fontSize.md,
+    lineHeight: 24,
     ...Platform.select({
       android: { includeFontPadding: false, textAlignVertical: "center" as const },
       default: {},
@@ -283,5 +368,5 @@ const styles = StyleSheet.create({
     bottom: 0,
     justifyContent: "center",
   },
-  msg: { marginTop: spacing[6] },
+  msg: { marginTop: spacing[4], paddingHorizontal: spacing[16] },
 });

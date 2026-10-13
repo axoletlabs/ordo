@@ -282,6 +282,7 @@ export class AuthController {
 
   @Post("email/change")
   @UseGuards(AuthGuard)
+  @RateLimit("password-confirm")
   @HttpCode(200)
   async changeEmail(
     @CurrentUser() user: AuthContext,
@@ -312,6 +313,7 @@ export class AuthController {
 
   @Post("password")
   @UseGuards(AuthGuard)
+  @RateLimit("password-confirm")
   @HttpCode(200)
   async changePassword(
     @CurrentUser() user: AuthContext,
@@ -334,6 +336,7 @@ export class AuthController {
 
   @Delete("account")
   @UseGuards(AuthGuard)
+  @RateLimit("password-confirm")
   @HttpCode(200)
   async deleteAccount(
     @CurrentUser() user: AuthContext,

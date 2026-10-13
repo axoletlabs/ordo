@@ -1,14 +1,15 @@
 /**
  * Login screen. Cloud is the default; self-host is a secondary opt-in.
  */
-import React, { useCallback, useState } from "react";
-import { StyleSheet, View } from "react-native";
-import { Link, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import React, { useCallback, useRef, useState } from "react";
+import { StyleSheet, View, type TextInput } from "react-native";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { AuthLink } from "../../src/components/auth/AuthLink";
+import { FormError } from "../../src/components/ui/FormError";
 import { AuthShell } from "../../src/components/auth/AuthShell";
-import { Input } from "../../src/components/ui/Input";
+import { AuthInput } from "../../src/components/auth/AuthInput";
 import { Button } from "../../src/components/ui/Button";
 import { Text } from "../../src/components/ui/Text";
-import { PressableScale } from "../../src/components/ui/PressableScale";
 import { ConfirmDialog } from "../../src/components/ui/ConfirmDialog";
 import { ServerConnectSheet } from "../../src/components/auth/ServerConnectSheet";
 import { SelfHostFlow } from "../../src/components/settings/SelfHostFlow";
@@ -21,6 +22,7 @@ import { ApiClientError } from "../../src/lib/api/client";
 import { CLOUD_SERVER_URL, hostingModeOf } from "../../src/lib/hosting";
 import { hostOf } from "../../src/lib/instance-name";
 import { haptics } from "../../src/lib/haptics";
+import { useTheme } from "../../src/theme/ThemeProvider";
 import { spacing } from "../../src/theme/tokens";
 import { ErrorCode, LoginSchema, isMfaRequiredResponse } from "@ordo/shared";
 import { lockedSecretDisplay, passwordAutofillProps } from "../../src/lib/password-autofill";
@@ -38,6 +40,7 @@ export default function LoginScreen() {
 }
 
 function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
+  const { expressive } = useTheme();
   const router = useRouter();
   const serverUrl = useSettingsStore((s) => s.serverUrl);
   const login = useLogin();
@@ -51,6 +54,9 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
   const [showServer, setShowServer] = useState(false);
   const [confirmCloud, setConfirmCloud] = useState(false);
   const [formError, setFormError] = useState("");
+  const [errorField, setErrorField] = useState<string | null>(null);
+  const passwordRef = useRef<TextInput>(null);
+  const inFlight = useRef(false);
   const [screenFocused, setScreenFocused] = useState(true);
 
   useFocusEffect(
@@ -61,12 +67,16 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
   );
 
   const submit = async () => {
+    if (inFlight.current) return;
     setFormError("");
+    setErrorField(null);
     const parsed = LoginSchema.safeParse({ identifier, password });
     if (!parsed.success) {
       setFormError(parsed.error.issues[0]?.message || "Please check your input.");
+      setErrorField(String(parsed.error.issues[0]?.path[0] ?? ""));
       return;
     }
+    inFlight.current = true;
     try {
       const result = await login.mutateAsync(parsed.data);
       if (isMfaRequiredResponse(result)) {
@@ -92,6 +102,8 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
         return;
       }
       setFormError(errorMessage(e));
+    } finally {
+      inFlight.current = false;
     }
   };
 
@@ -100,18 +112,38 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
   return (
     <>
       <AuthShell
-        title="Welcome back"
-        footer={
-          <View style={styles.row}>
-            <Text variant="footnote" color="secondary">No account yet? </Text>
-            <Link href="/(auth)/register" asChild replace>
-              <Text variant="footnote" color="accent" style={styles.link}>Create one</Text>
-            </Link>
+        title="Sign in"
+        footer={<AuthLink href="/(auth)/register" label="Create account" replace />}
+        secondaryFooter={selfHosted ? (
+          <View style={styles.hosting}>
+            <Text variant="bodySmall" color="secondary" align="center">
+              Server: {hostOf(serverUrl)}
+            </Text>
+            <View style={styles.hostingActions}>
+              <Button
+                label="Change server"
+                variant="ghost"
+                onPress={() => setShowServer(true)}
+              />
+              <Button
+                label="Use ordo Cloud"
+                variant="ghost"
+                onPress={() => setConfirmCloud(true)}
+              />
+            </View>
           </View>
-        }
+        ) : (
+          <Button
+            label="Use your own server"
+            variant="ghost"
+            onPress={() => setShowSelfHost(true)}
+          />
+        )}
       >
-        <Input
+        <AuthInput
           label="Email"
+          maxLength={254}
+          disabled={login.isPending}
           value={identifier}
           onChangeText={setIdentifier}
           placeholder="you@example.com"
@@ -120,72 +152,33 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
           autoComplete="email"
           autoCapitalize="none"
           importantForAutofill="yes"
-          error={formError || undefined}
+          error={errorField === "identifier" ? formError : undefined}
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() => passwordRef.current?.focus()}
         />
         <View style={{ height: spacing[16] }} />
-        <Input
+        <AuthInput
+          ref={passwordRef}
           key={screenFocused ? "password" : "password-locked"}
           label="Password"
+          disabled={login.isPending}
           value={passwordField.value}
           onChangeText={setPassword}
-          placeholder="••••••••"
           secureTextEntry={passwordField.secureTextEntry}
           {...passwordAutofillProps("current-password", !screenFocused)}
           rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
+          error={errorField === "password" ? formError : undefined}
+          returnKeyType="go"
+          onSubmitEditing={() => void submit()}
         />
         <View style={styles.forgotRow}>
-          <Link href="/(auth)/forgot-password" asChild>
-            <Text variant="footnote" color="accent" style={styles.link}>Forgot password?</Text>
-          </Link>
+          <AuthLink href="/(auth)/forgot-password" label="Forgot password?" />
         </View>
 
-        <View style={{ height: spacing[24] }} />
-        <Button label="Sign in" block size="lg" onPress={submit} loading={login.isPending} />
-
-        {selfHosted ? (
-          <View style={styles.hosting}>
-            <Text variant="footnote" color="tertiary" align="center">
-              Using <Text variant="monoSmall" color="tertiary">{hostOf(serverUrl)}</Text>
-            </Text>
-            <View style={styles.hostingActions}>
-              <PressableScale
-                accessibilityRole="button"
-                accessibilityLabel={`Change server. Current server: ${serverUrl}`}
-                onPress={() => {
-                  haptics.light();
-                  setShowServer(true);
-                }}
-              >
-                <Text variant="footnote" color="accent">Change server</Text>
-              </PressableScale>
-              <Text variant="footnote" color="faint"> · </Text>
-              <PressableScale
-                accessibilityRole="button"
-                accessibilityLabel="Use ordo Cloud"
-                onPress={() => {
-                  haptics.light();
-                  setConfirmCloud(true);
-                }}
-              >
-                <Text variant="footnote" color="accent">Use ordo Cloud</Text>
-              </PressableScale>
-            </View>
-          </View>
-        ) : (
-          <PressableScale
-            accessibilityRole="button"
-            accessibilityLabel="Use your own server"
-            onPress={() => {
-              haptics.light();
-              setShowSelfHost(true);
-            }}
-            style={styles.hosting}
-          >
-            <Text variant="footnote" color="tertiary" align="center">
-              Use your own server
-            </Text>
-          </PressableScale>
-        )}
+        <View style={{ height: spacing[16] }} />
+        <FormError message={errorField ? undefined : formError} />
+        <Button label="Sign in" block size={expressive ? "md" : "sm"} onPress={submit} loading={login.isPending} />
       </AuthShell>
 
       <SelfHostFlow visible={showSelfHost} onDismiss={() => setShowSelfHost(false)} />
@@ -199,10 +192,9 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
         onDismiss={() => {
           if (!busy) setConfirmCloud(false);
         }}
-        icon="cloud-outline"
         tone="accent"
         title="Use ordo Cloud?"
-        message="You'll leave this server. Your library there stays put — it isn't copied."
+        message="Your library stays on this server. It won't be copied to Cloud."
         confirmLabel="Use ordo Cloud"
         loading={busy}
         dismissible={!busy}
@@ -217,14 +209,12 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", alignItems: "center", justifyContent: "center" },
-  link: { textDecorationLine: "underline" },
-  hosting: { marginTop: spacing[20], gap: spacing[6] },
+  hosting: { gap: spacing[8], justifyContent: "center" },
   hostingActions: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     flexWrap: "wrap",
   },
-  forgotRow: { marginTop: spacing[10], alignItems: "flex-end" },
+  forgotRow: { alignItems: "flex-end" },
 });

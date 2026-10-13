@@ -22,16 +22,33 @@ function fingerprint(env) {
 }
 
 async function main() {
-  const channels = ["development", "production", "early-access", "development-t3code-2Fmaterial-2Dthree-2Dredesign"];
+  const configPath = resolve(mobile, "app.config.js");
+  const originalConfig = readFileSync(configPath, "utf8");
+  try {
+    await verifyRuntime(configPath, originalConfig);
+  } finally {
+    writeFileSync(configPath, originalConfig);
+  }
+}
+
+async function verifyRuntime(configPath, originalConfig) {
+  const { APP_VARIANTS, classifyReleaseVersion } = require("./release-policy.js");
+  const baseVersion = classifyReleaseVersion(originalConfig.match(/const version = "([^"]+)"/)[1]).version.split("-")[0];
+  const variants = ["stable", "preview", "development"];
   const hashes = [];
-  for (const channel of channels) {
-    const env = { EXPO_UPDATES_CHANNEL: channel, ORDO_BUILD_BRANCH: "main" };
+  for (const variant of variants) {
+    const version = variant === "preview" ? `${baseVersion}-preview.1` : baseVersion;
+    writeFileSync(configPath, originalConfig.replace(/const version = "[^"]+"/, `const version = "${version}"`));
+    const env = { ORDO_APP_VARIANT: variant, EXPO_UPDATES_CHANNEL: variant, ORDO_BUILD_BRANCH: "main" };
     run("node", [resolve(root, "node_modules/expo/bin/cli"), "prebuild", "--clean", "--platform", "android", "--no-install"], env);
     const manifest = await AndroidConfig.Manifest.readAndroidManifestAsync(resolve(mobile, "android/app/src/main/AndroidManifest.xml"));
     const metadata = manifest.manifest.application[0]["meta-data"];
     const headers = metadata.find((item) => item.$["android:name"] === "expo.modules.updates.UPDATES_CONFIGURATION_REQUEST_HEADERS_KEY");
-    assert.equal(JSON.parse(headers.$["android:value"])["expo-channel-name"], channel);
-    assert.ok(metadata.some((item) => item.$["android:name"] === "expo.modules.updates.ENABLED" && item.$["android:value"] === "true"));
+    if (variant === "development") assert.equal(headers, undefined);
+    else assert.equal(JSON.parse(headers.$["android:value"])["expo-channel-name"], variant);
+    assert.ok(metadata.some((item) => item.$["android:name"] === "expo.modules.updates.ENABLED" && item.$["android:value"] === String(variant !== "development")));
+    const gradle = readFileSync(resolve(mobile, "android/app/build.gradle"), "utf8");
+    assert.ok(gradle.includes(`applicationId '${APP_VARIANTS[variant].package}'`) || gradle.includes(`applicationId "${APP_VARIANTS[variant].package}"`));
     const fp = fingerprint(env);
     assert.match(fp.hash, /^[a-f0-9]{40}$/);
     assert.equal(fingerprint(env).hash, fp.hash, "fingerprint must be deterministic");
@@ -40,11 +57,13 @@ async function main() {
       ...env, ORDO_OTA_RUNTIME_VERSION: fp.hash,
     }, true);
     assert.equal(config.runtimeVersion, fp.hash, "OTA runtime pin must survive Expo config resolution");
-    assert.equal(config.updates.requestHeaders["expo-channel-name"], channel);
-    console.log(`Verified native channel ${channel}, runtime ${fp.hash}`);
+    assert.equal(config.updates.requestHeaders?.["expo-channel-name"] ?? null, APP_VARIANTS[variant].channel);
+    assert.equal(config.android.package, APP_VARIANTS[variant].package);
+    assert.equal(config.updates.enabled, variant !== "development");
+    console.log(`Verified native variant ${variant}, runtime ${fp.hash}`);
   }
-  assert.equal(new Set(hashes).size, channels.length, "channel changes must mint an isolated native runtime");
-  const env = { EXPO_UPDATES_CHANNEL: channels[3], ORDO_BUILD_BRANCH: "main" };
+  assert.equal(new Set(hashes).size, variants.length, "variant changes must mint an isolated native runtime");
+  const env = { ORDO_APP_VARIANT: "development", EXPO_UPDATES_CHANNEL: "development", ORDO_BUILD_BRANCH: "main" };
   run("node", [resolve(root, "node_modules/expo/bin/cli"), "prebuild", "--clean", "--platform", "android", "--no-install"], { ...env, ORDO_ENABLE_CCACHE: "1" });
   const gradle = readFileSync(resolve(mobile, "android/app/build.gradle"), "utf8");
   assert.match(gradle, /ordoCcacheLaunchers/);
@@ -71,6 +90,6 @@ async function main() {
   } finally { writeFileSync(pluginPath, plugin); }
   const bytecodeArgs = process.argv.includes("--no-bytecode") ? ["--no-bytecode"] : [];
   run("node", [resolve(root, "node_modules/expo/bin/cli"), "export", "--platform", "android", "--output-dir", ".expo/release-audit-export", ...bytecodeArgs], env);
-  console.log(`Verified Android ${bytecodeArgs.length ? "JS" : "Hermes"} export, shared release policy bundling, JS/native fingerprint routing, and all four channel manifests.`);
+  console.log(`Verified Android ${bytecodeArgs.length ? "JS" : "Hermes"} export, shared release policy bundling, JS/native fingerprint routing, and all three variant manifests.`);
 }
 main().catch((error) => { console.error(error); process.exitCode = 1; });

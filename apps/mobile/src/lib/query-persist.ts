@@ -17,6 +17,7 @@ export const QUERY_CACHE_STORAGE_PREFIX = "ordo.rq.";
 const RESERVED_BOOKMARK_SEGMENTS = new Set([
   "detail",
   "search",
+  "library-index",
   "tagged",
   "extraction-progress",
 ]);

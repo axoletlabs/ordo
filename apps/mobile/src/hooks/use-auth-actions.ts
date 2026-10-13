@@ -3,6 +3,7 @@
  * gate. Errors are surfaced via the returned rejection (screens handle UI).
  */
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useCallback } from "react";
 import {
   isMfaRequiredResponse,
   isPendingEmailVerificationResponse,
@@ -12,7 +13,6 @@ import {
   type UserDto,
 } from "@ordo/shared";
 import { queryClient } from "../lib/query-client";
-import { discardQueryCache } from "../lib/query-cache";
 import { authApi } from "../lib/api/auth";
 import { useAuthStore } from "../store/auth";
 import { useFolderTokenStore } from "../store/folder-tokens";
@@ -54,12 +54,11 @@ export function useResendVerification() {
   return useMutation({ mutationFn: authApi.resendVerification });
 }
 
-/** Write an updated user into the auth store + the `me` query cache. */
+/** Write an updated user into the auth store. */
 function useUpdateUser() {
   const setUser = useAuthStore((s) => s.setUser);
   return (user: UserDto) => {
     setUser(user);
-    queryClient.setQueryData<UserDto>(qk.me, user);
   };
 }
 
@@ -114,7 +113,8 @@ export function useDeleteAccount() {
     mutationFn: authApi.deleteAccount,
     onSuccess: async () => {
       cancelProactiveRefresh();
-      discardQueryCache();
+      // The root layout stops persistence immediately and wipes the cache
+      // once the sign-out crossfade has settled — see app/_layout.tsx.
       await Promise.allSettled([
         clear(),
         useFolderTokenStore.getState().clearAll(),
@@ -145,26 +145,28 @@ export function useRevokeSession() {
  */
 export function useUpdateReaderPreferences() {
   const setUser = useAuthStore((s) => s.setUser);
-  return useMutation({
-    mutationFn: (patch: UpdateReaderPreferencesInput) => authApi.updatePreferences(patch),
-    onMutate: (patch) => {
-      const prev = useAuthStore.getState().user;
-      if (prev) {
-        setUser({
-          ...prev,
-          preferences: { ...normalizeReaderPreferences(prev.preferences), ...patch },
-        });
-      }
-      return { prev };
-    },
+  const mutation = useMutation({
+    mutationKey: ["reader-preferences"],
+    scope: { id: "reader-preferences" },
+    mutationFn: ({ patch }: { patch: UpdateReaderPreferencesInput; prev: UserDto | null }) => authApi.updatePreferences(patch),
     onSuccess: (user) => {
-      setUser(user);
-      queryClient.setQueryData<UserDto>(qk.me, user);
+      const current = useAuthStore.getState().user;
+      const next = current && queryClient.isMutating({ mutationKey: ["reader-preferences"] }) > 1
+        ? { ...user, preferences: current.preferences } : user;
+      setUser(next);
     },
-    onError: (_e, _patch, ctx) => {
-      if (ctx?.prev) setUser(ctx.prev);
+    onError: (_e, { prev }) => {
+      if (prev && queryClient.isMutating({ mutationKey: ["reader-preferences"] }) === 1) setUser(prev);
     },
   });
+  const enqueue = mutation.mutate;
+  const mutate = useCallback((patch: UpdateReaderPreferencesInput) => {
+    const prev = useAuthStore.getState().user;
+    // Apply in the press handler, before React Query's asynchronous mutation lifecycle.
+    if (prev) setUser({ ...prev, preferences: { ...normalizeReaderPreferences(prev.preferences), ...patch } });
+    enqueue({ patch, prev });
+  }, [setUser, enqueue]);
+  return { ...mutation, mutate };
 }
 
 export function useLoginMfa() {
@@ -208,7 +210,9 @@ export function useLogout() {
     },
     onSettled: () => {
       cancelProactiveRefresh();
-      discardQueryCache();
+      // Cache teardown is owned by the root layout: it stops persistence at
+      // once and wipes after the crossfade, so the outgoing library keeps
+      // its painted rows while the sign-in screen fades in.
       void clear();
     },
   });

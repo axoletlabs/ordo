@@ -30,7 +30,7 @@ if [[ -z "$RUN_ID" && -n "$SHA" ]]; then
   tag=""
   [[ "$BRANCH" == release/* ]] && tag="v${APP_VERSION:-${BRANCH#release/}}"
   IDS="$(jq -r --arg branch "$BRANCH" --arg tag "$tag" --arg sha "$SHA" \
-    '.[] | select(.head_sha == $sha and ($branch == "" or .head_branch == $branch or ($tag != "" and .event == "release" and .head_branch == $tag))) | .id' <<<"$runs")"
+    '.[] | select(.head_sha == $sha and ($branch == "" or (.head_branch == $branch and (($branch | startswith("release/")) == false or .event == "push")) or ($tag != "" and .event == "release" and .head_branch == $tag))) | .id' <<<"$runs")"
   while read -r id; do
     [[ -z "$id" ]] && continue
     conclusion="$(gh api "repos/${REPO}/actions/runs/${id}/jobs" \

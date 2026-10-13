@@ -3,7 +3,7 @@
  */
 import React, { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import type { TagColor, TagDto } from "@ordo/shared";
+import { TAG_NAME_MAX_LENGTH, type TagColor, type TagDto } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
@@ -70,6 +70,8 @@ export function EditTagPanel({ visible, tag, onDismiss }: EditTagPanelProps) {
       <PanelHeader title="Edit tag" />
       <View style={styles.body}>
         <Input
+          label="Tag name"
+          required maxLength={TAG_NAME_MAX_LENGTH} showCounter
           value={name}
           onChangeText={setName}
           placeholder="Tag name"
@@ -93,5 +95,5 @@ export function EditTagPanel({ visible, tag, onDismiss }: EditTagPanelProps) {
 
 const styles = StyleSheet.create({
   body: {},
-  label: { marginTop: spacing[10], marginBottom: spacing[6] },
+  label: { marginTop: spacing[16], marginBottom: spacing[8] },
 });

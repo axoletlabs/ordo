@@ -1,98 +1,96 @@
-/**
- * Animated segmented control. Each active cell highlights with a springing
- * coral pill. Warm, compact, line-driven.
- */
-import React from "react";
-import { StyleSheet, View, Pressable } from "react-native";
-import Animated, {
-  interpolateColor,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
+/** Baseline segmented buttons / Expressive connected toggle button group. */
+import React, { useEffect } from "react";
+import { Platform, StyleSheet, View, type TextStyle } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import { PressableScale } from "./PressableScale";
+import { Text } from "./Text";
+import { MaterialIcon } from "./MaterialIcon";
 import { useTheme } from "../../theme/ThemeProvider";
+import { radius } from "../../theme/tokens";
 import { haptics } from "../../lib/haptics";
-import { fontSize, radius, resolveFont, springs, spacing } from "../../theme/tokens";
-
+import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
+const AnimatedText = Animated.createAnimatedComponent(Text);
+function SegmentLabel({ label, foreground, selected, labelStyle }: { label: string; foreground: string; selected: boolean; labelStyle?: TextStyle }) {
+  const motion = useMaterialMotion();
+  const tint = useSharedValue(foreground);
+  const selection = useSharedValue(selected ? 1 : 0);
+  useEffect(() => {
+    tint.value = motion.reducedMotion ? foreground : withSpring(foreground, materialMotion.effects.fast);
+    selection.value = motion.reducedMotion ? Number(selected) : withSpring(Number(selected), materialMotion.effects.fast);
+  }, [foreground, selected, motion.reducedMotion, tint, selection]);
+  const labelStyleAnimated = useAnimatedStyle(() => ({ color: tint.value }));
+  const checkStyle = useAnimatedStyle(() => ({ opacity: selection.value, width: 26 * selection.value }));
+  // Retain the check through deselection; animate its slot with the fade so
+  // labels don't jump sideways when the selection changes.
+  return <><Animated.View testID="material-segment-check" pointerEvents="none" accessible={false}
+    style={[{ overflow: "hidden", flexShrink: 0 }, checkStyle]}><MaterialIcon name="checkmark" size={18} color={foreground} /></Animated.View>
+    <AnimatedText variant="labelLarge" numberOfLines={1} style={[{ flexShrink: 1 }, labelStyle, labelStyleAnimated]}>{label}</AnimatedText></>;
+}
 export interface SegmentedProps<T extends string> {
-  options: readonly { value: T; label: string }[];
-  value: T;
-  onChange: (v: T) => void;
+  options: readonly { value: T; label: string; accessibilityLabel?: string; labelStyle?: TextStyle }[]; value: T; onChange: (value: T) => void;
+  accessibilityLabel?: string;
+  orientation?: "horizontal" | "vertical";
+  disabled?: boolean;
 }
-
-function Cell<T extends string>({
-  option,
-  active,
-  onPress,
-}: {
-  option: { value: T; label: string };
-  active: boolean;
-  onPress: () => void;
-}) {
-  const { palette } = useTheme();
-  const a = useSharedValue(active ? 1 : 0);
-  const idleColor = useSharedValue(palette.textTertiary);
-  const activeColor = useSharedValue(palette.accent);
-  idleColor.value = palette.textTertiary;
-  activeColor.value = palette.accent;
-
-  React.useEffect(() => {
-    a.value = withSpring(active ? 1 : 0, springs.snappy);
-  }, [active, a]);
-
-  const highlight = useAnimatedStyle(() => ({
-    opacity: a.value,
-    transform: [{ scale: 0.94 + a.value * 0.06 }],
-  }));
-
-  const labelStyle = useAnimatedStyle(() => ({
-    color: interpolateColor(a.value, [0, 1], [idleColor.value, activeColor.value]),
-  }));
-
-  return (
-    <Pressable style={styles.option} onPress={onPress}>
-      <Animated.View
-        pointerEvents="none"
-        style={[styles.pill, { backgroundColor: palette.accentSoft, borderRadius: radius.xs }, highlight]}
-      />
-      <Animated.Text style={[styles.label, labelStyle]} numberOfLines={1}>
-        {option.label}
-      </Animated.Text>
-    </Pressable>
-  );
+export function Segmented<T extends string>({ options, value, onChange, accessibilityLabel, orientation = "horizontal", disabled = false }: SegmentedProps<T>) {
+  const { palette, expressive } = useTheme();
+  const vertical = orientation === "vertical";
+  const keyboardProps = Platform.OS === "web" ? {
+    onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (disabled) return;
+      const radios = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[role="radio"]'));
+      const focused = radios.indexOf(event.target as HTMLElement);
+      if (focused < 0) return;
+      let next = focused;
+      if (event.key === "ArrowRight" || event.key === "ArrowDown") next = (focused + 1) % options.length;
+      else if (event.key === "ArrowLeft" || event.key === "ArrowUp") next = (focused + options.length - 1) % options.length;
+      else if (event.key === "Home") next = 0;
+      else if (event.key === "End") next = options.length - 1;
+      else return;
+      event.preventDefault();
+      const option = options[next];
+      if (option && option.value !== value) { haptics.selection(); onChange(option.value); }
+      radios[next]?.focus();
+    },
+  } : {};
+  return <View style={{ minHeight: 48, justifyContent: "center" }}><View {...keyboardProps} accessibilityRole="radiogroup" accessibilityLabel={accessibilityLabel} style={[styles.group, {
+    gap: expressive ? 2 : 0, backgroundColor: "transparent",
+    borderRadius: radius.full,
+    ...(vertical ? { flexDirection: "column" as const, height: "auto" as const } : {}),
+  }]}>
+    {options.map((option, index) => {
+      const selected = value === option.value;
+      const fg = disabled ? `${palette.onSurface}61` : selected ? expressive ? palette.onSecondary : palette.onSecondaryContainer : palette.onSurface;
+      const outer = vertical ? 24 : 20;
+      const first = index === 0, last = index === options.length - 1;
+      const ends = { topLeft: first, bottomLeft: vertical ? last : first, topRight: vertical ? first : last, bottomRight: last };
+      const corners = (inner: number) => ({ topLeft: ends.topLeft ? outer : inner, bottomLeft: ends.bottomLeft ? outer : inner,
+        topRight: ends.topRight ? outer : inner, bottomRight: ends.bottomRight ? outer : inner });
+      const rest = selected ? outer : corners(radius.sm);
+      const pressed = corners(radius.xs);
+      const outline = corners(0);
+      return <PressableScale key={option.value} accessibilityRole="radio" accessibilityLabel={option.accessibilityLabel ?? option.label}
+        {...(Platform.OS === "web" ? { tabIndex: selected ? 0 : -1 } : {})}
+        disabled={disabled} accessibilityState={{ checked: selected, disabled }} onPress={() => { if (!selected && !disabled) { haptics.selection(); onChange(option.value); } }}
+        stateLayerColor={fg} shape={{ rest: expressive ? rest : outline, pressed: expressive ? pressed : outline }}
+        style={[styles.option, vertical ? { flex: 0, width: "100%" } : null]}
+        visualStyle={[styles.visual, {
+          height: vertical ? 48 : 40,
+          ...(vertical ? { flex: 0, flexShrink: 0, minHeight: 48, width: "100%" as const } : {}),
+          backgroundColor: disabled ? selected ? `${palette.onSurface}1f` : "transparent" : selected ? expressive ? palette.secondary : palette.secondaryContainer : expressive ? palette.surfaceContainerLow : "transparent",
+          borderColor: disabled ? `${palette.onSurface}1f` : palette.outline,
+          borderTopWidth: expressive || vertical && !first ? 0 : 1, borderBottomWidth: expressive ? 0 : 1,
+          borderLeftWidth: expressive || !vertical && !first ? 0 : 1, borderRightWidth: expressive ? 0 : 1,
+          ...(!expressive ? { borderTopLeftRadius: outline.topLeft, borderBottomLeftRadius: outline.bottomLeft,
+            borderTopRightRadius: outline.topRight, borderBottomRightRadius: outline.bottomRight } : {}),
+        }]}>
+          <SegmentLabel label={option.label} foreground={fg} selected={selected} labelStyle={option.labelStyle} />
+      </PressableScale>;
+    })}
+  </View></View>;
 }
-
-export function Segmented<T extends string>({ options, value, onChange }: SegmentedProps<T>) {
-  const { palette } = useTheme();
-  return (
-    <View style={[styles.track, { backgroundColor: palette.surfaceSecondary, borderRadius: radius.sm }]}>
-      {options.map((o) => (
-        <Cell
-          key={o.value}
-          option={o}
-          active={o.value === value}
-          onPress={() => {
-            if (o.value === value) return;
-            haptics.selection();
-            onChange(o.value);
-          }}
-        />
-      ))}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  track: { flexDirection: "row", padding: spacing[4] },
-  option: { flex: 1, paddingVertical: spacing[8], alignItems: "center", justifyContent: "center" },
-  pill: { position: "absolute", top: spacing[4], bottom: spacing[4], left: spacing[4], right: spacing[4] },
-  label: {
-    fontFamily: resolveFont("display", "600"),
-    fontSize: fontSize.xs,
-    fontWeight: "600",
-    letterSpacing: 1.2,
-    textTransform: "uppercase",
-    includeFontPadding: false,
-    textAlignVertical: "center",
-  },
+   group: { flexDirection: "row", minHeight: 48 },
+   option: { flex: 1, minWidth: 48, minHeight: 48, justifyContent: "center" },
+   visual: { alignSelf: "stretch", height: 40, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingHorizontal: 12 },
 });

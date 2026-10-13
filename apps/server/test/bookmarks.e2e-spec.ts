@@ -1024,13 +1024,14 @@ describe("Bookmarks & Folders (e2e)", () => {
       });
       const bookmark = (await agent.get("/api/bookmarks").expect(200)).body.items[0];
 
-      // mark-read-on-open keeps its old behavior: it must not touch progress
+      // Marking read records completion without changing fractional progress.
       const marked = await agent
         .patch(`/api/bookmarks/${bookmark.id}`)
         .send({ isRead: true })
         .expect(200);
       expect(marked.body.readProgress).toBe(0.4);
-      expect(marked.body.completedAt).toBeNull();
+      expect(marked.body.completedAt).toEqual(expect.any(String));
+      expect(Number.isNaN(Date.parse(marked.body.completedAt))).toBe(false);
       expect(marked.body.isRead).toBe(true);
 
       // moving folders is an incidental mutation, not a progress reset
@@ -1041,10 +1042,12 @@ describe("Bookmarks & Folders (e2e)", () => {
         .expect(200);
       expect(moved.body.readProgress).toBe(0.4);
       expect(moved.body.isRead).toBe(true);
+      expect(moved.body.completedAt).toBe(marked.body.completedAt);
 
       // metadata round-trips through list and detail
       const detail = await agent.get(`/api/bookmarks/${bookmark.id}`).expect(200);
       expect(detail.body.readProgress).toBe(0.4);
+      expect(detail.body.completedAt).toBe(marked.body.completedAt);
       expect(detail.body.extractionVersion).toBeNull();
       expect(detail.body.extractionReason).toBeNull();
       expect(detail.body.fetchStatus).toBe("ok");

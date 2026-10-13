@@ -4,7 +4,7 @@ import { Image } from "expo-image";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { authApi } from "../../lib/api/auth";
-import { avatarColor, displayInitials } from "../../lib/avatar";
+import { displayInitials } from "../../lib/avatar";
 import { imageDataUri } from "../../lib/avatar-image";
 import type { UserDto } from "@ordo/shared";
 
@@ -54,7 +54,7 @@ export function UserAvatar({
     );
   }
 
-  const bg = user ? avatarColor(user.id || user.displayName) : palette.surfaceSecondary;
+  const bg = palette.secondaryContainer;
   return (
     <View
       style={[
@@ -62,7 +62,7 @@ export function UserAvatar({
         { width: size, height: size, borderRadius: radius, backgroundColor: bg },
       ]}
     >
-      <Text variant="title1" style={{ color: "#fff", fontSize: size * 0.36 }}>
+      <Text variant="titleMedium" style={{ color: palette.onSecondaryContainer, fontSize: size * 0.36, lineHeight: size * 0.5 }}>
         {displayInitials(user?.displayName ?? "")}
       </Text>
     </View>

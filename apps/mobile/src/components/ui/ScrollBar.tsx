@@ -19,6 +19,7 @@ import Animated, {
   type SharedValue,
   useAnimatedStyle,
   useSharedValue,
+  cancelAnimation,
   withTiming,
 } from "react-native-reanimated";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -34,6 +35,7 @@ import {
   type ScrollBarInsets,
 } from "../../theme/scrollbar";
 import { radius, timing } from "../../theme/tokens";
+import { useMaterialMotion } from "../../theme/material-motion";
 
 export type { ScrollBarInsets };
 
@@ -64,14 +66,21 @@ export function useVerticalScrollBar(insets?: ScrollBarInsets) {
   const offset = useSharedValue(0);
   const opacity = useSharedValue(0);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { reducedMotion } = useMaterialMotion();
+  const reducedMotionRef = useRef(reducedMotion);
+  reducedMotionRef.current = reducedMotion;
+  useEffect(() => {
+    if (reducedMotion) { cancelAnimation(opacity); opacity.value = hideTimer.current ? 1 : 0; }
+  }, [opacity, reducedMotion]);
 
   const reveal = useCallback(() => {
-    opacity.value = withTiming(1, { duration: timing.normal });
+    opacity.value = reducedMotion ? 1 : withTiming(1, { duration: timing.normal });
     if (hideTimer.current) clearTimeout(hideTimer.current);
     hideTimer.current = setTimeout(() => {
-      opacity.value = withTiming(0, { duration: timing.slow });
+      hideTimer.current = null;
+      opacity.value = reducedMotionRef.current ? 0 : withTiming(0, { duration: timing.slow });
     }, SCROLLBAR_IDLE_MS);
-  }, [opacity]);
+  }, [opacity, reducedMotion]);
 
   useEffect(
     () => () => {

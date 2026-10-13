@@ -11,11 +11,10 @@ export const LIST_PAGE_SIZE = MAX_PAGE_SIZE;
 export const LIST_END_REACHED_THRESHOLD = 0.2;
 
 /**
- * Space under the last row when a 48px FAB sits in the corner (20px off the
- * screen bottom). Do not pad the full button height — that left a blank band.
- * The last row tucks beside the FAB; title and trailing actions stay above it.
+ * Space under the last row for a 56dp extended Material FAB. Its wider label
+ * must never cover the final row's text or actions. Screens add their safe inset.
  */
-export const FAB_LIST_CLEARANCE = 20 + 16;
+export const FAB_LIST_CLEARANCE = 56 + 24 + 16;
 
 export function shouldFetchNextPage(opts: {
   hasNextPage: boolean;

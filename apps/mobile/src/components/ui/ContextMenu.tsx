@@ -1,7 +1,6 @@
 /**
  * Anchored floating context menu: sits beside its trigger instead of a
- * centered, dimmed dialog. Rows fill the panel (no inset, no inter-row gap)
- * so hover is full-bleed; comfort comes from each row's inner padding.
+ * centered dialog. Inset state layers stay inside the rounded menu surface.
  */
 import React from "react";
 import {
@@ -11,23 +10,27 @@ import {
   View,
   useWindowDimensions,
   type ViewStyle,
+  type PressableProps,
 } from "react-native";
-import Animated, { interpolate, useAnimatedStyle } from "react-native-reanimated";
-import { Ionicons } from "@expo/vector-icons";
+import Animated, { cancelAnimation, Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { useMaterialMotion } from "../../theme/material-motion";
+import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { AppIcon } from "./PinIcon";
 import { Spinner } from "./Spinner";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "./Text";
+import { PressableScale } from "./PressableScale";
 import { OverlayPortal } from "./overlay-host";
 import { ThemedScrollView } from "./ThemedScrollView";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
-import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
+import { useOverlayFocus } from "../../hooks/use-overlay-focus";
+import { dismissKeyboard, useKeyboardViewportHeight } from "../../hooks/use-keyboard-visible";
 import { haptics } from "../../lib/haptics";
 import {
   CONTEXT_MENU_WIDTH,
+  CONTEXT_MENU_EDGE,
   isMenuAnchorRect,
-  menuHoverFill,
   placeMenu,
   type MenuAnchorRect,
   type MenuPlacement,
@@ -37,7 +40,29 @@ import { layout, radius, spacing } from "../../theme/tokens";
 
 export type { MenuAnchorRect };
 
-export function ContextMenu({
+export interface ContextMenuProps {
+  visible: boolean;
+  onDismiss: () => void;
+  anchor: MenuAnchorRect | null;
+  children: React.ReactNode;
+  width?: number;
+  backdrop?: boolean;
+  preferredPlacement?: MenuPlacement["placement"];
+  estimatedHeight?: number;
+  sessionKey?: string | number | null;
+  scrollBody?: boolean;
+  keyboardDismiss?: boolean;
+  /** Nested pages share an origin and transition in place, sizing to their contents. */
+  pageKey?: string;
+}
+
+export function ContextMenu(props: ContextMenuProps) {
+  const [activated, setActivated] = React.useState(props.visible);
+  if (props.visible && !activated) setActivated(true);
+  return activated ? <ContextMenuSurface {...props} /> : null;
+}
+
+function ContextMenuSurface({
   visible,
   onDismiss,
   anchor,
@@ -47,43 +72,97 @@ export function ContextMenu({
   preferredPlacement,
   estimatedHeight = 200,
   sessionKey,
-}: {
-  visible: boolean;
-  onDismiss: () => void;
-  anchor: MenuAnchorRect | null;
-  children: React.ReactNode;
-  width?: number;
-  /** When false, taps pass through so OS text selection stays alive. */
-  backdrop?: boolean;
-  preferredPlacement?: MenuPlacement["placement"];
-  estimatedHeight?: number;
-  /**
-   * Keep the panel where it first landed across hide/show in the same
-   * overlay session (Remind, Custom, Back). A new key starts a fresh place.
-   */
-  sessionKey?: string | number | null;
-}) {
-  const { palette, shadows } = useTheme();
-  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  scrollBody = true,
+  keyboardDismiss = true,
+  pageKey,
+}: ContextMenuProps) {
+  const { palette, shadows, expressive } = useTheme();
+  const { width: windowWidth, height } = useWindowDimensions();
+  const windowHeight = useKeyboardViewportHeight(height, visible);
   const insets = useSafeAreaInsets();
   const hideAndDismiss = React.useCallback(() => {
-    if (backdrop) dismissKeyboard();
+    if (backdrop && keyboardDismiss) dismissKeyboard();
     onDismiss();
-  }, [backdrop, onDismiss]);
-  const { rendered, progress } = useOverlayPresence(visible, hideAndDismiss, {
-    dismissKeyboard: backdrop,
-  });
+  }, [backdrop, keyboardDismiss, onDismiss]);
   const [contentHeight, setContentHeight] = React.useState(0);
   const contentHeightRef = React.useRef(0);
+  const bodyRef = React.useRef<View>(null);
+  const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, {
+    dismissKeyboard: backdrop && keyboardDismiss,
+    ready: contentHeight > 0,
+  });
+  const menuRef = useOverlayFocus(visible && rendered && backdrop, hideAndDismiss, "menu");
+  const pageProgress = useSharedValue(1);
+  const pageLeaving = useSharedValue(0);
+  // Outgoing content held in place while a fade-through hands off to the
+  // next page. The origin stays fixed; size follows the displayed page.
+  const [displayed, setDisplayed] = React.useState<React.ReactNode>(null);
+  const motion = useMaterialMotion();
+  const lastPage = React.useRef(pageKey);
+  const visibleRef = React.useRef(visible);
+  visibleRef.current = visible;
+  const pageWasVisible = React.useRef(false);
+  const [pageCommit, setPageCommit] = React.useState(0);
+  // Swap the frozen outgoing page for the incoming one only after the
+  // surface has fully faded: the shared value is already applied at 0, so
+  // neither page can flash mid-frame no matter when styles land.
+  const settlePageSwap = React.useCallback((key: string | undefined) => {
+    if (!visibleRef.current || key !== lastPage.current) return;
+    pageLeaving.value = 0;
+    setDisplayed(null);
+    pageProgress.value = 0;
+    setPageCommit((value) => value + 1);
+  }, [pageLeaving, pageProgress]);
+  React.useLayoutEffect(() => {
+    if (!pageCommit || !visible || displayed !== null) return;
+    // Begin the incoming fade only once React has committed the new contents.
+    pageProgress.value = motion.reducedMotion ? 1 : withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) });
+  }, [pageCommit, displayed, visible, motion.reducedMotion, pageProgress]);
+  React.useLayoutEffect(() => {
+    if (!visible) {
+      cancelAnimation(pageProgress);
+      lastPage.current = pageKey;
+      return;
+    }
+    if (motion.reducedMotion) {
+      cancelAnimation(pageProgress);
+      lastPage.current = pageKey;
+      pageLeaving.value = 0;
+      pageProgress.value = 1;
+      setDisplayed(null);
+      return;
+    }
+    if (pageKey === lastPage.current) return;
+    lastPage.current = pageKey;
+    // Material fade-through: fade the current page out in place, swap to
+    // the next page while the surface is empty, then fade it in with a
+    // small settle. Direction-free, so opening a nested page reads the
+    // same as coming back.
+    pageLeaving.value = 1;
+    pageProgress.value = withTiming(0, { duration: 100, easing: Easing.in(Easing.quad) }, (finished) => {
+      if (finished) runOnJS(settlePageSwap)(pageKey);
+    });
+  }, [visible, pageKey, pageLeaving, pageProgress, settlePageSwap, motion.reducedMotion]);
+  const pageStyle = useAnimatedStyle(() => ({
+    opacity: pageProgress.value,
+    ...(Platform.OS !== "web" ? { transform: [{ translateX: (pageLeaving.value ? -8 : 8) * (1 - pageProgress.value) }] } : {}),
+  }));
   const lastPlacement = React.useRef<MenuPlacement | null>(null);
   const placementLock = React.useRef<MenuPlacement | null>(null);
   const sessionSide = React.useRef<MenuPlacement["placement"] | null>(null);
   const wasVisibleRef = React.useRef(visible);
   const layoutKeyRef = React.useRef("");
   const lastChildren = React.useRef(children);
+  const lastPageRender = React.useRef(pageKey);
+  if (visible && wasVisibleRef.current && pageKey !== lastPageRender.current) {
+    // Freeze the outgoing page in place while the fade-through empties the
+    // surface; the swap to the new page happens in `settlePageSwap`.
+    if (lastChildren.current !== children) setDisplayed(lastChildren.current);
+  }
   if (visible) lastChildren.current = children;
+  lastPageRender.current = pageKey;
   const sessionKeyRef = React.useRef(sessionKey);
-  if (sessionKeyRef.current !== sessionKey) {
+  if (visible && sessionKeyRef.current !== sessionKey) {
     sessionKeyRef.current = sessionKey;
     contentHeightRef.current = 0;
     placementLock.current = null;
@@ -101,10 +180,35 @@ export function ContextMenu({
       sessionSide.current = null;
       if (contentHeight !== 0) setContentHeight(0);
     }
+    if (displayed !== null) setDisplayed(null);
   }
   wasVisibleRef.current = visible;
+  React.useLayoutEffect(() => {
+    if (!visible || contentHeightRef.current > 0) return;
+    let cancelled = false;
+    // A quick reopen can reuse the exiting tree at exactly the same size.
+    // ResizeObserver/onLayout then has no change to report: explicitly measure
+    // that retained body rather than waiting forever behind the readiness gate.
+    bodyRef.current?.measure((_x, _y, _width, measured) => {
+      if (cancelled || measured <= 0) return;
+      contentHeightRef.current = measured;
+      setContentHeight(measured);
+    });
+    return () => { cancelled = true; };
+  }, [visible, sessionKey]);
+  React.useLayoutEffect(() => {
+    const opening = visible && !pageWasVisible.current;
+    pageWasVisible.current = visible;
+    if (!opening) return;
+    // Shared values are updated at commit, never during a speculative render.
+    cancelAnimation(pageProgress);
+    lastPage.current = pageKey;
+    pageLeaving.value = 0;
+    pageProgress.value = 1;
+  }, [visible, pageKey, pageLeaving, pageProgress]);
 
   const menuWidth = Math.min(width, Math.max(160, windowWidth - spacing[32]));
+  const menuPadding = spacing[8];
   const layoutKey = [
     windowWidth,
     windowHeight,
@@ -128,7 +232,7 @@ export function ContextMenu({
       lastPlacement.current = placeMenu({
         anchor,
         menuWidth,
-        menuHeight: measuredHeight || estimatedHeight,
+        menuHeight: (measuredHeight || estimatedHeight) + menuPadding * 2,
         windowWidth,
         windowHeight,
         insets,
@@ -141,12 +245,16 @@ export function ContextMenu({
     }
   }
   const placed = lastPlacement.current;
+  // A taller nested page may scroll, but must not grow below the viewport
+  // while the session's origin stays locked.
+  const heightLimit = placed ? placementLock.current
+    ? Math.min(placed.maxHeight, windowHeight - insets.bottom - CONTEXT_MENU_EDGE - placed.top)
+    : placed.maxHeight : 0;
+  const bodyHeightLimit = Math.max(0, heightLimit - menuPadding * 2);
   const fromY = placed?.placement === "above" ? 6 : -6;
-  const awaitingMeasure = visible && measuredHeight <= 0;
-
   const menuStyle = useAnimatedStyle(() => ({
-    opacity: awaitingMeasure ? 0 : progress.value,
-    transform: [{ translateY: interpolate(progress.value, [0, 1], [fromY, 0]) }],
+    opacity: progress.value,
+    transform: [{ translateY: interpolate(spatial.value, [0, 1], [fromY * 2, 0]) }],
   }));
 
   if (!rendered || !placed) return null;
@@ -164,12 +272,15 @@ export function ContextMenu({
             accessibilityLabel="Dismiss menu"
             style={StyleSheet.absoluteFill}
             pointerEvents={visible ? "auto" : "none"}
-            onPressIn={dismissKeyboard}
+            onPressIn={keyboardDismiss ? dismissKeyboard : undefined}
             onPress={hideAndDismiss}
           />
         ) : null}
         <Animated.View
+          ref={menuRef}
           accessibilityRole="menu"
+          aria-hidden={!visible}
+          {...(Platform.OS === "web" ? { tabIndex: -1, dataSet: { materialOverlay: visible ? "true" : "false", menuPage: pageKey ?? "" } } : {})}
           pointerEvents="auto"
           style={[
             styles.menu,
@@ -177,32 +288,33 @@ export function ContextMenu({
               left: placed.left,
               top: placed.top,
               width: menuWidth,
-              maxHeight: placed.maxHeight,
-              backgroundColor: palette.mode === "dark" ? palette.surfaceSecondary : palette.surfaceElevated,
-              borderColor: palette.outline,
-              ...shadows.level3,
+              maxHeight: heightLimit,
+              backgroundColor: palette.surfaceContainerHigh,
+              borderRadius: expressive ? radius.xl : radius.xs,
+              paddingVertical: menuPadding,
+              ...shadows.level2,
             },
             menuStyle,
           ]}
         >
-          <ThemedScrollView
-            bounces={false}
-            keyboardShouldPersistTaps="handled"
-            style={{ maxHeight: placed.maxHeight }}
-          >
             <View
+              ref={bodyRef}
               collapsable={false}
+              style={{ maxHeight: bodyHeightLimit, flexShrink: 1 }}
               onLayout={(event) => {
-                if (!visible || placementLock.current) return;
+                if (!visible) return;
                 const next = event.nativeEvent.layout.height;
                 if (next <= 0 || Math.abs(next - contentHeightRef.current) < 1) return;
                 contentHeightRef.current = next;
                 setContentHeight(next);
               }}
             >
-              {visible ? children : lastChildren.current}
+              <Animated.View style={[{ flexShrink: 1 }, pageStyle]}>
+              {scrollBody ? <ThemedScrollView bounces={false} keyboardShouldPersistTaps="handled" style={{ maxHeight: bodyHeightLimit }}>
+                {displayed ?? (visible ? children : lastChildren.current)}
+              </ThemedScrollView> : displayed ?? (visible ? children : lastChildren.current)}
+              </Animated.View>
             </View>
-          </ThemedScrollView>
         </Animated.View>
       </View>
     </OverlayPortal>
@@ -226,6 +338,7 @@ export function ContextMenuNote({
 
 export function ContextMenuItem({
   icon,
+  leading,
   label,
   detail,
   tone,
@@ -234,8 +347,11 @@ export function ContextMenuItem({
   disabled,
   busy,
   onPress,
+  selectionRole,
+  role = "menuitem",
 }: {
   icon?: keyof typeof Ionicons.glyphMap;
+  leading?: React.ReactNode;
   label: string;
   /** Trailing local time or similar meta, same row as the label. */
   detail?: string;
@@ -245,37 +361,42 @@ export function ContextMenuItem({
   disabled?: boolean;
   busy?: boolean;
   onPress: () => void;
+  selectionRole?: "menuitemradio" | "menuitemcheckbox";
+  role?: "menuitem" | "button";
 }) {
-  const { palette } = useTheme();
-  const [hovered, setHovered] = React.useState(false);
-  const color = tone === "danger" ? palette.danger : palette.text;
-  const highlight = menuHoverFill(palette.mode, true);
+  const { palette, expressive } = useTheme();
+  const color = tone === "danger" ? palette.error : selected ? palette.onSecondaryContainer : palette.onSurface;
   const inactive = disabled || busy;
 
   return (
-    <Pressable
-      accessibilityRole="menuitem"
+    <PressableScale
+      accessibilityRole={selectionRole === "menuitemradio" ? "radio" : selectionRole === "menuitemcheckbox" ? "checkbox" : role}
+      {...(Platform.OS === "web" ? { role: (selectionRole ?? role) as PressableProps["role"] } : null)}
       accessibilityLabel={detail ? `${label}, ${detail}` : label}
-      accessibilityState={{ disabled: !!inactive, selected: !!selected, busy: !!busy }}
+      accessibilityState={{ disabled: !!inactive, selected: !!selected, busy: !!busy, ...(selectionRole ? { checked: !!selected } : {}) }}
+      aria-disabled={!!inactive}
+      aria-busy={!!busy}
       disabled={inactive}
-      onHoverIn={() => setHovered(true)}
-      onHoverOut={() => setHovered(false)}
+      stateLayerColor={color}
+      focusOnlyVisible
+      onHoverIn={Platform.OS === "web" && !inactive ? (event) => (event.currentTarget as unknown as HTMLElement)?.focus() : undefined}
       onPress={() => {
         if (inactive) return;
         haptics.light();
         onPress();
       }}
-      style={({ pressed }) => [
+      style={[
         styles.item,
         Platform.OS === "web" ? styles.itemWeb : null,
         inactive && styles.itemDisabled,
-        (pressed || hovered) && !inactive ? { backgroundColor: highlight } : null,
+        { backgroundColor: selected ? palette.secondaryContainer : "transparent" },
+        { borderRadius: expressive ? radius.md : radius.xs, marginHorizontal: expressive ? spacing[8] : 0, paddingHorizontal: expressive ? spacing[16] : spacing[12], overflow: "hidden" },
       ]}
     >
       <View style={styles.iconSlot}>
-        {icon ? <AppIcon name={icon} size={16} color={color} /> : null}
+        {leading ?? (icon ? <AppIcon name={icon} size={24} color={color} /> : null)}
       </View>
-      <Text variant="body" style={[styles.itemLabel, { color }]} numberOfLines={1}>
+      <Text variant="bodyLarge" style={[styles.itemLabel, { color }]} numberOfLines={2}>
         {label}
       </Text>
       {busy ? (
@@ -284,7 +405,7 @@ export function ContextMenuItem({
         <Ionicons
           name="checkmark"
           size={16}
-          color={palette.accent}
+           color={palette.onSecondaryContainer}
           style={[styles.itemSide, iconGlyphStyle(16)]}
         />
       ) : trailing ? (
@@ -294,7 +415,7 @@ export function ContextMenuItem({
           {detail}
         </Text>
       ) : null}
-    </Pressable>
+    </PressableScale>
   );
 }
 
@@ -304,7 +425,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     overflow: "hidden",
     padding: layout.overlayMenuPadding,
-    borderWidth: 1,
+    borderWidth: 0,
     borderRadius: radius["3xl"],
   },
   note: {
@@ -312,23 +433,21 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[8],
   },
   item: {
-    minHeight: 40,
+    minHeight: 48,
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing[10],
-    paddingHorizontal: spacing[12],
+    gap: spacing[12],
+    paddingHorizontal: spacing[16],
     paddingVertical: spacing[8],
   },
   itemSide: { alignSelf: "center", flexShrink: 0 },
   itemWeb: {
     cursor: "pointer",
-    transitionProperty: "background-color",
-    transitionDuration: "120ms",
   } as ViewStyle,
   itemDisabled: { opacity: 0.45 },
   iconSlot: {
-    width: 16,
-    height: 16,
+    width: 24,
+    height: 24,
     alignItems: "center",
     justifyContent: "center",
   },

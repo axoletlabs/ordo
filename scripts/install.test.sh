@@ -25,8 +25,8 @@ if (ordo_release_from_args --release); then fail "--release without a value shou
 
 got=$(ordo_normalize_tag "0.1.0")
 [[ "$got" == "v0.1.0" ]] || fail "normalize plain, got $got"
-got=$(ordo_normalize_tag "v0.1.0-beta.1")
-[[ "$got" == "v0.1.0-beta.1" ]] || fail "normalize pre, got $got"
+got=$(ordo_normalize_tag "v0.1.0-preview.1")
+[[ "$got" == "v0.1.0-preview.1" ]] || fail "normalize pre, got $got"
 if ordo_normalize_tag "latest"; then fail "latest should defer"; fi
 if ordo_normalize_tag "latest-pre"; then fail "latest-pre should defer"; fi
 if ordo_normalize_tag "nope"; then fail "junk should fail"; fi
@@ -403,11 +403,11 @@ msg=$(
   ordo_ensure_node() { :; }
   ordo_ensure_pnpm() { :; }
   ordo_latest_tag() { printf 'v0.2.0\n'; }
-  ordo_latest_pre_tag() { printf 'v0.3.0-beta.1\n'; }
+  ordo_latest_pre_tag() { printf 'v0.3.0-preview.1\n'; }
   ordo_download_release() { fail "dry-run must not download"; }
   for flags in '--pre' '--release latest-pre'; do
     msg=$(ORDO_DIR="$tmp/fresh-dry" ordo_install_main --dry-run $flags)
-    [[ "$msg" == *"v0.3.0-beta.1"* ]] || fail "fresh early-access selection: $msg"
+    [[ "$msg" == *"v0.3.0-preview.1"* ]] || fail "fresh preview selection: $msg"
     [[ ! -e "$tmp/fresh-dry" ]] || fail "dry-run created an install"
   done
   msg=$(ORDO_DIR="$tmp/fresh-dry" ordo_install_main --dry-run --release latest)

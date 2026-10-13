@@ -14,19 +14,6 @@ export function hmacSha256Hex(value: string, secret: string): string {
   return createHmac("sha256", secret).update(value).digest("hex");
 }
 
-/** Unsalted SHA-256. Only for reading session rows minted before HMAC. */
-export function hashToken(token: string): string {
-  return sha256Hex(token);
-}
-
-/** Constant-time comparison of a raw token against its stored hash. */
-export function verifyToken(token: string, expectedHash: string): boolean {
-  const a = Buffer.from(hashToken(token), "hex");
-  const b = Buffer.from(expectedHash, "hex");
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(a, b);
-}
-
 /** HMAC-style peppered hash: mixes the app secret so a DB leak alone can't forge tokens. */
 export function pepperedHash(token: string, secret: string): string {
   return createHash("sha256").update(`${secret}:${token}`).digest("hex");

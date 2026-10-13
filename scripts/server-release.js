@@ -27,7 +27,7 @@ const { pipeline } = require("node:stream/promises");
 const { classifyReleaseVersion, compareVersions } = require("./release-policy.js");
 
 const DEFAULT_REPO = "axoletlabs/ordo";
-const TAG_RE = /^v\d+\.\d+\.\d+(?:-(?:alpha|beta|rc)(?:\.\d+)?)?$/;
+const TAG_RE = /^v\d+\.\d+\.\d+(?:-preview(?:\.\d+)?)?$/;
 
 function normalizeRepo(raw) {
   const repo = String(raw ?? DEFAULT_REPO).trim();
@@ -44,7 +44,7 @@ function normalizeReleaseSpec(raw, { pre = false } = {}) {
   const tag = text.startsWith("v") ? text : `v${text}`;
   if (!TAG_RE.test(tag) || !classifyReleaseVersion(tag)) {
     throw new Error(
-      `--release expects latest or vX.Y.Z (optional -alpha, -beta, or -rc), got ${JSON.stringify(raw)}`,
+      `--release expects latest or vX.Y.Z (optional -preview.N), got ${JSON.stringify(raw)}`,
     );
   }
   return { kind: "tag", tag, pre: Boolean(pre) };
@@ -214,7 +214,7 @@ function isPreserved(rel) {
   if (path === "apps/server/.env" || path.startsWith("apps/server/.env.")) return true;
   if (path === "apps/server/.ordo-secret" || path === "apps/server/.ordo-library-key") return true;
   if (path === ".ordo-secret" || path === ".ordo-library-key") return true;
-  if (path === "apps/server/.ordo.pid" || path === "apps/server/ordo.log") return true;
+  if (["apps/server/.ordo.pid", "apps/server/ordo.log", "apps/server/setup.log"].includes(path)) return true;
   const prisma = "apps/server/prisma/";
   if (!path.startsWith(prisma)) return false;
   const rest = path.slice(prisma.length);

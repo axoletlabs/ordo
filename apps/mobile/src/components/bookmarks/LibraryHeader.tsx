@@ -1,0 +1,165 @@
+/** A persistent search app bar and compact, contextual library actions. */
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Keyboard, Platform, StyleSheet, TextInput, View } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, type SharedValue } from "react-native-reanimated";
+import { useFocusEffect } from "expo-router";
+import { useAppRouter as useRouter } from "../../hooks/use-app-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useColumnPadding } from "../../hooks/use-scene-column-insets";
+import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
+import { useSearchBack } from "../../hooks/use-search-back";
+import { useAuthStore } from "../../store/auth";
+import { useTheme } from "../../theme/ThemeProvider";
+import { layout, radius, spacing } from "../../theme/tokens";
+import { registerSearchFieldFocus } from "../../lib/search-field-focus";
+import { MaterialIcon } from "../ui/MaterialIcon";
+import { Input } from "../ui/Input";
+import { IconButton } from "../ui/IconButton";
+import { HeaderIconButton } from "../ui/Header";
+import type { MenuAnchorRect } from "../../lib/menu-anchor";
+import { PressableScale } from "../ui/PressableScale";
+import { Text } from "../ui/Text";
+import { UserAvatar } from "../ui/UserAvatar";
+import { SelectionHeader } from "./SelectionHeader";
+import { appBarLayout } from "../../theme/app-bar-layout";
+import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
+
+/** Retain fading actions, but remove inactive slots from touch, Tab and screen readers. */
+function SearchBarActions({ active, style, children }: { active: boolean; style: React.ComponentProps<typeof Animated.View>["style"]; children: React.ReactNode }) {
+  const ref = useRef<View>(null);
+  useLayoutEffect(() => {
+    if (Platform.OS === "web" && ref.current) (ref.current as unknown as HTMLElement).inert = !active;
+  }, [active]);
+  return <Animated.View ref={ref} pointerEvents={active ? "box-none" : "none"} aria-hidden={!active}
+    accessibilityElementsHidden={!active} importantForAccessibility={active ? "auto" : "no-hide-descendants"}
+    style={style}>{children}</Animated.View>;
+}
+
+const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoFocus, onFilter, filtersOn, onFocusChange, filterOpen, selecting, spatialProgress, effectsProgress }: {
+  query: string; onChange: (query: string) => void; autoFocus?: boolean;
+  onFilter: (anchor: MenuAnchorRect) => void; filtersOn: boolean;
+  onFocusChange: (focused: boolean) => void;
+  filterOpen: boolean; selecting: boolean;
+  spatialProgress: SharedValue<number>; effectsProgress: SharedValue<number>;
+}) {
+  const { palette } = useTheme();
+  const motion = useMaterialMotion();
+  const inputRef = useRef<TextInput>(null);
+  const [text, setText] = useState(query);
+  const focused = useRef(false);
+  const [editing, setEditing] = useState(false);
+  const clearProgress = useSharedValue(query ? 1 : 0);
+  useEffect(() => {
+    clearProgress.value = motion.reducedMotion ? (text ? 1 : 0) : withSpring(text ? 1 : 0, materialMotion.effects.fast);
+  }, [!!text, clearProgress, motion.reducedMotion]);
+  const searchIconStyle = useAnimatedStyle(() => ({ opacity: 1 - effectsProgress.value }));
+  const backStyle = useAnimatedStyle(() => ({ opacity: effectsProgress.value,
+    transform: [{ translateX: -4 * (1 - spatialProgress.value) }] }));
+  const accessoriesStyle = useAnimatedStyle(() => ({ opacity: effectsProgress.value,
+    transform: [{ translateX: 8 * (1 - spatialProgress.value) }] }));
+  const clearStyle = useAnimatedStyle(() => ({ opacity: clearProgress.value }));
+  const exitSearch = useCallback(() => {
+    setEditing(false);
+    onFocusChange(false);
+    inputRef.current?.blur();
+    Keyboard.dismiss();
+  }, [onFocusChange]);
+  useSearchBack(editing, exitSearch, filterOpen);
+  useEffect(() => { if (selecting) exitSearch(); }, [selecting, exitSearch]);
+  useEffect(() => { if (!focused.current) setText(query); }, [query]);
+  useFocusEffect(useCallback(() => registerSearchFieldFocus(() => inputRef.current?.focus()), []));
+  useEffect(() => {
+    if (!autoFocus) return;
+    const timer = setTimeout(() => inputRef.current?.focus(), 200);
+    return () => clearTimeout(timer);
+  }, [autoFocus]);
+  const change = (next: string) => {
+    setText(next);
+    onChange(next);
+  };
+  const clear = () => { inputRef.current?.clear(); change(""); inputRef.current?.focus(); };
+  return <View><Input ref={inputRef} variant="search" showFocusIndicator={false} value={text} onChangeText={change}
+    placeholder={editing ? "Search your library" : "Library"} accessibilityLabel="Search your library"
+    accessibilityHint="Search saved bookmarks and folders."
+    onFocus={() => { focused.current = true; setEditing(true); onFocusChange(true); }}
+    onBlur={() => { focused.current = false; }}
+    autoCorrect={false} spellCheck={false} autoCapitalize="none" returnKeyType="search"
+    onSubmitEditing={exitSearch}
+    onKeyPress={(event) => { if (event.nativeEvent.key === "Escape") exitSearch(); }}
+    icon={<Animated.View style={searchIconStyle}><MaterialIcon name="search" color={palette.onSurfaceVariant} /></Animated.View>}
+    overlayPaddingRight={104} />
+    <SearchBarActions active={editing} style={[styles.searchAccessories, accessoriesStyle]}>
+      <SearchBarActions active={editing && !!text} style={clearStyle}>
+        <IconButton name="close" variant="standard" accessibilityLabel="Clear search" onPress={clear} />
+      </SearchBarActions>
+      <View><HeaderIconButton name="filter-outline" variant="standard" color={filtersOn ? palette.primary : palette.onSurfaceVariant}
+        accessibilityLabel={filtersOn ? "Search filters, active" : "Search filters"} onPress={onFilter} />
+        {filtersOn ? <View pointerEvents="none" style={{ position: "absolute", top: 6, right: 6, width: 6, height: 6, borderRadius: 3, backgroundColor: palette.primary }} /> : null}
+      </View>
+    </SearchBarActions>
+    <SearchBarActions active={editing} style={[styles.back, backStyle]}>
+      <IconButton name="arrow-back" variant="standard" accessibilityLabel="Exit search" onPress={exitSearch} />
+    </SearchBarActions>
+  </View>;
+});
+
+export function LibraryHeader({ tools, query, onQueryChange, onFilter, filtersOn = false, filterOpen = false, autoFocusSearch, resultLabel, filters, selection, maxWidth = layout.maxContentWidth }: {
+  tools: React.ReactNode; query: string; onQueryChange: (query: string) => void; autoFocusSearch?: boolean;
+  resultLabel?: string; filters?: React.ReactNode;
+  onFilter: (anchor: MenuAnchorRect) => void; filtersOn?: boolean;
+  filterOpen?: boolean;
+  maxWidth?: number;
+  selection?: { count: number; selectableCount: number; onCancel: () => void; onToggleSelectAll: () => void };
+}) {
+  const { palette } = useTheme();
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const column = useColumnPadding(maxWidth);
+  const { compactHeight } = useResponsiveLayout();
+  const barLayout = appBarLayout({ topInset: insets.top, tonal: true, compact: compactHeight });
+  const motion = useMaterialMotion();
+  const [focused, setFocused] = useState(false);
+  const spatialProgress = useSharedValue(0);
+  const effectsProgress = useSharedValue(0);
+  useEffect(() => {
+    const target = focused ? 1 : 0;
+    spatialProgress.value = motion.reducedMotion ? target : withSpring(target, { ...motion.spatial, overshootClamping: true });
+    effectsProgress.value = motion.reducedMotion ? target : withSpring(target, materialMotion.effects.spatial);
+  }, [focused, spatialProgress, effectsProgress, motion.reducedMotion, motion.expressive]);
+  const focusStyle = useAnimatedStyle(() => ({ opacity: effectsProgress.value }));
+  // The input and action slots never resize: fade/translate the two groups in
+  // place instead of clipping and squeezing live buttons on every frame.
+  const toolsStyle = useAnimatedStyle(() => ({ opacity: 1 - effectsProgress.value,
+    transform: [{ translateX: 8 * spatialProgress.value }] }));
+  const hasSelection = selection != null;
+  useEffect(() => { if (selection) Keyboard.dismiss(); }, [hasSelection]);
+  const user = useAuthStore((s) => s.user);
+  return <View testID="material-app-bar" style={{ width: "100%", maxWidth, alignSelf: "center",
+    paddingTop: barLayout.paddingTop, paddingBottom: barLayout.paddingBottom,
+    paddingLeft: column.left, paddingRight: column.right }}>
+    <View style={[styles.appBar, { backgroundColor: palette.surfaceContainerHigh }, selection ? { display: "none" } : null]}>
+      <View style={styles.search}><LibrarySearch query={query} onChange={onQueryChange} autoFocus={autoFocusSearch} onFilter={onFilter} filtersOn={filtersOn} onFocusChange={setFocused} filterOpen={filterOpen} selecting={!!selection} spatialProgress={spatialProgress} effectsProgress={effectsProgress} /></View>
+      <SearchBarActions active={!focused} style={[styles.searchAccessories, toolsStyle]}>{tools}
+      <PressableScale accessibilityRole="button" accessibilityLabel="Account and settings"
+        onPress={() => router.navigate("/settings")} stateLayerColor={palette.onSurface}
+        stateLayerInset={4}
+        style={styles.account}>
+        {user ? <UserAvatar user={user} size={40} /> : <MaterialIcon name="person-circle" size={24} color={palette.onSecondaryContainer} />}
+       </PressableScale>
+       </SearchBarActions>
+       <Animated.View testID="library-search-focus-ring" pointerEvents="none" style={[StyleSheet.absoluteFill, styles.focusRing, { borderColor: palette.primary }, focusStyle]} />
+    </View>
+    {selection ? <SelectionHeader {...selection} embedded /> : null}
+    {!selection && resultLabel ?
+      <Text variant="bodySmall" color="secondary" accessibilityLiveRegion="polite" style={{ marginTop: spacing[8], marginLeft: spacing[16] }}>{resultLabel}</Text> : null}
+    {!selection ? filters : null}
+  </View>;
+}
+const styles = StyleSheet.create({
+  appBar: { flexDirection: "row", alignItems: "center", minHeight: 56, borderRadius: radius.full },
+  search: { flex: 1, minWidth: 0 },
+  searchAccessories: { position: "absolute", right: spacing[4], top: spacing[4], height: 48, width: 96, flexDirection: "row", alignItems: "center" },
+  back: { position: "absolute", left: spacing[4], top: spacing[4] },
+  focusRing: { borderWidth: 2, borderRadius: radius.full },
+  account: { width: 48, height: 48, borderRadius: radius.full, alignItems: "center", justifyContent: "center", overflow: "hidden" },
+});

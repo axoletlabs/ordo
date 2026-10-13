@@ -22,6 +22,7 @@ import {
   type ReminderPingPayload,
 } from "./bookmark-reminders";
 import { prefsGet, prefsSet, StorageKeys } from "./storage";
+import { APP_IDENTITY } from "./app-variant";
 
 const CHANNEL_ID = "reminders";
 const FIRED_KEY = StorageKeys.REMINDER_FIRED;
@@ -396,10 +397,8 @@ async function ensureExactAlarms(): Promise<void> {
   await prefsSet(StorageKeys.REMINDER_EXACT_ALARM_ASKED, true);
   try {
     const IntentLauncher = await import("expo-intent-launcher");
-    const Constants = (await import("expo-constants")).default;
-    const pkg = Constants.expoConfig?.android?.package ?? "com.axolet.ordo";
     await IntentLauncher.startActivityAsync("android.settings.REQUEST_SCHEDULE_EXACT_ALARM", {
-      data: `package:${pkg}`,
+      data: `package:${APP_IDENTITY.package}`,
     });
   } catch {
     /* settings screen unavailable */

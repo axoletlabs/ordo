@@ -3,10 +3,10 @@
  * reveals actions. Hold the favicon to multi-select.
  */
 import React from "react";
-import { Platform, Pressable, StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View, useWindowDimensions } from "react-native";
 import { Image } from "expo-image";
-import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { useAppRouter as useRouter } from "../../hooks/use-app-router";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { ListPressable } from "../ui/ListPressable";
 import { Spinner } from "../ui/Spinner";
 import { Text } from "../ui/Text";
@@ -14,43 +14,47 @@ import { TagChip } from "../tags/TagChip";
 import { RowHighlight } from "./RowHighlight";
 import { SelectionMark } from "./SelectionMark";
 import { SelectionDragHandle, useSelectionDragRow } from "./SelectionDrag";
-import { RowStatusSlot, ROW_STATUS_ICON_SIZE } from "./RowStatusIcon";
-import { useTheme } from "../../theme/ThemeProvider";
+import { ROW_STATUS_ICON_SIZE } from "./RowStatusIcon";
+import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 import { domainFromUrl, relativeTime } from "../../lib/format";
 import { bookmarkReminderStatus, formatReminderWhen } from "../../lib/bookmark-reminders";
 import { bookmarkIsArticle, bookmarkOpensAsWebsite } from "../../lib/bookmark-reader";
 import { openBookmarkInExternalBrowser } from "../../lib/open-website";
 import { haptics } from "../../lib/haptics";
-import { measureAnchor, menuHoverFill, type MenuAnchorRect } from "../../lib/menu-anchor";
+import { runPressAction } from "../../lib/press-action";
+import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { prefetchBookmarkDetail } from "../../hooks/use-bookmarks";
 import { prefetchTaggedBookmarks } from "../../hooks/use-tags";
-import { firstSearchHighlight } from "../../lib/search-bookmarks";
+import { searchHighlightRanges } from "../../lib/search-bookmarks";
 import { ROW_ICON_FRAME, ROW_ICON_GLYPH } from "../../theme/alignment";
 import { layout, radius, spacing } from "../../theme/tokens";
 import { bookmarkKey, SELECTION_LONG_PRESS_MS, useSelectionHoldGuard } from "../../hooks/use-selection";
 import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
 import type { BookmarkDto } from "@ordo/shared";
+import { listCorners, type ListPosition } from "../../theme/list-shape";
+import { estimateBookmarkRowSize } from "../../lib/bookmark-row-layout";
+import { useRowSelection } from "../../hooks/selection-state-context";
+import { rowOwnsHover } from "../../lib/row-hover";
+import { nativeHoverEvents } from "../../lib/pointer-hover";
 
 /** Compact tags shown inline on a row before overflow. */
-const MAX_ROW_TAGS = 3;
+const MAX_ROW_TAGS = 2;
 
-function highlightTitle(title: string, query?: string, fuzzy = false) {
-  const span = query ? firstSearchHighlight(title, query, fuzzy) : null;
-  if (!span) return title;
-  return (
-    <>
-      {title.slice(0, span.start)}
-      <Text variant="headline" color="accent">
-        {title.slice(span.start, span.end)}
-      </Text>
-      {title.slice(span.end)}
-    </>
-  );
+function highlightTitle(title: string, query?: string, fuzzy = false, onSelectedSurface = false) {
+  const spans = query ? searchHighlightRanges(title, query, fuzzy) : [];
+  if (!spans.length) return title;
+  let end = 0;
+  const nodes: React.ReactNode[] = [];
+  for (const span of spans) {
+    nodes.push(title.slice(end, span.start), <Text key={span.start} variant="headline" color={onSelectedSurface ? "primary" : "accent"}>{title.slice(span.start, span.end)}</Text>);
+    end = span.end;
+  }
+  return <>{nodes}{title.slice(end)}</>;
 }
 
 export interface BookmarkRowProps {
   bookmark: BookmarkDto;
-  onPress: (b: BookmarkDto) => void;
+  onPress: (b: BookmarkDto) => void | boolean;
   onMore?: (b: BookmarkDto, anchor: MenuAnchorRect) => void;
   /** Press-and-hold on the favicon enters selection with this bookmark. */
   onEnterSelection?: (b: BookmarkDto) => void;
@@ -65,6 +69,7 @@ export interface BookmarkRowProps {
   /** When set, the matching word prefix in the title is emphasized. */
   searchQuery?: string;
   searchFuzzy?: boolean;
+  position?: ListPosition;
 }
 
 export const BookmarkRow = React.memo(function BookmarkRow({
@@ -72,15 +77,18 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   onPress,
   onMore,
   onEnterSelection,
-  selected,
-  selectionMode,
+  selected: selectedProp,
+  selectionMode: selectionModeProp,
   highlighted: highlightedProp,
   onTagPress,
   omitTagIds,
   searchQuery,
   searchFuzzy,
+  position = "only",
 }: BookmarkRowProps) {
-  const { palette } = useTheme();
+  const { selected, selectionMode } = useRowSelection(bookmarkKey(bookmark.id), { selected: selectedProp, selectionMode: selectionModeProp });
+  const { palette: basePalette, expressive } = useTheme();
+  const { fontScale } = useWindowDimensions();
   const router = useRouter();
   const rowRef = React.useRef<View>(null);
   const dragRow = useSelectionDragRow(bookmarkKey(bookmark.id));
@@ -105,12 +113,18 @@ export const BookmarkRow = React.memo(function BookmarkRow({
     hold.reset();
   }
   const [hovered, setHovered] = React.useState(false);
+  const [pressed, setPressed] = React.useState(false);
   const menuKey = bookmarkKey(bookmark.id);
   const highlightedFromMenu = useMenuHighlightStore((s) => s.key === menuKey);
   const highlighted = highlightedProp ?? highlightedFromMenu;
+  const palette = React.useMemo(() => selected || highlighted ? {
+    ...basePalette, onSurface: basePalette.onSecondaryContainer, onSurfaceVariant: basePalette.onSecondaryContainer,
+    text: basePalette.onSecondaryContainer, textSecondary: basePalette.onSecondaryContainer,
+    textTertiary: basePalette.onSecondaryContainer, textFaint: basePalette.onSecondaryContainer,
+  } : basePalette, [basePalette, selected, highlighted]);
   const titleColor = bookmark.isRead ? "secondary" : "primary";
   const domain = bookmark.domain || domainFromUrl(bookmark.url);
-  const title = bookmark.title || domain;
+  const title = (bookmark.title || domain).replace(/\s+/g, " ");
   const createdLabel = relativeTime(bookmark.createdAt);
   const reminderLabel = bookmark.remindAt != null ? formatReminderWhen(bookmark.remindAt) : null;
   const reminderDue = bookmarkReminderStatus(bookmark.remindAt) === "due";
@@ -120,7 +134,6 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   const opensAsWebsite = bookmarkOpensAsWebsite(bookmark);
   const isArticle = bookmarkIsArticle(bookmark);
   const showReadingTime = isArticle && !!bookmark.readingTimeMinutes;
-  const showDescription = isArticle && !!bookmark.description;
   const isPending = bookmark.fetchStatus === "pending";
   const tags = Array.isArray(bookmark.tags) ? bookmark.tags : [];
   const suggestedTags = Array.isArray(bookmark.suggestedTags) ? bookmark.suggestedTags : [];
@@ -130,6 +143,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
     : tags;
   const visibleTags = rowTags.slice(0, MAX_ROW_TAGS);
   const overflowCount = rowTags.length - visibleTags.length;
+  const hasDetails = rowTags.length > 0 || !!reminderLabel || hasSuggestions;
   const accessibilityLabel = [
     title,
     domain,
@@ -151,9 +165,8 @@ export const BookmarkRow = React.memo(function BookmarkRow({
       onTagPress(tagId);
       return;
     }
-    haptics.light();
     void prefetchTaggedBookmarks(tagId);
-    router.push(`/tags/${tagId}`);
+    if (router.push(`/tags/${tagId}`)) haptics.light();
   };
 
   const openBookmark = () => {
@@ -163,8 +176,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
       onPress(bookmark);
       return;
     }
-    haptics.light();
-    onPress(bookmark);
+    runPressAction(() => onPress(bookmark), haptics.light);
   };
 
   const warmBookmark = () => {
@@ -180,28 +192,25 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   const openExternal = (event?: { stopPropagation?: () => void }) => {
     event?.stopPropagation?.();
     if (selectionMode) return;
-    haptics.light();
-    openBookmarkInExternalBrowser(bookmark);
+    runPressAction(() => openBookmarkInExternalBrowser(bookmark), haptics.light);
   };
 
-  const rowFill = selected || highlighted
-    ? palette.surfaceSecondary
-    : hovered
-      ? menuHoverFill(palette.mode)
-      : "transparent";
-
   return (
+    <ThemeOverrideProvider palette={palette}>
     <View
       ref={setRowRef}
       collapsable={false}
-      onLayout={() => dragRow.bind(rowRef.current)}
+      onLayout={selectionMode ? () => dragRow.bind(rowRef.current) : undefined}
       style={[
         styles.wrap,
-        { borderBottomColor: palette.border },
+        fontScale <= 1 ? { height: estimateBookmarkRowSize(bookmark, omitTagIds) } : null,
+        { borderBottomWidth: 0, marginBottom: expressive ? spacing[2] : 0,
+          overflow: expressive ? "visible" : "hidden" },
       ]}
       {...(Platform.OS === "web"
         ? {
-            onMouseEnter: () => setHovered(true),
+            onMouseEnter: (event: { target?: unknown; currentTarget?: unknown }) => setHovered(rowOwnsHover(event)),
+            onMouseMove: (event: { target?: unknown; currentTarget?: unknown }) => setHovered(rowOwnsHover(event)),
             onMouseLeave: () => setHovered(false),
             onContextMenu:
               onMore && !selectionMode
@@ -210,10 +219,14 @@ export const BookmarkRow = React.memo(function BookmarkRow({
                     openMore();
                   }
                 : undefined,
+            onKeyDown: onMore && !selectionMode ? (event: { key: string; shiftKey: boolean; preventDefault: () => void }) => {
+              if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10")) { event.preventDefault(); openMore(); }
+            } : undefined,
           }
-        : null)}
+          : nativeHoverEvents({}, setHovered))}
     >
-      <RowHighlight color={rowFill} />
+      <RowHighlight rest={expressive ? listCorners(position, false) : undefined} expressive={expressive}
+        hovered={hovered} pressed={pressed} selected={!!selected || !!highlighted} />
       <SelectionDragHandle
         selectionKey={bookmarkKey(bookmark.id)}
         selectionMode={!!selectionMode}
@@ -229,12 +242,13 @@ export const BookmarkRow = React.memo(function BookmarkRow({
         style={styles.leadingHit}
       >
       <ListPressable
+        feedback={false}
         accessibilityRole="button"
         accessibilityLabel={`Select ${title}`}
         accessibilityHint="Press and hold to select"
         accessible={!selectionMode}
         importantForAccessibility={selectionMode ? "no" : "yes"}
-        style={styles.leading}
+        style={[styles.leading, hasDetails ? { justifyContent: "flex-start" } : null]}
         onTouchStart={(event) => {
           leadStartY.current = event.nativeEvent.pageY;
           leadMoved.current = false;
@@ -243,10 +257,11 @@ export const BookmarkRow = React.memo(function BookmarkRow({
           if (Math.abs(event.nativeEvent.pageY - leadStartY.current) > 10) leadMoved.current = true;
         }}
         onPressIn={() => {
+          setPressed(true);
           hold.pressIn();
           warmBookmark();
         }}
-        onPressOut={() => hold.pressOut()}
+        onPressOut={() => { setPressed(false); hold.pressOut(); }}
         onPress={() => {
           if (leadMoved.current) return;
           openBookmark();
@@ -259,7 +274,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
           <View
             style={[
               styles.faviconFrame,
-              { backgroundColor: palette.surfaceSecondary, borderColor: palette.border },
+                { backgroundColor: "transparent", borderRadius: radius.sm },
             ]}
           >
             {failedFavicon === faviconUrl ? (
@@ -280,9 +295,6 @@ export const BookmarkRow = React.memo(function BookmarkRow({
                 onError={() => setFailedFavicon(faviconUrl)}
               />
             )}
-            {!bookmark.isRead ? (
-              <View style={[styles.unreadDot, { backgroundColor: palette.accent }]} />
-            ) : null}
           </View>
         )}
         </View>
@@ -290,6 +302,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
       </SelectionDragHandle>
 
       <ListPressable
+        feedback={false}
         accessibilityRole={selectionMode ? "checkbox" : "button"}
         accessibilityLabel={accessibilityLabel}
         accessibilityState={selectionMode ? { checked: !!selected } : { selected: !!selected }}
@@ -321,10 +334,11 @@ export const BookmarkRow = React.memo(function BookmarkRow({
           if (Math.abs(event.nativeEvent.pageY - bodyStartY.current) > 10) bodyMoved.current = true;
         }}
         onPressIn={() => {
+          setPressed(true);
           hold.pressIn();
           warmBookmark();
         }}
-        onPressOut={() => hold.pressOut()}
+        onPressOut={() => { setPressed(false); hold.pressOut(); }}
         onPress={() => {
           if (bodyMoved.current) return;
           openBookmark();
@@ -333,154 +347,74 @@ export const BookmarkRow = React.memo(function BookmarkRow({
         delayLongPress={SELECTION_LONG_PRESS_MS}
       >
         <View style={styles.content}>
-          <View style={styles.titleRow}>
-            <View style={styles.titleWrap}>
-              <Text variant="headline" color={titleColor} numberOfLines={1}>
-                {highlightTitle(title, searchQuery, searchFuzzy)}
-              </Text>
-            </View>
-            {bookmark.remindAt != null ? (
-              <RowStatusSlot>
-                <Ionicons
-                  name="alarm-outline"
-                  size={ROW_STATUS_ICON_SIZE}
-                  color={reminderDue ? palette.accent : palette.textTertiary}
-                  accessible={false}
-                />
-              </RowStatusSlot>
-            ) : null}
-            {isPending ? (
-              <RowStatusSlot>
-                <Spinner
-                  size={ROW_STATUS_ICON_SIZE}
-                  color={palette.textTertiary}
-                  accessible={false}
-                />
-              </RowStatusSlot>
-            ) : isArticle ? (
-              <RowStatusSlot>
-                <Ionicons
-                  name="document-text-outline"
-                  size={ROW_STATUS_ICON_SIZE}
-                  color={palette.textTertiary}
-                  accessible={false}
-                />
-              </RowStatusSlot>
-            ) : opensAsWebsite ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Open ${title} in the browser`}
-                accessibilityHint="Opens the original page in your browser app."
-                hitSlop={{ top: 6, bottom: 8, left: 2, right: 10 }}
-                disabled={selectionMode}
-                onPressIn={(event) => event.stopPropagation()}
-                onPress={openExternal}
-                onLongPress={
-                  selectionMode || !onMore ? undefined : (event) => {
-                    event.stopPropagation();
-                    openMore(event);
-                  }
-                }
-                delayLongPress={SELECTION_LONG_PRESS_MS}
-                style={({ pressed }) => [styles.openExternal, pressed ? styles.openExternalPressed : null]}
-              >
-                <RowStatusSlot>
-                  <Ionicons
-                    name="open-outline"
-                    size={ROW_STATUS_ICON_SIZE}
-                    color={palette.textTertiary}
-                    accessible={false}
-                  />
-                </RowStatusSlot>
-              </Pressable>
-            ) : null}
+          <Text variant="headline" color={titleColor} numberOfLines={1} ellipsizeMode="tail">
+            {highlightTitle(title, searchQuery, searchFuzzy, !!selected || !!highlighted)}
+          </Text>
+          <View style={styles.metaRow}>
+            <Text variant="bodySmall" color="tertiary" numberOfLines={1} style={styles.domain}>{domain}</Text>
+            {showReadingTime ? <Text variant="bodySmall" color="tertiary" style={{ flexShrink: 0 }}>· {bookmark.readingTimeMinutes} min read</Text> : null}
           </View>
-          {showDescription ? (
-            <Text variant="footnote" color="secondary" numberOfLines={1} style={styles.description}>
-              {bookmark.description}
-            </Text>
-          ) : null}
-          {rowTags.length > 0 ? (
-            <View style={styles.tagRow}>
+          {hasDetails ? (
+            <View style={styles.detailsRow}>
               {visibleTags.map((tag) => (
                 <TagChip
                   key={tag.id}
                   name={tag.name}
                   color={tag.color}
                   compact
+                  inline
                   onPress={() => handleTagPress(tag.id)}
                   accessibilityLabel={`Show bookmarks tagged ${tag.name}`}
                 />
               ))}
               {overflowCount > 0 ? (
-                <Text variant="monoSmall" color="tertiary" style={styles.overflow}>
+                <Text variant="bodySmall" color="tertiary" style={styles.overflow}>
                   +{overflowCount}
                 </Text>
               ) : null}
+              {reminderLabel ? <View style={styles.reminderRow}>
+                <Ionicons name="alarm-outline" size={ROW_STATUS_ICON_SIZE} color={reminderDue ? palette.primary : palette.onSurfaceVariant} />
+                <Text variant="bodySmall" color={reminderDue ? "accent" : "tertiary"} numberOfLines={1} style={{ flexShrink: 1 }}>{reminderLabel}</Text>
+              </View> : null}
+              {hasSuggestions && !reminderLabel ? <Text variant="bodySmall" color="tertiary" numberOfLines={1}>{suggestedTags.length} tag suggestions</Text> : null}
             </View>
           ) : null}
-          {hasSuggestions ? (
-            <View style={styles.suggestionRow}>
-              <Ionicons name="sparkles-outline" size={12} color={palette.accent} />
-              <Text variant="footnote" color="accent">
-                {suggestedTags.length} tag{" "}
-                {suggestedTags.length === 1 ? "suggestion" : "suggestions"}
-              </Text>
-            </View>
-          ) : null}
-          <View style={styles.metaRow}>
-            <Text variant="monoSmall" color="tertiary" numberOfLines={1} style={styles.domain}>
-              {domain}
-            </Text>
-            <View style={[styles.separator, { backgroundColor: palette.textFaint }]} />
-            <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
-              {createdLabel}
-            </Text>
-            {reminderLabel ? (
-              <>
-                <View style={[styles.separator, { backgroundColor: palette.textFaint }]} />
-                <Text
-                  variant="monoSmall"
-                  color={reminderDue ? "accent" : "tertiary"}
-                  numberOfLines={1}
-                >
-                  {reminderLabel}
-                </Text>
-              </>
-            ) : null}
-            {showReadingTime ? (
-              <>
-                <View style={[styles.separator, { backgroundColor: palette.textFaint }]} />
-                <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
-                  {bookmark.readingTimeMinutes} min read
-                </Text>
-              </>
-            ) : null}
-          </View>
         </View>
       </ListPressable>
+      {opensAsWebsite && !isPending ? <ListPressable
+        accessibilityRole="button" accessibilityLabel={`Open ${title} in the browser`}
+        accessibilityHint="Opens the original page in your browser app." disabled={selectionMode}
+        onPress={openExternal} style={[styles.trailing, { borderRadius: radius.full }, hasDetails ? styles.trailingTop : null]}>
+        <Ionicons name="open-outline" size={20} color={palette.onSurfaceVariant} accessible={false} />
+      </ListPressable> : <View pointerEvents="none" style={[styles.trailing, hasDetails ? styles.trailingTop : null]}>
+        {isPending ? <Spinner size={20} color={palette.onSurfaceVariant} accessible={false} />
+          : isArticle ? <Ionicons name="document-text-outline" size={20} color={palette.onSurfaceVariant} accessible={false} /> : null}
+      </View>}
     </View>
+    </ThemeOverrideProvider>
   );
 });
 
 const styles = StyleSheet.create({
   wrap: {
+    minHeight: 72,
     flexDirection: "row",
     alignItems: "center",
     alignSelf: "stretch",
     width: "100%",
     flexGrow: 0,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingRight: layout.rowInset,
+    paddingRight: spacing[4],
+    overflow: "hidden",
   },
   leadingHit: {
     alignSelf: "stretch",
   },
   leading: {
     alignSelf: "stretch",
-    justifyContent: "center",
+     justifyContent: "center",
     alignItems: "center",
-    paddingVertical: spacing[8],
+     paddingVertical: spacing[12],
     paddingLeft: layout.rowInset,
     ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
   },
@@ -488,50 +422,31 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: spacing[8],
-    paddingLeft: spacing[12],
+      paddingVertical: spacing[12],
+     paddingLeft: spacing[16],
     paddingRight: spacing[8],
   },
   faviconFrame: {
     width: ROW_ICON_FRAME,
     height: ROW_ICON_FRAME,
     borderRadius: radius.sm,
-    borderWidth: StyleSheet.hairlineWidth,
     alignItems: "center",
     justifyContent: "center",
   },
-  favicon: { width: 20, height: 20, borderRadius: radius.xs },
-  unreadDot: {
-    position: "absolute",
-    top: -3,
-    right: -3,
-    width: 8,
-    height: 8,
-    borderRadius: radius.full,
-  },
+  favicon: { width: 24, height: 24, borderRadius: radius.xs },
   content: { flex: 1, minWidth: 0 },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[6] },
-  titleWrap: { flexShrink: 1, minWidth: 0 },
-  description: { marginTop: spacing[4] },
-  tagRow: {
+  detailsRow: {
     flexDirection: "row",
     alignItems: "center",
-    flexWrap: "wrap",
-    gap: spacing[4],
-    marginTop: spacing[6],
-  },
-  overflow: { marginLeft: spacing[2] },
-  suggestionRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[4],
+    overflow: "hidden",
+    columnGap: spacing[12],
     marginTop: spacing[4],
+    minHeight: 24,
   },
-  metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[6], marginTop: spacing[6] },
-  domain: { flexShrink: 1 },
-  separator: { width: 3, height: 3, borderRadius: radius.full },
-  openExternal: {
-    ...(Platform.OS === "web" ? { cursor: "pointer" as const } : null),
-  },
-  openExternalPressed: { opacity: 0.72 },
+  overflow: { marginLeft: spacing[2], flexShrink: 0 },
+   metaRow: { flexDirection: "row", alignItems: "center", gap: spacing[4], marginTop: spacing[2] },
+   reminderRow: { minHeight: 24, flexDirection: "row", alignItems: "center", gap: spacing[4], flexShrink: 1 },
+  domain: { flexShrink: 1, minWidth: 0 },
+  trailing: { width: 48, height: 48, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  trailingTop: { alignSelf: "flex-start", marginTop: 12 },
 });
