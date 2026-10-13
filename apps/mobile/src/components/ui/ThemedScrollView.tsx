@@ -19,6 +19,7 @@ import {
 import { type FlashListProps } from "@shopify/flash-list";
 import Animated, { LinearTransition } from "react-native-reanimated";
 import { useMaterialMotion } from "../../theme/material-motion";
+import { useTheme } from "../../theme/ThemeProvider";
 import {
   chainHandlers,
   splitScrollLayoutStyle,
@@ -194,14 +195,18 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
   } = props;
   const bar = useVerticalScrollBar(scrollBarInsets);
   const { wrapper, inner } = splitScrollLayoutStyle(style);
-  const customRefresh = !refreshControl && !!onRefresh;
+  const { palette } = useTheme();
+  const managedRefresh = !refreshControl && !!onRefresh;
+  const customRefresh = managedRefresh && Platform.OS === "web";
   const refresh = useMaterialRefresh(!!refreshing, onRefresh, customRefresh && rest.scrollEnabled !== false, Platform.OS === "web");
-  // Preserve the OS refresh gesture, accessibility and scroll coordination on
-  // devices. Only its visual is replaced; Android's legacy circle stays offscreen.
-  const nativeRefresh = customRefresh && Platform.OS !== "web" ? (
+  // Native refresh takes over scrolling and cancels JS touch observation on
+  // Android. Keep its themed indicator visible throughout the pull instead of
+  // hiding it offscreen and relying on a HUD that stops receiving touch moves.
+  const nativeRefresh = managedRefresh && Platform.OS !== "web" ? (
     <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh ?? undefined}
-      colors={["transparent"]} tintColor="transparent" progressBackgroundColor="transparent"
-      progressViewOffset={-1000} />
+      enabled={rest.scrollEnabled !== false}
+      colors={[palette.primary]} tintColor={palette.primary}
+      progressBackgroundColor={palette.surfaceContainerHigh} />
   ) : undefined;
   const fill = wrapper?.flex == null && wrapper?.maxHeight == null && wrapper?.height == null;
   const itemCount = Array.isArray(data) ? data.length : data == null ? 0 : 1;
