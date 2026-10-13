@@ -41,9 +41,11 @@ test("library uses one search app bar in every orientation", () => {
   const source = readFileSync(new URL("../components/bookmarks/LibraryHeader.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(source, /inlineLibraryHeader|showLibraryTitle|styles\.toolbar/);
   assert.match(source, /onFocusChange=\{setFocused\}/);
-  assert.match(source, /motion\.reducedMotion \? 0 : 180/);
-  assert.match(source, /const collapseTools = focused;/);
-  assert.match(source, /rightAccessory=\{editing \?/);
+  assert.match(source, /motion\.reducedMotion \? target : withSpring\(target/);
+  assert.match(source, /SearchBarActions active=\{!focused\}/);
+  assert.match(source, /SearchBarActions active=\{editing\}/);
+  assert.match(source, /showFocusIndicator=\{false\}/);
+  assert.doesNotMatch(source, /width: 96 \*|overflow: "hidden", flexDirection/);
   assert.match(source, /useSearchBack\(editing/);
 });
 

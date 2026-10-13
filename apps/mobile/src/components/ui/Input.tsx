@@ -55,6 +55,8 @@ export interface InputProps extends Omit<TextInputProps, "style"> {
   overlayPaddingRight?: number;
   mono?: boolean;
   variant?: "filled" | "outlined" | "search";
+  /** Embedded search bars let their enclosing surface own the focus outline. */
+  showFocusIndicator?: boolean;
   containerStyle?: ViewStyle;
   disabled?: boolean;
   readOnly?: boolean;
@@ -75,6 +77,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   overlayPaddingRight,
   mono,
   variant = "filled",
+  showFocusIndicator = true,
   containerStyle,
   onFocus,
   onBlur,
@@ -211,7 +214,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
         <StateLayer testID="material-field-hover" color={palette.onSurface} fraction={hovered && !inactive ? 0.08 : 0}
           surfaceStyle={{ borderRadius: search ? radius.full : filled ? 0 : radius.sm,
             ...(filled ? { borderTopLeftRadius: radius.xs, borderTopRightRadius: radius.xs } : {}) }} />
-        {search && focused ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderColor, borderWidth: 2, borderRadius: radius.full }]} /> : null}
+        {search && focused && showFocusIndicator ? <View testID="material-search-focus-ring" pointerEvents="none" style={[StyleSheet.absoluteFill, { borderColor, borderWidth: 2, borderRadius: radius.full }]} /> : null}
         {filled ? <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: borderWidth, backgroundColor: borderColor }} />
           : !search ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderColor, borderWidth, borderRadius: radius.sm }]} /> : null}
         {label ? <Animated.View pointerEvents="none" style={[styles.floatingLabel, {
