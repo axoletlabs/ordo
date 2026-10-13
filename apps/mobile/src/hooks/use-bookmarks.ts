@@ -180,6 +180,8 @@ export function useCreateBookmark() {
     onSuccess: (bookmark) => {
       insertCreatedBookmark(qc, bookmark);
       bumpFolderCount(qc, bookmark.folderId, +1, bookmark.isRead ? 0 : +1);
+      // The progress query stops polling at zero; a new save must wake it up.
+      void qc.invalidateQueries({ queryKey: qk.extractionProgress });
       if (bookmark.tags.length > 0) {
         void qc.invalidateQueries({ queryKey: ["tags"] });
       }
@@ -262,6 +264,7 @@ export function useSetContentKind() {
         ...("contentHtml" in bookmark && updated.fetchStatus !== "ok" ? { contentHtml: null } : {}),
       }));
       void qc.invalidateQueries({ queryKey: qk.bookmark(updated.id) });
+      void qc.invalidateQueries({ queryKey: qk.extractionProgress });
     },
     onError: (_e, { id }) => {
       // The optimistic override was never persisted; refetch the truth. The
