@@ -42,6 +42,22 @@ function bookmark(partial: Partial<BookmarkDto> & Pick<BookmarkDto, "id" | "titl
 
 const none: SearchFilters = { ...EMPTY_SEARCH_FILTERS };
 
+test("accented cached and remote results use the same matching and original highlight offsets", () => {
+  const cached = bookmark({ id: "cached", title: "Cafe\u0301 reading" });
+  const remote = bookmark({ id: "remote", title: "Café guide" });
+  const tagged = bookmark({ id: "tagged", title: "Notes", tags: [{ id: "coffee", name: "Café", color: "amber" }] });
+  for (const query of ["cafe", "CAFÉ", "cafe\u0301"]) {
+    const rows = compileSearchResults({ query, filters: none, cachedItems: [cached, tagged],
+      serverItems: [remote], serverMatchesQuery: true });
+    assert.deepEqual(rows.map((row) => row.id), ["cached", "remote", "tagged"]);
+    for (const row of [cached, remote]) {
+      const span = firstSearchHighlight(row.title, query);
+      assert.ok(span);
+      assert.equal(row.title.slice(span.start, span.end), row.id === "cached" ? "Cafe\u0301" : "Café");
+    }
+  }
+});
+
 test("sanitizeRouteParam treats Expo's stringified undefined as empty", () => {
   assert.equal(sanitizeRouteParam("undefined"), "");
   assert.equal(sanitizeRouteParam("null"), "");

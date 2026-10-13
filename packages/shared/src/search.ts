@@ -1,5 +1,5 @@
 /**
- * Bookmark search. Default matching is a case-insensitive word prefix
+ * Bookmark search. Default matching is a case- and Latin-accent-insensitive word prefix
  * (hel → hello, help, helpful; not shelf). Fuzzy (edit distance 1) is opt-in.
  *
  * Ranking, best first:
@@ -54,9 +54,9 @@ export interface SearchRankOptions {
   allowSecondary?: boolean;
 }
 
-/** Trim, collapse whitespace, and lowercase. */
+/** Trim, collapse whitespace, lowercase, and fold Latin accents. */
 export function normalizeSearchQuery(query: string): string {
-  return query.trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
+  return fold(query.trim().replace(/\s+/g, " "));
 }
 
 export function tokenizeSearchQuery(query: string): string[] {
@@ -84,7 +84,9 @@ const PRIMARY_FIELDS: ReadonlySet<SearchMatchField> = new Set(["title", "domain"
 /** Characters that start a new URL / title token for SQL prefix recall. */
 export const SEARCH_BOUNDARY_CHARS = [" ", ".", "-", "_", "/", "?", "=", "#", ":", "@", "&", "+", "[", "(", '"', "'"] as const;
 
-const WORD_PATTERN = "[\\p{L}\\p{N}]+";
+const WORD_PATTERN = "[\\p{L}\\p{N}][\\p{L}\\p{N}\\p{M}]*";
+const LATIN_CLUSTER = /\p{Script=Latin}\p{M}*/gu;
+const TEXT_CLUSTER = /[^\p{M}]\p{M}*|\p{M}+/gu;
 
 export function tokensAllowArticleText(tokens: readonly string[]): boolean {
   return tokens.length > 0 && tokens.every((token) => token.length >= MIN_ARTICLE_TEXT_QUERY_LENGTH);
@@ -95,7 +97,11 @@ export function isPrimarySearchField(field: SearchMatchField): boolean {
 }
 
 function fold(value: string | null | undefined): string {
-  return (value ?? "").toLocaleLowerCase("en-US");
+  const lower = (value ?? "").toLocaleLowerCase("en-US");
+  if (!/[^\x00-\x7f]/.test(lower)) return lower;
+  // FTS5's unicode61 tokenizer folds Latin accents. Do not strip marks
+  // globally: vowel signs and voiced kana distinguish words in other scripts.
+  return lower.replace(LATIN_CLUSTER, (cluster) => cluster.normalize("NFD").replace(/\p{M}/gu, ""));
 }
 
 function omitSet(omitTagIds: SearchRankOptions["omitTagIds"]): ReadonlySet<string> {
@@ -386,17 +392,27 @@ export function firstSearchHighlight(
   const token = tokenizeSearchQuery(query)[0];
   if (!token || !text) return null;
   const folded = fold(text);
-  if (folded.startsWith(token)) return { start: 0, end: token.length };
+  if (folded.startsWith(token)) return { start: 0, end: originalPrefixEnd(text, token.length) };
   const wordRe = new RegExp(WORD_PATTERN, "gu");
   let match: RegExpExecArray | null;
   while ((match = wordRe.exec(text))) {
     const word = fold(match[0]);
     if (word.startsWith(token)) {
-      return { start: match.index, end: match.index + token.length };
+      return { start: match.index, end: match.index + originalPrefixEnd(match[0], token.length) };
     }
     if (fuzzy && token.length >= MIN_FUZZY_TOKEN_LENGTH && withinOneEdit(word, token)) {
       return { start: match.index, end: match.index + match[0].length };
     }
   }
   return null;
+}
+
+/** Folding can shorten a word; highlights still use original UTF-16 offsets. */
+function originalPrefixEnd(text: string, foldedLength: number): number {
+  let length = 0;
+  for (const match of text.matchAll(TEXT_CLUSTER)) {
+    length += fold(match[0]).length;
+    if (length >= foldedLength) return match.index + match[0].length;
+  }
+  return text.length;
 }

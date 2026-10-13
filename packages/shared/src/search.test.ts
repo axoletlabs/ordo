@@ -32,6 +32,72 @@ test("tokenizeSearchQuery collapses space and lowercases", () => {
   assert.deepEqual(tokenizeSearchQuery("  SSL   Guide "), ["ssl", "guide"]);
 });
 
+test("Latin accents fold on both sides, including decomposed and uppercase queries", () => {
+  assert.deepEqual(tokenizeSearchQuery("  CAFÉ   re\u0301sume\u0301 "), ["cafe", "resume"]);
+  for (const title of ["Café résumé", "Cafe\u0301 re\u0301sume\u0301", "Cafe resume"]) {
+    const item = bookmark({ title });
+    prepareBookmarkSearch(item);
+    for (const query of ["cafe resume", "CAFÉ RÉSUMÉ", "cafe\u0301 re\u0301sume\u0301"]) {
+      assert.equal(createBookmarkSearchMatcher(query)(item).clause, "and");
+      assert.equal(bookmarkSearchRank(item, query).matched, true);
+    }
+  }
+});
+
+test("accent-insensitive matching covers every field without enabling fuzzy search", () => {
+  const fields: Array<[Partial<SearchableBookmark>, string]> = [
+    [{ title: "Café guide" }, "title"],
+    [{ domain: "café.example" }, "domain"],
+    [{ url: "https://example.com/café" }, "url"],
+    [{ tags: [{ id: "coffee", name: "Café" }] }, "tag"],
+    [{ description: "Résumé writing" }, "description"],
+    [{ author: "Renée" }, "description"],
+    [{ contentText: "Résumé writing" }, "body"],
+  ];
+  for (const [fieldsForItem, field] of fields) {
+    const query = field === "description" || field === "body"
+      ? (fieldsForItem.author ? "renee" : "resume") : "cafe";
+    const rank = bookmarkSearchRank(bookmark({ title: "Notes", ...fieldsForItem }), query);
+    assert.equal(rank.matched, true, field);
+    assert.equal(rank.field, field);
+    assert.equal(rank.usedFuzzy, false);
+  }
+  assert.equal(bookmarkSearchRank(bookmark({ title: "Decafé" }), "cafe").matched, false);
+  assert.equal(bookmarkSearchRank(bookmark({ title: "Café" }), "caef").matched, false);
+  assert.equal(bookmarkSearchRank(bookmark({ title: "Café" }), "caef", { fuzzy: true }).matched, true);
+  assert.equal(bookmarkSearchRank(bookmark({ title: "Notes", tags: [{ id: "coffee", name: "Café" }] }),
+    "cafe", { omitTagIds: ["coffee"] }).matched, false);
+});
+
+test("folding preserves meaningful marks in non-Latin scripts", () => {
+  for (const [title, other] of [["かな", "がな"], ["किताब", "कताब"], ["άλφα", "αλφα"]]) {
+    for (const prefix of ["", "Notes: "]) {
+      const item = bookmark({ title: `${prefix}${title}` });
+      assert.equal(bookmarkSearchRank(item, title!).matched, true);
+      assert.equal(bookmarkSearchRank(item, other!).matched, false);
+    }
+  }
+});
+
+test("accent-insensitive highlight spans refer to the original UTF-16 text", () => {
+  for (const [text, query, selected] of [
+    ["Café guide", "cafe", "Café"],
+    ["☕ Cafe\u0301 guide", "CAFÉ", "Cafe\u0301"],
+    ["🙂 Re\u0301sume\u0301 notes", "resume", "Re\u0301sume\u0301"],
+    ["Cafe\u0301 next", "cafe next", "Cafe\u0301"],
+    ["İstanbul guide", "istan", "İstan"],
+    ["The İSTANBUL guide", "istan", "İSTAN"],
+  ]) {
+    const span = firstSearchHighlight(text!, query!);
+    assert.ok(span, `${query} in ${text}`);
+    assert.equal(text!.slice(span.start, span.end), selected);
+  }
+  const text = "The Cafe\u0301 guide";
+  const fuzzy = firstSearchHighlight(text, "caef", true);
+  assert.ok(fuzzy);
+  assert.equal(text.slice(fuzzy.start, fuzzy.end), "Cafe\u0301");
+});
+
 test("metadata warming and short queries never read article bodies", () => {
   let reads = 0;
   const source = { ...bookmark({ title: "Material reading" }), get contentText() { reads++; return "secondary body content"; } };
