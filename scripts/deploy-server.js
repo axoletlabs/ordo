@@ -18,6 +18,7 @@
 const { spawnSync } = require("node:child_process");
 const {
   closeSync,
+  chmodSync,
   copyFileSync,
   existsSync,
   mkdirSync,
@@ -52,6 +53,7 @@ const {
 const { compareVersions } = require("./release-policy.js");
 const { hiddenPreCount, promptReleaseMenu, releaseMenuRows } = require("./release-menu.js");
 const { promptChoiceMenu } = require("./choice-menu.js");
+const { runSetupCommand } = require("./setup-process.js");
 
 const HELP = `Usage: deploy-server [install|update|uninstall] [options]
 
@@ -119,6 +121,7 @@ Options
   --skip-build                   Skip compile
   --skip-migrate                 Skip prisma generate / schema upgrade
   --dry-run                      Print the plan without changing anything
+  --verbose                      Show build output (normally saved to apps/server/setup.log)
   -h, --help                     Show this help
 
 Running server
@@ -226,6 +229,7 @@ function parseArgs(argv) {
     skipBuild: false,
     skipMigrate: false,
     dryRun: false,
+    verbose: false,
     release: null,
     pre: false,
     repo: null,
@@ -327,6 +331,9 @@ function parseArgs(argv) {
         break;
       case "--dry-run":
         args.dryRun = true;
+        break;
+      case "--verbose":
+        args.verbose = true;
         break;
       case "--port":
         args.port = parsePort(consume());
@@ -927,12 +934,18 @@ function shouldReexec(before, after, already) {
 }
 
 function reexecArgs(argv, mode = "git") {
-  if (mode === "release") {
-    if (argv.includes("--no-release") || argv.includes("--no-pull")) return [...argv];
-    return [...argv, "--no-release"];
+  const out = [];
+  for (let i = 0; i < argv.length; i += 1) {
+    const [flag, inline] = splitFlag(argv[i]);
+    // A resumed installer must not select/download/pull the release again.
+    if (["--release", "--repo"].includes(flag)) {
+      if (inline == null) i += 1;
+      continue;
+    }
+    if (["--from-git", "--pull", "--no-release", "--no-pull", "--pre"].includes(flag)) continue;
+    out.push(argv[i]);
   }
-  if (argv.includes("--no-pull") || argv.includes("--no-release")) return [...argv];
-  return [...argv, "--no-pull"];
+  return [...out, mode === "release" ? "--no-release" : "--no-pull"];
 }
 
 function fileHash(path) {
@@ -946,7 +959,7 @@ function reexecDeploy(repoRoot, argv, stamp, env, mode = "git") {
   const stampEnv = mode === "release" ? "ORDO_DEPLOY_SCRIPT" : "ORDO_DEPLOY_HEAD";
   const result = spawnSync(process.execPath, [script, ...reexecArgs(argv, mode)], {
     cwd: repoRoot,
-    env: { ...env, [stampEnv]: stamp },
+    env: { ...env, [stampEnv]: stamp, ORDO_SETUP_CONTINUING: "1" },
     stdio: "inherit",
   });
   return result.status ?? 1;
@@ -1219,22 +1232,17 @@ function formatSetupBanner(color = false) {
   return [
     "",
     p.bold("  ordo · self-hosted server"),
-    p.dim("  ──────────────────────────"),
-    "  A few questions, then this setup:",
-    "    1. writes a complete, documented apps/server/.env",
-    "    2. generates the session and library-encryption secrets",
-    "    3. installs dependencies and compiles the server",
-    "    4. creates the database and applies migrations",
+    p.dim("  Settings, secure keys, and database — one guided setup."),
     "",
-    p.dim("  ↑↓ move    enter select    enter on a blank line keeps the default"),
+    p.dim("  Enter keeps defaults. Esc cancels a menu."),
     "",
   ].join("\n");
 }
 
-/** A numbered step header: `Step 2 of 5 · Accounts`. */
+/** A compact numbered step header. */
 function formatStepHeader(step, total, label, color = false) {
   const p = makePainter(color);
-  return `\n${p.dim(`Step ${step} of ${total}`)} ${p.bold(`· ${label}`)}`;
+  return `\n  ${p.dim(`${step}/${total}`)} ${p.bold(label)}`;
 }
 
 function describeMail(settings) {
@@ -1276,32 +1284,28 @@ function formatSetupSummary(settings, folder) {
 }
 
 /** The panel shown after a successful install or update. */
-function formatNextSteps({ settings, dbPath, envPath, launch, color = false }) {
+function formatNextSteps({ settings, dbPath, envPath, launch, color = false, command = "install" }) {
   const p = makePainter(color);
   const host = settings.listenHost === "0.0.0.0" ? "0.0.0.0" : "127.0.0.1";
-  const lines = ["", p.bold("  Setup finished"), p.dim("  ─────────────"), ""];
+  const lines = ["", p.bold(command === "update" ? "  Update complete" : "  Setup finished"), ""];
   lines.push(`  Address     http://${host}:${settings.port}`);
   lines.push(`  Config      ${envPath}`);
   lines.push(`  Database    ${dbPath}`);
   if (launch === "detached") lines.push("  Log         apps/server/ordo.log");
+  lines.push("  Setup log   apps/server/setup.log");
+  lines.push("  Guide       docs/SERVER-SETUP.md");
   lines.push("");
-  lines.push(p.dim("  Keep a copy of the config, the database, and the secrets in it."));
+  lines.push(p.dim("  Back up the config and database together."));
   lines.push("");
   if (launch === "none") {
     lines.push("  Start the server");
     lines.push(p.cyan("    cd apps/server && NODE_ENV=production pnpm start"));
   }
-  lines.push("  Check that it answers");
-  lines.push(p.cyan(`    curl http://127.0.0.1:${settings.port}/api/server/info`));
-  lines.push("  Point the app at it");
-  lines.push(p.dim("    Sign in → “Use your own server” → ")
-    + p.cyan(`http://<this-host>:${settings.port}`));
-  lines.push("  Update later");
-  lines.push(p.cyan("    ./scripts/deploy-server update"));
-  lines.push("  Remove everything");
-  lines.push(p.cyan("    ./scripts/deploy-server uninstall"));
-  lines.push("  Full guide");
-  lines.push(p.dim("    docs/SERVER-SETUP.md"));
+  if (command === "install") {
+    lines.push("  Check that it answers");
+    lines.push(p.cyan(`    curl http://127.0.0.1:${settings.port}/api/server/info`));
+    lines.push(p.dim("  In the app, choose “Use your own server”."));
+  }
   lines.push("");
   return lines.join("\n");
 }
@@ -1332,7 +1336,7 @@ async function promptGuidedSettings(ask, current, pick, log, extras = {}) {
       log(p.dim("  so pick another one (3001 and up are usually free)."));
       portDefault = String(Number(current.port) + 1);
     }
-    const portText = (await ask(p.bold(`Port [${portDefault}] `))).trim();
+    const portText = (await ask(p.bold(`  Port [${portDefault}] `))).trim();
     const port = parsePort(portText === "" ? portDefault : portText);
 
     // ── Step 2: Accounts ────────────────────────────────────────────────────
@@ -1351,7 +1355,7 @@ async function promptGuidedSettings(ask, current, pick, log, extras = {}) {
     header(3, "Sign-up email");
     const emailVerification = await pick({
       title: "Require an email code for new accounts?",
-      detail: "With mail configured the code is emailed; without it the code is printed",
+      detail: "With mail, the code is emailed. Without it, check the server log.",
       options: [
         { label: "Sign in straight away", value: false },
         { label: "Send a one-time code first", value: true },
@@ -1366,19 +1370,21 @@ async function promptGuidedSettings(ask, current, pick, log, extras = {}) {
     log(p.dim("  Leave it empty to print one-time codes in the server log instead."));
     let smtp = "";
     while (true) {
-      const smtpRaw = (await ask(p.bold("SMTP URL [empty] "))).trim();
-      const error = validateSmtpUrl(smtpRaw);
+      const smtpRaw = (await ask(p.bold(`  SMTP URL [${current.smtpUrl ? "keep existing; (empty) clears" : "empty"}] `))).trim();
+      const candidate = smtpRaw === "" ? current.smtpUrl : smtpRaw;
+      const error = validateSmtpUrl(candidate);
       if (!error) {
-        smtp = smtpRaw === "" || smtpRaw === "(empty)" ? "" : smtpRaw;
+        smtp = candidate === "(empty)" ? "" : candidate;
         break;
       }
       log(`  ${error}`);
     }
     let smtpFrom = current.smtpFrom;
     let smtpRequired = current.smtpRequired;
-    if (smtp) {      log(p.dim("  Which address should people see in their inbox?"));
+    if (smtp) {
+      log(p.dim("  Which address should people see in their inbox?"));
       const fallback = current.smtpFrom || "ordo <noreply@ordo.local>";
-      const fromRaw = (await ask(p.bold(`From [${fallback}] `))).trim();
+      const fromRaw = (await ask(p.bold(`  From [${fallback}] `))).trim();
       smtpFrom = fromRaw === "" ? fallback : fromRaw;
       smtpRequired = true;
       log(p.dim("  Codes are only sent by email now — if mail fails, sign-up says so"));
@@ -1405,7 +1411,7 @@ async function promptGuidedSettings(ask, current, pick, log, extras = {}) {
       log("  How many proxies sit in front?");
       log(p.dim("  1 for a single nginx, Caddy, or Cloudflare. The server stays on localhost."));
       const fallback = String(current.trustProxy || 1);
-      const hopsRaw = (await ask(p.bold(`Hops [${fallback}] `))).trim();
+      const hopsRaw = (await ask(p.bold(`  Hops [${fallback}] `))).trim();
       trustProxy = parseTrustProxy(hopsRaw === "" ? fallback : hopsRaw);
     } else {
       const exposeLan = await pick({
@@ -1435,11 +1441,10 @@ async function promptGuidedSettings(ask, current, pick, log, extras = {}) {
     // ── Summary + confirm ───────────────────────────────────────────────────
     log("");
     log(p.bold("  Ready to install"));
-    log(p.dim("  ─────────────────"));
     for (const line of setupSummaryRows(next, folder)) log(line);
     const confirm = await pick({
       title: "Install with these settings?",
-      detail: "Nothing is written until you confirm.",
+      detail: "Settings and database stay unchanged until you confirm.",
       options: [
         { label: "Install now", value: "install" },
         { label: "Answer the questions again", value: "again" },
@@ -1449,11 +1454,12 @@ async function promptGuidedSettings(ask, current, pick, log, extras = {}) {
     });
     if (confirm === "install") return next;
     if (confirm === "cancel") {
-      const error = new Error("Setup cancelled. Nothing was installed.");
+      const error = new Error("Setup cancelled. No settings or database changes.");
       error.code = "CANCELLED";
       throw error;
     }
     log(p.dim("  Starting over — the previous answers are the new defaults."));
+    current = next;
   }
 }
 
@@ -1516,20 +1522,6 @@ async function promptSettings(ask, current, choose, pick, log, extras = {}) {
     trustProxy,
     listenHost,
   };
-}
-
-function run(command, commandArgs, { cwd, env, dryRun, log }) {
-  const pretty = [command, ...commandArgs].join(" ");
-  log(`$ ${pretty}`);
-  if (dryRun) return;
-  const result = spawnSync(command, commandArgs, {
-    cwd,
-    env,
-    stdio: "inherit",
-  });
-  if (result.status !== 0) {
-    throw new Error(`${pretty} failed (${result.status ?? result.error?.message})`);
-  }
 }
 
 function createAsk(streamIn, streamOut) {
@@ -1666,6 +1658,51 @@ async function deploy(options = {}) {
     });
   }
 
+  // Select and load the release's installer BEFORE asking about settings or
+  // restarting. Otherwise re-exec repeats the questions and loses the answers.
+  const gitPresent = existsSync(join(repoRoot, ".git"));
+  const fromGit = args.fromGit;
+  const pull = fromGit && gitPresent;
+  const continuationArgs = args.command ? argv : [command, ...argv];
+  let chosen = null;
+  const details = args.verbose || args.dryRun ? log : () => {};
+  if (!env.ORDO_SETUP_CONTINUING && command === "update") log("\n  ordo · update\n");
+  if (!fromGit && !args.noRelease) {
+    chosen = await resolveDeployRelease({
+      args, interactive, ask: ask(), repoRoot, log,
+      releases: options.releases,
+      fetchImpl: options.fetch ?? globalThis.fetch,
+      token: githubToken(env), arrows: useArrows,
+      stdin: streamIn, stdout: streamOut,
+    });
+  }
+  if (!args.dryRun && pull) {
+    const before = gitHead(repoRoot);
+    gitPull(repoRoot, { log: details, dryRun: false });
+    const after = gitHead(repoRoot);
+    if (shouldReexec(before, after, env.ORDO_DEPLOY_HEAD)) {
+      const exitCode = (options.reexec ?? reexecDeploy)(repoRoot, continuationArgs, after, env, "git");
+      return { ok: exitCode === 0, reexec: true, exitCode, command };
+    }
+  }
+  if (chosen?.release && !args.dryRun) {
+    if (gitPresent) assertCleanGit(repoRoot, "--no-release");
+    const scriptPath = join(repoRoot, "scripts", "deploy-server.js");
+    const before = fileHash(scriptPath);
+    log(`  Loading ${chosen.release.tag_name}…`);
+    await applySelectedRelease({
+      repoRoot, release: chosen.release, repo: chosen.repo,
+      fetchImpl: options.fetch ?? globalThis.fetch, token: githubToken(env),
+      sourceArchive: args.sourceArchive, requireAsset: args.requireAsset,
+      dryRun: false, log: details,
+    });
+    const after = fileHash(scriptPath);
+    if (shouldReexec(before, after, env.ORDO_DEPLOY_SCRIPT)) {
+      const exitCode = (options.reexec ?? reexecDeploy)(repoRoot, continuationArgs, after, env, "release");
+      return { ok: exitCode === 0, reexec: true, exitCode, command };
+    }
+  }
+
   if (interactive && command === "install") {
     const useColor = Boolean(streamOut.isTTY) && !env.NO_COLOR;
     if (pick) {
@@ -1682,14 +1719,7 @@ async function deploy(options = {}) {
       portInUse,
       color: useColor,
     });
-  } else if (command === "update") {
-    log("ordo backend update\n");
   }
-
-  const dbPath = sqlitePathFromUrl(settings.databaseUrl, serverDir);
-  const db = inspectDatabase(dbPath);
-  const migrate = migratePlan(db.kind, args.skipMigrate);
-  if (migrate.action === "error") throw new Error(migrate.reason);
 
   const envExists = existsSync(envPath);
   let envDecision = decideWriteEnv(args, envExists);
@@ -1734,7 +1764,7 @@ async function deploy(options = {}) {
         : ["y", "yes"].includes(
             (await ask()("Rewrite apps/server/.env in the documented format? [Y/n] "))
               .trim()
-              .toLowerCase(),
+              .toLowerCase() || "y",
           );
     }
     if (migrate) {
@@ -1753,25 +1783,11 @@ async function deploy(options = {}) {
     }
   }
 
-  const gitPresent = existsSync(join(repoRoot, ".git"));
-  const fromGit = args.fromGit;
-  let pull = fromGit && gitPresent;
-  let chosen = null;
-  if (!fromGit && !args.noRelease) {
-    chosen = await resolveDeployRelease({
-      args,
-      interactive,
-      ask: ask(),
-      repoRoot,
-      log,
-      releases: options.releases,
-      fetchImpl: options.fetch ?? globalThis.fetch,
-      token: githubToken(env),
-      arrows: useArrows,
-      stdin: streamIn,
-      stdout: streamOut,
-    });
-  }
+  if (!envDecision.write && envExists) settings = settingsFromSources(args, existingEnv);
+  const dbPath = sqlitePathFromUrl(settings.databaseUrl, serverDir);
+  const db = inspectDatabase(dbPath);
+  const migrate = migratePlan(db.kind, args.skipMigrate);
+  if (migrate.action === "error") throw new Error(migrate.reason);
 
   const backup =
     args.backup !== false && migrate.action !== "skip" && existsSync(dbPath) && statSync(dbPath).size > 0;
@@ -1789,8 +1805,8 @@ async function deploy(options = {}) {
   if (start == null && interactive && listener?.kind === "ordo") {
     const restart = pick
       ? await pick({
-          title: `The server is already running on port ${settings.port}. Restart it?`,
-          detail: "Yes stops it so the database can update, then starts it again in the background.",
+          title: "Restart after updating?",
+          detail: `The server on port ${settings.port} stops briefly for migrations.`,
           options: [
             { label: "Restart it", value: true },
             { label: "Leave it stopped", value: false },
@@ -1828,23 +1844,23 @@ async function deploy(options = {}) {
     );
   }
 
-  log("");
-  log(command === "update" ? "Updating the existing backend." : "Installing the backend.");
-  log(envDecision.reason);
-  log(migrate.reason);
-  if (fromGit && pull) log("Will run git pull --ff-only on the current branch.");
-  else if (fromGit) log("Skipping git pull (no .git directory).");
+  details("");
+  details(command === "update" ? "Updating the existing backend." : "Installing the backend.");
+  details(envDecision.reason);
+  details(migrate.reason);
+  if (fromGit && pull) details("Will run git pull --ff-only on the current branch.");
+  else if (fromGit) details("Skipping git pull (no .git directory).");
   else if (chosen?.release) {
     for (const line of planLines({
       release: chosen.release,
       mode: chosen.mode,
       installed: chosen.installed,
     })) {
-      log(line);
+      details(line);
     }
-  } else log("Staying on the copy already on disk (--no-release).");
-  if (backup) log("Will snapshot SQLite before applying schema changes.");
-  else if (args.backup === false) log("Skipping SQLite backup (--no-backup).");
+  } else details("Staying on the copy already on disk (--no-release).");
+  if (backup) details("Will snapshot SQLite before applying schema changes.");
+  else if (args.backup === false) log("  Warning: database backup disabled (--no-backup).");
   if (listener?.kind === "ordo") {
     const next =
       launch === "foreground"
@@ -1852,48 +1868,17 @@ async function deploy(options = {}) {
         : launch === "detached"
           ? "start it in the background"
           : "leave it stopped";
-    log(`Will stop ordo (pid ${listener.pid}) before the database change, then ${next}.`);
+    details(`Will stop ordo (pid ${listener.pid}) before the database change, then ${next}.`);
   } else if (listener?.kind === "other") {
     log(`Port ${settings.port} is in use by ${listener.command} (pid ${listener.pid}). It will not be stopped.`);
   }
   if (!args.skipInstall && dependenciesReady(repoRoot)) {
-    log("Dependencies already match pnpm-lock.yaml. Skipping pnpm install.");
+    details("Dependencies already match pnpm-lock.yaml. Skipping pnpm install.");
   }
   if (args.dryRun) log("Dry run: no files or commands will change.");
   log("");
 
-  if (pull) {
-    const before = args.dryRun ? null : gitHead(repoRoot);
-    gitPull(repoRoot, { log, dryRun: args.dryRun });
-    const after = args.dryRun ? null : gitHead(repoRoot);
-    if (!args.dryRun && shouldReexec(before, after, env.ORDO_DEPLOY_HEAD)) {
-      log("Checked out a new deploy script. Continuing with that copy.");
-      const exitCode = (options.reexec ?? reexecDeploy)(repoRoot, argv, after, env, "git");
-      return { ok: exitCode === 0, reexec: true, exitCode, command };
-    }
-  }
-  if (chosen?.release && !args.dryRun) {
-    if (gitPresent) assertCleanGit(repoRoot, "--no-release");
-    const scriptPath = join(repoRoot, "scripts", "deploy-server.js");
-    const before = fileHash(scriptPath);
-    await applySelectedRelease({
-      repoRoot,
-      release: chosen.release,
-      repo: chosen.repo,
-      fetchImpl: options.fetch ?? globalThis.fetch,
-      token: githubToken(env),
-      sourceArchive: args.sourceArchive,
-      requireAsset: args.requireAsset,
-      dryRun: false,
-      log,
-    });
-    const after = fileHash(scriptPath);
-    if (shouldReexec(before, after, env.ORDO_DEPLOY_SCRIPT)) {
-      log("Checked out a new deploy script. Continuing with that copy.");
-      const exitCode = (options.reexec ?? reexecDeploy)(repoRoot, argv, after, env, "release");
-      return { ok: exitCode === 0, reexec: true, exitCode, command };
-    }
-  }
+  if (pull && args.dryRun) gitPull(repoRoot, { log, dryRun: true });
   if (!args.dryRun) checkToolchain(repoRoot);
 
   const childEnv = {
@@ -1901,16 +1886,23 @@ async function deploy(options = {}) {
     DATABASE_URL: settings.databaseUrl,
     NODE_ENV: env.NODE_ENV === "test" ? env.NODE_ENV : "production",
   };
+  const setupLog = join(serverDir, "setup.log");
+  const run = (cmd, cmdArgs, opts) => runSetupCommand(cmd, cmdArgs, {
+    ...opts, logPath: setupLog, verbose: args.verbose,
+    // pnpm 11 otherwise auto-installs again before `run`, even with this flag.
+    env: args.skipInstall ? { ...opts.env, pnpm_config_verify_deps_before_run: "false" } : opts.env,
+  });
 
   // Long steps print a marker up front and a green tick when they finish.
   const useColor = Boolean(streamOut.isTTY) && !env.NO_COLOR;
   const painter = makePainter(useColor);
   const phase = (label) => {
-    log("");
-    log(`${painter.cyan("●")} ${label}`);
-    return (doneLabel, extra) => {
-      log(`${painter.green("✓")} ${doneLabel || label}`);
-      if (extra) log(painter.dim(`  ${extra}`));
+    log(`  ${painter.dim("·")} ${label}…`);
+    return (doneLabel) => {
+      if (streamOut.isTTY && !args.verbose && !args.dryRun && !options.log) {
+        streamOut.write("\x1b[1A\r\x1b[2K");
+      }
+      log(`  ${painter.green("✓")} ${doneLabel || label}`);
     };
   };
 
@@ -1928,22 +1920,21 @@ async function deploy(options = {}) {
       writeFileSync(
         envPath,
         renderEnv(settings, { secrets: writtenSecrets, preserved }),
-        { encoding: "utf8" },
+        { encoding: "utf8", mode: 0o600 },
       );
+      chmodSync(envPath, 0o600);
     }
     done(relative(repoRoot, envPath) || envPath);
-    log(
-      painter.dim(
-        `  Secrets: JWT_SECRET (${writtenSecrets.jwtSource}) and LIBRARY_KEK (${writtenSecrets.kekSource}) are stored in it.`,
-      ),
+    details(
+      `  Secrets: JWT_SECRET (${writtenSecrets.jwtSource}) and LIBRARY_KEK (${writtenSecrets.kekSource}) are stored in it.`,
     );
   }
 
   if (!args.skipInstall && !dependenciesReady(repoRoot)) {
-    const done = phase("Installing dependencies (can take a few minutes)");
+    const done = phase("Installing dependencies");
     run(
       "pnpm",
-      ["install", "--frozen-lockfile"],
+      ["install", "--frozen-lockfile", "--reporter=append-only"],
       { cwd: repoRoot, env: childEnv, dryRun: args.dryRun, log },
     );
     done("Dependencies installed");
@@ -1964,7 +1955,7 @@ async function deploy(options = {}) {
 
   if (migrate.action !== "skip") {
     const done = phase("Generating the database client");
-    run("pnpm", ["exec", "prisma", "generate"], {
+    run("pnpm", ["exec", "prisma", "generate", "--no-hints"], {
       cwd: serverDir,
       env: childEnv,
       dryRun: args.dryRun,
@@ -1993,13 +1984,13 @@ async function deploy(options = {}) {
   const quietDb = listener?.kind === "ordo" && (migrate.action !== "skip" || launch !== "none");
   try {
     if (quietDb && !args.dryRun) {
-      stopPid(listener.pid, log);
+      stopPid(listener.pid, details);
       stopped = true;
     }
     if (backup) {
       const done = phase("Backing up the database");
-      backupPath = backupSqlite(dbPath, { log, dryRun: args.dryRun });
-      done(`Database backed up to ${backupPath}`);
+      backupPath = backupSqlite(dbPath, { log: details, dryRun: args.dryRun });
+      done("Database backed up");
     }
     if (migrate.action !== "skip") {
       const done = phase(migrate.action === "setup" ? "Creating the database" : "Applying migrations");
@@ -2028,6 +2019,19 @@ async function deploy(options = {}) {
     throw error instanceof Error ? error : new Error(message);
   }
 
+  // Check readiness before printing success, not afterwards.
+  if (launch === "detached" && !args.dryRun) {
+    const done = phase("Restarting server");
+    startDetached(serverDir, childEnv, logPath, pidPath, details);
+    let info;
+    try {
+      info = await (options.waitForReady ?? waitForReady)(settings);
+    } catch (error) {
+      throw new Error(`${error instanceof Error ? error.message : String(error)}\nServer log: ${logPath}`);
+    }
+    done(`Server ready · ${info.version}`);
+  }
+
   if (args.dryRun) {
     log("");
     log(painter.dim("Dry run complete. Nothing was installed or changed."));
@@ -2038,15 +2042,16 @@ async function deploy(options = {}) {
       envPath: relative(repoRoot, envPath) || envPath,
       launch,
       color: useColor,
+      command,
     }));
-    if (settings.listenHost === "127.0.0.1") {
+    if (command === "install" && settings.listenHost === "127.0.0.1") {
       log(
         painter.dim(
           "  Only this machine can open that address. Put nginx or Caddy in front for HTTPS",
         ),
       );
       log(painter.dim("  (deploy/nginx.conf.example, deploy/Caddyfile.example), or re-run setup."));
-    } else if (settings.trustProxy === 0) {
+    } else if (command === "install" && settings.trustProxy === 0) {
       log(painter.dim("  That port is open on this network. Put a proxy in front if it faces"));
       log(painter.dim("  the internet."));
     }
@@ -2058,13 +2063,10 @@ async function deploy(options = {}) {
       env: childEnv,
       dryRun: args.dryRun,
       log,
+      foreground: true,
     });
   } else if (launch === "detached") {
-    if (!args.dryRun) {
-      startDetached(serverDir, childEnv, logPath, pidPath, log);
-      const info = await (options.waitForReady ?? waitForReady)(settings);
-      log(`Ready: ${healthUrl(settings)} (${info.name ?? "ordo"} ${info.version})`);
-    } else {
+    if (args.dryRun) {
       log(`$ pnpm start  # background, then check ${healthUrl(settings)}`);
     }
   }
@@ -2137,6 +2139,8 @@ if (require.main === module) {
   deploy()
     .then((result) => {
       if (result?.reexec) process.exit(result.exitCode ?? 1);
+      // Menus resume stdin for arrow keys. Do not keep a completed setup alive.
+      stdin.pause();
     })
     .catch((error) => {
       console.error(`error: ${error.message}`);

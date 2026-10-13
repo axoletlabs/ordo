@@ -128,6 +128,7 @@ If pnpm is missing, the arrow keys choose whether to install it.
 On a terminal, setup explains each question.
 Move with the arrow keys and press enter.
 Enter keeps a default port or mail setting.
+Build details are saved to apps/server/setup.log. --verbose shows them live.
 
 uninstall stops the server and removes that folder, including the database.
 It asks first. --yes skips the question.
@@ -349,9 +350,7 @@ ordo_banner() {
   ordo_step_color
   {
     printf '\n'
-    ordo_step_paint "1" "ordo installer"
-    printf '\n'
-    ordo_step_paint "2" "──────────────"
+    ordo_step_paint "1" "  ordo installer"
     printf '\n'
   }
 }
@@ -369,8 +368,8 @@ ordo_doing() {
   ordo_step_color
   {
     printf '  '
-    ordo_step_paint "36" "●"
-    printf ' %s\n' "$1"
+    ordo_step_paint "2" "·"
+    printf ' %s…\n' "$1"
   }
 }
 

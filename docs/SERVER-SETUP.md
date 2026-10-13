@@ -50,8 +50,10 @@ curl -fsSL https://ordo.axolet.com/install | bash -s -- --yes --port 8080 --trus
 ## 3. The wizard, question by question
 
 Move with the arrow keys, press enter to select, and press enter on a blank
-line to keep the default. Nothing is written until you confirm the summary
-at the end; you can also answer again or cancel there.
+line to keep the default. Settings and the database stay unchanged until you
+confirm the summary at the end; you can also answer again or cancel there.
+The release files are downloaded before the questions so the wizard runs
+from the version you selected.
 
 **Step 1 — Port.** The port the server listens on. `3000` is fine if it is
 free; the installer suggests the next one if something already sits there.
@@ -78,7 +80,9 @@ front* (nginx, Caddy, Cloudflare — then say how many hops, usually 1).
 
 **Summary.** You see every choice, where the server will listen, and where
 the database lands. `Install now` proceeds, `Answer the questions again`
-restarts, `Cancel` leaves without changing anything (esc works too).
+restarts using your previous answers as defaults, `Cancel` leaves settings
+and the database unchanged (esc works too). For existing SMTP credentials,
+enter keeps them without displaying the password; type `(empty)` to clear them.
 
 ## 4. What setup does, and what it creates
 
@@ -90,7 +94,16 @@ After you confirm, the installer:
 2. installs dependencies (`pnpm install --frozen-lockfile`);
 3. compiles the server;
 4. creates the SQLite database and applies migrations (backing up the file
-   first if this is an update).
+    first if this is an update).
+
+The terminal shows one progress line per step. Dependency and build output
+goes to `apps/server/setup.log` instead of filling the screen. Build tools
+cannot ask unrelated questions (including Prisma's optional agent-skills
+prompt) or advertise package-manager updates. Real failures show the last
+20 log lines and the full log path; setup stops without claiming success.
+Use `--verbose` to show detailed build output live, or follow the quiet
+setup from another terminal with `tail -f apps/server/setup.log`.
+The config and setup log are owner-readable/writable only (mode `0600`).
 
 The folder layout afterwards:
 
@@ -100,6 +113,7 @@ The folder layout afterwards:
 ├── apps/server/prisma/ordo.db   the database — back this up
 ├── apps/server/prisma/*.bak-*   automatic pre-migration snapshots
 ├── apps/server/ordo.log         log when started in the background
+├── apps/server/setup.log        dependency, build, and migration details
 └── scripts/deploy-server        the update/uninstall tool
 ```
 
@@ -164,6 +178,9 @@ cd ~/ordo
 ```
 
 The release menu lists published versions (arrow keys, or type a tag).
+The selected release is loaded first, then you are asked once whether to
+restart a running server. Completion is shown only after it answers the
+readiness check. Config, database, and log paths stay visible at the end.
 If your `.env` predates explicit secrets, update offers to rewrite it in
 the documented format — every value, secret, and custom key is preserved.
 Non-interactive: `./scripts/deploy-server update --yes [--release v0.2.0]`.
@@ -207,6 +224,9 @@ curl -fsSL https://ordo.axolet.com/install | bash -s -- uninstall
 
 ## 12. Troubleshooting
 
+- **Setup fails during a build or migration** — the terminal shows the
+  failing command and the log tail. Read `apps/server/setup.log` for quiet
+  runs, or repeat with `--verbose` for live output. Errors are not hidden.
 - **"Port 3000 is already used by …"** — another program owns the port.
   Stop it, or re-run setup and take the suggested next port.
 - **`Node.js … Ordo needs 22.13 or newer`** — upgrade Node.

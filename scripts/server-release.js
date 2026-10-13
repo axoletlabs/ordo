@@ -214,7 +214,7 @@ function isPreserved(rel) {
   if (path === "apps/server/.env" || path.startsWith("apps/server/.env.")) return true;
   if (path === "apps/server/.ordo-secret" || path === "apps/server/.ordo-library-key") return true;
   if (path === ".ordo-secret" || path === ".ordo-library-key") return true;
-  if (path === "apps/server/.ordo.pid" || path === "apps/server/ordo.log") return true;
+  if (["apps/server/.ordo.pid", "apps/server/ordo.log", "apps/server/setup.log"].includes(path)) return true;
   const prisma = "apps/server/prisma/";
   if (!path.startsWith(prisma)) return false;
   const rest = path.slice(prisma.length);

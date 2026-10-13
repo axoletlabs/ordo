@@ -53,6 +53,7 @@ test("typing filters by version and arrows wrap", () => {
   assert.equal(state.selected, 1);
   state = reduceReleaseMenu(state, { name: "up" }, rows);
   assert.equal(state.selected, 0);
+  assert.equal(reduceReleaseMenu(state, { name: "escape" }, rows).action, "cancel");
   state = reduceReleaseMenu(state, { name: "up" }, rows);
   assert.equal(state.selected, rows.length - 1);
   state = reduceReleaseMenu(state, { name: "v", sequence: "0" }, rows);
@@ -74,7 +75,8 @@ test("the menu renders a highlight, a version line, and the hidden count", () =>
   );
   assert.match(plain, /Choose a release/);
   assert.match(plain, /› v0\.1\.1/);
-  assert.match(plain, /v0\.1\.0\s+stable/);
+  assert.match(plain, /v0\.1\.0\s+installed/);
+  assert.doesNotMatch(plain, /stable|2026-/);
   assert.match(plain, /version {2}0\.1/);
   assert.match(plain, /1 pre-release hidden/);
   assert.doesNotMatch(plain, /\u001b\[/);
@@ -107,6 +109,8 @@ test("arrow keys move the highlight and enter selects it", async () => {
   const drawn = output.read().toString("utf8");
   assert.match(drawn, /Choose a release/);
   assert.match(drawn, /1 pre-release hidden/);
+  assert.match(drawn, /✓ Release  v0\.1\.1/);
+  assert.equal(input.isPaused(), true);
 });
 
 test("a typed version selects that tag, and an unknown tag asks to be fetched", async () => {

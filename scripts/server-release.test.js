@@ -138,6 +138,7 @@ test("an official archive is preferred over checking out the tag", () => {
 test("preserved paths are the live database, secrets, and avatars", () => {
   assert.equal(isPreserved("apps/server/.env"), true);
   assert.equal(isPreserved("apps/server/.ordo-secret"), true);
+  assert.equal(isPreserved("apps/server/setup.log"), true);
   assert.equal(isPreserved("apps/server/prisma/ordo.db"), true);
   assert.equal(isPreserved("apps/server/prisma/ordo.db.bak-2026"), true);
   assert.equal(isPreserved("apps/server/prisma/ordo-avatars/user.webp"), true);

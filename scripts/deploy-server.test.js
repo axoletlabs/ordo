@@ -88,6 +88,7 @@ test("parseArgs reads long flags, equals form, and booleans", () => {
     "--no-start",
     "--no-pull",
     "--dry-run",
+    "--verbose",
   ]);
   assert.equal(args.command, "update");
   assert.equal(args.yes, true);
@@ -100,6 +101,7 @@ test("parseArgs reads long flags, equals form, and booleans", () => {
   assert.equal(args.pull, false);
   assert.equal(args.noRelease, true);
   assert.equal(args.dryRun, true);
+  assert.equal(args.verbose, true);
 });
 
 test("parseArgs reads a release and rejects mixing it with git pull", () => {
@@ -425,7 +427,7 @@ test("update --from-git still plans a fast-forward pull", async () => {
 
 test("interactive dry-run uses prompt answers", async () => {
   const root = tempRepo();
-  const answers = ["8080", "n", "n", "", "y", "1", "1", "n"];
+  const answers = ["1", "8080", "n", "n", "", "y", "1", "n"];
   let i = 0;
   const result = await deploy({
     argv: ["install", "--dry-run", "--skip-install", "--skip-build", "--skip-migrate"],
@@ -458,6 +460,10 @@ test("dirty worktree blocks pull, and a new HEAD re-execs once", () => {
   assert.deepEqual(reexecArgs(["update", "--yes"]), ["update", "--yes", "--no-pull"]);
   assert.deepEqual(reexecArgs(["update", "--no-pull"]), ["update", "--no-pull"]);
   assert.deepEqual(reexecArgs(["update", "--yes"], "release"), ["update", "--yes", "--no-release"]);
+  const resumed = reexecArgs(["install", "--release", "v0.2.0", "--repo=owner/repo", "--pre", "--port", "8080"], "release");
+  assert.deepEqual(resumed, ["install", "--port", "8080", "--no-release"]);
+  assert.equal(parseArgs(resumed).port, 8080);
+  assert.deepEqual(reexecArgs(["update", "--from-git", "--pull"]), ["update", "--no-pull"]);
 });
 
 test("matching lockfiles skip install", () => {
@@ -472,6 +478,68 @@ test("matching lockfiles skip install", () => {
   assert.equal(dependenciesReady(root), true);
   writeFileSync(installed, "different\n");
   assert.equal(dependenciesReady(root), false);
+});
+
+test("release re-exec happens before settings/restart prompts and resumed flags parse cleanly", async (t) => {
+  const { createHash } = require("node:crypto");
+  const { readFileSync } = require("node:fs");
+  const { Readable } = require("node:stream");
+  const root = tempRepo();
+  const packed = tempRepo();
+  t.after(() => {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(packed, { recursive: true, force: true });
+  });
+  mkdirSync(join(root, "scripts"));
+  mkdirSync(join(packed, "scripts"));
+  writeFileSync(join(root, "scripts/deploy-server.js"), "// old installer\n");
+  writeFileSync(join(packed, "scripts/deploy-server.js"), "// new installer\n");
+  writeFileSync(join(root, "apps/server/.env"), "PORT=3215\nJWT_SECRET=kept\nLIBRARY_KEK=kept\n");
+  const archivePath = join(packed, "release.tar.gz");
+  assert.equal(spawnSync("tar", ["-czf", archivePath, "-C", packed, "apps", "scripts", "package.json", "pnpm-workspace.yaml"]).status, 0);
+  const bytes = readFileSync(archivePath);
+  const hash = createHash("sha256").update(bytes).digest("hex");
+  const release = publishedRelease("v0.2.0");
+  release.assets.push({ name: "ordo-server-v0.2.0.tar.gz.sha256", browser_download_url: "https://example.test/server.sha256" });
+  const asks = [];
+  let resumed;
+  const result = await deploy({
+    argv: ["update", "--release=v0.2.0", "--skip-install", "--skip-build", "--skip-migrate"],
+    repoRoot: root, interactive: true, env: process.env, releases: [release],
+    fetch: async (url) => ({ ok: true, status: 200,
+      body: Readable.toWeb(Readable.from([url.endsWith(".sha256") ? Buffer.from(hash) : bytes])),
+    }),
+    ask: async (question) => { asks.push(question); return "n"; },
+    listener: { kind: "ordo", pid: 42 }, log: () => {},
+    reexec: (_root, argv, _stamp, _env, mode) => {
+      resumed = reexecArgs(argv, mode);
+      return 0;
+    },
+  });
+  assert.equal(result.reexec, true);
+  assert.deepEqual(asks, [], "re-exec must not discard answers or repeat questions");
+  assert.equal(parseArgs(resumed).noRelease, true);
+  await deploy({
+    argv: resumed, repoRoot: root, interactive: true,
+    env: { ...process.env, ORDO_SETUP_CONTINUING: "1" },
+    listener: { kind: "ordo", pid: 42 }, log: () => {},
+    ask: async (question) => { asks.push(question); return "n"; },
+  });
+  assert.equal(asks.length, 1);
+  assert.match(asks[0], /Restart the running server/);
+});
+
+test("keeping an existing config also keeps its effective port, not discarded wizard answers", async () => {
+  const root = tempRepo();
+  writeFileSync(join(root, "apps/server/.env"), "PORT=3217\nJWT_SECRET=kept\nLIBRARY_KEK=kept\n");
+  const answers = ["3218", "n", "n", "", "n", "n", "n", "n"];
+  const result = await deploy({
+    argv: ["install", "--no-release", "--dry-run", "--skip-install", "--skip-build", "--skip-migrate"],
+    repoRoot: root, interactive: true, env: process.env,
+    ask: async () => answers.shift(), log: () => {},
+  });
+  assert.equal(result.envDecision.write, false);
+  assert.equal(result.settings.port, 3217);
 });
 
 test("port listeners and restart choice", () => {
@@ -549,8 +617,8 @@ test("guided setup keeps the usual choices, validates, and confirms first", asyn
   assert.match(seen.join("\n"), /The first sign-up becomes the owner either way/);
   assert.match(seen.join("\n"), /Port \[3000\]/);
   const wizardLog = logged.join("\n");
-  assert.match(wizardLog, /Step 1 of 5/);
-  assert.match(wizardLog, /Step 5 of 5/);
+  assert.match(wizardLog, /1\/5 Port/);
+  assert.match(wizardLog, /5\/5 Network/);
   assert.match(wizardLog, /Ready to install/);
   assert.match(seen.join("\n"), /Install with these settings\?/);
   const summary = formatSetupSummary(settings, "/home/ubuntu/ordo");
@@ -599,13 +667,30 @@ test("guided setup can be replayed or cancelled from the summary", async () => {
           spec.title === "Install with these settings?" ? "cancel" : spec.options[spec.selected].value,
         () => {},
       ),
-    (error) => error.code === "CANCELLED" && /Nothing was installed/.test(error.message),
+     (error) => error.code === "CANCELLED" && /No settings or database changes/.test(error.message),
   );
+});
+
+test("replaying the wizard keeps port and SMTP answers as defaults without displaying credentials", async () => {
+  let prompts = 0;
+  let confirms = 0;
+  const seen = [];
+  const settings = await promptGuidedSettings(async (question) => {
+    seen.push(question);
+    return ["3216", "smtp://user:password@mail.example.com:587", "", "", "", ""][prompts++] || "";
+  }, DEFAULTS, async (spec) => {
+    if (spec.title === "Install with these settings?") return ++confirms === 1 ? "again" : "install";
+    return spec.options[spec.selected].value;
+  }, () => {});
+  assert.equal(settings.port, 3216);
+  assert.equal(settings.smtpUrl, "smtp://user:password@mail.example.com:587");
+  assert.match(seen.join("\n"), /Port \[3216\]/);
+  assert.doesNotMatch(seen.join("\n"), /password/);
 });
 
 test("guided setup suggests the next port when the default is taken", async () => {
   const ask = async (question) => {
-    if (/^Port /.test(question)) {
+    if (/^\s*Port /.test(question)) {
       assert.match(question, /\[3001\]/, "should suggest 3001");
     }
     return "";
@@ -626,8 +711,8 @@ test("guided setup suggests the next port when the default is taken", async () =
 test("the banner and next-steps panel document what setup does", () => {
   const banner = formatSetupBanner(false);
   assert.match(banner, /ordo · self-hosted server/);
-  assert.match(banner, /writes a complete, documented apps\/server\/\.env/);
-  assert.match(banner, /generates the session and library-encryption secrets/);
+  assert.match(banner, /Settings, secure keys, and database/);
+  assert.match(banner, /Esc cancels/);
   const panel = formatNextSteps({
     settings: { ...DEFAULTS },
     dbPath: "apps/server/prisma/ordo.db",
@@ -638,9 +723,11 @@ test("the banner and next-steps panel document what setup does", () => {
   assert.match(panel, /NODE_ENV=production pnpm start/);
   assert.match(panel, /api\/server\/info/);
   assert.match(panel, /Use your own server/);
-  assert.match(panel, /deploy-server update/);
-  assert.match(panel, /deploy-server uninstall/);
+  assert.match(panel, /setup\.log/);
   assert.match(panel, /SERVER-SETUP\.md/);
+  const update = formatNextSteps({ settings: DEFAULTS, launch: "detached", command: "update" });
+  assert.match(update, /Update complete/);
+  assert.doesNotMatch(update, /Use your own server|Check that it answers/);
 });
 
 test("installProcess matches this server and not another cwd", () => {

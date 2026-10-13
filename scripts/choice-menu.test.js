@@ -35,7 +35,7 @@ test("the highlight is the only marker", () => {
   assert.match(plain, /› Install pnpm 11\.10\.0/);
   assert.match(plain, / {2}I'll install it myself/);
   assert.doesNotMatch(plain, /› I'll install it myself/);
-  assert.match(plain, /↑↓ move {4}enter select {4}esc cancel/);
+  assert.match(plain, /↑↓ move · enter select · esc cancel/);
   assert.doesNotMatch(plain, /\u001b\[/);
 
   const colored = renderChoiceMenu(
@@ -78,6 +78,8 @@ test("enter selects the highlighted row", async () => {
   assert.equal(await pending, "manual");
   const drawn = output.read().toString("utf8");
   assert.match(drawn, /› I'll install it myself/);
+  assert.match(drawn, /✓ Pick  I'll install it myself/);
+  assert.equal(input.isPaused(), true, "menu restores idle stdin instead of keeping Node alive");
 });
 
 test("escape cancels the menu", async () => {
