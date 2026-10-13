@@ -1,7 +1,7 @@
 /**
  * Bottom toolbar and confirmations for multi-select. Action set shrinks to
- * what every selected item can do: bookmarks get read/move/tags/copy/delete;
- * folders get pin/delete; a mix only deletes.
+ * what every selected item can do: bookmarks get read/move/more/delete (tags
+ * and copy live in the More menu); folders get pin/delete; a mix only deletes.
  */
 import React, { useState } from "react";
 import type { BookmarkDto, FolderDto } from "@ordo/shared";
@@ -9,9 +9,11 @@ import { SelectionActionBar, type SelectionAction } from "./SelectionActionBar";
 import { AddTagsSheet } from "./AddTagsSheet";
 import { MoveSheet } from "./MoveSheet";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
 import { useBatchBookmarks } from "../../hooks/use-bookmarks";
 import { useBatchFolders } from "../../hooks/use-folders";
 import { copyLinks } from "../../lib/copy-link";
+import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { markedAsReadToast, markedAsUnreadToast } from "../../lib/copy";
 import { errorMessage } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
@@ -41,6 +43,7 @@ export function SelectionTools({
   const [moveOpen, setMoveOpen] = useState(false);
   const [tagsOpen, setTagsOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [more, setMore] = useState<{ open: boolean; anchor: MenuAnchorRect | null }>({ open: false, anchor: null });
   const busy = batchBookmarks.isPending || batchFolders.isPending;
   const empty = bookmarks.length === 0 && folders.length === 0;
   const mixed = bookmarks.length > 0 && folders.length > 0;
@@ -124,21 +127,15 @@ export function SelectionTools({
         disabled,
         onPress: () => setMoveOpen(true),
       });
+      // Tags and copy are real but secondary in bulk workflows; keeping them
+      // out of the bar leaves four roomy pills on a narrow phone instead of
+      // five crowded ones. The menu anchors to the More pill itself.
       actions.push({
-        key: "tags",
-        icon: "pricetags-outline",
-        label: "Tags",
+        key: "more",
+        icon: "ellipsis-horizontal",
+        label: "More",
         disabled,
-        onPress: () => setTagsOpen(true),
-      });
-      actions.push({
-        key: "copy",
-        icon: "link-outline",
-        label: "Copy",
-        disabled,
-        onPress: () => {
-          void copyLinks(bookmarks.map((bookmark) => bookmark.url));
-        },
+        onPress: (trigger) => measureAnchor(trigger, (anchor) => setMore({ open: true, anchor })),
       });
     } else if (foldersOnly) {
       actions.push({
@@ -184,6 +181,33 @@ export function SelectionTools({
         onDismiss={() => setMoveOpen(false)}
         onMoved={onFinished}
       />
+
+      <ContextMenu
+        visible={more.open}
+        onDismiss={() => setMore({ open: false, anchor: null })}
+        anchor={more.anchor}
+        preferredPlacement="above"
+        estimatedHeight={128}
+      >
+        <ContextMenuItem
+          icon="pricetags-outline"
+          label="Add tags"
+          disabled={empty || busy}
+          onPress={() => {
+            setMore({ open: false, anchor: null });
+            setTagsOpen(true);
+          }}
+        />
+        <ContextMenuItem
+          icon="link-outline"
+          label="Copy links"
+          disabled={empty || busy}
+          onPress={() => {
+            setMore({ open: false, anchor: null });
+            void copyLinks(bookmarks.map((bookmark) => bookmark.url));
+          }}
+        />
+      </ContextMenu>
 
       <AddTagsSheet
         visible={tagsOpen}

@@ -15,6 +15,7 @@ export async function selectionActionMotionMatrix({ browser, fixture, login, but
     const folder = page.getByRole("checkbox", { name: /^Design & inspiration,/ });
     const bookmark = page.getByRole("checkbox", { name: /^Building a more expressive design system,/ });
     const mode = `${theme}-${expressive ? "expressive" : "standard"}`;
+    if (theme === "dark" && expressive) await capture(page, `${mode}-selection-toolbar`);
     for (const viewport of [{ name: "portrait", width: 390, height: 844 }, { name: "landscape", width: 1280, height: 800 }]) {
       await page.setViewportSize(viewport); await settle(page);
       const sampleNextToggle = () => page.evaluate(() => {
@@ -23,7 +24,7 @@ export async function selectionActionMotionMatrix({ browser, fixture, login, but
         row.addEventListener("click", () => {
           const start = performance.now();
           const sample = time => {
-            const buttons = [...document.querySelectorAll('[role="button"]')].filter(node => ["Read", "Move", "Tags", "Copy", "Pin", "Unpin", "Delete"].includes(node.getAttribute("aria-label")));
+            const buttons = [...document.querySelectorAll('[role="button"]')].filter(node => ["Read", "Move", "More", "Pin", "Unpin", "Delete"].includes(node.getAttribute("aria-label")));
             window.toolbarFrames.push({ elapsed: time - start, buttons: buttons.map(node => {
               const rect = node.getBoundingClientRect();
               let opacity = 1;
@@ -76,6 +77,14 @@ export async function selectionActionMotionMatrix({ browser, fixture, login, but
         await page.waitForTimeout(1100);
         assert.equal(await button(page, "Read").count(), 1);
         assert.ok(Math.abs((await button(page, "Delete").boundingBox()).width - before.width) < 1);
+        if (viewport.name === "portrait") {
+          // Tags and copy live behind More, anchored to its own pill.
+          await button(page, "More").click();
+          await page.getByRole("menuitem", { name: "Add tags", exact: true }).waitFor();
+          await page.getByRole("menuitem", { name: "Copy links", exact: true }).waitFor();
+          await page.keyboard.press("Escape"); await settle(page);
+          assert.equal(await page.getByRole("menu").count(), 0);
+        }
         await folder.focus(); await page.keyboard.press("Space"); await page.waitForTimeout(1000);
         await button(page, "Delete").focus(); await page.keyboard.press("Enter"); await settle(page);
         await page.getByRole("dialog").waitFor(); await page.keyboard.press("Escape"); await settle(page);

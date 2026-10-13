@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { selectionActionLayout, selectionActionPositions } from "./selection-action-layout.ts";
 
-const bookmarkKeys = ["read", "move", "tags", "copy", "delete"];
+const bookmarkKeys = ["read", "move", "more", "delete"];
 
 test("Delete stays right-anchored across all selection kinds", () => {
   for (const width of [272, 342, 928]) {
@@ -20,19 +20,23 @@ test("a lone Delete fills the entire available toolbar width", () => {
 
 test("pressed expansion uses 15% and compresses only adjacent actions", () => {
   const resting = selectionActionLayout(bookmarkKeys, 342);
-  const pressed = selectionActionLayout(bookmarkKeys, 342, "tags", true);
-  assert.ok(Math.abs(pressed.tags!.width - resting.tags!.width * 1.15) < 0.0001);
-  assert.equal(pressed.read!.width, resting.read!.width);
+  const pressed = selectionActionLayout(bookmarkKeys, 342, "move", true);
+  assert.ok(Math.abs(pressed.move!.width - resting.move!.width * 1.15) < 0.0001);
   assert.equal(pressed.delete!.width, resting.delete!.width);
-  assert.ok(pressed.move!.width < resting.move!.width);
-  assert.equal(pressed.move!.width, pressed.copy!.width);
+  assert.ok(pressed.read!.width < resting.read!.width);
+  assert.ok(pressed.more!.width < resting.more!.width);
+  assert.equal(pressed.read!.width, pressed.more!.width);
 });
 
 test("compressed buttons keep 48dp targets on a narrow screen", () => {
-  for (const key of bookmarkKeys) {
-    const layout = selectionActionLayout(bookmarkKeys, 272, key, true);
-    assert.ok(Object.values(layout).every(slot => slot.width >= 48));
-    assert.equal(layout.delete!.right, 0);
+  // 220dp squeezes four pills to a 49dp base so pressed compression binds at
+  // the floor; 272dp is the usual portrait budget.
+  for (const width of [220, 272]) {
+    for (const key of bookmarkKeys) {
+      const layout = selectionActionLayout(bookmarkKeys, width, key, true);
+      assert.ok(Object.values(layout).every(slot => slot.width >= 48), `width ${width}, pressed ${key}`);
+      assert.equal(layout.delete!.right, 0);
+    }
   }
 });
 

@@ -8,6 +8,7 @@ import { PressableScale } from "../ui/PressableScale";
 import { Text } from "../ui/Text";
 import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 import { selectionActionPositions } from "../../lib/selection-action-layout";
+import { type MeasureNode } from "../../lib/menu-anchor";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
 import { layout, radius, spacing } from "../../theme/tokens";
@@ -17,7 +18,8 @@ export interface SelectionAction {
   key: string;
   icon: keyof typeof Ionicons.glyphMap;
   label: string;
-  onPress: () => void;
+  /** Receives the pill's node so callers can anchor an overflow menu to it. */
+  onPress: (trigger: MeasureNode | null) => void;
   danger?: boolean;
   disabled?: boolean;
 }
@@ -186,6 +188,7 @@ function ActionSlot({ action, present, version, positions, geometryReady, onExit
   const motion = useMaterialMotion();
   const opacity = useSharedValue(0);
   const entered = useSharedValue(false);
+  const slotRef = useRef<MeasureNode | null>(null);
   const [readyToPress, setReadyToPress] = useState(false);
   const status = useRef({ present, version });
   status.current = { present, version };
@@ -224,13 +227,13 @@ function ActionSlot({ action, present, version, positions, geometryReady, onExit
   }));
   const color = action.danger ? palette.onErrorContainer : palette.onSecondaryContainer;
   const interactive = present && readyToPress;
-  return <Animated.View pointerEvents={interactive ? "auto" : "none"} aria-hidden={!interactive}
+  return <Animated.View ref={slotRef as React.Ref<Animated.View>} pointerEvents={interactive ? "auto" : "none"} aria-hidden={!interactive}
     accessibilityElementsHidden={!interactive} importantForAccessibility={interactive ? "auto" : "no-hide-descendants"}
     style={[styles.slot, slotStyle]}>
     <PressableScale accessibilityRole="button" accessibilityLabel={action.label}
       accessibilityState={{ disabled: !!action.disabled || !interactive }} disabled={action.disabled || !interactive}
       onPressIn={() => onPressed(key)} onPressOut={() => onPressed(null)} onBlur={() => onPressed(null)}
-      onPress={() => { if (!interactive || action.disabled) return; haptics.light(); action.onPress(); }}
+      onPress={() => { if (!interactive || action.disabled) return; haptics.light(); action.onPress(slotRef.current); }}
       stateLayerColor={color} shape={{ rest: 24, pressed: expressive ? radius.md : 24 }}
       style={[styles.action, { backgroundColor: action.danger ? palette.errorContainer : palette.secondaryContainer }, action.disabled && styles.disabled]}>
       <AppIcon name={action.icon} size={22} color={color} />
