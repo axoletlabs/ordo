@@ -1,6 +1,5 @@
 /**
- * Loading mark used by the in-app website reload HUD. Same arc everywhere
- * so list footers, buttons, and overlays do not pick up the OS spinner.
+ * Material grow/shrink arc shared by buttons, lists, refresh and overlays.
  */
 import React, { useEffect } from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
@@ -8,7 +7,6 @@ import Animated, {
   Easing,
   ReduceMotion,
   cancelAnimation,
-  useAnimatedStyle,
   useAnimatedProps,
   useSharedValue,
   withRepeat,
@@ -18,6 +16,7 @@ import Svg, { Circle, Path } from "react-native-svg";
 import { useTheme } from "../../theme/ThemeProvider";
 import { radius } from "../../theme/tokens";
 import { useMaterialMotion } from "../../theme/material-motion";
+import { circularIndeterminateArc } from "../../lib/material-progress";
 
 const SIZES = { sm: 16, md: 20, lg: 24 } as const;
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -45,28 +44,24 @@ export function Spinner({
   const { palette, expressive } = useTheme();
   const { reducedMotion } = useMaterialMotion();
   const extent = spinnerExtent(size);
-  const rotation = useSharedValue(0);
+  const phase = useSharedValue(0);
 
   useEffect(() => {
     if (!spinning || reducedMotion) {
-      cancelAnimation(rotation);
-      rotation.value = 0;
+      cancelAnimation(phase);
+      phase.value = 0;
       return;
     }
-    rotation.value = 0;
-    rotation.value = withRepeat(
-      withTiming(360, { duration: 1333, easing: Easing.linear, reduceMotion: ReduceMotion.Never }),
+    phase.value = 0;
+    phase.value = withRepeat(
+      withTiming(1, { duration: 5400, easing: Easing.linear, reduceMotion: ReduceMotion.Never }),
       -1,
       false,
       undefined,
       ReduceMotion.Never,
     );
-    return () => cancelAnimation(rotation);
-  }, [rotation, spinning, reducedMotion]);
-
-  const spinStyle = useAnimatedStyle(() => ({
-    transform: [{ rotate: `${rotation.value}deg` }],
-  }));
+    return () => cancelAnimation(phase);
+  }, [phase, spinning, reducedMotion]);
 
   const stroke = Math.max(2, extent * 0.1);
   const radiusPx = extent / 2 - stroke / 2 - 0.5;
@@ -83,9 +78,9 @@ export function Spinner({
     return { path: points.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(3)},${point.y.toFixed(3)}`).join(" "), length };
   }, [extent, radiusPx]);
   const arc = useAnimatedProps(() => {
-    const fraction = !spinning || reducedMotion ? 0.25 : 0.1 + 0.65 * (1 - Math.cos(rotation.value * Math.PI / 180)) / 2;
+    const motion = !spinning || reducedMotion ? { start: -90, sweep: 90 } : circularIndeterminateArc(phase.value);
     const length = expressive ? wave.length : circumference;
-    return { strokeDasharray: [length * fraction, length], strokeDashoffset: -length * rotation.value / 720 };
+    return { strokeDasharray: [length * motion.sweep / 360, length], strokeDashoffset: -length * motion.start / 360 };
   });
 
   return (
@@ -94,7 +89,8 @@ export function Spinner({
       accessibilityRole={accessible ? "progressbar" : undefined}
       accessibilityLabel={accessible ? "Loading" : undefined}
       importantForAccessibility={accessible ? "auto" : "no"}
-      style={[{ width: extent, height: extent }, spinStyle, style]}
+      testID="material-circular-progress"
+      style={[{ width: extent, height: extent }, style]}
     >
       <Svg width={extent} height={extent} viewBox={`0 0 ${extent} ${extent}`}>
         {expressive ? <AnimatedPath animatedProps={arc} d={wave.path} stroke={color ?? palette.primary} strokeWidth={stroke}
@@ -102,7 +98,7 @@ export function Spinner({
           cx={extent / 2}
           cy={extent / 2}
           r={radiusPx}
-          stroke={color ?? palette.accent}
+          stroke={color ?? palette.primary}
           strokeWidth={stroke}
           strokeLinecap="round"
           fill="none"
@@ -126,7 +122,7 @@ export function ReloadSpinner({
 }) {
   return (
     <View style={[styles.chip, { backgroundColor, borderColor }]}>
-      <Spinner color={color} spinning={spinning} />
+      <Spinner color={color} spinning={spinning} accessible={false} />
     </View>
   );
 }

@@ -27,28 +27,9 @@ import {
   type ScrollBarInsets,
 } from "./ScrollBar";
 import { scrollViewShouldFill } from "../../theme/scrollbar";
-import { useTheme } from "../../theme/ThemeProvider";
+import { useMaterialRefresh } from "../../hooks/use-material-refresh";
+import { RefreshHud } from "./RefreshHud";
 import { LIST_END_REACHED_THRESHOLD } from "../../lib/list-pagination";
-
-/** Native pull-to-refresh with the branded coral-on-chip colors. */
-function useThemedRefreshControl(
-  refreshing: boolean | null | undefined,
-  onRefresh: (() => void) | null | undefined,
-  refreshControl?: React.ReactElement,
-) {
-  const { palette } = useTheme();
-  if (refreshControl) return refreshControl;
-  if (refreshing == null && onRefresh == null) return undefined;
-  return (
-    <RefreshControl
-      refreshing={!!refreshing}
-      onRefresh={onRefresh ?? undefined}
-      tintColor={palette.accent}
-      colors={[palette.accent]}
-      progressBackgroundColor={palette.surfaceElevated}
-    />
-  );
-}
 
 export type ThemedScrollViewProps = ScrollViewProps & {
   scrollBarInsets?: ScrollBarInsets;
@@ -204,6 +185,7 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
     refreshing,
     onRefresh,
     refreshControl,
+    onTouchStart, onTouchMove, onTouchEnd, onTouchCancel, onScrollEndDrag,
     scrollBarInsets,
     contentContainerStyle,
     data,
@@ -212,7 +194,15 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
   } = props;
   const bar = useVerticalScrollBar(scrollBarInsets);
   const { wrapper, inner } = splitScrollLayoutStyle(style);
-  const themedRefresh = useThemedRefreshControl(refreshing, onRefresh, refreshControl);
+  const customRefresh = !refreshControl && !!onRefresh;
+  const refresh = useMaterialRefresh(!!refreshing, onRefresh, customRefresh && rest.scrollEnabled !== false, Platform.OS === "web");
+  // Preserve the OS refresh gesture, accessibility and scroll coordination on
+  // devices. Only its visual is replaced; Android's legacy circle stays offscreen.
+  const nativeRefresh = customRefresh && Platform.OS !== "web" ? (
+    <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh ?? undefined}
+      colors={["transparent"]} tintColor="transparent" progressBackgroundColor="transparent"
+      progressViewOffset={-1000} />
+  ) : undefined;
   const fill = wrapper?.flex == null && wrapper?.maxHeight == null && wrapper?.height == null;
   const itemCount = Array.isArray(data) ? data.length : data == null ? 0 : 1;
   const motion = useMaterialMotion();
@@ -225,9 +215,7 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
       style={[styles.host, fill ? styles.fill : null, wrapper]}
       onLayout={chainHandlers(bar.onLayout, onLayout)}
     >
-      {/* Native list. The gesture-handler list keeps the refresh gesture
-          open after the finger lifts, so the spinner sits there until the
-          next touch. */}
+      {/* Observe touches without replacing the list's native scroll responder. */}
       <List
         ref={ref}
         data={data}
@@ -238,18 +226,24 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
           Platform.OS === "web" ? (showsVerticalScrollIndicator ?? true) : false
         }
         indicatorStyle={bar.indicatorStyle}
-        refreshControl={themedRefresh}
+        refreshControl={refreshControl ?? nativeRefresh}
         removeClippedSubviews={false}
         contentContainerStyle={[
           { flexGrow: itemCount === 0 ? 1 : 0 },
           contentContainerStyle,
         ]}
         style={[fill ? styles.fill : null, inner]}
-        onScroll={chainHandlers(bar.onScroll, onScroll)}
+        onScroll={chainHandlers(bar.onScroll, refresh.onScroll, onScroll)}
+        onTouchStart={chainHandlers(refresh.onTouchStart, onTouchStart)}
+        onTouchMove={chainHandlers(refresh.onTouchMove, onTouchMove)}
+        onTouchEnd={chainHandlers(refresh.onTouchEnd, onTouchEnd)}
+        onTouchCancel={chainHandlers(refresh.onTouchCancel, onTouchCancel)}
+        onScrollEndDrag={chainHandlers(refresh.onScrollEndDrag, onScrollEndDrag)}
         onContentSizeChange={chainHandlers(bar.onContentSizeChange, onContentSizeChange)}
         scrollEventThrottle={scrollEventThrottle ?? 16}
       />
       {bar.overlay}
+      {customRefresh ? <RefreshHud dy={refresh.dy} refreshing={!!refreshing} /> : null}
     </View>
   );
 }) as <T>(props: ThemedFlatListProps<T> & { ref?: React.Ref<FlatList<T>> }) => React.ReactElement;

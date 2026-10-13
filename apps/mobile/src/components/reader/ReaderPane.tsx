@@ -73,7 +73,7 @@ import { pinSystemChrome } from "../../theme/pin-system-chrome";
 import type { Palette } from "../../theme/theme";
 import { currentAppPalette } from "../../theme/current-app-palette";
 import { useDeviceColors } from "../../theme/device-colors";
-import { scrollbarColors } from "../../theme/scrollbar";
+import { LinearProgress } from "../ui/LinearProgress";
 import { queryClient } from "../../lib/query-client";
 import { bookmarksApi } from "../../lib/api/bookmarks";
 import { findBookmarkInCache, updateBookmarkEverywhere } from "../../lib/cache-helpers";
@@ -753,10 +753,6 @@ function ReaderPaneInner({
   }, [persistProgress]);
 
   const progressSV = useSharedValue(0);
-  const trackWidthSV = useSharedValue(0);
-  const progressFillStyle = useAnimatedStyle(() => ({
-    width: Math.max(0, trackWidthSV.value * progressSV.value),
-  }));
 
   const handleFraction = useCallback(
     (fraction: number) => {
@@ -1003,30 +999,8 @@ function ReaderPaneInner({
       />
 
       {hasContent && !showWebsiteView ? (
-        <View
-          style={[
-            styles.progressTrack,
-            {
-              backgroundColor: scrollbarColors(palette).track,
-              maxWidth: layout.maxReaderWidth,
-              alignSelf: "center",
-            },
-          ]}
-          accessibilityRole="progressbar"
-          accessibilityLabel="Reading progress"
-          accessibilityValue={{ min: 0, max: 100, now: Math.round(progress * 100) }}
-          onLayout={(event) => {
-            trackWidthSV.value = event.nativeEvent.layout.width;
-          }}
-        >
-          <Animated.View
-            style={[
-              styles.progressFill,
-              { backgroundColor: palette.accent },
-              progressFillStyle,
-            ]}
-          />
-        </View>
+        <LinearProgress label="Reading progress" value={progress} animatedValue={progressSV}
+          style={{ maxWidth: layout.maxReaderWidth, alignSelf: "center" }} />
       ) : null}
       </Animated.View>
 
@@ -1560,8 +1534,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  progressTrack: { height: 2, width: "100%", overflow: "hidden" },
-  progressFill: { height: 2, alignSelf: "flex-start" },
   stateBody: {
     flex: 1,
     width: "100%",

@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { accessibilityMatrix } from "./material-accessibility.mjs";
 import { readerSettingsLayoutMatrix } from "./reader-settings-layout.mjs";
+import { progressMatrix } from "./material-progress-ui.mjs";
 import { selectionActionMotionMatrix } from "./selection-action-motion.mjs";
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? "playwright");
 const base = process.env.ORDO_UI_URL ?? "http://127.0.0.1:8235";
@@ -594,7 +595,8 @@ async function overlayLayoutMatrix() {
 }
 
 try {
-  if (process.env.ORDO_UI_SELECTION_MOTION_ONLY) await selectionActionMotionMatrix({ browser, fixture, login, button, settle, capture, results });
+  if (process.env.ORDO_UI_PROGRESS_ONLY) await progressMatrix({ browser, fixture, login, navigate, button, settle, capture, results, bookmark });
+  else if (process.env.ORDO_UI_SELECTION_MOTION_ONLY) await selectionActionMotionMatrix({ browser, fixture, login, button, settle, capture, results });
   else if (process.env.ORDO_UI_ACCESSIBILITY_ONLY) await accessibilityMatrix({ browser, base, fixture, user, button, settle, capture, results });
   else if (process.env.ORDO_UI_READER_SETTINGS_ONLY) await readerSettingsLayoutMatrix({ browser, fixture, login, navigate, button, settle, capture, results });
   else if (process.env.ORDO_UI_OVERLAY_LAYOUT_ONLY) await overlayLayoutMatrix();

@@ -9,10 +9,10 @@ import Animated, {
   withTiming,
   interpolate,
   cancelAnimation,
-  useReducedMotion,
 } from "react-native-reanimated";
 import { useTheme } from "../../theme/ThemeProvider";
 import { radius } from "../../theme/tokens";
+import { useMaterialMotion } from "../../theme/material-motion";
 
 export interface SkeletonProps {
   width?: DimensionValue;
@@ -24,15 +24,17 @@ export interface SkeletonProps {
 export function Skeleton({ width = "100%", height = 14, radiusKey = "xs", style }: SkeletonProps) {
   const { palette } = useTheme();
   const t = useSharedValue(0);
-  const reducedMotion = useReducedMotion();
+  const { reducedMotion } = useMaterialMotion();
 
   useEffect(() => {
+    cancelAnimation(t);
+    t.value = 0;
     if (!reducedMotion) t.value = withRepeat(withTiming(1, { duration: 1100, easing: Easing.inOut(Easing.ease) }), -1);
     return () => cancelAnimation(t);
   }, [t, reducedMotion]);
 
   const animStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(t.value, [0, 0.5, 1], [0.4, 0.8, 0.4]),
+    opacity: reducedMotion ? 0.6 : interpolate(t.value, [0, 0.5, 1], [0.4, 0.8, 0.4]),
   }));
 
   const staticStyle: ViewStyle = {

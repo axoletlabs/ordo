@@ -26,7 +26,6 @@ import {
   BROWSER_PTR_THRESHOLD,
   browserBlankCoverVisible,
   browserInjectedJavaScript,
-  browserProgressBarWidth,
   parseBrowserPtrMessage,
   shouldCommitBrowserPtr,
   webViewRequestAction,
@@ -42,6 +41,7 @@ import { spacing } from "../../theme/tokens";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 import { RefreshHud } from "../ui/RefreshHud";
+import { LinearProgress } from "../ui/LinearProgress";
 
 export interface BookmarkBrowserProps {
   url: string;
@@ -82,7 +82,6 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
         ),
       [forceWebsiteDark, chromeBackground],
     );
-    const barWidth = browserProgressBarWidth(progress, loading && !error);
     const coverBlank = browserBlankCoverVisible(loading, progress, !!error);
 
     const finishLoad = useCallback(() => {
@@ -302,20 +301,12 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           />
         ) : null}
         <RefreshHud dy={ptrDy} refreshing={refreshing} />
-        {barWidth > 0 ? (
+        {loading && !error ? (
           <View
             pointerEvents="none"
             style={styles.progressTrack}
-            accessibilityRole="progressbar"
-            accessibilityLabel="Page load"
-            accessibilityValue={{ min: 0, max: 100, now: Math.round(barWidth * 100) }}
           >
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${barWidth * 100}%`, backgroundColor: palette.accent },
-              ]}
-            />
+            <LinearProgress label="Page load" value={progress > 0 ? progress : undefined} />
           </View>
         ) : null}
         {error ? (
@@ -342,10 +333,9 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    height: 2,
+    height: 4,
     overflow: "hidden",
   },
-  progressFill: { height: 2, alignSelf: "flex-start" },
   error: {
     ...StyleSheet.absoluteFill,
     alignItems: "center",

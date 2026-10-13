@@ -232,7 +232,8 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
     if (get().hydrated) return;
     if (hydration) return hydration;
     hydration = (async () => {
-    const cached = await prefsGet<CachedUpdate>(StorageKeys.NATIVE_UPDATE);
+    // Cache is an optimization, never a prerequisite for finding an update.
+    const cached = await prefsGet<CachedUpdate>(StorageKeys.NATIVE_UPDATE).catch(() => null);
     let lastChecked = cached?.variant === APP_VARIANT && typeof cached?.checkedAt === "number" && Number.isFinite(cached.checkedAt) &&
       cached.checkedAt >= 0 && cached.checkedAt <= Date.now() ? cached.checkedAt : null;
     let release =
@@ -410,7 +411,20 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
       throw new Error("The update APK does not belong to this app variant");
     }
     const destination = apkDestination(release.version);
-    if (!destination) return;
+    if (!destination) throw new Error("Update storage is unavailable on this device");
+    // Reserve BEFORE the asynchronous file check, so a second tap cannot
+    // supersede the first operation while the filesystem catches up.
+    set({
+      status: "downloading",
+      progress: 0,
+      receivedBytes: 0,
+      downloadedUri: null,
+      error: null,
+      showProgress: true,
+      installPermissionLikely: false,
+    });
+    const stillCurrent = () => epoch === downloadEpoch;
+    try {
     if (await apkIsReady(destination, release.apkSize)) {
       if (epoch !== downloadEpoch) return;
       set({
@@ -427,19 +441,6 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
       return;
     }
     if (epoch !== downloadEpoch) return;
-    // Open the dialog as the request starts. Deleting the previous partial first
-    // left the bar at 0% while the filesystem caught up.
-    set({
-      status: "downloading",
-      progress: 0,
-      receivedBytes: 0,
-      downloadedUri: null,
-      error: null,
-      showProgress: true,
-      installPermissionLikely: false,
-    });
-    const stillCurrent = () => epoch === downloadEpoch;
-    try {
       const download = FileSystem.createDownloadResumable(
         release.apkUrl,
         destination,
@@ -509,6 +510,7 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
     const epoch = downloadEpoch;
     if (get().installing || !isSupported()) return;
     if (!get().release || !releaseIsEligible(get().release!)) return;
+    checkEpoch += 1;
     set({ installing: true });
     const release = get().release;
     const currentUri = get().downloadedUri;
@@ -607,6 +609,10 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
   },
 
   dismissDownload: () => {
+    if (get().status === "downloading") {
+      get().cancelDownload();
+      return;
+    }
     downloadEpoch += 1;
     const release = get().release;
     const downloaded = !!get().downloadedUri;

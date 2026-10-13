@@ -6,6 +6,8 @@ import { SettingRow } from "./SettingRow";
 import { toast } from "./toast-store";
 import { useAppUpdate } from "../../hooks/use-app-update";
 import type { AppUpdatePhase } from "../../lib/app-update-action";
+import { useUpdateRestartStore } from "../../store/update-restart";
+import { LinearProgress } from "./LinearProgress";
 
 function phaseLabel(phase: AppUpdatePhase): string {
   if (phase.action === "download") return "Download";
@@ -16,30 +18,30 @@ function phaseLabel(phase: AppUpdatePhase): string {
 export function OtaUpdateCard() {
   const update = useAppUpdate();
   const { ota, native, phases } = update;
-  const manualCheck = React.useRef(false);
-
-  React.useEffect(() => {
-    if (!manualCheck.current) return;
-    if (update.checking) return;
-
-    manualCheck.current = false;
-    if (phases.length > 0) return;
-    if (update.error) {
-      toast.show(ota.message ?? native.error ?? "Couldn't check for updates.", {
+  const [manualChecking, setManualChecking] = React.useState(false);
+  const checkInFlight = React.useRef(false);
+  const restarting = useUpdateRestartStore((state) => state.restarting);
+  const check = async () => {
+    if (checkInFlight.current) return;
+    checkInFlight.current = true;
+    setManualChecking(true);
+    try {
+      const available = await update.check();
+      if (!available) toast.show("You're up to date", { tone: "success", duration: 3000 });
+    } catch (error) {
+      toast.show(error instanceof Error ? error.message : "Couldn't check for updates.", {
         tone: "danger",
         duration: 5000,
         action: {
           label: "Retry",
-          onPress: () => {
-            manualCheck.current = true;
-            void update.check().catch(() => {});
-          },
+          onPress: () => { void check(); },
         },
       });
-      return;
+    } finally {
+      checkInFlight.current = false;
+      setManualChecking(false);
     }
-    toast.show("You're up to date", { tone: "success", duration: 3000 });
-  }, [native.error, ota.message, phases.length, update.check, update.checking, update.error]);
+  };
 
   const runPhase = (phase: AppUpdatePhase) => {
     if (phase.kind === "native" && phase.action === "download") {
@@ -68,7 +70,7 @@ export function OtaUpdateCard() {
   };
 
   if (phases.length === 0) {
-    const busy = update.checking;
+    const busy = update.checking || manualChecking;
     return (
       <SettingRow
         icon="cloud-download-outline"
@@ -80,10 +82,7 @@ export function OtaUpdateCard() {
             loading={busy}
             disabled={!update.enabled}
             style={styles.checkButton}
-            onPress={() => {
-              manualCheck.current = true;
-              void update.check().catch(() => {});
-            }}
+            onPress={() => { void check(); }}
           />
         }
       />
@@ -100,7 +99,7 @@ export function OtaUpdateCard() {
         const busy = nativeBusy || otaBusy;
         return (
           <SettingRow
-            key={`${phase.kind}-${phase.action}`}
+            key={phase.kind}
             icon={phase.kind === "native" ? "phone-portrait-outline" : "cloud-download-outline"}
             label={phase.kind === "native" ? "Install update" : "App update"}
             right={
@@ -108,7 +107,7 @@ export function OtaUpdateCard() {
                 label={phaseLabel(phase)}
                 size="md"
                 loading={busy}
-                disabled={!update.enabled}
+                disabled={!update.enabled || update.checking || manualChecking || update.downloading || native.installing || restarting}
                 style={styles.checkButton}
                 onPress={() => runPhase(phase)}
               />
@@ -116,6 +115,7 @@ export function OtaUpdateCard() {
           />
         );
       })}
+      {ota.status === "downloading" ? <LinearProgress label="Downloading app update" value={ota.downloadProgress} /> : null}
     </>
   );
 }

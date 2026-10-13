@@ -16,7 +16,7 @@ function githubRelease(version, extra = {}) {
     assets: [{ name: `${prefix}-v${version}-arm64-v8a.apk`, state: "uploaded", size: 100,
       browser_download_url: `https://github.com/axoletlabs/ordo/releases/download/v${version}/${prefix}-v${version}-arm64-v8a.apk` }], ...extra };
 }
-function fixture({ version = "0.1.0", variant = "stable", channel = variant, cached = null, readPrefs, fetchImpl } = {}) {
+function fixture({ version = "0.1.0", variant = "stable", channel = variant, cached = null, readPrefs, fetchImpl, readInfo, installImpl } = {}) {
   const files = new Map();
   const downloads = [];
   const installed = [];
@@ -30,18 +30,19 @@ function fixture({ version = "0.1.0", variant = "stable", channel = variant, cac
     "expo-device": { supportedCpuArchitectures: ["arm64-v8a"] },
     "expo-updates": { channel },
     "@ordo/shared": { APP_NAME: "ordo" },
-    "expo-intent-launcher": { ResultCode: { Canceled: 0 }, startActivityAsync: async (_action, options) => { installed.push(options); return { resultCode: 0 }; } },
+    "expo-intent-launcher": { ResultCode: { Canceled: 0 }, startActivityAsync: async (_action, options) => { installed.push(options); return installImpl ? installImpl() : { resultCode: 0 }; } },
     "expo-file-system/legacy": {
       cacheDirectory: "file:///cache/",
-      getInfoAsync: async (uri) => ({ exists: files.has(uri), size: files.get(uri) }),
+      getInfoAsync: async (uri) => readInfo ? readInfo(uri) : ({ exists: files.has(uri), size: files.get(uri) }),
       getContentUriAsync: async (uri) => `content://${uri}`,
       deleteAsync: async (uri) => { files.delete(uri); },
       createDownloadResumable: (url, uri, _options, progress) => {
         const transfer = deferred();
         const cancel = deferred();
         const task = { url, uri, progress, transfer, cancel,
+          cancelCalls: 0,
           downloadAsync: () => transfer.promise,
-          cancelAsync: () => cancel.promise };
+          cancelAsync: () => { task.cancelCalls += 1; return cancel.promise; } };
         downloads.push(task);
         return task;
       },
@@ -61,7 +62,9 @@ function fixture({ version = "0.1.0", variant = "stable", channel = variant, cac
     if (modules.has(file)) return modules.get(file).exports;
     const module = { exports: {} };
     modules.set(file, module);
-    const code = ts.transpileModule(readFileSync(file, "utf8"), {
+    const source = process.env.ORDO_NATIVE_UPDATE_SOURCE && file.endsWith("/store/native-update.ts")
+      ? process.env.ORDO_NATIVE_UPDATE_SOURCE : file;
+    const code = ts.transpileModule(readFileSync(source, "utf8"), {
       compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
     }).outputText;
     const localRequire = (specifier) => {
@@ -73,7 +76,7 @@ function fixture({ version = "0.1.0", variant = "stable", channel = variant, cac
       return target.endsWith(".js") ? require(target) : load(target);
     };
     vm.runInNewContext(code, { module, exports: module.exports, require: localRequire,
-      __DEV__: false, console, URL, AbortController, Date, setTimeout, clearTimeout,
+      __DEV__: false, console, URL, AbortController, Date, Error, setTimeout, clearTimeout,
       fetch: async (...args) => {
         fetches += 1;
         return fetchImpl ? fetchImpl(...args) : { ok: true, status: 200, json: async () => args[0].endsWith("latest") ? githubRelease("0.2.0") : [githubRelease("0.2.0")] };
@@ -271,4 +274,71 @@ test("failed checks preserve valid offline downloads but drop evicted files", as
   await assert.rejects(offline.store.getState().check(true), /offline/);
   assert.equal(offline.store.getState().downloadedUri, null);
   assert.equal(offline.store.getState().status, "available");
+});
+
+test("repeated download taps reserve the transfer before asynchronous file checks", async () => {
+  const info = deferred();
+  let hold = false;
+  const f = fixture({ readInfo: () => hold ? info.promise : { exists: false } });
+  await f.store.getState().check(true);
+  hold = true;
+  const first = f.store.getState().downloadAndInstall();
+  const second = f.store.getState().downloadAndInstall();
+  await tick();
+  assert.equal(f.store.getState().status, "downloading", "reserve before the file check completes");
+  assert.equal(f.store.getState().showProgress, true);
+  info.resolve({ exists: false });
+  await tick();
+  assert.equal(f.downloads.length, 1);
+  f.store.getState().cancelDownload();
+  f.downloads[0].cancel.resolve();
+  f.downloads[0].transfer.resolve(null);
+  await Promise.all([first, second]);
+});
+
+test("dismiss during a download cancels the socket and ignores late progress", async () => {
+  const f = fixture();
+  await f.store.getState().check(true);
+  const download = f.store.getState().downloadAndInstall();
+  await tick();
+  const task = f.downloads[0];
+  f.store.getState().dismissDownload();
+  assert.equal(task.cancelCalls, 1, "dismiss must actually stop the socket");
+  task.progress({ totalBytesWritten: 75, totalBytesExpectedToWrite: 100 });
+  assert.equal(f.store.getState().progress, 0);
+  assert.equal(f.store.getState().showProgress, false);
+  task.cancel.resolve();
+  task.transfer.resolve(null);
+  await download;
+  await tick();
+  assert.equal(f.store.getState().status, "available");
+});
+
+test("installer errors preserve the APK and allow another attempt", async () => {
+  let attempts = 0;
+  const f = fixture({ installImpl: async () => {
+    if (++attempts === 1) throw new Error("permission denied: unknown source");
+    return { resultCode: 0 };
+  } });
+  await f.store.getState().check(true);
+  const download = f.store.getState().downloadAndInstall();
+  const rejected = assert.rejects(download, /permission denied/);
+  await tick();
+  const task = f.downloads[0];
+  f.files.set(task.uri, 100);
+  task.transfer.resolve({ uri: task.uri, status: 200 });
+  await rejected;
+  assert.equal(f.store.getState().installing, false);
+  assert.equal(f.store.getState().installPermissionLikely, true);
+  assert.equal(f.files.get(task.uri), 100);
+  await f.store.getState().install();
+  assert.equal(f.installed.length, 2);
+  assert.equal(f.store.getState().installing, false);
+  assert.match(f.store.getState().error, /cancelled/);
+});
+
+test("storage read failures do not prevent online update discovery", async () => {
+  const f = fixture({ readPrefs: async () => { throw new Error("storage unavailable"); } });
+  assert.equal((await f.store.getState().check(true)).version, "0.2.0");
+  assert.equal(f.store.getState().hydrated, true);
 });
