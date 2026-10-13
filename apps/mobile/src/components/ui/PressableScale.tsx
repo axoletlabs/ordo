@@ -2,6 +2,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, View, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, type AnimatedStyle } from "react-native-reanimated";
+import { Pressable as GesturePressable } from "react-native-gesture-handler";
 import { useTheme } from "../../theme/ThemeProvider";
 import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 import { useButtonGroupInteraction } from "./ButtonGroup";
@@ -11,6 +12,10 @@ import { webSelectionKeys, type WebPressKeyEvent } from "./pressable-web";
 import { nativeHoverEvents } from "../../lib/pointer-hover";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+// Native-driven transforms aren't represented in Fabric's touch shadow tree.
+// Opt in only for controls whose handlers don't need RN's synthetic event API.
+const NativeGesturePressable = GesturePressable as unknown as typeof Pressable;
+const AnimatedGesturePressable = Animated.createAnimatedComponent(NativeGesturePressable);
 type CornerShape = number | { topLeft: number; topRight: number; bottomLeft: number; bottomRight: number };
 function cornerValues(shape: CornerShape): number[] {
   return typeof shape === "number" ? [shape, shape, shape, shape] : [shape.topLeft, shape.topRight, shape.bottomLeft, shape.bottomRight];
@@ -42,6 +47,8 @@ export type PressableScaleProps = Omit<PressableProps, "style"> & {
   animated?: boolean;
   /** Custom painted geometry; interaction, shape and state feedback stay shared. */
   renderSurface?: (state: PressableSurfaceState) => React.ReactNode;
+  /** Hit-test a native-transformed action against its real platform view. */
+  nativeGesture?: boolean;
 };
 export function PressableScale(props: PressableScaleProps) {
   // Shape-aware controls keep one tree across Standard/Expressive changes.
@@ -51,7 +58,7 @@ export function PressableScale(props: PressableScaleProps) {
 }
 
 /** Ordinary actions need a state layer, not shared values and mount-time springs. */
-function StatePressable({ style, visualStyle, children, disabled, stateLayerColor, stateLayerInset = 0, focusOnlyVisible = true, renderSurface,
+function StatePressable({ style, visualStyle, children, disabled, stateLayerColor, stateLayerInset = 0, focusOnlyVisible = true, renderSurface, nativeGesture,
   onPressIn, onPressOut, onHoverIn, onHoverOut, onFocus, onBlur,
   shape: _shape, scaleTo: _scaleTo, dim: _dim, animated: _animated, ...rest }: PressableScaleProps) {
   const { palette } = useTheme();
@@ -62,7 +69,8 @@ function StatePressable({ style, visualStyle, children, disabled, stateLayerColo
   const flat = StyleSheet.flatten(style as StyleProp<ViewStyle>);
   const tint = stateLayerColor ?? palette.onSurface;
   const focusLayer = focused && (!focusOnlyVisible || focusVisible || Platform.OS !== "web");
-  return <Pressable {...rest} disabled={disabled}
+  const ActionPressable = nativeGesture && Platform.OS !== "web" ? NativeGesturePressable : Pressable;
+  return <ActionPressable {...rest} disabled={disabled}
     {...(Platform.OS === "web" ? { dataSet: { ...rest.dataSet, materialHoverSurface: "true" } } : {})}
     {...(Platform.OS === "web" ? webSelectionKeys({ ...rest, disabled }) : {})}
     {...(Platform.OS !== "web" ? nativeHoverEvents({ ...rest, disabled, onHoverIn, onHoverOut }, setHovered) : {})}
@@ -90,12 +98,12 @@ function StatePressable({ style, visualStyle, children, disabled, stateLayerColo
           fraction={stateLayerOpacity({ disabled, pressed: state.pressed, focused: focusLayer, hovered })} /></>;
       return visualStyle ? <View pointerEvents="box-none" style={visualStyle}>{contents}</View> : contents;
     }}
-  </Pressable>;
+  </ActionPressable>;
 }
 
 function AnimatedStatePressable({
   scaleTo = 1, dim = false, style, visualStyle, children, disabled, onPressIn, onPressOut,
-  onHoverIn, onHoverOut, onFocus, onBlur, shape, stateLayerColor, stateLayerInset = 0, focusOnlyVisible = true, animated: _animated, renderSurface, ...rest
+  onHoverIn, onHoverOut, onFocus, onBlur, shape, stateLayerColor, stateLayerInset = 0, focusOnlyVisible = true, animated: _animated, renderSurface, nativeGesture, ...rest
 }: PressableScaleProps) {
   const { palette } = useTheme();
   const motion = useMaterialMotion();
@@ -154,8 +162,9 @@ function AnimatedStatePressable({
       overflow: "hidden", backgroundColor: alphaTint(stateLayerColor ?? palette.onSurface, ink.current),
     }, cornerStyle, layerStyle]} />
   </>;
+  const ActionPressable = nativeGesture && Platform.OS !== "web" ? AnimatedGesturePressable : AnimatedPressable;
   return (
-    <AnimatedPressable
+    <ActionPressable
       {...rest}
       {...(Platform.OS === "web" ? { dataSet: { ...rest.dataSet, materialHoverSurface: "true" } } : {})}
       {...(Platform.OS === "web" ? webSelectionKeys({ ...rest, disabled }) : {})}
@@ -187,6 +196,6 @@ function AnimatedStatePressable({
       style={[style, renderSurface ? { backgroundColor: "transparent" } : null, { position: targetStyle?.position ?? "relative" }, Platform.OS === "web" && focusVisible && !disabled ? { outlineColor: palette.primary, outlineWidth: 3, outlineOffset: 2, outlineStyle: "solid" } : null, !visualStyle && !renderSurface ? backgroundStyle : null, !visualStyle ? cornerStyle : null, feedback]}
     >
       {visualStyle ? <Animated.View pointerEvents="box-none" style={[visualStyle, backgroundStyle, cornerStyle]}>{contents}</Animated.View> : contents}
-    </AnimatedPressable>
+    </ActionPressable>
   );
 }

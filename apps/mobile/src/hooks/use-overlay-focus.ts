@@ -4,13 +4,12 @@ import { Platform, type View } from "react-native";
 import { isolateModal } from "../lib/modal-isolation";
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
-export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "dialog" | "menu", dismissible = true, isolateBackground = false) {
+export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "dialog" | "menu", dismissible = true, isolateBackground = false, suspended = false) {
   const ref = useRef<View>(null);
   const dismissRef = useRef(onDismiss);
   dismissRef.current = onDismiss;
   useEffect(() => {
-    if (!active || Platform.OS !== "web" || typeof document === "undefined") return;
-    const previous = document.activeElement as HTMLElement | null;
+    if (!active || suspended || Platform.OS !== "web" || typeof document === "undefined") return;
     const node = () => ref.current as unknown as HTMLElement | null;
     let releaseIsolation: (() => void) | undefined;
     const items = () => Array.from(node()?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []).filter((item) =>
@@ -61,9 +60,29 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
       document.removeEventListener("keydown", key, true);
       document.removeEventListener("focusin", containFocus, true);
       releaseIsolation?.();
-      const root = node();
-      if (previous?.isConnected && (root?.contains(document.activeElement) || document.activeElement === document.body)) previous.focus();
     };
-  }, [active, kind, dismissible, isolateBackground]);
+  }, [active, kind, dismissible, isolateBackground, suspended]);
+  // A dropdown temporarily owns focus, but does not end its parent dialog's
+  // session. Restore the original trigger only when that session really closes,
+  // after background isolation has been released by the effect above.
+  useEffect(() => {
+    if (!active || Platform.OS !== "web" || typeof document === "undefined") return;
+    const previous = document.activeElement as HTMLElement | null;
+    return () => {
+      const root = ref.current as unknown as HTMLElement | null;
+      const restore = () => {
+        const overlays = document.querySelectorAll('[data-material-overlay="true"]');
+        const top = overlays[overlays.length - 1];
+        if (previous?.isConnected && !previous.closest('[data-material-overlay="false"]') &&
+          (!top || top.contains(previous)) &&
+          (root?.contains(document.activeElement) || document.activeElement === document.body)) previous.focus();
+      };
+      // The parent portal publishes its resumed interactive state at the end
+      // of this commit. Don't restore into a still-hidden sibling or let its
+      // opening autofocus win the handoff.
+      if (previous?.closest('[data-material-overlay="false"]')) requestAnimationFrame(restore);
+      else restore();
+    };
+  }, [active]);
   return ref;
 }

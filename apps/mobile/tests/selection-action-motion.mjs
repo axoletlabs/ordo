@@ -71,7 +71,21 @@ export async function selectionActionMotionMatrix({ browser, fixture, login, but
       const after = await button(page, "Delete").boundingBox();
       const overshoot = Math.max(0, ...frames.flatMap(frame => frame.buttons.filter(item => item.label === "Delete").map(item => item.width - after.width)));
       const layoutStyleUpdates = frames.at(-1).layoutStyleUpdates;
-      results.toolbarMotion.push({ mode, layout: viewport.name, frames: frames.length, overlapFrames: overlapFrames.length, rightEdgeDriftPx: drift, overshootPx: overshoot, layoutStyleUpdates, beforeWidth: before.width, afterWidth: after.width });
+      // Paint cadence, not just geometry: count repeated widths within the
+      // moving interval and record actual rAF spacing. These are WEB metrics,
+      // not evidence of a native device's FPS.
+      const deletionWidths = frames.map(frame => frame.buttons.find(item => item.label === "Delete")?.width);
+      const movingIndices = deletionWidths.flatMap((width, index) => index && width != null && Math.abs(width - deletionWidths[index - 1]) > 0.001 ? [index] : []);
+      const activeIntervals = movingIndices.length ? frames.slice(movingIndices[0], movingIndices.at(-1) + 1)
+        .map((frame, index) => frame.elapsed - frames[movingIndices[0] + index - 1].elapsed).sort((a, b) => a - b) : [];
+      let repeatedPaintFrames = 0;
+      if (movingIndices.length) for (let index = movingIndices[0]; index <= movingIndices.at(-1); index++) {
+        if (Math.abs(deletionWidths[index] - deletionWidths[index - 1]) <= 0.001) repeatedPaintFrames++;
+      }
+      results.toolbarMotion.push({ mode, layout: viewport.name, frames: frames.length, overlapFrames: overlapFrames.length, rightEdgeDriftPx: drift, overshootPx: overshoot, layoutStyleUpdates,
+        paintedWidthUpdates: movingIndices.length, repeatedPaintFrames,
+        p95ActiveFrameIntervalMs: activeIntervals[Math.floor(activeIntervals.length * 0.95)] ?? null,
+        maxActiveFrameIntervalMs: activeIntervals.at(-1) ?? null, beforeWidth: before.width, afterWidth: after.width });
       if (!baseline) {
         assert.equal(overlapFrames.length, 0, `${mode}-${viewport.name}: departing actions overlap Delete`);
         assert.ok(drift < 1, `${mode}-${viewport.name}: right edge drift ${drift}`);

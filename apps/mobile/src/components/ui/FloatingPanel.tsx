@@ -90,7 +90,7 @@ function FloatingPanelSurface({
     onDismiss();
   }, [dismissible, onDismiss]);
   const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, { interactive: interactive && !obscured });
-  const panelRef = useOverlayFocus(visible && interactive && !obscured && rendered, hideAndDismiss, "dialog", dismissible);
+  const panelRef = useOverlayFocus(visible && rendered, hideAndDismiss, "dialog", dismissible, false, !interactive || obscured);
   // A sibling picker obscures this panel while staying mounted above it.
   // Crossfade this panel and its scrim (same 200ms inOut quad as the
   // picker's own fade, so the stacked scrims keep a constant dim) instead

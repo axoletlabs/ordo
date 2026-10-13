@@ -139,7 +139,7 @@ export function AddBookmarkSheet({
   };
 
   const close = () => {
-    reset();
+    // FloatingPanel retains the draft through its exit transition.
     onDismiss();
   };
 
@@ -213,7 +213,7 @@ export function AddBookmarkSheet({
         visible={visible}
         obscured={createFolderOpen || createTagOpen}
         interactive={!destinationOpen && !showTagPicker}
-        dismissible={!shareIntake}
+        dismissible={!shareIntake && !create.isPending}
         onDismiss={() => {
           if (unlocking) setLockedFolderId(null);
           else close();
@@ -234,7 +234,7 @@ export function AddBookmarkSheet({
           />
         ) : (
           <>
-            <PanelHeader title="Save bookmark" />
+            <PanelHeader title="Save bookmark" subtitle="Add a link to your library." onClose={!shareIntake && !create.isPending ? close : undefined} />
             <View style={styles.body}>
             {showUrlPreview ? (
               <PressableScale
@@ -244,17 +244,17 @@ export function AddBookmarkSheet({
                 style={[
                   styles.urlPreview,
                   {
-                    borderColor: error ? palette.danger : palette.border,
-                    backgroundColor: palette.background,
+                    borderColor: error ? palette.error : palette.outlineVariant,
+                    backgroundColor: palette.surfaceContainerHighest,
                   },
                 ]}
               >
                 <Ionicons name="link-outline" size={18} color={palette.textTertiary} style={iconGlyphStyle(18)} />
                 <View style={styles.urlPreviewText}>
-                  <Text variant="bodyStrong" numberOfLines={1}>
+                  <Text variant="titleMedium" numberOfLines={1}>
                     {domainFromUrl(url) || url}
                   </Text>
-                  <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
+                  <Text variant="bodySmall" color="secondary" numberOfLines={2}>
                     {url}
                   </Text>
                 </View>
@@ -264,9 +264,11 @@ export function AddBookmarkSheet({
               <Input
                 ref={urlRef}
                 label="Link"
+                variant="outlined"
                 value={url}
-                onChangeText={setUrl}
+                onChangeText={(next) => { setUrl(next); if (error) setError(""); }}
                 placeholder="Paste a link"
+                helper="Paste a URL or use the clipboard button."
                 keyboardType="url"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -293,7 +295,7 @@ export function AddBookmarkSheet({
               onPress={(anchor) => { setTagAnchor(anchor); setShowTagPicker(true); }} />
             </View>
             <PanelActions
-              confirmLabel="Save"
+              confirmLabel="Save bookmark"
               onConfirm={() => void submit()}
               onCancel={close}
               loading={create.isPending}
@@ -332,11 +334,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: spacing[8],
-    minHeight: 46,
-    paddingHorizontal: spacing[12],
-    paddingVertical: spacing[8],
+    minHeight: 72,
+    paddingHorizontal: spacing[16],
+    paddingVertical: spacing[16],
     borderWidth: 1,
-    borderRadius: radius.sm,
+    borderRadius: radius.lg,
   },
   urlPreviewText: { flex: 1, minWidth: 0, gap: spacing[2] },
   urlPreviewError: { marginTop: spacing[6] },
