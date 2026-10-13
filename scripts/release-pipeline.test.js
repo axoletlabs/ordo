@@ -1,7 +1,7 @@
 const assert = require("node:assert/strict");
 const { test } = require("node:test");
 const { spawnSync } = require("node:child_process");
-const { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } = require("node:fs");
+const { existsSync, mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const { join, resolve } = require("node:path");
 const yaml = require("js-yaml");
@@ -47,7 +47,9 @@ test("every distributor is gated by tests and dependency audit, including releas
 
 test("toolchain setup uses supported inputs and explicitly disables audit-job caching", () => {
   const action = yaml.load(readFileSync(join(root, ".github/actions/setup-pnpm-node/action.yml"), "utf8"));
-  const [pnpm, cached, uncached] = action.runs.steps;
+  const pnpm = action.runs.steps.find((step) => step.name === "Setup pnpm");
+  const cached = action.runs.steps.find((step) => step.name === "Setup Node.js (pnpm store cache)");
+  const uncached = action.runs.steps.find((step) => step.name === "Setup Node.js");
   assert.equal(pnpm.uses, "pnpm/action-setup@v5");
   assert.equal(pnpm.with, undefined, "do not pass setup-node inputs to pnpm/action-setup");
   for (const step of [cached, uncached]) {
@@ -61,6 +63,50 @@ test("toolchain setup uses supported inputs and explicitly disables audit-job ca
   assert.equal(uncached.with["package-manager-cache"], false);
   assert.equal(workflow.jobs["supply-chain"].steps.find((step) => step.uses === "./.github/actions/setup-pnpm-node").with["pnpm-cache"], false);
 });
+
+for (const scenario of ["new branch", "no baseline", "same baseline"]) {
+  test(`pnpm cache remains saveable when fingerprint detection exits early: ${scenario}`, (t) => {
+    const action = yaml.load(readFileSync(join(root, ".github/actions/setup-pnpm-node/action.yml"), "utf8"));
+    const cached = action.runs.steps.findIndex((step) => step.name === "Setup Node.js (pnpm store cache)");
+    const initialize = action.runs.steps.find((step) => step.name === "Ensure pnpm store exists");
+    assert.ok(initialize, "cached setup must create the store even when no dependencies are installed");
+    assert.equal(initialize.if, "inputs.pnpm-cache == 'true'");
+    assert.equal(initialize.shell, "bash");
+    assert.ok(action.runs.steps.indexOf(initialize) > cached, "resolve the store using the selected Node.js version");
+
+    const temp = mkdtempSync(join(tmpdir(), "ordo-empty-store-"));
+    t.after(() => rmSync(temp, { recursive: true, force: true }));
+    const bin = join(temp, "bin");
+    mkdirSync(bin);
+    const store = join(temp, "store with spaces", "v10");
+    const installMarker = join(temp, "install-called");
+    writeFileSync(join(bin, "pnpm"), `#!/usr/bin/env bash
+if [[ "$*" == "store path" ]]; then printf '%s\\n' "$TEST_STORE"; exit 0; fi
+touch "$TEST_INSTALL_MARKER"
+exit 1
+`, { mode: 0o755 });
+    const output = join(temp, "output");
+    writeFileSync(output, "");
+    const sha = "a".repeat(40);
+    const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, TEST_STORE: store,
+      TEST_INSTALL_MARKER: installMarker, GITHUB_OUTPUT: output, CURRENT_SHA: sha,
+      EVENT_BEFORE: scenario === "new branch" ? "0".repeat(40) : "b".repeat(40),
+      ORDO_BUILD_BRANCH: "release/0.2.0" };
+    assert.equal(existsSync(store), false, "a fresh runner starts without a pnpm store");
+    const setup = spawnSync("bash", ["-e", "-c", initialize.run], { encoding: "utf8", env });
+    assert.equal(setup.status, 0, setup.stderr);
+
+    const fingerprint = join(temp, "check-android-fingerprint.sh");
+    writeFileSync(fingerprint, readFileSync(join(root, ".github/scripts/check-android-fingerprint.sh")));
+    writeFileSync(join(temp, "apk-baseline-sha.sh"), `#!/usr/bin/env bash\n${scenario === "same baseline" ? `echo ${sha}` : "exit 0"}\n`);
+    const detect = spawnSync("bash", [fingerprint], { encoding: "utf8", env });
+    assert.equal(detect.status, 0, detect.stderr);
+    const nativeChanged = scenario === "same baseline" ? "false" : "true";
+    assert.ok(readFileSync(output, "utf8").includes(`native_changed=${nativeChanged}\n`));
+    assert.equal(existsSync(installMarker), false, "early detection must not install dependencies");
+    assert.equal(existsSync(store), true, "setup-node post cleanup must have a cache path to save");
+  });
+}
 
 test("packaged APK verification rejects cross-package updates and Development OTA", () => {
   const result = spawnSync("python3", [join(root, ".github/scripts/verify-apks.test.py")], {
