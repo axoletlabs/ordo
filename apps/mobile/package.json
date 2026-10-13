@@ -13,7 +13,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test:updates": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/lib/ota-update-state.test.ts src/lib/native-apk.test.ts src/lib/app-update-action.test.ts src/lib/app-update-check.test.ts src/lib/single-flight.test.ts && node --test ../../scripts/native-update.test.js",
-    "test:progress": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/lib/material-progress.test.ts src/lib/material-refresh.test.ts tests/list-refresh.test.mjs",
+    "test:progress": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/lib/material-progress.test.ts src/lib/material-refresh.test.ts tests/list-refresh.test.mjs tests/material-refresh-gesture.test.mjs",
     "test:material": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/theme/material-colors.test.ts src/theme/material-component-contrast.test.ts",
     "test:accessibility": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/lib/material-accessibility.test.ts",
     "test:ui": "node tests/material-ui-smoke.mjs",

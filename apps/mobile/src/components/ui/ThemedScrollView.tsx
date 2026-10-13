@@ -7,7 +7,6 @@ import React from "react";
 import {
   FlatList,
   Platform,
-  RefreshControl,
   ScrollView,
   StyleSheet,
   View,
@@ -17,9 +16,9 @@ import {
   type ViewStyle,
 } from "react-native";
 import { type FlashListProps } from "@shopify/flash-list";
+import { GestureDetector } from "react-native-gesture-handler";
 import Animated, { LinearTransition } from "react-native-reanimated";
 import { useMaterialMotion } from "../../theme/material-motion";
-import { useTheme } from "../../theme/ThemeProvider";
 import {
   chainHandlers,
   splitScrollLayoutStyle,
@@ -195,19 +194,8 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
   } = props;
   const bar = useVerticalScrollBar(scrollBarInsets);
   const { wrapper, inner } = splitScrollLayoutStyle(style);
-  const { palette } = useTheme();
-  const managedRefresh = !refreshControl && !!onRefresh;
-  const customRefresh = managedRefresh && Platform.OS === "web";
-  const refresh = useMaterialRefresh(!!refreshing, onRefresh, customRefresh && rest.scrollEnabled !== false, Platform.OS === "web");
-  // Native refresh takes over scrolling and cancels JS touch observation on
-  // Android. Keep its themed indicator visible throughout the pull instead of
-  // hiding it offscreen and relying on a HUD that stops receiving touch moves.
-  const nativeRefresh = managedRefresh && Platform.OS !== "web" ? (
-    <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh ?? undefined}
-      enabled={rest.scrollEnabled !== false}
-      colors={[palette.primary]} tintColor={palette.primary}
-      progressBackgroundColor={palette.surfaceContainerHigh} />
-  ) : undefined;
+  const customRefresh = !refreshControl && !!onRefresh;
+  const refresh = useMaterialRefresh(!!refreshing, onRefresh, customRefresh && rest.scrollEnabled !== false);
   const fill = wrapper?.flex == null && wrapper?.maxHeight == null && wrapper?.height == null;
   const itemCount = Array.isArray(data) ? data.length : data == null ? 0 : 1;
   const motion = useMaterialMotion();
@@ -215,38 +203,40 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
     .stiffness(motion.fast.stiffness).damping(motion.fast.damping), [motion.fast]);
   const List = (animateChanges ? Animated.FlatList : FlatList) as typeof FlatList;
 
+  const list = (
+    <List
+      ref={ref}
+      data={data}
+      {...rest}
+      {...(animateChanges && !motion.reducedMotion ? { itemLayoutAnimation: transition } : {})}
+      {...nativeScrollBarProps}
+      showsVerticalScrollIndicator={
+        Platform.OS === "web" ? (showsVerticalScrollIndicator ?? true) : false
+      }
+      indicatorStyle={bar.indicatorStyle}
+      refreshControl={refreshControl}
+      removeClippedSubviews={false}
+      contentContainerStyle={[
+        { flexGrow: itemCount === 0 ? 1 : 0 },
+        contentContainerStyle,
+      ]}
+      style={[fill ? styles.fill : null, inner]}
+      onScroll={chainHandlers(bar.onScroll, refresh.onScroll, onScroll)}
+      onTouchStart={chainHandlers(Platform.OS === "web" ? refresh.onTouchStart : undefined, onTouchStart)}
+      onTouchMove={chainHandlers(Platform.OS === "web" ? refresh.onTouchMove : undefined, onTouchMove)}
+      onTouchEnd={chainHandlers(Platform.OS === "web" ? refresh.onTouchEnd : undefined, onTouchEnd)}
+      onTouchCancel={chainHandlers(Platform.OS === "web" ? refresh.onTouchCancel : undefined, onTouchCancel)}
+      onScrollEndDrag={chainHandlers(Platform.OS === "web" ? refresh.onScrollEndDrag : undefined, onScrollEndDrag)}
+      onContentSizeChange={chainHandlers(bar.onContentSizeChange, onContentSizeChange)}
+      scrollEventThrottle={scrollEventThrottle ?? 16}
+    />
+  );
   return (
     <View
       style={[styles.host, fill ? styles.fill : null, wrapper]}
       onLayout={chainHandlers(bar.onLayout, onLayout)}
     >
-      {/* Observe touches without replacing the list's native scroll responder. */}
-      <List
-        ref={ref}
-        data={data}
-        {...rest}
-        {...(animateChanges && !motion.reducedMotion ? { itemLayoutAnimation: transition } : {})}
-        {...nativeScrollBarProps}
-        showsVerticalScrollIndicator={
-          Platform.OS === "web" ? (showsVerticalScrollIndicator ?? true) : false
-        }
-        indicatorStyle={bar.indicatorStyle}
-        refreshControl={refreshControl ?? nativeRefresh}
-        removeClippedSubviews={false}
-        contentContainerStyle={[
-          { flexGrow: itemCount === 0 ? 1 : 0 },
-          contentContainerStyle,
-        ]}
-        style={[fill ? styles.fill : null, inner]}
-        onScroll={chainHandlers(bar.onScroll, refresh.onScroll, onScroll)}
-        onTouchStart={chainHandlers(refresh.onTouchStart, onTouchStart)}
-        onTouchMove={chainHandlers(refresh.onTouchMove, onTouchMove)}
-        onTouchEnd={chainHandlers(refresh.onTouchEnd, onTouchEnd)}
-        onTouchCancel={chainHandlers(refresh.onTouchCancel, onTouchCancel)}
-        onScrollEndDrag={chainHandlers(refresh.onScrollEndDrag, onScrollEndDrag)}
-        onContentSizeChange={chainHandlers(bar.onContentSizeChange, onContentSizeChange)}
-        scrollEventThrottle={scrollEventThrottle ?? 16}
-      />
+      {customRefresh && refresh.gesture ? <GestureDetector gesture={refresh.gesture}>{list}</GestureDetector> : list}
       {bar.overlay}
       {customRefresh ? <RefreshHud dy={refresh.dy} refreshing={!!refreshing} /> : null}
     </View>
