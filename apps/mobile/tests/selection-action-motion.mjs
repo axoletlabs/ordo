@@ -23,15 +23,38 @@ export async function selectionActionMotionMatrix({ browser, fixture, login, but
         const row = [...document.querySelectorAll('[role="checkbox"]')].find(node => node.getAttribute("aria-label")?.startsWith("Design & inspiration,"));
         row.addEventListener("click", () => {
           const start = performance.now();
+          const deletion = [...document.querySelectorAll('[role="button"]')].find(node => node.getAttribute("aria-label") === "Delete");
+          // Count changed *layout* coordinates, rather than treating zero
+          // overlap as proof of smooth rendering. Transform-only motion should
+          // leave the live button and all its descendants' layout untouched.
+          const toolbar = deletion.parentElement.parentElement.parentElement;
+          let layoutStyleUpdates = 0;
+          const previous = new WeakMap();
+          const layout = node => ["width", "height", "left", "right", "top", "bottom"].map(property => node.style[property]).join("|");
+          for (const node of [toolbar, ...toolbar.querySelectorAll("*")]) previous.set(node, layout(node));
+          const observer = new MutationObserver(records => {
+            for (const { target } of records) {
+              const value = layout(target);
+              if (previous.has(target) && previous.get(target) !== value) layoutStyleUpdates++;
+              previous.set(target, value);
+            }
+          });
+          observer.observe(toolbar, { subtree: true, attributes: true, attributeFilter: ["style"] });
           const sample = time => {
             const buttons = [...document.querySelectorAll('[role="button"]')].filter(node => ["Read", "Move", "More", "Pin", "Unpin", "Delete"].includes(node.getAttribute("aria-label")));
-            window.toolbarFrames.push({ elapsed: time - start, buttons: buttons.map(node => {
+            window.toolbarFrames.push({ elapsed: time - start, layoutStyleUpdates, buttons: buttons.map(node => {
               const rect = node.getBoundingClientRect();
+              const content = node.querySelector('[data-testid="material-pill-content"]')?.getBoundingClientRect();
+              const cap = node.querySelector('[data-testid="material-pill-leading-cap"]')?.getBoundingClientRect();
+              const trailing = node.querySelector('[data-testid="material-pill-trailing-cap"]')?.getBoundingClientRect();
               let opacity = 1;
               for (let parent = node; parent; parent = parent.parentElement) opacity *= +getComputedStyle(parent).opacity;
-              return { label: node.getAttribute("aria-label"), x: rect.x, right: rect.right, width: rect.width, opacity };
+              return { label: node.getAttribute("aria-label"), x: rect.x, right: rect.right, width: rect.width, opacity,
+                contentWidth: content?.width, capWidth: cap?.width, capHeight: cap?.height,
+                capLeft: cap?.left, trailingRight: trailing?.right };
             }) });
             if (time - start < 900) requestAnimationFrame(sample);
+            else observer.disconnect();
           };
           requestAnimationFrame(sample);
         }, { once: true });
@@ -47,11 +70,17 @@ export async function selectionActionMotionMatrix({ browser, fixture, login, but
       const drift = Math.max(...frames.map(frame => Math.abs((frame.buttons.find(item => item.label === "Delete")?.right ?? before.x + before.width) - before.x - before.width)));
       const after = await button(page, "Delete").boundingBox();
       const overshoot = Math.max(0, ...frames.flatMap(frame => frame.buttons.filter(item => item.label === "Delete").map(item => item.width - after.width)));
-      results.toolbarMotion.push({ mode, layout: viewport.name, frames: frames.length, overlapFrames: overlapFrames.length, rightEdgeDriftPx: drift, overshootPx: overshoot, beforeWidth: before.width, afterWidth: after.width });
+      const layoutStyleUpdates = frames.at(-1).layoutStyleUpdates;
+      results.toolbarMotion.push({ mode, layout: viewport.name, frames: frames.length, overlapFrames: overlapFrames.length, rightEdgeDriftPx: drift, overshootPx: overshoot, layoutStyleUpdates, beforeWidth: before.width, afterWidth: after.width });
       if (!baseline) {
         assert.equal(overlapFrames.length, 0, `${mode}-${viewport.name}: departing actions overlap Delete`);
         assert.ok(drift < 1, `${mode}-${viewport.name}: right edge drift ${drift}`);
         assert.ok(overshoot < 1, `${mode}-${viewport.name}: expansion overshoot ${overshoot}`);
+        assert.equal(layoutStyleUpdates, 0, `${mode}-${viewport.name}: expansion must not relayout each frame`);
+        const deletionFrames = frames.flatMap(frame => frame.buttons.filter(item => item.label === "Delete"));
+        assert.ok(deletionFrames.every(item => Math.abs(item.capWidth - 24) < 0.1 && Math.abs(item.capHeight - 48) < 0.1), "Pill ends must not stretch into ellipses");
+        assert.ok(deletionFrames.every(item => Math.abs(item.capLeft - item.x) < 0.1 && Math.abs(item.trailingRight - item.right) < 0.1), "Both painted caps must meet the actual hit-tested edges");
+        assert.ok(Math.max(...deletionFrames.map(item => item.contentWidth)) - Math.min(...deletionFrames.map(item => item.contentWidth)) < 0.1, "Delete icon and label must remain unscaled");
         assert.equal(await page.locator('[role="button"][aria-label="Read"]').count(), 0, "Departing slots must be removed, not only hidden");
         assert.ok(after.width > before.width * 4);
       }
@@ -65,6 +94,8 @@ export async function selectionActionMotionMatrix({ browser, fixture, login, but
       await page.waitForTimeout(1000);
       assert.equal(await button(page, "Read").count(), 1);
       const restoring = await page.evaluate(() => window.toolbarFrames);
+      results.toolbarMotion.at(-1).restoreLayoutStyleUpdates = restoring.at(-1).layoutStyleUpdates;
+      if (!baseline) assert.equal(restoring.at(-1).layoutStyleUpdates, 0, `${mode}-${viewport.name}: restoration must not relayout each frame`);
       const restoreOverlapFrames = restoring.filter(frame => {
         const visible = frame.buttons.filter(item => item.opacity > 0.02);
         return visible.some((item, index) => visible.slice(index + 1).some(other => Math.min(item.right, other.right) - Math.max(item.x, other.x) > 0.5));
@@ -79,9 +110,13 @@ export async function selectionActionMotionMatrix({ browser, fixture, login, but
         assert.ok(Math.abs((await button(page, "Delete").boundingBox()).width - before.width) < 1);
         if (viewport.name === "portrait") {
           // Tags and copy live behind More, anchored to its own pill.
+          const moreRect = await button(page, "More").boundingBox();
           await button(page, "More").click();
           await page.getByRole("menuitem", { name: "Add tags", exact: true }).waitFor();
           await page.getByRole("menuitem", { name: "Copy links", exact: true }).waitFor();
+          await settle(page);
+          const menuRect = await page.getByRole("menu").boundingBox();
+          assert.ok(Math.abs(menuRect.x + menuRect.width - moreRect.x - moreRect.width) < 1, "More menu must anchor to the visible pill, not its layout canvas");
           await page.keyboard.press("Escape"); await settle(page);
           assert.equal(await page.getByRole("menu").count(), 0);
         }

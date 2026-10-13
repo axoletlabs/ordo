@@ -1,10 +1,10 @@
 import React, { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { StyleSheet, View, useWindowDimensions } from "react-native";
-import Animated, { cancelAnimation, Easing, runOnJS, useAnimatedReaction, useAnimatedStyle, useSharedValue, withDelay, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
+import Animated, { cancelAnimation, Easing, runOnJS, useAnimatedReaction, useAnimatedStyle, useDerivedValue, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import { useColumnPadding } from "../../hooks/use-scene-column-insets";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { AppIcon } from "../ui/PinIcon";
-import { PressableScale } from "../ui/PressableScale";
+import { StretchablePill } from "../ui/StretchablePill";
 import { Text } from "../ui/Text";
 import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 import { selectionActionPositions } from "../../lib/selection-action-layout";
@@ -52,6 +52,7 @@ export function SelectionActionBar({
   latest.current = actions;
   const positions = useSharedValue<ActionLayout>(target);
   const geometryReady = useSharedValue(true);
+  const departureOpacity = useSharedValue(1);
   const previousKeys = useRef(keys);
   const actionsKey = JSON.stringify(keys);
   const transition = useRef({ key: actionsKey, version: 0 });
@@ -86,6 +87,7 @@ export function SelectionActionBar({
     const reopening = current.length > 0 && previousKeys.current.length === 0;
     previousKeys.current = currentKeys;
     cancelAnimation(positions);
+    cancelAnimation(departureOpacity);
     if (!current.length) return; // Keep the last geometry through the bar's exit.
     if (activePress == null) setPressedKey(null);
     setRetained(previous => [...current, ...previous.filter(action => !currentKeys.includes(action.key))]);
@@ -103,9 +105,17 @@ export function SelectionActionBar({
       const animation = withSpring({ ...start, ...next }, { ...motion.spatial, overshootClamping: true }, finished => {
         if (finished) geometryReady.value = true;
       });
-      positions.value = departing ? withDelay(DEPARTURE_MS, animation) : animation;
+      if (departing) {
+        // One UI-thread handoff: a wall-clock delay can finish before a slot's
+        // fade starts on a busy frame. Growth begins only after all departures
+        // are visibly transparent, without unmounting them during the stretch.
+        departureOpacity.value = 1;
+        departureOpacity.value = withTiming(0, { duration: DEPARTURE_MS, easing: Easing.out(Easing.quad) }, finished => {
+          if (finished) positions.value = animation;
+        });
+      } else positions.value = animation;
     }
-  }, [actionsKey, activePress, available, motion.spatial, motion.reducedMotion, positions, geometryReady]);
+  }, [actionsKey, activePress, available, motion.spatial, motion.reducedMotion, positions, geometryReady, departureOpacity]);
 
   useLayoutEffect(() => {
     const version = transition.current.version;
@@ -167,7 +177,7 @@ export function SelectionActionBar({
         >
           <View style={styles.actions}>
             {ordered.map(action => <ActionSlot key={action.key} action={action} present={keys.includes(action.key)} version={transition.current.version}
-              positions={positions} geometryReady={geometryReady} onExited={removeDeparture} onPressed={setPressedKey} />)}
+              positions={positions} canvasWidth={available} geometryReady={geometryReady} departureOpacity={departureOpacity} onExited={removeDeparture} onPressed={setPressedKey} />)}
           </View>
         </Animated.View>
       </View>
@@ -175,12 +185,14 @@ export function SelectionActionBar({
   );
 }
 
-function ActionSlot({ action, present, version, positions, geometryReady, onExited, onPressed }: {
+function ActionSlot({ action, present, version, positions, canvasWidth, geometryReady, departureOpacity, onExited, onPressed }: {
   action: SelectionAction;
   present: boolean;
   version: number;
   positions: SharedValue<ActionLayout>;
+  canvasWidth: number;
   geometryReady: SharedValue<boolean>;
+  departureOpacity: SharedValue<number>;
   onExited: (key: string, version: number) => void;
   onPressed: (key: string | null) => void;
 }) {
@@ -204,11 +216,8 @@ function ActionSlot({ action, present, version, positions, geometryReady, onExit
       entered.value = false;
       if (motion.reducedMotion) {
         opacity.value = 0;
-        runOnJS(onExited)(key, version);
       } else {
-        opacity.value = withTiming(0, { duration: DEPARTURE_MS, easing: Easing.out(Easing.quad) }, finished => {
-          if (finished) runOnJS(onExited)(key, version);
-        });
+        opacity.value = withTiming(0, { duration: DEPARTURE_MS, easing: Easing.out(Easing.quad) });
       }
     } else if (state === 1 || state === 5) {
       entered.value = true;
@@ -220,25 +229,40 @@ function ActionSlot({ action, present, version, positions, geometryReady, onExit
       opacity.value = motion.reducedMotion ? 0 : withTiming(0, { duration: DEPARTURE_MS });
     }
   }, [present, key, version, motion.reducedMotion, onExited, enableAction]);
+  // Unmount hidden departures only *after* the stretch settles. Removing three
+  // React/native subtrees at the exact frame Delete starts growing creates a
+  // hitch even when the animation itself runs on the UI thread.
+  useAnimatedReaction(() => !present && geometryReady.value && opacity.value === 0, remove => {
+    if (remove) runOnJS(onExited)(key, version);
+  }, [present, key, version, onExited]);
+  const pillWidth = useDerivedValue(() => Math.max(48, positions.value[`${key}:width`] ?? 48));
   const slotStyle = useAnimatedStyle(() => ({
-    right: positions.value[`${key}:right`] ?? 0,
-    width: Math.max(0, positions.value[`${key}:width`] ?? 0),
-    opacity: opacity.value,
+    transform: [{ translateX: -(positions.value[`${key}:right`] ?? 0) }],
+    opacity: present ? opacity.value : Math.min(opacity.value, departureOpacity.value),
   }));
   const color = action.danger ? palette.onErrorContainer : palette.onSecondaryContainer;
   const interactive = present && readyToPress;
-  return <Animated.View ref={slotRef as React.Ref<Animated.View>} pointerEvents={interactive ? "auto" : "none"} aria-hidden={!interactive}
+  return <Animated.View ref={slotRef as React.Ref<Animated.View>} pointerEvents={interactive ? "box-none" : "none"} aria-hidden={!interactive}
     accessibilityElementsHidden={!interactive} importantForAccessibility={interactive ? "auto" : "no-hide-descendants"}
-    style={[styles.slot, slotStyle]}>
-    <PressableScale accessibilityRole="button" accessibilityLabel={action.label}
+    style={[styles.slot, { width: canvasWidth }, slotStyle]}>
+    <StretchablePill width={pillWidth} canvasWidth={canvasWidth} accessibilityRole="button" accessibilityLabel={action.label}
       accessibilityState={{ disabled: !!action.disabled || !interactive }} disabled={action.disabled || !interactive}
       onPressIn={() => onPressed(key)} onPressOut={() => onPressed(null)} onBlur={() => onPressed(null)}
-      onPress={() => { if (!interactive || action.disabled) return; haptics.light(); action.onPress(slotRef.current); }}
+      onPress={() => {
+        if (!interactive || action.disabled) return;
+        haptics.light();
+        // The layout canvas is deliberately fixed-size; menus anchor to the
+        // painted/hit-tested pill, not that wider offscreen canvas.
+        action.onPress({ measureInWindow: callback => slotRef.current?.measureInWindow?.((x, y, _width, height) => {
+          const width = Math.min(canvasWidth, pillWidth.value);
+          callback(x + canvasWidth - width, y, width, height);
+        }) });
+      }}
       stateLayerColor={color} shape={{ rest: 24, pressed: expressive ? radius.md : 24 }}
       style={[styles.action, { backgroundColor: action.danger ? palette.errorContainer : palette.secondaryContainer }, action.disabled && styles.disabled]}>
       <AppIcon name={action.icon} size={22} color={color} />
       <Text variant="labelSmall" style={{ color }} numberOfLines={1}>{action.label}</Text>
-    </PressableScale>
+    </StretchablePill>
   </Animated.View>;
 }
 
@@ -259,7 +283,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing[8],
   },
   actions: { height: 48, flex: 1 },
-  slot: { position: "absolute", height: 48, borderRadius: 24 },
+  slot: { position: "absolute", right: 0, height: 48, borderRadius: 24 },
   action: {
     width: "100%",
     borderRadius: 24,
