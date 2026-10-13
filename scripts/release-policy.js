@@ -10,8 +10,8 @@ const RELEASE_VERSION_RE = new RegExp(
 // or from an OTA manifest: it belongs to the installed binary.
 const APP_VARIANTS = {
   stable: { name: "ordo", package: "com.axolet.ordo", channel: "stable", apkPrefix: "ordo" },
-  preview: { name: "ordo-preview", package: "com.axolet.ordo.preview", channel: "preview", apkPrefix: "ordo-preview" },
-  development: { name: "ordo-development", package: "com.axolet.ordo.development", channel: null, apkPrefix: "ordo-development" },
+  preview: { name: "ordo (preview)", package: "com.axolet.ordo.preview", channel: "preview", apkPrefix: "ordo-preview" },
+  development: { name: "ordo (dev)", package: "com.axolet.ordo.development", channel: null, apkPrefix: "ordo-development" },
 };
 
 function appVariantForPackage(packageName) {

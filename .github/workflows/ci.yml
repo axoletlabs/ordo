@@ -73,11 +73,15 @@ jobs:
           echo "updates_channel=$CHANNEL" >> "$GITHUB_OUTPUT"
           echo "app_variant=$CHANNEL" >> "$GITHUB_OUTPUT"
           echo "App variant: $CHANNEL (branch=${BRANCH:-none})"
-          # Every APK of the build — universal and all ABI splits — shares the
-          # raw run number. Android treats an equal-code install as a replace,
-          # and later runs outrank earlier builds because the counter only
-          # grows. A workflow re-run reuses its own code.
-          echo "version_code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          # Only Development follows the Actions run number for versionCode.
+          # The other apps are separate packages, so their build numbers come
+          # from their own version (Preview's sequence number); otherwise 1.
+          if [ "$CHANNEL" = "development" ]; then
+            VERSION_CODE="${{ github.run_number }}"
+          else
+            VERSION_CODE="$(VERSION="$VERSION" node -e "const {classifyReleaseVersion}=require('./scripts/release-policy.js'); const c=classifyReleaseVersion(process.env.VERSION); process.stdout.write(String(c && c.number != null ? c.number : 1))")"
+          fi
+          echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
 
           if [ "${{ github.event_name }}" = "release" ]; then
             echo "is_release=true" >> "$GITHUB_OUTPUT"

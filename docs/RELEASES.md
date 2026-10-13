@@ -23,8 +23,8 @@ subscriptions. They can all be installed side by side.
 | Variant / launcher name | Android package | OTA channel | Native updater |
 | --- | --- | --- | --- |
 | Stable / `ordo` | `com.axolet.ordo` | `stable` | Stable releases only |
-| Preview / `ordo-preview` | `com.axolet.ordo.preview` | `preview` | Preview releases only |
-| Development / `ordo-development` | `com.axolet.ordo.development` | None; OTA disabled natively | Disabled |
+| Preview / `ordo (preview)` | `com.axolet.ordo.preview` | `preview` | Preview releases only |
+| Development / `ordo (dev)` | `com.axolet.ordo.development` | None; OTA disabled natively | Disabled |
 
 There is no early-access preference or stream-switching UI. Preview never
 installs Stable, including when the same version graduates to Stable. The
@@ -95,12 +95,12 @@ carries `~/.ccache` across runs. Fresh runners get new compiler timestamps, so
 the compiler is verified by content. Kotlin/Java reuse Gradle's build cache.
 
 Every APK of a build — the universal package and all four ABI splits — shares
-one `versionCode`: the CI run number. Android treats an equal-code install as a
-replace, so switching splits of the same build is a reinstall, and any later
-build outranks every earlier one because the run counter only grows. A workflow
-re-run reuses its run's code, and the immutability check refuses replacing
-published assets with different bytes. Releases starting with v0.1.0 use this
-scheme, so the run counter orders builds within each app variant.
+one `versionCode`. Only Development uses the CI run number, so its build
+numbers keep growing across manual builds. Preview and Stable are separate apps
+and use the small sequential numbers from their own version (Preview's
+sequence number, otherwise 1). Android treats an equal-code install as a
+replace; a re-run reuses its run's code and the immutability check refuses
+replacing published assets with different bytes.
 
 Development APKs are updated manually from Actions artifacts. They cannot
 receive OTA or published-release APK updates. Installing Stable or Preview

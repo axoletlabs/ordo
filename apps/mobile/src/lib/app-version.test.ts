@@ -27,7 +27,7 @@ test("exactly three independent native identities exist", () => {
   assert.deepEqual(Object.keys(APP_VARIANTS), ["stable", "preview", "development"]);
   assert.equal(new Set(Object.values(APP_VARIANTS).map((identity) => identity.package)).size, 3);
   assert.equal(APP_VARIANTS.stable.package, "com.axolet.ordo");
-  assert.equal(APP_VARIANTS.preview.name, "ordo-preview");
+  assert.equal(APP_VARIANTS.preview.name, "ordo (preview)");
   assert.equal(APP_VARIANTS.development.channel, null);
   for (const variant of ["stable", "preview", "development"] as const) {
     assert.equal(appVariantForPackage(APP_VARIANTS[variant].package), variant);
