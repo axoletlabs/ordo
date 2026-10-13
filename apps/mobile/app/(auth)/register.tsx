@@ -32,7 +32,7 @@ const AGE_CONFIRM_LABEL = "I am 13 or older and agree to the Terms and Privacy P
 const AGE_CONFIRM_ERROR = "Please confirm you are 13 or older.";
 
 export default function RegisterScreen() {
-  const { palette } = useTheme();
+  const { palette, expressive } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ focus?: string; email?: string }>();
   const focusEmail = routeParam(params.focus) === "email";
@@ -132,16 +132,10 @@ export default function RegisterScreen() {
   };
 
   return (
-      <AuthShell
-        title="Create account"
-        subtitle="A home for your saved links."
-        footer={
-          <View style={styles.row}>
-            <Text variant="bodyMedium" color="secondary">Already have an account?</Text>
-            <AuthLink href="/(auth)/login" label="Sign in" replace />
-          </View>
-        }
-      >
+    <AuthShell
+      title="Create account"
+      footer={<AuthLink href="/(auth)/login" label="Sign in" replace />}
+    >
       {!registrationEnabled ? (
         <View
           style={[
@@ -199,8 +193,7 @@ export default function RegisterScreen() {
             ref={passwordRef}
             value={password}
             onChangeText={setPassword}
-            placeholder="At least 8 characters"
-            helper="Use at least 8 characters."
+            helper="At least 8 characters"
             error={errorField === "password" ? formError : undefined}
             returnKeyType="next"
             submitBehavior="submit"
@@ -260,7 +253,7 @@ export default function RegisterScreen() {
 
           <View style={{ height: spacing[24] }} />
           <FormError message={errorField ? undefined : formError} />
-          <Button label="Create account" block size="md" onPress={submit} loading={register.isPending} />
+          <Button label="Create account" block size={expressive ? "md" : "sm"} onPress={submit} loading={register.isPending} />
         </>
       )}
     </AuthShell>
@@ -296,7 +289,6 @@ function LegalLink({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center", columnGap: spacing[4] },
   link: { textDecorationLine: "underline", includeFontPadding: false },
   disabledCard: { padding: spacing[16], borderRadius: radius.lg, borderWidth: 1 },
 });

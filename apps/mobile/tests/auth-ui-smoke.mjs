@@ -59,11 +59,23 @@ async function capture(page, name) {
   results.screens.push(name);
 }
 
-async function cleanForm(page, screen) {
+async function cleanForm(page, screen, expressive) {
   const fields = screen === "login" ? ["Email", "Password"] : ["Display name", "Email", "Password", "Confirm password"];
   const text = await page.locator("body").innerText();
   assert.ok(!text.includes("* Required"), "Auth forms do not repeat required hints");
   assert.ok(!text.includes("0/64"), "Display name does not need a character counter");
+  assert.equal(await page.getByTestId("auth-brand").innerText(), "ordo", "Wordmark only, without a generic decorative icon");
+  const title = screen === "login" ? "Sign in" : "Create account";
+  assert.equal(await page.getByTestId("auth-header").innerText(), title, "Header has no marketing tagline");
+  assert.ok(!text.includes("New to ordo?") && !text.includes("Already have an account?"), "Secondary actions do not repeat account prompts");
+  assert.equal(await page.getByRole("heading", { name: title, exact: true }).evaluate(node => getComputedStyle(node).fontSize), expressive ? "36px" : "32px", "Heading follows the shared large app-bar type roles");
+  const primary = button(page, title);
+  const geometry = await primary.evaluate(node => {
+    const visual = node.firstElementChild;
+    return { targetHeight: node.getBoundingClientRect().height, visualHeight: visual.getBoundingClientRect().height };
+  });
+  assert.equal(geometry.visualHeight, expressive ? 56 : 40, "Primary action uses the shared mode-appropriate button size");
+  assert.equal(geometry.targetHeight, expressive ? 56 : 48, "Standard buttons still retain a 48dp interaction target");
   for (const name of fields) {
     assert.equal(await field(page, name).getAttribute("aria-required"), "true", `${name}: required semantics retained`);
     const bounds = await field(page, name).boundingBox();
@@ -75,6 +87,25 @@ async function cleanForm(page, screen) {
     const bounds = await control.boundingBox();
     if (bounds) assert.ok(bounds.height >= 48, "Actions retain a 48dp target");
   }
+}
+
+async function primaryFeedback(page, expressive) {
+  const primary = button(page, "Sign in");
+  const before = await primary.boundingBox();
+  await primary.hover();
+  const after = await primary.boundingBox();
+  assert.deepEqual(after, before, "Hover state layers do not move the button");
+  const corner = () => primary.evaluate(node => parseFloat(getComputedStyle(node.firstElementChild).borderTopLeftRadius));
+  assert.equal(await corner(), expressive ? 28 : 20);
+  await page.mouse.down();
+  try {
+    await page.waitForTimeout(500);
+    assert.ok(Math.abs(await corner() - (expressive ? 12 : 20)) < 0.5, "Only Expressive primary actions morph their shape on press");
+  } finally {
+    await page.mouse.move(0, 0);
+    await page.mouse.up();
+  }
+  await page.waitForTimeout(500);
 }
 
 async function keyboardAndErrors(page, submissions, mode) {
@@ -134,12 +165,13 @@ try {
         const mode = `${theme}-${expressive ? "expressive" : "standard"}-${reducedMotion}-${layout}`;
         for (const screen of ["login", "register"]) {
           await open(page, screen, screen === "login" ? "Sign in" : "Create account");
-          await cleanForm(page, screen);
+          await cleanForm(page, screen, expressive);
           const action = await button(page, screen === "login" ? "Sign in" : "Create account").boundingBox();
           assert.ok(action.y + action.height < viewport.height, `${mode}: primary action fits without scrolling`);
           await capture(page, `${mode}-${screen}`);
         }
         await open(page, "login", "Sign in");
+        await primaryFeedback(page, expressive);
         await keyboardAndErrors(page, submissions, mode);
       } finally { await context.close(); }
     }
@@ -171,9 +203,10 @@ try {
     assert.equal(await button(page, "Create account").count(), 0);
     await capture(page, "registration-disabled");
     await open(page, "login", "Sign in");
-    await page.getByText("Connected to library.example.test", { exact: true }).waitFor();
+    await page.getByText("Server: library.example.test", { exact: true }).waitFor();
     await button(page, "Use ordo Cloud").click();
     await page.getByRole("dialog").waitFor();
+    await page.getByText("Your library stays on this server. It won't be copied to Cloud.", { exact: true }).waitFor();
     await capture(page, "self-host-cloud-confirmation");
     results.interactions.push("Self-host identity, Cloud confirmation and registration-disabled state preserved");
   } finally { await context.close(); }

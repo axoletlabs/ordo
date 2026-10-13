@@ -10,7 +10,6 @@ import { AuthShell } from "../../src/components/auth/AuthShell";
 import { AuthInput } from "../../src/components/auth/AuthInput";
 import { Button } from "../../src/components/ui/Button";
 import { Text } from "../../src/components/ui/Text";
-import { PressableScale } from "../../src/components/ui/PressableScale";
 import { ConfirmDialog } from "../../src/components/ui/ConfirmDialog";
 import { ServerConnectSheet } from "../../src/components/auth/ServerConnectSheet";
 import { SelfHostFlow } from "../../src/components/settings/SelfHostFlow";
@@ -23,7 +22,8 @@ import { ApiClientError } from "../../src/lib/api/client";
 import { CLOUD_SERVER_URL, hostingModeOf } from "../../src/lib/hosting";
 import { hostOf } from "../../src/lib/instance-name";
 import { haptics } from "../../src/lib/haptics";
-import { layout, radius, spacing } from "../../src/theme/tokens";
+import { useTheme } from "../../src/theme/ThemeProvider";
+import { spacing } from "../../src/theme/tokens";
 import { ErrorCode, LoginSchema, isMfaRequiredResponse } from "@ordo/shared";
 import { lockedSecretDisplay, passwordAutofillProps } from "../../src/lib/password-autofill";
 
@@ -40,6 +40,7 @@ export default function LoginScreen() {
 }
 
 function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
+  const { expressive } = useTheme();
   const router = useRouter();
   const serverUrl = useSettingsStore((s) => s.serverUrl);
   const login = useLogin();
@@ -112,55 +113,31 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
     <>
       <AuthShell
         title="Sign in"
-        subtitle="Continue to your library."
-        footer={
-          <View style={styles.row}>
-            <Text variant="bodyMedium" color="secondary">New to ordo?</Text>
-            <AuthLink href="/(auth)/register" label="Create account" replace />
-          </View>
-        }
+        footer={<AuthLink href="/(auth)/register" label="Create account" replace />}
         secondaryFooter={selfHosted ? (
           <View style={styles.hosting}>
             <Text variant="bodySmall" color="secondary" align="center">
-              Connected to {hostOf(serverUrl)}
+              Server: {hostOf(serverUrl)}
             </Text>
             <View style={styles.hostingActions}>
-              <PressableScale
-                accessibilityRole="button"
-                accessibilityLabel={`Change server. Current server: ${serverUrl}`}
-                style={styles.hostingAction}
-                onPress={() => {
-                  haptics.light();
-                  setShowServer(true);
-                }}
-              >
-                <Text variant="labelLarge" color="accent">Change server</Text>
-              </PressableScale>
-              <PressableScale
-                accessibilityRole="button"
-                accessibilityLabel="Use ordo Cloud"
-                style={styles.hostingAction}
-                onPress={() => {
-                  haptics.light();
-                  setConfirmCloud(true);
-                }}
-              >
-                <Text variant="labelLarge" color="accent">Use ordo Cloud</Text>
-              </PressableScale>
+              <Button
+                label="Change server"
+                variant="ghost"
+                onPress={() => setShowServer(true)}
+              />
+              <Button
+                label="Use ordo Cloud"
+                variant="ghost"
+                onPress={() => setConfirmCloud(true)}
+              />
             </View>
           </View>
         ) : (
-          <PressableScale
-            accessibilityRole="button"
-            accessibilityLabel="Use your own server"
-            onPress={() => {
-              haptics.light();
-              setShowSelfHost(true);
-            }}
-            style={styles.hostingAction}
-          >
-            <Text variant="labelLarge" color="secondary" align="center">Use your own server</Text>
-          </PressableScale>
+          <Button
+            label="Use your own server"
+            variant="ghost"
+            onPress={() => setShowSelfHost(true)}
+          />
         )}
       >
         <AuthInput
@@ -188,7 +165,6 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
           disabled={login.isPending}
           value={passwordField.value}
           onChangeText={setPassword}
-          placeholder="••••••••"
           secureTextEntry={passwordField.secureTextEntry}
           {...passwordAutofillProps("current-password", !screenFocused)}
           rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
@@ -202,7 +178,7 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
 
         <View style={{ height: spacing[16] }} />
         <FormError message={errorField ? undefined : formError} />
-        <Button label="Sign in" block size="md" onPress={submit} loading={login.isPending} />
+        <Button label="Sign in" block size={expressive ? "md" : "sm"} onPress={submit} loading={login.isPending} />
       </AuthShell>
 
       <SelfHostFlow visible={showSelfHost} onDismiss={() => setShowSelfHost(false)} />
@@ -216,10 +192,9 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
         onDismiss={() => {
           if (!busy) setConfirmCloud(false);
         }}
-        icon="cloud-outline"
         tone="accent"
         title="Use ordo Cloud?"
-        message="You'll leave this server. Your library there stays put — it isn't copied."
+        message="Your library stays on this server. It won't be copied to Cloud."
         confirmLabel="Use ordo Cloud"
         loading={busy}
         dismissible={!busy}
@@ -234,7 +209,6 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center", columnGap: spacing[4] },
   hosting: { gap: spacing[8], justifyContent: "center" },
   hostingActions: {
     flexDirection: "row",
@@ -242,6 +216,5 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     flexWrap: "wrap",
   },
-  hostingAction: { minHeight: layout.touchTargetMin, paddingHorizontal: spacing[8], justifyContent: "center", borderRadius: radius.full },
   forgotRow: { alignItems: "flex-end" },
 });

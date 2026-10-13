@@ -25,7 +25,7 @@ export function ConfirmDialog({
 }: {
   visible: boolean;
   onDismiss: () => void;
-  icon: keyof typeof Ionicons.glyphMap;
+  icon?: keyof typeof Ionicons.glyphMap;
   tone?: "danger" | "accent";
   title: string;
   message: string;
