@@ -16,11 +16,13 @@ export function PlainTooltip({ id, visible, anchor, label, onDismiss, onHoverIn,
   const { palette } = useTheme();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const { rendered, progress } = useOverlayPresence(visible, onDismiss, { dismissKeyboard: false });
   const [size, setSize] = React.useState({ width: 0, height: 24 });
+  const { rendered, progress } = useOverlayPresence(visible, onDismiss, { dismissKeyboard: false, ready: size.width > 0 });
   const lastAnchor = React.useRef(anchor);
   if (anchor) lastAnchor.current = anchor;
   const origin = lastAnchor.current;
+  const lastLabel = React.useRef(label);
+  if (visible) lastLabel.current = label;
   const fade = useAnimatedStyle(() => ({ opacity: progress.value }));
   if (!rendered || !origin) return null;
   const w = size.width || Math.min(240, label.length * 7 + 16);
@@ -30,7 +32,7 @@ export function PlainTooltip({ id, visible, anchor, label, onDismiss, onHoverIn,
    return <OverlayPortal><View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
      <Animated.View nativeID={id} role="tooltip" onPointerEnter={onHoverIn} onPointerLeave={onHoverOut} onLayout={(event) => setSize(event.nativeEvent.layout)}
       style={[styles.tooltip, { left, top, backgroundColor: palette.inverseSurface }, fade]}>
-      <Text variant="bodySmall" style={{ color: palette.inverseOnSurface }}>{label}</Text>
+       <Text variant="bodySmall" style={{ color: palette.inverseOnSurface }}>{visible ? label : lastLabel.current}</Text>
     </Animated.View>
   </View></OverlayPortal>;
 }

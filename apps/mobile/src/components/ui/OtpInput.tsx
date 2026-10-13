@@ -31,7 +31,7 @@ import { EMAIL_OTP, MFA } from "@ordo/shared";
 import { Text } from "./Text";
 import { useTheme } from "../../theme/ThemeProvider";
 import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
-import { useMaterialMotion } from "../../theme/material-motion";
+import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 import { haptics } from "../../lib/haptics";
 import { InputSurfaceContext } from "./input-surface";
 import { alphaTint } from "../../theme/state-layer";
@@ -130,8 +130,9 @@ export function OtpInput({
   }, [chars, length, onComplete, locked]);
 
   useEffect(() => {
-    if (status !== "error" || motion.reducedMotion) return;
+    cancelAnimation(shake);
     shake.value = 0;
+    if (status !== "error" || motion.reducedMotion) return;
     shake.value = withSequence(
       withTiming(1, { duration: 42, easing: Easing.out(Easing.quad) }),
       withTiming(-1, { duration: 42 }),
@@ -140,6 +141,7 @@ export function OtpInput({
       withTiming(0.36, { duration: 38 }),
       withTiming(0, { duration: 90, easing: Easing.out(Easing.cubic) }),
     );
+    return () => cancelAnimation(shake);
   }, [status, shake, motion.reducedMotion]);
 
   useEffect(() => {
@@ -155,7 +157,7 @@ export function OtpInput({
       return () => cancelAnimation(pulse);
     }
     cancelAnimation(pulse);
-    pulse.value = withTiming(1, { duration: 160 });
+    pulse.value = motion.reducedMotion ? 1 : withTiming(1, { duration: 160 });
     return undefined;
   }, [status, pulse, motion.reducedMotion]);
 
@@ -311,7 +313,11 @@ const DigitBox = React.memo(function DigitBox({
   const focusAmt = useSharedValue(focused ? 1 : 0);
   const appear = useSharedValue(filled ? 1 : 0);
   const pop = useSharedValue(1);
+  const successPop = useSharedValue(1);
   const caret = useSharedValue(active ? 1 : 0);
+  const previousFilled = useRef(filled);
+  const lastDigit = useRef(digit);
+  if (digit) lastDigit.current = digit;
 
   useEffect(() => {
     mood.value = withTiming(status === "error" ? 1 : status === "success" ? 2 : 0, {
@@ -324,9 +330,12 @@ const DigitBox = React.memo(function DigitBox({
   }, [focused, focusAmt, motion.fast, motion.reducedMotion]);
 
   useEffect(() => {
+    const changed = previousFilled.current !== filled;
+    previousFilled.current = filled;
     if (motion.reducedMotion) { appear.value = +filled; pop.value = 1; return; }
+    if (!changed) return;
     if (filled) {
-      appear.value = withSpring(1, motion.fast);
+      appear.value = withSpring(1, materialMotion.effects.fast);
       pop.value = 0.62;
       pop.value = withSpring(1, motion.fast);
     } else {
@@ -336,12 +345,15 @@ const DigitBox = React.memo(function DigitBox({
   }, [filled, appear, pop, motion.fast, motion.reducedMotion]);
 
   useEffect(() => {
+    cancelAnimation(successPop);
+    successPop.value = 1;
     if (status !== "success" || motion.reducedMotion) return;
-    pop.value = withDelay(
+    successPop.value = withDelay(
       index * 48,
       withSequence(withSpring(1.14, motion.spatial), withSpring(1, motion.fast)),
     );
-  }, [status, index, pop, motion.spatial, motion.fast, motion.reducedMotion]);
+    return () => cancelAnimation(successPop);
+  }, [status, index, successPop, motion.spatial, motion.fast, motion.reducedMotion]);
 
   useEffect(() => {
     if (!active) {
@@ -389,7 +401,7 @@ const DigitBox = React.memo(function DigitBox({
         Extrapolation.CLAMP,
       ),
       transform: [
-        { scale: motion.reducedMotion ? 1 : interpolate(focusAmt.value, [0, 1], [1, 1.04]) * pop.value },
+        { scale: motion.reducedMotion ? 1 : interpolate(focusAmt.value, [0, 1], [1, 1.04]) * pop.value * successPop.value },
       ],
     };
   });
@@ -402,7 +414,7 @@ const DigitBox = React.memo(function DigitBox({
     );
     return {
       color,
-      opacity: appear.value,
+      opacity: Math.max(0, Math.min(1, appear.value)),
       transform: [{ scale: interpolate(appear.value, [0, 1], [0.7, 1]) }],
     };
   });
@@ -419,25 +431,22 @@ const DigitBox = React.memo(function DigitBox({
         boxStyle,
       ]}
     >
-      {digit ? (
         <Animated.Text
           style={[
             compact ? styles.digitCompact : styles.digit,
-            { fontFamily: resolveFont("mono", "600") },
+            { position: "absolute", fontFamily: resolveFont("mono", "600") },
             digitStyle,
           ]}
         >
-          {digit}
+          {digit || lastDigit.current}
         </Animated.Text>
-      ) : (
         <Animated.View
           style={[
             compact ? styles.caretCompact : styles.caret,
-            { backgroundColor: palette.accent },
+            { position: "absolute", backgroundColor: palette.accent },
             caretStyle,
           ]}
         />
-      )}
     </Animated.View>
   );
 });

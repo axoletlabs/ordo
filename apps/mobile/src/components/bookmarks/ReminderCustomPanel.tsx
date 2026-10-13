@@ -323,7 +323,7 @@ function TimeButtons({ label, values, value, disabled, format, describe, onChang
         {...(Platform.OS === "web" ? { tabIndex: selected || !values.includes(value) && index === 0 ? 0 : -1 } : {})}
         stateLayerColor={selected ? palette.onSecondaryContainer : palette.onSurface}
         style={[styles.padCell, { backgroundColor: selected ? palette.secondaryContainer : "transparent", opacity: disabled ? 0.38 : 1 }]}
-        shape={expressive ? { rest: selected ? radius.full : radius.sm, pressed: radius.sm } : undefined}
+        shape={{ rest: expressive && selected ? 24 : radius.sm, pressed: radius.sm }}
         onPress={() => { haptics.selection(); onChange(option); }}>
         <Text variant="labelLarge" align="center" style={{ color: selected ? palette.onSecondaryContainer : palette.onSurface }}>{format(option)}</Text>
       </PressableScale>;

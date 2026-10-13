@@ -99,8 +99,10 @@ function FloatingPanelSurface({
   const obscuredFade = useSharedValue(obscured ? 0 : 1);
   const [collapsedObscured, setCollapsedObscured] = React.useState(obscured);
   const lastObscured = React.useRef(obscured);
+  const finishObscuring = React.useCallback(() => {
+    if (lastObscured.current) setCollapsedObscured(true);
+  }, []);
   React.useLayoutEffect(() => {
-    if (obscured === lastObscured.current) return;
     lastObscured.current = obscured;
     if (motion.reducedMotion) {
       obscuredFade.value = obscured ? 0 : 1;
@@ -110,13 +112,13 @@ function FloatingPanelSurface({
     const fade = { duration: 200, easing: Easing.inOut(Easing.quad) };
     if (obscured) {
       obscuredFade.value = withTiming(0, fade, (finished) => {
-        if (finished && lastObscured.current) runOnJS(setCollapsedObscured)(true);
+        if (finished) runOnJS(finishObscuring)();
       });
       return;
     }
     setCollapsedObscured(false);
     obscuredFade.value = withTiming(1, fade);
-  }, [obscured, obscuredFade, motion.reducedMotion]);
+  }, [obscured, obscuredFade, finishObscuring, motion.reducedMotion]);
   const lastChildren = React.useRef(children);
   if (visible) lastChildren.current = children;
   const nodes = panelChildren(visible ? children : lastChildren.current);

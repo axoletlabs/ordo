@@ -46,13 +46,15 @@ export function Button({ label, onPress, variant = "primary", size = "sm", loadi
         borderColor: inactive ? `${palette.onSurface}1f` : palette.outline },
         variant === "elevated" && !inactive ? shadows.level1 : null]}>
       <View style={styles.content}>
-        {loading ? <Spinner size="sm" color={foreground} /> : <>
+        <View pointerEvents="none" aria-hidden={loading} importantForAccessibility={loading ? "no-hide-descendants" : "auto"}
+          style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", minWidth: 0, maxWidth: "100%", opacity: loading ? 0 : 1 }}>
           {icon ? <View style={{ marginRight: 8 }}>{React.isValidElement<{ color?: string; size?: number }>(icon)
             ? React.cloneElement(icon, { color: foreground, size: tokens.icon }) : icon}</View> : null}
           <Text variant="labelLarge" numberOfLines={1} style={[styles.label, {
             color: foreground, fontSize: tokens.font, lineHeight: tokens.font + 6,
           }]}>{label}</Text>
-        </>}
+        </View>
+        {loading ? <View pointerEvents="none" style={StyleSheet.absoluteFill}><View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><Spinner size="sm" color={foreground} /></View></View> : null}
       </View>
     </PressableScale>
   </View>;

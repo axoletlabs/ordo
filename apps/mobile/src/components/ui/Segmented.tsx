@@ -19,8 +19,11 @@ function SegmentLabel({ label, foreground, selected, labelStyle }: { label: stri
     selection.value = motion.reducedMotion ? Number(selected) : withSpring(Number(selected), materialMotion.effects.fast);
   }, [foreground, selected, motion.reducedMotion, tint, selection]);
   const labelStyleAnimated = useAnimatedStyle(() => ({ color: tint.value }));
-  const checkStyle = useAnimatedStyle(() => ({ opacity: selection.value }));
-  return <>{selected ? <Animated.View testID="material-segment-check" style={[{ width: 18 }, checkStyle]}><MaterialIcon name="checkmark" size={18} color={foreground} /></Animated.View> : null}
+  const checkStyle = useAnimatedStyle(() => ({ opacity: selection.value, width: 26 * selection.value }));
+  // Retain the check through deselection; animate its slot with the fade so
+  // labels don't jump sideways when the selection changes.
+  return <><Animated.View testID="material-segment-check" pointerEvents="none" accessible={false}
+    style={[{ overflow: "hidden", flexShrink: 0 }, checkStyle]}><MaterialIcon name="checkmark" size={18} color={foreground} /></Animated.View>
     <AnimatedText variant="labelLarge" numberOfLines={1} style={[{ flexShrink: 1 }, labelStyle, labelStyleAnimated]}>{label}</AnimatedText></>;
 }
 export interface SegmentedProps<T extends string> {
@@ -69,7 +72,7 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
       return <PressableScale key={option.value} accessibilityRole="radio" accessibilityLabel={option.accessibilityLabel ?? option.label}
         {...(Platform.OS === "web" ? { tabIndex: selected ? 0 : -1 } : {})}
         disabled={disabled} accessibilityState={{ checked: selected, disabled }} onPress={() => { if (!selected && !disabled) { haptics.selection(); onChange(option.value); } }}
-        stateLayerColor={fg} shape={expressive ? { rest, pressed } : undefined}
+        stateLayerColor={fg} shape={{ rest: expressive ? rest : outline, pressed: expressive ? pressed : outline }}
         style={[styles.option, vertical ? { flex: 0, width: "100%" } : null]}
         visualStyle={[styles.visual, {
           height: vertical ? 48 : 40,
@@ -89,5 +92,5 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
 const styles = StyleSheet.create({
    group: { flexDirection: "row", minHeight: 48 },
    option: { flex: 1, minWidth: 48, minHeight: 48, justifyContent: "center" },
-   visual: { alignSelf: "stretch", height: 40, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 12 },
+   visual: { alignSelf: "stretch", height: 40, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingHorizontal: 12 },
 });

@@ -26,6 +26,12 @@ export function Toggle({ value, onValueChange, disabled, accessibilityLabel }: T
     position.value = motion.reducedMotion ? +value : withSpring(+value, motion.fast);
     effect.value = motion.reducedMotion ? +value : withSpring(+value, materialMotion.effects.fast);
   }, [value, motion.fast, motion.reducedMotion, position, effect]);
+  useEffect(() => {
+    const active = stateLayerOpacity({ ...interaction.current, disabled }) > 0;
+    state.value = motion.reducedMotion ? +active : withSpring(+active, materialMotion.effects.fast);
+    if (disabled) interaction.current.pressed = false;
+    if (disabled || motion.reducedMotion) pressed.value = motion.reducedMotion ? +interaction.current.pressed : withSpring(0, motion.fast);
+  }, [disabled, motion.reducedMotion, motion.fast, pressed, state]);
   const track = useAnimatedStyle(() => ({
     backgroundColor: disabled ? value ? `${palette.onSurface}1f` : `${palette.surfaceContainerHighest}1f`
       : interpolateColor(effect.value, [0, 1], [palette.surfaceContainerHighest, palette.primary]),

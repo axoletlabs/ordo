@@ -6,7 +6,8 @@ import React, { useEffect } from "react";
 import { View } from "react-native";
 import { Stack } from "expo-router";
 import { enableFreeze } from "react-native-screens";
-import Animated, { useAnimatedStyle, useSharedValue, withTiming, useReducedMotion } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { useReducedMotionPreference } from "../../src/hooks/use-reduced-motion-preference";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { useServerInfo, useValidateSession } from "../../src/hooks/queries";
 import { useAuthStore } from "../../src/store/auth";
@@ -30,7 +31,7 @@ export const unstable_settings = {
  */
 function MfaEnrollmentGate() {
   const { palette } = useTheme();
-  const reducedMotion = useReducedMotion();
+  const reducedMotion = useReducedMotionPreference();
   const opacity = useSharedValue(0);
 
   useEffect(() => {
@@ -94,7 +95,7 @@ export default function AppLayout() {
 function AuthenticatedAppLayout() {
   const { palette } = useTheme();
   const user = useAuthStore((s) => s.user);
-  const reducedMotion = useReducedMotion();
+  const reducedMotion = useReducedMotionPreference();
   const navigationAnimation = resolveStackNavigationAnimation(
     useSettingsStore((s) => s.navigationAnimation),
   );

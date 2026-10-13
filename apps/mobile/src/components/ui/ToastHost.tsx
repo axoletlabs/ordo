@@ -47,15 +47,19 @@ function ToastItem({ toast }: { toast: Toast }) {
   const animateOut = useCallback(() => {
     if (dismissed.current) return;
     dismissed.current = true;
-    enter.value = withTiming(0, { duration: motion.reducedMotion ? 0 : 200 }, () => runOnJS(dismiss)(toast.id));
+    enter.value = withTiming(0, { duration: motion.reducedMotion ? 0 : 200 }, (finished) => { if (finished) runOnJS(dismiss)(toast.id); });
   }, [dismiss, enter, toast.id, motion.reducedMotion]);
 
   // Enter, then schedule an auto-dismiss. Action toasts keep their explicit
   // close button but still time out — with a longer floor so the action can
   // be read and tapped. Web keeps the close button and gains the same timer.
   useEffect(() => {
+    if (dismissed.current) return;
     enter.value = motion.reducedMotion ? 1 : withSpring(1, materialMotion.effects.spatial);
-    if (hovered || focused) return;
+  }, [enter, motion.reducedMotion]);
+  useEffect(() => {
+    // Hover/focus may pause the timer, but must never restart an exit fade.
+    if (dismissed.current || hovered || focused) return;
     const duration = toast.action ? Math.max(toast.duration, ACTION_TOAST_FLOOR_MS) : toast.duration;
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -63,7 +67,7 @@ function ToastItem({ toast }: { toast: Toast }) {
     if (Platform.OS === "android") AccessibilityInfo.getRecommendedTimeoutMillis(duration).then(schedule, () => schedule(duration));
     else schedule(duration);
     return () => { active = false; if (timer) clearTimeout(timer); };
-  }, [toast.id, toast.duration, toast.action, enter, animateOut, motion.reducedMotion, hovered, focused]);
+  }, [toast.id, toast.duration, toast.action, animateOut, hovered, focused]);
 
   const pan = Gesture.Pan()
     .enabled(toast.swipeable)
@@ -75,7 +79,7 @@ function ToastItem({ toast }: { toast: Toast }) {
       if (past) {
         const dir = Math.sign(offsetX.value) || 1;
         if (motion.reducedMotion) runOnJS(animateOut)();
-        else offsetX.value = withSpring(dir * 500, materialMotion.effects.spatial, () => runOnJS(animateOut)());
+        else offsetX.value = withSpring(dir * 500, materialMotion.effects.spatial, (finished) => { if (finished) runOnJS(animateOut)(); });
       } else {
         offsetX.value = motion.reducedMotion ? 0 : withSpring(0, materialMotion.effects.spatial);
       }

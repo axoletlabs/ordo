@@ -1,6 +1,7 @@
 /** Material filled / outlined / search fields, preserving native editing and autofill. */
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import { StateLayer } from "./StateLayer";
 import {
   Platform,
   StyleSheet,
@@ -207,8 +208,9 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
           },
         ]}
       >
-        {hovered && !inactive ? <View testID="material-field-hover" pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: alphaTint(palette.onSurface, 0.08), borderRadius: search ? radius.full : filled ? 0 : radius.sm,
-          ...(filled ? { borderTopLeftRadius: radius.xs, borderTopRightRadius: radius.xs } : {}) }]} /> : null}
+        <StateLayer testID="material-field-hover" color={palette.onSurface} fraction={hovered && !inactive ? 0.08 : 0}
+          surfaceStyle={{ borderRadius: search ? radius.full : filled ? 0 : radius.sm,
+            ...(filled ? { borderTopLeftRadius: radius.xs, borderTopRightRadius: radius.xs } : {}) }} />
         {search && focused ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderColor, borderWidth: 2, borderRadius: radius.full }]} /> : null}
         {filled ? <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: borderWidth, backgroundColor: borderColor }} />
           : !search ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderColor, borderWidth, borderRadius: radius.sm }]} /> : null}

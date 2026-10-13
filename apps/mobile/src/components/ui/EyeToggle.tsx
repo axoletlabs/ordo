@@ -14,7 +14,7 @@ import Animated, {
 } from "react-native-reanimated";
 import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { useTheme } from "../../theme/ThemeProvider";
-import { useMaterialMotion } from "../../theme/material-motion";
+import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 import { haptics } from "../../lib/haptics";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
 
@@ -32,8 +32,8 @@ export function EyeToggle({ visible, onPress, size = 24 }: EyeToggleProps) {
   const v = useSharedValue(visible ? 1 : 0);
 
   useEffect(() => {
-    v.value = motion.reducedMotion ? +visible : withSpring(+visible, motion.fast);
-  }, [visible, v, motion.fast, motion.reducedMotion]);
+    v.value = motion.reducedMotion ? +visible : withSpring(+visible, materialMotion.effects.fast);
+  }, [visible, v, motion.reducedMotion]);
 
   const eyeStyle = useAnimatedStyle(() => ({
     opacity: interpolate(v.value, [0, 1], [1, 0], Extrapolation.CLAMP),

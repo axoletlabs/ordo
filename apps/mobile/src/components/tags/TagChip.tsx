@@ -23,9 +23,12 @@ export const TagChip = React.memo(function TagChip({ name, color, selected = fal
   const style = [styles.chip, { minHeight: compact ? 32 : 40, flexShrink: 1, backgroundColor: selected ? palette.secondaryContainer : palette.surfaceContainerHigh,
     borderWidth: 0, borderRadius: expressive ? radius.full : radius.sm },
     inline ? { minHeight: 24, paddingHorizontal: 0, backgroundColor: "transparent", maxWidth: 120 } : null];
+  // A full-radius token is a silhouette, not a 9,999dp spring target. Use
+  // the painted half-height so the entire morph is visible, not only its tail.
+  const restCorner = expressive ? (inline ? 12 : compact ? 16 : 20) : radius.sm;
    return onPress ? <PressableScale accessibilityRole={selectable ? "checkbox" : "button"} accessibilityLabel={accessibilityLabel ?? name}
      accessibilityState={selectable ? { checked: selected } : undefined} stateLayerColor={fg}
-    shape={expressive ? { rest: radius.full, pressed: radius.md } : undefined}
+     shape={{ rest: restCorner, pressed: expressive ? Math.min(restCorner, radius.md) : restCorner }}
      style={{ minHeight: 48, minWidth: 48, maxWidth: inline ? 120 : 200, alignSelf: "flex-start", justifyContent: "center", flexShrink: 1 }}
      visualStyle={style}
     onPress={(event) => { event.stopPropagation(); onPress(); }}>{contents}</PressableScale> : <View style={style}>{contents}</View>;

@@ -34,9 +34,9 @@ export type PressableScaleProps = Omit<PressableProps, "style"> & {
   animated?: boolean;
 };
 export function PressableScale(props: PressableScaleProps) {
-  const pressedCorners = props.shape ? cornerValues(props.shape.pressed) : [];
-  const morphs = props.shape && cornerValues(props.shape.rest).some((value, index) => value !== pressedCorners[index]);
-  return props.animated || morphs || (props.scaleTo != null && props.scaleTo !== 1) || props.dim
+  // Shape-aware controls keep one tree across Standard/Expressive changes.
+  // Switching implementations would remount focused/pressed controls mid-gesture.
+  return props.animated || props.shape || (props.scaleTo != null && props.scaleTo !== 1) || props.dim
     ? <AnimatedStatePressable {...props} /> : <StatePressable {...props} />;
 }
 
@@ -100,6 +100,8 @@ function AnimatedStatePressable({
   const backgroundColor = flat?.backgroundColor;
   const focusLayer = focused && (!focusOnlyVisible || Platform.OS !== "web" || focusVisible);
   const fraction = stateLayerOpacity({ disabled, pressed: down, focused: focusLayer, hovered });
+  const ink = useRef(fraction);
+  if (fraction > 0) ink.current = fraction;
   useEffect(() => {
     if (typeof backgroundColor !== "string") return;
     background.value = motion.reducedMotion ? backgroundColor : withSpring(backgroundColor, materialMotion.effects.fast);
@@ -112,8 +114,9 @@ function AnimatedStatePressable({
   const cornerKey = [...restShape, ...pressedShape].join(":");
 
   useEffect(() => {
-    progress.value = motion.reducedMotion ? (down ? 1 : 0) : withSpring(down ? 1 : 0, motion.fast);
-    layer.value = motion.reducedMotion ? (fraction > 0 ? 1 : 0) : withSpring(fraction > 0 ? 1 : 0, motion.fast);
+    const pressed = down && !disabled;
+    progress.value = motion.reducedMotion ? (pressed ? 1 : 0) : withSpring(pressed ? 1 : 0, motion.fast);
+    layer.value = motion.reducedMotion ? (fraction > 0 ? 1 : 0) : withSpring(fraction > 0 ? 1 : 0, materialMotion.effects.fast);
   }, [down, hovered, focused, focusVisible, focusOnlyVisible, disabled, progress, layer, motion.fast, motion.reducedMotion, fraction]);
   useEffect(() => {
     const values = cornerKey.split(":").map(Number);
@@ -132,7 +135,7 @@ function AnimatedStatePressable({
   const contents = <>
     {typeof children === "function" ? children({ pressed: down }) : children}
     <Animated.View testID="material-state-layer" pointerEvents="none" accessible={false} style={[{ position: "absolute", top: stateLayerInset, bottom: stateLayerInset, left: stateLayerInset, right: stateLayerInset }, stateLayerCorners(flat), {
-      overflow: "hidden", backgroundColor: alphaTint(stateLayerColor ?? palette.onSurface, fraction),
+      overflow: "hidden", backgroundColor: alphaTint(stateLayerColor ?? palette.onSurface, ink.current),
     }, cornerStyle, layerStyle]} />
   </>;
   return (
@@ -163,7 +166,8 @@ function AnimatedStatePressable({
         setFocusVisible(Platform.OS === "web" && !!(event.currentTarget as unknown as HTMLElement)?.matches?.(":focus-visible"));
         onFocus?.(event);
       }}
-      onBlur={(event) => { setFocused(false); setFocusVisible(false); setDown(false); groupInteraction?.(false); onBlur?.(event); }}
+      onBlur={(event) => { if (releaseFrame.current != null) cancelAnimationFrame(releaseFrame.current); releaseFrame.current = null;
+        setFocused(false); setFocusVisible(false); setDown(false); groupInteraction?.(false); onBlur?.(event); }}
        style={[style, { position: targetStyle?.position ?? "relative" }, Platform.OS === "web" && focusVisible && !disabled ? { outlineColor: palette.primary, outlineWidth: 3, outlineOffset: 2, outlineStyle: "solid" } : null, !visualStyle ? backgroundStyle : null, !visualStyle ? cornerStyle : null, feedback]}
     >
       {visualStyle ? <Animated.View pointerEvents="box-none" style={[visualStyle, backgroundStyle, cornerStyle]}>{contents}</Animated.View> : contents}
