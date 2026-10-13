@@ -169,7 +169,7 @@ function ReminderCustomPanelContent({
                   setAt((current) => applyLocalDate(current, cell.year, cell.month, cell.day!));
                 }}
                 stateLayerColor={cell.selected ? palette.onPrimary : palette.primary}
-                style={[styles.dayCell, { borderRadius: radius.full }]}
+                style={styles.dayCell}
               >
                 <View
                   style={[
@@ -290,7 +290,7 @@ function MonthChevrons({
         haptics.selection();
         onPress();
       }}
-      style={[styles.monthHit, { borderRadius: radius.full, opacity: disabled ? 0.38 : 1 }]}
+      style={[styles.monthHit, { opacity: disabled ? 0.38 : 1 }]}
     >
       <Ionicons name={icon} size={24} color={palette.onSurface} />
     </PressableScale>
@@ -316,6 +316,7 @@ const styles = StyleSheet.create({
   monthHit: {
     width: 48,
     height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -327,16 +328,20 @@ const styles = StyleSheet.create({
   },
   cellLabel: { includeFontPadding: false },
   days: { flexDirection: "row", flexWrap: "wrap" },
+  // Half-size radii instead of a 9999px "full" circle: oversized radius clips
+  // can square off under Android's compositor once the press layer animates
+  // above them, which read as a square selected date beside the round ring.
   dayCell: {
     width: 48,
     height: 48,
+    borderRadius: 24,
     alignItems: "center",
     justifyContent: "center",
   },
   dayHit: {
     width: 40,
     height: 40,
-    borderRadius: radius.full,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
   },
