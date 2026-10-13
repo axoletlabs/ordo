@@ -2,9 +2,8 @@ name: Set up pnpm and Node.js
 description: >
   The shared toolchain bootstrap for CI jobs: pnpm from package.json's
   packageManager field, then Node.js with an optional pnpm store cache.
-  Jobs that never run `pnpm install` (audit-only) must pass
-  pnpm-cache: false — actions/setup-node would otherwise fail its post
-  step saving a store path that was never created.
+  Cached jobs initialize the store even if installation is skipped.
+  Jobs that never need dependencies (audit-only) should pass pnpm-cache: false.
 inputs:
   node-version:
     description: Node.js version to install.
@@ -27,6 +26,15 @@ runs:
       with:
         node-version: ${{ inputs.node-version }}
         cache: pnpm
+
+    # Fingerprint detection can exit before installation on a new release
+    # branch, without an APK baseline, or when testing the baseline itself.
+    # setup-node still saves its cache in post cleanup; an absent store makes
+    # that cleanup fail the whole job. Keep these successful early exits green.
+    - name: Ensure pnpm store exists
+      if: inputs.pnpm-cache == 'true'
+      shell: bash
+      run: mkdir -p -- "$(pnpm store path)"
 
     # Audit-only jobs never create a pnpm store. Omit the explicit cache and
     # disable setup-node's automatic cache; this input belongs to setup-node,
