@@ -58,6 +58,8 @@ export interface InputProps extends Omit<TextInputProps, "style"> {
   disabled?: boolean;
   readOnly?: boolean;
   required?: boolean;
+  /** Hide repeated visual markers when every field in the form is required. Semantics remain required. */
+  showRequiredIndicator?: boolean;
   showCounter?: boolean;
   reserveSupportingSpace?: boolean;
 }
@@ -85,6 +87,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   disabled = false,
   readOnly = false,
   required = false,
+  showRequiredIndicator = true,
   showCounter = false,
   reserveSupportingSpace = !!label,
   ...rest
@@ -97,8 +100,9 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   const [hovered, setHovered] = useState(false);
   const inactive = disabled || (!editable && !readOnly);
   const canEdit = !inactive && !readOnly;
-  const displayLabel = label && required ? `${label} *` : label;
-  const support = error ?? (helper ? required ? `${helper} * Required` : helper : required ? "* Required" : undefined);
+  const indicateRequired = required && showRequiredIndicator;
+  const displayLabel = label && indicateRequired ? `${label} *` : label;
+  const support = error ?? (helper ? indicateRequired ? `${helper} * Required` : helper : indicateRequired ? "* Required" : undefined);
   const foreground = inactive ? alphaTint(palette.onSurface, 0.38) : palette.onSurface;
   const [hasText, setHasText] = useState(!!value);
   const [overlayWidth, setOverlayWidth] = useState(0);

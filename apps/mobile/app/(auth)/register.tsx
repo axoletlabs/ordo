@@ -7,7 +7,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { AuthLink } from "../../src/components/auth/AuthLink";
 import { FormError } from "../../src/components/ui/FormError";
 import { AuthShell } from "../../src/components/auth/AuthShell";
-import { Input } from "../../src/components/ui/Input";
+import { AuthInput } from "../../src/components/auth/AuthInput";
 import { Button } from "../../src/components/ui/Button";
 import { CheckLine } from "../../src/components/ui/CheckLine";
 import { Text } from "../../src/components/ui/Text";
@@ -133,10 +133,11 @@ export default function RegisterScreen() {
 
   return (
       <AuthShell
-        title="Create your account"
+        title="Create account"
+        subtitle="A home for your saved links."
         footer={
           <View style={styles.row}>
-            <Text variant="footnote" color="secondary">Already have an account? </Text>
+            <Text variant="bodyMedium" color="secondary">Already have an account?</Text>
             <AuthLink href="/(auth)/login" label="Sign in" replace />
           </View>
         }
@@ -155,9 +156,9 @@ export default function RegisterScreen() {
         </View>
       ) : (
         <>
-          <Input
+          <AuthInput
             label="Display name"
-            required maxLength={64} showCounter
+            maxLength={64}
             disabled={register.isPending}
             value={displayName}
             onChangeText={setDisplayName}
@@ -172,10 +173,10 @@ export default function RegisterScreen() {
             onSubmitEditing={() => emailRef.current?.focus()}
           />
           <View style={{ height: spacing[16] }} />
-          <Input
+          <AuthInput
             ref={emailRef}
             label="Email"
-            required maxLength={254}
+            maxLength={254}
             disabled={register.isPending}
             value={email}
             onChangeText={setEmail}
@@ -191,9 +192,9 @@ export default function RegisterScreen() {
             onSubmitEditing={() => passwordRef.current?.focus()}
           />
           <View style={{ height: spacing[16] }} />
-          <Input
+          <AuthInput
             label="Password"
-            required maxLength={256}
+            maxLength={256}
             disabled={register.isPending}
             ref={passwordRef}
             value={password}
@@ -211,9 +212,9 @@ export default function RegisterScreen() {
             rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
           />
           <View style={{ height: spacing[16] }} />
-          <Input
+          <AuthInput
             label="Confirm password"
-            required maxLength={256}
+            maxLength={256}
             disabled={register.isPending}
             ref={confirmRef}
             value={confirm}
@@ -295,7 +296,7 @@ function LegalLink({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center" },
+  row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center", columnGap: spacing[4] },
   link: { textDecorationLine: "underline", includeFontPadding: false },
   disabledCard: { padding: spacing[16], borderRadius: radius.lg, borderWidth: 1 },
 });

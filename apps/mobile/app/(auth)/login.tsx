@@ -7,7 +7,7 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { AuthLink } from "../../src/components/auth/AuthLink";
 import { FormError } from "../../src/components/ui/FormError";
 import { AuthShell } from "../../src/components/auth/AuthShell";
-import { Input } from "../../src/components/ui/Input";
+import { AuthInput } from "../../src/components/auth/AuthInput";
 import { Button } from "../../src/components/ui/Button";
 import { Text } from "../../src/components/ui/Text";
 import { PressableScale } from "../../src/components/ui/PressableScale";
@@ -23,7 +23,7 @@ import { ApiClientError } from "../../src/lib/api/client";
 import { CLOUD_SERVER_URL, hostingModeOf } from "../../src/lib/hosting";
 import { hostOf } from "../../src/lib/instance-name";
 import { haptics } from "../../src/lib/haptics";
-import { spacing } from "../../src/theme/tokens";
+import { layout, radius, spacing } from "../../src/theme/tokens";
 import { ErrorCode, LoginSchema, isMfaRequiredResponse } from "@ordo/shared";
 import { lockedSecretDisplay, passwordAutofillProps } from "../../src/lib/password-autofill";
 
@@ -112,59 +112,17 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
     <>
       <AuthShell
         title="Sign in"
+        subtitle="Continue to your library."
         footer={
           <View style={styles.row}>
-            <Text variant="footnote" color="secondary">No account yet? </Text>
+            <Text variant="bodyMedium" color="secondary">New to ordo?</Text>
             <AuthLink href="/(auth)/register" label="Create account" replace />
           </View>
         }
-      >
-        <Input
-          label="Email"
-          required maxLength={254}
-          disabled={login.isPending}
-          value={identifier}
-          onChangeText={setIdentifier}
-          placeholder="you@example.com"
-          keyboardType="email-address"
-          textContentType="emailAddress"
-          autoComplete="email"
-          autoCapitalize="none"
-          importantForAutofill="yes"
-          error={errorField === "identifier" ? formError : undefined}
-          returnKeyType="next"
-          submitBehavior="submit"
-          onSubmitEditing={() => passwordRef.current?.focus()}
-        />
-        <View style={{ height: spacing[16] }} />
-        <Input
-          ref={passwordRef}
-          key={screenFocused ? "password" : "password-locked"}
-          label="Password"
-          required
-          disabled={login.isPending}
-          value={passwordField.value}
-          onChangeText={setPassword}
-          placeholder="••••••••"
-          secureTextEntry={passwordField.secureTextEntry}
-          {...passwordAutofillProps("current-password", !screenFocused)}
-          rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
-          error={errorField === "password" ? formError : undefined}
-          returnKeyType="go"
-          onSubmitEditing={() => void submit()}
-        />
-        <View style={styles.forgotRow}>
-          <AuthLink href="/(auth)/forgot-password" label="Forgot password?" />
-        </View>
-
-        <View style={{ height: spacing[24] }} />
-        <FormError message={errorField ? undefined : formError} />
-        <Button label="Sign in" block size="md" onPress={submit} loading={login.isPending} />
-
-        {selfHosted ? (
+        secondaryFooter={selfHosted ? (
           <View style={styles.hosting}>
-            <Text variant="footnote" color="tertiary" align="center">
-              Using <Text variant="monoSmall" color="tertiary">{hostOf(serverUrl)}</Text>
+            <Text variant="bodySmall" color="secondary" align="center">
+              Connected to {hostOf(serverUrl)}
             </Text>
             <View style={styles.hostingActions}>
               <PressableScale
@@ -199,13 +157,52 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
               haptics.light();
               setShowSelfHost(true);
             }}
-            style={styles.hosting}
+            style={styles.hostingAction}
           >
-            <Text variant="footnote" color="tertiary" align="center">
-              Use your own server
-            </Text>
+            <Text variant="labelLarge" color="secondary" align="center">Use your own server</Text>
           </PressableScale>
         )}
+      >
+        <AuthInput
+          label="Email"
+          maxLength={254}
+          disabled={login.isPending}
+          value={identifier}
+          onChangeText={setIdentifier}
+          placeholder="you@example.com"
+          keyboardType="email-address"
+          textContentType="emailAddress"
+          autoComplete="email"
+          autoCapitalize="none"
+          importantForAutofill="yes"
+          error={errorField === "identifier" ? formError : undefined}
+          returnKeyType="next"
+          submitBehavior="submit"
+          onSubmitEditing={() => passwordRef.current?.focus()}
+        />
+        <View style={{ height: spacing[16] }} />
+        <AuthInput
+          ref={passwordRef}
+          key={screenFocused ? "password" : "password-locked"}
+          label="Password"
+          disabled={login.isPending}
+          value={passwordField.value}
+          onChangeText={setPassword}
+          placeholder="••••••••"
+          secureTextEntry={passwordField.secureTextEntry}
+          {...passwordAutofillProps("current-password", !screenFocused)}
+          rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
+          error={errorField === "password" ? formError : undefined}
+          returnKeyType="go"
+          onSubmitEditing={() => void submit()}
+        />
+        <View style={styles.forgotRow}>
+          <AuthLink href="/(auth)/forgot-password" label="Forgot password?" />
+        </View>
+
+        <View style={{ height: spacing[16] }} />
+        <FormError message={errorField ? undefined : formError} />
+        <Button label="Sign in" block size="md" onPress={submit} loading={login.isPending} />
       </AuthShell>
 
       <SelfHostFlow visible={showSelfHost} onDismiss={() => setShowSelfHost(false)} />
@@ -237,14 +234,14 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center" },
-  hosting: { marginTop: spacing[16], gap: spacing[8], minHeight: 48, justifyContent: "center", borderRadius: 24 },
+  row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", justifyContent: "center", columnGap: spacing[4] },
+  hosting: { gap: spacing[8], justifyContent: "center" },
   hostingActions: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     flexWrap: "wrap",
   },
-  hostingAction: { minHeight: 48, paddingHorizontal: spacing[8], justifyContent: "center", borderRadius: 24 },
-  forgotRow: { marginTop: spacing[8], alignItems: "flex-end" },
+  hostingAction: { minHeight: layout.touchTargetMin, paddingHorizontal: spacing[8], justifyContent: "center", borderRadius: radius.full },
+  forgotRow: { alignItems: "flex-end" },
 });
