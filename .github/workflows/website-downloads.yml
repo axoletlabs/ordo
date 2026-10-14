@@ -1,0 +1,43 @@
+name: Website downloads
+
+# When a release's CI run succeeds, its APKs are attached, so the website
+# (axoletlabs/ordo-website) can point its download buttons at them. The
+# website's own workflow reads the releases and redeploys; this only tells
+# it to look now instead of at its next scheduled check.
+#
+# workflow_run always runs this file from main, so release branches don't
+# need a copy of it.
+#
+# WEBSITE_DISPATCH_TOKEN: a fine-grained token limited to
+# axoletlabs/ordo-website with Contents read and write. Without it the job
+# skips and the website catches up on its own schedule.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions: {}
+
+jobs:
+  notify:
+    if: >-
+      github.repository == 'axoletlabs/ordo' &&
+      github.event.workflow_run.event == 'release' &&
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Ask the website to update its downloads
+        env:
+          GH_TOKEN: ${{ secrets.WEBSITE_DISPATCH_TOKEN }}
+          TAG: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::notice::WEBSITE_DISPATCH_TOKEN is not set; the website will pick up $TAG on its next scheduled check."
+            exit 0
+          fi
+          gh api repos/axoletlabs/ordo-website/dispatches \
+            -f event_type=ordo-release \
+            -f "client_payload[tag]=$TAG"
+          echo "Asked the website to update its downloads for $TAG."
