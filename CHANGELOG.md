@@ -4,6 +4,7 @@
 
 - Sync the release branch with `main`, preserving the complete commit history.
 - Rename launcher labels to `ordo (preview)` and `ordo (dev)`; package IDs and update channels are unchanged.
+- Move bookmarks without the confirmation animation or artificial closing delay.
 - Use release-derived Android build numbers for Stable/Preview; only Development uses the CI run number. Preview 2 uses `versionCode=2`.
 - Fix CI cache cleanup when native-compatibility detection skips dependency installation, with regression tests for all three early-exit paths.
 
