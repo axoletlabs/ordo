@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0 Preview 2
+
+- Sync the release branch with `main`, preserving the complete commit history.
+- Rename launcher labels to `ordo (preview)` and `ordo (dev)`; package IDs and update channels are unchanged.
+- Use release-derived Android build numbers for Stable/Preview; only Development uses the CI run number. Preview 2 uses `versionCode=2`.
+- Fix CI cache cleanup when native-compatibility detection skips dependency installation, with regression tests for all three early-exit paths.
+
+**Install:** The launcher-label change requires a new APK, not OTA. Preview 1 used Android build number 875, so Preview 2 cannot replace it in-place: uninstall Preview 1 first if present (this clears local settings/cache, not your server library). Later previews increment from this new numbering baseline.
+
+[Full commit history](https://github.com/axoletlabs/ordo/compare/v0.2.0-preview.1...v0.2.0-preview.2)
+
 ## 0.2.0 Preview 1
 
 The first preview of Ordo's Material 3 redesign, with a faster library, an immersive reader, and simpler self-hosting.

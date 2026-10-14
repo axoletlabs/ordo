@@ -154,7 +154,7 @@ test("routing matrix covers pushes, branches, forced builds and release events",
   }
 });
 
-test("CI version codes are the raw run number; retries keep one code and splits share it", () => {
+test("Development version codes are the raw run number; retries keep one code and splits share it", () => {
   const codes = [];
   for (const [run, attempt] of [[400, 1], [400, 2], [401, 1]]) {
     const result = runStep("Gather trigger info", {
@@ -171,6 +171,24 @@ test("CI version codes are the raw run number; retries keep one code and splits 
   // CI passes the raw run number; every APK of a build shares it, so any later
   // build outranks every earlier one because the run counter only grows.
   assert.deepEqual(codes, [400, 400, 401]);
+});
+
+test("Release builds use version-derived codes instead of the CI run number", () => {
+  const version = require("../apps/mobile/app.config.js").version;
+  const classified = policy.classifyReleaseVersion(version);
+  assert.ok(classified);
+  for (const event of ["push", "release"]) {
+    for (const run of [900, 901]) {
+      const result = runStep("Gather trigger info", {
+        expressions: { "github.run_number": String(run), "github.event_name": event },
+        env: { GITHUB_REF_NAME: event === "release" ? `v${version}` : policy.releaseLineBranch(version) },
+      });
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(result.output.version, version);
+      assert.equal(result.output.app_variant, classified.channel ?? "stable");
+      assert.equal(Number(result.output.version_code), classified.number ?? 1);
+    }
+  }
 });
 
 test("manual dispatch on a release ref builds Development and main cannot OTA", () => {
