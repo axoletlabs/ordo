@@ -26,6 +26,11 @@ function stubFor(moduleName, originModulePath) {
   if (moduleName === "react-native-svg/css" && /[\\/]react-native-qrcode-svg[\\/]/.test(originModulePath)) {
     return "svg-css.js";
   }
+  // expo-router's Android toolbar code imports Jetpack Compose views and
+  // requires the ExpoUI native module at load; ordo renders no toolbars.
+  if (moduleName === "@expo/ui" || moduleName.startsWith("@expo/ui/")) {
+    return "expo-ui.js";
+  }
   // expo-router always loads its native-tabs icon helper, which registers a
   // 966 KB Material Symbols font through expo-symbols. ordo has no native tabs.
   if (moduleName.startsWith("@expo-google-fonts/material-symbols")) {

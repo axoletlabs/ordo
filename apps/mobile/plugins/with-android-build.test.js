@@ -25,6 +25,9 @@ const {
   SHARE_RECEIVER_DEFAULT_ALIAS,
   SHARE_RECEIVER_SAVE_ALIAS,
   applyCcacheLaunchers,
+  applyProguardRules,
+  PROGUARD_RULES_MARKER,
+  RESOURCE_KEEP_XML,
   applyCmakePath,
   applyReleaseSigning,
   applySecurityCrypto,
@@ -426,3 +429,18 @@ test("patches Java MainApplication for the session module", () => {
   const patched = patchMainApplicationForShareSession(JAVA_APPLICATION, 'java');
   assert.match(patched, /packages\.add\(new OrdoShareSessionPackage\(\)\);/);
 });
+
+test("release builds keep ordo's package and the worklets runtime under R8", () => {
+  const template = "# template\n-keep class com.swmansion.reanimated.** { *; }\n";
+  const rules = applyProguardRules(template, "com.axolet.ordo");
+  assert.ok(rules.startsWith(template.trimEnd()));
+  assert.match(rules, /-keep class com\.axolet\.ordo\.\*\* \{ \*; \}/);
+  assert.match(rules, /-keep class com\.swmansion\.worklets\.\*\* \{ \*; \}/);
+  assert.equal(applyProguardRules(rules, "com.axolet.ordo"), rules);
+  assert.equal(rules.split(PROGUARD_RULES_MARKER).length, 2);
+});
+
+test("resource shrinking keeps drawables and raw files React Native loads by name", () => {
+  assert.match(RESOURCE_KEEP_XML, /tools:keep="@raw\/\*,@drawable\/\*"/);
+});
+

@@ -94,5 +94,17 @@
     "babel-preset-expo": "~57.0.11",
     "rimraf": "^6.0.1",
     "typescript": "^5.7.3"
+  },
+  "expo": {
+    "autolinking": {
+      "android": {
+        "exclude": [
+          "@expo/ui",
+          "@expo/dom-webview",
+          "@expo/log-box",
+          "expo-keep-awake"
+        ]
+      }
+    }
   }
 }
