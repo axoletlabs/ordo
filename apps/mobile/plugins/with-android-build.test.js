@@ -26,6 +26,7 @@ const {
   SHARE_RECEIVER_SAVE_ALIAS,
   applyCcacheLaunchers,
   applyProguardRules,
+  BOUNCY_CASTLE_UNUSED_RESOURCES,
   PROGUARD_RULES_MARKER,
   RESOURCE_KEEP_XML,
   applyCmakePath,
@@ -442,5 +443,13 @@ test("release builds keep ordo's package and the worklets runtime under R8", () 
 
 test("resource shrinking keeps drawables and raw files React Native loads by name", () => {
   assert.match(RESOURCE_KEEP_XML, /tools:keep="@raw\/\*,@drawable\/\*"/);
+});
+
+test("unused BouncyCastle data files are excluded without touching its classes", () => {
+  assert.ok(BOUNCY_CASTLE_UNUSED_RESOURCES.length > 0);
+  for (const pattern of BOUNCY_CASTLE_UNUSED_RESOURCES) {
+    assert.match(pattern, /^org\/bouncycastle\//);
+    assert.doesNotMatch(pattern, /\.class|^org\/bouncycastle\/\*\*$/);
+  }
 });
 

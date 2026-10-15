@@ -44,6 +44,11 @@ const SCROLLBAR_TRACK_XML = `<?xml version="1.0" encoding="utf-8"?>
 
 const LIGHT_SYSTEM_BARS_BOOL = 'ordo_light_system_bars';
 
+const BOUNCY_CASTLE_UNUSED_RESOURCES = [
+  'org/bouncycastle/pqc/**',
+  'org/bouncycastle/x509/CertPathReviewerMessages*.properties',
+];
+
 const PROGUARD_RULES_MARKER = '# ordo: release shrinking (with-android-build.js)';
 
 /** Keep rules R8 cannot infer for ordo's own code and Reanimated 4's runtime. */
@@ -1102,6 +1107,11 @@ const withAndroidBuild = (config) => {
     // to download (GitHub and the in-app updater). Android inflates them once
     // at install (well under a second); launch and runtime are unaffected.
     set('expo.useLegacyPackaging', 'true');
+    // Java resources R8 cannot strip. With R8 on, no BouncyCastle class
+    // survives (expo-updates code signing is unused), yet its post-quantum
+    // Picnic tables and certificate-review messages still shipped (~1.3 MB).
+    // Neither is needed even if update signing is enabled later.
+    set('android.packagingOptions.excludes', BOUNCY_CASTLE_UNUSED_RESOURCES.join(','));
 
     return c;
   });
@@ -1153,6 +1163,7 @@ const withAndroidBuild = (config) => {
 module.exports = withAndroidBuild;
 module.exports.APP_JNI_CMAKE = APP_JNI_CMAKE;
 module.exports.PROGUARD_RULES_MARKER = PROGUARD_RULES_MARKER;
+module.exports.BOUNCY_CASTLE_UNUSED_RESOURCES = BOUNCY_CASTLE_UNUSED_RESOURCES;
 module.exports.RESOURCE_KEEP_XML = RESOURCE_KEEP_XML;
 module.exports.applyProguardRules = applyProguardRules;
 module.exports.ABI_VERSION_BLOCK_MARKER = ABI_VERSION_BLOCK_MARKER;
