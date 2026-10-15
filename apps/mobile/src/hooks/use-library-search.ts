@@ -1,6 +1,7 @@
 /** Immediate cached matches, followed by paginated server/article-body matches. */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { AppState } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { prepareBookmarkSearch, type BookmarkDto, type FolderDto } from "@ordo/shared";
 import { useInfiniteQuery } from "@tanstack/react-query";
@@ -28,6 +29,17 @@ const CATALOGUE_WARM_DELAY_MS = 2_000;
 export function useLibraryCatalogue(searching: boolean) {
   const accessRevision = useFolderTokenStore((state) => state.accessRevision);
   const [armed, setArmed] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [foreground, setForeground] = useState(AppState.currentState !== "background" && AppState.currentState !== "inactive");
+  useFocusEffect(useCallback(() => {
+    setFocused(true);
+    return () => setFocused(false);
+  }, []));
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", state => setForeground(state === "active"));
+    return () => subscription.remove();
+  }, []);
+  const enabled = focused && foreground && (armed || searching);
   useEffect(() => {
     const timer = setTimeout(() => setArmed(true), CATALOGUE_WARM_DELAY_MS);
     return () => clearTimeout(timer);
@@ -40,16 +52,18 @@ export function useLibraryCatalogue(searching: boolean) {
       const next = nextPageCursor(page);
       return next && !pageParams.includes(next) ? next : undefined;
     }, staleTime: 60_000,
-    enabled: armed || searching,
+    enabled,
   });
   useEffect(() => {
     for (const bookmark of catalogue.data?.pages.at(-1)?.items ?? []) prepareBookmarkSearch(bookmark);
   }, [catalogue.data]);
   useEffect(() => {
-    if (!catalogue.hasNextPage || catalogue.isFetching || catalogue.isError) return;
+    // A 10k-bookmark catalogue takes 100 pages. Do not keep parsing/indexing
+    // them behind the reader, a folder transition, or while backgrounded.
+    if (!enabled || !catalogue.hasNextPage || catalogue.isFetching || catalogue.isError) return;
     const timer = setTimeout(() => void catalogue.fetchNextPage(), 250);
     return () => clearTimeout(timer);
-  }, [catalogue.hasNextPage, catalogue.isFetching, catalogue.isError, catalogue.data, catalogue.fetchNextPage]);
+  }, [enabled, catalogue.hasNextPage, catalogue.isFetching, catalogue.isError, catalogue.data, catalogue.fetchNextPage]);
 }
 
 export function useLibrarySearch(localItems: readonly BookmarkDto[], folders: readonly FolderDto[]) {

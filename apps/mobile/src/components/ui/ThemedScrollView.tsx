@@ -11,13 +11,15 @@ import {
   StyleSheet,
   View,
   type FlatListProps,
+  type NativeScrollEvent,
   type ScrollViewProps,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
 import { type FlashListProps } from "@shopify/flash-list";
 import { GestureDetector } from "react-native-gesture-handler";
-import Animated, { LinearTransition } from "react-native-reanimated";
+import Animated, { LinearTransition, runOnJS, useAnimatedScrollHandler, useComposedEventHandler,
+  type ScrollHandlerProcessed } from "react-native-reanimated";
 import { useMaterialMotion } from "../../theme/material-motion";
 import {
   chainHandlers,
@@ -33,6 +35,8 @@ import { LIST_END_REACHED_THRESHOLD } from "../../lib/list-pagination";
 
 export type ThemedScrollViewProps = ScrollViewProps & {
   scrollBarInsets?: ScrollBarInsets;
+  /** UI-thread scroll animation. JS bookkeeping is sampled, not frame-critical. */
+  animatedScrollHandler?: ScrollHandlerProcessed<Record<string, unknown>>;
 };
 
 export type ThemedFlashListProps<T> = FlashListProps<T> & {
@@ -70,11 +74,31 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
       showsVerticalScrollIndicator,
       indicatorStyle: _indicatorStyle,
       scrollBarInsets,
+      animatedScrollHandler,
       ...props
     },
     ref,
   ) {
     const bar = useVerticalScrollBar(scrollBarInsets);
+    const reportScroll = React.useCallback((event: NativeScrollEvent) => {
+      const synthetic = { nativeEvent: event } as Parameters<NonNullable<ScrollViewProps["onScroll"]>>[0];
+      bar.onScrollActivity(synthetic);
+      onScroll?.(synthetic);
+    }, [bar.onScrollActivity, onScroll]);
+    const updateScroll = bar.updateScroll;
+    const bridge = useAnimatedScrollHandler({
+      onScroll: (event, context: { lastReport?: number }) => {
+        updateScroll(event);
+        const now = Date.now();
+        if (context.lastReport != null && now - context.lastReport < 80) return;
+        context.lastReport = now;
+        runOnJS(reportScroll)(event);
+      },
+      onEndDrag: (event) => { runOnJS(reportScroll)(event); },
+      onMomentumEnd: (event) => { runOnJS(reportScroll)(event); },
+    });
+    const composed = useComposedEventHandler([animatedScrollHandler ?? null, bridge]);
+    const VerticalScrollView = animatedScrollHandler ? Animated.ScrollView : ScrollView;
     const { wrapper, inner } = splitScrollLayoutStyle(style);
     if (horizontal) {
       return (
@@ -98,7 +122,7 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
         style={[styles.host, fill ? styles.fill : null, wrapper]}
         onLayout={chainHandlers(bar.onLayout, onLayout)}
       >
-        <ScrollView
+        <VerticalScrollView
           ref={ref}
           {...props}
           {...nativeScrollBarProps}
@@ -112,7 +136,7 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
             inner,
             webNoContainingTransform,
           ]}
-          onScroll={chainHandlers(bar.onScroll, onScroll)}
+          onScroll={animatedScrollHandler ? composed : chainHandlers(bar.onScroll, onScroll)}
           onContentSizeChange={chainHandlers(bar.onContentSizeChange, onContentSizeChange)}
           scrollEventThrottle={scrollEventThrottle ?? 16}
         />

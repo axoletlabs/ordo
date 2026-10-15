@@ -438,7 +438,7 @@ async function checkReaderArticle(page, expectedDark, expectedSize = 17) {
   const paragraph = page.getByText("Plain reader paragraph for contrast.", { exact: true }).first();
   await paragraph.waitFor();
   for (const text of [paragraph, page.getByText("Source styling cannot override the reader.", { exact: true }).first(),
-    page.getByRole("link", { name: "library", exact: true }), page.getByText(/^const library =/).first()]) {
+    page.getByRole("link", { name: "library", exact: true }).last(), page.getByText(/^const library =/).first()]) {
     const metrics = await readerTextMetrics(text);
     const a = luminance(metrics.ink), b = luminance(metrics.background);
     assert.ok((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= 4.45, JSON.stringify(metrics));
@@ -501,8 +501,8 @@ async function readerMatrix() {
     await button(page, "Reader settings").click(); await page.getByRole("switch", { name: "Reader AMOLED black", exact: true }).click();
     for (const readerTheme of ["Light", "Dark"]) {
     await group().getByRole("radio", { name: readerTheme, exact: true }).click();
-    for (const font of ["Sans", "Serif", "Mono"]) for (const [size, px] of [["Small", 15], ["Medium", 17], ["Large", 19], ["Extra large", 21]]) {
-      await page.getByRole("radiogroup", { name: "Font", exact: true }).getByRole("radio", { name: font, exact: true }).click();
+    for (const font of ["Libron", "Legible Sans", "Garamond", "Bitter", "Jost"]) for (const [size, px] of [["Small", 15], ["Medium", 17], ["Large", 19], ["Extra large", 21]]) {
+      await page.getByRole("radiogroup", { name: "Typeface", exact: true }).getByRole("radio", { name: new RegExp(`^${font},`) }).click();
       await page.getByRole("radiogroup", { name: "Text size", exact: true }).getByRole("radio", { name: size, exact: true }).click();
       await settle(page); await page.keyboard.press("Escape"); await settle(page);
       await checkReaderArticle(page, readerTheme === "Dark", px);
@@ -522,6 +522,7 @@ async function readerMatrix() {
     await checkReaderArticle(page, opposite === "dark", 21);
     await button(page, "More article actions").click(); await page.getByRole("menuitem", { name: "Table of contents", exact: true }).click();
     await capture(page, `${theme}-${expressive}-reader-contents`); await button(page, "Go to Keep exploring").click(); await settle(page);
+    await page.getByText(bookmark.title, { exact: true }).last().scrollIntoViewIfNeeded(); await settle(page);
     await button(page, "More article actions").click(); await page.getByRole("menuitem", { name: "Highlights", exact: true }).click();
     const remove = button(page, "Remove highlight"); const target = await remove.boundingBox(); assert.ok(target.width >= 48 && target.height >= 48);
     await capture(page, `${theme}-${expressive}-reader-highlights`); await remove.click();

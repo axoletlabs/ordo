@@ -243,8 +243,10 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
       webRef.current?.reload();
     }, []);
 
-    return (
-      <View testID="bookmark-browser" collapsable={false} style={[styles.wrap, { backgroundColor: chromeBackground }]}>
+    // Loading progress and the refresh HUD can update dozens of times per
+    // second. Reuse the page element rather than reconciling the native WebView
+    // (and all its freshly allocated style/config props) on every HUD frame.
+    const page = useMemo(() => (
         <WebView
           ref={webRef}
           key={`${url}:${forceWebsiteDark ? "dark" : "auto"}`}
@@ -294,6 +296,12 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           injectedJavaScriptBeforeContentLoaded={injected}
           injectedJavaScript={injected}
         />
+    ), [url, forceWebsiteDark, source, chromeBackground, beginLoad, finishLoad, handleProgress,
+      handleError, handleNav, handleShouldStart, handleOpenWindow, handleMessage, recoverProcess, injected]);
+
+    return (
+      <View testID="bookmark-browser" collapsable={false} style={[styles.wrap, { backgroundColor: chromeBackground }]}>
+        {page}
         {coverBlank ? (
           <View
             pointerEvents="none"

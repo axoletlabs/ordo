@@ -87,7 +87,7 @@ import {
 import * as bookmarkHooks from "../../hooks/use-bookmarks";
 import { useFolders, useServerInfo } from "../../hooks/queries";
 import { useReaderPreferences } from "../../hooks/use-reader-preferences";
-import { useCollapsingFab } from "../../hooks/use-collapsing-fab";
+import { useReaderChrome } from "../../hooks/use-reader-chrome";
 import { useSettingsStore } from "../../store/settings";
 import { domainFromUrl, formatDate } from "../../lib/format";
 import { errorMessage, folderProtectedId, isFolderProtected } from "../../lib/error-message";
@@ -311,8 +311,9 @@ function ReaderPaneInner({
   // Chrome (header + progress rule) overlays the article and slides away on
   // real user drags only; programmatic scrolls (position restore, TOC jumps)
   // never yank it around. The article scrolls underneath the overlay.
-  const userScrollingRef = useRef(false);
-  const collapsingFab = useCollapsingFab(48);
+  const collapsingFab = useReaderChrome(!!selectionMenu);
+  const expandChromeRef = useRef(collapsingFab.expand);
+  expandChromeRef.current = collapsingFab.expand;
   const chromeHeightRef = useRef(0);
   const chromeHeightSV = useSharedValue(0);
   const [chromeHeight, setChromeHeight] = useState(0);
@@ -683,18 +684,31 @@ function ReaderPaneInner({
   const contentHeightRef = useRef(0);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const headingRefs = useRef(new Map<string, View>());
+  const pendingHeading = useRef<string | null>(null);
+  const selectHeadingRef = useRef<(id: string) => void>(() => {});
+  const headingFrame = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(headingFrame.current), []);
 
   const handleHeadingRef = useCallback((id: string, view: View | null) => {
-    if (view) headingRefs.current.set(id, view);
+    if (view) {
+      headingRefs.current.set(id, view);
+      if (pendingHeading.current === id) {
+        pendingHeading.current = null;
+        headingFrame.current = requestAnimationFrame(() => selectHeadingRef.current(id));
+      }
+    }
     else headingRefs.current.delete(id);
   }, []);
 
   const handleHeadingSelect = useCallback((id: string) => {
+    cancelAnimationFrame(headingFrame.current);
     const heading = headingRefs.current.get(id);
     const scroll = scrollRef.current;
-    if (!heading || !scroll) return;
-    haptics.light();
+    pendingHeading.current = null;
     setActionPanel(null);
+    if (!heading) { pendingHeading.current = id; return; }
+    if (!scroll) return;
+    haptics.light();
     // Re-sync the chrome machine with the current offset so the jump's own
     // scroll deltas don't toggle the header mid-flight.
     collapsingFab.expand(offsetRef.current);
@@ -745,6 +759,7 @@ function ReaderPaneInner({
       },
     );
   }, [collapsingFab]);
+  selectHeadingRef.current = handleHeadingSelect;
 
   const persistProgress = useCallback(
     (id: string, folderId: string | null, value: number) => {
@@ -815,9 +830,10 @@ function ReaderPaneInner({
     persistedProgressRef.current = baseline;
     restoredRef.current = false;
     htmlReadyRef.current = false;
+    pendingHeading.current = null;
+    cancelAnimationFrame(headingFrame.current);
     offsetRef.current = 0;
-    userScrollingRef.current = false;
-    collapsingFab.expand(0);
+    expandChromeRef.current(0);
     chromeHeightSV.value = chromeHeightRef.current;
     progressSV.value = baseline;
     progressLabelRef.current(baseline);
@@ -829,7 +845,19 @@ function ReaderPaneInner({
     return () => {
       flushProgress();
     };
-  }, [bookmark?.id, chromeHeightSV, collapsingFab]);
+  }, [bookmark?.id, chromeHeightSV]);
+
+  // A persisted list row can be older than the freshly fetched detail. Accept
+  // its canonical position until rendering finishes, never after a user jump.
+  useEffect(() => {
+    if (bookmark?.id !== currentArticleRef.current?.id || restoredRef.current || htmlReadyRef.current || offsetRef.current > 8) return;
+    const baseline = bookmark?.readProgress ?? 0;
+    initialProgressRef.current = baseline;
+    latestProgressRef.current = baseline;
+    persistedProgressRef.current = baseline;
+    progressSV.value = baseline;
+    progressLabelRef.current(baseline);
+  }, [bookmark?.id, bookmark?.readProgress, progressSV]);
 
   // Restore the saved reading position once layout + content size are known.
   const maybeRestore = useCallback(() => {
@@ -873,8 +901,6 @@ function ReaderPaneInner({
       // Chrome follows user drags on native (programmatic scrolls — position
       // restore, TOC jumps — never yank it around). Web wheel scrolling has no
       // drag events, so there the chrome simply follows the scroll.
-      if (selectionMenuRef.current) collapsingFab.expand(offsetRef.current);
-      else if (Platform.OS === "web" || userScrollingRef.current) collapsingFab.onScroll(event);
       const menu = selectionMenuRef.current;
       if (menu) {
         const dy = contentOffset.y - menuScrollY.current;
@@ -894,15 +920,8 @@ function ReaderPaneInner({
         scrollReadingProgress(contentOffset.y, layoutMeasurement.height, contentSize.height),
       );
     },
-    [collapsingFab, handleFraction, hasHtml, windowHeight],
+    [handleFraction, hasHtml, windowHeight],
   );
-
-  const handleScrollBeginDrag = useCallback(() => {
-    userScrollingRef.current = true;
-  }, []);
-  const handleScrollEnd = useCallback(() => {
-    userScrollingRef.current = false;
-  }, []);
 
   // Recompute when content settles/grows (images loading, HTML rendering).
   const onContentSizeChange = useCallback(
@@ -1104,8 +1123,7 @@ function ReaderPaneInner({
             onLayout={onScrollViewLayout}
             onContentSizeChange={onContentSizeChange}
             onScroll={onScroll}
-            onScrollBeginDrag={handleScrollBeginDrag}
-            onMomentumScrollEnd={handleScrollEnd}
+            animatedScrollHandler={collapsingFab.scrollHandler}
             scrollEventThrottle={16}
             contentContainerStyle={{
               // The chrome is an overlay: pad the content so it starts below

@@ -1,6 +1,8 @@
 # Performance audit (October 2026)
 
-Baseline: `release/0.2.0` (`faa9bed`). Branch: `perf/app-optimization`.
+Original release baseline: `release/0.2.0` (`faa9bed`). Branch:
+`perf/app-optimization`. The large-library/long-reader follow-up below uses
+`20e15ad` as its baseline; do not combine the two sets of measurements.
 
 ## Measured results
 
@@ -32,6 +34,118 @@ native frame-rate measurement.
 | Component renders, launch + 6 s | 6,323 | 3,182 |
 | Component renders, 40-step reader scroll | 14,320 | 9,232 |
 | Search typing long tasks | 3,445 ms | 3,629 ms (render counts identical; no new hotspot found) |
+
+## Large-library and long-reader follow-up
+
+Baseline: `20e15ad`, after the original optimizations above. Release-web export,
+Chromium 153 on an ARM64 Linux host, CPU throttled 4×, fixture API responses,
+10,000 bookmarks, a 5,000-bookmark folder and a 1,200-paragraph article
+(442,850 HTML bytes). These are an isolated before/after observation per layout,
+**not multi-run medians, backend timings or native frame-rate measurements**.
+No builds ran alongside the accepted timing runs.
+
+| Metric | Portrait before → after | Landscape before → after |
+| --- | --- | --- |
+| First article text | 5,188 → 1,670 ms | 5,028 → 1,659 ms |
+| Largest article-window main-thread task | 2,802 → 420 ms | 2,806 → 390 ms |
+| Complete article text mounted | 5,420 → 7,138 ms | 5,255 → 7,052 ms |
+| Total article-window long-task time | 4,920 → 6,343 ms | 4,764 → 6,192 ms |
+| Library ready | 3,047 → 3,083 ms | 3,036 → 3,156 ms |
+| Folder open | 859 → 839 ms | 793 → 840 ms |
+| Mounted library / folder rows | 21 / 33 → 21 / 33 | 19 / 31 → 19 / 31 |
+| Catalogue requests during the scenario | 11 → 1 | 11 → 1 |
+
+**Tradeoff:** first text appears about 67–68% sooner and the worst task is
+85–86% shorter, but complete mounting takes 32–34% longer and aggregate
+long-task time increases. This is a responsiveness optimization, not faster
+total article rendering. A 390–420 ms worst task is still noticeable. The
+large-library measurements do not demonstrate faster launch or folder opening;
+they verify bounded row mounting and pagination while avoiding hidden work.
+
+The harness polls native `document.body.textContent` for first/last paragraphs.
+Earlier experimental completion timings used recursive Playwright text matching,
+which became expensive as sections accumulated; those timings are invalid and
+are not reported here. Accepted raw results/screenshots for this session are in
+`/tmp/opencode/ordo-stress-before-final` and `/tmp/opencode/ordo-stress-accepted`
+(temporary local artifacts, not checked into the repository).
+
+### Changes and safeguards
+
+- **Title sorting:** reuse an `Intl.Collator` rather than passing locale options
+  to every comparison. An isolated Node benchmark of 10,000 mixed-case/Unicode
+  titles measured a median **953.66 → 22.95 ms** over ten retained iterations,
+  with identical ordering. This measures sorting alone, not a screen transition.
+- **Catalogue warm-up:** stop scheduling additional pages when the library loses
+  focus or the app backgrounds. An in-flight request may still finish. Search
+  resumes the same in-memory catalogue when the screen is active again.
+- **Long articles:** parse once into structurally intact sections, share the
+  renderer/config providers, mount one section initially, then two per scheduled
+  task (16 ms delay). Boundaries use 64 blocks or 24,000 text characters; highlight
+  markup cannot shift subsequent boundaries. Reuse unchanged section sources on
+  highlight edits. Lists, tables, paragraphs and styled containers stay intact.
+  This is progressive mounting, **not article virtualization**: all sections
+  eventually stay mounted, and an oversized indivisible block can still stall.
+- **Navigation/progress:** generate heading IDs globally, queue a TOC jump until
+  its target mounts, cancel scheduled work on unmount, and restore a saved
+  position only after complete content/layout. Fresh detail can correct stale
+  cached progress before restoration, never after a user jump. Changing motion
+  preferences no longer resets per-article progress initialization.
+- **Reader chrome:** run header/FAB direction hysteresis and scrollbar position
+  on the Reanimated UI thread. Sample noncritical JS scroll bookkeeping every
+  80 ms, with final drag/momentum reports. Preserve shared Material springs,
+  reduced motion, selection pinning and programmatic expansion.
+- **In-app browser:** memoize the WebView element independently of loading/pull
+  HUD updates; limit pull-to-refresh bridge updates and layout probes to once
+  per 32 ms; cancel reversed pulls and recheck top-of-page on release. Force-dark
+  refinements avoid identical stylesheet, class, meta and color-scheme writes.
+  VM tests execute the injected scripts; no native WebView FPS claim is made.
+- Smaller article batches caused repeated layout overhead. A web CSS containment
+  experiment did not help and was removed.
+
+### Reproducing and validating
+
+From `apps/mobile`, use a release web export served with SPA route fallback.
+Set `ORDO_UI_URL` to that local server, `PLAYWRIGHT_MODULE` to an installed
+Playwright module if necessary, and `PLAYWRIGHT_CHROMIUM` to a Chromium binary.
+The UI scripts use fixture API responses, not a production library.
+
+```sh
+pnpm test
+pnpm test:material
+pnpm typecheck
+pnpm lint
+pnpm test:performance
+node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/library-sort-performance.mjs
+pnpm test:stress-ui
+pnpm test:reader-sections-ui
+ORDO_UI_READER_ONLY=1 pnpm test:ui
+```
+
+The stress harness asserts virtualization before/after folder scrolling and a
+subsequent page fetch. Section unit tests cover text/structure, parent/sibling
+links, global heading IDs and unchanged-source reuse. The long-reader UI matrix
+uses both themes and design modes, both layouts, keyboard TOC navigation to an
+unmounted target, highlight removal without remount/jump, live reduced-motion
+changes without progress reset, navigation cancellation and saved-position
+restoration. The existing rich-reader matrix covers typefaces, sizes, reader
+themes, tables, code, links and highlights. Search CPU regression queries on
+10,000 records measured roughly 13–24 ms median; short queries skip article bodies.
+
+Final validation passed: the full mobile test command (525 tests), the separate
+Material color/contrast suite (118 tests), typecheck, lint and `git diff --check`.
+The long-reader UI matrix passed all four light/dark × standard/Expressive
+combinations, including the progress-accessibility assertion after live motion
+and layout changes. The rich-reader matrix also passed (236 screen captures,
+16 interaction groups); representative portrait/light/standard and
+landscape/dark/Expressive captures were visually inspected. Its incidental frame
+samples ran alongside validation work and are not accepted performance timings.
+
+Release-web and Android JS-only (`expo export --platform android --no-bytecode`)
+exports pass. Android Hermes bytecode export cannot run here: the host is ARM64
+but the bundled Linux `hermesc` is x86-64 (exit 128). No Android runtime/device
+was available. Native FPS, OS text selection across sections, image-driven
+relayout, WebView navigation/refresh/dark-mode smoothness and background/resume
+still need device verification. No native release, OTA or deployment was made.
 
 ## What changed
 
@@ -134,3 +248,17 @@ R8 changes can fail only at runtime. Smoke-test the CI APK on a device:
 - MFA QR code;
 - folder unlock (biometric/PIN);
 - the in-app updater.
+
+For the follow-up reader/browser changes, also verify on a physical device:
+
+- Open and rapidly scroll a large folder; confirm later pages load without
+  unbounded row mounting, and return from the reader to the same list position.
+- Open a book-length article, immediately use the TOC for a late heading, and
+  leave/reopen during mounting. Confirm saved progress restores after rendering.
+- Select/highlight text within and across section boundaries; edit/remove a
+  highlight while reading later sections. Check tables, lists and late images.
+- Reverse scroll direction while sections mount; verify header/FAB behavior,
+  reduced motion, selection pinning and progress after orientation changes.
+- Browse, navigate back, reload and pull-to-refresh inside both ordinary pages
+  and nested scrollers. Reverse/cancel pulls and toggle force-dark on light and
+  already-dark pages; background/resume without reload or position regressions.

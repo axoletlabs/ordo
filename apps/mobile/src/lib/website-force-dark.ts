@@ -232,7 +232,7 @@ export const WEBSITE_FORCE_DARK_SCRIPT = `(function(){
     return true;
   }
   function preferNativeDark(root) {
-    try { root.style.colorScheme = 'dark'; } catch (e) {}
+    try { if (root.style.colorScheme !== 'dark') root.style.colorScheme = 'dark'; } catch (e) {}
     var head = document.head || root;
     var meta = document.querySelector('meta[name="color-scheme"]');
     if (!meta) {
@@ -240,7 +240,7 @@ export const WEBSITE_FORCE_DARK_SCRIPT = `(function(){
       meta.setAttribute('name', 'color-scheme');
       head.insertBefore(meta, head.firstChild);
     }
-    meta.setAttribute('content', 'dark');
+    if (meta.getAttribute('content') !== 'dark') meta.setAttribute('content', 'dark');
     for (var name in THEME_ATTR) {
       if (!Object.prototype.hasOwnProperty.call(THEME_ATTR, name)) continue;
       var current = root.getAttribute(name);
@@ -286,9 +286,14 @@ export const WEBSITE_FORCE_DARK_SCRIPT = `(function(){
     return !!(style && style.textContent && style.textContent.indexOf('invert(1)') !== -1);
   }
   function paintInvert(style, root, on) {
-    style.textContent = SCHEME_CSS + (on ? INVERT_CSS : '');
-    if (on) root.classList.add(CLASS_NAME);
-    else root.classList.remove(CLASS_NAME);
+    var css = SCHEME_CSS + (on ? INVERT_CSS : '');
+    // Refinement runs several times as sites load. Replacing the identical
+    // stylesheet invalidates styles for the entire page for no visual change.
+    if (style.textContent !== css) style.textContent = css;
+    if (root.classList.contains(CLASS_NAME) !== on) {
+      if (on) root.classList.add(CLASS_NAME);
+      else root.classList.remove(CLASS_NAME);
+    }
   }
   function applyInvert() {
     try {

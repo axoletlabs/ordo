@@ -177,14 +177,23 @@ export const BROWSER_PTR_SCRIPT = `(function(){
       send('cancel', 0);
       return;
     }
-    if (dy < 0) return;
+    // An ordinary upward page scroll is not a refresh gesture. Stop checking
+    // scrollHeight/clientHeight on every move (those reads can force layout).
+    // Also clear the pull when a finger reverses back past its start.
+    if (dy < 0) {
+      armed = false;
+      if (lastDy > 0) send('cancel', 0);
+      return;
+    }
+    var now = Date.now();
+    // Hard rate limit, not a delta OR time test: large finger movements used
+    // to cross the bridge on every touch event, even within the same frame.
+    if (lastAt && now - lastAt < 32) return;
     if (!isAtTop(e.target)) {
       armed = false;
       send('cancel', 0);
       return;
     }
-    var now = Date.now();
-    if (Math.abs(dy - lastDy) < 6 && now - lastAt < 32) return;
     lastDy = dy;
     lastAt = now;
     send('move', dy);
@@ -193,7 +202,7 @@ export const BROWSER_PTR_SCRIPT = `(function(){
     if (!armed) return;
     armed = false;
     var y = e.changedTouches && e.changedTouches[0] ? e.changedTouches[0].clientY : startY;
-    send('end', y - startY);
+    send('end', isAtTop(e.target) ? y - startY : 0);
   }
   document.addEventListener('touchend', finish, { capture: true, passive: true });
   document.addEventListener('touchcancel', function() {
