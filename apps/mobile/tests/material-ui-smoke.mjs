@@ -5,6 +5,7 @@
  * ORDO_UI_REMINDER_MENU_ONLY=1 checks preset labels/times, widths, and nested navigation.
  * ORDO_UI_OVERLAY_LAYOUT_ONLY=1 checks nested menu sizing and reader contents across themes/layouts.
  * ORDO_UI_READER_SETTINGS_ONLY=1 checks stable reader settings geometry and typography controls.
+ * ORDO_UI_READER_CONTENTS_ONLY=1 checks compact long-article contents and dismissal.
  * ORDO_UI_BOOKMARK_ONLY=1 checks save-dialog focus and single/batch move feedback.
  * ORDO_UI_TRANSACTIONS_ONLY=1 replays stateful move/delete/Undo and restart recovery.
  */
@@ -17,6 +18,7 @@ import { reminderMenuLayoutMatrix } from "./reminder-menu-layout.mjs";
 import { progressMatrix } from "./material-progress-ui.mjs";
 import { selectionActionMotionMatrix } from "./selection-action-motion.mjs";
 import { bookmarkDialogMatrix } from "./bookmark-dialog.mjs";
+import { readerContentsMatrix } from "./reader-contents.mjs";
 import { bookmarkTransactionMatrix } from "./bookmark-transaction-ui.mjs";
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? "playwright");
 const base = process.env.ORDO_UI_URL ?? "http://127.0.0.1:8235";
@@ -48,6 +50,10 @@ const readerHighlight = { id: "saved-highlight", exact: "durable library", prefi
 const contentsHtml = `<h2>Join the mailing list and follow the reviews</h2><p>Reader introduction.</p>
   <h2>Reacting to comments, issuing new license versions</h2><p>Reader section.</p>
   <h3>Nested section</h3><p>Nested section text.</p><h3>Further details</h3><p>Details.</p>`;
+const longContentsHtml = Array.from({ length: 24 }, (_, index) => {
+  const level = index % 3 === 2 ? 3 : 2;
+  return `<h${level}>Section ${index + 1}: Reading with purpose</h${level}><p>${"Saved ideas make a useful library. ".repeat(12)}</p>`;
+}).join("");
 const authResponse = { user, tokens: { accessToken: "fixture-access", refreshToken: "fixture-refresh", expiresIn: 3600 } };
 const results = { screens: [], interactions: [], errors: [], performanceSamples: [] };
 let activePage;
@@ -110,7 +116,7 @@ async function fixture(page, scenario = {}) {
       ...Array.from({ length: Math.max(0, (scenario.bookmarkCount ?? 1) - 1) }, (_, index) => ({ ...bookmark, id: `saved-${index}`, title: `Saved reading ${index + 1}`, tags: [], createdAt: new Date(Date.parse(stamp) - (index + 1) * 60000).toISOString() }))], nextCursor: null, hasMore: false };
     else if (path.startsWith("/api/bookmarks/article/highlights") && request.method() === "DELETE") { scenario.highlightRemoved = true; body = { success: true }; }
     else if (path.startsWith("/api/bookmarks/article")) body = { ...bookmark,
-      contentHtml: scenario.contentsLayout ? contentsHtml : scenario.richReader ? readerHtml : "<h2>Reading with purpose</h2><p>Saved ideas make a useful library.</p>",
+      contentHtml: scenario.longContents ? longContentsHtml : scenario.contentsLayout ? contentsHtml : scenario.richReader ? readerHtml : "<h2>Reading with purpose</h2><p>Saved ideas make a useful library.</p>",
       highlights: scenario.richReader && !scenario.highlightRemoved ? [readerHighlight] : [] };
     else if (url.hostname === "api.github.com") body = [];
     if (url.hostname === "www.google.com") return route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"><rect width="24" height="24" rx="4" fill="#006a60"/></svg>' });
@@ -603,7 +609,8 @@ async function overlayLayoutMatrix() {
 }
 
 try {
-  if (process.env.ORDO_UI_REMINDER_MENU_ONLY) await reminderMenuLayoutMatrix({ browser, fixture, login, navigate, button, settle, capture, results });
+  if (process.env.ORDO_UI_READER_CONTENTS_ONLY) await readerContentsMatrix({ browser, fixture, login, navigate, button, settle, capture, results });
+  else if (process.env.ORDO_UI_REMINDER_MENU_ONLY) await reminderMenuLayoutMatrix({ browser, fixture, login, navigate, button, settle, capture, results });
   else if (process.env.ORDO_UI_TRANSACTIONS_ONLY) await bookmarkTransactionMatrix({ browser, fixture, login, button, settle, capture, results, bookmark, folder });
   else if (process.env.ORDO_UI_BOOKMARK_ONLY) await bookmarkDialogMatrix({ browser, fixture, login, button, settle, capture, results, bookmark, folder });
   else if (process.env.ORDO_UI_REMINDER_ONLY) await reminderPickerMatrix({ browser, fixture, login, button, settle, capture, results });

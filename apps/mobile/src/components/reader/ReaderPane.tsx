@@ -55,7 +55,7 @@ import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
-import { sheetMenuStyles } from "../ui/SheetActionRow";
+import { PanelActions, sheetMenuStyles } from "../ui/SheetActionRow";
 import { FAB, FABLayer } from "../ui/FAB";
 import type { ArticleHeading } from "./ArticleHtml";
 import { ReaderArticle } from "./ReaderArticle";
@@ -1232,7 +1232,8 @@ function ReaderPaneInner({
         </>
       )}
 
-      {hasContents && !selectionMenu && actionPanel !== "contents" ? (
+      {hasContents && !selectionMenu ? (
+        // The modal scrim covers this trigger; keep it mounted for focus restoration.
         <FABLayer maxWidth={layout.maxReaderWidth}>
           <FAB
             icon="list-outline"
@@ -1240,7 +1241,8 @@ function ReaderPaneInner({
             expansion={collapsingFab.expansion}
             accessibilityLabel="Table of contents"
             accessibilityHint="Jump to a section in this article."
-            onPress={() => {
+            onPress={(anchor) => {
+              setActionsAnchor(anchor);
               setActionPanel("contents");
             }}
             maxContentWidth={layout.maxReaderWidth}
@@ -1414,40 +1416,46 @@ function ReaderPaneInner({
           void detail.refetch();
         }}
       />
-      <FloatingPanel visible={actionPanel === "contents"} onDismiss={() => setActionPanel(null)}>
-        <PanelHeader title="Table of contents" />
-        <ThemedScrollView style={styles.tocList}>
-          {articleHeadings.map((heading, index) => (
-            <PressableScale
-              key={heading.id}
-              style={[
-                styles.tocRow,
-                { paddingLeft: spacing[16] + (heading.level - contentsBaseLevel) * spacing[16] },
-                expressive ? {
-                  ...listCorners(listPosition(index, articleHeadings.length), false),
-                  backgroundColor: readerPalette.surfaceContainerLow,
-                  marginBottom: spacing[2],
-                } : null,
-              ]}
-              onPress={() => handleHeadingSelect(heading.id)}
-              accessibilityRole="button"
-              accessibilityLabel={`Go to ${heading.text}`}
-            >
-              <Text
-                variant={heading.level === 1 ? "bodyStrong" : "body"}
-                numberOfLines={2}
+      <FloatingPanel
+        visible={actionPanel === "contents"}
+        onDismiss={closeActions}
+        maxWidth={Math.min(384, sceneWidth - spacing[48])}
+        scrollBody={false}
+      >
+        <PanelHeader title="Contents" titleVariant="titleLarge" onClose={closeActions} />
+        {/* Own the scroll area: FloatingPanel unwraps direct scroll-view children. */}
+        <View style={styles.tocBody}>
+          <ThemedScrollView style={[styles.tocList, { maxHeight: Math.min(320, (windowHeight - insets.top - insets.bottom) * 0.4) }]}>
+            {articleHeadings.map((heading, index) => (
+              <PressableScale
+                key={heading.id}
+                style={[
+                  styles.tocRow,
+                  { paddingLeft: spacing[16] + (heading.level - contentsBaseLevel) * spacing[16] },
+                  expressive ? {
+                    ...listCorners(listPosition(index, articleHeadings.length), false),
+                    backgroundColor: readerPalette.surfaceContainerLow,
+                    marginBottom: spacing[2],
+                  } : null,
+                ]}
+                onPress={() => handleHeadingSelect(heading.id)}
+                accessibilityRole="button"
+                accessibilityLabel={`Go to ${heading.text}`}
               >
-                {heading.text}
-              </Text>
-            </PressableScale>
-          ))}
-        </ThemedScrollView>
-        <Button
-          label="Article actions"
-          variant="secondary"
-          block
-          onPress={() => setActionPanel("actions")}
-          style={sheetMenuStyles.cancel}
+                <Text
+                  variant={heading.level === 1 ? "bodyStrong" : "body"}
+                  numberOfLines={2}
+                >
+                  {heading.text}
+                </Text>
+              </PressableScale>
+            ))}
+          </ThemedScrollView>
+        </View>
+        <PanelActions
+          confirmLabel="Article actions"
+          confirmVariant="secondary"
+          onConfirm={() => setActionPanel("actions")}
         />
       </FloatingPanel>
       <FloatingPanel visible={actionPanel === "highlights"} onDismiss={() => setActionPanel(null)}>
@@ -1576,7 +1584,8 @@ const styles = StyleSheet.create({
   description: { marginTop: spacing[8] },
   byline: { marginTop: spacing[6] },
   content: { marginTop: spacing[24] },
-  tocList: { maxHeight: 420 },
+  tocBody: { flexShrink: 1 },
+  tocList: { flexShrink: 1 },
   tocRow: {
     minHeight: 48,
     justifyContent: "center",

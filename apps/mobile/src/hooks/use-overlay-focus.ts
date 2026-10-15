@@ -77,11 +77,10 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
           (!top || top.contains(previous)) &&
           (root?.contains(document.activeElement) || document.activeElement === document.body)) previous.focus();
       };
-      // The parent portal publishes its resumed interactive state at the end
-      // of this commit. Don't restore into a still-hidden sibling or let its
-      // opening autofocus win the handoff.
-      if (previous?.closest('[data-material-overlay="false"]')) requestAnimationFrame(restore);
-      else restore();
+      // The portal publishes its closing/resumed interactive state in a second
+      // commit. Wait for that publication, otherwise the outgoing dialog still
+      // looks like the top active overlay and blocks restoration to its trigger.
+      requestAnimationFrame(restore);
     };
   }, [active]);
   return ref;
