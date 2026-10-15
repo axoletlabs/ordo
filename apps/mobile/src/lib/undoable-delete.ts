@@ -418,6 +418,7 @@ export function resumePendingDeletes() {
   if (!key) return;
   try {
     const intents = readDeleteIntents(key);
+    if (intents.length === 0) return;
     ensurePendingStripper();
     for (const intent of intents) {
       const activeKey = `${key}:${intent.id}`;

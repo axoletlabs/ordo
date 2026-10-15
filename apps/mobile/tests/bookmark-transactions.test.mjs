@@ -251,6 +251,13 @@ test("foreground recovery cannot prematurely commit a still-visible queued Undo"
   h.toastStore.getState().toasts[0].action.onPress();
 });
 
+test("an empty recovery journal must not mark stale library caches fresh", () => {
+  const h = harness(); h.seed();
+  h.qc.setQueryData(h.qk.bookmarks(null, "newest"), paged([]), { updatedAt: 1 });
+  h.resumePendingDeletes();
+  assert.equal(h.qc.getQueryState(h.qk.bookmarks(null, "newest")).dataUpdatedAt, 1);
+});
+
 test("Undo storage failure returns false so the action remains available to retry", () => {
   const h = harness(); h.seed(); h.deleteUndoable({ folders: [folder()] });
   const toast = h.toastStore.getState().toasts[0];
