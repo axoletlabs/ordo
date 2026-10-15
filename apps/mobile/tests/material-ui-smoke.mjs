@@ -2,6 +2,7 @@
  * PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs
  * PLAYWRIGHT_CHROMIUM=/path/to/chromium
  * ORDO_UI_URL=http://127.0.0.1:8235 ORDO_UI_OUTPUT=/tmp/opencode/ordo-ui node tests/material-ui-smoke.mjs
+ * ORDO_UI_REMINDER_MENU_ONLY=1 checks preset labels/times, widths, and nested navigation.
  * ORDO_UI_OVERLAY_LAYOUT_ONLY=1 checks nested menu sizing and reader contents across themes/layouts.
  * ORDO_UI_READER_SETTINGS_ONLY=1 checks stable reader settings geometry and typography controls.
  * ORDO_UI_BOOKMARK_ONLY=1 checks save-dialog focus and single/batch move feedback.
@@ -11,6 +12,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { accessibilityMatrix } from "./material-accessibility.mjs";
 import { readerSettingsLayoutMatrix } from "./reader-settings-layout.mjs";
 import { reminderPickerMatrix } from "./reminder-picker.mjs";
+import { reminderMenuLayoutMatrix } from "./reminder-menu-layout.mjs";
 import { progressMatrix } from "./material-progress-ui.mjs";
 import { selectionActionMotionMatrix } from "./selection-action-motion.mjs";
 import { bookmarkDialogMatrix } from "./bookmark-dialog.mjs";
@@ -598,7 +600,8 @@ async function overlayLayoutMatrix() {
 }
 
 try {
-  if (process.env.ORDO_UI_BOOKMARK_ONLY) await bookmarkDialogMatrix({ browser, fixture, login, button, settle, capture, results, bookmark, folder });
+  if (process.env.ORDO_UI_REMINDER_MENU_ONLY) await reminderMenuLayoutMatrix({ browser, fixture, login, navigate, button, settle, capture, results });
+  else if (process.env.ORDO_UI_BOOKMARK_ONLY) await bookmarkDialogMatrix({ browser, fixture, login, button, settle, capture, results, bookmark, folder });
   else if (process.env.ORDO_UI_REMINDER_ONLY) await reminderPickerMatrix({ browser, fixture, login, button, settle, capture, results });
   else if (process.env.ORDO_UI_PROGRESS_ONLY) await progressMatrix({ browser, fixture, login, navigate, button, settle, capture, results, bookmark });
   else if (process.env.ORDO_UI_SELECTION_MOTION_ONLY) await selectionActionMotionMatrix({ browser, fixture, login, button, settle, capture, results });

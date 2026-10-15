@@ -18,7 +18,7 @@ import { formatReminderWhen } from "../../lib/bookmark-reminders";
 import type { MenuAnchorRect } from "../../lib/menu-anchor";
 import type { BookmarkDto } from "@ordo/shared";
 import { ReminderCustomPanel } from "./ReminderCustomPanel";
-import { ReminderPresetItems, useSaveReminder } from "./ReminderFlow";
+import { REMINDER_MENU_WIDTH, ReminderPresetItems, useSaveReminder } from "./ReminderFlow";
 
 function useSetContentKindMissing() {
   return { mutate: () => undefined, isPending: false };
@@ -87,6 +87,7 @@ export function BookmarkActionsSheet({
         visible={visible && (mode === "menu" || (mode === "remind" && remindPage === "presets"))}
         onDismiss={onDismiss}
         anchor={anchor}
+        width={remindersSupported ? REMINDER_MENU_WIDTH : undefined}
         sessionKey={visible ? displayBookmark.id : undefined}
         pageKey={`${mode}:${remindPage}`}
       >

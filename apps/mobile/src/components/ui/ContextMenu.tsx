@@ -387,6 +387,7 @@ export function ContextMenuItem({
       }}
       style={[
         styles.item,
+        detail ? styles.itemWithDetail : null,
         Platform.OS === "web" ? styles.itemWeb : null,
         inactive && styles.itemDisabled,
         { backgroundColor: selected ? palette.secondaryContainer : "transparent" },
@@ -441,6 +442,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[8],
   },
   itemSide: { alignSelf: "center", flexShrink: 0 },
+  itemWithDetail: { gap: spacing[8] },
   itemWeb: {
     cursor: "pointer",
   } as ViewStyle,
