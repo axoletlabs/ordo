@@ -74,12 +74,13 @@ jobs:
           echo "app_variant=$CHANNEL" >> "$GITHUB_OUTPUT"
           echo "App variant: $CHANNEL (branch=${BRANCH:-none})"
           # Only Development follows the Actions run number for versionCode.
-          # The other apps are separate packages, so their build numbers come
-          # from their own version (Preview's sequence number); otherwise 1.
+          # Stable and Preview are separate packages with release-derived
+          # codes: Preview continues the count of every preview an earlier
+          # line shipped, so Android never sees a downgrade across lines.
           if [ "$CHANNEL" = "development" ]; then
             VERSION_CODE="${{ github.run_number }}"
           else
-            VERSION_CODE="$(VERSION="$VERSION" node -e "const {classifyReleaseVersion}=require('./scripts/release-policy.js'); const c=classifyReleaseVersion(process.env.VERSION); process.stdout.write(String(c && c.number != null ? c.number : 1))")"
+            VERSION_CODE="$(VERSION="$VERSION" node -e "const {androidBuildNumber}=require('./scripts/release-policy.js'); process.stdout.write(String(androidBuildNumber(process.env.VERSION) ?? 1))")"
           fi
           echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
 
@@ -164,6 +165,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Release policy tests hold PREVIEW_CODE_BASES against tag history.
+          fetch-depth: 0
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
