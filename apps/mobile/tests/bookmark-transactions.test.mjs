@@ -208,21 +208,24 @@ test("Undo cancels the durable intent before toast dismissal, without deleting",
 test("process death preserves deletion intent and a fresh process finishes it", async () => {
   const first = harness(); first.seed(); first.deleteUndoable({ folders: [folder()] });
   assert.equal(first.requests.length, 0);
+  const pending = [...first.disk.values()].join();
+  assert.ok(pending.includes("sleep"), "Inspect a non-empty pending journal");
+  assert.ok(!pending.includes("DeepSWE") && !pending.includes("Reader"), "Journal must never persist content");
   const second = harness(first.disk); second.seed(); second.resumePendingDeletes();
   assert.equal(second.qc.getQueryData(second.qk.folders).length, 0, "Hydrated tombstones apply before requests resolve");
   assert.equal(second.rows("sleep").length, 0);
   await drain();
   assert.equal(second.requests.length, 1);
   assert.equal(second.journal.readDeleteIntents(second.journal.deleteJournalKey()).length, 0);
-  assert.ok(![...first.disk.values()].join().includes("DeepSWE"), "Journal must never persist content");
 });
 
 test("native MMKV journal also survives process death without storing content", async () => {
   const first = harness(new Map(), "android"); first.seed(); first.deleteUndoable({ folders: [folder()] });
+  const pending = [...first.disk.values()].join();
+  assert.ok(pending.includes("sleep") && !pending.includes("DeepSWE") && !pending.includes("Reader"));
   const second = harness(first.disk, "android"); second.seed(); second.resumePendingDeletes(); await drain();
   assert.equal(second.requests.length, 1);
   assert.equal(second.journal.readDeleteIntents(second.journal.deleteJournalKey()).length, 0);
-  assert.ok(![...first.disk.values()].join().includes("DeepSWE"));
 });
 
 test("failed move rollback leaves another bookmark's successful concurrent move intact", async () => {
