@@ -27,7 +27,7 @@ import { errorMessage, isMfaRequiredError } from "../../../src/lib/error-message
 import { otpRequestFooter, otpSentToast } from "../../../src/lib/otp-copy";
 import { haptics } from "../../../src/lib/haptics";
 import { toast } from "../../../src/components/ui/toast-store";
-import { ChangeEmailSchema } from "@ordo/shared";
+import { ChangeEmailSchema } from "@ordo/shared/schemas";
 import { OtpDeliveryHint } from "../../../src/components/auth/OtpDeliveryHint";
 import { MfaStepUpPanel } from "../../../src/components/auth/MfaStepUpPanel";
 import { lockedSecretDisplay, passwordAutofillProps } from "../../../src/lib/password-autofill";

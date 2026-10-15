@@ -80,9 +80,10 @@ export const fontWeight = {
 };
 
 /* ----------------------------- Font families ----------------------------- */
-// Loaded via @expo-google-fonts or assets/fonts in app/_layout.tsx. Referenced
-// by name string. "book" (Libron) and "legible" (NV Legible Next) are the
-// reader's reading typefaces; sans/mono drive app UI and code respectively.
+// Loaded by theme/fonts.ts: interface faces at launch, reading faces on
+// demand. Referenced by name string. "book" (Libron) and "legible" (NV
+// Legible Next) are the reader's reading typefaces; sans/mono drive app UI
+// and code respectively.
 
 export type FontFamily = "display" | "sans" | "mono" | "book" | "legible" | "garamond" | "bitter" | "jost";
 
@@ -99,11 +100,12 @@ const FONTS = {
     "600": "Roboto_500Medium",
     "700": "Roboto_700Bold",
   },
+  // Only 400 and 600 ship; heavier requests use the nearest loaded face.
   mono: {
     "400": "JetBrainsMono_400Regular",
-    "500": "JetBrainsMono_500Medium",
+    "500": "JetBrainsMono_400Regular",
     "600": "JetBrainsMono_600SemiBold",
-    "700": "JetBrainsMono_700Bold",
+    "700": "JetBrainsMono_600SemiBold",
   },
   // Libron — a Newsreader reading variant with full italic support.
   book: {
@@ -170,71 +172,7 @@ export function resolveFont(
   return table[weight] ?? table["400"]!;
 }
 
-/** The list of font assets to preload (passed to useFonts in the root layout). */
-// Import individual faces: the package barrels require every TTF and make
-// Metro ship unused weights/styles, even though Font.loadAsync uses only these.
-import { JetBrainsMono_400Regular } from "@expo-google-fonts/jetbrains-mono/400Regular";
-import { JetBrainsMono_500Medium } from "@expo-google-fonts/jetbrains-mono/500Medium";
-import { JetBrainsMono_600SemiBold } from "@expo-google-fonts/jetbrains-mono/600SemiBold";
-import { JetBrainsMono_700Bold } from "@expo-google-fonts/jetbrains-mono/700Bold";
 import { ROW_INSET, SCREEN_RAIL } from "./alignment";
-import { Roboto_400Regular } from "@expo-google-fonts/roboto/400Regular";
-import { Roboto_500Medium } from "@expo-google-fonts/roboto/500Medium";
-import { Roboto_700Bold } from "@expo-google-fonts/roboto/700Bold";
-import MaterialIcons from "@expo/vector-icons/MaterialIcons";
-
-// Reading typefaces ship as local TTFs (see assets/fonts/README.md).
-import Libron_400Regular from "../../assets/fonts/Libron-Regular.ttf";
-import Libron_400Regular_Italic from "../../assets/fonts/Libron-Italic.ttf";
-import Libron_700Bold from "../../assets/fonts/Libron-Bold.ttf";
-import Libron_700BoldItalic from "../../assets/fonts/Libron-BoldItalic.ttf";
-import NVLegibleNext_400Regular from "../../assets/fonts/NVLegibleNext-Regular.ttf";
-import NVLegibleNext_400Regular_Italic from "../../assets/fonts/NVLegibleNext-Italic.ttf";
-import NVLegibleNext_700Bold from "../../assets/fonts/NVLegibleNext-Bold.ttf";
-import NVLegibleNext_700BoldItalic from "../../assets/fonts/NVLegibleNext-BoldItalic.ttf";
-import NVGaramond_400Regular from "../../assets/fonts/NVGaramond-Regular.ttf";
-import NVGaramond_400Regular_Italic from "../../assets/fonts/NVGaramond-Italic.ttf";
-import NVGaramond_700Bold from "../../assets/fonts/NVGaramond-Bold.ttf";
-import NVGaramond_700BoldItalic from "../../assets/fonts/NVGaramond-BoldItalic.ttf";
-import NVBitter_400Regular from "../../assets/fonts/NVBitter-Regular.ttf";
-import NVBitter_400Regular_Italic from "../../assets/fonts/NVBitter-Italic.ttf";
-import NVBitter_700Bold from "../../assets/fonts/NVBitter-Bold.ttf";
-import NVBitter_700BoldItalic from "../../assets/fonts/NVBitter-BoldItalic.ttf";
-import NVJost_400Regular from "../../assets/fonts/NVJost-Regular.ttf";
-import NVJost_400Regular_Italic from "../../assets/fonts/NVJost-Italic.ttf";
-import NVJost_700Bold from "../../assets/fonts/NVJost-Bold.ttf";
-import NVJost_700BoldItalic from "../../assets/fonts/NVJost-BoldItalic.ttf";
-
-export const fontAssets = {
-  ...MaterialIcons.font,
-  Roboto_400Regular,
-  Roboto_500Medium,
-  Roboto_700Bold,
-  JetBrainsMono_400Regular,
-  JetBrainsMono_500Medium,
-  JetBrainsMono_600SemiBold,
-  JetBrainsMono_700Bold,
-  Libron_400Regular,
-  Libron_400Regular_Italic,
-  Libron_700Bold,
-  Libron_700BoldItalic,
-  NVLegibleNext_400Regular,
-  NVLegibleNext_400Regular_Italic,
-  NVLegibleNext_700Bold,
-  NVLegibleNext_700BoldItalic,
-  NVGaramond_400Regular,
-  NVGaramond_400Regular_Italic,
-  NVGaramond_700Bold,
-  NVGaramond_700BoldItalic,
-  NVBitter_400Regular,
-  NVBitter_400Regular_Italic,
-  NVBitter_700Bold,
-  NVBitter_700BoldItalic,
-  NVJost_400Regular,
-  NVJost_400Regular_Italic,
-  NVJost_700Bold,
-  NVJost_700BoldItalic,
-};
 
 /**
  * Layout constants.

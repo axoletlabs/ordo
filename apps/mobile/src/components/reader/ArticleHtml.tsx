@@ -54,16 +54,14 @@ import {
   type HighlightUiHandlers,
 } from "./article-highlight-ui";
 
-/** Custom fonts loaded via useFonts must be registered to avoid warnings. */
+/** Custom fonts loaded by theme/fonts.ts must be registered to avoid warnings. */
 const SYSTEM_FONTS = [
   ...defaultSystemFonts,
   "Roboto_400Regular",
   "Roboto_500Medium",
   "Roboto_700Bold",
   "JetBrainsMono_400Regular",
-  "JetBrainsMono_500Medium",
   "JetBrainsMono_600SemiBold",
-  "JetBrainsMono_700Bold",
   "Libron_400Regular",
   "Libron_400Regular_Italic",
   "Libron_700Bold",

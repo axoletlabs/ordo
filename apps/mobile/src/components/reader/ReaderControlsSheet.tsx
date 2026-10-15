@@ -4,7 +4,7 @@
  * dark — the AMOLED pure-black toggle. Presented as a FloatingPanel so it
  * matches the app's existing menu/sheet language on phones and tablets alike.
  */
-import React from "react";
+import React, { useEffect, useMemo } from "react";
 import { StyleSheet, View, useWindowDimensions } from "react-native";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
@@ -13,6 +13,7 @@ import { Text } from "../ui/Text";
 import { Toggle } from "../ui/Toggle";
 import { spacing } from "../../theme/tokens";
 import { resolveReaderFont } from "./reader-typography";
+import { loadReaderFonts, READER_FONT_FAMILY_LIST, readerFontsReady, useReaderFontRevision } from "../../theme/fonts";
 import type {
   ReaderFontFamily,
   ReaderFontSize,
@@ -34,7 +35,7 @@ const familyOptions: readonly {
   value: ReaderFontFamily;
   label: string;
   accessibilityLabel: string;
-  labelStyle: { fontFamily: string };
+  labelStyle?: { fontFamily: string };
 }[] = [
   { value: "serif", label: "Libron", accessibilityLabel: "Libron, a reading serif", labelStyle: { fontFamily: resolveReaderFont("serif") } },
   { value: "sans", label: "Legible Sans", accessibilityLabel: "Legible Sans, an accessible sans serif", labelStyle: { fontFamily: resolveReaderFont("sans") } },
@@ -95,6 +96,17 @@ export const ReaderControlsSheet = React.memo(function ReaderControlsSheet({
 }: ReaderControlsSheetProps) {
   const { width, fontScale } = useWindowDimensions();
   const orientation = width < 360 || fontScale > 1.3 ? "vertical" : "horizontal";
+  // Previews need every reading family. They load with the panel; a label
+  // takes its face once loaded (native text keeps the face it laid out with).
+  const fontRevision = useReaderFontRevision();
+  useEffect(() => {
+    if (visible) READER_FONT_FAMILY_LIST.forEach((family) => void loadReaderFonts(family));
+  }, [visible]);
+  const typefaceOptions = useMemo(
+    () => familyOptions.map((option) => readerFontsReady(option.value) ? option : { ...option, labelStyle: undefined }),
+    // Readiness lives outside React; the revision says when it changed.
+    [fontRevision],
+  );
   return (
     <FloatingPanel visible={visible} onDismiss={onDismiss}>
       <PanelHeader title="Reader" onClose={onDismiss} />
@@ -117,7 +129,7 @@ export const ReaderControlsSheet = React.memo(function ReaderControlsSheet({
           accessibilityLabel="Typeface"
           // Vertical rows give each reading typeface room to preview itself.
           orientation="vertical"
-          options={familyOptions}
+          options={typefaceOptions}
           value={preferences.fontFamily}
           onChange={(fontFamily) => onUpdate({ fontFamily })}
         />

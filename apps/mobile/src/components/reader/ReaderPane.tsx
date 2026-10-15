@@ -7,7 +7,7 @@
  * open according to the website-browser setting; "Read in ordo" appears when
  * extraction actually produced an article.
  */
-import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   findNodeHandle,
   Platform,
@@ -23,7 +23,7 @@ import {
 import { useWindowDimensions } from "react-native";
 import { useSystemColorScheme } from "../../theme/use-system-color-scheme";
 import { useSceneColumnInsets } from "../../hooks/use-scene-column-insets";
-import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { StatusBar, setStatusBarStyle } from "expo-status-bar";
 import { useAppRouter as useRouter } from "../../hooks/use-app-router";
@@ -67,6 +67,7 @@ import { ReminderCustomPanel } from "../bookmarks/ReminderCustomPanel";
 import { ReminderPresetItems, useSaveReminder } from "../bookmarks/ReminderFlow";
 import { formatReminderWhen } from "../../lib/bookmark-reminders";
 import { READER_BODY_SIZE, resolveReaderFont } from "./reader-typography";
+import { useReaderFontFamily } from "../../theme/fonts";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 import { resolveReaderPalette } from "../../theme/reader-theme";
 import { pinSystemChrome } from "../../theme/pin-system-chrome";
@@ -148,6 +149,26 @@ function isRedundantReaderDescription(title: string, description: string): boole
 }
 
 const EMPTY_HIGHLIGHTS: HighlightDto[] = [];
+
+/** Reading progress rule; keeps the announced whole percent as local state. */
+function ReaderProgressBar({ animatedValue, labelRef, initialValue }: {
+  animatedValue: SharedValue<number>;
+  labelRef: React.MutableRefObject<(value: number) => void>;
+  initialValue: number;
+}) {
+  const [progress, setProgress] = useState(initialValue);
+  useLayoutEffect(() => {
+    labelRef.current = (value) => setProgress((previous) =>
+      Math.round(previous * 100) === Math.round(value * 100) ? previous : value);
+    return () => {
+      labelRef.current = () => {};
+    };
+  }, [labelRef]);
+  return (
+    <LinearProgress label="Reading progress" value={progress} animatedValue={animatedValue}
+      style={{ maxWidth: layout.maxReaderWidth, alignSelf: "center" }} />
+  );
+}
 
 /**
  * ReaderPane resolves the account-synced reader preferences + palette and
@@ -263,7 +284,10 @@ function ReaderPaneInner({
     headings: readonly ArticleHeading[];
   }>({ bookmarkId: "", headings: [] });
   const [articleWidth, setArticleWidth] = useState(0);
-  const [progress, setProgress] = useState(0);
+  // Scroll progress drives the bar on the UI thread (progressSV); the whole
+  // percent only feeds assistive tech. ReaderProgressBar owns that state so a
+  // reading scroll re-renders the bar, not this entire pane, at every 1%.
+  const progressLabelRef = useRef<(value: number) => void>(() => {});
   const [surface, setSurface] = useState<"auto" | "reader" | "browser">(
     initialSurface === "browser" ? "browser" : "auto",
   );
@@ -335,8 +359,17 @@ function ReaderPaneInner({
         .join(" · ")
     : "";
   const readerBodySize = READER_BODY_SIZE[contentPreferences.fontSize];
-  const readerFont = resolveReaderFont(contentPreferences.fontFamily);
-  const readerBoldFont = resolveReaderFont(contentPreferences.fontFamily, "700");
+  // Reading faces load per family; until the chosen one is ready the article
+  // keeps the previous family (or a skeleton on the very first open).
+  const readerFamily = useReaderFontFamily(contentPreferences.fontFamily);
+  const articlePreferences = useMemo(
+    () => readerFamily && readerFamily !== contentPreferences.fontFamily
+      ? { ...contentPreferences, fontFamily: readerFamily }
+      : contentPreferences,
+    [contentPreferences, readerFamily],
+  );
+  const readerFont = resolveReaderFont(articlePreferences.fontFamily);
+  const readerBoldFont = resolveReaderFont(articlePreferences.fontFamily, "700");
   const articleHeadings = headingState.bookmarkId === bookmark?.id ? headingState.headings : [];
   const contentsBaseLevel = articleHeadings.reduce((level, heading) => Math.min(level, heading.level), 6);
   const highlights = detail.data?.highlights ?? EMPTY_HIGHLIGHTS;
@@ -758,8 +791,7 @@ function ReaderPaneInner({
     (fraction: number) => {
       if (!trackProgressRef.current) return;
       progressSV.value = fraction;
-      const pct = Math.round(fraction * 100);
-      setProgress((prev) => (Math.round(prev * 100) === pct ? prev : fraction));
+      progressLabelRef.current(fraction);
       latestProgressRef.current = fraction;
       const last = persistedProgressRef.current;
       if (shouldFlushReadingProgress(fraction, last, PROGRESS_DELTA, READ_COMPLETION_THRESHOLD)) {
@@ -788,7 +820,7 @@ function ReaderPaneInner({
     collapsingFab.expand(0);
     chromeHeightSV.value = chromeHeightRef.current;
     progressSV.value = baseline;
-    setProgress(baseline);
+    progressLabelRef.current(baseline);
     if (selectTimer.current) {
       clearTimeout(selectTimer.current);
       selectTimer.current = null;
@@ -999,8 +1031,8 @@ function ReaderPaneInner({
       />
 
       {hasContent && !showWebsiteView ? (
-        <LinearProgress label="Reading progress" value={progress} animatedValue={progressSV}
-          style={{ maxWidth: layout.maxReaderWidth, alignSelf: "center" }} />
+        <ReaderProgressBar animatedValue={progressSV} labelRef={progressLabelRef}
+          initialValue={latestProgressRef.current} />
       ) : null}
       </Animated.View>
 
@@ -1087,13 +1119,20 @@ function ReaderPaneInner({
                 style={styles.articleColumn}
                 onLayout={(e) => setArticleWidth(e.nativeEvent.layout.width)}
               >
+                {!readerFamily ? (
+                <View accessibilityLabel="Loading article" style={styles.inlineEmpty}>
+                  <Skeleton width="80%" height={28} />
+                  <Skeleton width="100%" height={16} style={{ marginTop: spacing[16] }} />
+                  <Skeleton width="92%" height={16} style={{ marginTop: spacing[8] }} />
+                </View>
+                ) : <>
                 {articleHead}
 
                 {hasHtml ? (
                 <View style={styles.content}>
                   <ReaderArticle
                     html={detail.data?.contentHtml ?? ""}
-                    preferences={contentPreferences}
+                    preferences={articlePreferences}
                     contentWidth={articleWidth || fallbackArticleWidth}
                     highlights={highlights}
                     onTextSelect={handleTextSelect}
@@ -1158,6 +1197,7 @@ function ReaderPaneInner({
                   action={<Button label="Open original" onPress={handleOpenOriginal} />}
                 />
                 )}
+                </>}
               </View>
             </ScreenContent>
           </ThemedScrollView>

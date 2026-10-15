@@ -276,3 +276,6 @@ export const EXPORT_MIME: Record<ExportFormat, string> = {
 /** What to do when an imported URL already exists in the account. */
 export const DUPLICATE_POLICIES = ["skip", "update", "copy"] as const;
 export type DuplicatePolicy = (typeof DUPLICATE_POLICIES)[number];
+
+/** Phrase the account-deletion form requires, typed exactly. */
+export const DELETE_ACCOUNT_CONFIRMATION = "DELETE MY ACCOUNT";

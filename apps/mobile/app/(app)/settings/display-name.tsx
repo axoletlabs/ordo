@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { KeyboardAvoidingView, Platform } from "react-native";
 import { useRouter } from "expo-router";
-import { ChangeDisplayNameSchema } from "@ordo/shared";
+import { ChangeDisplayNameSchema } from "@ordo/shared/schemas";
 import {
   SettingsForm,
   SettingsGroup,

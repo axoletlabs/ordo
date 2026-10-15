@@ -4,7 +4,7 @@ import {
   CONTENT_SECURITY_POLICY,
   STRICT_TRANSPORT_SECURITY,
 } from "../src/common/http.js";
-import { createTestApp, teardownApp, type TestCtx } from "./utils.js";
+import { authedAgent, createTestApp, teardownApp, type TestCtx } from "./utils.js";
 
 function setCookies(res: request.Response): string[] {
   const raw = res.headers["set-cookie"];
@@ -171,6 +171,23 @@ describe("CORS, cookies, CSRF (e2e)", () => {
           day: new Date().toISOString().slice(0, 10),
         })
         .expect(200);
+    });
+  });
+
+  describe("compression", () => {
+    it("gzips large JSON for clients that accept it", async () => {
+      const agent = await authedAgent(ctx.app, "gzip@example.com");
+      for (let i = 0; i < 12; i++) {
+        await agent.post("/api/folders").send({ name: `Reading list number ${i} with a longer name` }).expect(201);
+      }
+      const gzipped = await agent.get("/api/folders").set("Accept-Encoding", "gzip").expect(200);
+      expect(gzipped.headers["content-encoding"]).toBe("gzip");
+      expect(gzipped.headers.vary).toMatch(/Accept-Encoding/i);
+      expect(gzipped.body).toHaveLength(12);
+
+      const plain = await agent.get("/api/folders").set("Accept-Encoding", "identity").expect(200);
+      expect(plain.headers["content-encoding"]).toBeUndefined();
+      expect(plain.body).toEqual(gzipped.body);
     });
   });
 });

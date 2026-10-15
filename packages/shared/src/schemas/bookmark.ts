@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { BATCH_ITEM_LIMIT, MAX_TAGS_PER_BOOKMARK } from "../constants.js";
 import { UNIX_SECONDS_MAX, UNIX_SECONDS_MIN } from "../reminders.js";
-import { isSupportedUrl } from "./import-export.js";
+import { isSupportedUrl } from "../urls.js";
 
 /** Unix seconds. Null clears the reminder; a past value is immediately due. */
 export const UnixSecondsSchema = z
