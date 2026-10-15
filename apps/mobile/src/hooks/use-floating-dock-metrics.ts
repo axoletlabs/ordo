@@ -2,6 +2,7 @@
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { spacing } from "../theme/tokens";
 import { SELECTION_BAR_HEIGHT, useSelectionUiStore } from "./use-selection";
+import { fabContentPadding } from "../lib/fab-layout";
 
 export function useFloatingDockMetrics() {
   const insets = useSafeAreaInsets();
@@ -14,6 +15,6 @@ export function useFloatingDockMetrics() {
     hideBottomNav: selectionActive, hideForKeyboard: false,
     bottom, height: 0, clearance: safeBottomClearance, selectionClearance,
     overlayClearance: selectionActive ? selectionClearance : safeBottomClearance,
-    listOverlayClearance: selectionActive ? selectionClearance : insets.bottom + spacing[16] + 56 + spacing[8],
+    listOverlayClearance: selectionActive ? selectionClearance : fabContentPadding(insets.bottom, undefined, spacing[8]),
   };
 }
