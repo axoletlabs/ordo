@@ -8,7 +8,7 @@ import { HeaderActions, HeaderIconButton } from "../../../src/components/ui/Head
 import { LibraryHeader } from "../../../src/components/bookmarks/LibraryHeader";
 import { LibraryFilters } from "../../../src/components/bookmarks/LibraryFilters";
 import { SearchFilterMenu } from "../../../src/components/bookmarks/SearchFilterMenu";
-import { useLibrarySearch } from "../../../src/hooks/use-library-search";
+import { useLibraryCatalogue, useLibrarySearch } from "../../../src/hooks/use-library-search";
 import { useLegacyReaderLink } from "../../../src/hooks/use-legacy-reader-link";
 import { searchScopeActive } from "../../../src/lib/search-bookmarks";
 import { ListLoadingFooter } from "../../../src/components/ui/ListLoadingFooter";
@@ -69,6 +69,12 @@ import { useBookmarkListLayout } from "../../../src/hooks/use-bookmark-list-layo
 type LibraryItem =
   | { type: "folder"; folder: FolderDto }
   | { type: "bookmark"; bookmark: BookmarkDto };
+
+/** Hosts search-index warming so each fetched page re-renders only this leaf. */
+function LibraryCatalogueWarmer({ searching }: { searching: boolean }) {
+  useLibraryCatalogue(searching);
+  return null;
+}
 
 export default function BookmarksScreen() {
   const { palette } = useTheme();
@@ -368,6 +374,7 @@ export default function BookmarksScreen() {
         } : undefined} />
 
       <ExtractionProgressLine />
+      <LibraryCatalogueWarmer searching={search.active} />
 
       {!search.active && bookmarks.error && !bookmarks.data && folderItems.length === 0 && !folders.isLoading ? (
         <ScreenContent maxWidth={layout.maxContentWidth} style={styles.center}>

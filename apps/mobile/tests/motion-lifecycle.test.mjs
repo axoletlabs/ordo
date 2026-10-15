@@ -135,6 +135,30 @@ test("stale close completion cannot unmount a reopened overlay", () => {
   assert.equal(h.render(() => useOverlayPresence(false, dismiss)).rendered, false);
 });
 
+test("a sibling handoff runs once after exit, never during the outgoing fade", () => {
+  const h = harness(), { useOverlayPresence } = h.load("hooks/use-overlay-presence.ts");
+  let exits = 0;
+  const render = visible => h.render(() => useOverlayPresence(visible, () => {}, { onExited: () => exits++ }));
+  render(true).progress.complete();
+  const closing = render(false);
+  assert.equal(exits, 0);
+  closing.progress.complete();
+  assert.equal(render(false).rendered, false); assert.equal(exits, 1);
+  render(false); assert.equal(exits, 1);
+});
+
+test("reopening cancels a pending sibling handoff until the next real exit", () => {
+  const h = harness(), { useOverlayPresence } = h.load("hooks/use-overlay-presence.ts");
+  let exits = 0;
+  const render = visible => h.render(() => useOverlayPresence(visible, () => {}, { onExited: () => exits++ }));
+  render(true).progress.complete();
+  const stale = render(false).progress.animation.callback;
+  render(true); stale(true); render(true);
+  assert.equal(exits, 0);
+  render(false).progress.complete(); render(false);
+  assert.equal(exits, 1);
+});
+
 test("live reduced motion settles an in-flight entrance immediately", () => {
   const h = harness(), { useOverlayPresence } = h.load("hooks/use-overlay-presence.ts");
   const dismiss = () => {};

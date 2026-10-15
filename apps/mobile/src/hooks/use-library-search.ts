@@ -1,6 +1,7 @@
 /** Immediate cached matches, followed by paginated server/article-body matches. */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { AppState } from "react-native";
 import { useQueryClient } from "@tanstack/react-query";
 import { prepareBookmarkSearch, type BookmarkDto, type FolderDto } from "@ordo/shared";
 import { useInfiniteQuery } from "@tanstack/react-query";
@@ -16,6 +17,55 @@ import { compileSearchResults, EMPTY_SEARCH_FILTERS, reuseSearchResults, sanitiz
   type SearchFilters } from "../lib/search-bookmarks";
 
 const EMPTY: BookmarkDto[] = [];
+/** Let the visible library and launch requests finish before indexing the rest. */
+const CATALOGUE_WARM_DELAY_MS = 2_000;
+
+/**
+ * Warms the lean, authorized metadata catalogue progressively so typing never
+ * waits for a request, even for folders the user has not opened. Mount it as
+ * its own component: each page re-renders only this hook, not the library.
+ * Search reads the pages through the query cache (collectCachedBookmarks).
+ */
+export function useLibraryCatalogue(searching: boolean) {
+  const accessRevision = useFolderTokenStore((state) => state.accessRevision);
+  const [armed, setArmed] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const [foreground, setForeground] = useState(AppState.currentState !== "background" && AppState.currentState !== "inactive");
+  useFocusEffect(useCallback(() => {
+    setFocused(true);
+    return () => setFocused(false);
+  }, []));
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", state => setForeground(state === "active"));
+    return () => subscription.remove();
+  }, []);
+  const enabled = focused && foreground && (armed || searching);
+  useEffect(() => {
+    const timer = setTimeout(() => setArmed(true), CATALOGUE_WARM_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  const catalogue = useInfiniteQuery({
+    queryKey: qk.libraryIndex(accessRevision),
+    queryFn: ({ pageParam, signal }) => bookmarksApi.listTagged([], pageParam, LIST_PAGE_SIZE, signal),
+    initialPageParam: null as string | null,
+    getNextPageParam: (page, _pages, _lastParam, pageParams) => {
+      const next = nextPageCursor(page);
+      return next && !pageParams.includes(next) ? next : undefined;
+    }, staleTime: 60_000,
+    enabled,
+  });
+  useEffect(() => {
+    for (const bookmark of catalogue.data?.pages.at(-1)?.items ?? []) prepareBookmarkSearch(bookmark);
+  }, [catalogue.data]);
+  useEffect(() => {
+    // A 10k-bookmark catalogue takes 100 pages. Do not keep parsing/indexing
+    // them behind the reader, a folder transition, or while backgrounded.
+    if (!enabled || !catalogue.hasNextPage || catalogue.isFetching || catalogue.isError) return;
+    const timer = setTimeout(() => void catalogue.fetchNextPage(), 250);
+    return () => clearTimeout(timer);
+  }, [enabled, catalogue.hasNextPage, catalogue.isFetching, catalogue.isError, catalogue.data, catalogue.fetchNextPage]);
+}
+
 export function useLibrarySearch(localItems: readonly BookmarkDto[], folders: readonly FolderDto[]) {
   const router = useRouter();
   const params = useLocalSearchParams<{ query?: string }>();
@@ -31,35 +81,23 @@ export function useLibrarySearch(localItems: readonly BookmarkDto[], folders: re
   const urlQuery = useDebouncedValue(trimmed, 1000);
   const queryClient = useQueryClient();
   const accessRevision = useFolderTokenStore((state) => state.accessRevision);
-  // Warm the lean, authorized metadata catalogue progressively. Typing never
-  // waits for a request, even for folders the user has not opened this session.
-  const catalogue = useInfiniteQuery({
-    queryKey: qk.libraryIndex(accessRevision),
-    queryFn: ({ pageParam }) => bookmarksApi.listTagged([], pageParam, LIST_PAGE_SIZE),
-    initialPageParam: null as string | null,
-    getNextPageParam: (page, _pages, _lastParam, pageParams) => {
-      const next = nextPageCursor(page);
-      return next && !pageParams.includes(next) ? next : undefined;
-    }, staleTime: 60_000,
-  });
   useEffect(() => {
     for (const bookmark of localItems) prepareBookmarkSearch(bookmark);
-    for (const bookmark of catalogue.data?.pages.at(-1)?.items ?? []) prepareBookmarkSearch(bookmark);
-  }, [localItems, catalogue.data]);
-  useEffect(() => {
-    if (!catalogue.hasNextPage || catalogue.isFetching || catalogue.isError) return;
-    const timer = setTimeout(() => void catalogue.fetchNextPage(), 250);
-    return () => clearTimeout(timer);
-  }, [catalogue.hasNextPage, catalogue.isFetching, catalogue.isError, catalogue.data, catalogue.fetchNextPage]);
+  }, [localItems]);
   const [cacheRevision, setCacheRevision] = useState(0);
-  useEffect(() => queryClient.getQueryCache().subscribe((event) => {
-    if (event.query.queryKey[0] !== "bookmarks") return;
-    // Search pages are written by this hook's own query; recomputing the
-    // cached-match snapshot on each would be redundant work per page.
-    if (event.query.queryKey[1] === "search") return;
-    if (event.type === "removed" || (event.type === "updated" && event.action.type === "success"))
-      setCacheRevision((revision) => revision + 1);
-  }), [queryClient]);
+  // Cached matches are only computed while searching; idle, cache traffic
+  // (catalogue pages, polls, prefetches) must not re-render the library.
+  useEffect(() => {
+    if (!active) return;
+    return queryClient.getQueryCache().subscribe((event) => {
+      if (event.query.queryKey[0] !== "bookmarks") return;
+      // Search pages are written by this hook's own query; recomputing the
+      // cached-match snapshot on each would be redundant work per page.
+      if (event.query.queryKey[1] === "search") return;
+      if (event.type === "removed" || (event.type === "updated" && event.action.type === "success"))
+        setCacheRevision((revision) => revision + 1);
+    });
+  }, [queryClient, active]);
   const search = useInfiniteSearch(serverQuery, { tagIds: listFilters.tagIds, folderIds: listFilters.folderIds,
     unfiled: listFilters.unfiled, unread: listFilters.status, fuzzy: listFilters.fuzzy,
     reminder: listFilters.reminder, enabled: !!serverQuery || searchScopeActive(listFilters) });

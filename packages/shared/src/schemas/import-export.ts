@@ -17,40 +17,9 @@ import {
   type ImportFormat,
 } from "../constants.js";
 import { FolderIconSchema } from "./folder.js";
+import { isSupportedUrl } from "../urls.js";
 
-/**
- * Normalize a URL for duplicate matching: lowercase scheme/host, drop default
- * ports, drop a trailing slash on the root path, and drop empty fragments.
- * Query strings and non-root paths are preserved exactly.
- */
-export function normalizeUrlForMatch(raw: string): string {
-  const trimmed = raw.trim();
-  let url: URL;
-  try {
-    url = new URL(trimmed);
-  } catch {
-    return trimmed;
-  }
-  let out = `${url.protocol}//${url.hostname}`;
-  const isDefaultPort =
-    (url.protocol === "https:" && url.port === "443") ||
-    (url.protocol === "http:" && url.port === "80");
-  if (url.port && !isDefaultPort) out += `:${url.port}`;
-  if (url.pathname && url.pathname !== "/") out += url.pathname;
-  if (url.search) out += url.search;
-  if (url.hash && url.hash !== "#") out += url.hash;
-  return out;
-}
-
-/** True when a URL is absolute http(s) — the only schemes Ordo stores. */
-export function isSupportedUrl(value: string): boolean {
-  try {
-    const url = new URL(value.trim());
-    return url.protocol === "http:" || url.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
+export { isSupportedUrl, normalizeUrlForMatch } from "../urls.js";
 
 /**
  * Flexible date input: ISO strings or unix seconds/milliseconds. Invalid
@@ -197,32 +166,7 @@ export interface ImportPreviewDto {
   duplicateSamples: ImportDuplicateSample[];
 }
 
-/**
- * Fill fields added after the first import-preview shape so older jobs (and
- * clients talking to an older server) never hand the UI undefined arrays.
- */
-export function normalizeImportPreview(
-  raw: Partial<ImportPreviewDto> | null | undefined,
-): ImportPreviewDto | null {
-  if (!raw || typeof raw !== "object") return null;
-  const duplicates = raw.duplicates ?? 0;
-  const uniqueDuplicates = raw.uniqueDuplicates ?? duplicates;
-  return {
-    format: raw.format ?? "netscape-html",
-    totalRows: raw.totalRows ?? 0,
-    validRows: raw.validRows ?? 0,
-    invalidRows: raw.invalidRows ?? 0,
-    duplicates,
-    uniqueNew: raw.uniqueNew ?? Math.max(0, (raw.validRows ?? 0) - uniqueDuplicates),
-    uniqueDuplicates,
-    withinFileDuplicates: raw.withinFileDuplicates ?? 0,
-    newFolders: raw.newFolders ?? [],
-    existingFolders: raw.existingFolders ?? [],
-    lockedFolderMatches: raw.lockedFolderMatches ?? [],
-    invalidSamples: raw.invalidSamples ?? [],
-    duplicateSamples: raw.duplicateSamples ?? [],
-  };
-}
+export { normalizeImportPreview } from "../import-preview.js";
 
 /** Live background article-fetch progress for the signed-in user. */
 export interface ExtractionProgressDto {

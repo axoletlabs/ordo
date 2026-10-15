@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { runInNewContext } from "node:vm";
 import {
   FORCE_DARK_CONTENT_SELECTORS,
   FORCE_DARK_LIGHT_LUMINANCE,
@@ -153,4 +154,66 @@ test("injected script asks for native dark and inverts body, not the root", () =
   assert.doesNotMatch(WEBSITE_FORCE_DARK_SCRIPT, /background-image/);
   assert.match(WEBSITE_FORCE_DARK_SCRIPT, /requestAnimationFrame/);
   assert.match(WEBSITE_FORCE_DARK_SCRIPT, /true;\s*$/);
+});
+
+test("force-dark refinements skip identical page-wide writes but still follow a theme change", () => {
+  const callbacks: Array<() => void> = [];
+  const nodes = new Map<string, ReturnType<typeof node>>();
+  const classes = new Set<string>();
+  let stylesheetWrites = 0, schemeWrites = 0, metaWrites = 0, classWrites = 0;
+  let colorScheme = "", background = "rgb(255, 255, 255)";
+  function node() {
+    const attributes = new Map<string, string>();
+    let text = "";
+    return {
+      id: "",
+      get textContent() { return text; },
+      set textContent(value: string) { stylesheetWrites++; text = value; },
+      getAttribute: (name: string) => attributes.get(name) ?? null,
+      setAttribute: (name: string, value: string) => {
+        if (name === "content") metaWrites++;
+        attributes.set(name, value);
+      },
+    };
+  }
+  const root = { ...node(), style: {
+    get colorScheme() { return colorScheme; },
+    set colorScheme(value: string) { schemeWrites++; colorScheme = value; },
+  }, classList: {
+    contains: (name: string) => classes.has(name),
+    add: (name: string) => { classWrites++; classes.add(name); },
+    remove: (name: string) => { classWrites++; classes.delete(name); },
+  } };
+  const context = {
+    window: {},
+    document: {
+      documentElement: root, body: {}, readyState: "complete",
+      head: {
+        firstChild: null,
+        appendChild: (element: ReturnType<typeof node>) => nodes.set(element.id, element),
+        insertBefore: (element: ReturnType<typeof node>) => nodes.set("meta", element),
+      },
+      getElementById: (id: string) => nodes.get(id) ?? null,
+      querySelector: (selector: string) => selector.startsWith("meta[") ? nodes.get("meta") ?? null : null,
+      createElement: node,
+    },
+    getComputedStyle: () => ({ backgroundColor: background }),
+    requestAnimationFrame: (callback: () => void) => callbacks.push(callback),
+    setTimeout: (callback: () => void) => callbacks.push(callback),
+  };
+  runInNewContext(WEBSITE_FORCE_DARK_SCRIPT, context);
+  callbacks.forEach(callback => callback());
+  runInNewContext(WEBSITE_FORCE_DARK_SCRIPT, context);
+  assert.equal(stylesheetWrites, 1);
+  assert.equal(schemeWrites, 1);
+  assert.equal(metaWrites, 1);
+  assert.equal(classWrites, 1);
+  background = "rgb(18, 18, 18)";
+  runInNewContext(WEBSITE_FORCE_DARK_SCRIPT, context);
+  assert.equal(stylesheetWrites, 2, "A real dark page must remove the inversion");
+  assert.equal(classWrites, 2);
+  assert.equal(classes.size, 0);
+  runInNewContext(WEBSITE_FORCE_DARK_SCRIPT, context);
+  assert.equal(stylesheetWrites, 2);
+  assert.equal(classWrites, 2);
 });
