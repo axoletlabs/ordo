@@ -64,7 +64,7 @@ import { ReaderControlsSheet } from "./ReaderControlsSheet";
 import { EditTagsSheet } from "../tags/EditTagsSheet";
 import { LockPrompt } from "../bookmarks/LockPrompt";
 import { ReminderCustomPanel } from "../bookmarks/ReminderCustomPanel";
-import { ReminderPresetItems, useSaveReminder } from "../bookmarks/ReminderFlow";
+import { REMINDER_MENU_WIDTH, ReminderPresetItems, useSaveReminder } from "../bookmarks/ReminderFlow";
 import { formatReminderWhen } from "../../lib/bookmark-reminders";
 import { READER_BODY_SIZE, resolveReaderFont } from "./reader-typography";
 import { useReaderFontFamily } from "../../theme/fonts";
@@ -1266,6 +1266,7 @@ function ReaderPaneInner({
         visible={actionPanel === "actions" || actionPanel === "remind"}
         onDismiss={closeActions}
         anchor={actionsAnchor}
+        width={remindersSupported ? REMINDER_MENU_WIDTH : undefined}
         sessionKey={actionPanel ? bookmark?.id : undefined}
         pageKey={actionPanel === "remind" ? "remind" : "actions"}
       >

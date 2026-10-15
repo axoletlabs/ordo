@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, ScrollView, StyleSheet, View } from "react-native";
+import Svg, { Circle } from "react-native-svg";
 import { PressableScale } from "../ui/PressableScale";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { unixSeconds } from "@ordo/shared";
@@ -171,13 +172,16 @@ function ReminderCustomPanelContent({
                 stateLayerColor={cell.selected ? palette.onPrimary : palette.primary}
                 style={styles.dayCell}
               >
-                <View
-                  style={[
-                    styles.dayHit,
-                    cell.selected ? { backgroundColor: palette.accent } : null,
-                    cell.isToday && !cell.selected ? { borderWidth: 1, borderColor: palette.primary } : null,
-                  ]}
-                >
+                <View style={styles.dayHit}>
+                  {/* Ordinary dates start as layout-only native views; adding a
+                      background on selection can lose their rounded paint on
+                      Android. Paint both states with real circle geometry,
+                      rather than relying on that view's border-radius update. */}
+                  <Svg width={40} height={40} style={StyleSheet.absoluteFill} pointerEvents="none" accessible={false}>
+                    <Circle cx={20} cy={20} r={cell.isToday && !cell.selected ? 19.5 : 20}
+                      fill={cell.selected ? palette.primary : "none"}
+                      stroke={cell.isToday && !cell.selected ? palette.primary : "none"} strokeWidth={1} />
+                  </Svg>
                   <Text
                     variant="bodyLarge"
                     color={cell.selected ? "onAccent" : cell.isPast ? "faint" : cell.isToday ? "accent" : "primary"}
@@ -328,9 +332,7 @@ const styles = StyleSheet.create({
   },
   cellLabel: { includeFontPadding: false },
   days: { flexDirection: "row", flexWrap: "wrap" },
-  // Half-size radii instead of a 9999px "full" circle: oversized radius clips
-  // can square off under Android's compositor once the press layer animates
-  // above them, which read as a square selected date beside the round ring.
+  // The 48dp interaction/state layer surrounds the 40dp painted date circle.
   dayCell: {
     width: 48,
     height: 48,
