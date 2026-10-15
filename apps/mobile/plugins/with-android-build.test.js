@@ -452,4 +452,3 @@ test("unused BouncyCastle data files are excluded without touching its classes",
     assert.doesNotMatch(pattern, /\.class|^org\/bouncycastle\/\*\*$/);
   }
 });
-
