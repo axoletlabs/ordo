@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0 Preview 1
+
+The first preview of the 0.3.0 cycle, focused on performance and day-to-day reliability.
+
+- Faster long readers and smoother work in large libraries.
+- Smaller downloads: R8 code and resource shrinking, compressed native libraries, and dead asset removal.
+- Bookmark moves reconcile reliably, and deletion undo is durable across restarts and idle recovery.
+- The Android Back gesture cancels an incoming share instead of leaving the app.
+- Reader: a compact contents panel with a close action, and reserved scroll clearance so the Contents FAB no longer covers the text.
+- Clearer reminder date indicators, with preset labels kept on one line.
+- OTP digits are individually editable during sign-in.
+
+**Install:** This preview requires a new APK, not OTA. Android build numbers restart with the 0.3.0 line (this preview uses `versionCode=1`, Preview 2 of 0.2.0 shipped `versionCode=2`), so it cannot replace the old preview in-place: uninstall `ordo (preview)` first if the update fails (this clears local settings/cache, not your server library). Self-hosted users can select this exact release with `--release v0.3.0-preview.1` or include previews with `--pre`.
+
+[Full commit history](https://github.com/axoletlabs/ordo/compare/v0.2.0...v0.3.0-preview.1)
+
 ## 0.2.0
 
 The 0.2.0 preview is now stable. Thanks to everyone who tested it!
