@@ -213,7 +213,8 @@ export function AddBookmarkSheet({
         visible={visible}
         obscured={createFolderOpen || createTagOpen}
         interactive={!destinationOpen && !showTagPicker}
-        dismissible={!shareIntake && !create.isPending}
+        dismissible={!create.isPending}
+        dismissOnScrim={!shareIntake}
         onDismiss={() => {
           if (unlocking) setLockedFolderId(null);
           else close();
