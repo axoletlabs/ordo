@@ -97,10 +97,13 @@ the compiler is verified by content. Kotlin/Java reuse Gradle's build cache.
 Every APK of a build — the universal package and all four ABI splits — shares
 one `versionCode`. Only Development uses the CI run number, so its build
 numbers keep growing across manual builds. Preview and Stable are separate apps
-and use the small sequential numbers from their own version (Preview's
-sequence number, otherwise 1). Android treats an equal-code install as a
-replace; a re-run reuses its run's code and the immutability check refuses
-replacing published assets with different bytes.
+with release-derived numbers: Stable stays at 1 (an equal-code install is a
+replace), and Preview adds its sequence number to the line's offset in
+`PREVIEW_CODE_BASES` (`scripts/release-policy.js`) — the count of previews
+earlier lines shipped — so the count keeps rising when a new line opens
+instead of restarting below the previous line's previews. A re-run reuses its
+run's code and the immutability check refuses replacing published assets with
+different bytes.
 
 Development APKs are updated manually from Actions artifacts. They cannot
 receive OTA or published-release APK updates. Installing Stable or Preview

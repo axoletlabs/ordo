@@ -78,6 +78,27 @@ function isNewerVersion(candidate, current) {
   return compareVersions(candidate, current) > 0;
 }
 
+// Preview APK build numbers must never fall backwards across release lines:
+// Android refuses to replace an installed versionCode with a lower one, so a
+// line that restarted at Preview 1 could not upgrade the previous line's
+// previews in place. Each line starts after every preview code earlier lines
+// shipped; the release pipeline test holds this table against tag history.
+const PREVIEW_CODE_BASES = { "0.3": 2 };
+
+function releaseLineOf(value) {
+  const classified = typeof value === "string" ? classifyReleaseVersion(value) : value;
+  return classified ? classified.version.split("-")[0].split(".").slice(0, 2).join(".") : null;
+}
+
+/** Stable/Preview Android versionCode. Development returns null (run number). */
+function androidBuildNumber(value) {
+  const classified = typeof value === "string" ? classifyReleaseVersion(value) : value;
+  if (!classified) return null;
+  if (classified.kind === "stable") return 1;
+  if (classified.channel !== "preview") return null;
+  return (PREVIEW_CODE_BASES[releaseLineOf(classified)] ?? 0) + (classified.number ?? 0);
+}
+
 function easUpdatesChannel(version) {
   const classified = classifyReleaseVersion(version);
   return classified ? (classified.kind === "stable" ? "stable" : "preview") : null;
@@ -141,6 +162,7 @@ function selectNativeUpdate(releases, current, variant) {
 module.exports = {
   APP_VARIANTS, appVariantForPackage, releaseMatchesVariant,
   classifyReleaseVersion, parseVersion, compareVersions, isNewerVersion,
+  PREVIEW_CODE_BASES, releaseLineOf, androidBuildNumber,
   easUpdatesChannel, releaseLineBranch, resolveUpdatesChannel,
   validateReleaseBranch, validateReleaseTag, isEarlyRelease,
   compareReleaseCandidates, selectNativeUpdate,

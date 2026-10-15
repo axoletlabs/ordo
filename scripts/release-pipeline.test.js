@@ -186,8 +186,41 @@ test("Release builds use version-derived codes instead of the CI run number", ()
       assert.equal(result.status, 0, result.stderr);
       assert.equal(result.output.version, version);
       assert.equal(result.output.app_variant, classified.channel ?? "stable");
-      assert.equal(Number(result.output.version_code), classified.number ?? 1);
+      assert.equal(Number(result.output.version_code), policy.androidBuildNumber(version) ?? 1);
     }
+  }
+});
+
+test("Preview build numbers continue across release lines instead of restarting", () => {
+  assert.equal(policy.androidBuildNumber("0.2.0-preview.1"), 1);
+  assert.equal(policy.androidBuildNumber("0.2.0-preview.2"), 2);
+  // 0.2.0 ended at code 2, so the 0.3.0 line starts at 3.
+  assert.equal(policy.androidBuildNumber("0.3.0-preview.1"), 3);
+  assert.equal(policy.androidBuildNumber("0.3.0-preview.10"), 12);
+  assert.equal(policy.androidBuildNumber("0.3.0-preview"), 2);
+  assert.equal(policy.androidBuildNumber("0.3.0"), 1);
+  assert.equal(policy.androidBuildNumber("nonsense"), null);
+  for (const preview of ["0.3.0-preview.1", "0.3.0-preview.2"]) {
+    assert.ok(policy.androidBuildNumber(preview) > policy.androidBuildNumber("0.2.0-preview.2"),
+      `${preview} must outrank the last preview the 0.2.0 line shipped`);
+  }
+});
+
+test("the preview build-number base table matches the published tag history", () => {
+  const tags = spawnSync("git", ["tag", "--list", "v*-preview.*"], { cwd: root, encoding: "utf8" })
+    .stdout.trim().split("\n").filter(Boolean);
+  const previews = tags.map((tag) => {
+    const match = tag.match(/^v(\d+)\.(\d+)\.\d+-preview\.(\d+)$/);
+    assert.ok(match, `unexpected preview tag: ${tag}`);
+    return { line: `${match[1]}.${match[2]}`, order: Number(match[1]) * 1000 + Number(match[2]) };
+  });
+  const lines = new Set(previews.map((preview) => preview.line));
+  lines.add(policy.releaseLineOf(require("../apps/mobile/app.config.js").version));
+  for (const line of lines) {
+    const [major, minor] = line.split(".").map(Number);
+    const expected = previews.filter((preview) => preview.order < major * 1000 + minor).length;
+    assert.equal(policy.PREVIEW_CODE_BASES[line] ?? 0, expected,
+      `line ${line} must start after the ${expected} previews earlier lines shipped`);
   }
 });
 
