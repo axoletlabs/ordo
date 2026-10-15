@@ -42,6 +42,8 @@ export interface FloatingPanelProps {
   fitContent?: boolean;
   /** When false, the scrim and back button do not close the panel. */
   dismissible?: boolean;
+  /** Disable outside-tap dismissal without disabling Back/Escape. */
+  dismissOnScrim?: boolean;
   /** Pickers own their virtualized list; don't nest it inside a ScrollView. */
   scrollBody?: boolean;
   /** Keep a draft mounted while a sibling picker is the active surface. */
@@ -65,6 +67,7 @@ function FloatingPanelSurface({
   onShow,
   fitContent = false,
   dismissible = true,
+  dismissOnScrim = true,
   scrollBody = true,
   obscured = false,
   interactive = true,
@@ -207,8 +210,8 @@ function FloatingPanelSurface({
           accessibilityRole="button"
           accessibilityLabel="Dismiss"
           style={StyleSheet.absoluteFill}
-          onPressIn={dismissible ? dismissKeyboard : undefined}
-          onPress={dismissible ? hideAndDismiss : undefined}
+          onPressIn={dismissible && dismissOnScrim ? dismissKeyboard : undefined}
+          onPress={dismissible && dismissOnScrim ? hideAndDismiss : undefined}
         />
           <View pointerEvents="box-none" style={[styles.frame, { paddingTop: insets.top + spacing[16], paddingBottom: insets.bottom + spacing[16] },
             Platform.OS !== "web" ? { flex: 0, height: restHeight } : null]}>
