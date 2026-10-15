@@ -5,6 +5,7 @@
  * ORDO_UI_OVERLAY_LAYOUT_ONLY=1 checks nested menu sizing and reader contents across themes/layouts.
  * ORDO_UI_READER_SETTINGS_ONLY=1 checks stable reader settings geometry and typography controls.
  * ORDO_UI_BOOKMARK_ONLY=1 checks save-dialog focus and single/batch move feedback.
+ * ORDO_UI_TRANSACTIONS_ONLY=1 replays stateful move/delete/Undo and restart recovery.
  */
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -14,6 +15,7 @@ import { reminderPickerMatrix } from "./reminder-picker.mjs";
 import { progressMatrix } from "./material-progress-ui.mjs";
 import { selectionActionMotionMatrix } from "./selection-action-motion.mjs";
 import { bookmarkDialogMatrix } from "./bookmark-dialog.mjs";
+import { bookmarkTransactionMatrix } from "./bookmark-transaction-ui.mjs";
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? "playwright");
 const base = process.env.ORDO_UI_URL ?? "http://127.0.0.1:8235";
 const output = process.env.ORDO_UI_OUTPUT ?? "/tmp/opencode/ordo-material-ui";
@@ -599,7 +601,8 @@ async function overlayLayoutMatrix() {
 }
 
 try {
-  if (process.env.ORDO_UI_BOOKMARK_ONLY) await bookmarkDialogMatrix({ browser, fixture, login, button, settle, capture, results, bookmark, folder });
+  if (process.env.ORDO_UI_TRANSACTIONS_ONLY) await bookmarkTransactionMatrix({ browser, fixture, login, button, settle, capture, results, bookmark, folder });
+  else if (process.env.ORDO_UI_BOOKMARK_ONLY) await bookmarkDialogMatrix({ browser, fixture, login, button, settle, capture, results, bookmark, folder });
   else if (process.env.ORDO_UI_REMINDER_ONLY) await reminderPickerMatrix({ browser, fixture, login, button, settle, capture, results });
   else if (process.env.ORDO_UI_PROGRESS_ONLY) await progressMatrix({ browser, fixture, login, navigate, button, settle, capture, results, bookmark });
   else if (process.env.ORDO_UI_SELECTION_MOTION_ONLY) await selectionActionMotionMatrix({ browser, fixture, login, button, settle, capture, results });
