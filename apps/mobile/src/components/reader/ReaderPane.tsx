@@ -107,6 +107,7 @@ import { copyLink, copyText } from "../../lib/copy-link";
 import { ackBookmarkOpened, openExternalBrowser, openLivePage } from "../../lib/open-website";
 import { reminderClearsOnOpen } from "../../lib/bookmark-reminders";
 import { scrollReadingProgress, shouldFlushReadingProgress } from "../../lib/reading-progress";
+import { fabContentPadding } from "../../lib/fab-layout";
 
 function useSetContentKindMissing() {
   return { mutate: () => undefined, isPending: false };
@@ -636,6 +637,13 @@ function ReaderPaneInner({
   const browserMounted = showWebsiteView || (!!bookmarkId && keptBrowserId === bookmarkId);
   websiteViewRef.current = showWebsiteView;
   const palette = showWebsiteView ? appPalette : readerPalette;
+  const hasContents = articleHeadings.length >= 3 && hasContent && !showWebsiteView;
+  const contentsFabBottom = spacing[20] + (safeBottom ? insets.bottom : 0);
+  // Reserve clearance even while selection or the contents panel hides the FAB,
+  // so opening/dismissing overlays never changes the article's scroll range.
+  const readerBottomPadding = hasContents
+    ? fabContentPadding(insets.bottom, contentsFabBottom)
+    : spacing[16] + (safeBottom ? insets.bottom : 0);
   const websiteChrome = forceWebsiteDark
     ? currentAppPalette("dark").background
     : palette.background;
@@ -1129,7 +1137,7 @@ function ReaderPaneInner({
               // The chrome is an overlay: pad the content so it starts below
               // the bar and scrolls underneath it once the bar slides away.
               paddingTop: chromeHeight + spacing[12],
-              paddingBottom: spacing[16] + (safeBottom ? insets.bottom : 0),
+              paddingBottom: readerBottomPadding,
             }}
           >
             <ScreenContent maxWidth={layout.maxReaderWidth} alignTo={embedded ? "parent" : "scene"} style={styles.body}>
@@ -1224,7 +1232,7 @@ function ReaderPaneInner({
         </>
       )}
 
-      {articleHeadings.length >= 3 && hasContent && !showWebsiteView && !selectionMenu && actionPanel !== "contents" ? (
+      {hasContents && !selectionMenu && actionPanel !== "contents" ? (
         <FABLayer maxWidth={layout.maxReaderWidth}>
           <FAB
             icon="list-outline"
@@ -1237,7 +1245,7 @@ function ReaderPaneInner({
             }}
             maxContentWidth={layout.maxReaderWidth}
             alignTo={embedded ? "parent" : "scene"}
-            bottom={spacing[20] + (safeBottom ? insets.bottom : 0)}
+            bottom={contentsFabBottom}
           />
         </FABLayer>
       ) : null}
