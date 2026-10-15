@@ -24,7 +24,8 @@ import { hostOf } from "../../src/lib/instance-name";
 import { haptics } from "../../src/lib/haptics";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { spacing } from "../../src/theme/tokens";
-import { ErrorCode, LoginSchema, isMfaRequiredResponse } from "@ordo/shared";
+import { ErrorCode, isMfaRequiredResponse } from "@ordo/shared";
+import { LoginSchema } from "@ordo/shared/schemas";
 import { lockedSecretDisplay, passwordAutofillProps } from "../../src/lib/password-autofill";
 
 function routeParam(value: string | string[] | undefined): string {

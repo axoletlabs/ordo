@@ -43,6 +43,8 @@ export type { MenuAnchorRect };
 export interface ContextMenuProps {
   visible: boolean;
   onDismiss: () => void;
+  /** Handoff to a sibling only after this menu has left the overlay host. */
+  onExited?: () => void;
   anchor: MenuAnchorRect | null;
   children: React.ReactNode;
   width?: number;
@@ -65,6 +67,7 @@ export function ContextMenu(props: ContextMenuProps) {
 function ContextMenuSurface({
   visible,
   onDismiss,
+  onExited,
   anchor,
   children,
   width = CONTEXT_MENU_WIDTH,
@@ -90,6 +93,7 @@ function ContextMenuSurface({
   const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, {
     dismissKeyboard: backdrop && keyboardDismiss,
     ready: contentHeight > 0,
+    onExited,
   });
   const menuRef = useOverlayFocus(visible && rendered && backdrop, hideAndDismiss, "menu");
   const pageProgress = useSharedValue(1);
@@ -387,6 +391,7 @@ export function ContextMenuItem({
       }}
       style={[
         styles.item,
+        detail ? styles.itemWithDetail : null,
         Platform.OS === "web" ? styles.itemWeb : null,
         inactive && styles.itemDisabled,
         { backgroundColor: selected ? palette.secondaryContainer : "transparent" },
@@ -441,6 +446,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[8],
   },
   itemSide: { alignSelf: "center", flexShrink: 0 },
+  itemWithDetail: { gap: spacing[8] },
   itemWeb: {
     cursor: "pointer",
   } as ViewStyle,

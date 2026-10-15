@@ -1,6 +1,7 @@
 import type { NestExpressApplication } from "@nestjs/platform-express";
 import type { Request, Response, NextFunction } from "express";
 import { json as expressJson } from "express";
+import compression from "compression";
 import cookieParser from "cookie-parser";
 import { CSRF_TOKEN_HEADER, IMPORT_EXPORT } from "@ordo/shared";
 import type { AppConfig } from "../config/config.module.js";
@@ -24,8 +25,8 @@ export const STRICT_TRANSPORT_SECURITY = "max-age=31536000; includeSubDomains";
 export const DEFAULT_JSON_BODY_LIMIT = "1mb";
 
 /**
- * Shared HTTP setup for `main.ts` and e2e: trust proxy, CORS, cookies,
- * and baseline security headers.
+ * Shared HTTP setup for `main.ts` and e2e: trust proxy, compression, CORS,
+ * cookies, and baseline security headers.
  * CORS never reflects an unknown Origin. Empty allowlist = this API's origin
  * plus loopback (Expo web on another port). A set list (ordo Cloud) is exact.
  * HSTS follows `req.secure`, the same signal as Secure cookies, so a client
@@ -33,6 +34,12 @@ export const DEFAULT_JSON_BODY_LIMIT = "1mb";
  */
 export function applyHttp(app: NestExpressApplication, cfg: AppConfig): void {
   app.set("trust proxy", cfg.trustProxy);
+  // Bookmark pages (up to 100 rows) and article HTML are text the app
+  // re-downloads constantly; gzip cuts them to a fraction on mobile links.
+  // Do not rely on the reverse proxy: nginx only compresses text/html unless
+  // configured, and LAN self-hosts often expose Node directly. Images and
+  // already-encoded bodies are skipped by compression's content-type filter.
+  app.use(compression());
   app.use((req: Request, res: Response, next: NextFunction) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");

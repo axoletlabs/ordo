@@ -17,11 +17,12 @@ import { useListSortStore } from "../store/list-sort";
 import { nextPageCursor, qk } from "../lib/api/query-keys";
 import {
   bumpFolderCount,
+  collectCachedBookmarks,
   insertCreatedBookmark,
+  moveBookmarkInCache,
   patchListsFromDetail,
-  prependBookmarkToPages,
-  removeBookmarkFromPages,
   removeBookmarksEverywhere,
+  rollbackBookmarkMoves,
   syncReminderInCache,
   updateBookmarkEverywhere,
   updateBookmarkInPages,
@@ -40,6 +41,8 @@ import {
 import { LIST_PAGE_SIZE } from "../lib/list-pagination";
 import { PERSISTED_QUERY_GC_TIME_MS } from "../lib/query-persist";
 
+const BOOKMARK_WRITE_KEY = ["bookmarks", "write"] as const;
+
 function snapshotLists(qc: QueryClient, folderId: string | null) {
   return qc.getQueriesData({ queryKey: qk.bookmarks(folderId) });
 }
@@ -49,37 +52,40 @@ function restoreLists(qc: QueryClient, snapshots: ReturnType<typeof snapshotList
   for (const [key, data] of snapshots) qc.setQueryData(key, data);
 }
 
-function findCachedBookmark(qc: QueryClient, folderId: string | null, id: string): BookmarkDto | undefined {
-  for (const [, data] of qc.getQueriesData<{ pages: { items: BookmarkDto[] }[] }>({
-    queryKey: qk.bookmarks(folderId),
-  })) {
-    const found = data?.pages.flatMap((page) => page.items).find((bookmark) => bookmark.id === id);
-    if (found) return found;
-  }
-  return undefined;
-}
-
 export function prefetchFolderBookmarks(folderId: string) {
   const sort = useListSortStore.getState().bookmarkSort(folderId);
   return queryClient.prefetchInfiniteQuery({
     queryKey: qk.bookmarks(folderId, sort),
-    queryFn: ({ pageParam }) =>
-      bookmarksApi.list({ folderId, cursor: pageParam ?? undefined, limit: LIST_PAGE_SIZE, sort }),
+    queryFn: ({ pageParam, signal }) =>
+      bookmarksApi.list({ folderId, cursor: pageParam ?? undefined, limit: LIST_PAGE_SIZE, sort, signal }),
     initialPageParam: null as string | null,
     getNextPageParam: nextPageCursor,
     gcTime: PERSISTED_QUERY_GC_TIME_MS,
   });
 }
 
+/** Article HTML is stable once extracted; pending or forced articles stay live. */
+function detailStaleTime(query: { state: { data?: BookmarkDetailDto } }): number {
+  const data = query.state.data;
+  return data?.fetchStatus === "pending" || (data?.contentKindOverride === "article" && data.fetchStatus !== "ok")
+    ? 0
+    : 5 * 60_000;
+}
+
 export function prefetchBookmarkDetail(id: string, folderId?: string | null) {
   if (!id) return;
   return queryClient.prefetchQuery({
     queryKey: qk.bookmark(id),
-    queryFn: async () => {
-      const detail = await bookmarksApi.detail(id, folderId);
+    queryFn: async ({ signal }) => {
+      const detail = await bookmarksApi.detail(id, folderId, signal);
+      // React Native's abort-controller polyfill has no throwIfAborted().
+      if (signal.aborted) throw new Error("Bookmark request was cancelled.");
       patchListsFromDetail(queryClient, detail);
       return detail;
     },
+    // Same freshness as the reader, or a press-in re-downloads article HTML
+    // the reader would reuse.
+    staleTime: detailStaleTime,
   });
 }
 
@@ -89,8 +95,8 @@ export function useInfiniteBookmarks(folderId: string | null, enabled = true) {
   );
   return useInfiniteQuery({
     queryKey: qk.bookmarks(folderId, sort),
-    queryFn: ({ pageParam }) =>
-      bookmarksApi.list({ folderId, cursor: pageParam ?? undefined, limit: LIST_PAGE_SIZE, sort }),
+    queryFn: ({ pageParam, signal }) =>
+      bookmarksApi.list({ folderId, cursor: pageParam ?? undefined, limit: LIST_PAGE_SIZE, sort, signal }),
     initialPageParam: null as string | null,
     getNextPageParam: nextPageCursor,
     placeholderData: keepPreviousData,
@@ -144,18 +150,14 @@ export function useBookmarkDetail(id: string, enabled = true, folderId?: string 
   const qc = useQueryClient();
   return useQuery({
     queryKey: qk.bookmark(id),
-    queryFn: async () => {
-      const detail = await bookmarksApi.detail(id, folderId);
+    queryFn: async ({ signal }) => {
+      const detail = await bookmarksApi.detail(id, folderId, signal);
+      if (signal.aborted) throw new Error("Bookmark request was cancelled.");
       patchListsFromDetail(qc, detail);
       return detail;
     },
     enabled: !!id && enabled,
-    staleTime: (query) =>
-      query.state.data?.fetchStatus === "pending" ||
-      (query.state.data?.contentKindOverride === "article" &&
-        query.state.data.fetchStatus !== "ok")
-        ? 0
-        : 5 * 60_000,
+    staleTime: detailStaleTime,
     refetchInterval: (query) => {
       const data = query.state.data;
       if (!data) return false;
@@ -321,6 +323,7 @@ export function useDeleteBookmark(folderId: string | null) {
 export function useMoveBookmark(fromFolderId: string | null) {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: BOOKMARK_WRITE_KEY,
     mutationFn: ({ id, toFolderId }: { id: string; toFolderId: string | null }) =>
       bookmarksApi.update(id, { folderId: toFolderId }, {
         folderId:
@@ -328,35 +331,37 @@ export function useMoveBookmark(fromFolderId: string | null) {
             ? toFolderId
             : fromFolderId,
       }),
-    onMutate: ({ id, toFolderId }) => {
-      const prev = snapshotLists(qc, fromFolderId);
-      const prevDestination = snapshotLists(qc, toFolderId);
-      const prevFolders = qc.getQueryData<FolderDto[]>(qk.folders);
-      let unreadDelta = 0;
-      const target = findCachedBookmark(qc, fromFolderId, id);
+    onMutate: async ({ id, toFolderId }) => {
+      await Promise.all([
+        qc.cancelQueries({ queryKey: ["bookmarks"] }),
+        qc.cancelQueries({ queryKey: qk.folders }),
+      ]);
+      const snapshots = qc.getQueriesData({ queryKey: ["bookmarks"] });
+      const target = collectCachedBookmarks(qc).find((bookmark) => bookmark.id === id);
       if (target) {
-        unreadDelta = target.isRead ? 0 : -1;
-        prependBookmarkToPages(qc, qk.bookmarks(toFolderId, DEFAULT_BOOKMARK_LIST_SORT), {
-          ...target,
-          folderId: toFolderId,
-        });
-        void qc.invalidateQueries({
-          queryKey: qk.bookmarks(toFolderId),
-          predicate: (query) => query.queryKey[2] !== DEFAULT_BOOKMARK_LIST_SORT,
-        });
+        moveBookmarkInCache(qc, { ...target, folderId: toFolderId });
+        if (target.folderId !== toFolderId) {
+          bumpFolderCount(qc, target.folderId, -1, target.isRead ? 0 : -1);
+          bumpFolderCount(qc, toFolderId, +1, target.isRead ? 0 : +1);
+        }
       }
-      removeBookmarkFromPages(qc, qk.bookmarks(fromFolderId), id);
-      bumpFolderCount(qc, fromFolderId, -1, unreadDelta);
-      bumpFolderCount(qc, toFolderId, +1, target && !target.isRead ? +1 : 0);
-      return { prev, prevDestination, prevFolders, toFolderId };
+      return { snapshots, originals: target ? [target] : [] };
     },
-    onError: (_e, _v, ctx) => {
-      restoreLists(qc, ctx?.prev);
-      restoreLists(qc, ctx?.prevDestination);
-      if (ctx?.prevFolders) qc.setQueryData(qk.folders, ctx.prevFolders);
+    onError: async (_e, { toFolderId }, ctx) => {
+      await qc.cancelQueries({ queryKey: ["bookmarks"] });
+      if (ctx) rollbackBookmarkMoves(qc, ctx.originals, toFolderId, ctx.snapshots);
+    },
+    onSuccess: async (updated) => {
+      // Navigation/prefetch can start another read during the mutation.
+      await qc.cancelQueries({ queryKey: ["bookmarks"] });
+      moveBookmarkInCache(qc, updated);
     },
     onSettled: () => {
+      // A different move may still be optimistic. Refetch only after the last
+      // write, otherwise its pre-commit server row can overwrite that move.
+      if (qc.isMutating({ mutationKey: BOOKMARK_WRITE_KEY }) > 1) return;
       void qc.invalidateQueries({ queryKey: ["bookmarks"] });
+      void qc.invalidateQueries({ queryKey: qk.folders });
     },
   });
 }
@@ -415,6 +420,7 @@ async function runBookmarkBatchChunks(
 export function useBatchBookmarks() {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: BOOKMARK_WRITE_KEY,
     mutationFn: ({
       action,
       ids,
@@ -437,11 +443,25 @@ export function useBatchBookmarks() {
         }
         return bookmarksApi.batch({ action, ids: chunk }, { folderId: scopeFolderId });
       }),
-    onMutate: ({ action, ids }) => {
+    onMutate: async ({ action, ids, folderId }) => {
+      await Promise.all([
+        qc.cancelQueries({ queryKey: ["bookmarks"] }),
+        qc.cancelQueries({ queryKey: qk.folders }),
+      ]);
       const snapshots = qc.getQueriesData({ queryKey: ["bookmarks"] });
       const prevFolders = qc.getQueryData<FolderDto[]>(qk.folders);
       const idSet = new Set(ids);
-      if (action === "delete") {
+      const originals = action === "move" ? collectCachedBookmarks(qc).filter((item) => idSet.has(item.id)) : [];
+      if (action === "move") {
+        for (const bookmark of originals) {
+          const destination = folderId ?? null;
+          moveBookmarkInCache(qc, { ...bookmark, folderId: destination });
+          if (bookmark.folderId !== destination) {
+            bumpFolderCount(qc, bookmark.folderId, -1, bookmark.isRead ? 0 : -1);
+            bumpFolderCount(qc, destination, +1, bookmark.isRead ? 0 : +1);
+          }
+        }
+      } else if (action === "delete") {
         removeBookmarksEverywhere(qc, idSet);
       } else if (action === "markRead") {
         updateBookmarksEverywhere(qc, idSet, (bookmark) => ({ ...bookmark, isRead: true }));
@@ -452,18 +472,32 @@ export function useBatchBookmarks() {
           completedAt: null,
         }));
       }
-      return { snapshots, prevFolders };
+      return { snapshots, prevFolders, originals };
     },
-    onError: (_e, _v, ctx) => {
+    onError: async (_e, variables, ctx) => {
+      if (variables.action === "move") {
+        await qc.cancelQueries({ queryKey: ["bookmarks"] });
+        if (ctx) rollbackBookmarkMoves(qc, ctx.originals, variables.folderId ?? null, ctx.snapshots);
+        return;
+      }
       ctx?.snapshots.forEach(([key, data]) => qc.setQueryData(key, data));
       if (ctx?.prevFolders) qc.setQueryData(qk.folders, ctx.prevFolders);
     },
+    onSuccess: async (_result, variables) => {
+      if (variables.action !== "move") return;
+      await qc.cancelQueries({ queryKey: ["bookmarks"] });
+      const ids = new Set(variables.ids);
+      for (const bookmark of collectCachedBookmarks(qc)) {
+        if (ids.has(bookmark.id)) moveBookmarkInCache(qc, { ...bookmark, folderId: variables.folderId ?? null });
+      }
+    },
     onSettled: (_data, _error, variables) => {
-      void qc.invalidateQueries({ queryKey: ["bookmarks"] });
-      void qc.invalidateQueries({ queryKey: qk.folders });
       if (variables.action === "delete" || variables.action === "addTags") {
         void qc.invalidateQueries({ queryKey: ["tags"] });
       }
+      if (qc.isMutating({ mutationKey: BOOKMARK_WRITE_KEY }) > 1) return;
+      void qc.invalidateQueries({ queryKey: ["bookmarks"] });
+      void qc.invalidateQueries({ queryKey: qk.folders });
     },
   });
 }

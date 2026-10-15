@@ -15,6 +15,11 @@ import {
   type ReminderPresetId,
 } from "../../lib/bookmark-reminders";
 import { ReminderCustomPanel } from "./ReminderCustomPanel";
+import { CONTEXT_MENU_WIDTH } from "../../lib/menu-anchor";
+
+// Share the width with the parent actions page so nested navigation stays put.
+// The extra room fits weekday + local time without changing typography.
+export const REMINDER_MENU_WIDTH = CONTEXT_MENU_WIDTH + 16;
 
 export type ReminderFlowBookmark = Pick<
   BookmarkDto,
@@ -144,6 +149,7 @@ export function ReminderFlow({
         visible={visible && page === "presets"}
         onDismiss={onDismiss}
         anchor={anchor}
+        width={REMINDER_MENU_WIDTH}
         estimatedHeight={248}
       >
         <ReminderPresetItems

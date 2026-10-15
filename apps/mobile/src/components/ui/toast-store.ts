@@ -8,7 +8,8 @@ export type ToastTone = "default" | "success" | "danger";
 
 export interface ToastAction {
   label: string;
-  onPress: () => void;
+  /** Return false when an action failed and its notification must remain. */
+  onPress: () => unknown;
 }
 
 export interface Toast {
@@ -66,6 +67,7 @@ export const useToastStore = create<ToastState>((set, get) => ({
 
 /** Imperative API for non-React call sites (mutations, watchers). */
 export const toast = {
+  dismiss: (id: string) => useToastStore.getState().dismiss(id),
   show: (message: string, opts?: ShowToastOptions) => useToastStore.getState().show(message, opts),
   success: (message: string, opts?: Omit<ShowToastOptions, "tone">) =>
     useToastStore.getState().show(message, { ...opts, tone: "success" }),

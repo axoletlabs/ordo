@@ -1,9 +1,7 @@
 import React, { useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform } from "react-native";
-import {
-  DELETE_ACCOUNT_CONFIRMATION,
-  DeleteAccountSchema,
-} from "@ordo/shared";
+import { DELETE_ACCOUNT_CONFIRMATION } from "@ordo/shared";
+import { DeleteAccountSchema } from "@ordo/shared/schemas";
 import {
   SettingsForm,
   SettingsGroup,

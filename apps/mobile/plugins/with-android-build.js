@@ -44,6 +44,42 @@ const SCROLLBAR_TRACK_XML = `<?xml version="1.0" encoding="utf-8"?>
 
 const LIGHT_SYSTEM_BARS_BOOL = 'ordo_light_system_bars';
 
+const BOUNCY_CASTLE_UNUSED_RESOURCES = [
+  'org/bouncycastle/pqc/**',
+  'org/bouncycastle/x509/CertPathReviewerMessages*.properties',
+];
+
+const PROGUARD_RULES_MARKER = '# ordo: release shrinking (with-android-build.js)';
+
+/** Keep rules R8 cannot infer for ordo's own code and Reanimated 4's runtime. */
+function ordoProguardRules(packageName) {
+  return `${PROGUARD_RULES_MARKER}
+# ordo's config-plugin Kotlin (modules, share activities, session store) lives
+# in the app package. React Native already keeps NativeModules and manifest
+# components; keep the whole package so nothing reached only via JS, JNI or
+# component names is renamed or removed.
+-keep class ${packageName}.** { *; }
+# Reanimated 4 runs worklets from react-native-worklets, whose keep rules are
+# not consumer rules (the Expo template only copies Reanimated's).
+-keep class com.swmansion.worklets.** { *; }
+`;
+}
+
+function applyProguardRules(contents, packageName) {
+  if (contents.includes(PROGUARD_RULES_MARKER)) return contents;
+  return `${contents.trimEnd()}\n\n${ordoProguardRules(packageName)}`;
+}
+
+/**
+ * React Native loads JS-bundled images (drawable) and fonts/other files (raw)
+ * by name at runtime, which the resource shrinker cannot see. Keep those
+ * types; library layouts, strings, menus and values are still removed.
+ */
+const RESOURCE_KEEP_XML = `<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@raw/*,@drawable/*" />
+`;
+
 const LIGHT_SYSTEM_BARS_BOOL_XML = `<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <bool name="${LIGHT_SYSTEM_BARS_BOOL}">true</bool>
@@ -905,6 +941,13 @@ const withAndroidBuild = (config) => {
       await fs.mkdir(valuesNightDir, { recursive: true });
       await fs.writeFile(path.join(valuesDir, 'bools.xml'), LIGHT_SYSTEM_BARS_BOOL_XML);
       await fs.writeFile(path.join(valuesNightDir, 'bools.xml'), DARK_SYSTEM_BARS_BOOL_XML);
+      const rawDir = path.join(resDir, 'raw');
+      await fs.mkdir(rawDir, { recursive: true });
+      await fs.writeFile(path.join(rawDir, 'ordo_keep.xml'), RESOURCE_KEEP_XML);
+
+      const proguardFile = path.join(c.modRequest.platformProjectRoot, 'app', 'proguard-rules.pro');
+      const proguard = await fs.readFile(proguardFile, 'utf8').catch(() => '');
+      await fs.writeFile(proguardFile, applyProguardRules(proguard, packageName));
 
       await fs.writeFile(path.join(sourceDir, 'ShareIntake.kt'), shareIntakeKotlin(packageName));
       await fs.writeFile(
@@ -1056,6 +1099,19 @@ const withAndroidBuild = (config) => {
     set('org.gradle.caching', 'true');
     set('org.gradle.daemon', 'true');
     set('android.enablePngCrunchInReleaseBuilds', 'false');
+    // R8 code + resource shrinking. Without it the arm64 APK carried ~53 MB
+    // of uncompressed DEX (Compose, BouncyCastle, Guava, Tink...) unstripped.
+    set('android.enableMinifyInReleaseBuilds', 'true');
+    set('android.enableShrinkResourcesInReleaseBuilds', 'true');
+    // Compress native libraries in the APK: ~25 MB of arm64 .so becomes ~8 MB
+    // to download (GitHub and the in-app updater). Android inflates them once
+    // at install (well under a second); launch and runtime are unaffected.
+    set('expo.useLegacyPackaging', 'true');
+    // Java resources R8 cannot strip. With R8 on, no BouncyCastle class
+    // survives (expo-updates code signing is unused), yet its post-quantum
+    // Picnic tables and certificate-review messages still shipped (~1.3 MB).
+    // Neither is needed even if update signing is enabled later.
+    set('android.packagingOptions.excludes', BOUNCY_CASTLE_UNUSED_RESOURCES.join(','));
 
     return c;
   });
@@ -1106,6 +1162,10 @@ const withAndroidBuild = (config) => {
 
 module.exports = withAndroidBuild;
 module.exports.APP_JNI_CMAKE = APP_JNI_CMAKE;
+module.exports.PROGUARD_RULES_MARKER = PROGUARD_RULES_MARKER;
+module.exports.BOUNCY_CASTLE_UNUSED_RESOURCES = BOUNCY_CASTLE_UNUSED_RESOURCES;
+module.exports.RESOURCE_KEEP_XML = RESOURCE_KEEP_XML;
+module.exports.applyProguardRules = applyProguardRules;
 module.exports.ABI_VERSION_BLOCK_MARKER = ABI_VERSION_BLOCK_MARKER;
 module.exports.applyCmakePath = applyCmakePath;
 module.exports.applyCcacheLaunchers = applyCcacheLaunchers;

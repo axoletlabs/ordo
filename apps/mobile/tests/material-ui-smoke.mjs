@@ -2,20 +2,24 @@
  * PLAYWRIGHT_MODULE=/absolute/path/to/playwright/index.mjs
  * PLAYWRIGHT_CHROMIUM=/path/to/chromium
  * ORDO_UI_URL=http://127.0.0.1:8235 ORDO_UI_OUTPUT=/tmp/opencode/ordo-ui node tests/material-ui-smoke.mjs
+ * ORDO_UI_REMINDER_MENU_ONLY=1 checks preset labels/times, widths, and nested navigation.
  * ORDO_UI_OVERLAY_LAYOUT_ONLY=1 checks nested menu sizing and reader contents across themes/layouts.
  * ORDO_UI_READER_SETTINGS_ONLY=1 checks stable reader settings geometry and typography controls.
  * ORDO_UI_READER_CONTENTS_ONLY=1 checks compact long-article contents and dismissal.
  * ORDO_UI_BOOKMARK_ONLY=1 checks save-dialog focus and single/batch move feedback.
+ * ORDO_UI_TRANSACTIONS_ONLY=1 replays stateful move/delete/Undo and restart recovery.
  */
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { accessibilityMatrix } from "./material-accessibility.mjs";
 import { readerSettingsLayoutMatrix } from "./reader-settings-layout.mjs";
 import { reminderPickerMatrix } from "./reminder-picker.mjs";
+import { reminderMenuLayoutMatrix } from "./reminder-menu-layout.mjs";
 import { progressMatrix } from "./material-progress-ui.mjs";
 import { selectionActionMotionMatrix } from "./selection-action-motion.mjs";
 import { bookmarkDialogMatrix } from "./bookmark-dialog.mjs";
 import { readerContentsMatrix } from "./reader-contents.mjs";
+import { bookmarkTransactionMatrix } from "./bookmark-transaction-ui.mjs";
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE ?? "playwright");
 const base = process.env.ORDO_UI_URL ?? "http://127.0.0.1:8235";
 const output = process.env.ORDO_UI_OUTPUT ?? "/tmp/opencode/ordo-material-ui";
@@ -444,7 +448,7 @@ async function checkReaderArticle(page, expectedDark, expectedSize = 17) {
   const paragraph = page.getByText("Plain reader paragraph for contrast.", { exact: true }).first();
   await paragraph.waitFor();
   for (const text of [paragraph, page.getByText("Source styling cannot override the reader.", { exact: true }).first(),
-    page.getByRole("link", { name: "library", exact: true }), page.getByText(/^const library =/).first()]) {
+    page.getByRole("link", { name: "library", exact: true }).last(), page.getByText(/^const library =/).first()]) {
     const metrics = await readerTextMetrics(text);
     const a = luminance(metrics.ink), b = luminance(metrics.background);
     assert.ok((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) >= 4.45, JSON.stringify(metrics));
@@ -507,8 +511,8 @@ async function readerMatrix() {
     await button(page, "Reader settings").click(); await page.getByRole("switch", { name: "Reader AMOLED black", exact: true }).click();
     for (const readerTheme of ["Light", "Dark"]) {
     await group().getByRole("radio", { name: readerTheme, exact: true }).click();
-    for (const font of ["Sans", "Serif", "Mono"]) for (const [size, px] of [["Small", 15], ["Medium", 17], ["Large", 19], ["Extra large", 21]]) {
-      await page.getByRole("radiogroup", { name: "Font", exact: true }).getByRole("radio", { name: font, exact: true }).click();
+    for (const font of ["Libron", "Legible Sans", "Garamond", "Bitter", "Jost"]) for (const [size, px] of [["Small", 15], ["Medium", 17], ["Large", 19], ["Extra large", 21]]) {
+      await page.getByRole("radiogroup", { name: "Typeface", exact: true }).getByRole("radio", { name: new RegExp(`^${font},`) }).click();
       await page.getByRole("radiogroup", { name: "Text size", exact: true }).getByRole("radio", { name: size, exact: true }).click();
       await settle(page); await page.keyboard.press("Escape"); await settle(page);
       await checkReaderArticle(page, readerTheme === "Dark", px);
@@ -528,6 +532,7 @@ async function readerMatrix() {
     await checkReaderArticle(page, opposite === "dark", 21);
     await button(page, "More article actions").click(); await page.getByRole("menuitem", { name: "Table of contents", exact: true }).click();
     await capture(page, `${theme}-${expressive}-reader-contents`); await button(page, "Go to Keep exploring").click(); await settle(page);
+    await page.getByText(bookmark.title, { exact: true }).last().scrollIntoViewIfNeeded(); await settle(page);
     await button(page, "More article actions").click(); await page.getByRole("menuitem", { name: "Highlights", exact: true }).click();
     const remove = button(page, "Remove highlight"); const target = await remove.boundingBox(); assert.ok(target.width >= 48 && target.height >= 48);
     await capture(page, `${theme}-${expressive}-reader-highlights`); await remove.click();
@@ -605,6 +610,8 @@ async function overlayLayoutMatrix() {
 
 try {
   if (process.env.ORDO_UI_READER_CONTENTS_ONLY) await readerContentsMatrix({ browser, fixture, login, navigate, button, settle, capture, results });
+  else if (process.env.ORDO_UI_REMINDER_MENU_ONLY) await reminderMenuLayoutMatrix({ browser, fixture, login, navigate, button, settle, capture, results });
+  else if (process.env.ORDO_UI_TRANSACTIONS_ONLY) await bookmarkTransactionMatrix({ browser, fixture, login, button, settle, capture, results, bookmark, folder });
   else if (process.env.ORDO_UI_BOOKMARK_ONLY) await bookmarkDialogMatrix({ browser, fixture, login, button, settle, capture, results, bookmark, folder });
   else if (process.env.ORDO_UI_REMINDER_ONLY) await reminderPickerMatrix({ browser, fixture, login, button, settle, capture, results });
   else if (process.env.ORDO_UI_PROGRESS_ONLY) await progressMatrix({ browser, fixture, login, navigate, button, settle, capture, results, bookmark });
@@ -648,7 +655,7 @@ try {
     await button(page, "Back to sign in").click(); await button(page, "Sign in").waitFor();
     results.interactions.push(`${mode}: backup-code sign-in exit`);
     await page.goto(`${base}/reset-password?email=alex%40example.test`);
-    await page.getByRole("textbox", { name: "Reset code", exact: true }).fill("123456");
+    await page.getByRole("textbox", { name: "Reset code, digit 1 of 6", exact: true }).fill("123456");
     await page.getByRole("textbox", { name: "New password", exact: true }).waitFor();
     await page.getByRole("textbox", { name: "New password", exact: true }).fill("Test-password-123");
     await page.getByRole("textbox", { name: "New password", exact: true }).press("Enter");
@@ -738,12 +745,12 @@ try {
     await page.getByRole("dialog", { name: "Set a password", exact: true }).waitFor();
     await capture(page, `${mode}-folder-password-dialog`); await button(page, "Back").click();
     await page.getByRole("menuitem", { name: "PIN", exact: true }).click();
-    await page.getByRole("textbox", { name: "PIN", exact: true }).fill("1234");
+    await page.getByRole("textbox", { name: "PIN, digit 1 of 4", exact: true }).fill("1234");
     await page.getByRole("dialog", { name: "Confirm PIN", exact: true }).waitFor();
     await capture(page, `${mode}-folder-pin-confirmation`);
-    await page.getByRole("textbox", { name: "PIN", exact: true }).fill("9876");
+    await page.getByRole("textbox", { name: "PIN, digit 1 of 4", exact: true }).fill("9876");
     await page.getByText("PINs do not match. Try again.", { exact: true }).waitFor();
-    assert.equal(await page.getByRole("textbox", { name: "PIN", exact: true }).getAttribute("aria-invalid"), "true");
+    assert.equal(await page.getByRole("textbox", { name: "PIN, digit 1 of 4", exact: true }).getAttribute("aria-invalid"), "true");
     await button(page, "Back").click(); await page.getByRole("menuitem", { name: "Pattern", exact: true }).click();
     await capture(page, `${mode}-folder-pattern-dialog`); await page.keyboard.press("Escape"); await settle(page);
     await folderRow.click({ button: "right" }); await page.getByRole("menuitem", { name: "Delete folder", exact: true }).click();
@@ -862,7 +869,7 @@ try {
     await capture(page, `${mode}-signout-dialog`); await page.keyboard.press("Escape");
     await navigate(page, "settings/security"); await button(page, "Set up authenticator").click();
     await capture(page, `${mode}-authenticator-setup`);
-    await page.getByRole("textbox", { name: "Authenticator code", exact: true }).fill("123456");
+    await page.getByRole("textbox", { name: "Authenticator code, digit 1 of 6", exact: true }).fill("123456");
     await page.getByRole("dialog", { name: "Save your backup codes", exact: true }).waitFor();
     await capture(page, `${mode}-backup-codes-dialog`); await page.keyboard.press("Escape");
     results.interactions.push(`${mode}: authenticator enrollment and one-time backup-code surface`);

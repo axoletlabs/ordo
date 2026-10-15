@@ -7,7 +7,7 @@
  * open according to the website-browser setting; "Read in ordo" appears when
  * extraction actually produced an article.
  */
-import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   findNodeHandle,
   Platform,
@@ -23,7 +23,7 @@ import {
 import { useWindowDimensions } from "react-native";
 import { useSystemColorScheme } from "../../theme/use-system-color-scheme";
 import { useSceneColumnInsets } from "../../hooks/use-scene-column-insets";
-import Animated, { useAnimatedStyle, useSharedValue } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { StatusBar, setStatusBarStyle } from "expo-status-bar";
 import { useAppRouter as useRouter } from "../../hooks/use-app-router";
@@ -64,9 +64,10 @@ import { ReaderControlsSheet } from "./ReaderControlsSheet";
 import { EditTagsSheet } from "../tags/EditTagsSheet";
 import { LockPrompt } from "../bookmarks/LockPrompt";
 import { ReminderCustomPanel } from "../bookmarks/ReminderCustomPanel";
-import { ReminderPresetItems, useSaveReminder } from "../bookmarks/ReminderFlow";
+import { REMINDER_MENU_WIDTH, ReminderPresetItems, useSaveReminder } from "../bookmarks/ReminderFlow";
 import { formatReminderWhen } from "../../lib/bookmark-reminders";
 import { READER_BODY_SIZE, resolveReaderFont } from "./reader-typography";
+import { useReaderFontFamily } from "../../theme/fonts";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 import { resolveReaderPalette } from "../../theme/reader-theme";
 import { pinSystemChrome } from "../../theme/pin-system-chrome";
@@ -86,7 +87,7 @@ import {
 import * as bookmarkHooks from "../../hooks/use-bookmarks";
 import { useFolders, useServerInfo } from "../../hooks/queries";
 import { useReaderPreferences } from "../../hooks/use-reader-preferences";
-import { useCollapsingFab } from "../../hooks/use-collapsing-fab";
+import { useReaderChrome } from "../../hooks/use-reader-chrome";
 import { useSettingsStore } from "../../store/settings";
 import { domainFromUrl, formatDate } from "../../lib/format";
 import { errorMessage, folderProtectedId, isFolderProtected } from "../../lib/error-message";
@@ -106,6 +107,7 @@ import { copyLink, copyText } from "../../lib/copy-link";
 import { ackBookmarkOpened, openExternalBrowser, openLivePage } from "../../lib/open-website";
 import { reminderClearsOnOpen } from "../../lib/bookmark-reminders";
 import { scrollReadingProgress, shouldFlushReadingProgress } from "../../lib/reading-progress";
+import { fabContentPadding } from "../../lib/fab-layout";
 
 function useSetContentKindMissing() {
   return { mutate: () => undefined, isPending: false };
@@ -148,6 +150,26 @@ function isRedundantReaderDescription(title: string, description: string): boole
 }
 
 const EMPTY_HIGHLIGHTS: HighlightDto[] = [];
+
+/** Reading progress rule; keeps the announced whole percent as local state. */
+function ReaderProgressBar({ animatedValue, labelRef, initialValue }: {
+  animatedValue: SharedValue<number>;
+  labelRef: React.MutableRefObject<(value: number) => void>;
+  initialValue: number;
+}) {
+  const [progress, setProgress] = useState(initialValue);
+  useLayoutEffect(() => {
+    labelRef.current = (value) => setProgress((previous) =>
+      Math.round(previous * 100) === Math.round(value * 100) ? previous : value);
+    return () => {
+      labelRef.current = () => {};
+    };
+  }, [labelRef]);
+  return (
+    <LinearProgress label="Reading progress" value={progress} animatedValue={animatedValue}
+      style={{ maxWidth: layout.maxReaderWidth, alignSelf: "center" }} />
+  );
+}
 
 /**
  * ReaderPane resolves the account-synced reader preferences + palette and
@@ -263,7 +285,10 @@ function ReaderPaneInner({
     headings: readonly ArticleHeading[];
   }>({ bookmarkId: "", headings: [] });
   const [articleWidth, setArticleWidth] = useState(0);
-  const [progress, setProgress] = useState(0);
+  // Scroll progress drives the bar on the UI thread (progressSV); the whole
+  // percent only feeds assistive tech. ReaderProgressBar owns that state so a
+  // reading scroll re-renders the bar, not this entire pane, at every 1%.
+  const progressLabelRef = useRef<(value: number) => void>(() => {});
   const [surface, setSurface] = useState<"auto" | "reader" | "browser">(
     initialSurface === "browser" ? "browser" : "auto",
   );
@@ -287,8 +312,9 @@ function ReaderPaneInner({
   // Chrome (header + progress rule) overlays the article and slides away on
   // real user drags only; programmatic scrolls (position restore, TOC jumps)
   // never yank it around. The article scrolls underneath the overlay.
-  const userScrollingRef = useRef(false);
-  const collapsingFab = useCollapsingFab(48);
+  const collapsingFab = useReaderChrome(!!selectionMenu);
+  const expandChromeRef = useRef(collapsingFab.expand);
+  expandChromeRef.current = collapsingFab.expand;
   const chromeHeightRef = useRef(0);
   const chromeHeightSV = useSharedValue(0);
   const [chromeHeight, setChromeHeight] = useState(0);
@@ -335,8 +361,17 @@ function ReaderPaneInner({
         .join(" · ")
     : "";
   const readerBodySize = READER_BODY_SIZE[contentPreferences.fontSize];
-  const readerFont = resolveReaderFont(contentPreferences.fontFamily);
-  const readerBoldFont = resolveReaderFont(contentPreferences.fontFamily, "700");
+  // Reading faces load per family; until the chosen one is ready the article
+  // keeps the previous family (or a skeleton on the very first open).
+  const readerFamily = useReaderFontFamily(contentPreferences.fontFamily);
+  const articlePreferences = useMemo(
+    () => readerFamily && readerFamily !== contentPreferences.fontFamily
+      ? { ...contentPreferences, fontFamily: readerFamily }
+      : contentPreferences,
+    [contentPreferences, readerFamily],
+  );
+  const readerFont = resolveReaderFont(articlePreferences.fontFamily);
+  const readerBoldFont = resolveReaderFont(articlePreferences.fontFamily, "700");
   const articleHeadings = headingState.bookmarkId === bookmark?.id ? headingState.headings : [];
   const contentsBaseLevel = articleHeadings.reduce((level, heading) => Math.min(level, heading.level), 6);
   const highlights = detail.data?.highlights ?? EMPTY_HIGHLIGHTS;
@@ -602,6 +637,13 @@ function ReaderPaneInner({
   const browserMounted = showWebsiteView || (!!bookmarkId && keptBrowserId === bookmarkId);
   websiteViewRef.current = showWebsiteView;
   const palette = showWebsiteView ? appPalette : readerPalette;
+  const hasContents = articleHeadings.length >= 3 && hasContent && !showWebsiteView;
+  const contentsFabBottom = spacing[20] + (safeBottom ? insets.bottom : 0);
+  // Reserve clearance even while selection or the contents panel hides the FAB,
+  // so opening/dismissing overlays never changes the article's scroll range.
+  const readerBottomPadding = hasContents
+    ? fabContentPadding(insets.bottom, contentsFabBottom)
+    : spacing[16] + (safeBottom ? insets.bottom : 0);
   const websiteChrome = forceWebsiteDark
     ? currentAppPalette("dark").background
     : palette.background;
@@ -650,18 +692,31 @@ function ReaderPaneInner({
   const contentHeightRef = useRef(0);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const headingRefs = useRef(new Map<string, View>());
+  const pendingHeading = useRef<string | null>(null);
+  const selectHeadingRef = useRef<(id: string) => void>(() => {});
+  const headingFrame = useRef(0);
+  useEffect(() => () => cancelAnimationFrame(headingFrame.current), []);
 
   const handleHeadingRef = useCallback((id: string, view: View | null) => {
-    if (view) headingRefs.current.set(id, view);
+    if (view) {
+      headingRefs.current.set(id, view);
+      if (pendingHeading.current === id) {
+        pendingHeading.current = null;
+        headingFrame.current = requestAnimationFrame(() => selectHeadingRef.current(id));
+      }
+    }
     else headingRefs.current.delete(id);
   }, []);
 
   const handleHeadingSelect = useCallback((id: string) => {
+    cancelAnimationFrame(headingFrame.current);
     const heading = headingRefs.current.get(id);
     const scroll = scrollRef.current;
-    if (!heading || !scroll) return;
-    haptics.light();
+    pendingHeading.current = null;
     setActionPanel(null);
+    if (!heading) { pendingHeading.current = id; return; }
+    if (!scroll) return;
+    haptics.light();
     // Re-sync the chrome machine with the current offset so the jump's own
     // scroll deltas don't toggle the header mid-flight.
     collapsingFab.expand(offsetRef.current);
@@ -712,6 +767,7 @@ function ReaderPaneInner({
       },
     );
   }, [collapsingFab]);
+  selectHeadingRef.current = handleHeadingSelect;
 
   const persistProgress = useCallback(
     (id: string, folderId: string | null, value: number) => {
@@ -758,8 +814,7 @@ function ReaderPaneInner({
     (fraction: number) => {
       if (!trackProgressRef.current) return;
       progressSV.value = fraction;
-      const pct = Math.round(fraction * 100);
-      setProgress((prev) => (Math.round(prev * 100) === pct ? prev : fraction));
+      progressLabelRef.current(fraction);
       latestProgressRef.current = fraction;
       const last = persistedProgressRef.current;
       if (shouldFlushReadingProgress(fraction, last, PROGRESS_DELTA, READ_COMPLETION_THRESHOLD)) {
@@ -783,12 +838,13 @@ function ReaderPaneInner({
     persistedProgressRef.current = baseline;
     restoredRef.current = false;
     htmlReadyRef.current = false;
+    pendingHeading.current = null;
+    cancelAnimationFrame(headingFrame.current);
     offsetRef.current = 0;
-    userScrollingRef.current = false;
-    collapsingFab.expand(0);
+    expandChromeRef.current(0);
     chromeHeightSV.value = chromeHeightRef.current;
     progressSV.value = baseline;
-    setProgress(baseline);
+    progressLabelRef.current(baseline);
     if (selectTimer.current) {
       clearTimeout(selectTimer.current);
       selectTimer.current = null;
@@ -797,7 +853,19 @@ function ReaderPaneInner({
     return () => {
       flushProgress();
     };
-  }, [bookmark?.id, chromeHeightSV, collapsingFab]);
+  }, [bookmark?.id, chromeHeightSV]);
+
+  // A persisted list row can be older than the freshly fetched detail. Accept
+  // its canonical position until rendering finishes, never after a user jump.
+  useEffect(() => {
+    if (bookmark?.id !== currentArticleRef.current?.id || restoredRef.current || htmlReadyRef.current || offsetRef.current > 8) return;
+    const baseline = bookmark?.readProgress ?? 0;
+    initialProgressRef.current = baseline;
+    latestProgressRef.current = baseline;
+    persistedProgressRef.current = baseline;
+    progressSV.value = baseline;
+    progressLabelRef.current(baseline);
+  }, [bookmark?.id, bookmark?.readProgress, progressSV]);
 
   // Restore the saved reading position once layout + content size are known.
   const maybeRestore = useCallback(() => {
@@ -841,8 +909,6 @@ function ReaderPaneInner({
       // Chrome follows user drags on native (programmatic scrolls — position
       // restore, TOC jumps — never yank it around). Web wheel scrolling has no
       // drag events, so there the chrome simply follows the scroll.
-      if (selectionMenuRef.current) collapsingFab.expand(offsetRef.current);
-      else if (Platform.OS === "web" || userScrollingRef.current) collapsingFab.onScroll(event);
       const menu = selectionMenuRef.current;
       if (menu) {
         const dy = contentOffset.y - menuScrollY.current;
@@ -862,15 +928,8 @@ function ReaderPaneInner({
         scrollReadingProgress(contentOffset.y, layoutMeasurement.height, contentSize.height),
       );
     },
-    [collapsingFab, handleFraction, hasHtml, windowHeight],
+    [handleFraction, hasHtml, windowHeight],
   );
-
-  const handleScrollBeginDrag = useCallback(() => {
-    userScrollingRef.current = true;
-  }, []);
-  const handleScrollEnd = useCallback(() => {
-    userScrollingRef.current = false;
-  }, []);
 
   // Recompute when content settles/grows (images loading, HTML rendering).
   const onContentSizeChange = useCallback(
@@ -999,8 +1058,8 @@ function ReaderPaneInner({
       />
 
       {hasContent && !showWebsiteView ? (
-        <LinearProgress label="Reading progress" value={progress} animatedValue={progressSV}
-          style={{ maxWidth: layout.maxReaderWidth, alignSelf: "center" }} />
+        <ReaderProgressBar animatedValue={progressSV} labelRef={progressLabelRef}
+          initialValue={latestProgressRef.current} />
       ) : null}
       </Animated.View>
 
@@ -1072,14 +1131,13 @@ function ReaderPaneInner({
             onLayout={onScrollViewLayout}
             onContentSizeChange={onContentSizeChange}
             onScroll={onScroll}
-            onScrollBeginDrag={handleScrollBeginDrag}
-            onMomentumScrollEnd={handleScrollEnd}
+            animatedScrollHandler={collapsingFab.scrollHandler}
             scrollEventThrottle={16}
             contentContainerStyle={{
               // The chrome is an overlay: pad the content so it starts below
               // the bar and scrolls underneath it once the bar slides away.
               paddingTop: chromeHeight + spacing[12],
-              paddingBottom: spacing[16] + (safeBottom ? insets.bottom : 0),
+              paddingBottom: readerBottomPadding,
             }}
           >
             <ScreenContent maxWidth={layout.maxReaderWidth} alignTo={embedded ? "parent" : "scene"} style={styles.body}>
@@ -1087,13 +1145,20 @@ function ReaderPaneInner({
                 style={styles.articleColumn}
                 onLayout={(e) => setArticleWidth(e.nativeEvent.layout.width)}
               >
+                {!readerFamily ? (
+                <View accessibilityLabel="Loading article" style={styles.inlineEmpty}>
+                  <Skeleton width="80%" height={28} />
+                  <Skeleton width="100%" height={16} style={{ marginTop: spacing[16] }} />
+                  <Skeleton width="92%" height={16} style={{ marginTop: spacing[8] }} />
+                </View>
+                ) : <>
                 {articleHead}
 
                 {hasHtml ? (
                 <View style={styles.content}>
                   <ReaderArticle
                     html={detail.data?.contentHtml ?? ""}
-                    preferences={contentPreferences}
+                    preferences={articlePreferences}
                     contentWidth={articleWidth || fallbackArticleWidth}
                     highlights={highlights}
                     onTextSelect={handleTextSelect}
@@ -1158,6 +1223,7 @@ function ReaderPaneInner({
                   action={<Button label="Open original" onPress={handleOpenOriginal} />}
                 />
                 )}
+                </>}
               </View>
             </ScreenContent>
           </ThemedScrollView>
@@ -1166,7 +1232,7 @@ function ReaderPaneInner({
         </>
       )}
 
-      {articleHeadings.length >= 3 && hasContent && !showWebsiteView && !selectionMenu ? (
+      {hasContents && !selectionMenu ? (
         // The modal scrim covers this trigger; keep it mounted for focus restoration.
         <FABLayer maxWidth={layout.maxReaderWidth}>
           <FAB
@@ -1181,7 +1247,7 @@ function ReaderPaneInner({
             }}
             maxContentWidth={layout.maxReaderWidth}
             alignTo={embedded ? "parent" : "scene"}
-            bottom={spacing[20] + (safeBottom ? insets.bottom : 0)}
+            bottom={contentsFabBottom}
           />
         </FABLayer>
       ) : null}
@@ -1202,6 +1268,7 @@ function ReaderPaneInner({
         visible={actionPanel === "actions" || actionPanel === "remind"}
         onDismiss={closeActions}
         anchor={actionsAnchor}
+        width={remindersSupported ? REMINDER_MENU_WIDTH : undefined}
         sessionKey={actionPanel ? bookmark?.id : undefined}
         pageKey={actionPanel === "remind" ? "remind" : "actions"}
       >

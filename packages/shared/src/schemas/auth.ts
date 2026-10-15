@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { EMAIL_OTP, MFA } from "../constants.js";
+import { DELETE_ACCOUNT_CONFIRMATION, EMAIL_OTP, MFA } from "../constants.js";
 
 const email = z
   .string()
@@ -90,7 +90,7 @@ export const ChangePasswordSchema = z
   });
 export type ChangePasswordInput = z.infer<typeof ChangePasswordSchema>;
 
-export const DELETE_ACCOUNT_CONFIRMATION = "DELETE MY ACCOUNT";
+export { DELETE_ACCOUNT_CONFIRMATION } from "../constants.js";
 export const DeleteAccountSchema = z.object({
   currentPassword: password,
   confirmation: z.string().refine((value) => value === DELETE_ACCOUNT_CONFIRMATION, {

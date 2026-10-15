@@ -18,7 +18,7 @@ import { formatReminderWhen } from "../../lib/bookmark-reminders";
 import type { MenuAnchorRect } from "../../lib/menu-anchor";
 import type { BookmarkDto } from "@ordo/shared";
 import { ReminderCustomPanel } from "./ReminderCustomPanel";
-import { ReminderPresetItems, useSaveReminder } from "./ReminderFlow";
+import { REMINDER_MENU_WIDTH, ReminderPresetItems, useSaveReminder } from "./ReminderFlow";
 
 function useSetContentKindMissing() {
   return { mutate: () => undefined, isPending: false };
@@ -62,6 +62,12 @@ export function BookmarkActionsSheet({
   const bookmarkRef = React.useRef(bookmark);
   if (bookmark) bookmarkRef.current = bookmark;
   const displayBookmark = bookmark ?? bookmarkRef.current;
+  const nextAction = React.useRef<(() => void) | null>(null);
+  useLayoutEffect(() => { if (visible) nextAction.current = null; }, [visible]);
+  const handoff = (action: () => void) => {
+    nextAction.current = action;
+    onDismiss();
+  };
   const { save: saveReminder, busy: reminderBusy } = useSaveReminder(displayBookmark, onDismiss);
   const remindNow = React.useMemo(
     () => new Date(),
@@ -86,7 +92,13 @@ export function BookmarkActionsSheet({
       <ContextMenu
         visible={visible && (mode === "menu" || (mode === "remind" && remindPage === "presets"))}
         onDismiss={onDismiss}
+        onExited={() => {
+          const action = nextAction.current;
+          nextAction.current = null;
+          action?.();
+        }}
         anchor={anchor}
+        width={remindersSupported ? REMINDER_MENU_WIDTH : undefined}
         sessionKey={visible ? displayBookmark.id : undefined}
         pageKey={`${mode}:${remindPage}`}
       >
@@ -114,8 +126,7 @@ export function BookmarkActionsSheet({
           icon="folder-open-outline"
           label="Move to folder"
           onPress={() => {
-            onMove(displayBookmark);
-            onDismiss();
+            handoff(() => onMove(displayBookmark));
           }}
         />
         {onEditTags ? (
@@ -123,8 +134,7 @@ export function BookmarkActionsSheet({
             icon="pricetags-outline"
             label="Edit tags"
             onPress={() => {
-              onEditTags(displayBookmark);
-              onDismiss();
+              handoff(() => onEditTags(displayBookmark));
             }}
           />
         ) : null}

@@ -4,7 +4,10 @@
     "strict": true,
     "jsx": "react-jsx",
     "module": "ESNext",
-    "moduleResolution": "Bundler"
+    "moduleResolution": "Bundler",
+    "customConditions": [
+      "react-native"
+    ]
   },
   "include": [
     "**/*.ts",
