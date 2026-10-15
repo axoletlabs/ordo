@@ -90,7 +90,6 @@ export const ChangePasswordSchema = z
   });
 export type ChangePasswordInput = z.infer<typeof ChangePasswordSchema>;
 
-export { DELETE_ACCOUNT_CONFIRMATION } from "../constants.js";
 export const DeleteAccountSchema = z.object({
   currentPassword: password,
   confirmation: z.string().refine((value) => value === DELETE_ACCOUNT_CONFIRMATION, {
