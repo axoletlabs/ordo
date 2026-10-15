@@ -9,6 +9,7 @@ export async function reminderPickerMatrix({ browser, fixture, login, button, se
     await context.addInitScript(({ theme, expressive }) => localStorage.setItem("ordo.settings", JSON.stringify({ themeMode: theme, expressive, materialYouColors: false })), { theme, expressive });
     const page = await context.newPage();
     try {
+      await page.clock.setFixedTime(new Date("2026-10-15T12:00:00"));
       await fixture(page); await login(page); await settle(page);
       const article = page.getByRole("button", { name: /^Building a more expressive design system,/ });
       await article.click({ button: "right" });
@@ -34,10 +35,32 @@ export async function reminderPickerMatrix({ browser, fixture, login, button, se
         assert.ok(rect.x >= panel.x && rect.x + rect.width <= panel.x + panel.width, "Seven dates fit on a 390dp phone");
       }
       assert.ok(await dates.getByRole("radio", { disabled: true }).count() > 0, "Past dates are not tappable");
+      const today = dates.locator('[data-calendar-date="2026-10-15"]');
+      const otherDate = dates.locator('[data-calendar-date="2026-10-24"]');
+      // Exercise the transition that used to reveal a square native background:
+      // an ordinary (flattened) date becomes selected, unlike today's bordered view.
+      await today.click();
+      await assertDateCircle(today, true, false);
+      for (let attempt = 0; attempt < 2; attempt++) {
+        await otherDate.click();
+        await assertDateCircle(otherDate, true, false);
+        await assertDateCircle(today, false, true);
+        if (attempt === 0) await today.click();
+      }
+      measurement.selectedDateCircle = await otherDate.locator("circle").count();
+      measurement.todayOutlineCircle = await today.locator("circle").count();
+      await page.mouse.move(0, 0); await settle(page);
+      await capture(page, `${mode}-portrait-reminder-date`);
+      await page.setViewportSize({ width: 1280, height: 800 }); await settle(page);
+      await assertDateCircle(otherDate, true, false);
+      await capture(page, `${mode}-landscape-reminder-date`);
+      await page.setViewportSize({ width: 390, height: 844 }); await settle(page);
       await button(page, "Next month").click();
       await dates.getByRole("radio").last().click();
       const selected = dates.getByRole("radio", { checked: true });
+      await assertDateCircle(selected, true, false);
       await selected.focus(); await page.keyboard.press("ArrowLeft");
+      await assertDateCircle(dates.getByRole("radio", { checked: true }), true, false);
       const finalDate = await dates.getByRole("radio", { checked: true }).getAttribute("data-calendar-date");
       await hours.getByRole("radio", { name: "9 o'clock", exact: true }).click();
       await minutes.getByRole("radio", { name: "30 minutes", exact: true }).click();
@@ -86,4 +109,25 @@ export async function reminderPickerMatrix({ browser, fixture, login, button, se
       results.interactions.push(`${mode}: tap date/hour/minute, keyboard selection, short viewport, busy save, dismissal, reopen`);
     } finally { await context.close(); }
   }
+}
+
+async function assertDateCircle(date, selected, outlined) {
+  assert.equal(await date.getAttribute("aria-checked"), String(selected));
+  const geometry = await date.evaluate(node => {
+    const svg = node.querySelector("svg"), circle = svg?.querySelector("circle");
+    if (!circle) return null;
+    const bounds = svg.getBoundingClientRect();
+    return { width: bounds.width, height: bounds.height, cx: circle.getAttribute("cx"), cy: circle.getAttribute("cy"),
+      r: circle.getAttribute("r"), fill: circle.getAttribute("fill"), stroke: circle.getAttribute("stroke"),
+      background: getComputedStyle(svg.parentElement).backgroundColor };
+  });
+  assert.ok(geometry, "Dates paint an explicit circle, not a border-radius-dependent native background");
+  assert.equal(geometry.width, 40);
+  assert.equal(geometry.height, 40);
+  assert.equal(geometry.cx, "20");
+  assert.equal(geometry.cy, "20");
+  assert.equal(geometry.r, outlined ? "19.5" : "20");
+  assert.equal(geometry.fill !== "none", selected);
+  assert.equal(geometry.stroke !== "none", outlined);
+  assert.equal(geometry.background, "rgba(0, 0, 0, 0)", "The circle must not sit above a square selection fill");
 }
