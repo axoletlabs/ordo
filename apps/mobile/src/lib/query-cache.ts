@@ -5,13 +5,15 @@
  * launch. Refreshes settle after the UI is up; the offline gate covers a
  * confirmed-down host once the probe answers.
  */
+import { AppState } from "react-native";
 import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
 import {
   persistQueryClientRestore,
-  persistQueryClientSubscribe,
+  persistQueryClientSave,
   type PersistedClient,
   type Persister,
 } from "@tanstack/react-query-persist-client";
+import type { QueryCacheNotifyEvent } from "@tanstack/react-query";
 import { DEFAULT_BOOKMARK_LIST_SORT } from "@ordo/shared";
 import { createMMKV, type MMKV } from "react-native-mmkv";
 import { bookmarksApi } from "./api/bookmarks";
@@ -24,6 +26,8 @@ import {
   PERSISTED_QUERY_GC_TIME_MS,
   PERSISTED_QUERY_MAX_AGE_MS,
   QUERY_CACHE_BUSTER,
+  isFoldersListKey,
+  isPersistedBookmarkListKey,
   protectedFolderIdsFromFolders,
   queryCacheStorageKey,
   sanitizePersistedClient,
@@ -33,6 +37,7 @@ import {
 import { raceDeadline } from "./fetch-timeout";
 import { useAuthStore } from "../store/auth";
 import { useSettingsStore } from "../store/settings";
+import { resumePendingDeletes } from "./undoable-delete";
 
 function sanitizeForDisk(client: PersistedClient): PersistedClient {
   return sanitizePersistedClient(client as unknown as PersistedClientSnapshot) as unknown as PersistedClient;
@@ -73,10 +78,21 @@ function createQueryCachePersister(storageKey: string): Persister {
         }
       : undefined,
     key: storageKey,
-    throttleTime: 1000,
+    // subscribePersistence below already coalesces writes.
+    throttleTime: 0,
     serialize: (client) => JSON.stringify(sanitizeForDisk(client)),
     deserialize: (cachedString) => sanitizeForDisk(JSON.parse(cachedString) as PersistedClient),
   });
+}
+
+/** Built per save so the folder lock lookup runs once, not once per query. */
+function dehydrateOptions() {
+  const protectedIds = protectedFolderIdsFromCache();
+  return {
+    shouldDehydrateMutation: () => false,
+    shouldDehydrateQuery: (query: { queryKey: readonly unknown[]; state: { status: string } }) =>
+      query.state.status === "success" && shouldPersistQueryKey(query.queryKey, protectedIds),
+  };
 }
 
 function persistOptions(persister: Persister) {
@@ -85,12 +101,7 @@ function persistOptions(persister: Persister) {
     persister,
     maxAge: PERSISTED_QUERY_MAX_AGE_MS,
     buster: QUERY_CACHE_BUSTER,
-    dehydrateOptions: {
-      shouldDehydrateMutation: () => false,
-      shouldDehydrateQuery: (query: { queryKey: readonly unknown[]; state: { status: string } }) =>
-        query.state.status === "success" &&
-        shouldPersistQueryKey(query.queryKey, protectedFolderIdsFromCache()),
-    },
+    dehydrateOptions: dehydrateOptions(),
     hydrateOptions: {
       defaultOptions: {
         queries: {
@@ -98,6 +109,47 @@ function persistOptions(persister: Persister) {
         },
       },
     },
+  };
+}
+
+/** Trailing window that turns a burst of list updates into one disk write. */
+const PERSIST_DELAY_MS = 1_000;
+
+/** Only folders and public bookmark lists reach disk; other queries never trigger a write. */
+function changesPersistedSnapshot(event: QueryCacheNotifyEvent): boolean {
+  const key = event.query.queryKey;
+  if (!isFoldersListKey(key) && !isPersistedBookmarkListKey(key)) return false;
+  if (event.type === "removed") return true;
+  return event.type === "updated" && event.action.type === "success";
+}
+
+/**
+ * TanStack's subscriber dehydrates the whole cache on every cache event
+ * (fetch start, polling, search keystrokes, reader loads) and serializes the
+ * snapshot each second while anything is active. Save only when persisted
+ * data changes, once per burst, and right away when the app leaves the
+ * foreground.
+ */
+function subscribePersistence(options: ReturnType<typeof persistOptions>): () => void {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  const save = () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    void persistQueryClientSave({ ...options, dehydrateOptions: dehydrateOptions() }).catch((error) =>
+      console.warn("Query cache save failed", error));
+  };
+  const unsubscribeCache = queryClient.getQueryCache().subscribe((event) => {
+    if (timer || !changesPersistedSnapshot(event)) return;
+    timer = setTimeout(save, PERSIST_DELAY_MS);
+  });
+  const appState = AppState.addEventListener("change", (state) => {
+    if (state !== "active" && timer) save();
+  });
+  return () => {
+    if (timer) clearTimeout(timer);
+    timer = null;
+    unsubscribeCache();
+    appState.remove();
   };
 }
 
@@ -137,7 +189,8 @@ export async function restoreQueryPersistence(userId: string, serverUrl: string)
   }
 
   if (generation !== restoreGeneration || activeStorageKey !== storageKey) return;
-  unsubscribe = persistQueryClientSubscribe(options);
+  unsubscribe = subscribePersistence(options);
+  resumePendingDeletes();
 }
 
 function homeLibraryCached(): boolean {

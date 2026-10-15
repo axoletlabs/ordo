@@ -5,6 +5,7 @@
 import type { QueryClient, InfiniteData } from "@tanstack/react-query";
 import {
   DEFAULT_BOOKMARK_LIST_SORT,
+  isBookmarkListSort,
   type BookmarkDetailDto,
   type BookmarkDto,
   type BookmarkReminderDto,
@@ -12,6 +13,7 @@ import {
   type FolderDto,
 } from "@ordo/shared";
 import { qk } from "./api/query-keys";
+import { sortBookmarksBy } from "./list-sort";
 
 type BookmarkData = InfiniteData<CursorPage<BookmarkDto>, string | null>;
 
@@ -332,6 +334,67 @@ export function collectCachedBookmarks(qc: QueryClient): BookmarkDto[] {
     }
   }
   return [...byId.values()].map(({ item }) => item);
+}
+
+/** Move membership, not just a row in the currently visible list. Inactive
+ * reader/search/index copies participate in deletes too, so they must agree. */
+export function moveBookmarkInCache(qc: QueryClient, bookmark: BookmarkDto) {
+  updateBookmarkEverywhere(qc, bookmark.id, (old) => ({ ...old, ...bookmark }));
+  for (const query of qc.getQueryCache().findAll({ queryKey: ["bookmarks"] })) {
+    const key = query.queryKey;
+    const data = query.state.data;
+    if (!isPagedBookmarks(data)) continue;
+    const folderList = key.length === 3 && isBookmarkListSort(key[2]);
+    // Search keeps text/body matches, but must drop a row that left its scope.
+    const folderIds = key[1] === "search" && Array.isArray(key[5]) ? key[5] as string[] : [];
+    const unfiled = key[1] === "search" && key[6] === true;
+    const outsideSearch = (folderIds.length > 0 || unfiled) &&
+      !(bookmark.folderId === null ? unfiled : folderIds.includes(bookmark.folderId));
+    if ((folderList && key[1] !== bookmark.folderId) || outsideSearch) {
+      removeBookmarkFromPages(qc, key, bookmark.id);
+    } else if (folderList && key[1] === bookmark.folderId) {
+      insertBookmarkIfAbsent(qc, key, bookmark);
+      qc.setQueryData<BookmarkData>(key, (current) => {
+        if (!current) return current;
+        const items = sortBookmarksBy(current.pages.flatMap((page) => page.items), key[2] as Parameters<typeof sortBookmarksBy>[1]);
+        let offset = 0;
+        return { ...current, pages: current.pages.map((page) => {
+          const next = { ...page, items: items.slice(offset, offset + page.items.length) };
+          offset += page.items.length;
+          return next;
+        }) };
+      });
+    }
+  }
+  if (qc.getQueryData(qk.reminders) !== undefined) syncReminderInCache(qc, bookmark);
+}
+
+/** Undo only this move's membership/count deltas. Restoring entire query
+ * snapshots would also roll back a different bookmark's concurrent move. */
+export function rollbackBookmarkMoves(
+  qc: QueryClient,
+  originals: readonly BookmarkDto[],
+  destination: string | null,
+  snapshots: readonly [readonly unknown[], unknown][],
+) {
+  const current = new Map(collectCachedBookmarks(qc).map((bookmark) => [bookmark.id, bookmark]));
+  const restored = new Map<string, BookmarkDto>();
+  for (const original of originals) {
+    const bookmark = { ...(current.get(original.id) ?? original), folderId: original.folderId };
+    moveBookmarkInCache(qc, bookmark);
+    restored.set(bookmark.id, bookmark);
+    if (original.folderId !== destination) {
+      bumpFolderCount(qc, destination, -1, original.isRead ? 0 : -1);
+      bumpFolderCount(qc, original.folderId, +1, original.isRead ? 0 : +1);
+    }
+  }
+  for (const [key, data] of snapshots) {
+    if (!isPagedBookmarks(data)) continue;
+    for (const item of data.pages.flatMap((page) => page.items)) {
+      const bookmark = restored.get(item.id);
+      if (bookmark) insertBookmarkIfAbsent(qc, key, bookmark);
+    }
+  }
 }
 
 /**

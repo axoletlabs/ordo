@@ -6,7 +6,7 @@ import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { useRouter } from "expo-router";
 import { AuthLink } from "../../src/components/auth/AuthLink";
-import { ForgotPasswordSchema } from "@ordo/shared";
+import { ForgotPasswordSchema } from "@ordo/shared/schemas";
 import { AuthShell } from "../../src/components/auth/AuthShell";
 import { OtpDeliveryHint } from "../../src/components/auth/OtpDeliveryHint";
 import { Input } from "../../src/components/ui/Input";

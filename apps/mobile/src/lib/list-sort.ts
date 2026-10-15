@@ -7,6 +7,10 @@ export const FOLDER_LIST_SORTS = ["name", "newest", "oldest"] as const;
 export type FolderListSort = (typeof FOLDER_LIST_SORTS)[number];
 export const DEFAULT_FOLDER_LIST_SORT: FolderListSort = "oldest";
 
+// Passing locale options to localeCompare constructs a collator for every
+// comparison on Hermes/V8. Reuse one across an O(n log n) library sort.
+const titleCollator = new Intl.Collator(undefined, { sensitivity: "base" });
+
 export const BOOKMARK_SORT_LABEL: Record<BookmarkListSort, string> = {
   newest: "Newest",
   oldest: "Oldest",
@@ -25,7 +29,7 @@ export function sortFoldersBy(folders: readonly FolderDto[], sort: FolderListSor
     const pinned = Number(b.pinned) - Number(a.pinned);
     if (pinned) return pinned;
     if (sort === "name") {
-      return a.name.localeCompare(b.name, undefined, { sensitivity: "base" }) || a.id.localeCompare(b.id);
+      return titleCollator.compare(a.name, b.name) || a.id.localeCompare(b.id);
     }
     if (sort === "newest") {
       return b.createdAt.localeCompare(a.createdAt) || b.id.localeCompare(a.id);
@@ -56,7 +60,7 @@ export function sortBookmarksBy(
   return [...bookmarks].sort((a, b) => {
     if (sort === "title" || sort === "titleDesc") {
       const cmp =
-        a.title.localeCompare(b.title, undefined, { sensitivity: "base" }) ||
+        titleCollator.compare(a.title, b.title) ||
         a.id.localeCompare(b.id);
       return sort === "title" ? cmp : -cmp;
     }

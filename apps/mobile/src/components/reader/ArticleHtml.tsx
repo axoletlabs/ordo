@@ -8,7 +8,7 @@
  * is purely presentation: token-driven typography scaled by the reader
  * preferences, responsive images, select-to-highlight text, and external links.
  */
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Linking,
   StyleSheet,
@@ -16,16 +16,18 @@ import {
   View,
   type View as ViewType,
 } from "react-native";
-import RenderHTML, {
+import {
+  RenderHTMLSource,
+  RenderHTMLConfigProvider,
+  TRenderEngineProvider,
   defaultSystemFonts,
   useRendererProps,
   type CustomBlockRenderer,
   type MixedStyleRecord,
-  type RenderHTMLProps,
   type RenderersProps,
   type TNode,
-  type TDocument,
 } from "@native-html/render";
+import { prepareArticleSections, reuseArticleSections } from "./article-sections";
 import { useTheme } from "../../theme/ThemeProvider";
 import type { Palette } from "../../theme/theme";
 import { radius, resolveFont, spacing, type FontFamily } from "../../theme/tokens";
@@ -54,16 +56,14 @@ import {
   type HighlightUiHandlers,
 } from "./article-highlight-ui";
 
-/** Custom fonts loaded via useFonts must be registered to avoid warnings. */
+/** Custom fonts loaded by theme/fonts.ts must be registered to avoid warnings. */
 const SYSTEM_FONTS = [
   ...defaultSystemFonts,
   "Roboto_400Regular",
   "Roboto_500Medium",
   "Roboto_700Bold",
   "JetBrainsMono_400Regular",
-  "JetBrainsMono_500Medium",
   "JetBrainsMono_600SemiBold",
-  "JetBrainsMono_700Bold",
   "Libron_400Regular",
   "Libron_400Regular_Italic",
   "Libron_700Bold",
@@ -377,31 +377,31 @@ const ARTICLE_RENDERERS = {
   mark: markRenderer,
 };
 
-function textFromNode(node: TNode): string {
-  if (node.type === "text") return node.data;
-  return node.children.map(textFromNode).join("");
-}
-
-function headingsFromTree(tree: TDocument): ArticleHeading[] {
-  const headings: ArticleHeading[] = [];
-  const visit = (node: TNode) => {
-    if (node.type !== "text" && /^h[1-3]$/.test(node.tagName ?? "") && node.id) {
-      const text = textFromNode(node).replace(/\s+/g, " ").trim();
-      if (text) {
-        headings.push({
-          id: node.id,
-          level: Number(node.tagName?.slice(1)) as ArticleHeading["level"],
-          text,
-        });
-      }
-    }
-    if (node.type !== "text") node.children.forEach(visit);
-  };
-  visit(tree);
-  return headings;
-}
-
 const EMPTY_HIGHLIGHTS: HighlightDto[] = [];
+
+/** Keep the scheduler below the providers: appending a section must not update
+ * engine/config contexts or walk every already-mounted article component. */
+function ArticleSections({ sections, contentWidth, onReady }: {
+  sections: ReturnType<typeof prepareArticleSections>["sections"];
+  contentWidth: number;
+  onReady?: () => void;
+}) {
+  const [mountedCount, setMountedCount] = useState(1);
+  const count = Math.min(mountedCount, Math.max(1, sections.length));
+  useEffect(() => {
+    if (count >= sections.length) return;
+    const timer = setTimeout(() => setMountedCount(count + 2), 16);
+    return () => clearTimeout(timer);
+  }, [count, sections]);
+  useEffect(() => {
+    if (count < sections.length) return;
+    const frame = requestAnimationFrame(() => onReady?.());
+    return () => cancelAnimationFrame(frame);
+  }, [count, sections, onReady]);
+  return <>{sections.slice(0, count).map((source, index) => (
+    <RenderHTMLSource key={index} source={source} contentWidth={contentWidth} />
+  ))}</>;
+}
 
 export const ArticleHtml = React.memo(function ArticleHtml({
   html,
@@ -422,11 +422,18 @@ export const ArticleHtml = React.memo(function ArticleHtml({
     () => applyHighlightsToHtml(html, highlights ?? EMPTY_HIGHLIGHTS),
     [html, highlights],
   );
-  const source = useMemo(() => ({ html: highlightedHtml }), [highlightedHtml]);
-  useEffect(() => {
-    const frame = requestAnimationFrame(() => onReady?.());
-    return () => cancelAnimationFrame(frame);
-  }, [html, onReady]);
+  const previousSections = useRef<ReturnType<typeof prepareArticleSections>["sections"]>([]);
+  const { sections, headings } = useMemo(() => {
+    const prepared = prepareArticleSections(highlightedHtml);
+    prepared.sections = reuseArticleSections(previousSections.current, prepared.sections);
+    previousSections.current = prepared.sections;
+    return prepared;
+  }, [highlightedHtml]);
+  // Keep already mounted sections stable. Appending bounded batches yields
+  // to input/navigation instead of mounting thousands of native text views in
+  // one uninterruptible commit. All sections remain mounted, preserving OS text
+  // selection, exact heading refs and the existing ScrollView position model.
+  useEffect(() => { onHeadingsChange?.(headings); }, [headings, onHeadingsChange]);
 
   const tagsStyles = useMemo(
     () => buildTagsStyles(palette, family, base, lineSpacing),
@@ -492,42 +499,24 @@ export const ArticleHtml = React.memo(function ArticleHtml({
       }) as Partial<RenderersProps>,
     [markerTextStyle, onHeadingRef, base, family],
   );
-  const domVisitors = useMemo<NonNullable<RenderHTMLProps["domVisitors"]>>(() => {
-    let headingIndex = 0;
-    return {
-      onDocument: () => {
-        headingIndex = 0;
-      },
-      onElement: (element) => {
-        if (/^h[1-3]$/.test(element.name) && !element.attribs.id) {
-          element.attribs.id = `ordo-heading-${headingIndex}`;
-          headingIndex += 1;
-        }
-      },
-    };
-  }, []);
-  const handleTreeChange = useCallback(
-    (tree: TDocument) => onHeadingsChange?.(headingsFromTree(tree)),
-    [onHeadingsChange],
-  );
-
   if (contentWidth <= 0) return null;
 
   return (
     <HighlightUiContext.Provider value={highlightUi}>
-    <RenderHTML
-      source={source}
-      contentWidth={contentWidth}
+    <TRenderEngineProvider
       baseStyle={baseStyle}
       tagsStyles={tagsStyles}
+      systemFonts={SYSTEM_FONTS}
+      ignoredStyles={READER_IGNORED_INLINE_STYLES}
+    >
+    <RenderHTMLConfigProvider
       renderersProps={renderersProps}
       renderers={ARTICLE_RENDERERS}
-      domVisitors={domVisitors}
-      onTTreeChange={handleTreeChange}
-      systemFonts={SYSTEM_FONTS}
       defaultTextProps={defaultTextProps}
-      ignoredStyles={READER_IGNORED_INLINE_STYLES}
-    />
+    >
+      <ArticleSections sections={sections} contentWidth={contentWidth} onReady={onReady} />
+    </RenderHTMLConfigProvider>
+    </TRenderEngineProvider>
     </HighlightUiContext.Provider>
   );
 });

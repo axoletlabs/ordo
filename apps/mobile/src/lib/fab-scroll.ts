@@ -1,26 +1,28 @@
+export interface FabScrollState { previous: number; origin: number; direction: number; collapsed: boolean }
+
+export function stepFabScrollState(state: FabScrollState, offset: number, threshold: number): FabScrollState {
+  "worklet";
+  const next = Math.max(0, offset);
+  if (next <= 8) return { previous: next, origin: next, direction: 0, collapsed: false };
+  const delta = next - state.previous;
+  if (Math.abs(delta) < 1) return state;
+  const sign = Math.sign(delta);
+  const origin = sign !== state.direction ? state.previous : state.origin;
+  return { previous: next, origin, direction: sign,
+    collapsed: Math.abs(next - origin) >= threshold ? sign > 0 : state.collapsed };
+}
+
 /** Direction hysteresis prevents a FAB from expanding/collapsing on tiny scroll jitter. */
 export function createFabScrollState(threshold = 24) {
-  let previous = 0;
-  let origin = 0;
-  let direction = 0;
-  let collapsed = false;
+  let state: FabScrollState = { previous: 0, origin: 0, direction: 0, collapsed: false };
   const next = (offset: number) => {
-    const next = Math.max(0, offset);
-    if (next <= 8) { previous = origin = next; direction = 0; collapsed = false; return collapsed; }
-    const delta = next - previous;
-    if (Math.abs(delta) < 1) return collapsed;
-    const sign = Math.sign(delta);
-    if (sign !== direction) { direction = sign; origin = previous; }
-    if (Math.abs(next - origin) >= threshold) collapsed = sign > 0;
-    previous = next;
-    return collapsed;
+    state = stepFabScrollState(state, offset, threshold);
+    return state.collapsed;
   };
   return Object.assign(next, {
     /** Re-sync after programmatic scrolling so stale deltas don't flip state. */
     reset(at = 0) {
-      previous = origin = Math.max(0, at);
-      direction = 0;
-      collapsed = false;
+      state = { previous: Math.max(0, at), origin: Math.max(0, at), direction: 0, collapsed: false };
     },
   });
 }

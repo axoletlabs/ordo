@@ -16,6 +16,7 @@ export interface ListBookmarksParams {
   cursor?: string | null;
   limit?: number;
   sort?: BookmarkListSort;
+  signal?: AbortSignal;
 }
 
 export const bookmarksApi = {
@@ -26,15 +27,17 @@ export const bookmarksApi = {
       { folderId },
     ),
 
-  list: ({ folderId, cursor, limit, sort }: ListBookmarksParams) =>
+  list: ({ folderId, cursor, limit, sort, signal }: ListBookmarksParams) =>
     api.get<typeof BookmarkRoutes.list.response>(BookmarkRoutes.list.path, {
       query: { folderId, cursor, limit, sort },
       folderId,
+      signal,
     }),
 
   /** Whole-library list filtered by tags (AND semantics). */
-  listTagged: (tagIds: string[], cursor?: string | null, limit?: number) =>
+  listTagged: (tagIds: string[], cursor?: string | null, limit?: number, signal?: AbortSignal) =>
     api.get<typeof BookmarkRoutes.list.response>(BookmarkRoutes.list.path, {
+      signal,
       query: {
         scope: "all",
         tagIds: tagIds.length > 0 ? tagIds.join(",") : undefined,
@@ -71,10 +74,10 @@ export const bookmarksApi = {
       signal,
     }),
 
-  detail: (id: string, folderId?: string | null) =>
+  detail: (id: string, folderId?: string | null, signal?: AbortSignal) =>
     api.get<typeof BookmarkRoutes.detail.response>(
       buildPath(BookmarkRoutes.detail.path, { id }),
-      { folderId, timeoutMs: BOOKMARK_DETAIL_TIMEOUT_MS },
+      { folderId, signal, timeoutMs: BOOKMARK_DETAIL_TIMEOUT_MS },
     ),
 
   update: (

@@ -8,10 +8,11 @@
  */
 import { AppState, Platform } from "react-native";
 import type { AppStateStatus } from "react-native";
-import { focusManager } from "@tanstack/react-query";
+import { focusManager, onlineManager } from "@tanstack/react-query";
 import { cancelProactiveRefresh, ensureFreshAccessToken } from "./api/client";
 import { recordForeground } from "./telemetry";
 import { useAuthStore } from "../store/auth";
+import { resumePendingDeletes } from "./undoable-delete";
 
 let started = false;
 let lastState: AppStateStatus = AppState.currentState;
@@ -25,6 +26,7 @@ async function onBecameActive() {
   try {
     await useAuthStore.getState().reconcileShareSession();
     await ensureFreshAccessToken();
+    resumePendingDeletes();
   } catch {
     /* ensureFresh already swallows refresh failures into a result union */
   }
@@ -54,4 +56,5 @@ export function initAppLifecycle() {
   if (lastState === "active") setNativeFocused(true);
   else onLeftActive();
   AppState.addEventListener("change", onAppStateChange);
+  onlineManager.subscribe((online) => { if (online) resumePendingDeletes(); });
 }

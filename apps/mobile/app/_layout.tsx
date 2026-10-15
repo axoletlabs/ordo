@@ -41,7 +41,7 @@ import { UpdateReadyWatcher } from "../src/components/UpdateReadyWatcher";
 import { NativeUpdateProgress } from "../src/components/NativeUpdateProgress";
 import { ErrorBoundary } from "../src/components/ErrorBoundary";
 import { LaunchSplash } from "../src/components/LaunchSplash";
-import { fontAssets } from "../src/theme/tokens";
+import { launchFonts, loadReaderFonts } from "../src/theme/fonts";
 import { IncomingShareHandler } from "../src/components/IncomingShareHandler";
 import { recordColdStart } from "../src/lib/telemetry";
 import { AddBookmarkSheet } from "../src/components/bookmarks/AddBookmarkSheet";
@@ -55,6 +55,7 @@ import {
   useUpdateRestartStore,
 } from "../src/store/update-restart";
 import { enableFreeze } from "react-native-screens";
+import { normalizeReaderPreferences } from "@ordo/shared";
 
 enableFreeze(true);
 initAppLifecycle();
@@ -75,6 +76,10 @@ SplashScreen.setOptions(
 // launch by a full beat after hydration finishes.
 const MIN_SPLASH_MS = 400;
 const LAUNCH_STARTED_AT = Date.now();
+
+// Reading typefaces are not launch fonts. Warm the account's family once the
+// library has settled so the first article opens in its face, not a skeleton.
+const READER_FONT_WARM_DELAY_MS = 1_500;
 
 // Sign-out crossfade budget: the outgoing library keeps its painted data
 // while the auth group fades in; the cache wipe follows once it settles.
@@ -171,6 +176,15 @@ function RootShell() {
   const showSplash = restarting || (!revealedRef.current && coveredByLaunch);
 
   useEffect(() => {
+    if (showSplash || status !== "authenticated") return;
+    const timer = setTimeout(() => {
+      const { fontFamily } = normalizeReaderPreferences(useAuthStore.getState().user?.preferences);
+      void loadReaderFonts(fontFamily);
+    }, READER_FONT_WARM_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [showSplash, status]);
+
+  useEffect(() => {
     if (showSplash) return;
     revealedRef.current = true;
     SplashScreen.hideAsync().catch(() => {});
@@ -231,7 +245,7 @@ export default function RootLayout() {
   useEffect(() => {
     (async () => {
       const results = await Promise.allSettled([
-        Font.loadAsync(fontAssets),
+        Font.loadAsync(launchFonts),
         useSettingsStore.getState().hydrate(),
         useFolderTokenStore.getState().hydrate(),
         useOnlineStore.getState().init(),

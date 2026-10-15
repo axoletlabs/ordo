@@ -13,7 +13,7 @@ function readPackageVersion(): string {
   } catch {
     // fall through to the literal
   }
-  return "0.2.0-preview.2";
+  return "0.2.0";
 }
 
 /** Fallback when this tree was not installed from a GitHub Release. */

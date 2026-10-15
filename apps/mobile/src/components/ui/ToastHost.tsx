@@ -120,7 +120,7 @@ function ToastItem({ toast }: { toast: Toast }) {
             stateLayerColor={palette.inversePrimary}
             hitSlop={6}
             onPress={() => {
-              toast.action!.onPress();
+              if (dismissed.current || toast.action!.onPress() === false) return;
               animateOut();
             }}
             style={styles.actionHit}

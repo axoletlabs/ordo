@@ -90,3 +90,12 @@ test("sortBookmarksBy orders titles A–Z regardless of recency", () => {
     ["p", "d", "e", "w"],
   );
 });
+
+test("cached collator preserves Unicode/case-insensitive ordering and ID tie breaks", () => {
+  const items = ["Éclair", "eclair", "Design", "design", "中文", "Ångström"].map((title, index) =>
+    bookmark({ id: String(index), title, createdAt: "2026-01-01T00:00:00Z" }));
+  const original = [...items].sort((a, b) => a.title.localeCompare(b.title, undefined, { sensitivity: "base" }) || a.id.localeCompare(b.id));
+  assert.deepEqual(sortBookmarksBy(items, "title"), original);
+  assert.deepEqual(sortBookmarksBy(items, "titleDesc"), [...original].reverse());
+  assert.equal(items[0]?.title, "Éclair", "Sorting must not mutate the query cache");
+});

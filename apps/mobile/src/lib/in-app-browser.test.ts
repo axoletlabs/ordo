@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { runInNewContext } from "node:vm";
 import {
   BROWSER_NAV_SCRIPT,
   BROWSER_PTR_SCRIPT,
@@ -131,4 +132,57 @@ test("blank cover hides the white reload document until load finishes", () => {
   assert.equal(browserBlankCoverVisible(true, 1, false), false);
   assert.equal(browserBlankCoverVisible(false, 0, false), false);
   assert.equal(browserBlankCoverVisible(true, 0, true), false);
+});
+
+function ptrPage() {
+  const listeners: Record<string, (event: unknown) => void> = {};
+  const messages: Array<{ phase: string; dy: number }> = [];
+  let now = 1000, reads = 0;
+  const root = { scrollTop: 0 };
+  const target = { nodeType: 1, parentElement: root, scrollTop: 0,
+    get scrollHeight() { reads++; return 1000; }, clientHeight: 100 };
+  runInNewContext(BROWSER_PTR_SCRIPT, {
+    window: { scrollY: 0, ReactNativeWebView: { postMessage: (raw: string) => messages.push(JSON.parse(raw)) } },
+    document: { documentElement: root, scrollingElement: root, body: root,
+      addEventListener: (name: string, callback: (event: unknown) => void) => { listeners[name] = callback; } },
+    Date: { now: () => now },
+  });
+  return { messages, target, reads: () => reads, at: (time: number) => { now = time; },
+    touch: (name: string, y: number) => listeners[name]?.({ target, touches: [{ clientX: 0, clientY: y }], changedTouches: [{ clientX: 0, clientY: y }] }) };
+}
+
+test("fast refresh pulls cross the bridge at most once per 32ms, with an immediate release", () => {
+  const page = ptrPage();
+  page.touch("touchstart", 0);
+  for (let frame = 0; frame < 120; frame++) {
+    page.at(1000 + frame * 8);
+    page.touch("touchmove", frame * 10);
+  }
+  assert.equal(page.messages.filter(message => message.phase === "move").length, 30);
+  page.touch("touchend", 1200);
+  assert.deepEqual(page.messages.at(-1), { type: "ordo-ptr", phase: "end", dy: 1200 });
+  assert.ok(page.reads() < 35, "Rate limiting precedes layout reads");
+});
+
+test("ordinary upward scrolling stops page-layout probes and reversal cancels a pull", () => {
+  const page = ptrPage();
+  page.touch("touchstart", 100);
+  const initialReads = page.reads();
+  for (let step = 0; step < 100; step++) page.touch("touchmove", 99 - step);
+  page.touch("touchend", 0);
+  assert.equal(page.reads(), initialReads);
+  assert.equal(page.messages.length, 0);
+  page.touch("touchstart", 100);
+  page.touch("touchmove", 180);
+  page.touch("touchmove", 90);
+  assert.equal(page.messages.at(-1)?.phase, "cancel");
+});
+
+test("a page that scrolled away from the top cannot refresh on release", () => {
+  const page = ptrPage();
+  page.touch("touchstart", 0);
+  page.touch("touchmove", 100);
+  page.target.scrollTop = 40;
+  page.touch("touchend", 120);
+  assert.equal(page.messages.at(-1)?.dy, 0);
 });

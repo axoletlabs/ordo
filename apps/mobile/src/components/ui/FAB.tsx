@@ -15,6 +15,7 @@ import { useKeyboardVisible } from "../../hooks/use-keyboard-visible";
 import { useFocusEffect } from "expo-router";
 import { useFloatingActions } from "../../store/floating-actions";
 import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
+import { FAB_DEFAULT_BOTTOM, FAB_SIZE, fabBottomOffset } from "../../lib/fab-layout";
 
 export interface FABProps {
   icon?: keyof typeof Ionicons.glyphMap;
@@ -64,7 +65,7 @@ export function FAB({
   accessibilityLabel = "Create",
   accessibilityHint,
   testID,
-  bottom = spacing[20],
+  bottom = FAB_DEFAULT_BOTTOM,
   right: rightOverride,
   maxContentWidth = layout.maxLibraryWidth,
   alignTo = "scene",
@@ -75,7 +76,7 @@ export function FAB({
   const spatial = expansion?.spatial ?? expanded;
   const effects = expansion?.effects ?? expanded;
   const widthStyle = useAnimatedStyle(() => ({
-    width: label ? 56 + (labelWidth + spacing[8]) * Math.max(0, spatial.value) : 56,
+    width: label ? FAB_SIZE + (labelWidth + spacing[8]) * Math.max(0, spatial.value) : FAB_SIZE,
   }));
   const hitStyle = useAnimatedStyle(() => ({ gap: label ? spacing[8] * Math.max(0, Math.min(1, spatial.value)) : 0 }));
   const labelStyle = useAnimatedStyle(() => ({ width: labelWidth * Math.max(0, spatial.value), opacity: Math.max(0, Math.min(1, effects.value)) }));
@@ -96,7 +97,7 @@ export function FAB({
     <Animated.View
       ref={anchorRef}
       collapsable={false}
-      style={[styles.fab, { bottom: Math.max(bottom, insets.bottom + spacing[16]), right, borderRadius: expressive ? radius.xl : radius.lg }, shadows.level3, widthStyle]}
+      style={[styles.fab, { bottom: fabBottomOffset(insets.bottom, bottom), right, borderRadius: expressive ? radius.xl : radius.lg }, shadows.level3, widthStyle]}
     >
       <PressableScale
         animated
@@ -132,14 +133,14 @@ const styles = StyleSheet.create({
   layer: { flex: 1, width: "100%", alignSelf: "center" },
   fab: {
     position: "absolute",
-    minWidth: 56,
-    height: 56,
+    minWidth: FAB_SIZE,
+    height: FAB_SIZE,
     alignItems: "center",
     justifyContent: "center",
   },
   fabHit: {
-    minWidth: 56,
-    height: 56,
+    minWidth: FAB_SIZE,
+    height: FAB_SIZE,
     flexDirection: "row",
     gap: spacing[8],
     alignItems: "center",

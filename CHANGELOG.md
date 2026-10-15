@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0
+
+The 0.2.0 preview is now stable. Thanks to everyone who tested it!
+
+- A refreshed design with wallpaper colors on supported Android devices.
+- Faster search and smoother bookmark browsing and organization.
+- A more comfortable reader with new fonts, adjustable line spacing, and easier navigation.
+- More reliable sign-in, reminders, and app updates, plus simpler self-hosted setup.
+
+**Preview users:** Install the Stable app (`ordo`) and sign in to access your saved library. It installs separately from Preview; local settings do not transfer.
+
+[All changes since 0.1.0](https://github.com/axoletlabs/ordo/compare/v0.1.0...v0.2.0)
+
 ## 0.2.0 Preview 2
 
 - Sync the release branch with `main`, preserving the complete commit history.

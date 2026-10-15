@@ -15,7 +15,7 @@ const CLOSE_FALLBACK_MS = CLOSE_MS + 70;
 export function useOverlayPresence(
   visible: boolean,
   onDismiss: () => void,
-  options?: { dismissKeyboard?: boolean; interactive?: boolean; ready?: boolean },
+  options?: { dismissKeyboard?: boolean; interactive?: boolean; ready?: boolean; onExited?: () => void },
 ) {
   const progress = useSharedValue(0);
   const spatial = useSharedValue(0);
@@ -26,6 +26,15 @@ export function useOverlayPresence(
   const hideKeyboard = options?.dismissKeyboard !== false;
   const interactive = options?.interactive !== false;
   const ready = options?.ready !== false;
+  const onExited = useRef(options?.onExited);
+  onExited.current = options?.onExited;
+  const hadSurface = useRef(visible);
+  useEffect(() => {
+    if (visible) hadSurface.current = true;
+    if (visible || rendered || !hadSurface.current) return;
+    hadSurface.current = false;
+    onExited.current?.();
+  }, [visible, rendered]);
 
   const hide = useCallback((token: number) => {
     if (generation.current !== token) return;

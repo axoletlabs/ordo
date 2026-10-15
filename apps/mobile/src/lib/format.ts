@@ -1,7 +1,7 @@
 /**
  * Human-friendly formatting helpers.
  */
-import { formatDistanceToNowStrict } from "date-fns";
+import { formatDistanceToNowStrict } from "date-fns/formatDistanceToNowStrict";
 
 /** "3 days", "2 months" — compact relative time. */
 export function relativeTime(iso: string): string {

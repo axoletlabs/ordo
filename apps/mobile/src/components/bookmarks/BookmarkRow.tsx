@@ -179,8 +179,10 @@ export const BookmarkRow = React.memo(function BookmarkRow({
     runPressAction(() => onPress(bookmark), haptics.light);
   };
 
+  // Press-in also fires when a scroll starts on the row. Only warm what the
+  // reader will actually request: websites open live and skip the detail.
   const warmBookmark = () => {
-    if (selectionMode) return;
+    if (selectionMode || opensAsWebsite) return;
     void prefetchBookmarkDetail(bookmark.id, bookmark.folderId);
   };
 
