@@ -25,6 +25,10 @@ const {
   SHARE_RECEIVER_DEFAULT_ALIAS,
   SHARE_RECEIVER_SAVE_ALIAS,
   applyCcacheLaunchers,
+  applyProguardRules,
+  BOUNCY_CASTLE_UNUSED_RESOURCES,
+  PROGUARD_RULES_MARKER,
+  RESOURCE_KEEP_XML,
   applyCmakePath,
   applyReleaseSigning,
   applySecurityCrypto,
@@ -425,4 +429,26 @@ test("patches Expo 57 MainApplication packageList.apply for the session module",
 test("patches Java MainApplication for the session module", () => {
   const patched = patchMainApplicationForShareSession(JAVA_APPLICATION, 'java');
   assert.match(patched, /packages\.add\(new OrdoShareSessionPackage\(\)\);/);
+});
+
+test("release builds keep ordo's package and the worklets runtime under R8", () => {
+  const template = "# template\n-keep class com.swmansion.reanimated.** { *; }\n";
+  const rules = applyProguardRules(template, "com.axolet.ordo");
+  assert.ok(rules.startsWith(template.trimEnd()));
+  assert.match(rules, /-keep class com\.axolet\.ordo\.\*\* \{ \*; \}/);
+  assert.match(rules, /-keep class com\.swmansion\.worklets\.\*\* \{ \*; \}/);
+  assert.equal(applyProguardRules(rules, "com.axolet.ordo"), rules);
+  assert.equal(rules.split(PROGUARD_RULES_MARKER).length, 2);
+});
+
+test("resource shrinking keeps drawables and raw files React Native loads by name", () => {
+  assert.match(RESOURCE_KEEP_XML, /tools:keep="@raw\/\*,@drawable\/\*"/);
+});
+
+test("unused BouncyCastle data files are excluded without touching its classes", () => {
+  assert.ok(BOUNCY_CASTLE_UNUSED_RESOURCES.length > 0);
+  for (const pattern of BOUNCY_CASTLE_UNUSED_RESOURCES) {
+    assert.match(pattern, /^org\/bouncycastle\//);
+    assert.doesNotMatch(pattern, /\.class|^org\/bouncycastle\/\*\*$/);
+  }
 });

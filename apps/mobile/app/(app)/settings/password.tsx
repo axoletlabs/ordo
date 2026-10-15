@@ -15,7 +15,7 @@ import { useChangePassword } from "../../../src/hooks/use-auth-actions";
 import { errorMessage, isMfaRequiredError } from "../../../src/lib/error-message";
 import { haptics } from "../../../src/lib/haptics";
 import { toast } from "../../../src/components/ui/toast-store";
-import { ChangePasswordSchema } from "@ordo/shared";
+import { ChangePasswordSchema } from "@ordo/shared/schemas";
 import { MfaStepUpPanel } from "../../../src/components/auth/MfaStepUpPanel";
 import { lockedSecretDisplay, passwordAutofillProps } from "../../../src/lib/password-autofill";
 

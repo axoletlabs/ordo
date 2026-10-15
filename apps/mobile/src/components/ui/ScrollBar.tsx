@@ -103,15 +103,29 @@ export function useVerticalScrollBar(insets?: ScrollBarInsets) {
     [content],
   );
 
-  const onScroll = useCallback(
-    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
-      const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+  const updateScroll = useCallback(
+    (event: NativeScrollEvent) => {
+      "worklet";
+      const { contentOffset, contentSize, layoutMeasurement } = event;
       offset.value = contentOffset.y;
       viewport.value = layoutMeasurement.height;
       content.value = contentSize.height;
+    },
+    [content, offset, viewport],
+  );
+  const onScrollActivity = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const { contentSize, layoutMeasurement } = event.nativeEvent;
       if (contentSize.height > layoutMeasurement.height + 1) reveal();
     },
-    [content, offset, reveal, viewport],
+    [reveal],
+  );
+  const onScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      updateScroll(event.nativeEvent);
+      onScrollActivity(event);
+    },
+    [onScrollActivity, updateScroll],
   );
 
   const overlay =
@@ -131,6 +145,8 @@ export function useVerticalScrollBar(insets?: ScrollBarInsets) {
     onLayout,
     onContentSizeChange,
     onScroll,
+    updateScroll,
+    onScrollActivity,
     overlay,
     hideNativeIndicator: true,
     indicatorStyle: palette.mode === "dark" ? ("white" as const) : ("black" as const),

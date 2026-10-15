@@ -71,6 +71,14 @@ export function prefetchFolderBookmarks(folderId: string) {
   });
 }
 
+/** Article HTML is stable once extracted; pending or forced articles stay live. */
+function detailStaleTime(query: { state: { data?: BookmarkDetailDto } }): number {
+  const data = query.state.data;
+  return data?.fetchStatus === "pending" || (data?.contentKindOverride === "article" && data.fetchStatus !== "ok")
+    ? 0
+    : 5 * 60_000;
+}
+
 export function prefetchBookmarkDetail(id: string, folderId?: string | null) {
   if (!id) return;
   return queryClient.prefetchQuery({
@@ -80,6 +88,9 @@ export function prefetchBookmarkDetail(id: string, folderId?: string | null) {
       patchListsFromDetail(queryClient, detail);
       return detail;
     },
+    // Same freshness as the reader, or a press-in re-downloads article HTML
+    // the reader would reuse.
+    staleTime: detailStaleTime,
   });
 }
 
@@ -150,12 +161,7 @@ export function useBookmarkDetail(id: string, enabled = true, folderId?: string 
       return detail;
     },
     enabled: !!id && enabled,
-    staleTime: (query) =>
-      query.state.data?.fetchStatus === "pending" ||
-      (query.state.data?.contentKindOverride === "article" &&
-        query.state.data.fetchStatus !== "ok")
-        ? 0
-        : 5 * 60_000,
+    staleTime: detailStaleTime,
     refetchInterval: (query) => {
       const data = query.state.data;
       if (!data) return false;

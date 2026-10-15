@@ -20,7 +20,8 @@ import { errorMessage } from "../../src/lib/error-message";
 import { haptics } from "../../src/lib/haptics";
 import { useTheme } from "../../src/theme/ThemeProvider";
 import { radius, spacing } from "../../src/theme/tokens";
-import { RegisterSchema, isPendingEmailVerificationResponse } from "@ordo/shared";
+import { isPendingEmailVerificationResponse } from "@ordo/shared";
+import { RegisterSchema } from "@ordo/shared/schemas";
 import { readSignupDraft, saveSignupDraft } from "../../src/lib/signup-draft";
 
 function routeParam(value: string | string[] | undefined): string {

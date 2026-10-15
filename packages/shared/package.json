@@ -1,12 +1,20 @@
 {
   "name": "@ordo/shared",
-  "version": "0.2.0-preview.2",
+  "version": "0.2.0",
   "private": true,
   "license": "AGPL-3.0",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
+      "react-native": {
+        "types": "./dist/client.d.ts",
+        "default": "./dist/client.js"
+      },
+      "browser": {
+        "types": "./dist/client.d.ts",
+        "default": "./dist/client.js"
+      },
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
@@ -19,7 +27,9 @@
       "default": "./dist/contract.js"
     }
   },
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc -b",
     "lint": "eslint .",
