@@ -644,7 +644,7 @@ try {
     await button(page, "Back to sign in").click(); await button(page, "Sign in").waitFor();
     results.interactions.push(`${mode}: backup-code sign-in exit`);
     await page.goto(`${base}/reset-password?email=alex%40example.test`);
-    await page.getByRole("textbox", { name: "Reset code", exact: true }).fill("123456");
+    await page.getByRole("textbox", { name: "Reset code, digit 1 of 6", exact: true }).fill("123456");
     await page.getByRole("textbox", { name: "New password", exact: true }).waitFor();
     await page.getByRole("textbox", { name: "New password", exact: true }).fill("Test-password-123");
     await page.getByRole("textbox", { name: "New password", exact: true }).press("Enter");
@@ -734,12 +734,12 @@ try {
     await page.getByRole("dialog", { name: "Set a password", exact: true }).waitFor();
     await capture(page, `${mode}-folder-password-dialog`); await button(page, "Back").click();
     await page.getByRole("menuitem", { name: "PIN", exact: true }).click();
-    await page.getByRole("textbox", { name: "PIN", exact: true }).fill("1234");
+    await page.getByRole("textbox", { name: "PIN, digit 1 of 4", exact: true }).fill("1234");
     await page.getByRole("dialog", { name: "Confirm PIN", exact: true }).waitFor();
     await capture(page, `${mode}-folder-pin-confirmation`);
-    await page.getByRole("textbox", { name: "PIN", exact: true }).fill("9876");
+    await page.getByRole("textbox", { name: "PIN, digit 1 of 4", exact: true }).fill("9876");
     await page.getByText("PINs do not match. Try again.", { exact: true }).waitFor();
-    assert.equal(await page.getByRole("textbox", { name: "PIN", exact: true }).getAttribute("aria-invalid"), "true");
+    assert.equal(await page.getByRole("textbox", { name: "PIN, digit 1 of 4", exact: true }).getAttribute("aria-invalid"), "true");
     await button(page, "Back").click(); await page.getByRole("menuitem", { name: "Pattern", exact: true }).click();
     await capture(page, `${mode}-folder-pattern-dialog`); await page.keyboard.press("Escape"); await settle(page);
     await folderRow.click({ button: "right" }); await page.getByRole("menuitem", { name: "Delete folder", exact: true }).click();
@@ -858,7 +858,7 @@ try {
     await capture(page, `${mode}-signout-dialog`); await page.keyboard.press("Escape");
     await navigate(page, "settings/security"); await button(page, "Set up authenticator").click();
     await capture(page, `${mode}-authenticator-setup`);
-    await page.getByRole("textbox", { name: "Authenticator code", exact: true }).fill("123456");
+    await page.getByRole("textbox", { name: "Authenticator code, digit 1 of 6", exact: true }).fill("123456");
     await page.getByRole("dialog", { name: "Save your backup codes", exact: true }).waitFor();
     await capture(page, `${mode}-backup-codes-dialog`); await page.keyboard.press("Escape");
     results.interactions.push(`${mode}: authenticator enrollment and one-time backup-code surface`);
