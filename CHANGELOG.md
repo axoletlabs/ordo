@@ -12,7 +12,7 @@ The first preview of the 0.3.0 cycle, focused on performance and day-to-day reli
 - Clearer reminder date indicators, with preset labels kept on one line.
 - OTP digits are individually editable during sign-in.
 
-**Install:** This preview requires a new APK, not OTA. Android build numbers restart with the 0.3.0 line (this preview uses `versionCode=1`, Preview 2 of 0.2.0 shipped `versionCode=2`), so it cannot replace the old preview in-place: uninstall `ordo (preview)` first if the update fails (this clears local settings/cache, not your server library). Self-hosted users can select this exact release with `--release v0.3.0-preview.1` or include previews with `--pre`.
+**Install:** This preview requires a new APK, not OTA. It shipped with `versionCode=1` (build numbers then restarted per line; Preview 2 of 0.2.0 shipped `versionCode=2`), so it cannot replace the old preview in-place: uninstall `ordo (preview)` first if the update fails (this clears local settings/cache, not your server library). Later previews continue the 0.2.0 count instead of restarting, so they upgrade in place from either preview. Self-hosted users can select this exact release with `--release v0.3.0-preview.1` or include previews with `--pre`.
 
 [Full commit history](https://github.com/axoletlabs/ordo/compare/v0.2.0...v0.3.0-preview.1)
 
