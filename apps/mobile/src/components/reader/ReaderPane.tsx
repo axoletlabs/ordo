@@ -318,8 +318,11 @@ function ReaderPaneInner({
   const chromeHeightRef = useRef(0);
   const chromeHeightSV = useSharedValue(0);
   const [chromeHeight, setChromeHeight] = useState(0);
+  // Capture only the shared value: the controller also owns a JS-only native
+  // event registration that Worklets cannot serialize onto the UI thread.
+  const chromeExpansion = collapsingFab.expansion.spatial;
   const chromeShiftStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -chromeHeightSV.value * (1 - collapsingFab.expansion.spatial.value) }],
+    transform: [{ translateY: -chromeHeightSV.value * (1 - chromeExpansion.value) }],
   }));
   const websiteViewRef = useRef(false);
   const [keptBrowserId, setKeptBrowserId] = useState<string | null>(null);

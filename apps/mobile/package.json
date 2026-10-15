@@ -24,7 +24,7 @@
     "test:calendar": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/lib/calendar-input.test.ts",
     "test:otp": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/lib/otp-edit.test.ts",
     "test:otp-ui": "node tests/otp-input.mjs",
-    "test:reader": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/components/reader/reader-article-colors.test.ts src/components/reader/article-sections.test.ts",
+    "test:reader": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/components/reader/reader-article-colors.test.ts src/components/reader/article-sections.test.ts tests/reader-native-worklet.test.mjs",
     "test:stress-ui": "node tests/library-reader-stress.mjs",
     "test:reader-sections-ui": "node tests/reader-sections-ui.mjs",
     "test:reader-performance": "node tests/reader-performance.mjs",
