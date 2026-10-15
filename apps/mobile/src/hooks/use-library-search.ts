@@ -46,7 +46,7 @@ export function useLibraryCatalogue(searching: boolean) {
   }, []);
   const catalogue = useInfiniteQuery({
     queryKey: qk.libraryIndex(accessRevision),
-    queryFn: ({ pageParam }) => bookmarksApi.listTagged([], pageParam, LIST_PAGE_SIZE),
+    queryFn: ({ pageParam, signal }) => bookmarksApi.listTagged([], pageParam, LIST_PAGE_SIZE, signal),
     initialPageParam: null as string | null,
     getNextPageParam: (page, _pages, _lastParam, pageParams) => {
       const next = nextPageCursor(page);

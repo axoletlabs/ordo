@@ -37,6 +37,7 @@ import {
 import { raceDeadline } from "./fetch-timeout";
 import { useAuthStore } from "../store/auth";
 import { useSettingsStore } from "../store/settings";
+import { resumePendingDeletes } from "./undoable-delete";
 
 function sanitizeForDisk(client: PersistedClient): PersistedClient {
   return sanitizePersistedClient(client as unknown as PersistedClientSnapshot) as unknown as PersistedClient;
@@ -189,6 +190,7 @@ export async function restoreQueryPersistence(userId: string, serverUrl: string)
 
   if (generation !== restoreGeneration || activeStorageKey !== storageKey) return;
   unsubscribe = subscribePersistence(options);
+  resumePendingDeletes();
 }
 
 function homeLibraryCached(): boolean {

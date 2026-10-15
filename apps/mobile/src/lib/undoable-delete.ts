@@ -21,6 +21,7 @@ import { sortFoldersDefault, sortTagsDefault } from "./list-sort";
 import { qk, tagsAnyAccess } from "./api/query-keys";
 import {
   bumpFolderCount,
+  collectCachedBookmarks,
   insertBookmarkIfAbsent,
   mapCachedBookmarks,
   removeBookmarksEverywhere,
@@ -32,14 +33,18 @@ import { errorMessage } from "./error-message";
 import { haptics } from "./haptics";
 import { queryClient } from "./query-client";
 import { useFolderTokenStore } from "../store/folder-tokens";
+import { deleteJournalKey, forgetDeleteIntent, readDeleteIntents, recordDeleteIntent, type DeleteIntent } from "./delete-journal";
 
 const UNDO_MS = 5_500;
-const COMMIT_FALLBACK_MS = UNDO_MS + 800;
 
 const pendingBookmarkIds = new Set<string>();
 const pendingFolderIds = new Set<string>();
 const pendingTagIds = new Set<string>();
 let stripperStarted = false;
+const activeIntents = new Set<string>();
+const pendingToastIds = new Set<string>();
+let journalScope: string | null = null;
+let scopeGeneration = 0;
 
 export function isBookmarkDeletePending(id: string): boolean {
   return pendingBookmarkIds.has(id);
@@ -168,31 +173,34 @@ function listKeyAllowsRestore(queryKey: readonly unknown[], folderId: string | n
   if (queryKey[0] !== "bookmarks") return false;
   const scope = queryKey[1];
   if (scope === "detail" || scope === "extraction-progress" || scope === "reminders") return false;
-  if (scope === "search" || scope === "tagged") return true;
   return scope === folderId && (queryKey.length === 2 || queryKey.length === 3);
 }
 
 function collectBookmarksInFolders(folderIds: ReadonlySet<string>): BookmarkDto[] {
   if (folderIds.size === 0) return [];
-  const found = new Map<string, BookmarkDto>();
-  for (const query of queryClient.getQueryCache().findAll({ queryKey: ["bookmarks"] })) {
-    const data = query.state.data;
-    if (isPagedBookmarks(data)) {
-      for (const page of data.pages) {
-        for (const item of page.items) {
-          if (item.folderId && folderIds.has(item.folderId)) found.set(item.id, item);
-        }
-      }
-    } else if (isBookmarkRecord(data) && data.folderId && folderIds.has(data.folderId)) {
-      found.set(data.id, data);
-    }
-  }
-  return [...found.values()];
+  // Resolve the newest copy BEFORE filtering by folder. An obsolete reader or
+  // inactive index must never make a moved-out bookmark part of this deletion.
+  return collectCachedBookmarks(queryClient).filter((item) => item.folderId && folderIds.has(item.folderId));
+}
+
+interface BookmarkRestore {
+  details: Map<string, BookmarkDetailDto | BookmarkDto>;
+  lists: Map<string, (readonly unknown[])[]>;
 }
 
 function hideBookmarks(bookmarks: BookmarkDto[], bumpCounts: boolean) {
   const details = new Map<string, BookmarkDetailDto | BookmarkDto>();
-  if (bookmarks.length === 0) return details;
+  const lists = new Map<string, (readonly unknown[])[]>();
+  if (bookmarks.length === 0) return { details, lists };
+  const ids = new Set(bookmarks.map((bookmark) => bookmark.id));
+  for (const query of queryClient.getQueryCache().findAll({ queryKey: ["bookmarks"] })) {
+    const data = query.state.data;
+    if (!isPagedBookmarks(data)) continue;
+    for (const item of data.pages.flatMap((page) => page.items)) {
+      if (!ids.has(item.id)) continue;
+      lists.set(item.id, [...(lists.get(item.id) ?? []), query.queryKey]);
+    }
+  }
   for (const bookmark of bookmarks) {
     pendingBookmarkIds.add(bookmark.id);
     const detail = queryClient.getQueryData<BookmarkDetailDto | BookmarkDto>(qk.bookmark(bookmark.id));
@@ -209,23 +217,25 @@ function hideBookmarks(bookmarks: BookmarkDto[], bumpCounts: boolean) {
     queryClient.removeQueries({ queryKey: qk.bookmark(bookmark.id) });
     if (bumpCounts) bumpFolderCount(queryClient, bookmark.folderId, -1, bookmark.isRead ? 0 : -1);
   }
-  return details;
+  return { details, lists };
 }
 
 function restoreBookmarks(
   bookmarks: BookmarkDto[],
-  details: Map<string, BookmarkDetailDto | BookmarkDto>,
+  snapshot: BookmarkRestore,
   bumpCounts: boolean,
 ) {
   if (bookmarks.length === 0) return;
   for (const bookmark of bookmarks) pendingBookmarkIds.delete(bookmark.id);
   for (const bookmark of bookmarks) {
     for (const query of queryClient.getQueryCache().findAll({ queryKey: ["bookmarks"] })) {
-      if (!listKeyAllowsRestore(query.queryKey, bookmark.folderId)) continue;
+      const previouslyPresent = snapshot.lists.get(bookmark.id)?.some((key) =>
+        JSON.stringify(key) === JSON.stringify(query.queryKey));
+      if (!previouslyPresent && !listKeyAllowsRestore(query.queryKey, bookmark.folderId)) continue;
       insertBookmarkIfAbsent(queryClient, query.queryKey, bookmark);
     }
     if (bumpCounts) bumpFolderCount(queryClient, bookmark.folderId, +1, bookmark.isRead ? 0 : +1);
-    const detail = details.get(bookmark.id);
+    const detail = snapshot.details.get(bookmark.id);
     if (detail) queryClient.setQueryData(qk.bookmark(bookmark.id), detail);
     if (bookmark.remindAt != null) {
       syncReminderInCache(queryClient, bookmark);
@@ -315,62 +325,6 @@ function restoreTags(tags: TagDto[], assignments: Map<string, Map<string, TagPre
   });
 }
 
-async function commitBookmarkDeletes(bookmarks: BookmarkDto[], scopeFolderId?: string | null) {
-  if (bookmarks.length === 0) return;
-  if (bookmarks.length === 1) {
-    const bookmark = bookmarks[0];
-    await bookmarksApi.remove(bookmark.id, { folderId: bookmark.folderId ?? scopeFolderId ?? null });
-  } else {
-    const ids = bookmarks.map((bookmark) => bookmark.id);
-    for (let i = 0; i < ids.length; i += BATCH_ITEM_LIMIT) {
-      const chunk = ids.slice(i, i + BATCH_ITEM_LIMIT);
-      await bookmarksApi.batch({ action: "delete", ids: chunk }, { folderId: scopeFolderId });
-    }
-  }
-  for (const bookmark of bookmarks) pendingBookmarkIds.delete(bookmark.id);
-  void queryClient.invalidateQueries({ queryKey: ["tags"] });
-  void queryClient.invalidateQueries({ queryKey: ["bookmarks", "tagged"] });
-  void queryClient.invalidateQueries({ queryKey: ["bookmarks", "search"] });
-  void queryClient.invalidateQueries({ queryKey: qk.reminders });
-}
-
-async function commitFolderDeletes(folders: FolderDto[], contained: BookmarkDto[]) {
-  if (folders.length === 0) return;
-  const ids = folders.map((folder) => folder.id);
-  if (ids.length === 1) {
-    await foldersApi.remove(ids[0]);
-  } else {
-    for (let i = 0; i < ids.length; i += BATCH_ITEM_LIMIT) {
-      await foldersApi.batch({ action: "delete", ids: ids.slice(i, i + BATCH_ITEM_LIMIT) });
-    }
-  }
-  for (const folder of folders) {
-    pendingFolderIds.delete(folder.id);
-    useFolderTokenStore.getState().clear(folder.id);
-  }
-  for (const bookmark of contained) pendingBookmarkIds.delete(bookmark.id);
-  void queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
-  void queryClient.invalidateQueries({ queryKey: qk.folders });
-  void queryClient.invalidateQueries({ queryKey: tagsAnyAccess });
-}
-
-async function commitTagDeletes(tags: TagDto[]) {
-  if (tags.length === 0) return;
-  try {
-    // No batch endpoint for tags; delete sequentially.
-    for (const tag of tags) {
-      await tagsApi.remove(tag.id);
-      pendingTagIds.delete(tag.id);
-    }
-  } finally {
-    // A partial failure must not leave the cache showing already-deleted tags
-    // (the undo restore re-inserts all of them); refetch the server truth.
-    void queryClient.invalidateQueries({ queryKey: tagsAnyAccess });
-    void queryClient.invalidateQueries({ queryKey: ["bookmarks", "tagged"] });
-    void queryClient.invalidateQueries({ queryKey: ["bookmarks", "search"] });
-  }
-}
-
 function toastMessage(bookmarks: number, folders: number, tags: readonly TagDto[]): string {
   if (tags.length > 0 && bookmarks === 0 && folders === 0) return deletedTagsToast(tags);
   if (folders > 0 && bookmarks > 0) return "Deleted";
@@ -388,8 +342,123 @@ export interface UndoableDeleteOpts {
   showToast?: boolean;
 }
 
+function releaseIntent(intent: DeleteIntent) {
+  for (const bookmark of intent.bookmarks) pendingBookmarkIds.delete(bookmark.id);
+  for (const id of intent.contained) pendingBookmarkIds.delete(id);
+  for (const id of intent.folders) pendingFolderIds.delete(id);
+  for (const id of intent.tags) pendingTagIds.delete(id);
+}
+
+function invalidateDeletedLists() {
+  void queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
+  void queryClient.invalidateQueries({ queryKey: qk.folders });
+  void queryClient.invalidateQueries({ queryKey: tagsAnyAccess });
+}
+
+function syncJournalScope() {
+  const key = deleteJournalKey();
+  if (journalScope !== key) {
+    for (const id of pendingToastIds) toast.dismiss(id);
+    pendingToastIds.clear();
+    pendingBookmarkIds.clear(); pendingFolderIds.clear(); pendingTagIds.clear();
+    activeIntents.clear();
+    journalScope = key;
+    scopeGeneration += 1;
+  }
+  return key;
+}
+
+/** A replay may follow a successful DELETE whose response was lost. */
+async function deleteIfPresent(run: () => Promise<unknown>) {
+  try { await run(); } catch (cause) {
+    if ((cause as { status?: number }).status !== 404) throw cause;
+  }
+}
+
+async function replayDeleteIntent(key: string, intent: DeleteIntent) {
+  const assertScope = () => {
+    if (deleteJournalKey() !== key) throw new Error("Deletion paused after account or server changed.");
+  };
+  const removeChunks = async (ids: string[], batch: (ids: string[]) => Promise<unknown>, single: (id: string) => Promise<unknown>) => {
+    for (let offset = 0; offset < ids.length; offset += BATCH_ITEM_LIMIT) {
+      assertScope();
+      const chunk = ids.slice(offset, offset + BATCH_ITEM_LIMIT);
+      if (chunk.length > 1) {
+        try { await batch(chunk); continue; } catch (cause) {
+          // Partially completed replays can contain an already-deleted ID.
+          if ((cause as { status?: number }).status !== 404) throw cause;
+        }
+      }
+      for (const id of chunk) {
+        assertScope();
+        await deleteIfPresent(() => single(id));
+      }
+    }
+  };
+  const bookmarksById = new Map(intent.bookmarks.map((bookmark) => [bookmark.id, bookmark]));
+  await removeChunks(intent.bookmarks.map((bookmark) => bookmark.id),
+    (ids) => bookmarksApi.batch({ action: "delete", ids }),
+    (id) => bookmarksApi.remove(id, { folderId: bookmarksById.get(id)?.folderId }));
+  await removeChunks(intent.folders, (ids) => foldersApi.batch({ action: "delete", ids }), (id) => foldersApi.remove(id));
+  for (const id of intent.tags) {
+    assertScope();
+    await deleteIfPresent(() => tagsApi.remove(id));
+  }
+  forgetDeleteIntent(key, intent.id);
+  if (deleteJournalKey() !== key) return;
+  releaseIntent(intent);
+  for (const id of intent.folders) useFolderTokenStore.getState().clear(id);
+  invalidateDeletedLists();
+}
+
+/** Restore ID-only tombstones before launch/foreground queries paint. A new
+ * process has no Undo surface, so finish durable intents instead of losing them. */
+export function resumePendingDeletes() {
+  const key = syncJournalScope();
+  if (!key) return;
+  try {
+    const intents = readDeleteIntents(key);
+    ensurePendingStripper();
+    for (const intent of intents) {
+      const activeKey = `${key}:${intent.id}`;
+      for (const bookmark of intent.bookmarks) pendingBookmarkIds.add(bookmark.id);
+      for (const id of intent.contained) pendingBookmarkIds.add(id);
+      for (const id of intent.folders) pendingFolderIds.add(id);
+      for (const id of intent.tags) pendingTagIds.add(id);
+      if (activeIntents.has(activeKey)) continue;
+      activeIntents.add(activeKey);
+      void replayDeleteIntent(key, intent).catch((cause) => {
+        if (deleteJournalKey() !== key) return;
+        const status = (cause as { status?: number }).status;
+        if (status && status >= 400 && status < 500) {
+          // Expired folder access requires an explicit unlock, not an invisible
+          // deletion that retries forever. Refetch restores the server's rows.
+          try { forgetDeleteIntent(key, intent.id); } catch (storageError) {
+            toast.error(errorMessage(storageError, "Couldn't save deletion status."));
+            return;
+          }
+          releaseIntent(intent);
+          invalidateDeletedLists();
+        }
+        toast.error(status && status >= 400 && status < 500 ? errorMessage(cause)
+          : `${errorMessage(cause)} Deletion will retry when you return online.`);
+      }).finally(() => activeIntents.delete(activeKey));
+    }
+    // The disk cache may already contain these rows. Apply tombstones now,
+    // rather than waiting for a network/cache event to trigger the subscriber.
+    for (const query of queryClient.getQueryCache().getAll()) {
+      if (["bookmarks", "folders", "tags"].includes(String(query.queryKey[0]))) {
+        queryClient.setQueryData(query.queryKey, query.state.data);
+      }
+    }
+  } catch (cause) {
+    toast.error(errorMessage(cause, "Couldn't restore pending deletions."));
+  }
+}
+
 export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; commit: () => void } {
   const noop = { undo: () => {}, commit: () => {} };
+  syncJournalScope();
   const folders = (opts.folders ?? []).filter((folder) => !pendingFolderIds.has(folder.id));
   const tags = (opts.tags ?? []).filter((tag) => !pendingTagIds.has(tag.id));
   const selectedBookmarks = (opts.bookmarks ?? []).filter(
@@ -407,6 +476,22 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
     (bookmark) => !pendingBookmarkIds.has(bookmark.id) && !standalone.some((item) => item.id === bookmark.id),
   );
 
+  let journal: ReturnType<typeof recordDeleteIntent>;
+  try {
+    journal = recordDeleteIntent({
+      bookmarks: standalone.map(({ id, folderId }) => ({ id, folderId })),
+      folders: folders.map((folder) => folder.id), tags: tags.map((tag) => tag.id),
+      contained: contained.map((bookmark) => bookmark.id),
+    });
+  } catch (cause) {
+    toast.error(errorMessage(cause, "Couldn't save deletion. Nothing was deleted."));
+    return noop;
+  }
+  journalScope = journal.key;
+  const activeKey = `${journal.key}:${journal.intent.id}`;
+  const generation = scopeGeneration;
+  activeIntents.add(activeKey);
+
   hideFolders(folders);
   const containedDetails = hideBookmarks(contained, false);
   const standaloneDetails = hideBookmarks(standalone, true);
@@ -415,7 +500,6 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
 
   let settled = false;
   const showToast = opts.showToast !== false;
-  let fallback: ReturnType<typeof setTimeout> | undefined;
 
   const restore = () => {
     restoreFolders(folders);
@@ -424,32 +508,51 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
     restoreTags(tags, tagAssignments);
   };
 
-  const settle = (undo: boolean) => {
-    if (settled) return;
-    settled = true;
-    if (fallback) clearTimeout(fallback);
+  const settle = (undo: boolean): boolean => {
+    if (settled) return true;
+    if (deleteJournalKey() !== journal.key || generation !== scopeGeneration) return false;
     if (undo) {
+      try { forgetDeleteIntent(journal.key, journal.intent.id); } catch (cause) {
+        toast.error(errorMessage(cause, "Couldn't save Undo. Try again."));
+        return false;
+      }
+    }
+    settled = true;
+    if (undo) {
+      activeIntents.delete(activeKey);
       haptics.success();
       restore();
-      return;
+      invalidateDeletedLists();
+      return true;
     }
-    void (async () => {
-      await commitBookmarkDeletes(standalone, opts.scopeFolderId);
-      await commitFolderDeletes(folders, contained);
-      await commitTagDeletes(tags);
-    })().catch((cause) => {
-      restore();
-      toast.error(errorMessage(cause));
-    });
+    void replayDeleteIntent(journal.key, journal.intent).catch((cause) => {
+      if (deleteJournalKey() !== journal.key || generation !== scopeGeneration) return;
+      const status = (cause as { status?: number }).status;
+      if (status && status >= 400 && status < 500) {
+        try { forgetDeleteIntent(journal.key, journal.intent.id); } catch (storageError) {
+          toast.error(errorMessage(storageError, "Couldn't save deletion status."));
+          return;
+        }
+        restore();
+        invalidateDeletedLists();
+      }
+      // Network failures retain the durable intent and tombstones for replay.
+      toast.error(status && status >= 400 && status < 500 ? errorMessage(cause)
+        : `${errorMessage(cause)} Deletion will retry when you return online.`);
+    }).finally(() => activeIntents.delete(activeKey));
+    return true;
   };
 
   if (showToast) {
-    fallback = setTimeout(() => settle(false), COMMIT_FALLBACK_MS);
-    toast.success(toastMessage(selectedBookmarks.length, folders.length, tags), {
+    const id = toast.success(toastMessage(selectedBookmarks.length, folders.length, tags), {
       duration: UNDO_MS,
       action: { label: "Undo", onPress: () => settle(true) },
-      onDismiss: () => settle(false),
+      onDismiss: () => {
+        pendingToastIds.delete(id);
+        settle(false);
+      },
     });
+    pendingToastIds.add(id);
   }
 
   return {
