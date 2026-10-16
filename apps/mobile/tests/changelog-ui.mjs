@@ -91,7 +91,7 @@ try {
           horizontalOverflow: group.scrollWidth > group.clientWidth,
         };
       });
-      assert.equal(listGeometry.content, "Faster long readers and smoother work in large libraries.", "No decorative ticks or icon column");
+      assert.equal(listGeometry.content, "Faster long-article reading and smoother large libraries.", "No decorative ticks or icon column");
       assert.ok(listGeometry.textWidth >= listGeometry.width - 33, "Notes use the full list width, with only 16dp text rails");
       assert.equal(listGeometry.fontSize, "16px", "Keep the Material body-large role; don't shrink copy to fit");
       assert.equal(listGeometry.horizontalOverflow, false);
@@ -109,12 +109,12 @@ try {
       const intro = await panel.getByText("The first preview of the 0.3.0 cycle, focused on performance and day-to-day reliability.", { exact: true }).boundingBox();
       assert.ok(intro.y - heading.y < 112, "Release metadata stays compact, including narrow portrait layouts");
       if (viewport.height < 480) {
-        const firstNote = await panel.getByText("Faster long readers and smoother work in large libraries.", { exact: true }).boundingBox();
+        const firstNote = await panel.getByText("Faster long-article reading and smoother large libraries.", { exact: true }).boundingBox();
         const history = await panel.getByRole("button", { name: "v0.3.0", exact: true }).boundingBox();
         assert.ok(firstNote.y + firstNote.height <= history.y, "Landscape keeps the first change visible, not just the intro");
       }
       const footerBefore = await panel.getByRole("button", { name: "Got it", exact: true }).boundingBox();
-      const notesPane = panel.locator("div").filter({ has: page.getByText("Faster long readers and smoother work in large libraries.", { exact: true }) });
+      const notesPane = panel.locator("div").filter({ has: page.getByText("Faster long-article reading and smoother large libraries.", { exact: true }) });
       await notesPane.last().evaluate((node) => {
         let parent = node;
         while (parent && (parent.scrollHeight <= parent.clientHeight + 1 || !["auto", "scroll"].includes(getComputedStyle(parent).overflowY))) parent = parent.parentElement;
@@ -130,7 +130,7 @@ try {
       await panel.getByRole("button", { name: "v0.2.0", exact: true }).click();
       await panel.getByText("Design and navigation", { exact: true }).waitFor();
       await panel.getByRole("button", { name: "v0.3.0", exact: true }).click();
-      assert.equal(await panel.getByText("Faster long readers and smoother work in large libraries.", { exact: true }).evaluate((node) => {
+      assert.equal(await panel.getByText("Faster long-article reading and smoother large libraries.", { exact: true }).evaluate((node) => {
         let parent = node.parentElement;
         while (parent && !["auto", "scroll"].includes(getComputedStyle(parent).overflowY)) parent = parent.parentElement;
         return parent?.scrollTop;
