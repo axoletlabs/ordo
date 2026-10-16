@@ -21,6 +21,7 @@ import {
   formatReminderFull,
   hour12To24,
   localTimeParts,
+  reminderDateLabels,
   reminderMonthGrid,
   shiftCalendarMonth,
   weekdayNarrowLabels,
@@ -71,7 +72,8 @@ function ReminderCustomPanelContent({
     const next = seedUnix(initialUnix);
     const parts = localTimeParts(next);
     setAt(next);
-    setView({ year: parts.year, month: parts.month });
+    setView((current) => current.year === parts.year && current.month === parts.month
+      ? current : { year: parts.year, month: parts.month });
   }, [initialUnix, visible]);
 
   const now = useMemo(() => new Date(), [visible]);
@@ -81,7 +83,11 @@ function ReminderCustomPanelContent({
     () => reminderMonthGrid(view.year, view.month, at, now),
     [view.year, view.month, at, now],
   );
-  const weekdays = useMemo(() => weekdayNarrowLabels(), []);
+  // Selection/time edits do not change date labels. Refresh on reopen so an
+  // OS locale/timezone change never leaves a cached formatter from last time.
+  const dateLabels = useMemo(() => reminderDateLabels(view.year, view.month), [view.year, view.month, visible]);
+  const weekdays = useMemo(() => weekdayNarrowLabels(), [visible]);
+  const monthTitle = useMemo(() => formatMonthTitle(view.year, view.month), [view.year, view.month, visible]);
   const nowMonth = now.getFullYear() === view.year && now.getMonth() === view.month;
 
   const pickTime = (hour: number, minute: number, period = parts.period) => {
@@ -133,7 +139,7 @@ function ReminderCustomPanelContent({
             onPress={() => setView((current) => shiftCalendarMonth(current.year, current.month, -1))}
           />
           <Text variant="bodyStrong" align="center" numberOfLines={1} style={styles.monthTitle}>
-            {formatMonthTitle(view.year, view.month)}
+            {monthTitle}
           </Text>
           <MonthChevrons
             label="Next month"
@@ -161,7 +167,7 @@ function ReminderCustomPanelContent({
               <PressableScale
                 key={cell.key}
                 accessibilityRole="radio"
-                accessibilityLabel={new Date(cell.year, cell.month, cell.day).toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+                accessibilityLabel={dateLabels[cell.day - 1]}
                 accessibilityState={{ disabled, checked: cell.selected }}
                 {...(Platform.OS === "web" ? { dataSet: { calendarDate: formatCalendarInput(new Date(cell.year, cell.month, cell.day).getTime() / 1000) }, tabIndex: cell.selected || !cells.some((candidate) => candidate.selected) && cell === cells.find((candidate) => candidate.inMonth && !candidate.isPast) ? 0 : -1 } : {})}
                 disabled={disabled}
@@ -177,11 +183,11 @@ function ReminderCustomPanelContent({
                       background on selection can lose their rounded paint on
                       Android. Paint both states with real circle geometry,
                       rather than relying on that view's border-radius update. */}
-                  <Svg width={40} height={40} style={StyleSheet.absoluteFill} pointerEvents="none" accessible={false}>
+                  {cell.selected || cell.isToday ? <Svg width={40} height={40} style={StyleSheet.absoluteFill} pointerEvents="none" accessible={false}>
                     <Circle cx={20} cy={20} r={cell.isToday && !cell.selected ? 19.5 : 20}
                       fill={cell.selected ? palette.primary : "none"}
                       stroke={cell.isToday && !cell.selected ? palette.primary : "none"} strokeWidth={1} />
-                  </Svg>
+                  </Svg> : null}
                   <Text
                     variant="bodyLarge"
                     color={cell.selected ? "onAccent" : cell.isPast ? "faint" : cell.isToday ? "accent" : "primary"}

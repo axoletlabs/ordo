@@ -11,6 +11,7 @@ import {
   MINUTE_STEPS,
   reminderClearsOnOpen,
   reminderMonthGrid,
+  reminderDateLabels,
   reminderLaterAt,
   reminderNotificationCopy,
   parseUnixSeconds,
@@ -27,6 +28,7 @@ import {
   scheduledTriggerUnix,
   shouldOpenExactAlarmSettings,
   shiftCalendarMonth,
+  weekdayNarrowLabels,
 } from "./bookmark-reminders.ts";
 
 const now = new Date(2026, 8, 17, 21, 33, 0); // Thu Sep 17 2026, 9:33 PM local
@@ -111,6 +113,31 @@ test("month grid is Sunday-first and marks today", () => {
 
 test("shiftCalendarMonth wraps the year", () => {
   assert.deepEqual(shiftCalendarMonth(2026, 11, 1), { year: 2027, month: 0 });
+});
+
+test("calendar labels preserve localized dates with one formatter per month", (t) => {
+  const Original = Intl.DateTimeFormat;
+  let constructions = 0;
+  let locale = "en-US";
+  t.mock.method(Intl, "DateTimeFormat", function (_locales?: Intl.LocalesArgument, options?: Intl.DateTimeFormatOptions) {
+    constructions++;
+    return new Original(locale, options);
+  });
+  for (const language of ["en-US", "en-GB", "ar-EG", "ja-JP"]) {
+    locale = language;
+    for (const [year, month] of [[2024, 1], [2026, 1], [2026, 9], [2026, 11]] as const) {
+      const before = constructions;
+      const labels = reminderDateLabels(year, month);
+      assert.equal(constructions - before, 1, "A 31-day month must not construct 31 formatters");
+      assert.equal(labels.length, new Date(year, month + 1, 0).getDate());
+      labels.forEach((label, index) => assert.equal(label, new Date(year, month, index + 1).toLocaleDateString(locale,
+        { weekday: "long", year: "numeric", month: "long", day: "numeric" })));
+    }
+    const before = constructions;
+    assert.deepEqual(weekdayNarrowLabels(), Array.from({ length: 7 }, (_, index) =>
+      new Date(2026, 8, 13 + index).toLocaleDateString(locale, { weekday: "narrow" })));
+    assert.equal(constructions - before, 1, "Weekday labels share one formatter too");
+  }
 });
 
 test("Later is the one-hour preset from now", () => {

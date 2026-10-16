@@ -147,6 +147,74 @@ was available. Native FPS, OS text selection across sections, image-driven
 relayout, WebView navigation/refresh/dark-mode smoothness and background/resume
 still need device verification. No native release, OTA or deployment was made.
 
+## Custom reminder opening follow-up
+
+Baseline: `b09154b`, with the prior audit changes already included. The custom
+calendar constructed a locale formatter for every date on every render, and
+mounted an SVG/circle pair for all dates even when nothing was painted.
+
+- Share one `Intl.DateTimeFormat` for all date accessibility labels in a month,
+  and one for the seven weekday labels. Memoize labels and the month title
+  across date/time edits; refresh when reopening or changing months so an OS
+  locale/timezone change is not permanently cached.
+- Preserve the current month state object when opening in that same month,
+  avoiding a redundant calendar render.
+- Mount circle geometry only for today and the selected date: **31 SVG trees
+  become 1–2** in the October fixture. Keep the explicit SVG circles that avoid
+  square selection backgrounds on Android; the visible styling is unchanged.
+
+Reproduction from `apps/mobile`, against release-web exports served with SPA
+fallback, using the same Chromium binary/host and no concurrent builds/tests:
+
+```sh
+ORDO_UI_REMINDER_PERF_ONLY=1 node tests/material-ui-smoke.mjs
+ORDO_UI_REMINDER_ONLY=1 node tests/material-ui-smoke.mjs
+```
+
+Set `ORDO_UI_URL`, `PLAYWRIGHT_MODULE`, `PLAYWRIGHT_CHROMIUM`, and
+`ORDO_UI_OUTPUT` as needed. The timing harness fixes the date, throttles CPU 4×,
+and reports medians of three fresh browser contexts per design mode, each
+measuring a first opening and a reopening. API responses are fixtures.
+This measures shared JavaScript/web work, **not native FPS or backend latency**.
+The action dispatches the real Custom menu click; first-content time is the
+first animation-frame callback that sees the calendar DOM, not the end of the
+opening animation. Pointer and keyboard behavior have separate interaction tests.
+
+Observed medians (milliseconds) on the shared ARM64 host:
+
+| Mode / opening | First calendar content before → after | Largest task before → after |
+| --- | --- | --- |
+| Standard / first | 1,256 → 447 | 1,148 → 370 |
+| Standard / reopen | 1,034 → 316 | 917 → 252 |
+| Expressive / first | 944 → 1,113 | 736 → 977 |
+| Expressive / reopen | 1,006 → 414 | 946 → 356 |
+
+**Timing limitation:** no builds/tests from this session ran during measurement,
+but other agents' browser jobs were active. These are contended observations,
+not an isolated speedup estimate; Expressive first opening did not improve in
+this repeat run, and the remaining stalls are still noticeable. An earlier
+single-sample pair showed 46–56% shorter worst tasks, but the repeated run does
+not justify claiming that percentage as stable. Do not combine those samples.
+The initial combined run timed out during the after pass; only its completed
+before results and the subsequent completed after pass are listed above.
+Raw results: `/tmp/opencode/ordo-reminder-opening-before-medians/results.json`
+and `/tmp/opencode/ordo-reminder-opening-verified-medians-complete/results.json`
+(temporary local artifacts, not checked in).
+
+The deterministic work reduction is consistent: `toLocaleDateString` calls
+during opening drop **71 → 1** (first) and **64 → 1** (reopen), with month and
+weekday labels using shared formatters instead. The remaining call formats the
+month title. This counter is not a count of all date formatting operations.
+
+Validation: all 571 mobile tests, typecheck, lint for the changed code, the
+release-web export and Android JS-only (`--no-bytecode`) export pass. The web
+JavaScript hashes match the export used by the
+interaction matrix: 16 captures and four light/dark × standard/Expressive
+interaction groups, portrait/wide layouts, 12/24-hour cycles, reduced motion,
+keyboard date/hour selection, month navigation, short-window scrolling, busy
+save, dismissal and reopening. Locale unit cases cover en-US, en-GB, ar-EG,
+ja-JP and leap/non-leap months. Native-device runtime remains unverified.
+
 ## What changed
 
 ### Launch

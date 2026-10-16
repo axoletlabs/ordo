@@ -3,6 +3,7 @@
  * PLAYWRIGHT_CHROMIUM=/path/to/chromium
  * ORDO_UI_URL=http://127.0.0.1:8235 ORDO_UI_OUTPUT=/tmp/opencode/ordo-ui node tests/material-ui-smoke.mjs
  * ORDO_UI_REMINDER_MENU_ONLY=1 checks preset labels/times, widths, and nested navigation.
+ * ORDO_UI_REMINDER_PERF_ONLY=1 measures cold/reopened picker JS work at 4× CPU throttle.
  * ORDO_UI_OVERLAY_LAYOUT_ONLY=1 checks nested menu sizing and reader contents across themes/layouts.
  * ORDO_UI_READER_SETTINGS_ONLY=1 checks stable reader settings geometry and typography controls.
  * ORDO_UI_READER_CONTENTS_ONLY=1 checks compact long-article contents and dismissal.
@@ -14,6 +15,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { accessibilityMatrix } from "./material-accessibility.mjs";
 import { readerSettingsLayoutMatrix } from "./reader-settings-layout.mjs";
 import { reminderPickerMatrix } from "./reminder-picker.mjs";
+import { reminderOpeningPerformance } from "./reminder-opening-performance.mjs";
 import { reminderMenuLayoutMatrix } from "./reminder-menu-layout.mjs";
 import { progressMatrix } from "./material-progress-ui.mjs";
 import { selectionActionMotionMatrix } from "./selection-action-motion.mjs";
@@ -614,6 +616,7 @@ try {
   else if (process.env.ORDO_UI_TRANSACTIONS_ONLY) await bookmarkTransactionMatrix({ browser, fixture, login, button, settle, capture, results, bookmark, folder });
   else if (process.env.ORDO_UI_BOOKMARK_ONLY) await bookmarkDialogMatrix({ browser, fixture, login, button, settle, capture, results, bookmark, folder });
   else if (process.env.ORDO_UI_REMINDER_ONLY) await reminderPickerMatrix({ browser, fixture, login, button, settle, capture, results });
+  else if (process.env.ORDO_UI_REMINDER_PERF_ONLY) await reminderOpeningPerformance({ browser, fixture, login, settle, results, output });
   else if (process.env.ORDO_UI_PROGRESS_ONLY) await progressMatrix({ browser, fixture, login, navigate, button, settle, capture, results, bookmark });
   else if (process.env.ORDO_UI_SELECTION_MOTION_ONLY) await selectionActionMotionMatrix({ browser, fixture, login, button, settle, capture, results });
   else if (process.env.ORDO_UI_ACCESSIBILITY_ONLY) await accessibilityMatrix({ browser, base, fixture, user, button, settle, capture, results });
