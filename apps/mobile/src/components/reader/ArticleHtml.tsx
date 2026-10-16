@@ -27,7 +27,7 @@ import {
   type RenderersProps,
   type TNode,
 } from "@native-html/render";
-import { prepareArticleSections, reuseArticleSections } from "./article-sections";
+import { ARTICLE_END_CLASS, prepareArticleSections, reuseArticleSections } from "./article-sections";
 import { useTheme } from "../../theme/ThemeProvider";
 import type { Palette } from "../../theme/theme";
 import { radius, resolveFont, spacing, type FontFamily } from "../../theme/tokens";
@@ -378,6 +378,7 @@ const ARTICLE_RENDERERS = {
 };
 
 const EMPTY_HIGHLIGHTS: HighlightDto[] = [];
+const ARTICLE_CLASSES_STYLES = { [ARTICLE_END_CLASS]: { marginBottom: 0 } };
 
 /** Keep the scheduler below the providers: appending a section must not update
  * engine/config contexts or walk every already-mounted article component. */
@@ -506,6 +507,7 @@ export const ArticleHtml = React.memo(function ArticleHtml({
     <TRenderEngineProvider
       baseStyle={baseStyle}
       tagsStyles={tagsStyles}
+      classesStyles={ARTICLE_CLASSES_STYLES}
       systemFonts={SYSTEM_FONTS}
       ignoredStyles={READER_IGNORED_INLINE_STYLES}
     >

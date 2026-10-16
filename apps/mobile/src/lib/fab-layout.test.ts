@@ -30,3 +30,10 @@ test("the final content stays 16dp above the button for every safe area and offs
     }
   }
 });
+
+test("compact reader endings keep only an 8dp gap across safe areas", () => {
+  for (const safeArea of [0, 4, 16, 24, 34, 48]) {
+    const bottom = 20 + safeArea;
+    assert.equal(fabContentPadding(safeArea, bottom, 8) - fabBottomOffset(safeArea, bottom) - FAB_SIZE, 8);
+  }
+});

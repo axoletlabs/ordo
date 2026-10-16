@@ -645,7 +645,7 @@ function ReaderPaneInner({
   // Reserve clearance even while selection or the contents panel hides the FAB,
   // so opening/dismissing overlays never changes the article's scroll range.
   const readerBottomPadding = hasContents
-    ? fabContentPadding(insets.bottom, contentsFabBottom)
+    ? fabContentPadding(insets.bottom, contentsFabBottom, spacing[8])
     : spacing[16] + (safeBottom ? insets.bottom : 0);
   const websiteChrome = forceWebsiteDark
     ? currentAppPalette("dark").background
