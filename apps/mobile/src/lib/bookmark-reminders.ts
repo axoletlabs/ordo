@@ -432,11 +432,19 @@ export function formatMonthTitle(year: number, month: number): string {
 /** Sunday-first narrow weekday labels in the device locale. */
 export function weekdayNarrowLabels(): string[] {
   const sunday = new Date(2026, 8, 13);
+  const formatter = new Intl.DateTimeFormat(undefined, { weekday: "narrow" });
   return Array.from({ length: 7 }, (_, i) => {
     const date = new Date(sunday);
     date.setDate(sunday.getDate() + i);
-    return date.toLocaleDateString(undefined, { weekday: "narrow" });
+    return formatter.format(date);
   });
+}
+
+/** One locale formatter per month, not one ICU formatter per date/render. */
+export function reminderDateLabels(year: number, month: number): string[] {
+  const formatter = new Intl.DateTimeFormat(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+  const days = new Date(year, month + 1, 0).getDate();
+  return Array.from({ length: days }, (_, index) => formatter.format(new Date(year, month, index + 1)));
 }
 
 export interface ReminderCalendarCell {
@@ -503,4 +511,3 @@ export function shiftCalendarMonth(
   const date = new Date(year, month + delta, 1);
   return { year: date.getFullYear(), month: date.getMonth() };
 }
-

@@ -41,10 +41,12 @@ export async function reminderPickerMatrix({ browser, fixture, login, button, se
       // an ordinary (flattened) date becomes selected, unlike today's bordered view.
       await today.click();
       await assertDateCircle(today, true, false);
+      assert.equal(await dates.locator("svg").count(), 1, "Ordinary dates must not mount invisible SVG trees");
       for (let attempt = 0; attempt < 2; attempt++) {
         await otherDate.click();
         await assertDateCircle(otherDate, true, false);
         await assertDateCircle(today, false, true);
+        assert.equal(await dates.locator("svg").count(), 2, "Only today and the selected date need painted circles");
         if (attempt === 0) await today.click();
       }
       measurement.selectedDateCircle = await otherDate.locator("circle").count();
