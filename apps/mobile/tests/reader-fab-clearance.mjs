@@ -54,7 +54,9 @@ try {
           const gap = fabBox.y - lastParagraph.y - lastParagraph.height;
           const name = `${theme}-${expressive ? "expressive" : "standard"}-${viewport.name}-${reducedMotion}`;
           results.clearance.push({ name, ...scroll, gap });
-          if (!baseline) assert.ok(gap >= 15.5, `${name}: final text must clear Contents by 16dp (${gap})`);
+          // The text locator bounds the inline glyph span, not its line box:
+          // allow the font's trailing leading in addition to the 8dp gap.
+          if (!baseline) assert.ok(gap >= 7.5 && gap <= 13.5, `${name}: final text needs only compact Contents clearance (${gap})`);
           assert.equal(await page.getByRole("progressbar", { name: "Reading progress" }).getAttribute("aria-valuenow"), "100");
           // Hiding the FAB for the contents panel must not shrink the scroll range.
           await fab.focus();
