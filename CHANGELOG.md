@@ -1,18 +1,32 @@
 # Changelog
 
+## 0.3.0 Preview 2
+
+The second preview of the 0.3.0 cycle, polishing updates and everyday reliability.
+
+- A cleaner in-app changelog, announcing each installed update's notes once.
+- Backup codes save through the standard export flow; cancelling shows no error.
+- Faster custom reminder calendar.
+- Row selection feedback no longer flashes during layout resizes.
+- No extra blank space at the end of articles.
+
+**Install:** Installs in place over Preview 1. Ships `versionCode=4`, continuing the preview count. Self-hosted: select this release with `--release v0.3.0-preview.2`, or include previews with `--pre`.
+
+[Full commit history](https://github.com/axoletlabs/ordo/compare/v0.3.0-preview.1...v0.3.0-preview.2)
+
 ## 0.3.0 Preview 1
 
 The first preview of the 0.3.0 cycle, focused on performance and day-to-day reliability.
 
-- Faster long readers and smoother work in large libraries.
-- Smaller downloads: R8 code and resource shrinking, compressed native libraries, and dead asset removal.
-- Bookmark moves reconcile reliably, and deletion undo is durable across restarts and idle recovery.
-- The Android Back gesture cancels an incoming share instead of leaving the app.
-- Reader: a compact contents panel with a close action, and reserved scroll clearance so the Contents FAB no longer covers the text.
-- Clearer reminder date indicators, with preset labels kept on one line.
-- OTP digits are individually editable during sign-in.
+- Faster long-article reading and smoother large libraries.
+- Smaller downloads: R8 shrinking, compressed libraries, dead assets removed.
+- Reliable bookmark moves, with deletion undo that survives restarts.
+- Android Back cancels an incoming share instead of leaving the app.
+- A compact reader Contents panel that no longer covers the text.
+- Clearer reminder date indicators, with preset labels on one line.
+- Individually editable OTP digits during sign-in.
 
-**Install:** This preview requires a new APK, not OTA. It shipped with `versionCode=1` (build numbers then restarted per line; Preview 2 of 0.2.0 shipped `versionCode=2`), so it cannot replace the old preview in-place: uninstall `ordo (preview)` first if the update fails (this clears local settings/cache, not your server library). Later previews continue the 0.2.0 count instead of restarting, so they upgrade in place from either preview. Self-hosted users can select this exact release with `--release v0.3.0-preview.1` or include previews with `--pre`.
+**Install:** Requires a new APK, not OTA. Ships `versionCode=3`, continuing the 0.2.0 preview count, so it replaces any earlier preview in place. Self-hosted: select this release with `--release v0.3.0-preview.1`, or include previews with `--pre`.
 
 [Full commit history](https://github.com/axoletlabs/ordo/compare/v0.2.0...v0.3.0-preview.1)
 
