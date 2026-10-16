@@ -25,6 +25,7 @@ export function PanelHeader({
   numberOfLines = 3,
   accessory,
   onClose,
+  align,
   style,
 }: {
   title: string;
@@ -37,6 +38,7 @@ export function PanelHeader({
   numberOfLines?: number;
   accessory?: React.ReactNode;
   onClose?: () => void;
+  align?: "left" | "center";
   style?: StyleProp<ViewStyle>;
 }) {
   const { palette } = useTheme();
@@ -64,12 +66,12 @@ export function PanelHeader({
           />
         </View>
       ) : null}
-      <View style={styles.copy}>
+      <View style={[styles.copy, align === "left" ? { alignItems: "flex-start" } : null]}>
         <Text
           variant={titleVariant}
           nativeID={titleId}
           accessibilityRole="header"
-          align={icon ? "center" : "left"}
+          align={align ?? (icon ? "center" : "left")}
           numberOfLines={numberOfLines}
           style={[styles.title, onClose && !icon ? { paddingRight: 40 } : null]}
         >

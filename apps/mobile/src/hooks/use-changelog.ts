@@ -27,7 +27,7 @@ async function readCache(): Promise<ChangelogRelease[] | null> {
     .sort((left, right) => compareReleaseCandidates(right, left));
 }
 
-export function useChangelog() {
+export function useChangelog(enabled = true) {
   const [releases, setReleases] = useState<ChangelogRelease[] | null>(memory?.releases ?? null);
   const [refreshing, setRefreshing] = useState(false);
   const [errorStatus, setErrorStatus] = useState<number | null>(null);
@@ -70,6 +70,7 @@ export function useChangelog() {
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     let cancelled = false;
     void (async () => {
       if (!memory) {
@@ -86,7 +87,7 @@ export function useChangelog() {
       cancelled = true;
       request.current += 1;
     };
-  }, [load]);
+  }, [load, enabled]);
 
   return {
     releases,

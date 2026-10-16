@@ -46,6 +46,8 @@ export interface FloatingPanelProps {
   dismissOnScrim?: boolean;
   /** Pickers own their virtualized list; don't nest it inside a ScrollView. */
   scrollBody?: boolean;
+  /** Reset the notes/picker scroll position when its selected content changes. */
+  scrollResetKey?: string;
   /** Keep a draft mounted while a sibling picker is the active surface. */
   obscured?: boolean;
   /** An anchored dropdown can own focus/back without hiding its parent form. */
@@ -69,6 +71,7 @@ function FloatingPanelSurface({
   dismissible = true,
   dismissOnScrim = true,
   scrollBody = true,
+  scrollResetKey,
   obscured = false,
   interactive = true,
 }: FloatingPanelProps) {
@@ -141,7 +144,7 @@ function FloatingPanelSurface({
   const scrollNodes = scrollHeader ? [...headers.map((header) => React.isValidElement<{ style?: StyleProp<ViewStyle> }>(header)
      ? React.cloneElement(header, { style: [header.props.style, { marginBottom: body.length ? spacing[24] : 0 }] }) : header), ...body, ...(scrollAll ? actions : [])] : body;
   const scrollingBody = !scrollNodes.length ? null : scrollBody
-    ? <ThemedScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled style={{ flexShrink: 1, maxHeight: bodyLimit }}>{scrollNodes}</ThemedScrollView>
+    ? <ThemedScrollView key={scrollResetKey} keyboardShouldPersistTaps="handled" nestedScrollEnabled style={{ flexShrink: 1, maxHeight: bodyLimit }}>{scrollNodes}</ThemedScrollView>
     : <View style={{ flexShrink: 1, maxHeight: bodyLimit }}>{scrollNodes}</View>;
 
   React.useEffect(() => {

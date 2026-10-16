@@ -47,6 +47,23 @@ export type ChangelogBlock =
 
 export type ChangelogMark = "installed" | "available" | "early";
 
+/** Bundle commit, not the downloaded/pending update or the APK's old version. */
+export function changelogBuildKey(version: string, gitHash: string | null): string | null {
+  if (!parseVersion(version)) return null;
+  return `${version}:${gitHash || "release"}`;
+}
+
+/** Never announce a newer release that the person has not installed yet. */
+export function unseenChangelogRelease(
+  releases: ChangelogRelease[] | null,
+  version: string,
+  buildKey: string | null,
+  seenBuildKey: unknown,
+): ChangelogRelease | null {
+  if (!buildKey || buildKey === seenBuildKey) return null;
+  return releases?.find((release) => versionsMatch(release.version, version) && release.body.trim().length > 0) ?? null;
+}
+
 export interface GithubReleaseNote {
   tag_name?: string;
   body?: string;

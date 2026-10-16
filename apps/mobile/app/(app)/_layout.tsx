@@ -17,6 +17,7 @@ import { useSettingsStore } from "../../src/store/settings";
 import { MfaEnrollmentScreen } from "../../src/components/auth/MfaEnrollmentScreen";
 import { ReminderNotificationHost } from "../../src/components/bookmarks/ReminderNotificationHost";
 import { PageTransition } from "../../src/components/ui/PageTransition";
+import { ChangelogAnnouncementHost } from "../../src/components/settings/ChangelogAnnouncementHost";
 
 enableFreeze(true);
 
@@ -95,6 +96,7 @@ export default function AppLayout() {
 function AuthenticatedAppLayout() {
   const { palette } = useTheme();
   const user = useAuthStore((s) => s.user);
+  const status = useAuthStore((s) => s.status);
   const reducedMotion = useReducedMotionPreference();
   const navigationAnimation = resolveStackNavigationAnimation(
     useSettingsStore((s) => s.navigationAnimation),
@@ -143,6 +145,7 @@ function AuthenticatedAppLayout() {
     <View style={{ flex: 1, backgroundColor: palette.background }}>
       <View style={{ flex: 1 }}>{stack}</View>
       <ReminderNotificationHost />
+      <ChangelogAnnouncementHost enabled={status === "authenticated" && Boolean(serverInfo) && !needsMfaEnrollment} />
       {needsMfaEnrollment ? <MfaEnrollmentGate /> : null}
     </View>
   );

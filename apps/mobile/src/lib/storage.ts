@@ -116,6 +116,7 @@ export const StorageKeys = {
   FOLDER_TOKENS: "ordo.folderTokens",
   NATIVE_UPDATE: "ordo.nativeUpdate",
   CHANGELOG: "ordo.changelog",
+  CHANGELOG_SEEN_BUILD: "ordo.changelogSeenBuild",
   IMPORT_JOB: "ordo.importJob",
   REMINDER_FIRED: "ordo.reminderFired",
   REMINDER_ARMED: "ordo.reminderArmed",

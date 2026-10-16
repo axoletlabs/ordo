@@ -32,6 +32,9 @@ export function PanelActions({
   confirmDisabled,
   cancelDisabled,
   confirmVariant = "primary",
+  children,
+  fullWidth = false,
+  inline = false,
 }: {
   confirmLabel: string;
   onConfirm: () => void;
@@ -41,9 +44,15 @@ export function PanelActions({
   confirmDisabled?: boolean;
   cancelDisabled?: boolean;
   confirmVariant?: ButtonVariant;
+  /** Optional persistent content above the actions, such as release navigation. */
+  children?: React.ReactNode;
+  fullWidth?: boolean;
+  /** Place supplementary navigation beside the actions in short, wide panels. */
+  inline?: boolean;
 }) {
-  return (
+  const actions = (
     <View style={sheetMenuStyles.row}>
+      {inline && children ? <View style={{ flex: 1, minWidth: 0 }}>{children}</View> : null}
       {onCancel ? <Button
         label={cancelLabel}
         variant="ghost"
@@ -63,10 +72,11 @@ export function PanelActions({
         }}
         loading={loading}
         disabled={confirmDisabled}
-        style={sheetMenuStyles.action}
+        style={[sheetMenuStyles.action, fullWidth ? { flex: 1 } : null]}
       />
     </View>
   );
+  return children && !inline ? <View>{children}{actions}</View> : actions;
 }
 
 /** Shrink-wraps action rows to the longest label and centers that column. */

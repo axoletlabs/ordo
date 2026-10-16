@@ -1,9 +1,9 @@
 /**
- * One release at a time, in a panel. Version chips along the bottom swap
- * the notes. The opening paragraph leads; commands sit in a recessed line.
+ * A quiet release reader: fixed heading and release navigation, with one
+ * scrolling notes pane. The first bullet list groups the release highlights.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Image, Linking, ScrollView, StyleSheet, View } from "react-native";
+import { Image, Linking, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { Text, type TextColor } from "../ui/Text";
 import { PressableScale } from "../ui/PressableScale";
@@ -13,6 +13,8 @@ import { PanelHeader } from "../ui/PanelHeader";
 import { PanelActions } from "../ui/SheetActionRow";
 import { IconButton } from "../ui/IconButton";
 import { Spinner } from "../ui/Spinner";
+import { Badge } from "../ui/Badge";
+import { ListItem } from "../ui/ListItem";
 import { toast } from "../ui/toast-store";
 import {
   changelogMark,
@@ -32,6 +34,7 @@ import { useNativeUpdateStore } from "../../store/native-update";
 import { useTheme } from "../../theme/ThemeProvider";
 import { AppIcon } from "../ui/PinIcon";
 import { radius, resolveFont, spacing } from "../../theme/tokens";
+import { listPosition } from "../../theme/list-shape";
 
 const MARK_LABEL: Record<ChangelogMark, string> = {
   installed: "Installed",
@@ -100,26 +103,9 @@ function failureMessage(status: number | null): string {
 }
 
 function MarkChip({ mark }: { mark: ChangelogMark }) {
-  const { palette } = useTheme();
-  const tone =
-    mark === "installed"
-      ? { bg: palette.primaryContainer, fg: palette.onPrimaryContainer }
-      : mark === "available"
-        ? { bg: palette.secondaryContainer, fg: palette.onSecondaryContainer }
-        : { bg: palette.surfaceSecondary, fg: palette.textSecondary };
-
-  return (
-    <View
-      style={[
-        styles.chip,
-        { backgroundColor: tone.bg, borderColor: palette.border },
-      ]}
-    >
-      <Text variant="label" style={{ color: tone.fg }}>
-        {MARK_LABEL[mark]}
-      </Text>
-    </View>
-  );
+  return <Badge tone={mark === "installed" ? "accent" : mark === "available" ? "blue" : "neutral"}>
+    {MARK_LABEL[mark]}
+  </Badge>;
 }
 
 function CommandLine({ text }: { text: string }) {
@@ -245,9 +231,9 @@ function InlineChildren({
 }
 
 function InlineRun({ inlines, variant }: { inlines: ChangelogInline[]; variant: InlineVariant }) {
-  const tone: TextColor = variant === "body" ? "secondary" : "primary";
+  const tone: TextColor = variant === "callout" ? "secondary" : "primary";
   return (
-    <Text variant={variant} color={tone} selectable>
+    <Text variant={variant} color={tone} selectable accessibilityRole={variant === "title3" || variant === "headline" ? "header" : undefined}>
       <InlineChildren inlines={inlines} variant={variant} tone={tone} />
     </Text>
   );
@@ -322,7 +308,7 @@ function NoteList({ items, nested }: { items: ChangelogListItem[]; nested?: bool
                 {item.index}.
               </Text>
             ) : (
-              <View style={[styles.bullet, { backgroundColor: palette.accent }]} />
+              <View style={[styles.bullet, { backgroundColor: palette.onSurfaceVariant }]} />
             )}
           </View>
           <View style={styles.listCopy}>
@@ -455,6 +441,18 @@ function BlockView({
   return <Paragraph inlines={block.inlines} variant={lead ? "callout" : "body"} />;
 }
 
+function Highlights({ items }: { items: ChangelogListItem[] }) {
+  return (
+    <View testID="changelog-highlights">
+      {items.map((item, index) => (
+        <ListItem key={index} position={listPosition(index, items.length)}>
+          {item.blocks.map((block, blockIndex) => <BlockView key={blockIndex} block={block} nested />)}
+        </ListItem>
+      ))}
+    </View>
+  );
+}
+
 function Notes({ blocks }: { blocks: ChangelogBlock[] }) {
   if (blocks.length === 0) {
     return (
@@ -464,11 +462,21 @@ function Notes({ blocks }: { blocks: ChangelogBlock[] }) {
     );
   }
   const leadIndex = blocks.findIndex((block) => block.type === "paragraph");
+  // Only an opening, unordered list is a highlight group. Preserve numbered
+  // steps, tasks and detailed lists under section headings as written.
+  const firstList = blocks.findIndex((block) => block.type === "list");
+  const highlightIndex = firstList >= 0 && !blocks.slice(0, firstList).some((block) => block.type === "heading")
+    ? firstList : -1;
   return (
     <View style={styles.notes}>
-      {blocks.map((block, index) => (
-        <BlockView key={index} block={block} lead={index === leadIndex} />
-      ))}
+      {blocks.map((block, index) => {
+        if (index === highlightIndex && block.type === "list" && block.items.every((item) => item.kind === "bullet")) {
+          return <Highlights key={index} items={block.items} />;
+        }
+        return <View key={index} style={block.type === "heading" && index > 0 ? styles.sectionHeading : undefined}>
+          <BlockView block={block} lead={index === leadIndex} />
+        </View>;
+      })}
     </View>
   );
 }
@@ -484,19 +492,21 @@ function VersionPill({
   marked: boolean;
   onPress: () => void;
 }) {
-  const { palette } = useTheme();
-  const fg = selected ? palette.onPrimaryContainer : palette.onSurface;
+  const { palette, expressive } = useTheme();
+  const fg = selected ? expressive ? palette.onSecondary : palette.onSecondaryContainer : palette.onSurface;
   return (
     <PressableScale
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected }}
       onPress={onPress}
+      stateLayerColor={fg}
+      shape={{ rest: expressive ? radius.full : radius.sm, pressed: expressive ? radius.md : radius.sm }}
       style={[
         styles.pill,
         {
-          backgroundColor: selected ? palette.accentSoft : palette.surfaceSecondary,
-          borderColor: selected ? "transparent" : palette.border,
+          backgroundColor: selected ? expressive ? palette.secondary : palette.secondaryContainer : "transparent",
+          borderColor: selected ? "transparent" : palette.outline,
         },
       ]}
     >
@@ -508,107 +518,87 @@ function VersionPill({
   );
 }
 
-function ReleaseBody({
-  release,
-  currentVersion,
-  availableVersion,
-}: {
-  release: ChangelogRelease;
-  currentVersion: string;
-  availableVersion: string | null;
-}) {
-  const mark = changelogMark(release, currentVersion, availableVersion);
-  const date = releaseDate(release.publishedAt);
-  const { palette } = useTheme();
+function ReleaseBody({ release }: { release: ChangelogRelease }) {
   const blocks = useMemo(() => parseChangelogBody(release.body), [release.body]);
-
   return (
-    <>
-      <PanelHeader
-        icon="newspaper-outline"
-        iconColor={palette.accent}
-        iconBackground={palette.accentSoft}
-        title={`v${release.version}`}
-        titleVariant="title1"
-        subtitle={date || undefined}
-        accessory={mark ? <MarkChip mark={mark} /> : undefined}
-      />
-      <View
-        key={release.tagName}
-        style={styles.notesContent}
-      >
-        <Notes blocks={blocks} />
-      </View>
-    </>
+    <View style={styles.notesContent}>
+      <Notes blocks={blocks} />
+    </View>
   );
 }
 
 function ChangelogSheetBody({
   visible,
   onDismiss,
+  initialTag,
+  onShow,
 }: {
   visible: boolean;
   onDismiss: () => void;
+  initialTag?: string;
+  onShow?: () => void;
 }) {
-  const { palette } = useTheme();
+  const { expressive } = useTheme();
+  const { width, height } = useWindowDimensions();
+  const compactActions = width >= 600 && height < 480;
   const build = useBuildInfo();
   const changelog = useChangelog();
   const availableVersion = useNativeUpdateStore((state) => state.release?.version ?? null);
   const releases = changelog.releases;
-  const [tag, setTag] = useState<string | null>(null);
+  const [tag, setTag] = useState<string | null>(initialTag ?? null);
+
+  useEffect(() => {
+    if (visible) setTag(initialTag ?? null);
+  }, [visible, initialTag]);
 
   const selected =
     releases?.find((release) => release.tagName === tag) ?? releases?.[0] ?? null;
-
-
+  const mark = selected ? changelogMark(selected, build.releaseVersion, availableVersion) : null;
+  const date = selected ? releaseDate(selected.publishedAt) : "";
   let body: ReactNode;
   if (releases == null) {
     body = changelog.errorStatus == null ? (
       <View style={styles.loading}>
         <Spinner size="lg" />
+        <Text variant="bodyMedium" color="secondary">Loading release notes…</Text>
       </View>
     ) : (
-      <>
-        <PanelHeader
-          icon="newspaper-outline"
-          iconColor={palette.accent}
-          iconBackground={palette.accentSoft}
-          title="Changelog"
-          subtitle={failureMessage(changelog.errorStatus)}
-        />
+      <View style={styles.empty}>
+        <Text variant="titleMedium">Couldn't load release notes</Text>
+        <Text variant="bodyMedium" color="secondary">{failureMessage(changelog.errorStatus)}</Text>
         <Button label="Try again" variant="secondary" block onPress={changelog.reload} />
-      </>
+      </View>
     );
   } else if (releases.length === 0 || !selected) {
     body = (
-      <PanelHeader
-        icon="newspaper-outline"
-        iconColor={palette.accent}
-        iconBackground={palette.accentSoft}
-        title="Changelog"
-        subtitle="Published updates will show up here."
-      />
+      <Text variant="body" color="secondary">Published updates will show up here.</Text>
     );
   } else {
-    body = (
-      <>
-        <ReleaseBody
-          release={selected}
-          currentVersion={build.version}
-          availableVersion={availableVersion}
-        />
-        {releases.length > 1 ? (
-          <View style={styles.versions}>
-            <Text variant="label" color="secondary">
-              Versions
-            </Text>
+    body = <ReleaseBody release={selected} />;
+  }
+
+  return (
+    <FloatingPanel visible={visible} onDismiss={onDismiss} onShow={onShow} maxWidth={600} scrollResetKey={selected?.tagName}>
+      <PanelHeader title="What's new" titleVariant={expressive ? "headlineMedium" : "headlineSmall"} align="left"
+        accessory={selected ? <View style={styles.releaseMeta}>
+          <Text variant="bodyMedium" color="secondary">{`Ordo v${selected.version}${date ? ` · ${date}` : ""}`}</Text>
+          {mark ? <MarkChip mark={mark} /> : null}
+        </View> : undefined} />
+      {body}
+      <PanelActions confirmLabel="Got it" onConfirm={onDismiss} fullWidth={!compactActions} inline={compactActions}>
+        {releases && releases.length > 1 && selected ? (
+          <View style={[styles.versions, compactActions ? { marginTop: 0 } : null]}>
+            {!compactActions ? <Text variant="label" color="secondary">
+              Release history
+            </Text> : null}
             <ScrollView
               horizontal
+              accessibilityLabel="Release history"
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.pills}
             >
               {releases.map((release) => {
-                const mark = changelogMark(release, build.version, availableVersion);
+                const mark = changelogMark(release, build.releaseVersion, availableVersion);
                 return (
                   <VersionPill
                     key={release.tagName}
@@ -625,14 +615,7 @@ function ChangelogSheetBody({
             </ScrollView>
           </View>
         ) : null}
-      </>
-    );
-  }
-
-  return (
-    <FloatingPanel visible={visible} onDismiss={onDismiss} maxWidth={480}>
-      {body}
-      <PanelActions confirmLabel="Done" onConfirm={onDismiss} />
+      </PanelActions>
     </FloatingPanel>
   );
 }
@@ -640,26 +623,34 @@ function ChangelogSheetBody({
 export function ChangelogSheet({
   visible,
   onDismiss,
+  initialTag,
+  onShow,
 }: {
   visible: boolean;
   onDismiss: () => void;
+  initialTag?: string;
+  onShow?: () => void;
 }) {
   const [seen, setSeen] = useState(visible);
   useEffect(() => {
     if (visible) setSeen(true);
   }, [visible]);
   if (!seen) return null;
-  return <ChangelogSheetBody visible={visible} onDismiss={onDismiss} />;
+  return <ChangelogSheetBody visible={visible} onDismiss={onDismiss} initialTag={initialTag} onShow={onShow} />;
 }
 
 const styles = StyleSheet.create({
   loading: {
     minHeight: 120,
+    gap: spacing[16],
     alignItems: "center",
     justifyContent: "center",
   },
-  notesContent: { paddingBottom: spacing[4] },
-  notes: { gap: spacing[12] },
+  notesContent: { paddingBottom: spacing[8] },
+  notes: { gap: spacing[16] },
+  sectionHeading: { marginTop: spacing[16] },
+  releaseMeta: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: spacing[8], marginTop: spacing[4] },
+  empty: { gap: spacing[16] },
   prose: { gap: spacing[10] },
   command: {
     flexDirection: "row",
@@ -670,12 +661,6 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[4],
   },
   codeText: { fontFamily: resolveFont("mono", "400"), lineHeight: 20, letterSpacing: 0 },
-  chip: {
-    borderRadius: radius.full,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: spacing[10],
-    paddingVertical: spacing[4],
-  },
   list: { gap: spacing[10] },
   listItem: { flexDirection: "row", alignItems: "flex-start" },
   bulletSlot: {
@@ -685,7 +670,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   bullet: { width: 5, height: 5, borderRadius: radius.full },
-  listCopy: { flex: 1, minWidth: 0 },
+  listCopy: { flex: 1, minWidth: 0, gap: spacing[8] },
   versions: { marginTop: spacing[16], gap: spacing[8] },
   pills: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
   pill: {
@@ -693,8 +678,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: spacing[6],
     minHeight: 48,
-    paddingHorizontal: spacing[10],
-    borderRadius: radius.full,
+    paddingHorizontal: spacing[16],
+    borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "transparent",
   },

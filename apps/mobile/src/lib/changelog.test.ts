@@ -20,10 +20,48 @@ const {
   changelogFromGithubPayload,
   changelogHref,
   changelogMark,
+  changelogBuildKey,
+  unseenChangelogRelease,
   isChangelogReleaseList,
   parseChangelogBody,
   parseChangelogInlines,
 } = await import("./changelog.ts");
+
+test("announcements follow the installed bundle and are shown only once", () => {
+  const releases = changelogFromGithubPayload([
+    { tag_name: "v0.4.0", published_at: "2026-10-16", body: "Not installed yet." },
+    { tag_name: "v0.3.0", published_at: "2026-10-15", body: "Installed notes." },
+  ]);
+  const key = changelogBuildKey("0.3.0", "commit-a");
+  assert.equal(unseenChangelogRelease(releases, "0.3.0", key, null)?.tagName, "v0.3.0");
+  assert.equal(unseenChangelogRelease(releases, "0.3.0", key, key), null);
+  const otaKey = changelogBuildKey("0.3.0", "commit-b");
+  assert.notEqual(otaKey, key);
+  assert.equal(unseenChangelogRelease(releases, "0.3.0", otaKey, key)?.tagName, "v0.3.0");
+  assert.equal(unseenChangelogRelease(releases, "0.4.0", changelogBuildKey("0.4.0", "commit-c"), otaKey)?.tagName, "v0.4.0");
+});
+
+test("missing, empty or unavailable release notes do not consume the announcement", () => {
+  const key = changelogBuildKey("0.3.0", null);
+  assert.equal(unseenChangelogRelease(null, "0.3.0", key, null), null);
+  assert.equal(unseenChangelogRelease([], "0.3.0", key, null), null);
+  const empty = changelogFromGithubPayload([{ tag_name: "v0.3.0", published_at: "2026-10-15", body: "  " }]);
+  assert.equal(unseenChangelogRelease(empty, "0.3.0", key, null), null);
+  const notes = changelogFromGithubPayload([{ tag_name: "v0.3.0", published_at: "2026-10-15", body: "Now published." }]);
+  assert.equal(unseenChangelogRelease(notes, "0.3.0", key, null)?.body, "Now published.");
+  assert.equal(changelogBuildKey("—", null), null);
+  assert.equal(unseenChangelogRelease(notes, "—", null, null), null);
+});
+
+test("preview announcements match the exact preview, not stable or another preview", () => {
+  const releases = changelogFromGithubPayload([
+    { tag_name: "v0.3.0", published_at: "2026-10-16", body: "Stable." },
+    { tag_name: "v0.3.0-preview.2", published_at: "2026-10-15", body: "Second preview." },
+    { tag_name: "v0.3.0-preview.1", published_at: "2026-10-14", body: "First preview." },
+  ]);
+  const key = changelogBuildKey("0.3.0-preview.1", "preview-commit");
+  assert.equal(unseenChangelogRelease(releases, "0.3.0-preview.1", key, "0.2.0:old")?.body, "First preview.");
+});
 
 const V011 = [
   "Lists and settings share one row. The compact dock is gone. Titles sit on the icon column, and a subtitle sits beside the title.",
