@@ -494,6 +494,9 @@ function VersionPill({
 }) {
   const { palette, expressive } = useTheme();
   const fg = selected ? expressive ? palette.onSecondary : palette.onSecondaryContainer : palette.onSurface;
+  // A full-radius token is a silhouette, not a spring target; morph the pill's
+  // painted half-height so the entire shape change is visible.
+  const corner = expressive ? 24 : radius.sm;
   return (
     <PressableScale
       accessibilityRole="button"
@@ -501,7 +504,7 @@ function VersionPill({
       accessibilityState={{ selected }}
       onPress={onPress}
       stateLayerColor={fg}
-      shape={{ rest: expressive ? radius.full : radius.sm, pressed: expressive ? radius.md : radius.sm }}
+      shape={{ rest: corner, pressed: expressive ? radius.md : corner }}
       style={[
         styles.pill,
         {
