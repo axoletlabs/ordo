@@ -4,6 +4,7 @@ import { Document, Element, cloneNode, isTag, type ChildNode } from "domhandler"
 
 const CONTAINERS = new Set(["div", "article", "section", "main", "body", "html"]);
 export const ARTICLE_SECTION_BLOCKS = 64;
+export const ARTICLE_END_CLASS = "ordo-article-end";
 // Count text, not markup: adding a saved <mark> must not move every later
 // section boundary and invalidate all of their native trees.
 const SECTION_CHARACTERS = 24_000;
@@ -51,6 +52,27 @@ function* sectionChildren(children: ChildNode[]): Generator<ChildNode[]> {
   if (group.length) yield group;
 }
 
+/** The reader owns end clearance. Block margins separate siblings, not the
+ * final paragraph from the FAB; don't stack them on top of that clearance. */
+function markArticleEnd(sections: Array<{ dom: Document }>) {
+  const lastContent = (nodes: ChildNode[]) => {
+    for (let index = nodes.length - 1; index >= 0; index--) {
+      const node = nodes[index]!;
+      if (isTag(node) || (node.type === "text" && node.data.trim().length > 0)) return node;
+    }
+    return undefined;
+  };
+  for (let index = sections.length - 1; index >= 0; index--) {
+    let node = lastContent(sections[index]!.dom.children);
+    if (!node) continue;
+    while (node && isTag(node)) {
+      node.attribs.class = [node.attribs.class, ARTICLE_END_CLASS].filter(Boolean).join(" ");
+      node = lastContent(node.children);
+    }
+    break;
+  }
+}
+
 /** One cheap DOM parse; expensive styled/native trees are built section by section. */
 export function prepareArticleSections(html: string) {
   const document = parseDocument(html);
@@ -81,6 +103,7 @@ export function prepareArticleSections(html: string) {
   };
   visitHeadings(document.children);
   const sections = [...sectionChildren(document.children)].map(children => ({ dom: attach(new Document([]), children) }));
+  markArticleEnd(sections);
   return { sections, headings };
 }
 

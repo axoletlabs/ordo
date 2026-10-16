@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isTag, type ChildNode } from "domhandler";
-import { ARTICLE_SECTION_BLOCKS, prepareArticleSections, reuseArticleSections } from "./article-sections.ts";
+import { ARTICLE_END_CLASS, ARTICLE_SECTION_BLOCKS, prepareArticleSections, reuseArticleSections } from "./article-sections.ts";
 
 function elements(nodes: ChildNode[], name: string): ChildNode[] {
   return nodes.flatMap(node => isTag(node) ? [...(node.name === name ? [node] : []), ...elements(node.children, name)] : []);
@@ -9,6 +9,33 @@ function elements(nodes: ChildNode[], name: string): ChildNode[] {
 function text(nodes: ChildNode[]): string {
   return nodes.map(node => node.type === "text" ? node.data : "children" in node ? text(node.children) : "").join("");
 }
+
+function marked(nodes: ChildNode[]): string[] {
+  return nodes.flatMap(node => isTag(node) ? [
+    ...(node.attribs.class?.split(" ").includes(ARTICLE_END_CLASS) ? [node.name] : []),
+    ...marked(node.children),
+  ] : []);
+}
+
+test("only the true article ending loses trailing block margins, not section boundaries", () => {
+  const { sections } = prepareArticleSections(`<article>${"<p>Paragraph</p>".repeat(130)}\n</article>\n<!-- end -->`);
+  assert.ok(sections.length >= 3);
+  assert.deepEqual(sections.flatMap(section => marked(section.dom.children)), ["article", "p"]);
+  assert.deepEqual(marked(sections[0]!.dom.children), []);
+});
+
+test("nested endings retain classes and trim margin through the last list item", () => {
+  const { sections } = prepareArticleSections('<div class="source"><ul><li>First</li><li class="last">Last</li>\n</ul></div>');
+  assert.deepEqual(sections.flatMap(section => marked(section.dom.children)), ["div", "ul", "li"]);
+  const items = elements(sections[0]!.dom.children, "li");
+  assert.ok(isTag(items[1]!));
+  assert.equal(items[1]!.attribs.class, `last ${ARTICLE_END_CLASS}`);
+});
+
+test("a paragraph followed by bare text keeps its normal spacing", () => {
+  const { sections } = prepareArticleSections('<p>Paragraph</p>Final bare text');
+  assert.deepEqual(sections.flatMap(section => marked(section.dom.children)), []);
+});
 
 test("book-length nested articles preserve every paragraph in bounded sections", () => {
   const paragraphs = Array.from({ length: 1200 }, (_, index) => `<p>Paragraph ${index}: <strong>keep &amp; read</strong>.</p>`);
