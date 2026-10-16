@@ -24,6 +24,11 @@ function harness(platform = "android") {
   };
   const hooks = { ...React,
     useRef: value => { const index = cursor++; return refs[index] ??= { current: value }; },
+    useMemo: (create, deps) => {
+      const index = cursor++, previous = refs[index];
+      if (!previous || !deps.every((value, i) => Object.is(value, previous.deps[i]))) refs[index] = { deps, value: create() };
+      return refs[index].value;
+    },
     useEffect: (effect, deps) => {
       const index = cursor++, previous = effectStates[index];
       if (previous && deps.every((value, i) => Object.is(value, previous.deps[i]))) return;
@@ -88,13 +93,15 @@ function harness(platform = "android") {
   let attached = [];
   return {
     animations,
+    graph: null,
     render(props = {}, options = {}) {
       expressive = options.expressive ?? expressive;
       reducedMotion = options.reducedMotion ?? reducedMotion;
       cursor = 0; effects.length = 0;
       const tree = RowHighlight({ rest: { borderTopLeftRadius: 16, borderTopRightRadius: 16, borderBottomLeftRadius: 4, borderBottomRightRadius: 4 },
         expressive, hovered: false, pressed: false, selected: false, ...props });
-      const styles = React.Children.toArray(tree.props.children).map(child => Style.from(flatten(child.props.style)));
+      this.graph = React.Children.toArray(tree.props.children).map(child => flatten(child.props.style));
+      const styles = this.graph.map(style => Style.from(style));
       styles.forEach(style => style.__attach());
       attached.forEach(style => style.__detach());
       attached = styles;
@@ -106,6 +113,58 @@ function harness(platform = "android") {
 }
 
 for (const platform of ["android", "ios", "web"]) {
+  test(`${platform}: metadata/size rerenders retain the entire row feedback graph`, () => {
+    const row = harness(platform);
+    row.render({ selected: true });
+    const original = row.graph;
+    const before = row.animations.length;
+    // BookmarkRow gets a fresh DTO when tags, suggestions or reminders change;
+    // all callers also create a fresh (but equal) rest-corners object.
+    for (let resize = 0; resize < 6; resize++) {
+      const styles = row.render({ selected: true });
+      for (let layer = 0; layer < original.length; layer++) {
+        for (const corner of ["borderTopLeftRadius", "borderTopRightRadius", "borderBottomLeftRadius", "borderBottomRightRadius"]) {
+          assert.ok(row.graph[layer][corner] === original[layer][corner], "Resizing must not replace AnimatedProps' corner nodes");
+          assert.equal(styles[layer][corner], 20);
+        }
+        assert.ok(row.graph[layer].opacity === original[layer].opacity);
+      }
+      assert.equal(styles[1].opacity, 1);
+    }
+    assert.equal(row.animations.length, before, "Layout/data updates must not replay feedback");
+  });
+
+  test(`${platform}: real group-corner changes update without resetting held selection`, () => {
+    const row = harness(platform);
+    row.render({ selected: true });
+    const original = row.graph;
+    const styles = row.render({ selected: true, rest: {
+      borderTopLeftRadius: 24, borderTopRightRadius: 24, borderBottomLeftRadius: 4, borderBottomRightRadius: 4,
+    } });
+    assert.ok(row.graph[0].borderTopLeftRadius !== original[0].borderTopLeftRadius);
+    assert.equal(styles[0].borderTopLeftRadius, 24);
+    assert.equal(styles[0].borderBottomLeftRadius, 20);
+    assert.ok(row.graph[1].opacity === original[1].opacity);
+    assert.equal(styles[1].opacity, 1);
+  });
+
+  test(`${platform}: resizing during press/release preserves in-flight corner nodes`, () => {
+    const row = harness(platform);
+    // Tag rows use a different silhouette and lift, but share the same layer.
+    const props = { rest: { borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
+      hoverRadius: 24, pressRadius: 28 };
+    row.render(props);
+    for (const state of [{ pressed: true }, { selected: true }, { hovered: true }, {}]) {
+      row.render({ ...props, ...state });
+      const graph = row.graph, before = row.animations.length;
+      row.render({ ...props, rest: { ...props.rest }, ...state });
+      assert.ok(row.graph[0].borderTopLeftRadius === graph[0].borderTopLeftRadius);
+      assert.ok(row.graph[1].opacity === graph[1].opacity);
+      assert.ok(row.graph[2].opacity === graph[2].opacity);
+      assert.equal(row.animations.length, before, "A data update must not interrupt or restart a press/release spring");
+    }
+  });
+
   test(`${platform}: repeated Expressive row feedback never promotes the JS corner graph`, () => {
     const row = harness(platform);
     row.render();
