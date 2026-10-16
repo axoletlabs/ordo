@@ -6,6 +6,7 @@ import { Text } from "../ui/Text";
 import { PanelActions } from "../ui/SheetActionRow";
 import { toast } from "../ui/toast-store";
 import { downloadBackupCodes } from "../../lib/backup-codes-file";
+import { isExportSaveCanceled } from "../../lib/import-export-file";
 import { errorMessage } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -33,6 +34,7 @@ export function BackupCodesDialog({
       await downloadBackupCodes(codes);
       haptics.success();
     } catch (e) {
+      if (isExportSaveCanceled(e)) return;
       haptics.error();
       toast.error(errorMessage(e, "Couldn't save the codes."));
     } finally {
