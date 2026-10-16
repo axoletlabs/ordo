@@ -9,7 +9,7 @@ import { Animated, StyleSheet } from "react-native";
 import { useTheme } from "../../theme/ThemeProvider";
 import { alphaTint } from "../../theme/state-layer";
 import { useMaterialMotion } from "../../theme/material-motion";
-import { rowCornerStyle, useRowLift, type CornerRadii } from "../../theme/row-shape";
+import { useRowCornerStyle, useRowLift, type CornerRadii } from "../../theme/row-shape";
 import { useStateVisibility } from "../ui/StateLayer";
 
 export function RowHighlight({ rest, expressive, hovered, pressed, selected, hoverRadius, pressRadius }: {
@@ -23,7 +23,7 @@ export function RowHighlight({ rest, expressive, hovered, pressed, selected, hov
   const selection = useStateVisibility(selected, false);
   const feedback = useStateVisibility(pressed || hovered, false);
   const lift = useRowLift({ expressive, hovered, pressed, selected, hoverRadius, pressRadius, reducedMotion });
-  const morph = expressive && rest ? rowCornerStyle(lift, rest) : null;
+  const morph = useRowCornerStyle(lift, expressive ? rest : undefined);
   // Static rest corners under the interpolations: before the first animation
   // frame RN-web has not written the dynamic style yet, and the surface must
   // still render its group silhouette.

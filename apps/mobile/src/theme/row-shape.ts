@@ -4,7 +4,7 @@
  * radius, so segment edges stay aligned while the inner corners round. Standard
  * mode never lifts (state layers only).
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { Animated } from "react-native";
 import { materialMotion } from "./material-motion";
 
@@ -38,4 +38,17 @@ export function rowCornerStyle(lift: Animated.Value, rest: CornerRadii) {
     borderTopLeftRadius: corner(rest.borderTopLeftRadius), borderTopRightRadius: corner(rest.borderTopRightRadius),
     borderBottomLeftRadius: corner(rest.borderBottomLeftRadius), borderBottomRightRadius: corner(rest.borderBottomRightRadius),
   };
+}
+
+/** Keep AnimatedProps attached to the same graph during row data/size updates.
+ * Callers create fresh rest objects, so memoize by radii, not object identity. */
+export function useRowCornerStyle(lift: Animated.Value, rest?: CornerRadii) {
+  const topLeft = rest?.borderTopLeftRadius;
+  const topRight = rest?.borderTopRightRadius;
+  const bottomLeft = rest?.borderBottomLeftRadius;
+  const bottomRight = rest?.borderBottomRightRadius;
+  return useMemo(() => topLeft == null || topRight == null || bottomLeft == null || bottomRight == null ? null : rowCornerStyle(lift, {
+    borderTopLeftRadius: topLeft, borderTopRightRadius: topRight,
+    borderBottomLeftRadius: bottomLeft, borderBottomRightRadius: bottomRight,
+  }), [lift, topLeft, topRight, bottomLeft, bottomRight]);
 }

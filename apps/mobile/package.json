@@ -18,6 +18,7 @@
     "test:accessibility": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/lib/material-accessibility.test.ts",
     "test:ui": "node tests/material-ui-smoke.mjs",
     "test:animation-ui": "node tests/animation-polish.mjs",
+    "test:row-resize-ui": "node tests/row-feedback-resize.mjs",
     "test:search-ui": "node tests/search-bar-motion.mjs",
     "audit:inventory": "node tests/ui-inventory.mjs",
     "test:performance": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/search-performance.mjs",
