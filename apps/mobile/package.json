@@ -22,7 +22,7 @@
     "audit:inventory": "node tests/ui-inventory.mjs",
     "test:performance": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/search-performance.mjs",
     "test:calendar": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/lib/calendar-input.test.ts",
-    "test:otp": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/lib/otp-edit.test.ts",
+    "test:otp": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/lib/otp-edit.test.ts tests/backup-codes-file.test.mjs",
     "test:otp-ui": "node tests/otp-input.mjs",
     "test:reader": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test src/components/reader/reader-article-colors.test.ts src/components/reader/article-sections.test.ts tests/reader-native-worklet.test.mjs",
     "test:stress-ui": "node tests/library-reader-stress.mjs",
