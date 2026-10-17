@@ -139,7 +139,7 @@ try {
     });
     await page.getByTestId("add-bookmark-fab").click();
     await page.getByRole("textbox", { name: "Link", exact: true }).fill("https://example.test/new-bookmark");
-    const save = button(page, "Save"); await settle(page);
+    const save = button(page, "Save bookmark"); await settle(page);
     const beforeSave = await save.boundingBox();
     await save.click(); await page.waitForTimeout(100);
     const busySave = await save.boundingBox();

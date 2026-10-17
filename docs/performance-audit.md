@@ -270,6 +270,15 @@ of the 200ms fade. Profiles/raw samples are in
 `/home/builder/ci/ordo-reminder-freeze-oct17/artifacts/date-only-{before,after}`
 on the build host (temporary artifacts, not checked in).
 
+Validation: 598 mobile tests, 118 Material tests, mobile typecheck/lint,
+release-web and Android JS-only exports pass. The picker, shared-control hover
+and overlay-layout matrices pass (112 captures; light/dark,
+Standard/Expressive, portrait/wide, 12/24-hour cycles, keyboard, reduced motion,
+busy save and reopening). Deterministic lifecycle tests exercise web/Android/iOS
+branches; there is no connected native device for a runtime FPS claim. The
+broader animation suite's stale `Save` selector was updated to the existing
+`Save bookmark` accessible label (also present on the baseline).
+
 ## What changed
 
 ### Launch
