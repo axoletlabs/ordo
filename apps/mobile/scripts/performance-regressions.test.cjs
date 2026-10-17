@@ -126,6 +126,9 @@ test("500-bookmark delete and Undo batch lists/counts/reminders without restorin
   const { qc, items, source } = fixture();
   const journal = new Map(); let sequence = 0;
   const mock = (path, exports) => modules.set(resolve(__dirname, "../src", path), { exports });
+  const auth = { sessionGeneration: 1 };
+  mock("store/auth.ts", { useAuthStore: { getState: () => auth } });
+  mock("store/settings.ts", { useSettingsStore: { getState: () => ({ serverUrl: "http://127.0.0.1" }) } });
   mock("lib/query-client.ts", { queryClient: qc });
   mock("lib/haptics.ts", { haptics: { success() {} } });
   mock("lib/api/client.ts", { ApiClientError: class extends Error {}, LOCAL_ERROR: {} });
@@ -174,6 +177,14 @@ test("500-bookmark delete and Undo batch lists/counts/reminders without restorin
   assert.equal(rows(qc, source).length, 1000);
   assert.equal(qc.getQueryData(qk.folders).find((row) => row.id === "source").bookmarkCount, 1000);
   assert.equal(journal.size, 0);
+  const staleUndo = deleteUndoable({ bookmarks: [items[0]], showToast: false });
+  auth.sessionGeneration++;
+  // Same account/server key, but a new login: an old callback must not restore
+  // the old snapshot or dispatch a deletion using the replacement credentials.
+  const beforeStaleCallback = qc.getQueryData(source);
+  staleUndo.undo(); staleUndo.commit();
+  assert.equal(qc.getQueryData(source), beforeStaleCallback);
+  assert.equal(journal.size, 1, "stale callbacks leave durable replay to the next launch");
   console.log(JSON.stringify({ operation: "delete-and-undo-500-of-1000", hiddenMs: +hiddenMs.toFixed(2), restoreMs: +restoreMs.toFixed(2), restorePublications }));
   await new Promise(setImmediate); qc.clear();
 });

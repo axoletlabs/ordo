@@ -1,6 +1,6 @@
 # App-wide performance, Material 3, and motion audit
 
-The [follow-up pass](#follow-up-workflow-and-policy-audit) extends the initial results below with real-server workflows, delayed/rejected mutations, narrow OTP fields, and mandatory-MFA accessibility. **This is still not exhaustive native release approval.** Native/device checks and the documented first-dialog main-thread costs remain open.
+The [session-isolation continuation](#session-isolation-smtp-and-encrypted-library-continuation) is the latest pass: **479 captures, 2,151 checks, 44 mobile tests**, plus real local SMTP, two-server switching, and encrypted-library checks. The earlier [follow-up pass](#follow-up-workflow-and-policy-audit) and initial results below remain historical evidence. **This is not exhaustive release approval.** Native verification is explicitly deferred; the documented first-dialog main-thread costs remain unresolved.
 
 ## Scope and confidence
 
@@ -173,7 +173,53 @@ The isolated final3 quick run still records largest cold-save long tasks of **24
 
 The initial [development APK workflow](https://github.com/axoletlabs/ordo/actions/runs/39040664088) completed successfully, including the APK build, package/signing checks, and `ordo-apk-development` artifact upload. That artifact belongs to `e6616d4`, not the follow-up source. A newly dispatched workflow is reported separately when the follow-up is published. `adb devices` still reports no attached device; this host also has no configured Android SDK/emulator or KVM device.
 
-**Open work:** the native release checklist below; SMTP delivery/reset/email-change integration; broader account/server switching and offline race testing; native protected/encrypted-library and WebView workflows; and further cold-dialog profiling/remediation. The source inventory and executed matrices are not an assertion that every possible validation, permission, account, and OS branch has been executed.
+**Open work at the follow-up publication:** the native release checklist below; SMTP delivery/reset/email-change integration; broader account/server switching and offline race testing; native protected/encrypted-library and WebView workflows; and further cold-dialog profiling/remediation. The continuation below executes the SMTP and non-native isolation workflows; native verification and cold-dialog costs remain open. The source inventory and executed matrices are not an assertion that every possible validation, permission, account, and OS branch has been executed.
+
+## Session isolation, SMTP, and encrypted-library continuation
+
+This continuation starts from `8b621581b547feb943e78dacb039e20f3d572ede`, on the same audit branch. Native Android device verification is intentionally excluded as requested. The separate [verification manifest](full-app-audit-2026-10-17/session-isolation/verification.json) identifies the exact web/Android JS export fingerprints, test-script/server-source hashes, results, and curated screenshots. Its [source inventory](full-app-audit-2026-10-17/session-isolation/source-inventory.json) covers **347 TypeScript files, 30 routes/layouts, 41,612 lines, 603 interaction sites, and 115 motion calls**; these remain source counts, not executed-branch percentages.
+
+### Corrections
+
+- **Account/server ownership:** requests pin their originating server and runtime session generation. Late responses, refresh rejection/success, and network failures cannot replace/clear the next account, replay on its host, mark its server offline, or publish its predecessor's data. A replacement account starts its own refresh flight. A newer Quick Save token rotation also wins against an older in-flight refresh.
+- **Mutation lifecycles:** bookmark/folder/tag/auth/import/export/server mutations share per-execution ownership guards. Superseded success/rollback/settled callbacks are suppressed; stale successful `mutateAsync` executions reject instead of running caller success continuations. Serialized queued mutations cannot send using a later account. Multi-chunk writes and async cache-reconciliation callbacks recheck ownership across awaits.
+- **Cache and deferred work:** synchronous auth/settings subscriptions clear shared query data before another account/host can observe it, stop outgoing persistence, and clear folder unlock tokens. Snapshot restoration checks ownership **before hydration**, not after stale data has already entered the cache. Reader progress queues, Undo callbacks, and durable delete replays also retain their original runtime ownership, including signing back into the same account.
+- **Logout:** session removal uses idempotent `deleteMany` rather than logging a missing-record Prisma error when another path already removed it. Real-server logout workflows pass without that error.
+- **Avoidable web work:** web scrollers no longer attach unused native-scrollbar layout/content callbacks; web panels rely on viewport/CSS geometry rather than unused keyboard/gesture measurements. Input labels skip already-settled initial timing work. Overlay focus enumerates controls once at opening, avoids scrolling the page to the initial field, and does not measure controls on unrelated typing keys. Native scrollbar/keyboard paths and actual preference/state animations remain intact. These are bounded work reductions, **not a measured cold-dialog speedup**.
+
+### Final-export results
+
+All nine suites below use the same `stage3-final` production web export. Light/dark, Standard/Expressive, phone/wide, narrow/landscape, keyboard, and reduced-motion coverage is retained from the full shared-UI matrices.
+
+| Suite | Captures | Checks | Result |
+| --- | ---: | ---: | --- |
+| Routes | 200 | 801 | Pass |
+| Phone overlays | 60 | 253 | Pass |
+| Wide overlays | 60 | 253 | Pass |
+| Narrow/empty/error/Retry states | 34 | 145 | Pass |
+| Delayed/rejected mutations and OTP workflows | 24 | 185 | Pass |
+| Account/server policy fixtures | 48 | 233 | Pass |
+| Actual loopback-server workflows | 5 | 31 | Pass |
+| Isolated interactions, timing, held transition | 43 | 215 | Pass |
+| SMTP, encrypted library, account/server/offline integration | 5 | 35 | Pass |
+| **Total** | **479** | **2,151** | **0 issues, 0 uncaught browser errors** |
+
+The first route invocation exceeded its 240-second harness deadline after 152 captures. The separately recorded complete run above uses a longer deadline; the partial run is not counted as passing. An initial local-server assertion raced React's pending-state render; the runner now waits for the disabled control while holding the commit request, then checks all pending options. Only the complete passing rerun is packaged. Test-runner corrections do not change the production export.
+
+**New actual integrations:** `extended-server-audit.mjs` launches two fresh loopback Nest/SQLite servers and an in-process SMTP sink, using only disposable `example.test` accounts. It verifies SMTP-required signup does not authenticate early; wrong/correct verification codes; multipart plaintext/HTML/logo mail; email-change verification and the original-mailbox security notice; reset-form mismatch/retry; one-use password reset; token refresh; TOTP enrollment and SMTP MFA recovery while retaining MFA; ciphertext at rest for bookmark URLs/titles, folder names, and tag names; encrypted-library readability after password reset, refresh, and MFA recovery; server-down focus isolation/session retention/Retry; logout/login into a second account and reload without the first library; the actual signed-in hosting probe/confirmation/restart into another server with independent accounts and no inherited library; and an intentionally rejected SMTP delivery. No real SMTP service, mailbox, credentials, or existing database participates.
+
+**Deterministic/build checks:** all **44 mobile tests** pass (including 336 palette assertions), as do workspace typecheck/lint, three SQLite migration/query-plan tests, server build, production web export, and Android JS export. Held-network and actual TanStack tests cover stale refreshes, independent refresh flights, stale responses/errors, mutation success/rollback, queued writes, offline retry, synchronous cache clearing, and an already-awaiting stale snapshot restore. Delete/Undo regression coverage also verifies old callbacks cannot restore or dispatch after a new login.
+
+![Encrypted library on the real local server](full-app-audit-2026-10-17/session-isolation/encrypted-library.png)
+![Offline gate retaining the session](full-app-audit-2026-10-17/session-isolation/server-offline.png)
+
+### Remaining performance finding and APK status
+
+The isolated quick run records largest cold-save long tasks of **246–253ms** in five normal-motion configurations and **228ms** in reduced-motion landscape; cold contents records **138–147ms** normally and **141ms** with reduced motion, all at 4× browser CPU throttling. In comparable three-sample CPU/timeline profiles, the published final3 baseline cold maxima are **306/307/306ms**, versus **299/320/305ms** for this final export. Warm maxima are **230/221/204ms** versus **227/232/214ms**. These overlapping ranges do **not** establish meaningful improvement. The baseline trace contains a roughly 305ms function task, including about 50ms of layout-tree work; CPU samples point to RN-web offset measurement, React rendering, and focus/layout work. Raw diagnostic traces/profiles stay in `/tmp/opencode/ordo-stage3-{profile-baseline,final-profile}`; compact sample summaries are packaged. A broader overlay/render architecture change would need its own comparable validation; the unresolved stall must not be relabeled as complete or inferred to be native FPS.
+
+The [follow-up APK workflow](https://github.com/axoletlabs/ordo/actions/runs/39058584135) **succeeded** for `8b62158`; its non-expired `ordo-apk-development` artifact was confirmed (ID `12110349604`, 19,474,091 bytes). It does not include this continuation. A fresh development APK workflow is dispatched for the newly published continuation commit and reported with the handoff. Neither artifact is device verification.
+
+The requested non-native workflow expansion and regression reruns above are complete, but **cold-dialog performance remains an open non-native finding**. Native Back/IME, OS accessibility services, biometrics, WebView, installation/share/update flows, real wallpaper palettes/scaling, and physical frame/battery measurements remain explicitly deferred. No claim of exhaustive branch execution or Material certification is made.
 
 ## Coverage and remaining device checks
 
@@ -188,7 +234,7 @@ The initial [development APK workflow](https://github.com/axoletlabs/ordo/action
 | Loading and failure | Cold-cache skeleton with delayed network, empty-library save action, server error and successful Retry recovery |
 | Shared UI | Buttons, icon actions, fields, selectors, lists, menu/dialog focus and dismissal, spinner/progress/skeleton/OTP lifecycle, scrollbars, root/page motion |
 
-“Route coverage” is not every possible account/server/permission combination. The follow-up completes the specific actual authentication/import/export/protected-folder workflows listed above, but not SMTP delivery, native file pickers, OS share/update/install flows, biometric unlock, every encrypted-library/server scenario, native WebView selection/scrolling, or every validation/error branch. Existing historical reports are not counted as newly executed verification.
+“Route coverage” is not every possible account/server/permission combination. The continuation adds the specific SMTP, encrypted-library, account/server-switching, and offline integrations listed above; it does not verify native file pickers, OS share/update/install flows, biometric unlock, every encrypted-library/server scenario, native WebView selection/scrolling, or every validation/error branch. Existing historical reports are not counted as newly executed verification.
 
 Before native release approval:
 
@@ -245,6 +291,9 @@ In a separate terminal, with the exported web app served and the same Playwright
 
 ```sh
 ORDO_AUDIT_API=http://127.0.0.1:8260 node apps/mobile/scripts/local-server-audit.mjs
+
+# Launches its own disposable API servers, SQLite databases and SMTP sink:
+node apps/mobile/scripts/extended-server-audit.mjs
 ```
 
 The local-server runner refuses non-loopback endpoints, creates its own account, and deletes that account after the successful end-to-end run. Failed runs can leave disposable accounts in the disposable database; do not point this runner at real data. Give each script its own `ORDO_UI_OUTPUT`. Run timing comparisons **without** the other browser/build processes; parallel layout matrices are only correctness evidence.

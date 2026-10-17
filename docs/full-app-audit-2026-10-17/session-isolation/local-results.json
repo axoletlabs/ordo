@@ -1,0 +1,137 @@
+{
+  "checks": [
+    {
+      "name": "registration mismatch is field-owned and does not submit",
+      "pass": true
+    },
+    {
+      "name": "real registration creates a new isolated session",
+      "pass": true
+    },
+    {
+      "name": "registered-library: viewport contained",
+      "pass": true
+    },
+    {
+      "name": "nested folder creation persisted on real server",
+      "pass": true
+    },
+    {
+      "name": "real save updates folder membership/count",
+      "pass": true
+    },
+    {
+      "name": "folder lock mismatch remains editable",
+      "pass": true
+    },
+    {
+      "name": "password lock persists and clears local access",
+      "pass": true
+    },
+    {
+      "name": "wrong folder credential receives inline failure",
+      "pass": true
+    },
+    {
+      "name": "unlocked-folder: viewport contained",
+      "pass": true
+    },
+    {
+      "name": "account-password lock recovery persists",
+      "pass": true
+    },
+    {
+      "name": "import-preview: viewport contained",
+      "pass": true
+    },
+    {
+      "name": "pending import disables duplicate policy changes",
+      "pass": true
+    },
+    {
+      "name": "pending import disables atomic option changes",
+      "pass": true
+    },
+    {
+      "name": "pending import disables advanced branch changes",
+      "pass": true
+    },
+    {
+      "name": "pending import cannot be discarded with Escape",
+      "pass": true
+    },
+    {
+      "name": "import-complete: viewport contained",
+      "pass": true
+    },
+    {
+      "name": "CSV import committed to existing folder",
+      "pass": true
+    },
+    {
+      "name": "JSON download contains actual saved data",
+      "pass": true
+    },
+    {
+      "name": "HTML download contains actual saved data",
+      "pass": true
+    },
+    {
+      "name": "CSV download contains actual saved data",
+      "pass": true
+    },
+    {
+      "name": "duplicate preview recognizes committed URL",
+      "pass": true
+    },
+    {
+      "name": "import-invalid: viewport contained",
+      "pass": true
+    },
+    {
+      "name": "real authenticator enrollment accepts a generated TOTP",
+      "pass": true
+    },
+    {
+      "name": "real logout returns to credential screen",
+      "pass": true
+    },
+    {
+      "name": "real MFA rejects incorrect code without abandoning challenge",
+      "pass": true
+    },
+    {
+      "name": "real one-time backup code signs back into existing library",
+      "pass": true
+    },
+    {
+      "name": "account deletion requires exact confirmation",
+      "pass": true
+    },
+    {
+      "name": "step-up removes real parent password from obscured input",
+      "pass": true
+    },
+    {
+      "name": "step-up cancellation restores private draft",
+      "pass": true
+    },
+    {
+      "name": "real step-up deletion removes only the disposable account and signs out",
+      "pass": true
+    },
+    {
+      "name": "no uncaught application errors in real-server workflows",
+      "pass": true
+    }
+  ],
+  "errors": [],
+  "captures": [
+    "registered-library",
+    "unlocked-folder",
+    "import-preview",
+    "import-complete",
+    "import-invalid"
+  ],
+  "note": "New isolated example.test account on loopback API; no real user data."
+}

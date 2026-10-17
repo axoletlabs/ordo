@@ -1,0 +1,153 @@
+{
+  "checks": [
+    {
+      "name": "SMTP-required registration does not authenticate before verification",
+      "pass": true
+    },
+    {
+      "name": "registration email reached real local SMTP with text, HTML and inline logo",
+      "pass": true
+    },
+    {
+      "name": "verification email includes HTML and logo MIME parts",
+      "pass": true
+    },
+    {
+      "name": "wrong verification code remains inline and retryable",
+      "pass": true
+    },
+    {
+      "name": "verified login provisions an encrypted library",
+      "pass": true
+    },
+    {
+      "name": "bookmark title and URL are ciphertext at rest",
+      "pass": true
+    },
+    {
+      "name": "tag name is ciphertext at rest",
+      "pass": true
+    },
+    {
+      "name": "folder name is ciphertext at rest",
+      "pass": true
+    },
+    {
+      "name": "encrypted-library: viewport contained",
+      "pass": true
+    },
+    {
+      "name": "email change sends a security notice to the original mailbox",
+      "pass": true
+    },
+    {
+      "name": "email verification updates the active account",
+      "pass": true
+    },
+    {
+      "name": "password reset mismatch preserves the code and editable form",
+      "pass": true
+    },
+    {
+      "name": "SMTP password reset rewraps the key without losing encrypted library content",
+      "pass": true
+    },
+    {
+      "name": "password reset code cannot be replayed",
+      "pass": true
+    },
+    {
+      "name": "refresh rotation preserves encrypted-library access",
+      "pass": true
+    },
+    {
+      "name": "SMTP MFA recovery keeps the authenticator enabled and decrypts the existing library",
+      "pass": true
+    },
+    {
+      "name": "mfa-email-recovered: viewport contained",
+      "pass": true
+    },
+    {
+      "name": "offline server cannot sign the user out",
+      "pass": true
+    },
+    {
+      "name": "server-offline: viewport contained",
+      "pass": true
+    },
+    {
+      "name": "offline gate contains keyboard focus",
+      "pass": true
+    },
+    {
+      "name": "offline gate contains keyboard focus",
+      "pass": true
+    },
+    {
+      "name": "offline gate contains keyboard focus",
+      "pass": true
+    },
+    {
+      "name": "offline gate contains keyboard focus",
+      "pass": true
+    },
+    {
+      "name": "offline gate contains keyboard focus",
+      "pass": true
+    },
+    {
+      "name": "Retry restores the same account after server recovery",
+      "pass": true
+    },
+    {
+      "name": "second account never sees the previous encrypted library",
+      "pass": true
+    },
+    {
+      "name": "second account reload cannot restore the previous snapshot",
+      "pass": true
+    },
+    {
+      "name": "second-account-empty: viewport contained",
+      "pass": true
+    },
+    {
+      "name": "signed-in host switch clears auth and commits only the verified server",
+      "pass": true
+    },
+    {
+      "name": "second isolated host has an independent account namespace",
+      "pass": true
+    },
+    {
+      "name": "new host cannot inherit the previous host's in-memory or persisted library",
+      "pass": true
+    },
+    {
+      "name": "second-server-empty: viewport contained",
+      "pass": true
+    },
+    {
+      "name": "SMTP failure cannot claim delivery or create an authenticated session",
+      "pass": true
+    },
+    {
+      "name": "no uncaught browser errors in extended workflows",
+      "pass": true
+    },
+    {
+      "name": "logout no longer emits missing-record Prisma errors",
+      "pass": true
+    }
+  ],
+  "errors": [],
+  "captures": [
+    "encrypted-library",
+    "mfa-email-recovered",
+    "server-offline",
+    "second-account-empty",
+    "second-server-empty"
+  ],
+  "note": "Two fresh loopback databases, local SMTP sink, disposable example.test accounts. No external mail. Native verification excluded."
+}

@@ -2,7 +2,7 @@
 import { MaterialIcon as Ionicons } from "../../../src/components/ui/MaterialIcon";
 import React, { useMemo, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { useMutation } from "@tanstack/react-query";
+import { useSessionMutation as useMutation } from "../../../src/hooks/use-session-mutation";
 import type { ExportFormat, FolderDto } from "@ordo/shared";
 import { TOKEN_TTL } from "@ordo/shared";
 import { SettingsPage, SettingsScrollView, SettingsGroup } from "../../../src/components/settings/SettingsPage";

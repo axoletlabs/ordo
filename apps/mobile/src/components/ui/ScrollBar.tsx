@@ -51,8 +51,11 @@ export function useScrollBarInsets(): Required<ScrollBarInsets> {
 export function chainHandlers<Args extends unknown[]>(
   ...handlers: Array<((...args: Args) => void) | undefined>
 ) {
+  const active = handlers.filter((handler) => handler != null);
+  if (active.length === 0) return undefined;
+  if (active.length === 1) return active[0];
   return (...args: Args) => {
-    for (const handler of handlers) handler?.(...args);
+    for (const handler of active) handler(...args);
   };
 }
 

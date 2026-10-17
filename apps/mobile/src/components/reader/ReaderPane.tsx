@@ -109,6 +109,7 @@ import { reconcileReadingProgress, scrollReadingProgress, shouldFlushReadingProg
 import { fabContentPadding } from "../../lib/fab-layout";
 import { useReducedMotionPreference } from "../../hooks/use-reduced-motion-preference";
 import { createLatestWriteQueue } from "../../lib/latest-write-queue";
+import { captureSessionScope, isSessionScopeCurrent, type SessionScope } from "../../lib/session-scope";
 import { useAuthStore } from "../../store/auth";
 
 function useSetContentKindMissing() {
@@ -138,12 +139,12 @@ const SELECT_OPEN_MS = 280;const SELECT_CLOSE_MS = 140;
 // Survive reader unmount/reopen: a late write from the previous screen must
 // not race the new screen's progress for the same account/server/article.
 const saveProgress = createLatestWriteQueue(
-  async (write: { id: string; folderId: string | null; progress: number; userId: string | undefined; server: string }) => {
-    if (!write.userId || useAuthStore.getState().user?.id !== write.userId || useSettingsStore.getState().serverUrl !== write.server) return null;
+  async (write: { id: string; folderId: string | null; progress: number; userId: string | undefined; server: string; scope: SessionScope }) => {
+    if (!isSessionScopeCurrent(write.scope) || !write.userId || useAuthStore.getState().user?.id !== write.userId || useSettingsStore.getState().serverUrl !== write.server) return null;
     return bookmarksApi.update(write.id, { readProgress: write.progress }, { folderId: write.folderId });
   },
   (updated, write) => {
-    if (!updated || useAuthStore.getState().user?.id !== write.userId || useSettingsStore.getState().serverUrl !== write.server) return;
+    if (!updated || !isSessionScopeCurrent(write.scope) || useAuthStore.getState().user?.id !== write.userId || useSettingsStore.getState().serverUrl !== write.server) return;
     // A concurrent move/tag edit is unrelated to progress. Do not restore its
     // older folder/tags from the full DTO returned by this request.
     updateBookmarkEverywhere(queryClient, write.id, (bookmark) => reconcileReadingProgress(bookmark, updated));
@@ -710,7 +711,7 @@ function ReaderPaneInner({
   const currentArticleRef = useRef<{ id: string; folderId: string | null } | null>(null);
   // Capture ownership before navigation/logout cleanup can change global auth.
   // An outgoing reader must never enqueue its article against the next account.
-  const progressOwner = useRef({ userId: useAuthStore.getState().user?.id, server: useSettingsStore.getState().serverUrl }).current;
+  const progressOwner = useRef({ userId: useAuthStore.getState().user?.id, server: useSettingsStore.getState().serverUrl, scope: captureSessionScope() }).current;
   const initialProgressRef = useRef(0);
   const latestProgressRef = useRef(0);
   const persistedProgressRef = useRef<number | null>(null);
@@ -799,8 +800,8 @@ function ReaderPaneInner({
 
   const persistProgress = useCallback(
     (id: string, folderId: string | null, value: number) => {
-      const { userId, server } = progressOwner;
-      if (!userId || useAuthStore.getState().user?.id !== userId || useSettingsStore.getState().serverUrl !== server) return;
+      const { userId, server, scope } = progressOwner;
+      if (!isSessionScopeCurrent(scope) || !userId || useAuthStore.getState().user?.id !== userId || useSettingsStore.getState().serverUrl !== server) return;
       const rounded = Math.round(Math.min(1, Math.max(0, value)) * 1000) / 1000;
       // Optimistic: reflect in the detail + list caches immediately.
       updateBookmarkEverywhere(queryClient, id, (b) => ({
@@ -810,7 +811,7 @@ function ReaderPaneInner({
           ? { isRead: true, completedAt: b.completedAt ?? new Date().toISOString() }
           : {}),
       }));
-      saveProgress(`${server}:${userId}:${id}`, { id, folderId, progress: rounded, userId, server });
+      saveProgress(`${server}:${userId}:${scope.generation}:${id}`, { id, folderId, progress: rounded, userId, server, scope });
     },
     [progressOwner],
   );

@@ -1,0 +1,276 @@
+TAP version 13
+# Subtest: account identifier is a username on native and web
+ok 1 - account identifier is a username on native and web
+  ---
+  duration_ms: 3.018734
+  type: 'test'
+  ...
+# Subtest: current-password uses standard, matching autofill hints
+ok 2 - current-password uses standard, matching autofill hints
+  ---
+  duration_ms: 0.368922
+  type: 'test'
+  ...
+# Subtest: current-password leaves the autofill graph while obscured
+ok 3 - current-password leaves the autofill graph while obscured
+  ---
+  duration_ms: 0.290121
+  type: 'test'
+  ...
+# Subtest: new-password uses standard, matching autofill hints
+ok 4 - new-password uses standard, matching autofill hints
+  ---
+  duration_ms: 0.1592
+  type: 'test'
+  ...
+# Subtest: new-password leaves the autofill graph while obscured
+ok 5 - new-password leaves the autofill graph while obscured
+  ---
+  duration_ms: 0.444842
+  type: 'test'
+  ...
+# Subtest: locked usernames cannot be rewritten by an OTP or another account
+ok 6 - locked usernames cannot be rewritten by an OTP or another account
+  ---
+  duration_ms: 0.151761
+  type: 'test'
+  ...
+# Subtest: obscured secrets never reach the underlying field, even when revealed
+ok 7 - obscured secrets never reach the underlying field, even when revealed
+  ---
+  duration_ms: 0.420522
+  type: 'test'
+  ...
+# Subtest: folder passwords cannot offer or replace saved account credentials
+ok 8 - folder passwords cannot offer or replace saved account credentials
+  ---
+  duration_ms: 0.173041
+  type: 'test'
+  ...
+# Subtest: password identity survives reveal regardless of which hint identifies it
+ok 9 - password identity survives reveal regardless of which hint identifies it
+  ---
+  duration_ms: 0.972124
+  type: 'test'
+  ...
+# Subtest: Android revealed passwords use the password keyboard, not plain text
+ok 10 - Android revealed passwords use the password keyboard, not plain text
+  ---
+  duration_ms: 1.046805
+  type: 'test'
+  ...
+# Subtest: each OTP focus position exposes exactly one code-autofill target
+ok 11 - each OTP focus position exposes exactly one code-autofill target
+  ---
+  duration_ms: 0.519202
+  type: 'test'
+  ...
+# Subtest: busy or hidden OTP fields do not request autofill
+ok 12 - busy or hidden OTP fields do not request autofill
+  ---
+  duration_ms: 0.160841
+  type: 'test'
+  ...
+# Subtest: PIN and backup cells are native secure fields, never SMS targets
+ok 13 - PIN and backup cells are native secure fields, never SMS targets
+  ---
+  duration_ms: 0.205481
+  type: 'test'
+  ...
+# Subtest: full OTP autofill replaces the code from any focused cell
+ok 14 - full OTP autofill replaces the code from any focused cell
+  ---
+  duration_ms: 0.385402
+  type: 'test'
+  ...
+# Subtest: PIN, recovery-code paste, replacement and deletion still work
+ok 15 - PIN, recovery-code paste, replacement and deletion still work
+  ---
+  duration_ms: 0.302122
+  type: 'test'
+  ...
+# Subtest: every account/folder password field declares an explicit autofill policy and identity
+ok 16 - every account/folder password field declares an explicit autofill policy and identity
+  ---
+  duration_ms: 1025.591202
+  type: 'test'
+  ...
+# Subtest: web password-lock removal never calls unsupported native secure-store methods
+ok 17 - web password-lock removal never calls unsupported native secure-store methods
+  ---
+  duration_ms: 96.057158
+  type: 'test'
+  ...
+# Subtest: snapshot writes are synchronous and restored data remains visible but stale
+ok 18 - snapshot writes are synchronous and restored data remains visible but stale
+  ---
+  duration_ms: 2.905253
+  type: 'test'
+  ...
+# {"operation":"move-500-of-1000","elapsedMs":25.4,"cacheUpdates":11}
+# {"operation":"delete-and-undo-500-of-1000","hiddenMs":12.12,"restoreMs":12.23,"restorePublications":6}
+# Subtest: hydrated folders paint immediately while one background revalidation repairs an older snapshot
+ok 19 - hydrated folders paint immediately while one background revalidation repairs an older snapshot
+  ---
+  duration_ms: 23.804349
+  type: 'test'
+  ...
+# Subtest: narrow OTP forms split groups instead of shrinking targets below 48dp
+ok 20 - narrow OTP forms split groups instead of shrinking targets below 48dp
+  ---
+  duration_ms: 0.694444
+  type: 'test'
+  ...
+# Subtest: 500-bookmark moves publish bounded cache updates and keep all memberships correct
+ok 21 - 500-bookmark moves publish bounded cache updates and keep all memberships correct
+  ---
+  duration_ms: 32.687469
+  type: 'test'
+  ...
+# Subtest: 500-bookmark delete and Undo batch lists/counts/reminders without restoring another deletion
+ok 22 - 500-bookmark delete and Undo batch lists/counts/reminders without restoring another deletion
+  ---
+  duration_ms: 300.909654
+  type: 'test'
+  ...
+# Subtest: failed batch rollback preserves another concurrent move
+ok 23 - failed batch rollback preserves another concurrent move
+  ---
+  duration_ms: 2.412011
+  type: 'test'
+  ...
+# Subtest: batch moves support mixed origins, root destination, duplicates and repeat reconciliation
+ok 24 - batch moves support mixed origins, root destination, duplicates and repeat reconciliation
+  ---
+  duration_ms: 1.410246
+  type: 'test'
+  ...
+# Subtest: exact row offsets reserve full tag targets without inflating plain metadata rows
+ok 25 - exact row offsets reserve full tag targets without inflating plain metadata rows
+  ---
+  duration_ms: 0.249441
+  type: 'test'
+  ...
+# Subtest: extraction completion never refetches a whole paginated library catalogue
+ok 26 - extraction completion never refetches a whole paginated library catalogue
+  ---
+  duration_ms: 0.942605
+  type: 'test'
+  ...
+# Subtest: reading completion triggers once instead of a request on every bottom-of-page scroll
+ok 27 - reading completion triggers once instead of a request on every bottom-of-page scroll
+  ---
+  duration_ms: 0.909164
+  type: 'test'
+  ...
+# Subtest: progress responses cannot undo a concurrent folder/tag edit or discard detail
+ok 28 - progress responses cannot undo a concurrent folder/tag edit or discard detail
+  ---
+  duration_ms: 0.564202
+  type: 'test'
+  ...
+# Subtest: latest-write queue serializes, coalesces and cannot reconcile an older response
+ok 29 - latest-write queue serializes, coalesces and cannot reconcile an older response
+  ---
+  duration_ms: 7.720516
+  type: 'test'
+  ...
+# Subtest: a failed progress write does not wedge later writes or a different article
+ok 30 - a failed progress write does not wedge later writes or a different article
+  ---
+  duration_ms: 0.802644
+  type: 'test'
+  ...
+# Subtest: Material tonal pairs retain text contrast in both modes, AMOLED and contrast levels
+ok 31 - Material tonal pairs retain text contrast in both modes, AMOLED and contrast levels
+  ---
+  duration_ms: 59.10475
+  type: 'test'
+  ...
+# Subtest: late successful refresh cannot replace/clear the next session
+ok 32 - late successful refresh cannot replace/clear the next session
+  ---
+  duration_ms: 697.718945
+  type: 'test'
+  ...
+# Subtest: late rejected refresh cannot replace/clear the next session
+ok 33 - late rejected refresh cannot replace/clear the next session
+  ---
+  duration_ms: 154.476585
+  type: 'test'
+  ...
+# Subtest: old unauthorized requests never replay or refresh against the new server
+ok 34 - old unauthorized requests never replay or refresh against the new server
+  ---
+  duration_ms: 97.577446
+  type: 'test'
+  ...
+# Subtest: late successful refresh cannot overwrite a newer Quick Save rotation
+ok 35 - late successful refresh cannot overwrite a newer Quick Save rotation
+  ---
+  duration_ms: 66.356503
+  type: 'test'
+  ...
+# Subtest: late rejected refresh cannot overwrite a newer Quick Save rotation
+ok 36 - late rejected refresh cannot overwrite a newer Quick Save rotation
+  ---
+  duration_ms: 52.73016
+  type: 'test'
+  ...
+# Subtest: a new account starts its own refresh instead of joining the old account's flight
+ok 37 - a new account starts its own refresh instead of joining the old account's flight
+  ---
+  duration_ms: 52.944041
+  type: 'test'
+  ...
+# Subtest: late successful responses and network failures do not affect the next account
+ok 38 - late successful responses and network failures do not affect the next account
+  ---
+  duration_ms: 85.913952
+  type: 'test'
+  ...
+# Subtest: late mutation success cannot republish into the next account
+ok 39 - late mutation success cannot republish into the next account
+  ---
+  duration_ms: 44.666764
+  type: 'test'
+  ...
+# Subtest: late mutation rollback cannot republish into the next account
+ok 40 - late mutation rollback cannot republish into the next account
+  ---
+  duration_ms: 61.525041
+  type: 'test'
+  ...
+# Subtest: serialized mutations queued before sign-out never send with the next account
+ok 41 - serialized mutations queued before sign-out never send with the next account
+  ---
+  duration_ms: 50.195029
+  type: 'test'
+  ...
+# Subtest: offline failures retain the current session and successful retries still work
+ok 42 - offline failures retain the current session and successful retries still work
+  ---
+  duration_ms: 36.837929
+  type: 'test'
+  ...
+# Subtest: account switching synchronously removes shared query data and old snapshots
+ok 43 - account switching synchronously removes shared query data and old snapshots
+  ---
+  duration_ms: 93.421386
+  type: 'test'
+  ...
+# Subtest: a snapshot restoration already awaiting storage cannot hydrate the next account
+ok 44 - a snapshot restoration already awaiting storage cannot hydrate the next account
+  ---
+  duration_ms: 101.558463
+  type: 'test'
+  ...
+1..44
+# tests 44
+# suites 0
+# pass 44
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2402.574888

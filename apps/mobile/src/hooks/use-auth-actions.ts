@@ -2,7 +2,8 @@
  * Auth mutations. On success they update the auth store, which flips the root
  * gate. Errors are surfaced via the returned rejection (screens handle UI).
  */
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { useSessionMutation as useMutation } from "./use-session-mutation";
 import { useCallback } from "react";
 import {
   isMfaRequiredResponse,

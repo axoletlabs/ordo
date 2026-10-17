@@ -5,11 +5,12 @@
 import {
   keepPreviousData,
   useInfiniteQuery,
-  useMutation,
   useQuery,
   useQueryClient,
   type QueryClient,
 } from "@tanstack/react-query";
+import { useSessionMutation as useMutation } from "./use-session-mutation";
+import { assertSessionScope, captureSessionScope, isSessionScopeCurrent } from "../lib/session-scope";
 import { bookmarksApi } from "../lib/api/bookmarks";
 import { queryClient } from "../lib/query-client";
 import { useFolderTokenStore } from "../store/folder-tokens";
@@ -334,10 +335,12 @@ export function useMoveBookmark(fromFolderId: string | null) {
             : fromFolderId,
       }),
     onMutate: async ({ id, toFolderId }) => {
+      const owner = captureSessionScope();
       await Promise.all([
         qc.cancelQueries({ queryKey: ["bookmarks"] }),
         qc.cancelQueries({ queryKey: qk.folders }),
       ]);
+      assertSessionScope(owner);
       const snapshots = qc.getQueriesData({ queryKey: ["bookmarks"] });
       const target = collectCachedBookmarks(qc).find((bookmark) => bookmark.id === id);
       if (target) {
@@ -350,12 +353,16 @@ export function useMoveBookmark(fromFolderId: string | null) {
       return { snapshots, originals: target ? [target] : [] };
     },
     onError: async (_e, { toFolderId }, ctx) => {
+      const owner = captureSessionScope();
       await qc.cancelQueries({ queryKey: ["bookmarks"] });
+      if (!isSessionScopeCurrent(owner)) return;
       if (ctx) rollbackBookmarkMoves(qc, ctx.originals, toFolderId, ctx.snapshots);
     },
     onSuccess: async (updated) => {
+      const owner = captureSessionScope();
       // Navigation/prefetch can start another read during the mutation.
       await qc.cancelQueries({ queryKey: ["bookmarks"] });
+      if (!isSessionScopeCurrent(owner)) return;
       moveBookmarkInCache(qc, updated);
     },
     onSettled: () => {
@@ -411,8 +418,10 @@ async function runBookmarkBatchChunks(
   ids: string[],
   run: (chunk: string[]) => Promise<{ updated: number }>,
 ): Promise<{ updated: number }> {
+  const owner = captureSessionScope();
   let updated = 0;
   for (let i = 0; i < ids.length; i += BATCH_ITEM_LIMIT) {
+    assertSessionScope(owner);
     const result = await run(ids.slice(i, i + BATCH_ITEM_LIMIT));
     updated += result.updated;
   }
@@ -446,10 +455,12 @@ export function useBatchBookmarks() {
         return bookmarksApi.batch({ action, ids: chunk }, { folderId: scopeFolderId });
       }),
     onMutate: async ({ action, ids, folderId }) => {
+      const owner = captureSessionScope();
       await Promise.all([
         qc.cancelQueries({ queryKey: ["bookmarks"] }),
         qc.cancelQueries({ queryKey: qk.folders }),
       ]);
+      assertSessionScope(owner);
       const snapshots = qc.getQueriesData({ queryKey: ["bookmarks"] });
       const prevFolders = qc.getQueryData<FolderDto[]>(qk.folders);
       const idSet = new Set(ids);
@@ -472,8 +483,10 @@ export function useBatchBookmarks() {
       return { snapshots, prevFolders, originals };
     },
     onError: async (_e, variables, ctx) => {
+      const owner = captureSessionScope();
       if (variables.action === "move") {
         await qc.cancelQueries({ queryKey: ["bookmarks"] });
+        if (!isSessionScopeCurrent(owner)) return;
         if (ctx) rollbackBookmarkMoves(qc, ctx.originals, variables.folderId ?? null, ctx.snapshots);
         return;
       }
@@ -482,7 +495,9 @@ export function useBatchBookmarks() {
     },
     onSuccess: async (_result, variables) => {
       if (variables.action !== "move") return;
+      const owner = captureSessionScope();
       await qc.cancelQueries({ queryKey: ["bookmarks"] });
+      if (!isSessionScopeCurrent(owner)) return;
       const ids = new Set(variables.ids);
       moveBookmarksInCache(qc, collectCachedBookmarks(qc).filter((bookmark) => ids.has(bookmark.id))
         .map((bookmark) => ({ ...bookmark, folderId: variables.folderId ?? null })));

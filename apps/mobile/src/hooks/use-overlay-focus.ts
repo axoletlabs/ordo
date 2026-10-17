@@ -37,8 +37,9 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
         }
         // Returning from a dropdown should preserve its restored trigger focus.
         if (node()?.contains(document.activeElement) && document.activeElement !== node()) return;
-        const preferred = kind === "dialog" ? items().find((item) => /INPUT|TEXTAREA/.test(item.tagName) && !item.hasAttribute("readonly")) : null;
-        (preferred ?? items()[0] ?? node())?.focus?.();
+        const controls = items();
+        const preferred = kind === "dialog" ? controls.find((item) => /INPUT|TEXTAREA/.test(item.tagName) && !item.hasAttribute("readonly")) : null;
+        (preferred ?? controls[0] ?? node())?.focus?.({ preventScroll: true });
       });
     });
     const key = (event: KeyboardEvent) => {
@@ -49,6 +50,7 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
       if (event.key === "Escape" && dismissible) {
         event.preventDefault(); event.stopPropagation(); dismissRef.current(); return;
       }
+      if (event.key !== "Tab" && !(kind === "menu" && ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key))) return;
       const controls = items();
       if (!controls.length) { if (event.key === "Tab") event.preventDefault(); return; }
       const index = controls.indexOf(document.activeElement as HTMLElement);

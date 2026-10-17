@@ -170,7 +170,10 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   const borderWidth = search ? 0 : focused && !inactive ? 2 : 1;
   const floating = focused || hasText || !!value;
   const floatProgress = useSharedValue(floating ? 1 : 0);
+  const previousFloat = useRef({ floating, reducedMotion: motion.reducedMotion });
   useEffect(() => {
+    if (previousFloat.current.floating === floating && previousFloat.current.reducedMotion === motion.reducedMotion) return;
+    previousFloat.current = { floating, reducedMotion: motion.reducedMotion };
     floatProgress.value = withTiming(floating ? 1 : 0, { duration: motion.reducedMotion ? 0 : 150 });
   }, [floating, floatProgress, motion.reducedMotion]);
   const labelPosition = useAnimatedStyle(() => ({ top: 16 - (filled ? 8 : 16 + 8 * fontScale) * floatProgress.value }));

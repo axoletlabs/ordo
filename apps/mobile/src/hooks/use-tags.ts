@@ -5,10 +5,10 @@
  */
 import {
   useInfiniteQuery,
-  useMutation,
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { useSessionMutation as useMutation } from "./use-session-mutation";
 import { LIST_PAGE_SIZE } from "../lib/list-pagination";
 import { sortTagsDefault } from "../lib/list-sort";
 import { type TagColor, type TagDto } from "@ordo/shared";

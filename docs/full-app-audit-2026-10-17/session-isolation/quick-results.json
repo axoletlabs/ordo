@@ -1,0 +1,1316 @@
+{
+  "screens": [
+    "cold-cache-loading",
+    "light-false-390-normal-save",
+    "light-false-390-normal-sort",
+    "light-false-390-normal-tags-filter",
+    "light-false-390-normal-contents",
+    "light-false-390-normal-reader-settings",
+    "light-false-390-normal-reminder",
+    "light-false-390-normal-calendar",
+    "light-true-390-normal-save",
+    "light-true-390-normal-sort",
+    "light-true-390-normal-tags-filter",
+    "light-true-390-normal-contents",
+    "light-true-390-normal-reader-settings",
+    "light-true-390-normal-reminder",
+    "light-true-390-normal-calendar",
+    "dark-false-390-normal-save",
+    "dark-false-390-normal-sort",
+    "dark-false-390-normal-tags-filter",
+    "dark-false-390-normal-contents",
+    "dark-false-390-normal-reader-settings",
+    "dark-false-390-normal-reminder",
+    "dark-false-390-normal-calendar",
+    "dark-true-390-normal-save",
+    "dark-true-390-normal-sort",
+    "dark-true-390-normal-tags-filter",
+    "dark-true-390-normal-contents",
+    "dark-true-390-normal-reader-settings",
+    "dark-true-390-normal-reminder",
+    "dark-true-390-normal-calendar",
+    "dark-true-1280-normal-save",
+    "dark-true-1280-normal-sort",
+    "dark-true-1280-normal-tags-filter",
+    "dark-true-1280-normal-contents",
+    "dark-true-1280-normal-reader-settings",
+    "dark-true-1280-normal-reminder",
+    "dark-true-1280-normal-calendar",
+    "dark-true-844-reduce-save",
+    "dark-true-844-reduce-sort",
+    "dark-true-844-reduce-tags-filter",
+    "dark-true-844-reduce-contents",
+    "dark-true-844-reduce-reader-settings",
+    "dark-true-844-reduce-reminder",
+    "dark-true-844-reduce-calendar"
+  ],
+  "checks": [
+    {
+      "name": "cold-cache launch does not wait for library network",
+      "pass": true,
+      "details": {
+        "elapsedMs": 902.8,
+        "networkDelayMs": 5000
+      }
+    },
+    {
+      "name": "cold-cache-loading: painted content",
+      "pass": true
+    },
+    {
+      "name": "cold-cache-loading: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "cold-cache-loading: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "cold-cache-loading: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal: incoming page motion stays inside viewport",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal: inline tag fits row",
+      "pass": true,
+      "details": {
+        "target": {
+          "x": 88,
+          "y": 195,
+          "width": 56,
+          "height": 48,
+          "top": 195,
+          "right": 144,
+          "bottom": 243,
+          "left": 88
+        },
+        "body": {
+          "x": 72,
+          "y": 137,
+          "width": 250,
+          "height": 118,
+          "top": 137,
+          "right": 322,
+          "bottom": 255,
+          "left": 72
+        },
+        "row": {
+          "x": 16,
+          "y": 136,
+          "width": 358,
+          "height": 120,
+          "top": 136,
+          "right": 374,
+          "bottom": 256,
+          "left": 16
+        },
+        "fits": true
+      }
+    },
+    {
+      "name": "light-false-390-normal: save focus",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-save: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-save: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-save: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal-save: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal: Escape dismisses dialog",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-sort: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-sort: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-sort: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal-sort: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal: bounded filter menu",
+      "pass": true,
+      "details": {
+        "mountedTags": 13
+      }
+    },
+    {
+      "name": "light-false-390-normal-tags-filter: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-tags-filter: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-tags-filter: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal-tags-filter: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal: End reaches last unmounted catalogue item",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal: catalogue Home and arrow wrapping retain focus",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-contents: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-contents: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-contents: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal-contents: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal-reader-settings: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-reader-settings: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-reader-settings: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal-reader-settings: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal-reminder: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-reminder: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-reminder: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal-reminder: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal-calendar: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-calendar: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-calendar: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal-calendar: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-390-normal: incoming page motion stays inside viewport",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal: inline tag fits row",
+      "pass": true,
+      "details": {
+        "target": {
+          "x": 88,
+          "y": 197,
+          "width": 56,
+          "height": 48,
+          "top": 197,
+          "right": 144,
+          "bottom": 245,
+          "left": 88
+        },
+        "body": {
+          "x": 72,
+          "y": 139,
+          "width": 250,
+          "height": 118,
+          "top": 139,
+          "right": 322,
+          "bottom": 257,
+          "left": 72
+        },
+        "row": {
+          "x": 16,
+          "y": 138,
+          "width": 358,
+          "height": 120,
+          "top": 138,
+          "right": 374,
+          "bottom": 258,
+          "left": 16
+        },
+        "fits": true
+      }
+    },
+    {
+      "name": "light-true-390-normal: save focus",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-save: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-save: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-save: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-390-normal-save: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-390-normal: Escape dismisses dialog",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-sort: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-sort: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-sort: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-390-normal-sort: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-390-normal: bounded filter menu",
+      "pass": true,
+      "details": {
+        "mountedTags": 13
+      }
+    },
+    {
+      "name": "light-true-390-normal-tags-filter: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-tags-filter: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-tags-filter: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-390-normal-tags-filter: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-390-normal: End reaches last unmounted catalogue item",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal: catalogue Home and arrow wrapping retain focus",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-contents: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-contents: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-contents: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-390-normal-contents: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-390-normal-reader-settings: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-reader-settings: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-reader-settings: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-390-normal-reader-settings: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-390-normal-reminder: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-reminder: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-reminder: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-390-normal-reminder: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-390-normal-calendar: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-calendar: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-calendar: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-390-normal-calendar: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-390-normal: incoming page motion stays inside viewport",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal: inline tag fits row",
+      "pass": true,
+      "details": {
+        "target": {
+          "x": 88,
+          "y": 195,
+          "width": 56,
+          "height": 48,
+          "top": 195,
+          "right": 144,
+          "bottom": 243,
+          "left": 88
+        },
+        "body": {
+          "x": 72,
+          "y": 137,
+          "width": 250,
+          "height": 118,
+          "top": 137,
+          "right": 322,
+          "bottom": 255,
+          "left": 72
+        },
+        "row": {
+          "x": 16,
+          "y": 136,
+          "width": 358,
+          "height": 120,
+          "top": 136,
+          "right": 374,
+          "bottom": 256,
+          "left": 16
+        },
+        "fits": true
+      }
+    },
+    {
+      "name": "dark-false-390-normal: save focus",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-save: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-save: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-save: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-390-normal-save: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-390-normal: Escape dismisses dialog",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-sort: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-sort: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-sort: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-390-normal-sort: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-390-normal: bounded filter menu",
+      "pass": true,
+      "details": {
+        "mountedTags": 13
+      }
+    },
+    {
+      "name": "dark-false-390-normal-tags-filter: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-tags-filter: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-tags-filter: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-390-normal-tags-filter: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-390-normal: End reaches last unmounted catalogue item",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal: catalogue Home and arrow wrapping retain focus",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-contents: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-contents: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-contents: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-390-normal-contents: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-390-normal-reader-settings: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-reader-settings: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-reader-settings: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-390-normal-reader-settings: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-390-normal-reminder: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-reminder: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-reminder: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-390-normal-reminder: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-390-normal-calendar: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-calendar: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-calendar: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-390-normal-calendar: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-normal: incoming page motion stays inside viewport",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal: inline tag fits row",
+      "pass": true,
+      "details": {
+        "target": {
+          "x": 88,
+          "y": 197,
+          "width": 56,
+          "height": 48,
+          "top": 197,
+          "right": 144,
+          "bottom": 245,
+          "left": 88
+        },
+        "body": {
+          "x": 72,
+          "y": 139,
+          "width": 250,
+          "height": 118,
+          "top": 139,
+          "right": 322,
+          "bottom": 257,
+          "left": 72
+        },
+        "row": {
+          "x": 16,
+          "y": 138,
+          "width": 358,
+          "height": 120,
+          "top": 138,
+          "right": 374,
+          "bottom": 258,
+          "left": 16
+        },
+        "fits": true
+      }
+    },
+    {
+      "name": "dark-true-390-normal: save focus",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-save: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-save: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-save: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-normal-save: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-normal: Escape dismisses dialog",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-sort: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-sort: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-sort: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-normal-sort: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-normal: bounded filter menu",
+      "pass": true,
+      "details": {
+        "mountedTags": 13
+      }
+    },
+    {
+      "name": "dark-true-390-normal-tags-filter: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-tags-filter: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-tags-filter: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-normal-tags-filter: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-normal: End reaches last unmounted catalogue item",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal: catalogue Home and arrow wrapping retain focus",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-contents: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-contents: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-contents: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-normal-contents: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-normal-reader-settings: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-reader-settings: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-reader-settings: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-normal-reader-settings: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-normal-reminder: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-reminder: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-reminder: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-normal-reminder: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-normal-calendar: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-calendar: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-calendar: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-normal-calendar: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-normal: incoming page motion stays inside viewport",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal: inline tag fits row",
+      "pass": true,
+      "details": {
+        "target": {
+          "x": 308,
+          "y": 197,
+          "width": 56,
+          "height": 48,
+          "top": 197,
+          "right": 364,
+          "bottom": 245,
+          "left": 308
+        },
+        "body": {
+          "x": 292,
+          "y": 139,
+          "width": 700,
+          "height": 118,
+          "top": 139,
+          "right": 992,
+          "bottom": 257,
+          "left": 292
+        },
+        "row": {
+          "x": 236,
+          "y": 138,
+          "width": 808,
+          "height": 120,
+          "top": 138,
+          "right": 1044,
+          "bottom": 258,
+          "left": 236
+        },
+        "fits": true
+      }
+    },
+    {
+      "name": "dark-true-1280-normal: save focus",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-save: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-save: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-save: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-normal-save: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-normal: Escape dismisses dialog",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-sort: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-sort: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-sort: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-normal-sort: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-normal: bounded filter menu",
+      "pass": true,
+      "details": {
+        "mountedTags": 13
+      }
+    },
+    {
+      "name": "dark-true-1280-normal-tags-filter: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-tags-filter: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-tags-filter: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-normal-tags-filter: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-normal: End reaches last unmounted catalogue item",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal: catalogue Home and arrow wrapping retain focus",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-contents: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-contents: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-contents: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-normal-contents: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-normal-reader-settings: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-reader-settings: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-reader-settings: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-normal-reader-settings: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-normal-reminder: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-reminder: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-reminder: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-normal-reminder: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-normal-calendar: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-calendar: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-calendar: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-normal-calendar: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-844-reduce: inline tag fits row",
+      "pass": true,
+      "details": {
+        "target": {
+          "x": 90,
+          "y": 189,
+          "width": 56,
+          "height": 48,
+          "top": 189,
+          "right": 146,
+          "bottom": 237,
+          "left": 90
+        },
+        "body": {
+          "x": 74,
+          "y": 131,
+          "width": 700,
+          "height": 118,
+          "top": 131,
+          "right": 774,
+          "bottom": 249,
+          "left": 74
+        },
+        "row": {
+          "x": 18,
+          "y": 130,
+          "width": 808,
+          "height": 120,
+          "top": 130,
+          "right": 826,
+          "bottom": 250,
+          "left": 18
+        },
+        "fits": true
+      }
+    },
+    {
+      "name": "dark-true-844-reduce: save focus",
+      "pass": true
+    },
+    {
+      "name": "dark-true-844-reduce-save: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-844-reduce-save: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-844-reduce-save: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-844-reduce-save: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-844-reduce: Escape dismisses dialog",
+      "pass": true
+    },
+    {
+      "name": "dark-true-844-reduce-sort: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-844-reduce-sort: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-844-reduce-sort: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-844-reduce-sort: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-844-reduce: bounded filter menu",
+      "pass": true,
+      "details": {
+        "mountedTags": 8
+      }
+    },
+    {
+      "name": "dark-true-844-reduce-tags-filter: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-844-reduce-tags-filter: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-844-reduce-tags-filter: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-844-reduce-tags-filter: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-844-reduce: End reaches last unmounted catalogue item",
+      "pass": true
+    },
+    {
+      "name": "dark-true-844-reduce: catalogue Home and arrow wrapping retain focus",
+      "pass": true
+    },
+    {
+      "name": "dark-true-844-reduce-contents: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-844-reduce-contents: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-844-reduce-contents: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-844-reduce-contents: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-844-reduce-reader-settings: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-844-reduce-reader-settings: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-844-reduce-reader-settings: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-844-reduce-reader-settings: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-844-reduce-reminder: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-844-reduce-reminder: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-844-reduce-reminder: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-844-reduce-reminder: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-844-reduce-calendar: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-844-reduce-calendar: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-844-reduce-calendar: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-844-reduce-calendar: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "no uncaught browser errors",
+      "pass": true,
+      "details": []
+    }
+  ],
+  "issues": [],
+  "errors": [],
+  "performance": [
+    {
+      "name": "light-false-390-normal: cold save dialog",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 809.2,
+      "longTasks": 2,
+      "maxLongTaskMs": 248,
+      "totalLongTaskMs": 314
+    },
+    {
+      "name": "light-false-390-normal: cold contents",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 575.8,
+      "longTasks": 1,
+      "maxLongTaskMs": 143,
+      "totalLongTaskMs": 143
+    },
+    {
+      "name": "light-true-390-normal: cold save dialog",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 808.1,
+      "longTasks": 2,
+      "maxLongTaskMs": 247,
+      "totalLongTaskMs": 314
+    },
+    {
+      "name": "light-true-390-normal: cold contents",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 592.5,
+      "longTasks": 1,
+      "maxLongTaskMs": 147,
+      "totalLongTaskMs": 147
+    },
+    {
+      "name": "dark-false-390-normal: cold save dialog",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 815.6,
+      "longTasks": 2,
+      "maxLongTaskMs": 246,
+      "totalLongTaskMs": 312
+    },
+    {
+      "name": "dark-false-390-normal: cold contents",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 576.9,
+      "longTasks": 1,
+      "maxLongTaskMs": 145,
+      "totalLongTaskMs": 145
+    },
+    {
+      "name": "dark-true-390-normal: cold save dialog",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 813.2,
+      "longTasks": 2,
+      "maxLongTaskMs": 247,
+      "totalLongTaskMs": 315
+    },
+    {
+      "name": "dark-true-390-normal: cold contents",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 584.4,
+      "longTasks": 1,
+      "maxLongTaskMs": 140,
+      "totalLongTaskMs": 140
+    },
+    {
+      "name": "dark-true-1280-normal: cold save dialog",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 812.8,
+      "longTasks": 2,
+      "maxLongTaskMs": 253,
+      "totalLongTaskMs": 320
+    },
+    {
+      "name": "dark-true-1280-normal: cold contents",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 576.3,
+      "longTasks": 1,
+      "maxLongTaskMs": 138,
+      "totalLongTaskMs": 138
+    },
+    {
+      "name": "dark-true-844-reduce: cold save dialog",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 736.6,
+      "longTasks": 2,
+      "maxLongTaskMs": 228,
+      "totalLongTaskMs": 279
+    },
+    {
+      "name": "dark-true-844-reduce: cold contents",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 574.2,
+      "longTasks": 1,
+      "maxLongTaskMs": 141,
+      "totalLongTaskMs": 141
+    }
+  ]
+}

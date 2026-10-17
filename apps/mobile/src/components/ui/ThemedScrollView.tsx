@@ -123,7 +123,7 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
     return (
       <View
         style={[styles.host, fill ? styles.fill : null, wrapper]}
-        onLayout={chainHandlers(bar.onLayout, onLayout)}
+        onLayout={chainHandlers(Platform.OS === "web" ? undefined : bar.onLayout, onLayout)}
       >
         <VerticalScrollView
           ref={ref}
@@ -140,8 +140,8 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
             inner,
             webNoContainingTransform,
           ]}
-          onScroll={animatedScrollHandler ? composed : chainHandlers(bar.onScroll, onScroll)}
-          onContentSizeChange={chainHandlers(bar.onContentSizeChange, onContentSizeChange)}
+          onScroll={animatedScrollHandler ? composed : chainHandlers(Platform.OS === "web" ? undefined : bar.onScroll, onScroll)}
+          onContentSizeChange={chainHandlers(Platform.OS === "web" ? undefined : bar.onContentSizeChange, onContentSizeChange)}
           scrollEventThrottle={scrollEventThrottle ?? 16}
         />
         {bar.overlay}
@@ -251,20 +251,20 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
         contentContainerStyle,
       ]}
       style={[fill ? styles.fill : null, inner, webNoContainingTransform]}
-      onScroll={chainHandlers(bar.onScroll, refresh.onScroll, onScroll)}
+      onScroll={chainHandlers(Platform.OS === "web" ? undefined : bar.onScroll, customRefresh ? refresh.onScroll : undefined, onScroll)}
       onTouchStart={chainHandlers(Platform.OS === "web" ? refresh.onTouchStart : undefined, onTouchStart)}
       onTouchMove={chainHandlers(Platform.OS === "web" ? refresh.onTouchMove : undefined, onTouchMove)}
       onTouchEnd={chainHandlers(Platform.OS === "web" ? refresh.onTouchEnd : undefined, onTouchEnd)}
       onTouchCancel={chainHandlers(Platform.OS === "web" ? refresh.onTouchCancel : undefined, onTouchCancel)}
       onScrollEndDrag={chainHandlers(Platform.OS === "web" ? refresh.onScrollEndDrag : undefined, onScrollEndDrag)}
-      onContentSizeChange={chainHandlers(bar.onContentSizeChange, onContentSizeChange)}
+      onContentSizeChange={chainHandlers(Platform.OS === "web" ? undefined : bar.onContentSizeChange, onContentSizeChange)}
       scrollEventThrottle={scrollEventThrottle ?? 16}
     />
   );
   return (
     <View
       style={[styles.host, fill ? styles.fill : null, wrapper]}
-      onLayout={chainHandlers(bar.onLayout, onLayout)}
+      onLayout={chainHandlers(Platform.OS === "web" ? undefined : bar.onLayout, onLayout)}
     >
       {customRefresh && refresh.gesture ? <GestureDetector gesture={refresh.gesture}>{list}</GestureDetector> : list}
       {bar.overlay}
