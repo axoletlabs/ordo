@@ -1,6 +1,6 @@
 /** Baseline segmented buttons / Expressive connected toggle button group. */
-import React, { useEffect } from "react";
-import { Platform, StyleSheet, View, type TextStyle } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Platform, StyleSheet, View, useWindowDimensions, type TextStyle } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
@@ -19,22 +19,29 @@ function SegmentLabel({ label, foreground, selected, labelStyle }: { label: stri
     selection.value = motion.reducedMotion ? Number(selected) : withSpring(Number(selected), materialMotion.effects.fast);
   }, [foreground, selected, motion.reducedMotion, tint, selection]);
   const labelStyleAnimated = useAnimatedStyle(() => ({ color: tint.value }));
-  const checkStyle = useAnimatedStyle(() => ({ opacity: selection.value, width: 26 * selection.value }));
+  const checkStyle = useAnimatedStyle(() => ({ opacity: selection.value, width: 22 * selection.value }));
   // Retain the check through deselection; animate its slot with the fade so
   // labels don't jump sideways when the selection changes.
   return <><Animated.View testID="material-segment-check" pointerEvents="none" accessible={false}
     style={[{ overflow: "hidden", flexShrink: 0 }, checkStyle]}><MaterialIcon name="checkmark" size={18} color={foreground} /></Animated.View>
-    <AnimatedText variant="labelLarge" numberOfLines={1} style={[{ flexShrink: 1 }, labelStyle, labelStyleAnimated]}>{label}</AnimatedText></>;
+    <AnimatedText testID="material-segment-label" variant="labelLarge" numberOfLines={1} style={[{ flexShrink: 1 }, labelStyle, labelStyleAnimated]}>{label}</AnimatedText></>;
 }
 export interface SegmentedProps<T extends string> {
   options: readonly { value: T; label: string; accessibilityLabel?: string; labelStyle?: TextStyle }[]; value: T; onChange: (value: T) => void;
   accessibilityLabel?: string;
-  orientation?: "horizontal" | "vertical";
+  orientation?: "auto" | "horizontal" | "vertical";
   disabled?: boolean;
 }
-export function Segmented<T extends string>({ options, value, onChange, accessibilityLabel, orientation = "horizontal", disabled = false }: SegmentedProps<T>) {
+export function Segmented<T extends string>({ options, value, onChange, accessibilityLabel, orientation = "auto", disabled = false }: SegmentedProps<T>) {
   const { palette, expressive } = useTheme();
-  const vertical = orientation === "vertical";
+  const { fontScale } = useWindowDimensions();
+  const [width, setWidth] = useState(0);
+  const [labelWidths, setLabelWidths] = useState<Record<string, number>>({});
+  // Reserve the selected check for EVERY segment so selecting another option
+  // never resizes its neighbors. Narrow windows/large fonts stack, not truncate.
+  const minimumWidth = Math.max(0, ...options.map((option) => labelWidths[option.value] ?? 0)) + 22 + 24 + (expressive ? 0 : 2);
+  const vertical = orientation === "vertical" || orientation === "auto" && width > 0 && width < minimumWidth * options.length + (expressive ? 2 * (options.length - 1) : 0);
+  const visualHeight = Math.max(vertical ? 48 : 40, 20 * fontScale + 16);
   const keyboardProps = Platform.OS === "web" ? {
     onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
       if (disabled) return;
@@ -53,7 +60,16 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
       radios[next]?.focus();
     },
   } : {};
-  return <View style={{ minHeight: 48, justifyContent: "center" }}><View {...keyboardProps} accessibilityRole="radiogroup" accessibilityLabel={accessibilityLabel} style={[styles.group, {
+  return <View onLayout={(event) => setWidth(event.nativeEvent.layout.width)} style={{ minHeight: 48, justifyContent: "center" }}>
+    {orientation === "auto" ? <View pointerEvents="none" aria-hidden importantForAccessibility="no-hide-descendants"
+      style={{ position: "absolute", left: 0, right: 0, opacity: 0 }}>
+      {options.map((option) => <Text key={option.value} variant="labelLarge" numberOfLines={1}
+        style={[{ alignSelf: "flex-start" }, option.labelStyle]} onLayout={(event) => {
+          const measured = Math.ceil(event.nativeEvent.layout.width) + 1;
+          setLabelWidths((current) => current[option.value] === measured ? current : { ...current, [option.value]: measured });
+        }}>{option.label}</Text>)}
+    </View> : null}
+    <View {...keyboardProps} accessibilityRole="radiogroup" accessibilityLabel={accessibilityLabel} style={[styles.group, {
     gap: expressive ? 2 : 0, backgroundColor: "transparent",
     borderRadius: radius.full,
     ...(vertical ? { flexDirection: "column" as const, height: "auto" as const } : {}),
@@ -75,7 +91,7 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
         stateLayerColor={fg} shape={{ rest: expressive ? rest : outline, pressed: expressive ? pressed : outline }}
         style={[styles.option, vertical ? { flex: 0, width: "100%" } : null]}
         visualStyle={[styles.visual, {
-          height: vertical ? 48 : 40,
+          height: visualHeight,
           ...(vertical ? { flex: 0, flexShrink: 0, minHeight: 48, width: "100%" as const } : {}),
           backgroundColor: disabled ? selected ? `${palette.onSurface}1f` : "transparent" : selected ? expressive ? palette.secondary : palette.secondaryContainer : expressive ? palette.surfaceContainerLow : "transparent",
           borderColor: disabled ? `${palette.onSurface}1f` : palette.outline,

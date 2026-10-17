@@ -21,6 +21,7 @@ import { spacing } from "../../theme/tokens";
 import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
 import { DEFAULT_FOLDER_ICON, type BookmarkDto, type FolderDto } from "@ordo/shared";
 import { useMoveBookmark, useBatchBookmarks } from "../../hooks/use-bookmarks";
+import { LazyMount } from "../ui/LazyMount";
 
 export interface MoveSheetProps {
   visible: boolean;
@@ -40,7 +41,11 @@ function isRootDestination(d: Destination): d is typeof ROOT_DESTINATION {
   return d === ROOT_DESTINATION;
 }
 
-export function MoveSheet({
+export function MoveSheet(props: MoveSheetProps) {
+  return <LazyMount active={props.visible}>{() => <MoveSheetContent {...props} />}</LazyMount>;
+}
+
+function MoveSheetContent({
   visible,
   onDismiss,
   bookmark,

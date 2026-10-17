@@ -20,6 +20,7 @@ import { useMaterialMotion } from "../../theme/material-motion";
 import { circularIndeterminateArc } from "../../lib/material-progress";
 import { loadingMorphPath, loadingMorphState, MORPH_INTERVAL, MORPH_STEPS } from "../../lib/material-loading";
 import { LOADING_SHAPE_SCALE } from "../../lib/material-loading-shapes";
+import { useAnimationActivity } from "../../hooks/use-animation-activity";
 
 const SIZES = { sm: 16, md: 20, lg: 24 } as const;
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -46,13 +47,14 @@ export function Spinner({
 }) {
   const { palette, expressive } = useTheme();
   const { reducedMotion } = useMaterialMotion();
+  const active = useAnimationActivity() && spinning;
   const extent = spinnerExtent(size);
   const phase = useSharedValue(0);
   const morph = useSharedValue(0);
   const rotation = useSharedValue(0);
 
   useEffect(() => {
-    if (!spinning || reducedMotion || expressive) {
+    if (!active || reducedMotion || expressive) {
       cancelAnimation(phase);
       phase.value = 0;
       return;
@@ -66,7 +68,7 @@ export function Spinner({
       ReduceMotion.Never,
     );
     return () => cancelAnimation(phase);
-  }, [phase, spinning, reducedMotion, expressive]);
+  }, [phase, active, reducedMotion, expressive]);
 
   const stroke = Math.max(2, extent * 0.1);
   const radiusPx = extent / 2 - stroke / 2 - 0.5;
@@ -74,7 +76,7 @@ export function Spinner({
   useEffect(() => {
     morph.value = 0;
     rotation.value = 0;
-    if (expressive && spinning && !reducedMotion) {
+    if (expressive && active && !reducedMotion) {
       morph.value = withRepeat(withTiming(MORPH_STEPS, {
         duration: MORPH_INTERVAL * MORPH_STEPS, easing: Easing.linear, reduceMotion: ReduceMotion.Never,
       }), -1, false, undefined, ReduceMotion.Never);
@@ -83,7 +85,7 @@ export function Spinner({
       }), -1, false, undefined, ReduceMotion.Never);
     }
     return () => { cancelAnimation(morph); cancelAnimation(rotation); };
-  }, [expressive, spinning, reducedMotion, morph, rotation]);
+  }, [expressive, active, reducedMotion, morph, rotation]);
   const arc = useAnimatedProps(() => {
     const motion = !spinning || reducedMotion ? { start: -90, sweep: 90 } : circularIndeterminateArc(phase.value);
     return { strokeDasharray: [circumference * motion.sweep / 360, circumference], strokeDashoffset: -circumference * motion.start / 360 };

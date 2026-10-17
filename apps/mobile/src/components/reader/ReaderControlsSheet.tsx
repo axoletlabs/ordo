@@ -11,6 +11,7 @@ import { PanelHeader } from "../ui/PanelHeader";
 import { Segmented } from "../ui/Segmented";
 import { Text } from "../ui/Text";
 import { Toggle } from "../ui/Toggle";
+import { LazyMount } from "../ui/LazyMount";
 import { spacing } from "../../theme/tokens";
 import { resolveReaderFont } from "./reader-typography";
 import { loadReaderFonts, READER_FONT_FAMILY_LIST, readerFontsReady, useReaderFontRevision } from "../../theme/fonts";
@@ -87,7 +88,11 @@ function ControlGroup({
   );
 }
 
-export const ReaderControlsSheet = React.memo(function ReaderControlsSheet({
+export const ReaderControlsSheet = React.memo(function ReaderControlsSheet(props: ReaderControlsSheetProps) {
+  return <LazyMount active={props.visible}>{() => <ReaderControlsContent {...props} />}</LazyMount>;
+});
+
+const ReaderControlsContent = React.memo(function ReaderControlsContent({
   visible,
   onDismiss,
   preferences,

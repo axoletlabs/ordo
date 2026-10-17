@@ -20,6 +20,8 @@ import {
   collectCachedBookmarks,
   insertCreatedBookmark,
   moveBookmarkInCache,
+  moveBookmarksInCache,
+  moveFolderCounts,
   patchListsFromDetail,
   removeBookmarksEverywhere,
   rollbackBookmarkMoves,
@@ -453,14 +455,9 @@ export function useBatchBookmarks() {
       const idSet = new Set(ids);
       const originals = action === "move" ? collectCachedBookmarks(qc).filter((item) => idSet.has(item.id)) : [];
       if (action === "move") {
-        for (const bookmark of originals) {
-          const destination = folderId ?? null;
-          moveBookmarkInCache(qc, { ...bookmark, folderId: destination });
-          if (bookmark.folderId !== destination) {
-            bumpFolderCount(qc, bookmark.folderId, -1, bookmark.isRead ? 0 : -1);
-            bumpFolderCount(qc, destination, +1, bookmark.isRead ? 0 : +1);
-          }
-        }
+        const destination = folderId ?? null;
+        moveBookmarksInCache(qc, originals.map((bookmark) => ({ ...bookmark, folderId: destination })));
+        moveFolderCounts(qc, originals, destination);
       } else if (action === "delete") {
         removeBookmarksEverywhere(qc, idSet);
       } else if (action === "markRead") {
@@ -487,9 +484,8 @@ export function useBatchBookmarks() {
       if (variables.action !== "move") return;
       await qc.cancelQueries({ queryKey: ["bookmarks"] });
       const ids = new Set(variables.ids);
-      for (const bookmark of collectCachedBookmarks(qc)) {
-        if (ids.has(bookmark.id)) moveBookmarkInCache(qc, { ...bookmark, folderId: variables.folderId ?? null });
-      }
+      moveBookmarksInCache(qc, collectCachedBookmarks(qc).filter((bookmark) => ids.has(bookmark.id))
+        .map((bookmark) => ({ ...bookmark, folderId: variables.folderId ?? null })));
     },
     onSettled: (_data, _error, variables) => {
       if (variables.action === "delete" || variables.action === "addTags") {

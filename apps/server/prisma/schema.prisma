@@ -208,7 +208,9 @@ model Bookmark {
   @@index([userId, fetchStatus])
   @@index([folderId])
   @@index([createdAt])
-  @@index([userId, folderId, createdAt])
+  @@index([userId, folderId, createdAt, id])
+  @@index([userId, createdAt, id])
+  @@index([userId, folderId, title, id])
   @@index([userId, remindAt])
 }
 

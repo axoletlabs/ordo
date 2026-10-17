@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { View } from "react-native";
 import type { ArticleHtmlProps } from "./ArticleHtml";
-import { Skeleton } from "../ui/Skeleton";
+import { Skeleton, SkeletonGroup } from "../ui/Skeleton";
 import { spacing } from "../../theme/tokens";
 
 let renderer: React.ComponentType<ArticleHtmlProps> | null = null;
@@ -37,7 +37,7 @@ export function ReaderArticle(props: ArticleHtmlProps) {
   }, [html]);
   if (failure) throw failure;
   if (Renderer && paintedHtml === html) return <Renderer {...props} />;
-  return <View accessibilityLabel="Loading article" style={{ gap: spacing[12] }}>
+  return <SkeletonGroup><View accessibilityLabel="Loading article" style={{ gap: spacing[12] }}>
     {(["100%", "92%", "68%"] as const).map((width) => <Skeleton key={width} width={width} height={16} />)}
-  </View>;
+  </View></SkeletonGroup>;
 }

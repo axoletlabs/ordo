@@ -15,8 +15,13 @@ import { errorMessage } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
 import { toast } from "../ui/toast-store";
 import { spacing } from "../../theme/tokens";
+import { LazyMount } from "../ui/LazyMount";
 
-export function AddTagsSheet({
+export function AddTagsSheet(props: Parameters<typeof AddTagsContent>[0]) {
+  return <LazyMount active={props.visible}>{() => <AddTagsContent {...props} />}</LazyMount>;
+}
+
+function AddTagsContent({
   visible,
   onDismiss,
   bookmarkIds,

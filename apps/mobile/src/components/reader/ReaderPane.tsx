@@ -105,8 +105,11 @@ import {
 import { copyLink, copyText } from "../../lib/copy-link";
 import { ackBookmarkOpened, openExternalBrowser, openLivePage } from "../../lib/open-website";
 import { reminderClearsOnOpen } from "../../lib/bookmark-reminders";
-import { scrollReadingProgress, shouldFlushReadingProgress } from "../../lib/reading-progress";
+import { reconcileReadingProgress, scrollReadingProgress, shouldFlushReadingProgress } from "../../lib/reading-progress";
 import { fabContentPadding } from "../../lib/fab-layout";
+import { useReducedMotionPreference } from "../../hooks/use-reduced-motion-preference";
+import { createLatestWriteQueue } from "../../lib/latest-write-queue";
+import { useAuthStore } from "../../store/auth";
 
 function useSetContentKindMissing() {
   return { mutate: () => undefined, isPending: false };
@@ -131,6 +134,21 @@ const PROGRESS_DELTA = 0.08;
 /** Trailing idle window before a progress write is flushed. */
 const PROGRESS_DEBOUNCE_MS = 1_500;
 const SELECT_OPEN_MS = 280;const SELECT_CLOSE_MS = 140;
+
+// Survive reader unmount/reopen: a late write from the previous screen must
+// not race the new screen's progress for the same account/server/article.
+const saveProgress = createLatestWriteQueue(
+  async (write: { id: string; folderId: string | null; progress: number; userId: string | undefined; server: string }) => {
+    if (!write.userId || useAuthStore.getState().user?.id !== write.userId || useSettingsStore.getState().serverUrl !== write.server) return null;
+    return bookmarksApi.update(write.id, { readProgress: write.progress }, { folderId: write.folderId });
+  },
+  (updated, write) => {
+    if (!updated || useAuthStore.getState().user?.id !== write.userId || useSettingsStore.getState().serverUrl !== write.server) return;
+    // A concurrent move/tag edit is unrelated to progress. Do not restore its
+    // older folder/tags from the full DTO returned by this request.
+    updateBookmarkEverywhere(queryClient, write.id, (bookmark) => reconcileReadingProgress(bookmark, updated));
+  },
+);
 
 /** Collapse whitespace/newlines so stored titles render as one line-ish. */
 function normalizeTitle(raw: string | null | undefined): string {
@@ -234,7 +252,10 @@ function ReaderPaneInner({
   const { height: windowHeight } = useWindowDimensions();
   const { sceneWidth } = useSceneColumnInsets();
 
-  const cached = bookmarkId ? findBookmarkInCache(queryClient, bookmarkId) : undefined;
+  // The row is only a first-paint fallback; detail is the live query. Do not
+  // scan every loaded folder/search page whenever reader chrome changes.
+  const cached = useMemo(() => bookmarkId ? findBookmarkInCache(queryClient, bookmarkId) : undefined, [bookmarkId]);
+  const reducedMotion = useReducedMotionPreference();
   const skipWebsiteDetail =
     (cached?.fetchStatus === "unsupported" || cached?.fetchStatus === "failed") &&
     cached.contentKindOverride !== "article" &&
@@ -687,6 +708,9 @@ function ReaderPaneInner({
 
   const trackProgressRef = useRef(false);
   const currentArticleRef = useRef<{ id: string; folderId: string | null } | null>(null);
+  // Capture ownership before navigation/logout cleanup can change global auth.
+  // An outgoing reader must never enqueue its article against the next account.
+  const progressOwner = useRef({ userId: useAuthStore.getState().user?.id, server: useSettingsStore.getState().serverUrl }).current;
   const initialProgressRef = useRef(0);
   const latestProgressRef = useRef(0);
   const persistedProgressRef = useRef<number | null>(null);
@@ -726,7 +750,7 @@ function ReaderPaneInner({
     collapsingFab.expand(offsetRef.current);
     const jump = (contentY: number) => {
       if (!Number.isFinite(contentY)) return;
-      scroll.scrollTo({ y: Math.max(0, contentY - spacing[16]), animated: true });
+      scroll.scrollTo({ y: Math.max(0, contentY - spacing[16]), animated: !reducedMotion });
     };
     // Content-space Y = heading window Y - content-origin window Y, measured
     // in the same frame. measureLayout against the inner view silently no-ops
@@ -770,11 +794,13 @@ function ReaderPaneInner({
         jump(headingY - originY);
       },
     );
-  }, [collapsingFab]);
+  }, [collapsingFab, reducedMotion]);
   selectHeadingRef.current = handleHeadingSelect;
 
   const persistProgress = useCallback(
     (id: string, folderId: string | null, value: number) => {
+      const { userId, server } = progressOwner;
+      if (!userId || useAuthStore.getState().user?.id !== userId || useSettingsStore.getState().serverUrl !== server) return;
       const rounded = Math.round(Math.min(1, Math.max(0, value)) * 1000) / 1000;
       // Optimistic: reflect in the detail + list caches immediately.
       updateBookmarkEverywhere(queryClient, id, (b) => ({
@@ -784,18 +810,9 @@ function ReaderPaneInner({
           ? { isRead: true, completedAt: b.completedAt ?? new Date().toISOString() }
           : {}),
       }));
-      bookmarksApi
-        .update(id, { readProgress: rounded }, { folderId })
-        .then((updated) => {
-          // Reconcile with server truth (completedAt/isRead); the spread keeps
-          // detail-only fields like contentHtml.
-          updateBookmarkEverywhere(queryClient, id, (b) => ({ ...b, ...updated }));
-        })
-        .catch(() => {
-          /* best-effort; the server position stays canonical for next open */
-        });
+      saveProgress(`${server}:${userId}:${id}`, { id, folderId, progress: rounded, userId, server });
     },
-    [],
+    [progressOwner],
   );
 
   const flushProgress = useCallback(() => {

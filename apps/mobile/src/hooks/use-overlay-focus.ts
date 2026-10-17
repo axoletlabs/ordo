@@ -4,10 +4,12 @@ import { Platform, type View } from "react-native";
 import { isolateModal } from "../lib/modal-isolation";
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
-export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "dialog" | "menu", dismissible = true, isolateBackground = false, suspended = false) {
+export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "dialog" | "menu", dismissible = true, isolateBackground = false, suspended = false, onNavigate?: (key: string) => boolean) {
   const ref = useRef<View>(null);
   const dismissRef = useRef(onDismiss);
   dismissRef.current = onDismiss;
+  const navigateRef = useRef(onNavigate);
+  navigateRef.current = onNavigate;
   useEffect(() => {
     if (!active || suspended || Platform.OS !== "web" || typeof document === "undefined") return;
     const node = () => ref.current as unknown as HTMLElement | null;
@@ -55,6 +57,8 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
         else if (!event.shiftKey && (index < 0 || index === controls.length - 1)) { event.preventDefault(); controls[0].focus(); }
       }
       if (kind !== "menu" || /INPUT|TEXTAREA|SELECT/.test((document.activeElement as HTMLElement)?.tagName ?? "")) return;
+      // A virtualized catalogue must navigate its data, not just mounted rows.
+      if (navigateRef.current?.(event.key)) { event.preventDefault(); return; }
       const rows = controls.filter((item) => item.getAttribute("role")?.startsWith("menuitem"));
       if (!rows.length) return;
       const current = rows.indexOf(document.activeElement as HTMLElement);

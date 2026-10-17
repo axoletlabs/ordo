@@ -35,7 +35,10 @@ export function bookmarkListItemType(bookmark: BookmarkDto | null | undefined): 
 export function estimateBookmarkRowSize(bookmark: BookmarkDto | null | undefined, omitTagIds?: readonly string[]): number {
   if (!bookmark) return BOOKMARK_ROW_BASE_SIZE;
   const hasTags = bookmark.tags?.some((tag) => !omitTagIds?.includes(tag.id));
-  return hasTags || bookmark.remindAt != null || bookmark.suggestedTags?.length ? 96 : BOOKMARK_ROW_BASE_SIZE;
+  // Inline tags are actions with real 48dp targets, not 24dp text metadata.
+  // Title (24) + metadata (18) + gap (4) + tags (48) + padding (24) = 118.
+  if (hasTags) return 120;
+  return bookmark.remindAt != null || bookmark.suggestedTags?.length ? 96 : BOOKMARK_ROW_BASE_SIZE;
 }
 
 export function listRowLayouts(heights: readonly number[]) {

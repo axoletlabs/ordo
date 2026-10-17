@@ -45,6 +45,7 @@ import { useMenuHighlight } from "../../hooks/use-menu-highlight";
 import { useOverlaySessionMode } from "../../lib/overlay-session-mode";
 import { localPasswordAutofillProps, passwordAutofillProps } from "../../lib/password-autofill";
 import { AccountAutofillIdentity } from "../auth/AccountAutofillIdentity";
+import { LazyMount } from "../ui/LazyMount";
 
 type Mode = "menu" | "rename" | "lockChoice" | "lockCredential" | "icon" | "delete" | "removePassword" | "removePasswordAccount";
 
@@ -58,7 +59,11 @@ export interface FolderActionsSheetProps {
   onLockSet?: () => void;
 }
 
-export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDeleted, onLockSet }: FolderActionsSheetProps) {
+export function FolderActionsSheet(props: FolderActionsSheetProps) {
+  return <LazyMount active={props.visible}>{() => <FolderActionsContent {...props} />}</LazyMount>;
+}
+
+function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, onLockSet }: FolderActionsSheetProps) {
   const { palette } = useTheme();
   const serverInfo = useServerInfo();
   /** Older servers drop lockType and silently store every lock as a password. */

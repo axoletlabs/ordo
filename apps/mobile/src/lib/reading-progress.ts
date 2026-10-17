@@ -1,3 +1,5 @@
+import type { BookmarkDto } from "@ordo/shared";
+
 /** Map a vertical scroll offset to a 0–1 reading fraction. */
 export function scrollReadingProgress(
   offset: number,
@@ -20,6 +22,11 @@ export function shouldFlushReadingProgress(
   completion: number,
 ): boolean {
   if (last === null) return true;
-  if (next >= completion) return true;
+  if (next >= completion && last < completion) return true;
   return Math.abs(next - last) >= delta;
+}
+/** Reconcile only progress fields; a full response may predate a move/tag edit. */
+export function reconcileReadingProgress<T extends BookmarkDto>(bookmark: T, updated: BookmarkDto): T {
+  return { ...bookmark, readProgress: updated.readProgress, isRead: updated.isRead, completedAt: updated.completedAt,
+    updatedAt: updated.updatedAt > bookmark.updatedAt ? updated.updatedAt : bookmark.updatedAt };
 }
