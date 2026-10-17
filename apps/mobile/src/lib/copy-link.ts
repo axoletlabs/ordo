@@ -21,8 +21,9 @@ export async function copyText(value: string, success = "Copied"): Promise<void>
   if (!value) return;
   haptics.light();
   try {
-    await Clipboard.setStringAsync(value);
-    toast.success(success);
+    const copied = await Clipboard.setStringAsync(value);
+    if (copied) toast.success(success);
+    else toast.error("Couldn't copy that.");
   } catch {
     toast.error("Couldn't copy that.");
   }

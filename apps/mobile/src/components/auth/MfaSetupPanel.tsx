@@ -1,11 +1,15 @@
 import React, { useState } from "react";
-import { Share, StyleSheet, View } from "react-native";
+import { StyleSheet, View, useWindowDimensions } from "react-native";
 import { PressableScale } from "../ui/PressableScale";
 import QRCode from "react-native-qrcode-svg";
 import { Button } from "../ui/Button";
 import { Text } from "../ui/Text";
 import { OtpInput, type OtpStatus } from "../ui/OtpInput";
+import { FloatingPanel } from "../ui/FloatingPanel";
+import { PanelHeader } from "../ui/PanelHeader";
+import { PanelActions } from "../ui/SheetActionRow";
 import { authApi } from "../../lib/api/auth";
+import { copyText } from "../../lib/copy-link";
 import { errorMessage } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -21,8 +25,10 @@ export function MfaSetupPanel({
   existingCode?: string;
 }) {
   const { palette } = useTheme();
+  const { width, height } = useWindowDimensions();
   const [secret, setSecret] = useState<string | null>(null);
   const [otpauthUrl, setOtpauthUrl] = useState<string | null>(null);
+  const [qrExpanded, setQrExpanded] = useState(false);
   const [starting, setStarting] = useState(false);
   const [code, setCode] = useState("");
   const [confirming, setConfirming] = useState(false);
@@ -77,18 +83,23 @@ export function MfaSetupPanel({
 
   return (
     <View style={styles.block}>
-      <View style={[styles.qr, { backgroundColor: "#fff", borderColor: palette.border }]}>
+      <PressableScale
+        accessibilityRole="button"
+        accessibilityLabel="Enlarge authenticator QR code"
+        accessibilityHint="Opens a larger QR code for scanning. Tap outside to close."
+        accessibilityState={{ expanded: qrExpanded }}
+        style={[styles.qr, { borderColor: palette.outlineVariant }]}
+        onPress={() => setQrExpanded(true)}
+      >
         <QRCode value={otpauthUrl} size={180} />
-      </View>
+      </PressableScale>
       <Text variant="footnote" color="secondary" align="center">
-        Can't scan? Enter this key in your app:
+        Can't scan? Tap to copy this key into your app:
       </Text>
-      <PressableScale accessibilityRole="button" accessibilityLabel="Share authenticator key"
-        accessibilityHint="Only share this key with your authenticator app."
+      <PressableScale accessibilityRole="button" accessibilityLabel="Copy authenticator key"
+        accessibilityHint="Copies the setup key to your clipboard to paste into your authenticator app."
         style={styles.secretTarget}
-        onPress={() => {
-          void Share.share({ message: secret, title: "Authenticator key" }).catch(() => undefined);
-        }}
+        onPress={() => void copyText(secret, "Authenticator key copied")}
       >
         <Text variant="mono" align="center" style={styles.secret}>
           {secret}
@@ -105,6 +116,13 @@ export function MfaSetupPanel({
         error={error || undefined}
         label="Authenticator code"
       />
+      <FloatingPanel visible={qrExpanded} onDismiss={() => setQrExpanded(false)} maxWidth={384}>
+        <PanelHeader title="Authenticator QR code" />
+        <View style={[styles.qr, { borderColor: palette.outlineVariant }]}>
+          <QRCode value={otpauthUrl} size={Math.max(96, Math.min(256, width - 112, height - 280))} />
+        </View>
+        <PanelActions confirmLabel="Done" onConfirm={() => setQrExpanded(false)} />
+      </FloatingPanel>
     </View>
   );
 }
@@ -164,6 +182,8 @@ const styles = StyleSheet.create({
   secretTarget: { minHeight: 48, justifyContent: "center", paddingHorizontal: spacing[8] },
   qr: {
     alignSelf: "center",
+    // Keep a white quiet zone around the black QR modules in either theme.
+    backgroundColor: "#fff",
     padding: spacing[16],
     borderRadius: radius.lg,
     borderWidth: StyleSheet.hairlineWidth,
