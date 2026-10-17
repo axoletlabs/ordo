@@ -279,6 +279,100 @@ branches; there is no connected native device for a runtime FPS claim. The
 broader animation suite's stale `Save` selector was updated to the existing
 `Save bookmark` accessible label (also present on the baseline).
 
+### Clock picker: reducing the remaining first-paint tree
+
+Baseline `2dfdc74` includes the idle-animation fix above and the current shared
+panel's bottom-sheet support (the reminder still uses dialog presentation).
+Both compared builds include that same shared-panel implementation.
+The idle-animation fix did not remove
+the time grid itself: each of its 24–36 `AnimatedStatePressable` instances still
+initializes four shared values and four animated styles, plus its native/web
+view tree. The 31-date calendar also mounts alongside it. These are synchronous
+React/animation/layout costs before useful content can paint, not a deliberate
+opening timer or a backend/notification-permission request. The overlay portal
+publishes into a sibling host, so making the panel visible still has to mount
+that entire content tree before its first useful frame. The previous release's
+OTA job completed successfully; that alone does not establish which update an
+individual device has applied.
+
+The new picker has two explicit editing steps rather than a scrolling wall of
+date/hour/minute buttons:
+
+- **Time opens first:** a Material clock with large hour/minute readouts, the
+  device's 12/24-hour cycle, and AM/PM when applicable. Tap or drag a hand;
+  choosing an hour advances to minutes only after release. The 24-hour dial has
+  outer 1–12 and inner 00/13–23 rings.
+- **One adjustable surface:** SVG numerals are paint, not separate animated
+  pressables. A single gesture/slider handles the face, with native
+  increment/decrement actions and web arrow/Home/End/Page keys. Minute taps use
+  the existing five-minute steps; dragging supports individual minutes. Exact
+  existing minutes are preserved; keyboard/accessibility actions also adjust
+  by one minute.
+- **Date is a real, separate step:** it mounts the existing 48dp calendar,
+  preserving keyboard navigation and explicit Android-safe selection circles.
+  Time edits do not construct calendars/date labels. Date edits do not mount a
+  time grid. Switching steps retains the chosen datetime and the tab's focus.
+- Opening resets the draft before committing descendants, not in a post-mount
+  effect. A session-scoped datetime formatter avoids repeated ICU construction
+  during clock edits and respects the same hour cycle as the clock readout.
+
+No hidden prewarming, delayed body reveal, artificial opening sleep or shortened
+fade is used. The benchmark works with both exports and also measures switching
+to Date and back to Time, to detect merely moving the pause to the second step.
+Run with `ORDO_UI_REMINDER_PERF_ONLY=1` as above; the first-frame probe now accepts
+either the baseline calendar or the complete new clock SVG. `dialogNodes` and
+`controls` count descendants/interactive roles inside the dialog, not the app
+background. Native frame timing still requires an attached device.
+
+Paired release-web exports use baseline `2dfdc74` and PR #32's combined tree
+(`6bc0ba3` plus that same baseline). Same ARM64 host, Chromium headless shell
+1243, 390×844, dark, full motion, 4× CPU throttling; medians of three fresh
+contexts per design mode, each cold + reopen:
+
+| Mode / opening | First content before → clock (ms) | Largest task before → clock (ms) | Controls before → clock |
+| --- | --- | --- | --- |
+| Standard / first | 314.3 → 166.5 | 265 → 137 | 61 → 9 |
+| Standard / reopen | 343.7 → 123.8 | 263 → 101 | 61 → 9 |
+| Expressive / first | 341.3 → 172.9 | 301 → 145 | 71 → 7 |
+| Expressive / reopen | 301.7 → 144.7 | 266 → 121 | 71 → 7 |
+
+Standard uses en-US/12h and Expressive en-GB/24h in the timing harness; the
+interaction matrix independently crosses both hour cycles with both modes.
+Dialog DOM descendants fall from 245–266 to 82–86. Date-step medians are
+109–161ms, and returning to Time is 71–100ms under the same throttle, below
+the old opening stall rather than moving it intact to the next tap.
+
+These are observed first-content reductions of 47–64%, not an isolated native
+speedup or a zero-long-task claim. This shared host had other workloads; no
+builds/tests from this session ran concurrently with measurement. Total
+post-opening script/task time did not improve uniformly (Expressive cold total
+task time was nearly unchanged), so do not turn the first-content result into
+a blanket CPU/FPS percentage. First content is the first RAF observing the
+complete interactive clock/calendar DOM, not the end of the unchanged fade.
+Raw samples, CPU profiles and export source maps remain under
+`/home/builder/ci/ordo-reminder-clock-oct17/artifacts/`, in
+`perf-integrated-before`, `perf-integrated-after`, `baseline` and `clock`.
+
+Validation on that combined tree: 617 mobile tests, 118 Material tests,
+typecheck/lint, release-web and Android JS-only exports pass. Eight
+light/dark × Standard/Expressive × 12/24h picker contexts pass (40 captures),
+including tap/drag, one-minute precision, 24h inner ring, keyboard focus,
+short windows, busy saves, quick Back/reopen and prevention of accidental SVG
+text selection. The overlay matrix passes (24 captures). Handler tests execute
+Android/iOS/web code paths, including cancelled/batched gestures; they are not
+native visual tests. The broad legacy accessibility suite stops before the
+reminder section on the same registration `aria-describedby`/Required-helper
+assertion on baseline and clock builds. Auth is unchanged; that assertion was
+not weakened to claim a green suite.
+
+While this change was being merged, `cec6fce` removed the repository's test
+suite and scripts. That removal is preserved: the clock validation additions
+and modifications are not reintroduced into the shipping tree. The results
+above were obtained before removal, using the archived harness; temporary
+artifacts and `/tmp/opencode/reminder-clock-validation-archive.tar` retain the
+validation evidence. The final merge continues with the repository's current
+build/typecheck/lint CI gates.
+
 ## What changed
 
 ### Launch
