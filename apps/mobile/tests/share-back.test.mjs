@@ -55,7 +55,9 @@ function harness({ pending = false, expressive = false, reducedMotion = false, w
     } },
   };
   const motion = { reducedMotion, spatial: {} };
+  const pan = new Proxy({}, { get: () => () => pan });
   const services = {
+    "react-native-gesture-handler": { Gesture: { Pan: () => pan }, GestureDetector: "GestureDetector" },
     "@ordo/shared": { isSupportedUrl: () => true },
     "expo-clipboard": {},
     "icon-glyph": { iconGlyphStyle: () => ({}) },

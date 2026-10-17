@@ -4,7 +4,7 @@ import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { Button, type ButtonVariant } from "./Button";
 import { ContextMenuItem } from "./ContextMenu";
 import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
-import { spacing } from "../../theme/tokens";
+import { spacing, type Spacing } from "../../theme/tokens";
 
 export const sheetMenuStyles = StyleSheet.create({
   stack: { gap: spacing[8], marginTop: spacing[8] },
@@ -35,6 +35,7 @@ export function PanelActions({
   children,
   fullWidth = false,
   inline = false,
+  topSpacing = 24,
 }: {
   confirmLabel: string;
   onConfirm: () => void;
@@ -49,9 +50,10 @@ export function PanelActions({
   fullWidth?: boolean;
   /** Place supplementary navigation beside the actions in short, wide panels. */
   inline?: boolean;
+  topSpacing?: Spacing;
 }) {
   const actions = (
-    <View style={sheetMenuStyles.row}>
+    <View style={[sheetMenuStyles.row, { marginTop: spacing[topSpacing] }]}>
       {inline && children ? <View style={{ flex: 1, minWidth: 0 }}>{children}</View> : null}
       {onCancel ? <Button
         label={cancelLabel}

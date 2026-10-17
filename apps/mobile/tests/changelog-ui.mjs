@@ -69,22 +69,44 @@ try {
       const { context, page } = await setup({ theme, expressive, viewport, reducedMotion: expressive ? "reduce" : "no-preference" });
       await page.goto(base);
       const panel = await visibleDialog(page);
-      await panel.getByText("Installed", { exact: true }).waitFor();
-      assert.ok((await panel.innerText()).includes("Ordo v0.3.0"), "Automatically select installed notes, not a newer release");
+      const sheetHeader = panel.getByTestId("material-sheet-header");
+      await sheetHeader.getByText("v0.3.0", { exact: true }).waitFor();
+      const headerText = await sheetHeader.innerText();
+      assert.ok(!/Installed|Available|Oct|2026|Ordo/.test(headerText), "Header contains only the heading and release version");
       await assertContained(page, panel);
-      const highlights = panel.getByTestId("changelog-highlights");
+      const panelBox = await panel.boundingBox();
+      assert.ok(Math.abs(panelBox.y + panelBox.height - viewport.height) < 2, "Sheet meets the bottom edge, not a floating dialog");
+      if (viewport.width < 600) assert.equal(panelBox.width, viewport.width, "Compact sheets use the full screen width");
+      else assert.ok(panelBox.width <= 640, "Wide sheets constrain the reading width");
+      const sheetShape = await panel.evaluate((node) => {
+        const style = getComputedStyle(node);
+        return { top: style.borderTopLeftRadius, bottom: style.borderBottomLeftRadius };
+      });
+      assert.equal(sheetShape.top, expressive ? "32px" : "28px");
+      assert.equal(sheetShape.bottom, "0px");
+      const surfaces = await panel.evaluate((node) => {
+        const header = getComputedStyle(node.querySelector('[data-testid="material-sheet-header"]'));
+        const body = getComputedStyle(node.querySelector('[data-testid="material-sheet-body"]'));
+        const actions = getComputedStyle(node.querySelector('[data-testid="material-sheet-actions"]'));
+        return { header: header.backgroundColor, body: body.backgroundColor, footer: actions.backgroundColor,
+          headerDivider: parseFloat(header.borderBottomWidth), footerDivider: parseFloat(actions.borderTopWidth) };
+      });
+      assert.equal(surfaces.header, surfaces.body, "One continuous sheet surface in both light and dark mode");
+      assert.equal(surfaces.header, surfaces.footer);
+      assert.equal(surfaces.headerDivider, 0, "No separator between the header and notes");
+      assert.equal(surfaces.footerDivider, 0, "No separator above release history and dismissal");
+      if (viewport.height >= 480) await panel.getByText("Earlier updates", { exact: true }).waitFor();
+      const highlights = panel.getByTestId("changelog-list").first();
       const listGeometry = await highlights.evaluate((group) => {
         const rows = [...group.children];
         const first = rows[0];
-        const text = first.firstElementChild;
+        const text = first.lastElementChild.firstElementChild;
         const style = getComputedStyle(first);
         return {
           content: first.textContent,
           textWidth: text.getBoundingClientRect().width,
           width: group.getBoundingClientRect().width,
           topCorner: style.borderTopLeftRadius,
-          innerCorner: getComputedStyle(rows[1]).borderTopLeftRadius,
-          lastCorner: getComputedStyle(rows.at(-1)).borderBottomLeftRadius,
           divider: parseFloat(style.borderBottomWidth),
           fontSize: getComputedStyle(text).fontSize,
           background: style.backgroundColor,
@@ -92,19 +114,12 @@ try {
         };
       });
       assert.equal(listGeometry.content, "Faster long-article reading and smoother large libraries.", "No decorative ticks or icon column");
-      assert.ok(listGeometry.textWidth >= listGeometry.width - 33, "Notes use the full list width, with only 16dp text rails");
+      assert.ok(listGeometry.textWidth >= listGeometry.width - 17, "Only a small Markdown bullet rail, no nested card padding");
       assert.equal(listGeometry.fontSize, "16px", "Keep the Material body-large role; don't shrink copy to fit");
       assert.equal(listGeometry.horizontalOverflow, false);
-      if (expressive) {
-        assert.equal(listGeometry.topCorner, "16px");
-        assert.equal(listGeometry.innerCorner, "4px");
-        assert.equal(listGeometry.lastCorner, "16px");
-        assert.equal(listGeometry.divider, 0);
-        assert.notEqual(listGeometry.background, "rgba(0, 0, 0, 0)");
-      } else {
-        assert.equal(listGeometry.topCorner, "0px");
-        assert.ok(listGeometry.divider > 0, "Baseline lists use dividers, not nested cards");
-      }
+      assert.equal(listGeometry.topCorner, "0px");
+      assert.equal(listGeometry.divider, 0);
+      assert.equal(listGeometry.background, "rgba(0, 0, 0, 0)", "Continuous notes, not segmented cards in either mode");
       const heading = await panel.getByRole("heading", { name: "What's new", exact: true }).boundingBox();
       const intro = await panel.getByText("The first preview of the 0.3.0 cycle, focused on performance and day-to-day reliability.", { exact: true }).boundingBox();
       assert.ok(intro.y - heading.y < 112, "Release metadata stays compact, including narrow portrait layouts");
@@ -127,6 +142,8 @@ try {
       });
       const footerAfter = await panel.getByRole("button", { name: "Got it", exact: true }).boundingBox();
       assert.equal(footerBefore.y, footerAfter.y, "Footer must not scroll with notes");
+      assert.equal((await panel.getByRole("heading", { name: "What's new", exact: true }).boundingBox()).y, heading.y,
+        "Header stays separate and fixed while the notes scroll");
       await panel.getByRole("button", { name: "v0.2.0", exact: true }).click();
       await panel.getByText("Design and navigation", { exact: true }).waitFor();
       await panel.getByRole("button", { name: "v0.3.0", exact: true }).click();
@@ -156,8 +173,28 @@ try {
       await dialog(page).waitFor({ state: "hidden" });
       await page.getByRole("button", { name: "Changelog", exact: true }).click();
       await visibleDialog(page);
-      await page.keyboard.press("Escape");
+      await panel.getByRole("button", { name: "Dismiss sheet", exact: true }).click();
       await dialog(page).waitFor({ state: "hidden" });
+      if (viewport.width === 390) {
+        await page.getByRole("button", { name: "Changelog", exact: true }).click();
+        const draggable = await visibleDialog(page);
+        const handle = await draggable.getByRole("button", { name: "Dismiss sheet", exact: true }).boundingBox();
+        await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+        await page.mouse.down();
+        for (let step = 1; step <= 8; step++) {
+          await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2 + step * 3);
+          await page.waitForTimeout(40);
+        }
+        assert.ok((await draggable.boundingBox()).y > panelBox.y + 12, "The handle tracks a downward drag");
+        await page.mouse.up();
+        await page.waitForTimeout(500);
+        assert.equal(await draggable.isVisible(), true, "A short drag springs back, without dismissing");
+        await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2 + 120, { steps: 8 });
+        await page.mouse.up();
+        await dialog(page).waitFor({ state: "hidden" });
+      }
       if (viewport.width === 390) {
         await page.evaluate(() => localStorage.setItem("ordo.changelogSeenBuild", JSON.stringify("0.2.0:previous-build")));
         await page.goto(base);
@@ -167,6 +204,19 @@ try {
       }
       await context.close();
     }
+  }
+  // A very short window cannot keep every section fixed. The entire sheet
+  // must remain scrollable, with the final note and dismissal still reachable.
+  for (const theme of ["light", "dark"]) for (const expressive of [false, true]) {
+    const { context, page } = await setup({ theme, expressive, viewport: { width: 844, height: 240 }, reducedMotion: "reduce" });
+    await page.goto(base);
+    const panel = await visibleDialog(page);
+    const scroller = panel.getByTestId("material-sheet-body");
+    const sizes = await scroller.evaluate((node) => ({ viewport: node.clientHeight, content: node.scrollHeight }));
+    assert.ok(sizes.content > sizes.viewport, "Tiny windows scroll the whole sheet rather than clip its content");
+    await panel.getByRole("button", { name: "Got it", exact: true }).click();
+    await dialog(page).waitFor({ state: "hidden" });
+    await context.close();
   }
   // An unavailable feed must not show or mark an empty automatic dialog.
   const { context, page } = await setup({ feed: [] });
@@ -194,7 +244,7 @@ try {
   await dialog(failed.page).waitFor({ state: "hidden" });
   await failed.context.close();
   assert.deepEqual(errors, []);
-  console.log("Changelog UI: 16 theme/layout cases, full-width icon-free lists, Material type/shape roles, compact header, fixed footer, scroll reset, focus trap, keyboard dismissal, once-per-build persistence/replay, empty feed and rate-limit retry passed.");
+  console.log("Changelog UI: 20 theme/layout cases, bottom attachment, unified divider-free surface, continuous Markdown, minimal fixed header/footer, short-window fallback, drag dismissal/cancellation, scroll reset, focus trap, keyboard dismissal, once-per-build persistence/replay, empty feed and rate-limit retry passed.");
 } finally {
   await browser.close();
 }
