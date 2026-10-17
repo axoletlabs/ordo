@@ -298,7 +298,7 @@ function FloatingPanelSurface({
         // would discard its measurements and repeat the cold layout on open.
         style={[styles.root, collapsedObscured ? { display: "none" } : null,
           Platform.OS === "web" && !rendered ? { visibility: "hidden" } as unknown as ViewStyle : null]}
-        onLayout={(event) => { const next = event.nativeEvent.layout.height; if (!obscured && next > 0) setAvailableHeight((current) => Math.abs(current - next) < 1 ? current : next); }}
+        onLayout={Platform.OS === "web" ? undefined : (event) => { const next = event.nativeEvent.layout.height; if (!obscured && next > 0) setAvailableHeight((current) => Math.abs(current - next) < 1 ? current : next); }}
       >
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, scrimStyle]}>
           <View style={[StyleSheet.absoluteFill, { backgroundColor: palette.overlay }]} />
@@ -316,7 +316,7 @@ function FloatingPanelSurface({
             Platform.OS !== "web" ? { flex: 0, height: restHeight } : null]}>
           <Animated.View
             ref={panelRef}
-            onLayout={(event) => setPanelHeight(event.nativeEvent.layout.height)}
+            onLayout={Platform.OS === "web" ? undefined : (event) => setPanelHeight(event.nativeEvent.layout.height)}
             role="dialog"
             aria-modal={visible && interactive && !obscured}
             aria-hidden={!visible}

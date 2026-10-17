@@ -1,7 +1,8 @@
 /**
  * Folder queries + mutations (optimistic create/rename/delete).
  */
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import { useSessionMutation as useMutation } from "./use-session-mutation";
 import { foldersApi } from "../lib/api/folders";
 import { queryClient } from "../lib/query-client";
 import { qk, tagsAnyAccess } from "../lib/api/query-keys";

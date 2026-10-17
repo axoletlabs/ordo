@@ -226,7 +226,7 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
     }
     // The access token can be stale after a concurrent refresh rotated it out;
     // always drop the session row too so logout can't silently no-op.
-    await this.prisma.session.delete({ where: { id: sessionId } }).catch(() => undefined);
+    await this.prisma.session.deleteMany({ where: { id: sessionId } });
   }
 
   async me(userId: string): Promise<UserDto> {

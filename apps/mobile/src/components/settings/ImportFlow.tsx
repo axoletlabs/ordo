@@ -4,7 +4,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSessionMutation as useMutation } from "../../hooks/use-session-mutation";
 import type { DuplicatePolicy, FolderDto, ImportJobDto, ImportPreviewDto } from "@ordo/shared";
 import { IMPORT_EXPORT, normalizeImportPreview } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";

@@ -15,6 +15,7 @@ import {
 } from "@ordo/shared";
 import { toast } from "../components/ui/toast-store";
 import { bookmarksApi } from "./api/bookmarks";
+import { assertSessionScope, captureSessionScope, isSessionScopeCurrent } from "./session-scope";
 import { foldersApi } from "./api/folders";
 import { tagsApi } from "./api/tags";
 import { sortFoldersDefault, sortTagsDefault } from "./list-sort";
@@ -382,7 +383,9 @@ async function deleteIfPresent(run: () => Promise<unknown>) {
 }
 
 async function replayDeleteIntent(key: string, intent: DeleteIntent) {
+  const owner = captureSessionScope();
   const assertScope = () => {
+    assertSessionScope(owner);
     if (deleteJournalKey() !== key) throw new Error("Deletion paused after account or server changed.");
   };
   const removeChunks = async (ids: string[], batch: (ids: string[]) => Promise<unknown>, single: (id: string) => Promise<unknown>) => {
@@ -410,6 +413,7 @@ async function replayDeleteIntent(key: string, intent: DeleteIntent) {
     assertScope();
     await deleteIfPresent(() => tagsApi.remove(id));
   }
+  assertScope();
   forgetDeleteIntent(key, intent.id);
   if (deleteJournalKey() !== key) return;
   releaseIntent(intent);
@@ -434,8 +438,9 @@ export function resumePendingDeletes() {
       for (const id of intent.tags) pendingTagIds.add(id);
       if (activeIntents.has(activeKey)) continue;
       activeIntents.add(activeKey);
+      const owner = captureSessionScope();
       void replayDeleteIntent(key, intent).catch((cause) => {
-        if (deleteJournalKey() !== key) return;
+        if (!isSessionScopeCurrent(owner) || deleteJournalKey() !== key) return;
         const status = (cause as { status?: number }).status;
         if (status && status >= 400 && status < 500) {
           // Expired folder access requires an explicit unlock, not an invisible
@@ -464,6 +469,7 @@ export function resumePendingDeletes() {
 }
 
 export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; commit: () => void } {
+  const owner = captureSessionScope();
   const noop = { undo: () => {}, commit: () => {} };
   syncJournalScope();
   const folders = (opts.folders ?? []).filter((folder) => !pendingFolderIds.has(folder.id));
@@ -517,7 +523,7 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
 
   const settle = (undo: boolean): boolean => {
     if (settled) return true;
-    if (deleteJournalKey() !== journal.key || generation !== scopeGeneration) return false;
+    if (!isSessionScopeCurrent(owner) || deleteJournalKey() !== journal.key || generation !== scopeGeneration) return false;
     if (undo) {
       try { forgetDeleteIntent(journal.key, journal.intent.id); } catch (cause) {
         toast.error(errorMessage(cause, "Couldn't save Undo. Try again."));
@@ -533,7 +539,7 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
       return true;
     }
     void replayDeleteIntent(journal.key, journal.intent).catch((cause) => {
-      if (deleteJournalKey() !== journal.key || generation !== scopeGeneration) return;
+      if (!isSessionScopeCurrent(owner) || deleteJournalKey() !== journal.key || generation !== scopeGeneration) return;
       const status = (cause as { status?: number }).status;
       if (status && status >= 400 && status < 500) {
         try { forgetDeleteIntent(journal.key, journal.intent.id); } catch (storageError) {

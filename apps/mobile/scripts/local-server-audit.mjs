@@ -27,7 +27,7 @@ async function capture(name) {
   check(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `${name}: viewport contained`);
 }
 async function request(path, options = {}) {
-  const response = await fetch(new URL(path, api), { ...options, headers: { "content-type": "application/json", "x-ordo-client": "mobile",
+  const response = await fetch(new URL(path, api), { ...options, headers: { "content-type": "application/json", "x-client-type": "mobile",
     ...(token ? { authorization: `Bearer ${token}` } : {}), ...options.headers },
     ...(options.body ? { body: JSON.stringify(options.body) } : {}) });
   const body = await response.json();
@@ -138,6 +138,10 @@ try {
   await page.route("**/api/import-export/import/*/commit", async (route) => { arrived(); await heldCommit; await route.continue(); });
   await button("Import").click();
   await committing;
+  // Network dispatch precedes React's pending-state commit. Wait for the
+  // observable state, not an incidental scheduling order on a fast local host.
+  await page.waitForFunction(() => Array.from(document.querySelectorAll('[role="radio"]')).some((node) =>
+    node.getAttribute("aria-label") === "Update" && node.matches(':disabled, [aria-disabled="true"]')));
   check(await page.getByRole("radio", { name: "Update", exact: true }).isDisabled(), "pending import disables duplicate policy changes");
   check(await page.getByRole("switch").isDisabled(), "pending import disables atomic option changes");
   check(await button("Advanced").isDisabled(), "pending import disables advanced branch changes");

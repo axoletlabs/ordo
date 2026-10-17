@@ -23,6 +23,7 @@ import { APP_IDENTITY } from "../src/lib/app-variant";
 import {
   discardQueryCache,
   prepareLaunchLibrary,
+  installSessionCacheIsolation,
   restoreQueryPersistence,
   stopQueryPersistence,
 } from "../src/lib/query-cache";
@@ -245,6 +246,7 @@ export default function RootLayout() {
   const restartCover = peekRestartCover();
 
   useEffect(() => {
+    const releaseIsolation = installSessionCacheIsolation();
     (async () => {
       // Connectivity is an advisory signal, not a prerequisite for painting a
       // locally-restored session. A slow native network probe must not hold boot.
@@ -281,6 +283,7 @@ export default function RootLayout() {
         void recordColdStart();
       }
     })();
+    return releaseIsolation;
   }, []);
 
   return (

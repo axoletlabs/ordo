@@ -7,11 +7,11 @@
  */
 import { AppState, Platform } from "react-native";
 import {
-  persistQueryClientRestore,
   persistQueryClientSave,
   type Persister,
 } from "@tanstack/react-query-persist-client";
-import type { QueryCacheNotifyEvent } from "@tanstack/react-query";
+import { hydrate, type QueryCacheNotifyEvent } from "@tanstack/react-query";
+import { captureSessionScope, isSessionScopeCurrent } from "./session-scope";
 import { DEFAULT_BOOKMARK_LIST_SORT } from "@ordo/shared";
 import { createMMKV, type MMKV } from "react-native-mmkv";
 import { bookmarksApi } from "./api/bookmarks";
@@ -33,12 +33,45 @@ import {
 } from "./query-persist";
 import { useAuthStore } from "../store/auth";
 import { useSettingsStore } from "../store/settings";
+import { useFolderTokenStore } from "../store/folder-tokens";
 import { resumePendingDeletes } from "./undoable-delete";
 
 let mmkv: MMKV | null | undefined;
 let activeStorageKey: string | null = null;
 let unsubscribe: (() => void) | undefined;
 let restoreGeneration = 0;
+
+/** Runs synchronously with the stores, before a new account can observe shared
+ * query keys. Keep the outgoing painted library only until the next sign-in. */
+export function installSessionCacheIsolation(): () => void {
+  let owner: string | null = null;
+  let lastState = "";
+  const update = () => {
+    const auth = useAuthStore.getState();
+    if (auth.status === "loading") return;
+    const next = auth.user && auth.status === "authenticated"
+      ? queryCacheStorageKey(auth.user.id, useSettingsStore.getState().serverUrl) : null;
+    const state = `${auth.status}:${next ?? ""}`;
+    if (state === lastState) return;
+    lastState = state;
+    if (!next) {
+      stopQueryPersistence();
+      resumePendingDeletes(); // drop account-scoped tombstones and Undo surfaces
+      void useFolderTokenStore.getState().clearAll();
+      return;
+    }
+    if (owner && owner !== next) {
+      discardQueryCache();
+      void useFolderTokenStore.getState().clearAll();
+      resumePendingDeletes();
+    }
+    owner = next;
+  };
+  const releaseAuth = useAuthStore.subscribe(update);
+  const releaseSettings = useSettingsStore.subscribe(update);
+  update();
+  return () => { releaseAuth(); releaseSettings(); };
+}
 
 function getMmkv(): MMKV | null {
   if (mmkv !== undefined) return mmkv;
@@ -160,7 +193,17 @@ export async function restoreQueryPersistence(userId: string, serverUrl: string)
   const options = persistOptions(createQueryCachePersister(storageKey));
 
   try {
-    await persistQueryClientRestore(options);
+    const snapshot = await options.persister.restoreClient();
+    // Check after the storage await and before synchronous hydration. Checking
+    // only after persistQueryClientRestore is too late: it already hydrated.
+    if (generation !== restoreGeneration || activeStorageKey !== storageKey) return;
+    if (snapshot) {
+      if (!snapshot.timestamp || Date.now() - snapshot.timestamp > options.maxAge || snapshot.buster !== options.buster) {
+        await options.persister.removeClient();
+      } else {
+        hydrate(queryClient, snapshot.clientState, options.hydrateOptions);
+      }
+    }
   } catch (error) {
     console.warn("Query cache restore failed", error);
   }
@@ -227,6 +270,7 @@ async function prefetchServerInfo(serverUrl: string): Promise<void> {
  * even when the fonts, session, and route were ready.
  */
 export async function prepareLaunchLibrary(): Promise<void> {
+  const owner = captureSessionScope();
   const auth = useAuthStore.getState();
   if (auth.status !== "authenticated" || !auth.user) {
     stopQueryPersistence();
@@ -235,6 +279,7 @@ export async function prepareLaunchLibrary(): Promise<void> {
   const serverUrl = useSettingsStore.getState().serverUrl;
 
   await restoreQueryPersistence(auth.user.id, serverUrl);
+  if (!isSessionScopeCurrent(owner)) return;
 
   void prefetchServerInfo(serverUrl);
   if (!homeLibraryCached()) void fetchHomeLibrary().catch((error) => {

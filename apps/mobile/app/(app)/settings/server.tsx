@@ -1,7 +1,7 @@
 /** Hosting: ordo Cloud by default, or a verified self-hosted server. */
 import React, { useEffect, useRef, useState } from "react";
 import { StyleSheet, View, type TextInput } from "react-native";
-import { useMutation } from "@tanstack/react-query";
+import { useSessionMutation as useMutation } from "../../../src/hooks/use-session-mutation";
 import { MaterialIcon as Ionicons } from "../../../src/components/ui/MaterialIcon";
 import { APP_NAME, type ServerInfoDto } from "@ordo/shared";
 import { ChangeServerNameSchema } from "@ordo/shared/schemas";
