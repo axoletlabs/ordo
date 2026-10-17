@@ -91,13 +91,19 @@ export function insertBookmarkIfAbsent(
   queryKey: readonly unknown[],
   bookmark: BookmarkDto,
 ) {
+  insertBookmarksIfAbsent(qc, queryKey, [bookmark]);
+}
+
+function insertBookmarksIfAbsent(qc: QueryClient, queryKey: readonly unknown[], bookmarks: readonly BookmarkDto[]) {
   qc.setQueriesData<BookmarkData>({ queryKey }, (data) => {
     if (!data?.pages[0]) return data;
-    if (data.pages.some((page) => page.items.some((item) => item.id === bookmark.id))) return data;
+    const present = new Set(data.pages.flatMap((page) => page.items.map((item) => item.id)));
+    const missing = bookmarks.filter((bookmark) => !present.has(bookmark.id));
+    if (!missing.length) return data;
     const firstPage = data.pages[0];
     return {
       ...data,
-      pages: [{ ...firstPage, items: [bookmark, ...firstPage.items] }, ...data.pages.slice(1)],
+      pages: [{ ...firstPage, items: [...missing, ...firstPage.items] }, ...data.pages.slice(1)],
     };
   });
 }
@@ -339,7 +345,14 @@ export function collectCachedBookmarks(qc: QueryClient): BookmarkDto[] {
 /** Move membership, not just a row in the currently visible list. Inactive
  * reader/search/index copies participate in deletes too, so they must agree. */
 export function moveBookmarkInCache(qc: QueryClient, bookmark: BookmarkDto) {
-  updateBookmarkEverywhere(qc, bookmark.id, (old) => ({ ...old, ...bookmark }));
+  moveBookmarksInCache(qc, [bookmark]);
+}
+
+/** A batch move walks/sorts each cache once, not once per selected bookmark. */
+export function moveBookmarksInCache(qc: QueryClient, bookmarks: readonly BookmarkDto[]) {
+  if (!bookmarks.length) return;
+  const moved = new Map(bookmarks.map((bookmark) => [bookmark.id, bookmark]));
+  updateBookmarksEverywhere(qc, new Set(moved.keys()), (old) => ({ ...old, ...moved.get(old.id)! }));
   for (const query of qc.getQueryCache().findAll({ queryKey: ["bookmarks"] })) {
     const key = query.queryKey;
     const data = query.state.data;
@@ -348,25 +361,74 @@ export function moveBookmarkInCache(qc: QueryClient, bookmark: BookmarkDto) {
     // Search keeps text/body matches, but must drop a row that left its scope.
     const folderIds = key[1] === "search" && Array.isArray(key[5]) ? key[5] as string[] : [];
     const unfiled = key[1] === "search" && key[6] === true;
-    const outsideSearch = (folderIds.length > 0 || unfiled) &&
-      !(bookmark.folderId === null ? unfiled : folderIds.includes(bookmark.folderId));
-    if ((folderList && key[1] !== bookmark.folderId) || outsideSearch) {
-      removeBookmarkFromPages(qc, key, bookmark.id);
-    } else if (folderList && key[1] === bookmark.folderId) {
-      insertBookmarkIfAbsent(qc, key, bookmark);
-      qc.setQueryData<BookmarkData>(key, (current) => {
-        if (!current) return current;
-        const items = sortBookmarksBy(current.pages.flatMap((page) => page.items), key[2] as Parameters<typeof sortBookmarksBy>[1]);
+    const scopedSearch = key[1] === "search" && (folderIds.length > 0 || unfiled);
+    if (!folderList && !scopedSearch) continue;
+    let changed = false;
+    const pages = data.pages.map((page) => {
+      const items = page.items.filter((item) => {
+        const bookmark = moved.get(item.id);
+        if (!bookmark) return true;
+        const keep = folderList ? key[1] === bookmark.folderId
+          : bookmark.folderId === null ? unfiled : folderIds.includes(bookmark.folderId);
+        if (!keep) changed = true;
+        return keep;
+      });
+      return items.length === page.items.length ? page : { ...page, items };
+    });
+    if (folderList && pages.length) {
+      const present = new Set(pages.flatMap((page) => page.items.map((item) => item.id)));
+      const incoming = [...moved.values()].filter((bookmark) => bookmark.folderId === key[1] && !present.has(bookmark.id));
+      if (incoming.length) {
+        changed = true;
+        pages[0] = { ...pages[0]!, items: [...incoming, ...pages[0]!.items] };
+      }
+      // Existing destination rows may change sort fields even without insertion.
+      if (changed || bookmarks.some((bookmark) => bookmark.folderId === key[1])) {
+        const items = sortBookmarksBy(pages.flatMap((page) => page.items), key[2] as Parameters<typeof sortBookmarksBy>[1]);
         let offset = 0;
-        return { ...current, pages: current.pages.map((page) => {
+        qc.setQueryData<InfiniteData<CursorPage<BookmarkDto>>>(key, { ...data, pages: pages.map((page) => {
           const next = { ...page, items: items.slice(offset, offset + page.items.length) };
           offset += page.items.length;
           return next;
-        }) };
-      });
+        }) });
+        continue;
+      }
     }
+    if (changed) qc.setQueryData(key, { ...data, pages });
   }
-  if (qc.getQueryData(qk.reminders) !== undefined) syncReminderInCache(qc, bookmark);
+  if (qc.getQueryData(qk.reminders) !== undefined) {
+    qc.setQueryData<BookmarkReminderDto[]>(qk.reminders, (rows) => {
+      const reminders = new Map((rows ?? []).map((row) => [row.id, row]));
+      for (const bookmark of moved.values()) {
+        if (bookmark.remindAt == null) reminders.delete(bookmark.id);
+        else reminders.set(bookmark.id, { id: bookmark.id, folderId: bookmark.folderId, title: bookmark.title,
+          domain: bookmark.domain, description: bookmark.description, remindAt: bookmark.remindAt });
+      }
+      return [...reminders.values()].sort((a, b) => a.remindAt - b.remindAt || a.id.localeCompare(b.id));
+    });
+  }
+}
+
+/** Aggregate folder deltas before publishing; large selections need one update. */
+export function moveFolderCounts(qc: QueryClient, originals: readonly BookmarkDto[], destination: string | null, direction = 1) {
+  const deltas = new Map<string, { total: number; unread: number }>();
+  const add = (id: string | null, total: number, unread: number) => {
+    if (!id) return;
+    const previous = deltas.get(id) ?? { total: 0, unread: 0 };
+    deltas.set(id, { total: previous.total + total, unread: previous.unread + unread });
+  };
+  for (const bookmark of originals) {
+    if (bookmark.folderId === destination) continue;
+    const unread = bookmark.isRead ? 0 : direction;
+    add(bookmark.folderId, -direction, -unread);
+    add(destination, direction, unread);
+  }
+  if (!deltas.size) return;
+  qc.setQueryData<FolderDto[]>(qk.folders, (rows) => rows?.map((folder) => {
+    const delta = deltas.get(folder.id);
+    return delta ? { ...folder, bookmarkCount: Math.max(0, folder.bookmarkCount + delta.total),
+      unreadCount: Math.max(0, folder.unreadCount + delta.unread) } : folder;
+  }));
 }
 
 /** Undo only this move's membership/count deltas. Restoring entire query
@@ -381,19 +443,14 @@ export function rollbackBookmarkMoves(
   const restored = new Map<string, BookmarkDto>();
   for (const original of originals) {
     const bookmark = { ...(current.get(original.id) ?? original), folderId: original.folderId };
-    moveBookmarkInCache(qc, bookmark);
     restored.set(bookmark.id, bookmark);
-    if (original.folderId !== destination) {
-      bumpFolderCount(qc, destination, -1, original.isRead ? 0 : -1);
-      bumpFolderCount(qc, original.folderId, +1, original.isRead ? 0 : +1);
-    }
   }
+  moveBookmarksInCache(qc, [...restored.values()]);
+  moveFolderCounts(qc, originals, destination, -1);
   for (const [key, data] of snapshots) {
     if (!isPagedBookmarks(data)) continue;
-    for (const item of data.pages.flatMap((page) => page.items)) {
-      const bookmark = restored.get(item.id);
-      if (bookmark) insertBookmarkIfAbsent(qc, key, bookmark);
-    }
+    const missing = data.pages.flatMap((page) => page.items).flatMap((item) => restored.has(item.id) ? [restored.get(item.id)!] : []);
+    if (missing.length) insertBookmarksIfAbsent(qc, key, missing);
   }
 }
 

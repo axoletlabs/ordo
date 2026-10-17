@@ -23,13 +23,13 @@ export function ListPressable({ style, children, feedback = true, ...rest }: Pre
       aria-checked={rest.accessibilityState?.checked}
       aria-selected={rest.accessibilityState?.selected}
       aria-disabled={rest.disabled || rest.accessibilityState?.disabled}
-      onFocus={(event) => { setFocused(Platform.OS === "web" && !!(event.currentTarget as unknown as HTMLElement)?.matches?.(":focus-visible")); rest.onFocus?.(event); }}
+      onFocus={(event) => { setFocused(Platform.OS !== "web" || !!(event.currentTarget as unknown as HTMLElement)?.matches?.(":focus-visible")); rest.onFocus?.(event); }}
       onBlur={(event) => { setFocused(false); rest.onBlur?.(event); }}
       onHoverIn={(event) => { setHovered(true); rest.onHoverIn?.(event); }}
       onHoverOut={(event) => { setHovered(false); rest.onHoverOut?.(event); }}
       android_ripple={{ color: "transparent", borderless: false }}
       style={(state) => [typeof style === "function" ? style(state) : style as StyleProp<ViewStyle>,
-        focused ? { outlineColor: palette.primary, outlineWidth: 2, outlineOffset: -2, outlineStyle: "solid" } : null]}
+        focused && Platform.OS === "web" ? { outlineColor: palette.primary, outlineWidth: 2, outlineOffset: -2, outlineStyle: "solid" } : null]}
     >
       {state => {
         const flat = StyleSheet.flatten(typeof style === "function" ? style(state) : style as StyleProp<ViewStyle>);

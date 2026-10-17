@@ -131,6 +131,9 @@ const REFRESH_DELAY_MS = 250;
 /** AND matches are loaded first so they cannot be crowded out by OR hits. */
 const SEARCH_AND_POOL_SIZE = 300;
 const SEARCH_OR_POOL_SIZE = 200;
+// Encrypted title sorting happens in memory. Reuse the locale collation state
+// instead of constructing it for every comparison in an O(n log n) sort.
+const titleCollator = new Intl.Collator("en-US", { sensitivity: "base" });
 /** Hard stop so a pathological database can never loop forever. */
 const REFRESH_MAX_BATCHES = 500;
 
@@ -856,7 +859,7 @@ export class BookmarksService implements OnApplicationBootstrap {
     const opened = rows
       .map((row) => this.crypto.openBookmark(row) as ListItem)
       .sort((a, b) => {
-        const byTitle = a.title.localeCompare(b.title, "en-US", { sensitivity: "base" });
+        const byTitle = titleCollator.compare(a.title, b.title);
         if (byTitle !== 0) return sort === "title" ? byTitle : -byTitle;
         return sort === "title" ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id);
       });

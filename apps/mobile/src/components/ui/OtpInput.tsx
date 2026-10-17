@@ -37,6 +37,7 @@ import { alphaTint } from "../../theme/state-layer";
 import { editOtp, normalizeOtp } from "../../lib/otp-edit";
 import { otpAutofillProps } from "../../lib/otp-autofill";
 import { useCredentialLock } from "../../hooks/use-credential-lock";
+import { useAnimationActivity } from "../../hooks/use-animation-activity";
 
 export type OtpStatus = "idle" | "loading" | "success" | "error";
 
@@ -84,6 +85,7 @@ export function OtpInput({
   const fieldSurface = React.useContext(InputSurfaceContext) ?? palette.surface;
   const messageId = React.useId();
   const motion = useMaterialMotion();
+  const animationActive = useAnimationActivity();
   const inputRefs = useRef<(TextInput | null)[]>([]);
   const completedRef = useRef<string | null>(null);
   const prevLen = useRef(0);
@@ -169,7 +171,7 @@ export function OtpInput({
   }, [status, shake, motion.reducedMotion]);
 
   useEffect(() => {
-    if (status === "loading" && !motion.reducedMotion) {
+    if (status === "loading" && animationActive && !motion.reducedMotion) {
       pulse.value = withRepeat(
         withSequence(
           withTiming(0.7, { duration: 540, easing: Easing.inOut(Easing.ease) }),
@@ -183,7 +185,7 @@ export function OtpInput({
     cancelAnimation(pulse);
     pulse.value = motion.reducedMotion ? 1 : withTiming(1, { duration: 160 });
     return undefined;
-  }, [status, pulse, motion.reducedMotion]);
+  }, [status, pulse, motion.reducedMotion, animationActive]);
 
   const rowMotion = useAnimatedStyle(() => ({
     opacity: pulse.value,
@@ -365,6 +367,7 @@ const DigitBox = React.memo(function DigitBox({
   children: React.ReactNode;
 }) {
   const motion = useMaterialMotion();
+  const animationActive = useAnimationActivity();
   const mood = useSharedValue(status === "error" ? 1 : status === "success" ? 2 : 0);
   const focusAmt = useSharedValue(focused ? 1 : 0);
   const appear = useSharedValue(filled ? 1 : 0);
@@ -412,7 +415,7 @@ const DigitBox = React.memo(function DigitBox({
   }, [status, index, successPop, motion.spatial, motion.fast, motion.reducedMotion]);
 
   useEffect(() => {
-    if (!active) {
+    if (!active || !animationActive) {
       cancelAnimation(caret);
       caret.value = 0;
       return;
@@ -429,7 +432,7 @@ const DigitBox = React.memo(function DigitBox({
       false,
     );
     return () => cancelAnimation(caret);
-  }, [active, caret, motion.reducedMotion]);
+  }, [active, caret, motion.reducedMotion, animationActive]);
 
   const boxStyle = useAnimatedStyle(() => {
     const idleBorder = interpolateColor(

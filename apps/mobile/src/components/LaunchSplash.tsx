@@ -30,6 +30,7 @@ export function LaunchSplash({ onPresented }: LaunchSplashProps) {
 
   return (
     <View
+      testID="launch-splash"
       pointerEvents="auto"
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"

@@ -12,6 +12,7 @@
     "start": "expo start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
+    "test": "node --test scripts/*.test.cjs",
     "clean": "rimraf .expo node_modules/.cache"
   },
   "dependencies": {

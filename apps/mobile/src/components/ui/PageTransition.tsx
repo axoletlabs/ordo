@@ -1,12 +1,19 @@
 /** Native stacks own native motion; web native-stack needs an explicit transition. */
-import React, { useCallback, useEffect, useRef } from "react";
+import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Platform, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { useMaterialMotion } from "../../theme/material-motion";
 import { useSettingsStore } from "../../store/settings";
+import { AnimationActivityContext } from "../../hooks/use-animation-activity";
 
 export function PageTransition({ children }: { children: React.ReactNode }) {
   const ref = useRef<View>(null);
+  const [focused, setFocused] = useState(true);
+  const parentActive = useContext(AnimationActivityContext);
+  useFocusEffect(useCallback(() => {
+    setFocused(true);
+    return () => setFocused(false);
+  }, []));
   const { reducedMotion } = useMaterialMotion();
   const preference = useSettingsStore((state) => state.navigationAnimation);
   const settings = useRef({ reducedMotion, preference });
@@ -29,5 +36,5 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
     // Preferences affect the NEXT navigation, not an already-focused settings
     // page. Otherwise choosing a transition replays that page's entrance.
   }, []));
-  return <View ref={ref} style={{ flex: 1 }}>{children}</View>;
+  return <AnimationActivityContext.Provider value={parentActive && focused}><View ref={ref} style={{ flex: 1 }}>{children}</View></AnimationActivityContext.Provider>;
 }

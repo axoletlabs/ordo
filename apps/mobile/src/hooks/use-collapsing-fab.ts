@@ -25,7 +25,9 @@ export function useCollapsingFab(threshold = 24) {
   }, [spatial, effects, motion.spatial, motion.reducedMotion]);
   const expand = useCallback((offset?: number) => {
     if (offset != null) state.current.reset(offset);
-    if (!collapsed.current && spatial.value === 1 && effects.value === 1) return;
+    // Reading .value from JS blocks on the UI thread. The target is already
+    // known locally, including while an interrupted expansion is settling.
+    if (!collapsed.current) return;
     collapsed.current = false;
     const target = 1;
     spatial.value = motion.reducedMotion ? target : withSpring(target, motion.spatial);

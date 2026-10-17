@@ -126,10 +126,10 @@ export function FAB({
         <Ionicons name={icon} size={24} color={palette.onPrimaryContainer} />
         {label ? <>
           <View pointerEvents="none" aria-hidden importantForAccessibility="no-hide-descendants" style={{ position: "absolute", width: 280, height: 24, opacity: 0 }}>
-            <Text variant="labelLarge" numberOfLines={1} style={{ alignSelf: "flex-start" }} onLayout={(event) => setLabelWidth(event.nativeEvent.layout.width)}>{label}</Text>
+            <Text variant="labelLarge" numberOfLines={1} style={{ alignSelf: "flex-start" }} onLayout={(event) => setLabelWidth(Math.ceil(event.nativeEvent.layout.width) + 1)}>{label}</Text>
           </View>
           <Animated.View pointerEvents="none" aria-hidden style={[{ overflow: "hidden" }, labelStyle]}>
-            <Text variant="labelLarge" numberOfLines={1} style={{ width: labelWidth, color: palette.onPrimaryContainer }}>{label}</Text>
+            <Text testID="material-fab-label" variant="labelLarge" numberOfLines={1} style={{ width: labelWidth, color: palette.onPrimaryContainer }}>{label}</Text>
           </Animated.View>
         </> : null}
       </PressableScale>

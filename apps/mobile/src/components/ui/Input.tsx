@@ -7,6 +7,7 @@ import {
   StyleSheet,
   TextInput,
   View,
+  useWindowDimensions,
   type TextInputProps,
   type TextStyle,
   type ViewStyle,
@@ -102,6 +103,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   ...rest
 }, ref) {
   const { palette } = useTheme();
+  const { fontScale } = useWindowDimensions();
   const messageId = React.useId();
   const fieldSurface = React.useContext(InputSurfaceContext) ?? palette.surface;
   const motion = useMaterialMotion();
@@ -171,7 +173,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   useEffect(() => {
     floatProgress.value = withTiming(floating ? 1 : 0, { duration: motion.reducedMotion ? 0 : 150 });
   }, [floating, floatProgress, motion.reducedMotion]);
-  const labelPosition = useAnimatedStyle(() => ({ top: 16 - (filled ? 8 : 24) * floatProgress.value }));
+  const labelPosition = useAnimatedStyle(() => ({ top: 16 - (filled ? 8 : 16 + 8 * fontScale) * floatProgress.value }));
   const labelType = useAnimatedStyle(() => ({ fontSize: 16 - 4 * floatProgress.value, lineHeight: 24 - 8 * floatProgress.value }));
   // Keep the system face for secure editing/AutoFill, including across reveal.
   const fontFamily = secret
@@ -199,7 +201,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
       : null;
 
   return (
-    <View style={[label && !filled && !search ? { paddingTop: 8 } : null, containerStyle]}>
+    <View style={[label && !filled && !search ? { paddingTop: 8 * fontScale } : null, containerStyle]}>
       <View
         onPointerEnter={(event) => { if (event.nativeEvent.pointerType !== "touch") setHovered(true); }}
         onPointerLeave={() => setHovered(false)}
@@ -316,7 +318,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
             webCaretFix,
             Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0, boxShadow: "none" } as unknown as TextStyle : null,
             padRight != null ? { paddingRight: padRight } : null,
-            filled && label ? { paddingTop: spacing[24], paddingBottom: spacing[8] } : null,
+            filled && label ? { paddingTop: spacing[8] + 16 * fontScale, paddingBottom: spacing[8] } : null,
           ]}
         />
         {error && !inactive ? <View testID="material-field-error-icon" pointerEvents="none" style={{ marginLeft: 8 }}><MaterialIcon name="alert-circle" size={24} color={palette.error} accessible={false} /></View> : null}
@@ -341,7 +343,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
           </View>
         ) : null}
       </View>
-      {support || reserveSupportingSpace || counterVisible ? <View style={[styles.msg, { minHeight: 16, flexDirection: "row", gap: 8 }]}>
+      {support || reserveSupportingSpace || counterVisible ? <View style={[styles.msg, { minHeight: 16, flexDirection: "row", gap: spacing[16] }]}>
         <Text nativeID={messageId} variant="bodySmall" color={error ? "danger" : "secondary"}
           accessibilityRole={error ? "alert" : undefined} accessibilityLiveRegion={error ? "polite" : "none"} style={[{ flex: 1 }, inactive ? { color: foreground } : null]}>{support ?? " "}</Text>
         {counterVisible ? <Text variant="bodySmall" color="secondary" accessibilityLabel={`${value?.length ?? 0} of ${rest.maxLength} characters`}>{value?.length ?? 0}/{rest.maxLength}</Text> : null}

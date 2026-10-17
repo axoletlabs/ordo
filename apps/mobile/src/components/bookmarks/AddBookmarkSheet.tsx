@@ -33,6 +33,7 @@ import { spacing, radius } from "../../theme/tokens";
 import { useTheme } from "../../theme/ThemeProvider";
 import { domainFromUrl } from "../../lib/format";
 import { isSupportedUrl } from "@ordo/shared";
+import { LazyMount } from "../ui/LazyMount";
 
 export interface AddBookmarkSheetProps {
   visible: boolean;
@@ -64,7 +65,11 @@ function destinationLabel(folderId: string | null, folderName?: string | null): 
   return folderId === null ? "Bookmarks" : null;
 }
 
-export function AddBookmarkSheet({
+export function AddBookmarkSheet(props: AddBookmarkSheetProps) {
+  return <LazyMount active={props.visible}>{() => <AddBookmarkContent {...props} />}</LazyMount>;
+}
+
+function AddBookmarkContent({
   visible,
   onDismiss,
   folderId,

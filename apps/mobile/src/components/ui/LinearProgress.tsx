@@ -10,6 +10,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { useMaterialMotion } from "../../theme/material-motion";
 import { progressFraction } from "../../lib/progress-fraction";
 import { linearIndeterminateSegments, wavyProgressPath } from "../../lib/material-progress";
+import { useAnimationActivity } from "../../hooks/use-animation-activity";
 
 const HEIGHT = 4;
 const GAP = 4;
@@ -27,6 +28,7 @@ export function LinearProgress({ value, animatedValue, label, style, wavy = fals
 }) {
   const { palette } = useTheme();
   const { reducedMotion } = useMaterialMotion();
+  const active = useAnimationActivity();
   const [width, setWidth] = useState(0);
   const phase = useSharedValue(0);
   const fill = useSharedValue(0);
@@ -34,14 +36,15 @@ export function LinearProgress({ value, animatedValue, label, style, wavy = fals
   const amplitude = useSharedValue(0);
   const progress = value == null ? null : progressFraction(value);
   const indeterminate = progress == null && !animatedValue;
+  const complete = progress === 1;
 
   useEffect(() => {
     wave.value = 0;
-    if (wavy && !reducedMotion) {
+    if (wavy && active && !reducedMotion && !complete) {
       wave.value = withRepeat(withTiming(1, { duration: 1000, easing: Easing.linear, reduceMotion: ReduceMotion.Never }), -1, false, undefined, ReduceMotion.Never);
     }
     return () => cancelAnimation(wave);
-  }, [wave, wavy, reducedMotion]);
+  }, [wave, wavy, reducedMotion, active, complete]);
 
   const waveAmplitude = indeterminate || (progress != null && progress > 0.1 && progress < 0.95) ? 3 : 0;
   useEffect(() => {
@@ -54,11 +57,11 @@ export function LinearProgress({ value, animatedValue, label, style, wavy = fals
   useEffect(() => {
     cancelAnimation(phase);
     phase.value = 0;
-    if (indeterminate && !reducedMotion) {
+    if (indeterminate && active && !reducedMotion) {
       phase.value = withRepeat(withTiming(1, { duration: 1800, easing: Easing.linear, reduceMotion: ReduceMotion.Never }), -1, false, undefined, ReduceMotion.Never);
     }
     return () => cancelAnimation(phase);
-  }, [phase, indeterminate, reducedMotion]);
+  }, [phase, indeterminate, reducedMotion, active]);
 
   useEffect(() => {
     // Don't spring a percentage: overshooting suggests bytes that aren't there.

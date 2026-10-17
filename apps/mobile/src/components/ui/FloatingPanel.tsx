@@ -86,7 +86,7 @@ function FloatingPanelSurface({
   obscured = false,
   interactive = true,
 }: FloatingPanelProps) {
-  const { palette, expressive } = useTheme();
+  const { palette } = useTheme();
   const sheet = presentation === "bottom-sheet";
   const panelSurface = sheet ? palette.surfaceContainerLow : palette.surfaceContainerHigh;
   const titleId = React.useId();
@@ -161,12 +161,13 @@ function FloatingPanelSurface({
     : Math.max(80, viewportHeight - insets.top - bottomInset - spacing[32]);
   const sheetInset = width < 600 ? spacing[16] : spacing[24];
   const sheetWidth = Math.min(maxWidth, width - insets.left - insets.right);
+  const dialogWidth = Math.max(0, Math.min(maxWidth, width - insets.left - insets.right - spacing[32]));
   const corners = sheet ? {
-    borderTopLeftRadius: expressive ? radius["3xl"] : radius["2xl"],
-    borderTopRightRadius: expressive ? radius["3xl"] : radius["2xl"],
+    borderTopLeftRadius: radius["2xl"],
+    borderTopRightRadius: radius["2xl"],
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
-  } : { borderRadius: expressive ? radius["3xl"] : radius["2xl"] };
+  } : { borderRadius: radius["2xl"] };
   // Opening the keyboard must not also change the form's horizontal padding.
   const panelPadding = restHeight - insets.top - insets.bottom - spacing[32] < 480 ? spacing[16] : layout.overlayPadding;
   // In short windows/above the IME, let the title scroll with the content so
@@ -310,7 +311,8 @@ function FloatingPanelSurface({
           onPress={dismissible && dismissOnScrim ? hideAndDismiss : undefined}
         />
           <View pointerEvents="box-none" style={[styles.frame, { paddingTop: insets.top + spacing[16], paddingBottom: insets.bottom + spacing[16] },
-            sheet ? { justifyContent: "flex-end", paddingBottom: 0, paddingLeft: insets.left, paddingRight: insets.right } : null,
+            sheet ? { justifyContent: "flex-end", paddingBottom: 0, paddingLeft: insets.left, paddingRight: insets.right }
+              : { paddingLeft: insets.left + spacing[16], paddingRight: insets.right + spacing[16] },
             Platform.OS !== "web" ? { flex: 0, height: restHeight } : null]}>
           <Animated.View
             ref={panelRef}
@@ -326,10 +328,10 @@ function FloatingPanelSurface({
             style={[
               styles.panel,
               {
-                width: sheet ? sheetWidth : fitContent ? undefined : Math.min(maxWidth, width - spacing[32]),
-                maxWidth: sheet ? sheetWidth : Math.min(maxWidth, width - spacing[32]),
+                width: sheet ? sheetWidth : fitContent ? undefined : dialogWidth,
+                maxWidth: sheet ? sheetWidth : dialogWidth,
                 padding: sheet ? 0 : panelPadding,
-                minWidth: fitContent ? 220 : undefined,
+                minWidth: fitContent ? Math.min(280, dialogWidth) : undefined,
                 maxHeight: heightLimit,
                 backgroundColor: Platform.OS === "web" ? "transparent" : panelSurface,
                 ...corners,
@@ -354,7 +356,7 @@ function FloatingPanelSurface({
               {sheet ? sheetContent : <>
               {!scrollHeader ? headers.map((header) => React.isValidElement<{ style?: StyleProp<ViewStyle> }>(header)
                 ? React.cloneElement(header, { style: [header.props.style, { marginBottom: 0 }] }) : header) : null}
-              {scrollingBody ? <View style={{ flexShrink: 1, marginTop: !scrollHeader && headers.length ? spacing[24] : 0 }}>{scrollingBody}</View> : null}{!scrollAll ? actions : null}
+              {scrollingBody ? <View style={{ flexShrink: 1, marginTop: !scrollHeader && headers.length ? spacing[16] : 0 }}>{scrollingBody}</View> : null}{!scrollAll ? actions : null}
               </>}
             </InputSurfaceContext.Provider>
             </PanelTitleContext.Provider>

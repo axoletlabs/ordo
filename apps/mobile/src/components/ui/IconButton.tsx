@@ -21,7 +21,7 @@ export function IconButton({ name, variant = "tonal", color, style, ...props }: 
     stateLayerColor={foreground} shape={{ rest: 20, pressed: expressive ? 8 : 20 }}
     style={{ width: "100%", height: 48, borderRadius: 24, justifyContent: "center" }}
     visualStyle={{ alignSelf: "stretch", marginHorizontal: 4, height: 40, borderRadius: 20,
-      backgroundColor: background, borderWidth: variant === "outlined" ? 1 : 0, borderColor: palette.outline,
+      backgroundColor: background, borderWidth: variant === "outlined" ? 1 : 0, borderColor: props.disabled ? `${palette.onSurface}1f` : expressive ? palette.outlineVariant : palette.outline,
       alignItems: "center", justifyContent: "center" }}>
     <MaterialIcon name={name} size={24} color={foreground} />
     </PressableScale>

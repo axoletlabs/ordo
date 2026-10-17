@@ -34,7 +34,6 @@ import {
   shouldPersistQueryKey,
   type PersistedClientSnapshot,
 } from "./query-persist";
-import { raceDeadline } from "./fetch-timeout";
 import { useAuthStore } from "../store/auth";
 import { useSettingsStore } from "../store/settings";
 import { resumePendingDeletes } from "./undoable-delete";
@@ -207,18 +206,18 @@ async function fetchHomeLibrary(): Promise<void> {
       queryFn: fetchFoldersNormalized,
       staleTime: 30_000,
       gcTime: PERSISTED_QUERY_GC_TIME_MS,
-      // Launch fetches never retry: the splash deadline (below) is the only
-      // budget they get, and mounted observers retry with their own policy.
+      // Launch prefetches never retry; mounted observers own retry feedback.
       retry: false,
     }),
     queryClient.fetchInfiniteQuery({
       queryKey: qk.bookmarks(null, DEFAULT_BOOKMARK_LIST_SORT),
-      queryFn: ({ pageParam }) =>
+      queryFn: ({ pageParam, signal }) =>
         bookmarksApi.list({
           folderId: null,
           cursor: pageParam ?? undefined,
           limit: LIST_PAGE_SIZE,
           sort: DEFAULT_BOOKMARK_LIST_SORT,
+          signal,
         }),
       initialPageParam: null as string | null,
       getNextPageParam: nextPageCursor,
@@ -244,17 +243,10 @@ async function prefetchServerInfo(serverUrl: string): Promise<void> {
 }
 
 /**
- * How long a cold-cache launch may hold the splash on the network. Past the
- * deadline the app continues (skeletons cover the gap) while the fetches keep
- * running and paint the library the moment they land.
- */
-const LAUNCH_FETCH_DEADLINE_MS = 3_500;
-
-/**
- * Restore the disk snapshot, then fill a cold cache before the home screen
- * mounts. The snapshot restore is local-only and always runs first; a dead or
- * slow host can add at most LAUNCH_FETCH_DEADLINE_MS to the launch, never the
- * per-request timeout stack.
+ * Only local restoration gates first paint. Fill a cold cache in parallel
+ * with navigation; the library's skeleton already handles this state. Waiting
+ * for the network here used to add up to 3.5 seconds of non-interactive splash
+ * even when the fonts, session, and route were ready.
  */
 export async function prepareLaunchLibrary(): Promise<void> {
   const auth = useAuthStore.getState();
@@ -266,19 +258,8 @@ export async function prepareLaunchLibrary(): Promise<void> {
 
   await restoreQueryPersistence(auth.user.id, serverUrl);
 
-  if (homeLibraryCached()) {
-    void prefetchServerInfo(serverUrl);
-    return;
-  }
-
-  const fill = Promise.allSettled([prefetchServerInfo(serverUrl), fetchHomeLibrary()]).then(
-    (results) => {
-      for (const result of results) {
-        if (result.status === "rejected") {
-          console.warn("Launch library fetch failed", result.reason);
-        }
-      }
-    },
-  );
-  await raceDeadline(fill, LAUNCH_FETCH_DEADLINE_MS);
+  void prefetchServerInfo(serverUrl);
+  if (!homeLibraryCached()) void fetchHomeLibrary().catch((error) => {
+    console.warn("Launch library fetch failed", error);
+  });
 }

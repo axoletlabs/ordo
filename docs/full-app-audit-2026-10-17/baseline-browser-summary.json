@@ -1,0 +1,143 @@
+{
+  "baseline": "01af889",
+  "note": "Historical fixture run; readiness and geometry checks were subsequently strengthened. Timing is diagnostic, not native FPS.",
+  "screens": 42,
+  "checks": 109,
+  "issues": [
+    {
+      "name": "light-false-390-normal: bounded filter menu",
+      "details": {
+        "mountedTags": 200
+      }
+    },
+    {
+      "name": "light-true-390-normal: bounded filter menu",
+      "details": {
+        "mountedTags": 200
+      }
+    },
+    {
+      "name": "dark-false-390-normal: bounded filter menu",
+      "details": {
+        "mountedTags": 200
+      }
+    },
+    {
+      "name": "dark-true-390-normal: bounded filter menu",
+      "details": {
+        "mountedTags": 200
+      }
+    },
+    {
+      "name": "dark-true-1280-normal: bounded filter menu",
+      "details": {
+        "mountedTags": 200
+      }
+    },
+    {
+      "name": "dark-true-844-reduce: bounded filter menu",
+      "details": {
+        "mountedTags": 200
+      }
+    }
+  ],
+  "errors": [],
+  "performance": [
+    {
+      "name": "light-false-390-normal: cold save dialog",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 803.6,
+      "longTasks": 2,
+      "maxLongTaskMs": 241,
+      "totalLongTaskMs": 313
+    },
+    {
+      "name": "light-false-390-normal: cold contents",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 570.3,
+      "longTasks": 1,
+      "maxLongTaskMs": 105,
+      "totalLongTaskMs": 105
+    },
+    {
+      "name": "light-true-390-normal: cold save dialog",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 807.6,
+      "longTasks": 2,
+      "maxLongTaskMs": 221,
+      "totalLongTaskMs": 284
+    },
+    {
+      "name": "light-true-390-normal: cold contents",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 599.9,
+      "longTasks": 1,
+      "maxLongTaskMs": 130,
+      "totalLongTaskMs": 130
+    },
+    {
+      "name": "dark-false-390-normal: cold save dialog",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 803.4,
+      "longTasks": 2,
+      "maxLongTaskMs": 239,
+      "totalLongTaskMs": 306
+    },
+    {
+      "name": "dark-false-390-normal: cold contents",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 578.1,
+      "longTasks": 1,
+      "maxLongTaskMs": 130,
+      "totalLongTaskMs": 130
+    },
+    {
+      "name": "dark-true-390-normal: cold save dialog",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 797.2,
+      "longTasks": 2,
+      "maxLongTaskMs": 237,
+      "totalLongTaskMs": 306
+    },
+    {
+      "name": "dark-true-390-normal: cold contents",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 981.6,
+      "longTasks": 2,
+      "maxLongTaskMs": 406,
+      "totalLongTaskMs": 456
+    },
+    {
+      "name": "dark-true-1280-normal: cold save dialog",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 528.5,
+      "longTasks": 2,
+      "maxLongTaskMs": 244,
+      "totalLongTaskMs": 312
+    },
+    {
+      "name": "dark-true-1280-normal: cold contents",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 580.4,
+      "longTasks": 1,
+      "maxLongTaskMs": 129,
+      "totalLongTaskMs": 129
+    },
+    {
+      "name": "dark-true-844-reduce: cold save dialog",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 772.3,
+      "longTasks": 2,
+      "maxLongTaskMs": 231,
+      "totalLongTaskMs": 290
+    },
+    {
+      "name": "dark-true-844-reduce: cold contents",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 581.9,
+      "longTasks": 1,
+      "maxLongTaskMs": 132,
+      "totalLongTaskMs": 132
+    }
+  ]
+}

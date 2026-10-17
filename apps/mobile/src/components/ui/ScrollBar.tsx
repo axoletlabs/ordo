@@ -66,6 +66,7 @@ export function useVerticalScrollBar(insets?: ScrollBarInsets) {
   const offset = useSharedValue(0);
   const opacity = useSharedValue(0);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastActivity = useRef(0);
   const { reducedMotion } = useMaterialMotion();
   const reducedMotionRef = useRef(reducedMotion);
   reducedMotionRef.current = reducedMotion;
@@ -74,12 +75,17 @@ export function useVerticalScrollBar(insets?: ScrollBarInsets) {
   }, [opacity, reducedMotion]);
 
   const reveal = useCallback(() => {
+    if (Platform.OS === "web") return; // The browser owns its scrollbar.
+    lastActivity.current = Date.now();
+    if (hideTimer.current) return;
     opacity.value = reducedMotion ? 1 : withTiming(1, { duration: timing.normal });
-    if (hideTimer.current) clearTimeout(hideTimer.current);
-    hideTimer.current = setTimeout(() => {
+    const hideWhenIdle = () => {
+      const remaining = SCROLLBAR_IDLE_MS - (Date.now() - lastActivity.current);
+      if (remaining > 0) { hideTimer.current = setTimeout(hideWhenIdle, remaining); return; }
       hideTimer.current = null;
       opacity.value = reducedMotionRef.current ? 0 : withTiming(0, { duration: timing.slow });
-    }, SCROLLBAR_IDLE_MS);
+    };
+    hideTimer.current = setTimeout(hideWhenIdle, SCROLLBAR_IDLE_MS);
   }, [opacity, reducedMotion]);
 
   useEffect(
@@ -91,6 +97,7 @@ export function useVerticalScrollBar(insets?: ScrollBarInsets) {
 
   const onLayout = useCallback(
     (event: LayoutChangeEvent) => {
+      if (Platform.OS === "web") return;
       viewport.value = event.nativeEvent.layout.height;
     },
     [viewport],
@@ -98,6 +105,7 @@ export function useVerticalScrollBar(insets?: ScrollBarInsets) {
 
   const onContentSizeChange = useCallback(
     (_width: number, height: number) => {
+      if (Platform.OS === "web") return;
       content.value = height;
     },
     [content],
@@ -106,6 +114,7 @@ export function useVerticalScrollBar(insets?: ScrollBarInsets) {
   const updateScroll = useCallback(
     (event: NativeScrollEvent) => {
       "worklet";
+      if (Platform.OS === "web") return;
       const { contentOffset, contentSize, layoutMeasurement } = event;
       offset.value = contentOffset.y;
       viewport.value = layoutMeasurement.height;
@@ -170,13 +179,8 @@ function ScrollBarOverlay({
   topInset: number;
   bottomInset: number;
 }) {
-  const top = useSharedValue(topInset);
-  const bottom = useSharedValue(bottomInset);
-  top.value = topInset;
-  bottom.value = bottomInset;
-
   const thumbStyle = useAnimatedStyle(() => {
-    const track = Math.max(0, viewport.value - top.value - bottom.value);
+    const track = Math.max(0, viewport.value - topInset - bottomInset);
     const view = viewport.value;
     const size = content.value;
     if (size <= view + 1 || track <= 0) {

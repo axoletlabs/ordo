@@ -1,0 +1,1202 @@
+{
+  "screens": [
+    "overlays-light-false-Rename",
+    "overlays-light-false-Change-icon",
+    "overlays-light-false-Delete-folder",
+    "overlays-light-false-lock-Pattern",
+    "overlays-light-false-pattern-accessible",
+    "overlays-light-false-lock-PIN",
+    "overlays-light-false-lock-Text-password",
+    "overlays-light-false-Move-to-folder",
+    "overlays-light-false-Edit-tags",
+    "overlays-light-false-Delete-bookmark",
+    "overlays-light-false-nested-icon-picker",
+    "overlays-light-false-theme-picker",
+    "overlays-light-false-authenticator-qr",
+    "overlays-light-false-session-confirmation",
+    "overlays-light-false-signout-confirmation",
+    "overlays-light-true-Rename",
+    "overlays-light-true-Change-icon",
+    "overlays-light-true-Delete-folder",
+    "overlays-light-true-lock-Pattern",
+    "overlays-light-true-pattern-accessible",
+    "overlays-light-true-lock-PIN",
+    "overlays-light-true-lock-Text-password",
+    "overlays-light-true-Move-to-folder",
+    "overlays-light-true-Edit-tags",
+    "overlays-light-true-Delete-bookmark",
+    "overlays-light-true-nested-icon-picker",
+    "overlays-light-true-theme-picker",
+    "overlays-light-true-authenticator-qr",
+    "overlays-light-true-session-confirmation",
+    "overlays-light-true-signout-confirmation",
+    "overlays-dark-false-Rename",
+    "overlays-dark-false-Change-icon",
+    "overlays-dark-false-Delete-folder",
+    "overlays-dark-false-lock-Pattern",
+    "overlays-dark-false-pattern-accessible",
+    "overlays-dark-false-lock-PIN",
+    "overlays-dark-false-lock-Text-password",
+    "overlays-dark-false-Move-to-folder",
+    "overlays-dark-false-Edit-tags",
+    "overlays-dark-false-Delete-bookmark",
+    "overlays-dark-false-nested-icon-picker",
+    "overlays-dark-false-theme-picker",
+    "overlays-dark-false-authenticator-qr",
+    "overlays-dark-false-session-confirmation",
+    "overlays-dark-false-signout-confirmation",
+    "overlays-dark-true-Rename",
+    "overlays-dark-true-Change-icon",
+    "overlays-dark-true-Delete-folder",
+    "overlays-dark-true-lock-Pattern",
+    "overlays-dark-true-pattern-accessible",
+    "overlays-dark-true-lock-PIN",
+    "overlays-dark-true-lock-Text-password",
+    "overlays-dark-true-Move-to-folder",
+    "overlays-dark-true-Edit-tags",
+    "overlays-dark-true-Delete-bookmark",
+    "overlays-dark-true-nested-icon-picker",
+    "overlays-dark-true-theme-picker",
+    "overlays-dark-true-authenticator-qr",
+    "overlays-dark-true-session-confirmation",
+    "overlays-dark-true-signout-confirmation"
+  ],
+  "checks": [
+    {
+      "name": "overlays-light-false-Rename: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-Rename: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-Rename: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-Rename: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-Change-icon: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-Change-icon: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-Change-icon: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-Change-icon: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-Delete-folder: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-Delete-folder: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-Delete-folder: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-Delete-folder: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-lock-Pattern: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-lock-Pattern: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-lock-Pattern: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-lock-Pattern: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-pattern-accessible: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-pattern-accessible: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-pattern-accessible: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-pattern-accessible: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-lock-PIN: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-lock-PIN: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-lock-PIN: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-lock-PIN: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-lock-Text-password: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-lock-Text-password: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-lock-Text-password: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-lock-Text-password: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-Move-to-folder: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-Move-to-folder: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-Move-to-folder: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-Move-to-folder: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-Edit-tags: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-Edit-tags: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-Edit-tags: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-Edit-tags: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-Delete-bookmark: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-Delete-bookmark: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-Delete-bookmark: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-Delete-bookmark: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-nested-icon-picker: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-nested-icon-picker: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-nested-icon-picker: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-nested-icon-picker: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false: nested picker retains folder draft",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false: child form retains parent draft",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-theme-picker: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-theme-picker: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-theme-picker: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-theme-picker: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false: keyboard owns menu selection",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-authenticator-qr: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-authenticator-qr: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-authenticator-qr: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-authenticator-qr: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-session-confirmation: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-session-confirmation: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-session-confirmation: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-session-confirmation: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-signout-confirmation: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-signout-confirmation: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-false-signout-confirmation: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-false-signout-confirmation: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-Rename: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-Rename: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-Rename: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-Rename: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-Change-icon: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-Change-icon: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-Change-icon: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-Change-icon: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-Delete-folder: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-Delete-folder: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-Delete-folder: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-Delete-folder: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-lock-Pattern: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-lock-Pattern: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-lock-Pattern: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-lock-Pattern: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-pattern-accessible: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-pattern-accessible: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-pattern-accessible: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-pattern-accessible: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-lock-PIN: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-lock-PIN: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-lock-PIN: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-lock-PIN: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-lock-Text-password: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-lock-Text-password: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-lock-Text-password: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-lock-Text-password: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-Move-to-folder: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-Move-to-folder: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-Move-to-folder: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-Move-to-folder: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-Edit-tags: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-Edit-tags: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-Edit-tags: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-Edit-tags: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-Delete-bookmark: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-Delete-bookmark: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-Delete-bookmark: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-Delete-bookmark: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-nested-icon-picker: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-nested-icon-picker: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-nested-icon-picker: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-nested-icon-picker: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true: nested picker retains folder draft",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true: child form retains parent draft",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-theme-picker: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-theme-picker: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-theme-picker: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-theme-picker: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true: keyboard owns menu selection",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-authenticator-qr: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-authenticator-qr: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-authenticator-qr: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-authenticator-qr: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-session-confirmation: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-session-confirmation: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-session-confirmation: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-session-confirmation: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-signout-confirmation: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-signout-confirmation: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-light-true-signout-confirmation: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-light-true-signout-confirmation: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-Rename: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-Rename: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-Rename: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-Rename: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-Change-icon: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-Change-icon: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-Change-icon: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-Change-icon: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-Delete-folder: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-Delete-folder: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-Delete-folder: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-Delete-folder: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-lock-Pattern: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-lock-Pattern: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-lock-Pattern: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-lock-Pattern: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-pattern-accessible: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-pattern-accessible: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-pattern-accessible: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-pattern-accessible: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-lock-PIN: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-lock-PIN: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-lock-PIN: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-lock-PIN: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-lock-Text-password: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-lock-Text-password: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-lock-Text-password: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-lock-Text-password: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-Move-to-folder: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-Move-to-folder: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-Move-to-folder: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-Move-to-folder: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-Edit-tags: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-Edit-tags: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-Edit-tags: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-Edit-tags: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-Delete-bookmark: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-Delete-bookmark: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-Delete-bookmark: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-Delete-bookmark: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-nested-icon-picker: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-nested-icon-picker: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-nested-icon-picker: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-nested-icon-picker: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false: nested picker retains folder draft",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false: child form retains parent draft",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-theme-picker: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-theme-picker: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-theme-picker: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-theme-picker: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false: keyboard owns menu selection",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-authenticator-qr: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-authenticator-qr: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-authenticator-qr: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-authenticator-qr: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-session-confirmation: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-session-confirmation: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-session-confirmation: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-session-confirmation: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-signout-confirmation: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-signout-confirmation: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-false-signout-confirmation: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-false-signout-confirmation: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-Rename: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-Rename: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-Rename: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-Rename: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-Change-icon: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-Change-icon: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-Change-icon: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-Change-icon: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-Delete-folder: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-Delete-folder: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-Delete-folder: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-Delete-folder: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-lock-Pattern: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-lock-Pattern: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-lock-Pattern: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-lock-Pattern: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-pattern-accessible: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-pattern-accessible: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-pattern-accessible: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-pattern-accessible: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-lock-PIN: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-lock-PIN: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-lock-PIN: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-lock-PIN: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-lock-Text-password: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-lock-Text-password: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-lock-Text-password: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-lock-Text-password: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-Move-to-folder: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-Move-to-folder: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-Move-to-folder: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-Move-to-folder: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-Edit-tags: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-Edit-tags: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-Edit-tags: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-Edit-tags: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-Delete-bookmark: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-Delete-bookmark: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-Delete-bookmark: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-Delete-bookmark: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-nested-icon-picker: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-nested-icon-picker: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-nested-icon-picker: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-nested-icon-picker: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true: nested picker retains folder draft",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true: child form retains parent draft",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-theme-picker: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-theme-picker: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-theme-picker: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-theme-picker: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true: keyboard owns menu selection",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-authenticator-qr: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-authenticator-qr: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-authenticator-qr: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-authenticator-qr: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-session-confirmation: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-session-confirmation: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-session-confirmation: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-session-confirmation: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-signout-confirmation: painted content",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-signout-confirmation: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "overlays-dark-true-signout-confirmation: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "overlays-dark-true-signout-confirmation: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "no uncaught browser errors",
+      "pass": true,
+      "details": []
+    }
+  ],
+  "issues": [],
+  "errors": [],
+  "performance": []
+}
