@@ -1,0 +1,1041 @@
+{
+  "screens": [],
+  "checks": [
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false}: open 0 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false}: dropdown retains draft",
+      "pass": true
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false}: open 1 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false}: open 2 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false}: open 3 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false}: open 4 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false}: open 5 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false}: open 6 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false}: open 7 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false}: open 8 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false}: open 9 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false}: open 10 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false}: open 11 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false}: open 12 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false}: open 13 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false}: open 14 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false}: repeated dialogs have bounded DOM",
+      "pass": true,
+      "details": {
+        "before": {
+          "JSEventListeners": 588,
+          "Nodes": 893,
+          "JSHeapUsedSize": 21105616
+        },
+        "after": {
+          "JSEventListeners": 588,
+          "Nodes": 893,
+          "JSHeapUsedSize": 21745340
+        }
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false}: repeated dialogs have bounded listeners",
+      "pass": true,
+      "details": {
+        "before": {
+          "JSEventListeners": 588,
+          "Nodes": 893,
+          "JSHeapUsedSize": 21105616
+        },
+        "after": {
+          "JSEventListeners": 588,
+          "Nodes": 893,
+          "JSHeapUsedSize": 21745340
+        }
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false}: large-library scrolling stays virtualized",
+      "pass": true,
+      "details": {
+        "mountedRows": 30
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false}: no uncaught errors",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":true}: open 0 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":true}: dropdown retains draft",
+      "pass": true
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":true}: open 1 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":true}: open 2 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":true}: open 3 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":true}: open 4 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":true}: open 5 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":true}: open 6 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":true}: open 7 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":true}: open 8 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":true}: open 9 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":true}: open 10 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":true}: open 11 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":true}: open 12 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":true}: open 13 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":true}: open 14 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":true}: repeated dialogs have bounded DOM",
+      "pass": true,
+      "details": {
+        "before": {
+          "JSEventListeners": 588,
+          "Nodes": 914,
+          "JSHeapUsedSize": 21379704
+        },
+        "after": {
+          "JSEventListeners": 588,
+          "Nodes": 914,
+          "JSHeapUsedSize": 22011412
+        }
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":true}: repeated dialogs have bounded listeners",
+      "pass": true,
+      "details": {
+        "before": {
+          "JSEventListeners": 588,
+          "Nodes": 914,
+          "JSHeapUsedSize": 21379704
+        },
+        "after": {
+          "JSEventListeners": 588,
+          "Nodes": 914,
+          "JSHeapUsedSize": 22011412
+        }
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":true}: large-library scrolling stays virtualized",
+      "pass": true,
+      "details": {
+        "mountedRows": 30
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":true}: no uncaught errors",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":false}: open 0 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":false}: dropdown retains draft",
+      "pass": true
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":false}: open 1 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":false}: open 2 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":false}: open 3 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":false}: open 4 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":false}: open 5 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":false}: open 6 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":false}: open 7 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":false}: open 8 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":false}: open 9 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":false}: open 10 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":false}: open 11 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":false}: open 12 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":false}: open 13 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":false}: open 14 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":false}: repeated dialogs have bounded DOM",
+      "pass": true,
+      "details": {
+        "before": {
+          "JSEventListeners": 588,
+          "Nodes": 893,
+          "JSHeapUsedSize": 21093592
+        },
+        "after": {
+          "JSEventListeners": 588,
+          "Nodes": 893,
+          "JSHeapUsedSize": 21726088
+        }
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":false}: repeated dialogs have bounded listeners",
+      "pass": true,
+      "details": {
+        "before": {
+          "JSEventListeners": 588,
+          "Nodes": 893,
+          "JSHeapUsedSize": 21093592
+        },
+        "after": {
+          "JSEventListeners": 588,
+          "Nodes": 893,
+          "JSHeapUsedSize": 21726088
+        }
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":false}: large-library scrolling stays virtualized",
+      "pass": true,
+      "details": {
+        "mountedRows": 30
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":false}: no uncaught errors",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true}: open 0 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true}: dropdown retains draft",
+      "pass": true
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true}: open 1 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true}: open 2 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true}: open 3 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true}: open 4 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true}: open 5 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true}: open 6 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true}: open 7 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true}: open 8 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true}: open 9 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true}: open 10 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true}: open 11 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true}: open 12 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true}: open 13 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true}: open 14 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true}: repeated dialogs have bounded DOM",
+      "pass": true,
+      "details": {
+        "before": {
+          "JSEventListeners": 588,
+          "Nodes": 914,
+          "JSHeapUsedSize": 21360484
+        },
+        "after": {
+          "JSEventListeners": 588,
+          "Nodes": 914,
+          "JSHeapUsedSize": 21991916
+        }
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true}: repeated dialogs have bounded listeners",
+      "pass": true,
+      "details": {
+        "before": {
+          "JSEventListeners": 588,
+          "Nodes": 914,
+          "JSHeapUsedSize": 21360484
+        },
+        "after": {
+          "JSEventListeners": 588,
+          "Nodes": 914,
+          "JSHeapUsedSize": 21991916
+        }
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true}: large-library scrolling stays virtualized",
+      "pass": true,
+      "details": {
+        "mountedRows": 30
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true}: no uncaught errors",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true,\"width\":1280,\"height\":800}: open 0 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true,\"width\":1280,\"height\":800}: dropdown retains draft",
+      "pass": true
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true,\"width\":1280,\"height\":800}: open 1 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true,\"width\":1280,\"height\":800}: open 2 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true,\"width\":1280,\"height\":800}: open 3 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true,\"width\":1280,\"height\":800}: open 4 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true,\"width\":1280,\"height\":800}: open 5 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true,\"width\":1280,\"height\":800}: open 6 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true,\"width\":1280,\"height\":800}: open 7 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true,\"width\":1280,\"height\":800}: open 8 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true,\"width\":1280,\"height\":800}: open 9 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true,\"width\":1280,\"height\":800}: open 10 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true,\"width\":1280,\"height\":800}: open 11 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true,\"width\":1280,\"height\":800}: open 12 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true,\"width\":1280,\"height\":800}: open 13 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true,\"width\":1280,\"height\":800}: open 14 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true,\"width\":1280,\"height\":800}: repeated dialogs have bounded DOM",
+      "pass": true,
+      "details": {
+        "before": {
+          "JSEventListeners": 572,
+          "Nodes": 885,
+          "JSHeapUsedSize": 21247232
+        },
+        "after": {
+          "JSEventListeners": 572,
+          "Nodes": 885,
+          "JSHeapUsedSize": 21893256
+        }
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true,\"width\":1280,\"height\":800}: repeated dialogs have bounded listeners",
+      "pass": true,
+      "details": {
+        "before": {
+          "JSEventListeners": 572,
+          "Nodes": 885,
+          "JSHeapUsedSize": 21247232
+        },
+        "after": {
+          "JSEventListeners": 572,
+          "Nodes": 885,
+          "JSHeapUsedSize": 21893256
+        }
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true,\"width\":1280,\"height\":800}: large-library scrolling stays virtualized",
+      "pass": true,
+      "details": {
+        "mountedRows": 29
+      }
+    },
+    {
+      "name": "{\"theme\":\"dark\",\"expressive\":true,\"width\":1280,\"height\":800}: no uncaught errors",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false,\"width\":844,\"height\":390,\"reducedMotion\":\"reduce\"}: open 0 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false,\"width\":844,\"height\":390,\"reducedMotion\":\"reduce\"}: dropdown retains draft",
+      "pass": true
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false,\"width\":844,\"height\":390,\"reducedMotion\":\"reduce\"}: open 1 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false,\"width\":844,\"height\":390,\"reducedMotion\":\"reduce\"}: open 2 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false,\"width\":844,\"height\":390,\"reducedMotion\":\"reduce\"}: open 3 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false,\"width\":844,\"height\":390,\"reducedMotion\":\"reduce\"}: open 4 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false,\"width\":844,\"height\":390,\"reducedMotion\":\"reduce\"}: open 5 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false,\"width\":844,\"height\":390,\"reducedMotion\":\"reduce\"}: open 6 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false,\"width\":844,\"height\":390,\"reducedMotion\":\"reduce\"}: open 7 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false,\"width\":844,\"height\":390,\"reducedMotion\":\"reduce\"}: open 8 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false,\"width\":844,\"height\":390,\"reducedMotion\":\"reduce\"}: open 9 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false,\"width\":844,\"height\":390,\"reducedMotion\":\"reduce\"}: open 10 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false,\"width\":844,\"height\":390,\"reducedMotion\":\"reduce\"}: open 11 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false,\"width\":844,\"height\":390,\"reducedMotion\":\"reduce\"}: open 12 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false,\"width\":844,\"height\":390,\"reducedMotion\":\"reduce\"}: open 13 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false,\"width\":844,\"height\":390,\"reducedMotion\":\"reduce\"}: open 14 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false,\"width\":844,\"height\":390,\"reducedMotion\":\"reduce\"}: repeated dialogs have bounded DOM",
+      "pass": true,
+      "details": {
+        "before": {
+          "JSEventListeners": 455,
+          "Nodes": 760,
+          "JSHeapUsedSize": 18509348
+        },
+        "after": {
+          "JSEventListeners": 453,
+          "Nodes": 759,
+          "JSHeapUsedSize": 20404288
+        }
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false,\"width\":844,\"height\":390,\"reducedMotion\":\"reduce\"}: repeated dialogs have bounded listeners",
+      "pass": true,
+      "details": {
+        "before": {
+          "JSEventListeners": 455,
+          "Nodes": 760,
+          "JSHeapUsedSize": 18509348
+        },
+        "after": {
+          "JSEventListeners": 453,
+          "Nodes": 759,
+          "JSHeapUsedSize": 20404288
+        }
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false,\"width\":844,\"height\":390,\"reducedMotion\":\"reduce\"}: large-library scrolling stays virtualized",
+      "pass": true,
+      "details": {
+        "mountedRows": 18
+      }
+    },
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false,\"width\":844,\"height\":390,\"reducedMotion\":\"reduce\"}: no uncaught errors",
+      "pass": true,
+      "details": []
+    }
+  ],
+  "issues": [],
+  "errors": [],
+  "performance": [],
+  "measurements": [
+    {
+      "options": {
+        "theme": "light",
+        "expressive": false
+      },
+      "cycles": 15,
+      "before": {
+        "JSEventListeners": 588,
+        "Nodes": 893,
+        "JSHeapUsedSize": 21105616
+      },
+      "after": {
+        "JSEventListeners": 588,
+        "Nodes": 893,
+        "JSHeapUsedSize": 21745340
+      },
+      "mountedRows": 30
+    },
+    {
+      "options": {
+        "theme": "light",
+        "expressive": true
+      },
+      "cycles": 15,
+      "before": {
+        "JSEventListeners": 588,
+        "Nodes": 914,
+        "JSHeapUsedSize": 21379704
+      },
+      "after": {
+        "JSEventListeners": 588,
+        "Nodes": 914,
+        "JSHeapUsedSize": 22011412
+      },
+      "mountedRows": 30
+    },
+    {
+      "options": {
+        "theme": "dark",
+        "expressive": false
+      },
+      "cycles": 15,
+      "before": {
+        "JSEventListeners": 588,
+        "Nodes": 893,
+        "JSHeapUsedSize": 21093592
+      },
+      "after": {
+        "JSEventListeners": 588,
+        "Nodes": 893,
+        "JSHeapUsedSize": 21726088
+      },
+      "mountedRows": 30
+    },
+    {
+      "options": {
+        "theme": "dark",
+        "expressive": true
+      },
+      "cycles": 15,
+      "before": {
+        "JSEventListeners": 588,
+        "Nodes": 914,
+        "JSHeapUsedSize": 21360484
+      },
+      "after": {
+        "JSEventListeners": 588,
+        "Nodes": 914,
+        "JSHeapUsedSize": 21991916
+      },
+      "mountedRows": 30
+    },
+    {
+      "options": {
+        "theme": "dark",
+        "expressive": true,
+        "width": 1280,
+        "height": 800
+      },
+      "cycles": 15,
+      "before": {
+        "JSEventListeners": 572,
+        "Nodes": 885,
+        "JSHeapUsedSize": 21247232
+      },
+      "after": {
+        "JSEventListeners": 572,
+        "Nodes": 885,
+        "JSHeapUsedSize": 21893256
+      },
+      "mountedRows": 29
+    },
+    {
+      "options": {
+        "theme": "light",
+        "expressive": false,
+        "width": 844,
+        "height": 390,
+        "reducedMotion": "reduce"
+      },
+      "cycles": 15,
+      "before": {
+        "JSEventListeners": 455,
+        "Nodes": 760,
+        "JSHeapUsedSize": 18509348
+      },
+      "after": {
+        "JSEventListeners": 453,
+        "Nodes": 759,
+        "JSHeapUsedSize": 20404288
+      },
+      "mountedRows": 18
+    }
+  ]
+}

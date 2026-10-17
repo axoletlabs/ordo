@@ -1,0 +1,692 @@
+{
+  "baseline": "038175e721c390bf7323a961d27bdcbd983fb258",
+  "source": "Exact final3 runtime sources are fingerprinted in source-inventory.json. Only the six final3 suites below count as new passing verification; no historical integration or route suite is counted again.",
+  "sourceInventory": {
+    "files": 349,
+    "routes": 30,
+    "lines": 41706,
+    "interactions": 605,
+    "motionCalls": 116
+  },
+  "webExport": [
+    {
+      "path": "_expo/static/js/web/ArticleHtml-636452c6d053d3008bf88929d58823e5.js",
+      "bytes": 551241,
+      "sha256": "758abf124409d3467999e1343262016beecdb1c79ca356a03b26e1adc5179dae"
+    },
+    {
+      "path": "_expo/static/js/web/entry-58d6713277e83878c5e73e8d9e2cf8ca.js",
+      "bytes": 3856978,
+      "sha256": "d1dd8ad7f6b51bab0868ee220b5f9f6e9f6e46726bef19dae38d491fda8bc13d"
+    },
+    {
+      "path": "_expo/static/js/web/index-edebb069b083b36558bb09584456ab6a.js",
+      "bytes": 58760,
+      "sha256": "407e41638a7660234455608cbb619c5981b39f86030bb9cb5caeaf61125f6aec"
+    },
+    {
+      "path": "assets/__node_modules/@expo-google-fonts/jetbrains-mono/400Regular/JetBrainsMono_400Regular.a0147b5ab9e4946e81879aef45313def.ttf",
+      "bytes": 114904,
+      "sha256": "b6b1ff4ddefe36d7f2a6174e1d001cab374e594519ee9049af028d577b64c5f5"
+    },
+    {
+      "path": "assets/__node_modules/@expo-google-fonts/jetbrains-mono/600SemiBold/JetBrainsMono_600SemiBold.9d1d8c76cca7c52b5ba85124ea0dde52.ttf",
+      "bytes": 114900,
+      "sha256": "55987f26bab41b3fc9f13ce5ca9db9d99a75e3be4bba0f7341d3c026ff6e4706"
+    },
+    {
+      "path": "assets/__node_modules/@expo-google-fonts/roboto/400Regular/Roboto_400Regular.678ba85b47044ac65031832c80bdfe4a.ttf",
+      "bytes": 159108,
+      "sha256": "15256405ecb0d880678833a582760efad538ab2932318b52c8105b267d159459"
+    },
+    {
+      "path": "assets/__node_modules/@expo-google-fonts/roboto/500Medium/Roboto_500Medium.21030564b3bbea7711315b1670eca626.ttf",
+      "bytes": 159296,
+      "sha256": "79343dc641a2e8d48a703a4667b71fc8dc6565cc8ce47dfc34fc52c12aadbf38"
+    },
+    {
+      "path": "assets/__node_modules/@expo-google-fonts/roboto/700Bold/Roboto_700Bold.2dd437af13b14eb2f3b5de2e79523e65.ttf",
+      "bytes": 159900,
+      "sha256": "4aaf8c5b661a386998c2e70cf2b87e2440f5404e0b8fd81164f0413fb3435ec6"
+    },
+    {
+      "path": "assets/__node_modules/expo-router/assets/arrow_down.017bc6ba3fc25503e5eb5e53826d48a8.png",
+      "bytes": 9456,
+      "sha256": "6deca32b56b97fa1fa87facd6996b46cc45190a553400e7febdf1d2093099b57"
+    },
+    {
+      "path": "assets/__node_modules/expo-router/assets/error.d1ea1496f9057eb392d5bbf3732a61b7.png",
+      "bytes": 469,
+      "sha256": "c15ec72a74d13957211808313d5c35deb7f7606c6d22dbddceb0000d4e0547ad"
+    },
+    {
+      "path": "assets/__node_modules/expo-router/assets/file.19eeb73b9593a38f8e9f418337fc7d10.png",
+      "bytes": 138,
+      "sha256": "a69a2edb5b6c60b8433d5b6d23c69f520ccd8a602f3f60e7996e489718bc175c"
+    },
+    {
+      "path": "assets/__node_modules/expo-router/assets/forward.d8b800c443b8972542883e0b9de2bdc6.png",
+      "bytes": 188,
+      "sha256": "708a79cf561b8a2a4850ce0254584d3a5231046be08fb7fadf4b6edfdb31178b"
+    },
+    {
+      "path": "assets/__node_modules/expo-router/assets/pkg.ab19f4cbc543357183a20571f68380a3.png",
+      "bytes": 364,
+      "sha256": "27f4d229d440925bf7212d5dfffa45d596b2c7b3bb2905c96b839b2081a1dbeb"
+    },
+    {
+      "path": "assets/__node_modules/expo-router/assets/react-navigation/elements/back-icon-mask.0a328cd9c1afd0afe8e3b1ec5165b1b4.png",
+      "bytes": 653,
+      "sha256": "9adb8c5efca932e2b732b293da813bd2e31952263056bce9e2517fec0f0b6a76"
+    },
+    {
+      "path": "assets/__node_modules/expo-router/assets/react-navigation/elements/back-icon.35ba0eaec5a4f5ed12ca16fabeae451d.png",
+      "bytes": 207,
+      "sha256": "84cf5eb3b20250f69e0e4733beb4da5f417f0682892a5ad1b5e62570753c21b1"
+    },
+    {
+      "path": "assets/__node_modules/expo-router/assets/react-navigation/elements/clear-icon.c94f6478e7ae0cdd9f15de1fcb9e5e55.png",
+      "bytes": 220,
+      "sha256": "d03a5cd7a66ef10c5147916f9d5878b2d0a0a5ad46f405a31cd9967efaa55afd"
+    },
+    {
+      "path": "assets/__node_modules/expo-router/assets/react-navigation/elements/clear-icon.c94f6478e7ae0cdd9f15de1fcb9e5e55@2x.png",
+      "bytes": 334,
+      "sha256": "ab5613d2ce70fa67c5926e831353664945199fc195fa6fe76c5fe3cec452e31a"
+    },
+    {
+      "path": "assets/__node_modules/expo-router/assets/react-navigation/elements/clear-icon.c94f6478e7ae0cdd9f15de1fcb9e5e55@3x.png",
+      "bytes": 502,
+      "sha256": "c4e54e6a0a7de636aa153378fbc62ea4a41695bfedf807f90df7b18ffd733f67"
+    },
+    {
+      "path": "assets/__node_modules/expo-router/assets/react-navigation/elements/clear-icon.c94f6478e7ae0cdd9f15de1fcb9e5e55@4x.png",
+      "bytes": 645,
+      "sha256": "c86bb485eee687e06c500fc4234f51a6784b4530c2ae11d0c76481110bce3105"
+    },
+    {
+      "path": "assets/__node_modules/expo-router/assets/react-navigation/elements/close-icon.808e1b1b9b53114ec2838071a7e6daa7.png",
+      "bytes": 141,
+      "sha256": "b1bc1810ca23e2c38cd76971c43591d726161061240d8b792b05757196ddb528"
+    },
+    {
+      "path": "assets/__node_modules/expo-router/assets/react-navigation/elements/close-icon.808e1b1b9b53114ec2838071a7e6daa7@2x.png",
+      "bytes": 201,
+      "sha256": "cbdf9213e55f65c48d076acd8423b7c9aee4f1b81101ff6c95a38c4cd8a86461"
+    },
+    {
+      "path": "assets/__node_modules/expo-router/assets/react-navigation/elements/close-icon.808e1b1b9b53114ec2838071a7e6daa7@3x.png",
+      "bytes": 266,
+      "sha256": "d05c9d30d79f45a78e5585a2e7ec67c6a06a883dd9137e1d5059e8c87b33ce76"
+    },
+    {
+      "path": "assets/__node_modules/expo-router/assets/react-navigation/elements/close-icon.808e1b1b9b53114ec2838071a7e6daa7@4x.png",
+      "bytes": 332,
+      "sha256": "2325c53a73e54c438cbbc60dffdd8b513d471ba42e2f56713ef404b95e0ca1fc"
+    },
+    {
+      "path": "assets/__node_modules/expo-router/assets/react-navigation/elements/search-icon.286d67d3f74808a60a78d3ebf1a5fb57.png",
+      "bytes": 928,
+      "sha256": "5d075e0c287c4f4441b5b5c8fc7ea5cd27c11bb617ecea09755955bcb1889083"
+    },
+    {
+      "path": "assets/__node_modules/expo-router/assets/sitemap.412dd9275b6b48ad28f5e3d81bb1f626.png",
+      "bytes": 465,
+      "sha256": "acf691957a3bcce7d195856dce98a5cf14dce10bea28aa5c10b3550c078e23b5"
+    },
+    {
+      "path": "assets/__node_modules/expo-router/assets/unmatched.20e71bdf79e3a97bf55fd9e164041578.png",
+      "bytes": 4752,
+      "sha256": "efc79da3c4c97dfb1571bff6202958ab0529c5aa31e8392600578b3e359d1447"
+    },
+    {
+      "path": "assets/assets/fonts/Libron-Bold.166355b4a540d24563e7f27d95b23b53.ttf",
+      "bytes": 145612,
+      "sha256": "26fc5039fa2588410ca2a376deac3e5d75e17480c28a11c48c5b16c531bbec13"
+    },
+    {
+      "path": "assets/assets/fonts/Libron-BoldItalic.fe6ef4f0107837059576db02597d89b0.ttf",
+      "bytes": 165000,
+      "sha256": "e962f44498acf9073ea171b9c045856302e9dbe99251a5a0929ca2479f6d1870"
+    },
+    {
+      "path": "assets/assets/fonts/Libron-Italic.dca9f4b2549a4201a66ec139aabef5f8.ttf",
+      "bytes": 164664,
+      "sha256": "944b9ef57e3fb83eb101ceabc671200e8dba6fae63d85de0c54557237b186a9f"
+    },
+    {
+      "path": "assets/assets/fonts/Libron-Regular.de7144eca72c6d76dfbce6080634b177.ttf",
+      "bytes": 143868,
+      "sha256": "72d7a358bcb29c52f3d60078efada61a980f40b6fde7031de9e1167b351b4a38"
+    },
+    {
+      "path": "assets/assets/fonts/MaterialIcons-Ordo.61986977f668857752460e4953bb7843.ttf",
+      "bytes": 18584,
+      "sha256": "7f17b01e4f810caf926a02fd262cc3cf939b7c8549f3e3889f9f12844a485e46"
+    },
+    {
+      "path": "assets/assets/fonts/NVBitter-Bold.a2c8f2f7763a103af31777b6a87154a2.ttf",
+      "bytes": 162248,
+      "sha256": "935eb6cb6a26d7d28fb8282fdb456b6f7e83f7693c752b2c03d74d4ce6b2f312"
+    },
+    {
+      "path": "assets/assets/fonts/NVBitter-BoldItalic.acbaf90928afa4e0286236d50cd397ac.ttf",
+      "bytes": 161416,
+      "sha256": "cdcdc169954add1e154e9dec41693cf0ae88a976d91ec8fd616378b6d4b2d406"
+    },
+    {
+      "path": "assets/assets/fonts/NVBitter-Italic.414442edbf5c98c8b47277b85ba31e18.ttf",
+      "bytes": 160784,
+      "sha256": "e76aa50f14b8824ab78b009bd6031502e70dfacb77062c1f0371e5bf63104d6a"
+    },
+    {
+      "path": "assets/assets/fonts/NVBitter-Regular.fe9309e5eca3e4811a67583eb5382799.ttf",
+      "bytes": 161172,
+      "sha256": "59a0c613773870d1abe95b3ac0e4e974127726a35bb7dfb6a72a5568d7f3c9f1"
+    },
+    {
+      "path": "assets/assets/fonts/NVGaramond-Bold.008fde2023e0ef63bfb39d57471a3600.ttf",
+      "bytes": 641696,
+      "sha256": "397717819b15a416df19bdac453dd1160b03da8ff41d236f982443c6f8e88294"
+    },
+    {
+      "path": "assets/assets/fonts/NVGaramond-BoldItalic.d4a825319d311f05cf50fa66a2223706.ttf",
+      "bytes": 597064,
+      "sha256": "2a307c0d1cfded88370c6ef3fb20595a8adb03b903a7e06aaf0b57d0bd98ff3b"
+    },
+    {
+      "path": "assets/assets/fonts/NVGaramond-Italic.c4460e1bee929be313be46d493707f60.ttf",
+      "bytes": 574352,
+      "sha256": "32416ab32fd9802fb758de7adb1bb369fa983451a4eb526eff4431b454dbb940"
+    },
+    {
+      "path": "assets/assets/fonts/NVGaramond-Regular.a55cd556aff27b5953fd14379867a7a9.ttf",
+      "bytes": 595224,
+      "sha256": "ded6b51bfe0eac9d63a3c62f1b947b791bb124e693dcef10fdad160c18f339d0"
+    },
+    {
+      "path": "assets/assets/fonts/NVJost-Bold.496d6a656a38c1ca1774f57642f73631.ttf",
+      "bytes": 56384,
+      "sha256": "3414a26bb155b5fe70ee9497a511c775a646ec7b5f2c73eab636105f92211401"
+    },
+    {
+      "path": "assets/assets/fonts/NVJost-BoldItalic.a903420d417ed916318292917d8f90ae.ttf",
+      "bytes": 60392,
+      "sha256": "6903c4248edfe786c539ef18f0d598d9e86e750a9851b63b2e8dd656794b5919"
+    },
+    {
+      "path": "assets/assets/fonts/NVJost-Italic.1d1d30c06d4f0b3f93796cefbb9b3ecf.ttf",
+      "bytes": 60408,
+      "sha256": "924cee1ea69552964403561e4e0e921f3f7de1a743facb720598946c182718cf"
+    },
+    {
+      "path": "assets/assets/fonts/NVJost-Regular.7396e0897559e45fa73d781d1c909857.ttf",
+      "bytes": 56224,
+      "sha256": "5b07ed5d1bcfd16bcc2aa0a1f4ceb5207c61d5f31afdbf709377a781038ab27d"
+    },
+    {
+      "path": "assets/assets/fonts/NVLegibleNext-Bold.61ddba6eebe7104f00789c73bc4f9440.ttf",
+      "bytes": 60316,
+      "sha256": "2f6a1ea90941b663974b211bb32ec6c9d6b8e2579f3cbf35aac8b8e705df8f4f"
+    },
+    {
+      "path": "assets/assets/fonts/NVLegibleNext-BoldItalic.49feaf06c66c0f1588a6b1cc4c5c95bc.ttf",
+      "bytes": 63772,
+      "sha256": "3fcd4aa68a1b030004427c3a64e590a00207f94458738b83f6688e82faaf7b1f"
+    },
+    {
+      "path": "assets/assets/fonts/NVLegibleNext-Italic.1ba834f8c3c7692e49cb76265634b4be.ttf",
+      "bytes": 62528,
+      "sha256": "aa61d4c79b2c6b670c43170ae3605f630eee42bfbc1cbfa23408a4a3c9495ab6"
+    },
+    {
+      "path": "assets/assets/fonts/NVLegibleNext-Regular.5209b72491f1137acd8f0867a2cad57e.ttf",
+      "bytes": 58396,
+      "sha256": "82766bc07c577074eee8f3940ccd4774c438210a35e5a7c27a6c845786a582c8"
+    },
+    {
+      "path": "assets/assets/logo-mark.b87484bf28767cbaaaf27205dfb8f983.png",
+      "bytes": 311363,
+      "sha256": "99551ab74189605ceefb35cec071cd6bfc04cbcede3aee2912d47f34726e58dd"
+    },
+    {
+      "path": "index.html",
+      "bytes": 1177,
+      "sha256": "b86b824ff0e35f99d82738ccc11845dc072f16c799b4cddab6e47ad43af36846"
+    },
+    {
+      "path": "metadata.json",
+      "bytes": 49,
+      "sha256": "aa5f19cc84d41c0f8c70ececb2bc82e863227ea1e121632aca879eb616056991"
+    }
+  ],
+  "androidJsExport": [
+    {
+      "path": "_expo/static/js/android/entry-1bbb761d4063aeb2050ed08ec9deeebe.js",
+      "bytes": 4724250,
+      "sha256": "236af37339883be4db12b9d14607762d94730cf6c74654a2cf739fd94a768c95"
+    },
+    {
+      "path": "assets/008fde2023e0ef63bfb39d57471a3600",
+      "bytes": 641696,
+      "sha256": "397717819b15a416df19bdac453dd1160b03da8ff41d236f982443c6f8e88294"
+    },
+    {
+      "path": "assets/017bc6ba3fc25503e5eb5e53826d48a8",
+      "bytes": 9456,
+      "sha256": "6deca32b56b97fa1fa87facd6996b46cc45190a553400e7febdf1d2093099b57"
+    },
+    {
+      "path": "assets/02bc1fa7c0313217bde2d65ccbff40c9",
+      "bytes": 167,
+      "sha256": "ffa7ee45b76405ba73921495008f7d68c9de6395f4b6941db063465f6e382320"
+    },
+    {
+      "path": "assets/069d99eb1fa6712c0b9034a58c6b57dd",
+      "bytes": 483,
+      "sha256": "5300f50be3659d17d8cee868ec4e6c0d3f4e89944fd5899d3c20f6a767a045f5"
+    },
+    {
+      "path": "assets/0747a1317bbe9c6fc340b889ef8ab3ae",
+      "bytes": 332,
+      "sha256": "2325c53a73e54c438cbbc60dffdd8b513d471ba42e2f56713ef404b95e0ca1fc"
+    },
+    {
+      "path": "assets/0a328cd9c1afd0afe8e3b1ec5165b1b4",
+      "bytes": 653,
+      "sha256": "9adb8c5efca932e2b732b293da813bd2e31952263056bce9e2517fec0f0b6a76"
+    },
+    {
+      "path": "assets/1190ab078c57159f4245a328118fcd9a",
+      "bytes": 201,
+      "sha256": "cbdf9213e55f65c48d076acd8423b7c9aee4f1b81101ff6c95a38c4cd8a86461"
+    },
+    {
+      "path": "assets/166355b4a540d24563e7f27d95b23b53",
+      "bytes": 145612,
+      "sha256": "26fc5039fa2588410ca2a376deac3e5d75e17480c28a11c48c5b16c531bbec13"
+    },
+    {
+      "path": "assets/19eeb73b9593a38f8e9f418337fc7d10",
+      "bytes": 138,
+      "sha256": "a69a2edb5b6c60b8433d5b6d23c69f520ccd8a602f3f60e7996e489718bc175c"
+    },
+    {
+      "path": "assets/1ba834f8c3c7692e49cb76265634b4be",
+      "bytes": 62528,
+      "sha256": "aa61d4c79b2c6b670c43170ae3605f630eee42bfbc1cbfa23408a4a3c9495ab6"
+    },
+    {
+      "path": "assets/1d1d30c06d4f0b3f93796cefbb9b3ecf",
+      "bytes": 60408,
+      "sha256": "924cee1ea69552964403561e4e0e921f3f7de1a743facb720598946c182718cf"
+    },
+    {
+      "path": "assets/20e71bdf79e3a97bf55fd9e164041578",
+      "bytes": 4752,
+      "sha256": "efc79da3c4c97dfb1571bff6202958ab0529c5aa31e8392600578b3e359d1447"
+    },
+    {
+      "path": "assets/21030564b3bbea7711315b1670eca626",
+      "bytes": 159296,
+      "sha256": "79343dc641a2e8d48a703a4667b71fc8dc6565cc8ce47dfc34fc52c12aadbf38"
+    },
+    {
+      "path": "assets/286d67d3f74808a60a78d3ebf1a5fb57",
+      "bytes": 928,
+      "sha256": "5d075e0c287c4f4441b5b5c8fc7ea5cd27c11bb617ecea09755955bcb1889083"
+    },
+    {
+      "path": "assets/2dd437af13b14eb2f3b5de2e79523e65",
+      "bytes": 159900,
+      "sha256": "4aaf8c5b661a386998c2e70cf2b87e2440f5404e0b8fd81164f0413fb3435ec6"
+    },
+    {
+      "path": "assets/35ba0eaec5a4f5ed12ca16fabeae451d",
+      "bytes": 207,
+      "sha256": "84cf5eb3b20250f69e0e4733beb4da5f417f0682892a5ad1b5e62570753c21b1"
+    },
+    {
+      "path": "assets/3cd68ccdb8938e3711da2e8831b85493",
+      "bytes": 645,
+      "sha256": "c86bb485eee687e06c500fc4234f51a6784b4530c2ae11d0c76481110bce3105"
+    },
+    {
+      "path": "assets/412dd9275b6b48ad28f5e3d81bb1f626",
+      "bytes": 465,
+      "sha256": "acf691957a3bcce7d195856dce98a5cf14dce10bea28aa5c10b3550c078e23b5"
+    },
+    {
+      "path": "assets/414442edbf5c98c8b47277b85ba31e18",
+      "bytes": 160784,
+      "sha256": "e76aa50f14b8824ab78b009bd6031502e70dfacb77062c1f0371e5bf63104d6a"
+    },
+    {
+      "path": "assets/4403c6117ec30c859bc95d70ce4a71d3",
+      "bytes": 258,
+      "sha256": "ba722fb24bff0a4c52e656cdf205deac5c5df85e5bae2bf6d30713bd50c6d5f7"
+    },
+    {
+      "path": "assets/496d6a656a38c1ca1774f57642f73631",
+      "bytes": 56384,
+      "sha256": "3414a26bb155b5fe70ee9497a511c775a646ec7b5f2c73eab636105f92211401"
+    },
+    {
+      "path": "assets/49feaf06c66c0f1588a6b1cc4c5c95bc",
+      "bytes": 63772,
+      "sha256": "3fcd4aa68a1b030004427c3a64e590a00207f94458738b83f6688e82faaf7b1f"
+    },
+    {
+      "path": "assets/5209b72491f1137acd8f0867a2cad57e",
+      "bytes": 58396,
+      "sha256": "82766bc07c577074eee8f3940ccd4774c438210a35e5a7c27a6c845786a582c8"
+    },
+    {
+      "path": "assets/61986977f668857752460e4953bb7843",
+      "bytes": 18584,
+      "sha256": "7f17b01e4f810caf926a02fd262cc3cf939b7c8549f3e3889f9f12844a485e46"
+    },
+    {
+      "path": "assets/61ca7e64b7d605716c57706cef640b9a",
+      "bytes": 220,
+      "sha256": "d03a5cd7a66ef10c5147916f9d5878b2d0a0a5ad46f405a31cd9967efaa55afd"
+    },
+    {
+      "path": "assets/61ddba6eebe7104f00789c73bc4f9440",
+      "bytes": 60316,
+      "sha256": "2f6a1ea90941b663974b211bb32ec6c9d6b8e2579f3cbf35aac8b8e705df8f4f"
+    },
+    {
+      "path": "assets/678ba85b47044ac65031832c80bdfe4a",
+      "bytes": 159108,
+      "sha256": "15256405ecb0d880678833a582760efad538ab2932318b52c8105b267d159459"
+    },
+    {
+      "path": "assets/7396e0897559e45fa73d781d1c909857",
+      "bytes": 56224,
+      "sha256": "5b07ed5d1bcfd16bcc2aa0a1f4ceb5207c61d5f31afdbf709377a781038ab27d"
+    },
+    {
+      "path": "assets/778ffc9fe8773a878e9c30a6304784de",
+      "bytes": 100,
+      "sha256": "8b61a4c7ef70dc92753f0494976482f66fd4150ec23dfc772ab65e10373afa55"
+    },
+    {
+      "path": "assets/78c625386b4d0690b421eb0fc78f7b9c",
+      "bytes": 266,
+      "sha256": "d05c9d30d79f45a78e5585a2e7ec67c6a06a883dd9137e1d5059e8c87b33ce76"
+    },
+    {
+      "path": "assets/98a4e3d00dbf5d65da99a69b38a7def2",
+      "bytes": 307,
+      "sha256": "e53f1e69f862e595f5d119c042863ff2a444fe42996d22bbab876b30073d0fba"
+    },
+    {
+      "path": "assets/9b5cb09b4e669ed0f28f3b3f2871a0a5",
+      "bytes": 312,
+      "sha256": "fda3f183ae85e63bcbce70a74276ea220332ae841f746c370b0b2ab40355a357"
+    },
+    {
+      "path": "assets/9d1d8c76cca7c52b5ba85124ea0dde52",
+      "bytes": 114900,
+      "sha256": "55987f26bab41b3fc9f13ce5ca9db9d99a75e3be4bba0f7341d3c026ff6e4706"
+    },
+    {
+      "path": "assets/a0147b5ab9e4946e81879aef45313def",
+      "bytes": 114904,
+      "sha256": "b6b1ff4ddefe36d7f2a6174e1d001cab374e594519ee9049af028d577b64c5f5"
+    },
+    {
+      "path": "assets/a2c8f2f7763a103af31777b6a87154a2",
+      "bytes": 162248,
+      "sha256": "935eb6cb6a26d7d28fb8282fdb456b6f7e83f7693c752b2c03d74d4ce6b2f312"
+    },
+    {
+      "path": "assets/a55cd556aff27b5953fd14379867a7a9",
+      "bytes": 595224,
+      "sha256": "ded6b51bfe0eac9d63a3c62f1b947b791bb124e693dcef10fdad160c18f339d0"
+    },
+    {
+      "path": "assets/a903420d417ed916318292917d8f90ae",
+      "bytes": 60392,
+      "sha256": "6903c4248edfe786c539ef18f0d598d9e86e750a9851b63b2e8dd656794b5919"
+    },
+    {
+      "path": "assets/ab19f4cbc543357183a20571f68380a3",
+      "bytes": 364,
+      "sha256": "27f4d229d440925bf7212d5dfffa45d596b2c7b3bb2905c96b839b2081a1dbeb"
+    },
+    {
+      "path": "assets/acbaf90928afa4e0286236d50cd397ac",
+      "bytes": 161416,
+      "sha256": "cdcdc169954add1e154e9dec41693cf0ae88a976d91ec8fd616378b6d4b2d406"
+    },
+    {
+      "path": "assets/aff2c65b39a296d4f7e96d0f58169170",
+      "bytes": 334,
+      "sha256": "ab5613d2ce70fa67c5926e831353664945199fc195fa6fe76c5fe3cec452e31a"
+    },
+    {
+      "path": "assets/b87484bf28767cbaaaf27205dfb8f983",
+      "bytes": 311363,
+      "sha256": "99551ab74189605ceefb35cec071cd6bfc04cbcede3aee2912d47f34726e58dd"
+    },
+    {
+      "path": "assets/c3273c9e5321f20d1e42c2efae2578c4",
+      "bytes": 728,
+      "sha256": "6c8f11bfd1c7e22769dc135c16ecd0e053bb55554da88b9611d9cf71d12136f1"
+    },
+    {
+      "path": "assets/c4460e1bee929be313be46d493707f60",
+      "bytes": 574352,
+      "sha256": "32416ab32fd9802fb758de7adb1bb369fa983451a4eb526eff4431b454dbb940"
+    },
+    {
+      "path": "assets/c79c3606a1cf168006ad3979763c7e0c",
+      "bytes": 134,
+      "sha256": "906666dd689346ada232ce3689adef907b4257fa1b593f03638d2b9497f64884"
+    },
+    {
+      "path": "assets/d1ea1496f9057eb392d5bbf3732a61b7",
+      "bytes": 469,
+      "sha256": "c15ec72a74d13957211808313d5c35deb7f7606c6d22dbddceb0000d4e0547ad"
+    },
+    {
+      "path": "assets/d4a825319d311f05cf50fa66a2223706",
+      "bytes": 597064,
+      "sha256": "2a307c0d1cfded88370c6ef3fb20595a8adb03b903a7e06aaf0b57d0bd98ff3b"
+    },
+    {
+      "path": "assets/d84e297c3b3e49a614248143d53e40ca",
+      "bytes": 141,
+      "sha256": "b1bc1810ca23e2c38cd76971c43591d726161061240d8b792b05757196ddb528"
+    },
+    {
+      "path": "assets/d8b800c443b8972542883e0b9de2bdc6",
+      "bytes": 188,
+      "sha256": "708a79cf561b8a2a4850ce0254584d3a5231046be08fb7fadf4b6edfdb31178b"
+    },
+    {
+      "path": "assets/d8e7601e3df962f83c62371ac14964d8",
+      "bytes": 502,
+      "sha256": "c4e54e6a0a7de636aa153378fbc62ea4a41695bfedf807f90df7b18ffd733f67"
+    },
+    {
+      "path": "assets/dca9f4b2549a4201a66ec139aabef5f8",
+      "bytes": 164664,
+      "sha256": "944b9ef57e3fb83eb101ceabc671200e8dba6fae63d85de0c54557237b186a9f"
+    },
+    {
+      "path": "assets/de7144eca72c6d76dfbce6080634b177",
+      "bytes": 143868,
+      "sha256": "72d7a358bcb29c52f3d60078efada61a980f40b6fde7031de9e1167b351b4a38"
+    },
+    {
+      "path": "assets/fe6ef4f0107837059576db02597d89b0",
+      "bytes": 165000,
+      "sha256": "e962f44498acf9073ea171b9c045856302e9dbe99251a5a0929ca2479f6d1870"
+    },
+    {
+      "path": "assets/fe9309e5eca3e4811a67583eb5382799",
+      "bytes": 161172,
+      "sha256": "59a0c613773870d1abe95b3ac0e4e974127726a35bb7dfb6a72a5568d7f3c9f1"
+    },
+    {
+      "path": "metadata.json",
+      "bytes": 3487,
+      "sha256": "d95103c6be06dec73d84eb6efb0855222419be18e629e4632dc0b22597a7053f"
+    }
+  ],
+  "baselineWebExport": [
+    {
+      "path": "_expo/static/js/web/ArticleHtml-3414167d870f7420de47770d90a15c22.js",
+      "bytes": 551241,
+      "sha256": "a2677e0893f397766288a7bc367779ee85595334383e810cc25043c2762997d7"
+    },
+    {
+      "path": "_expo/static/js/web/entry-ea7a5ba0d887374b8b5c1b24ddada984.js",
+      "bytes": 3855137,
+      "sha256": "5aa1377659cc3f8b4a3a6196f53c887827115954cabe2f4abfa604ffb4d0ddaa"
+    },
+    {
+      "path": "_expo/static/js/web/index-72c0aa889b523d580d8a9331349ec4ee.js",
+      "bytes": 58760,
+      "sha256": "e0e81b01284873cba7d7a6ad35851eda99a1715e3aeb1a2c33cd1a8ddf533fbe"
+    },
+    {
+      "path": "index.html",
+      "bytes": 1177,
+      "sha256": "d3a8923aea5876333050fad36d4b66997c7f1135dcc992625ccbccc9efbcbff9"
+    },
+    {
+      "path": "metadata.json",
+      "bytes": 49,
+      "sha256": "aa5f19cc84d41c0f8c70ececb2bc82e863227ea1e121632aca879eb616056991"
+    }
+  ],
+  "baselineHttpVerification": "All baseline web JS/HTML/metadata bytes served on port 8268 matched the previous published manifest before packaging.",
+  "additionalSources": [
+    {
+      "path": "apps/mobile/scripts/menu-motion-audit.mjs",
+      "bytes": 9134,
+      "sha256": "70f0abc945fdc564eef1f3d8fe573caaf2640b54af986f629e5d237dec359879"
+    },
+    {
+      "path": "apps/mobile/scripts/menu-motion.test.cjs",
+      "bytes": 4899,
+      "sha256": "d44393581d487258f64b1eedf0aa7a6dcd37105055d0201a35183abfd4910cc6"
+    },
+    {
+      "path": "apps/mobile/scripts/ui-audit.mjs",
+      "bytes": 24619,
+      "sha256": "c88dabff88ba7e4105fde356cdb948a9dff673041304c3367cd0a9c640fe9e27"
+    },
+    {
+      "path": "apps/mobile/scripts/motion-lifecycle-audit.mjs",
+      "bytes": 5240,
+      "sha256": "89c4af740ac12ab8a460e789dc2d1cca0768ede83a7784c587e25cd5aca091a2"
+    },
+    {
+      "path": "apps/mobile/scripts/profile-dialogs.mjs",
+      "bytes": 3299,
+      "sha256": "9e0843bb4fcb86444ac5ff9c294d1391283c1fd8f647fa56c508b6842286cc32"
+    }
+  ],
+  "suites": [
+    {
+      "name": "menu",
+      "captures": 20,
+      "checks": 291,
+      "issues": 0,
+      "uncaughtErrors": 0,
+      "result": "menu-results.json"
+    },
+    {
+      "name": "quick",
+      "captures": 43,
+      "checks": 215,
+      "issues": 0,
+      "uncaughtErrors": 0,
+      "result": "quick-results.json"
+    },
+    {
+      "name": "overlays",
+      "captures": 60,
+      "checks": 253,
+      "issues": 0,
+      "uncaughtErrors": 0,
+      "result": "overlays-results.json"
+    },
+    {
+      "name": "wide",
+      "captures": 60,
+      "checks": 253,
+      "issues": 0,
+      "uncaughtErrors": 0,
+      "result": "wide-results.json"
+    },
+    {
+      "name": "states",
+      "captures": 34,
+      "checks": 145,
+      "issues": 0,
+      "uncaughtErrors": 0,
+      "result": "states-results.json"
+    },
+    {
+      "name": "lifecycle",
+      "captures": 0,
+      "checks": 120,
+      "issues": 0,
+      "uncaughtErrors": 0,
+      "result": "lifecycle-results.json"
+    }
+  ],
+  "totals": {
+    "captures": 217,
+    "checks": 1277,
+    "mobileTests": 49
+  },
+  "controlRegression": {
+    "result": "control-menu-results.json",
+    "expectedFailedChecks": 32,
+    "scope": "Sixteen normal-motion row exits fail two latency assertions each; reduced motion, nested ownership and rapid reopen pass."
+  },
+  "profiles": {
+    "summary": "profile-summary.json",
+    "raw": "isolated-profiles.tar.gz",
+    "cpuThrottle": 4,
+    "samplesPerKindPerInvocation": 3,
+    "order": [
+      "control",
+      "final",
+      "final2",
+      "control-repeat",
+      "final3"
+    ],
+    "isolatedSequential": true,
+    "finalRuntime": "final3",
+    "superseded": {
+      "final": "Eager disclosure initialization and experimental overlay timings.",
+      "final2": "Lazy disclosure initialization, experimental overlay timings still present."
+    }
+  },
+  "concurrency": "Menu-exit sampling and all standalone profiles ran sequentially without competing browser/build work. Broad correctness suites overlapped; their embedded quick-run performance numbers are not timing comparisons.",
+  "runnerDevelopmentFailures": [
+    {
+      "result": "runner-locator-failure.json",
+      "reason": "Role locator excluded inert underlying rows."
+    },
+    {
+      "result": "runner-sampling-failure.json",
+      "reason": "Sampler wrongly expected aria-hidden=false rather than an omitted attribute; rapid Escape did not await menu attachment; wide consent clicks landed on embedded legal links."
+    }
+  ],
+  "limits": [
+    "Cold-dialog main-thread tasks remain; overlapping small final/control ranges are not a speedup or no-regression guarantee.",
+    "No native Android device/emulator, native FPS/RAM/battery, TalkBack, or actual OEM palette verification.",
+    "Android export is JS-only (--no-bytecode), not a local Hermes/native build.",
+    "Stable repeated-dialog DOM/listeners do not prove a heap plateau or absence of leaks.",
+    "Source inventory is not branch execution coverage or Material certification."
+  ]
+}

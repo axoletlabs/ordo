@@ -4,6 +4,7 @@ import { Platform, StyleSheet, View, useWindowDimensions } from "react-native";
 import { MaterialIcon } from "./MaterialIcon";
 import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
+import { DisclosureChevron } from "./DisclosureChevron";
 import { useTheme } from "../../theme/ThemeProvider";
 import { radius, spacing } from "../../theme/tokens";
 import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
@@ -28,7 +29,8 @@ export function PickerField({ label, value, icon, onPress, dropdown = false, exp
       style={[styles.field, { backgroundColor: palette.surfaceContainerHighest, opacity: disabled ? 0.38 : 1 }]}>
       <MaterialIcon name={icon} size={24} color={palette.onSurfaceVariant} />
       <Text variant="bodyLarge" numberOfLines={1} style={{ flex: 1, minWidth: 0, paddingTop: spacing[8] + 16 * fontScale, paddingBottom: spacing[8] }}>{value}</Text>
-      <MaterialIcon name={dropdown ? expanded ? "chevron-up" : "chevron-down" : "chevron-forward"} size={24} color={palette.onSurfaceVariant} />
+      {dropdown ? <DisclosureChevron expanded={expanded} color={palette.onSurfaceVariant} />
+        : <MaterialIcon name="chevron-forward" size={24} color={palette.onSurfaceVariant} />}
     </PressableScale>
     <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: expanded ? 2 : 1, backgroundColor: expanded ? palette.primary : palette.outline }} />
     <View pointerEvents="none" style={styles.label}>

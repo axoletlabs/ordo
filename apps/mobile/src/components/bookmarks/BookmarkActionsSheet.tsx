@@ -74,8 +74,7 @@ export function BookmarkActionsSheet({
     [visible, mode, displayBookmark?.id, displayBookmark?.remindAt],
   );
 
-  const surface = mode === "delete" ? "delete" : mode === "remind" && remindPage === "custom" ? "custom" : "menu";
-  const onSurfaceExited = useMenuHighlight(visible, displayBookmark ? bookmarkKey(displayBookmark.id) : null, surface);
+  useMenuHighlight(visible, displayBookmark ? bookmarkKey(displayBookmark.id) : null);
 
   if (!displayBookmark) return null;
 
@@ -85,7 +84,6 @@ export function BookmarkActionsSheet({
         visible={visible && (mode === "menu" || (mode === "remind" && remindPage === "presets"))}
         onDismiss={onDismiss}
         onExited={() => {
-          onSurfaceExited("menu");
           const action = nextAction.current;
           nextAction.current = null;
           action?.();
@@ -224,7 +222,6 @@ export function BookmarkActionsSheet({
         initialUnix={displayBookmark.remindAt}
         busy={reminderBusy}
         onDismiss={() => setRemindPage("presets")}
-        onExited={() => onSurfaceExited("custom")}
         onConfirm={(unix) => saveReminder(unix)}
       />
       <ConfirmDialog
@@ -234,7 +231,6 @@ export function BookmarkActionsSheet({
         message="You can undo this."
         confirmLabel="Delete"
         onDismiss={() => setMode("menu")}
-        onExited={() => onSurfaceExited("delete")}
         onConfirm={() => {
           onDelete(displayBookmark);
           onDismiss();
