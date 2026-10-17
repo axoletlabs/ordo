@@ -113,4 +113,13 @@ for (const os of ["android", "ios", "web"]) {
     assert.equal(h.render().accessibilityLabel, "Reminder minute");
     assert.equal(h.render().accessibilityValue.text, "31 minutes");
   });
+
+  test(`${os}: batched drag events can return to the original value before a React commit`, () => {
+    const h = harness(os);
+    const handlers = h.render();
+    handlers.onPanResponderGrant(h.event(2));
+    handlers.onPanResponderMove(h.event(3));
+    handlers.onPanResponderMove(h.event(1));
+    assert.deepEqual(h.changes.map(change => change.hour), [14, 15, 13]);
+  });
 }

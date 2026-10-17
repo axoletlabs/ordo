@@ -30,24 +30,26 @@ export function ClockTimePicker({ hour, minute, hour12, disabled = false, onChan
   const origin = useRef({ x: 0, y: 0 });
   const gestureField = useRef<ClockField | null>(null);
   const lastValue = useRef<number | null>(null);
-  const setValue = (next: number) => {
-    if (disabled || next === value) return;
+  const setValue = (next: number, fromDrag = false) => {
+    // Continuous move events can batch before controlled props catch up. A
+    // drag back to its starting value must still overwrite the pending choice.
+    if (disabled || !fromDrag && next === value) return;
     haptics.selection();
     onChange(field === "hour" ? hour12 ? next % 12 + (hour >= 12 ? 12 : 0) : next : hour, field === "minute" ? next : minute);
   };
   const current = useRef({ disabled, field, hour12, setValue });
   current.current = { disabled, field, hour12, setValue };
-  const probe = (event: GestureResponderEvent, preciseMinutes = false) => {
+  const probe = (event: GestureResponderEvent, dragging = false) => {
     const state = current.current;
     if (state.disabled || gestureField.current !== state.field) return;
     // Page coordinates stay relative to the original surface while dragging,
     // even when a native event's target/location changes under the finger.
     const x = (event.nativeEvent.pageX - origin.current.x) * CLOCK_SIZE / width.current;
     const y = (event.nativeEvent.pageY - origin.current.y) * CLOCK_SIZE / width.current;
-    const next = clockValueAt(x, y, state.field, state.hour12, preciseMinutes ? 1 : 5);
+    const next = clockValueAt(x, y, state.field, state.hour12, dragging ? 1 : 5);
     if (next == null || next === lastValue.current) return;
     lastValue.current = next;
-    state.setValue(next);
+    state.setValue(next, dragging);
   };
   const probeRef = useRef(probe);
   probeRef.current = probe;
