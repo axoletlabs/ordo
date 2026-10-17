@@ -116,6 +116,7 @@ export async function reminderPickerMatrix({ browser, fixture, login, button, se
         minuteDial.y + minuteDial.height * (128 - Math.cos(31 / 60 * Math.PI * 2) * 104) / 256, { steps: 4 });
       await page.mouse.up();
       assert.equal(await minutes.getAttribute("aria-valuenow"), "31", "Dragging supports precise minutes without typing");
+      assert.equal(await page.evaluate(() => window.getSelection()?.toString() ?? ""), "", "Dragging the clock must not select its SVG numerals");
       await minutes.focus(); await page.keyboard.press("ArrowLeft");
       await capture(page, `${mode}-portrait-reminder`);
       await page.setViewportSize({ width: 1280, height: 800 }); await settle(page);

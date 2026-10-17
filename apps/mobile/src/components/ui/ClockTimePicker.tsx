@@ -118,7 +118,7 @@ export function ClockTimePicker({ hour, minute, hour12, disabled = false, onChan
         }
       }}
       onLayout={(event) => { if (event.nativeEvent.layout.width > 0) width.current = event.nativeEvent.layout.width; }}
-      style={[styles.clock, { opacity: disabled ? 0.38 : 1 }, Platform.OS === "web" ? { touchAction: "none", outlineColor: palette.primary } as ViewStyle : null]}>
+      style={[styles.clock, { opacity: disabled ? 0.38 : 1 }, Platform.OS === "web" ? { touchAction: "none", userSelect: "none", outlineColor: palette.primary } as ViewStyle : null]}>
       <Svg width="100%" height="100%" viewBox={`0 0 ${CLOCK_SIZE} ${CLOCK_SIZE}`} pointerEvents="none" accessible={false} aria-hidden>
         <Circle cx={CLOCK_CENTER} cy={CLOCK_CENTER} r={CLOCK_CENTER} fill={palette.surfaceContainerHighest} />
         <Line x1={CLOCK_CENTER} y1={CLOCK_CENTER} x2={hand.x} y2={hand.y} stroke={palette.primary} strokeWidth={2} />
