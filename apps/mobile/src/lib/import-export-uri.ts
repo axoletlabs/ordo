@@ -1,6 +1,5 @@
 /**
- * Export URI / cancel helpers. Keep this file free of react-native so node tests
- * can import it.
+ * Export URI / cancel helpers.
  *
  * Expo's IntentLauncher puts the result Intent's string form in `data`, so we
  * extract `dat=` (the content URI). Newer Expo versions may already return the URI.

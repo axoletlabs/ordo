@@ -13,7 +13,7 @@
 
 ## Verification
 
-Isolated plain-text preparation benchmark (`pnpm --filter @ordo/mobile test:reader-performance`): unchanged **95,012-byte** article across **24** font/size/theme combinations, **30** measured iterations with alternating order. Repeated parsing versus caching gives **24 → 1 scans**, **135.948 → 6.250ms median** and **146.893 → 8.061ms p95** for the complete 24-combination workload. Both paths assert identical text checksums. This is a Node preparation-cost comparison, not a React/native rendering, startup or FPS measurement; concurrent browser matrices were running on the build box.
+Historical isolated plain-text preparation benchmark (runner since removed): unchanged **95,012-byte** article across **24** font/size/theme combinations, **30** measured iterations with alternating order. Repeated parsing versus caching gives **24 → 1 scans**, **135.948 → 6.250ms median** and **146.893 → 8.061ms p95** for the complete 24-combination workload. Both paths asserted identical text checksums. This is a Node preparation-cost comparison, not a React/native rendering, startup or FPS measurement; concurrent browser matrices were running on the build box.
 
 The production web fixture exercises both app schemes × Standard/Expressive, all reader themes, all three fonts × four sizes in both explicit reader schemes, AMOLED, saved nested-link highlights, source-styling rejection, headings, lists, quotations, long code, stacked tables, images/captions, live device appearance, keyboard controls, contents navigation and highlight removal. Controls are checked at 390×844, 1280×800 and 320×420. Article layouts are checked in portrait and landscape.
 

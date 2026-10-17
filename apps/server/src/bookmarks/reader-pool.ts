@@ -23,8 +23,8 @@ interface WorkerResponse {
 
 /**
  * Two-thread pool for Readability/DOM work so fetch concurrency cannot freeze
- * the HTTP event loop. Falls back to in-process parse in tests or if workers
- * fail to start.
+ * the HTTP event loop. Falls back to in-process parse when workers are disabled
+ * or fail to start.
  */
 export class ExtractPool {
   private readonly workers: Worker[] = [];
@@ -35,7 +35,7 @@ export class ExtractPool {
   private inline = false;
 
   constructor() {
-    if (process.env.JEST_WORKER_ID || process.env.ORDO_EXTRACT_WORKERS === "0") {
+    if (process.env.ORDO_EXTRACT_WORKERS === "0") {
       this.inline = true;
       return;
     }

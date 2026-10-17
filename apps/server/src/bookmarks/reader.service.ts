@@ -64,11 +64,11 @@ export class ReaderService implements OnModuleDestroy {
   private readonly dnsCache = new DnsCache();
   private readonly pool = new ExtractPool();
   private readonly fetchBudget = new FetchBudget();
-  private readonly dispatcher = process.env.JEST_WORKER_ID ? null : this.createDispatcher();
+  private readonly dispatcher = this.createDispatcher();
 
   async onModuleDestroy(): Promise<void> {
     await this.pool.close();
-    if (this.dispatcher) await this.dispatcher.close();
+    await this.dispatcher.close();
   }
 
   classifyShellText(text: string): ReaderRejectionReason | null {
@@ -116,7 +116,7 @@ export class ReaderService implements OnModuleDestroy {
     signal?: AbortSignal,
     options: LoadHtmlOptions = {},
   ): Promise<{ html: string; fallbackHtml?: string }> {
-    const persist = options.cache !== false && !process.env.JEST_WORKER_ID;
+    const persist = options.cache !== false;
     if (!persist) {
       this.noteFetch(options.userId);
       return this.fetchAndMaybeAmp(url, forceArticle, signal, options);
@@ -149,7 +149,7 @@ export class ReaderService implements OnModuleDestroy {
     if (!amp) return { html };
     try {
       this.rejectUnsupportedDestination(amp, forceArticle);
-      const persist = options.cache !== false && !process.env.JEST_WORKER_ID;
+      const persist = options.cache !== false;
       const ampHtml = persist
         ? await this.htmlCache.remember(amp, () => {
             this.noteFetch(options.userId);
@@ -215,16 +215,13 @@ export class ReaderService implements OnModuleDestroy {
       };
       // npm `undici` and Node's bundled fetch are different copies. Passing this
       // Agent into global fetch throws `invalid onRequestStart method`, which
-      // every extraction then stores as `fetch_error`. Tests mock global fetch
-      // and run without a dispatcher.
-      res = this.dispatcher
-        ? ((await undiciFetch(current, {
-            redirect: "manual",
-            signal: combined,
-            headers,
-            dispatcher: this.dispatcher,
-          })) as Response)
-        : await fetch(current, { redirect: "manual", signal: combined, headers });
+      // every extraction then stores as `fetch_error`.
+      res = (await undiciFetch(current, {
+        redirect: "manual",
+        signal: combined,
+        headers,
+        dispatcher: this.dispatcher,
+      })) as Response;
       if (![301, 302, 303, 307, 308].includes(res.status)) break;
       const location = res.headers.get("location");
       if (!location) break;
@@ -356,7 +353,6 @@ export class ReaderService implements OnModuleDestroy {
   }
 
   private noteFetch(userId?: string): void {
-    if (process.env.JEST_WORKER_ID) return;
     this.fetchBudget.consume(userId);
   }
 

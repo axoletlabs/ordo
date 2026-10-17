@@ -141,9 +141,7 @@ and [JavaScript loading](https://reactnative.dev/docs/optimizing-javascript-load
 Native-stack transitions remain native; render work, not animation duration or
 an extra tap debounce, is the target.
 
-Run `pnpm --filter @ordo/mobile test:interactions` for route identity, browser
-handoff, minimum keyboard movement, and segmented shape regressions. Also run
-the normal mobile tests, Material color tests, lint, and typecheck.
+The interaction and Material test suites have been removed. Historical verification below is not a current test gate. Lint and typecheck remain available.
 
 Visual verification covers 390×844 portrait, 1280×800 landscape, 320×420
 constrained forms, light/dark, baseline/Expressive, and reduced motion. Native

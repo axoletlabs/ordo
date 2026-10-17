@@ -1884,7 +1884,7 @@ async function deploy(options = {}) {
   const childEnv = {
     ...env,
     DATABASE_URL: settings.databaseUrl,
-    NODE_ENV: env.NODE_ENV === "test" ? env.NODE_ENV : "production",
+    NODE_ENV: "production",
   };
   const setupLog = join(serverDir, "setup.log");
   const run = (cmd, cmdArgs, opts) => runSetupCommand(cmd, cmdArgs, {

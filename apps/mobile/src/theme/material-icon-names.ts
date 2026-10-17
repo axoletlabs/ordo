@@ -1,7 +1,7 @@
 /**
  * Maps the Ionicons-style names used across the app (and persisted folder
  * icons) onto Material Icons. Plain data with no React or font imports, so the
- * icon-font generator and its test can load it under Node.
+ * icon-font generator can load it under Node.
  */
 export const LEGACY_ICON_NAMES: Record<string, string> = {
   add: "add", remove: "remove", close: "close", search: "search", checkmark: "check", "checkmark-done": "done-all",

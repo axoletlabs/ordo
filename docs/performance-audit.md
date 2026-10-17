@@ -102,23 +102,13 @@ are not reported here. Accepted raw results/screenshots for this session are in
 - Smaller article batches caused repeated layout overhead. A web CSS containment
   experiment did not help and was removed.
 
-### Reproducing and validating
+### Historical validation
 
-From `apps/mobile`, use a release web export served with SPA route fallback.
-Set `ORDO_UI_URL` to that local server, `PLAYWRIGHT_MODULE` to an installed
-Playwright module if necessary, and `PLAYWRIGHT_CHROMIUM` to a Chromium binary.
-The UI scripts use fixture API responses, not a production library.
+All test runners and artifacts have been removed. The measurements below describe past runs; the remaining static checks from `apps/mobile` are:
 
 ```sh
-pnpm test
-pnpm test:material
 pnpm typecheck
 pnpm lint
-pnpm test:performance
-node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/library-sort-performance.mjs
-pnpm test:stress-ui
-pnpm test:reader-sections-ui
-ORDO_UI_READER_ONLY=1 pnpm test:ui
 ```
 
 The stress harness asserts virtualization before/after folder scrolling and a
@@ -163,18 +153,10 @@ mounted an SVG/circle pair for all dates even when nothing was painted.
   become 1–2** in the October fixture. Keep the explicit SVG circles that avoid
   square selection backgrounds on Android; the visible styling is unchanged.
 
-Reproduction from `apps/mobile`, against release-web exports served with SPA
-fallback, using the same Chromium binary/host and no concurrent builds/tests:
-
-```sh
-ORDO_UI_REMINDER_PERF_ONLY=1 node tests/material-ui-smoke.mjs
-ORDO_UI_REMINDER_ONLY=1 node tests/material-ui-smoke.mjs
-```
-
-Set `ORDO_UI_URL`, `PLAYWRIGHT_MODULE`, `PLAYWRIGHT_CHROMIUM`, and
-`ORDO_UI_OUTPUT` as needed. The timing harness fixes the date, throttles CPU 4×,
-and reports medians of three fresh browser contexts per design mode, each
-measuring a first opening and a reopening. API responses are fixtures.
+The historical timing harness (since removed) used release-web exports served with SPA
+fallback, the same Chromium binary/host, and no concurrent builds/tests.
+It fixed the date, throttled CPU 4×, and reported medians of three fresh browser contexts per design mode, each
+measuring a first opening and a reopening. API responses were fixtures.
 This measures shared JavaScript/web work, **not native FPS or backend latency**.
 The action dispatches the real Custom menu click; first-content time is the
 first animation-frame callback that sees the calendar DOM, not the end of the
@@ -418,8 +400,7 @@ build/typecheck/lint CI gates.
 - `date-fns` is imported per function.
 - Icons use `assets/fonts/MaterialIcons-Ordo.ttf`: 171 glyphs, 18 KB, down
   from 357 KB. **After adding an icon, run**
-  `node --experimental-strip-types scripts/build-icon-font.mjs`. CI fails if
-  you forget (`tests/icon-font.test.mjs`). Unknown names draw a folder glyph,
+  `node --experimental-strip-types scripts/build-icon-font.mjs`. Unknown names draw a folder glyph,
   never tofu.
 - Reading fonts are subset to drop glyphs reachable only through OpenType
   features the app never enables. Every character's outline, advance and

@@ -1,5 +1,5 @@
 # Drop build-only metadata so JS follow-ups still OTA onto older APKs.
-# extra.ordo is the git stamp. packageJson:scripts lists test files.
+# extra.ordo is the git stamp. packageJson:scripts is build/tooling metadata.
 # New builds skip both via fingerprint.config.js; this keeps detect from
 # minting an APK when comparing to older binaries that still hashed them.
 del(.hash)

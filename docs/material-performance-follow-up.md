@@ -8,18 +8,13 @@ frames. Native-device and production integration gates remain open.
 
 ## Exhaustive source inventory, bounded verification
 
-`apps/mobile/tests/ui-inventory.mjs` uses the TypeScript JSX AST, not a filename
-guess or a regular-expression list. It enumerates every JSX occurrence and
+The historical inventory tool (since removed with the test infrastructure) used the TypeScript JSX AST, not a filename
+guess or a regular-expression list. It enumerated every JSX occurrence and
 label-bearing attribute/option-object property in `app/` and `src/components/`, with source line,
 properties, conditional elements, and a SHA-256 hash for each file. Dynamic
 labels are retained as expressions; the tool does not claim to evaluate every
 possible value. Imported native/OS UI and legal websites are outside this JSX
 inventory. There is no `apps/web` package in this checkout: Expo serves web.
-
-```sh
-cd apps/mobile
-node tests/ui-inventory.mjs   # writes the inventory JSON to stdout
-```
 
 The inventory covers **137 files, 31 routes/layouts, 1,617 JSX occurrences and
 873 label occurrences**. These are source counts, not unique rendered screens.
@@ -104,8 +99,8 @@ Web font assets changed **47 → 11**, or **7,378,632 → 1,859,768 bytes** (74.
 less exported font data). This reduces distribution/cache footprint; it is not
 a measured 74.8% startup improvement, since unused faces were not all loaded.
 
-`pnpm --filter @ordo/mobile test:performance` runs five warmed 10,000-bookmark
-searches and the cold reader-detail workload. Warm median/p95 are reported,
+The historical performance runner (since removed) ran five warmed 10,000-bookmark
+searches and the cold reader-detail workload. Warm median/p95 were reported,
 not asserted against fragile wall-clock thresholds. Ordering is verified
 outside the timed region. Broad warmed-search speedups are not claimed: the
 initial runs were mixed/noisy, and still exceeded a 16.7ms frame budget for

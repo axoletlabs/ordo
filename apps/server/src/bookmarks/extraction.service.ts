@@ -165,7 +165,7 @@ export class ExtractionService {
     return new Promise((resolve) => this.idleWaiters.push(resolve));
   }
 
-  /** Run one extraction immediately (tests + callers that already hold the slot). */
+  /** Run one extraction immediately for callers that already hold the slot. */
   async enrichBookmark(
     bookmarkId: string,
     url: string,

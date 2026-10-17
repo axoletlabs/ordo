@@ -54,13 +54,13 @@ unrelated screens. No Reanimated feature flag or dependency upgrade is needed.
 
 ## Verification and remaining device check
 
-`tests/selection-native-driver.test.mjs` loads RN's real arithmetic classes,
-native graph promotion and driver guard. It checks native-driver selection,
+The historical native-driver suite (since removed) loaded RN's real arithmetic classes,
+native graph promotion and driver guard. It checked native-driver selection,
 single-coordinate resizing, exact geometry, no JS bridge listeners, fade
 ordering, retargeting, stale callbacks and live reduced motion. Its bridge and
 completion clock are simulated; it does not measure native frame rate or taps.
 
-`tests/selection-action-motion.mjs` verifies painted motion, menu placement,
+The historical browser suite (also removed) verified painted motion, menu placement,
 keyboard and interruption behavior in all eight web configurations. Android
 bundling checks native module resolution, not device performance.
 

@@ -75,7 +75,7 @@ The same 1,000-bookmark fixture, viewport and 20 selection toggles ran against t
 
 The first run overlapped more build-box work (before: eight Long Tasks, maximum 67ms; after: zero). The repeat demonstrates **no reliable web latency improvement claim** under light load; the measured fixed anchor is consistent. The subscription refactor removes the known FlatList refresh path but requires native timing verification. This is not an FPS, zero-hitch or zero-lag guarantee.
 
-Reproduce with `ORDO_UI_SELECTION_PERF=1` and the standard `test:ui` environment. Repeat results: `/tmp/opencode/ordo-hover-perf-{before,after}/results.json`. Initial measurements: `/tmp/opencode/ordo-selection-{before,after}.log`.
+The test runner and saved audit artifacts have since been removed. The figures above describe historical measurements, not a currently available suite.
 
 ## Verification limitations
 

@@ -1,7 +1,7 @@
 import { highlightIdFromMark } from "@ordo/shared";
 
 /**
- * Walk a render-html TNode (or a test double) and pull out table rows.
+ * Walk a render-html TNode and pull out table rows.
  * Nested thead/tbody/tr wrappers are flattened so the reader can render a
  * cheap stacked layout instead of Yoga-flex table cells.
  */
