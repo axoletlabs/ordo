@@ -55,7 +55,7 @@ import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
-import { PanelActions, sheetMenuStyles } from "../ui/SheetActionRow";
+import { sheetMenuStyles } from "../ui/SheetActionRow";
 import { FAB, FABLayer } from "../ui/FAB";
 import type { ArticleHeading } from "./ArticleHtml";
 import { ReaderArticle } from "./ReaderArticle";
@@ -1455,11 +1455,6 @@ function ReaderPaneInner({
             ))}
           </ThemedScrollView>
         </View>
-        <PanelActions
-          confirmLabel="Article actions"
-          confirmVariant="secondary"
-          onConfirm={() => setActionPanel("actions")}
-        />
       </FloatingPanel>
       <FloatingPanel visible={actionPanel === "highlights"} onDismiss={() => setActionPanel(null)}>
         <PanelHeader

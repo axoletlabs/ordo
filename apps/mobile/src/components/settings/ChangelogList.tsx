@@ -1,6 +1,6 @@
 /**
- * A quiet release reader: fixed heading and release navigation, with one
- * scrolling notes pane. The first bullet list groups the release highlights.
+ * A bottom-sheet release reader: minimal heading, continuous Markdown notes,
+ * and persistent release navigation. No cards or decorative change icons.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Image, Linking, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
@@ -13,45 +13,25 @@ import { PanelHeader } from "../ui/PanelHeader";
 import { PanelActions } from "../ui/SheetActionRow";
 import { IconButton } from "../ui/IconButton";
 import { Spinner } from "../ui/Spinner";
-import { Badge } from "../ui/Badge";
-import { ListItem } from "../ui/ListItem";
 import { toast } from "../ui/toast-store";
 import {
-  changelogMark,
   parseChangelogBody,
   type ChangelogAlign,
   type ChangelogBlock,
   type ChangelogInline,
   type ChangelogListItem,
-  type ChangelogMark,
   type ChangelogRelease,
 } from "../../lib/changelog";
-import { formatDate } from "../../lib/format";
 import { haptics } from "../../lib/haptics";
 import { useChangelog } from "../../hooks/use-changelog";
-import { useBuildInfo } from "../../hooks/use-build-info";
-import { useNativeUpdateStore } from "../../store/native-update";
 import { useTheme } from "../../theme/ThemeProvider";
 import { AppIcon } from "../ui/PinIcon";
 import { radius, resolveFont, spacing } from "../../theme/tokens";
-import { listPosition } from "../../theme/list-shape";
-
-const MARK_LABEL: Record<ChangelogMark, string> = {
-  installed: "Installed",
-  available: "Available",
-  early: "Preview",
-};
 
 type Piece =
   | { kind: "run"; inlines: ChangelogInline[] }
   | { kind: "command"; text: string }
   | { kind: "image"; alt: string; href: string };
-
-function releaseDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  return formatDate(iso);
-}
 
 function isCommand(text: string): boolean {
   return text.includes(" ") || text.length > 42;
@@ -100,12 +80,6 @@ function failureMessage(status: number | null): string {
     return "GitHub is limiting requests. Try again in a few minutes.";
   }
   return "Check your connection and try again.";
-}
-
-function MarkChip({ mark }: { mark: ChangelogMark }) {
-  return <Badge tone={mark === "installed" ? "accent" : mark === "available" ? "blue" : "neutral"}>
-    {MARK_LABEL[mark]}
-  </Badge>;
 }
 
 function CommandLine({ text }: { text: string }) {
@@ -287,7 +261,7 @@ function Paragraph({ inlines, variant }: { inlines: ChangelogInline[]; variant: 
 function NoteList({ items, nested }: { items: ChangelogListItem[]; nested?: boolean }) {
   const { palette } = useTheme();
   return (
-    <View style={[styles.list, nested ? styles.nestedList : null]}>
+    <View testID="changelog-list" style={[styles.list, nested ? styles.nestedList : null]}>
       {items.map((item, index) => (
         <View key={index} style={styles.listItem}>
           <View style={styles.bulletSlot}>
@@ -441,18 +415,6 @@ function BlockView({
   return <Paragraph inlines={block.inlines} variant={lead ? "callout" : "body"} />;
 }
 
-function Highlights({ items }: { items: ChangelogListItem[] }) {
-  return (
-    <View testID="changelog-highlights">
-      {items.map((item, index) => (
-        <ListItem key={index} position={listPosition(index, items.length)}>
-          {item.blocks.map((block, blockIndex) => <BlockView key={blockIndex} block={block} nested />)}
-        </ListItem>
-      ))}
-    </View>
-  );
-}
-
 function Notes({ blocks }: { blocks: ChangelogBlock[] }) {
   if (blocks.length === 0) {
     return (
@@ -462,17 +424,9 @@ function Notes({ blocks }: { blocks: ChangelogBlock[] }) {
     );
   }
   const leadIndex = blocks.findIndex((block) => block.type === "paragraph");
-  // Only an opening, unordered list is a highlight group. Preserve numbered
-  // steps, tasks and detailed lists under section headings as written.
-  const firstList = blocks.findIndex((block) => block.type === "list");
-  const highlightIndex = firstList >= 0 && !blocks.slice(0, firstList).some((block) => block.type === "heading")
-    ? firstList : -1;
   return (
     <View style={styles.notes}>
       {blocks.map((block, index) => {
-        if (index === highlightIndex && block.type === "list" && block.items.every((item) => item.kind === "bullet")) {
-          return <Highlights key={index} items={block.items} />;
-        }
         return <View key={index} style={block.type === "heading" && index > 0 ? styles.sectionHeading : undefined}>
           <BlockView block={block} lead={index === leadIndex} />
         </View>;
@@ -484,12 +438,10 @@ function Notes({ blocks }: { blocks: ChangelogBlock[] }) {
 function VersionPill({
   label,
   selected,
-  marked,
   onPress,
 }: {
   label: string;
   selected: boolean;
-  marked: boolean;
   onPress: () => void;
 }) {
   const { palette, expressive } = useTheme();
@@ -513,7 +465,6 @@ function VersionPill({
         },
       ]}
     >
-      {marked ? <View style={[styles.dot, { backgroundColor: selected ? fg : palette.primary }]} /> : null}
       <Text variant="label" style={{ color: fg }}>
         {label}
       </Text>
@@ -544,9 +495,7 @@ function ChangelogSheetBody({
   const { expressive } = useTheme();
   const { width, height } = useWindowDimensions();
   const compactActions = width >= 600 && height < 480;
-  const build = useBuildInfo();
   const changelog = useChangelog();
-  const availableVersion = useNativeUpdateStore((state) => state.release?.version ?? null);
   const releases = changelog.releases;
   const [tag, setTag] = useState<string | null>(initialTag ?? null);
 
@@ -556,8 +505,6 @@ function ChangelogSheetBody({
 
   const selected =
     releases?.find((release) => release.tagName === tag) ?? releases?.[0] ?? null;
-  const mark = selected ? changelogMark(selected, build.releaseVersion, availableVersion) : null;
-  const date = selected ? releaseDate(selected.publishedAt) : "";
   let body: ReactNode;
   if (releases == null) {
     body = changelog.errorStatus == null ? (
@@ -581,19 +528,15 @@ function ChangelogSheetBody({
   }
 
   return (
-    <FloatingPanel visible={visible} onDismiss={onDismiss} onShow={onShow} maxWidth={600} scrollResetKey={selected?.tagName}>
+    <FloatingPanel visible={visible} onDismiss={onDismiss} onShow={onShow} maxWidth={640}
+      presentation="bottom-sheet" scrollResetKey={selected?.tagName}>
       <PanelHeader title="What's new" titleVariant={expressive ? "headlineMedium" : "headlineSmall"} align="left"
-        accessory={selected ? <View style={styles.releaseMeta}>
-          <Text variant="bodyMedium" color="secondary">{`Ordo v${selected.version}${date ? ` · ${date}` : ""}`}</Text>
-          {mark ? <MarkChip mark={mark} /> : null}
-        </View> : undefined} />
+        accessory={selected ? <Text variant="bodyMedium" color="secondary">{`v${selected.version}`}</Text> : undefined} />
       {body}
       <PanelActions confirmLabel="Got it" onConfirm={onDismiss} fullWidth={!compactActions} inline={compactActions}>
         {releases && releases.length > 1 && selected ? (
           <View style={[styles.versions, compactActions ? { marginTop: 0 } : null]}>
-            {!compactActions ? <Text variant="label" color="secondary">
-              Release history
-            </Text> : null}
+            {!compactActions ? <Text variant="label" color="secondary">Earlier updates</Text> : null}
             <ScrollView
               horizontal
               accessibilityLabel="Release history"
@@ -601,13 +544,11 @@ function ChangelogSheetBody({
               contentContainerStyle={styles.pills}
             >
               {releases.map((release) => {
-                const mark = changelogMark(release, build.releaseVersion, availableVersion);
                 return (
                   <VersionPill
                     key={release.tagName}
                     label={`v${release.version}`}
                     selected={release.tagName === selected.tagName}
-                    marked={mark === "installed"}
                     onPress={() => {
                       haptics.selection();
                       setTag(release.tagName);
@@ -652,7 +593,6 @@ const styles = StyleSheet.create({
   notesContent: { paddingBottom: spacing[8] },
   notes: { gap: spacing[16] },
   sectionHeading: { marginTop: spacing[16] },
-  releaseMeta: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: spacing[8], marginTop: spacing[4] },
   empty: { gap: spacing[16] },
   prose: { gap: spacing[10] },
   command: {
@@ -664,7 +604,7 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[4],
   },
   codeText: { fontFamily: resolveFont("mono", "400"), lineHeight: 20, letterSpacing: 0 },
-  list: { gap: spacing[10] },
+  list: { gap: spacing[16] },
   listItem: { flexDirection: "row", alignItems: "flex-start" },
   bulletSlot: {
     width: spacing[16],
@@ -721,5 +661,4 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[8],
     gap: spacing[4],
   },
-  dot: { width: 6, height: 6, borderRadius: radius.full },
 });

@@ -202,21 +202,7 @@ pnpm db:generate
 pnpm --filter @ordo/shared build
 pnpm -r typecheck
 pnpm -r lint
-pnpm -r test
-pnpm --filter @ordo/mobile test:updates
-pnpm test:scripts
 pnpm audit --prod --audit-level=high
 pnpm --filter @ordo/server build
-pnpm test:release-runtime
 shellcheck -S warning .github/scripts/*.sh
 ```
-
-The runtime smoke test prebuilds all three variant manifests, checks independent
-package IDs, OTA enablement, fixed channels, deterministic
-fingerprints, runtime pinning and JS/native routing, then exports Android JS and
-Hermes bytecode. Use `--no-bytecode` only for a host whose x86 Hermes compiler
-cannot run correctly; that verifies JS export, not bytecode or an APK. A full
-signed APK build and device installation still require the Android toolchain,
-the stored upload key and a device. Script tests exercise routing, GitHub waits,
-runtime lookup, APK download/cancel/install state, archive integrity and data
-preservation with deterministic fixtures without publishing updates.

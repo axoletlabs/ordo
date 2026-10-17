@@ -365,6 +365,14 @@ reminder section on the same registration `aria-describedby`/Required-helper
 assertion on baseline and clock builds. Auth is unchanged; that assertion was
 not weakened to claim a green suite.
 
+While this change was being merged, `cec6fce` removed the repository's test
+suite and scripts. That removal is preserved: the clock validation additions
+and modifications are not reintroduced into the shipping tree. The results
+above were obtained before removal, using the archived harness; temporary
+artifacts and `/tmp/opencode/reminder-clock-validation-archive.tar` retain the
+validation evidence. The final merge continues with the repository's current
+build/typecheck/lint CI gates.
+
 ## What changed
 
 ### Launch
