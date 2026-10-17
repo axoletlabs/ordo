@@ -11,6 +11,7 @@ import { layout, spacing } from "../../theme/tokens";
 export function ConfirmDialog({
   visible,
   onDismiss,
+  onExited,
   icon,
   tone = "danger",
   title,
@@ -25,6 +26,7 @@ export function ConfirmDialog({
 }: {
   visible: boolean;
   onDismiss: () => void;
+  onExited?: () => void;
   icon?: keyof typeof Ionicons.glyphMap;
   tone?: "danger" | "accent";
   title: string;
@@ -45,6 +47,7 @@ export function ConfirmDialog({
     <FloatingPanel
       visible={visible}
       onDismiss={onDismiss}
+      onExited={onExited}
       dismissible={canDismiss}
       maxWidth={layout.overlayConfirmWidth}
     >

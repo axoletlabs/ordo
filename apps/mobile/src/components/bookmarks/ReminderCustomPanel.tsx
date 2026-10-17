@@ -24,8 +24,8 @@ export function ReminderCustomPanel(props: Parameters<typeof ReminderCustomPanel
   return activated ? <ReminderCustomPanelContent {...props} /> : null;
 }
 
-function ReminderCustomPanelContent({ visible, initialUnix, onDismiss, onConfirm, busy }: {
-  visible: boolean; initialUnix: number | null; onDismiss: () => void; onConfirm: (unix: number) => void; busy?: boolean;
+function ReminderCustomPanelContent({ visible, initialUnix, onDismiss, onExited, onConfirm, busy }: {
+  visible: boolean; initialUnix: number | null; onDismiss: () => void; onExited?: () => void; onConfirm: (unix: number) => void; busy?: boolean;
 }) {
   const hour12 = useHourCycle();
   const active = useRef(visible && !busy);
@@ -46,7 +46,7 @@ function ReminderCustomPanelContent({ visible, initialUnix, onDismiss, onConfirm
   const parts = localTimeParts(at);
   const future = at > unixSeconds();
   const changeDate = (next: number) => setDraft((state) => ({ ...state, at: next }));
-  return <FloatingPanel visible={visible} onDismiss={onDismiss} dismissible={!busy} maxWidth={384} style={styles.panel}>
+  return <FloatingPanel visible={visible} onDismiss={onDismiss} onExited={onExited} dismissible={!busy} maxWidth={384} style={styles.panel}>
     <PanelHeader title="Custom reminder" subtitle={subtitle} style={styles.rail} />
     <View style={styles.body}>
       <View style={styles.rail}><Segmented options={SECTIONS} accessibilityLabel="Reminder date or time" value={section} disabled={busy}

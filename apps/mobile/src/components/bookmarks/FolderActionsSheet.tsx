@@ -40,7 +40,7 @@ import {
 import { useServerInfo } from "../../hooks/queries";
 import { useFolderTokenStore } from "../../store/folder-tokens";
 import { folderKey } from "../../hooks/use-selection";
-import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
+import { useMenuHighlight } from "../../hooks/use-menu-highlight";
 import { useOverlaySessionMode } from "../../lib/overlay-session-mode";
 
 type Mode = "menu" | "rename" | "lockChoice" | "lockCredential" | "icon" | "delete" | "removePassword" | "removePasswordAccount";
@@ -84,16 +84,11 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
   if (folder) folderRef.current = folder;
   const displayFolder = folder ?? folderRef.current;
 
-  const highlightId = displayFolder?.id;
-  React.useLayoutEffect(() => {
-    if (!visible || !highlightId) return;
-    const key = folderKey(highlightId);
-    useMenuHighlightStore.getState().set(key);
-    return () => {
-      const store = useMenuHighlightStore.getState();
-      if (store.key === key) store.set(null);
-    };
-  }, [visible, highlightId]);
+  // Retain the folder row's highlight through nested pages AND the final exit,
+  // matching BookmarkActionsSheet: the row must not blink mid-fade or between
+  // surfaces, and a stale exit must not clear a quickly reopened menu.
+  const surface = mode === "menu" || mode === "lockChoice" ? "menu" : mode === "delete" ? "delete" : "dialog";
+  const onSurfaceExited = useMenuHighlight(visible, displayFolder ? folderKey(displayFolder.id) : null, surface);
 
   React.useEffect(() => {
     if (!visible) return;
@@ -381,7 +376,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
 
   return (
     <>
-      <ContextMenu visible={menuOpen} onDismiss={onDismiss} anchor={anchor ?? null} pageKey={mode} sessionKey={displayFolder?.id}>
+      <ContextMenu visible={menuOpen} onDismiss={onDismiss} onExited={() => onSurfaceExited("menu")} anchor={anchor ?? null} pageKey={mode} sessionKey={displayFolder?.id}>
         {displayFolder && mode === "menu" ? (
           <>
             {error ? <ContextMenuNote tone="danger">{error}</ContextMenuNote> : null}
@@ -417,7 +412,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
         ) : null}
       </ContextMenu>
 
-      <FloatingPanel visible={dialogOpen} onDismiss={onDismiss}>
+      <FloatingPanel visible={dialogOpen} onDismiss={onDismiss} onExited={() => onSurfaceExited("dialog")}>
       {folder && mode === "rename" ? (
         <>
           <PanelHeader title="Rename folder" />
@@ -727,6 +722,7 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
         }
         confirmLabel="Delete"
         onDismiss={() => showMode("menu")}
+        onExited={() => onSurfaceExited("delete")}
         onConfirm={doDelete}
       />
     </>

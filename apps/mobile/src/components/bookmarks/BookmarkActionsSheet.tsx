@@ -11,7 +11,7 @@ import * as bookmarkHooks from "../../hooks/use-bookmarks";
 import { toast } from "../ui/toast-store";
 import { errorMessage } from "../../lib/error-message";
 import { bookmarkKey } from "../../hooks/use-selection";
-import { useMenuHighlightStore } from "../../hooks/use-menu-highlight";
+import { useMenuHighlight } from "../../hooks/use-menu-highlight";
 import { useOverlaySessionMode } from "../../lib/overlay-session-mode";
 import { useServerInfo } from "../../hooks/queries";
 import { formatReminderWhen } from "../../lib/bookmark-reminders";
@@ -68,22 +68,14 @@ export function BookmarkActionsSheet({
     nextAction.current = action;
     onDismiss();
   };
-  const { save: saveReminder, busy: reminderBusy } = useSaveReminder(displayBookmark, onDismiss);
+  const { save: saveReminder, busy: reminderBusy } = useSaveReminder(displayBookmark, onDismiss, visible && mode === "remind");
   const remindNow = React.useMemo(
     () => new Date(),
     [visible, mode, displayBookmark?.id, displayBookmark?.remindAt],
   );
 
-  const highlightId = displayBookmark?.id;
-  useLayoutEffect(() => {
-    if (!visible || !highlightId) return;
-    const key = bookmarkKey(highlightId);
-    useMenuHighlightStore.getState().set(key);
-    return () => {
-      const store = useMenuHighlightStore.getState();
-      if (store.key === key) store.set(null);
-    };
-  }, [visible, highlightId]);
+  const surface = mode === "delete" ? "delete" : mode === "remind" && remindPage === "custom" ? "custom" : "menu";
+  const onSurfaceExited = useMenuHighlight(visible, displayBookmark ? bookmarkKey(displayBookmark.id) : null, surface);
 
   if (!displayBookmark) return null;
 
@@ -93,6 +85,7 @@ export function BookmarkActionsSheet({
         visible={visible && (mode === "menu" || (mode === "remind" && remindPage === "presets"))}
         onDismiss={onDismiss}
         onExited={() => {
+          onSurfaceExited("menu");
           const action = nextAction.current;
           nextAction.current = null;
           action?.();
@@ -231,6 +224,7 @@ export function BookmarkActionsSheet({
         initialUnix={displayBookmark.remindAt}
         busy={reminderBusy}
         onDismiss={() => setRemindPage("presets")}
+        onExited={() => onSurfaceExited("custom")}
         onConfirm={(unix) => saveReminder(unix)}
       />
       <ConfirmDialog
@@ -240,6 +234,7 @@ export function BookmarkActionsSheet({
         message="You can undo this."
         confirmLabel="Delete"
         onDismiss={() => setMode("menu")}
+        onExited={() => onSurfaceExited("delete")}
         onConfirm={() => {
           onDelete(displayBookmark);
           onDismiss();

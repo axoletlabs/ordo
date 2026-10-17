@@ -36,6 +36,7 @@ import { layout, radius, spacing } from "../../theme/tokens";
 export interface FloatingPanelProps {
   visible: boolean;
   onDismiss: () => void;
+  onExited?: () => void;
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   maxWidth?: number;
@@ -67,6 +68,7 @@ export function FloatingPanel(props: FloatingPanelProps) {
 function FloatingPanelSurface({
   visible,
   onDismiss,
+  onExited,
   children,
   style,
   maxWidth = layout.overlayMaxWidth,
@@ -112,7 +114,7 @@ function FloatingPanelSurface({
     dismissKeyboard();
     onDismiss();
   }, [dismissible, onDismiss]);
-  const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, { interactive: interactive && !obscured });
+  const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, { interactive: interactive && !obscured, onExited });
   const panelRef = useOverlayFocus(visible && rendered, hideAndDismiss, "dialog", dismissible, false, !interactive || obscured);
   // A sibling picker obscures this panel while staying mounted above it.
   // Crossfade this panel and its scrim (same 200ms inOut quad as the

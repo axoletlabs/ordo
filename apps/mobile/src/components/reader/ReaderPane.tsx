@@ -274,7 +274,9 @@ function ReaderPaneInner({
   >(null);
   const [actionsAnchor, setActionsAnchor] = useState<MenuAnchorRect | null>(null);
   const closeActions = useCallback(() => setActionPanel(null), []);
-  const { save: saveReminder, busy: reminderBusy } = useSaveReminder(bookmark ?? null, closeActions);
+  const { save: saveReminder, busy: reminderBusy } = useSaveReminder(
+    bookmark ?? null, closeActions, actionPanel === "remind" || actionPanel === "remind-custom",
+  );
   const remindNow = useMemo(
     () => new Date(),
     [actionPanel, bookmark?.id, bookmark?.remindAt],

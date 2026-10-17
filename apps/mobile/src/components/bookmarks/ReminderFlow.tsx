@@ -33,14 +33,23 @@ const PRESET_ICON: Record<ReminderPresetId, keyof typeof Ionicons.glyphMap> = {
   nextWeek: "calendar-outline",
 };
 
-export function useSaveReminder(bookmark: ReminderFlowBookmark | null, onDismiss: () => void) {
+export function useSaveReminder(bookmark: ReminderFlowBookmark | null, onDismiss: () => void, visible: boolean) {
   const setReminder = useSetBookmarkReminder();
   const bookmarkRef = React.useRef(bookmark);
   if (bookmark) bookmarkRef.current = bookmark;
+  // A save belongs to the menu session that started it. A slow request must
+  // still update its bookmark and toast, but cannot dismiss a different
+  // menu the user opened while it was in flight.
+  const activeSession = React.useRef<object | null>(null);
+  React.useLayoutEffect(() => {
+    activeSession.current = visible ? {} : null;
+    return () => { activeSession.current = null; };
+  }, [visible, bookmark?.id]);
 
   const save = (remindAt: number | null) => {
     const target = bookmarkRef.current;
-    if (!target) return;
+    const session = activeSession.current;
+    if (!target || !session) return;
     setReminder.mutate(
       {
         id: target.id,
@@ -54,7 +63,7 @@ export function useSaveReminder(bookmark: ReminderFlowBookmark | null, onDismiss
         onSuccess: (updated) => {
           if (updated.remindAt == null) toast.success(reminderClearedToast());
           else toast.success(reminderSetToast(updated.remindAt));
-          onDismiss();
+          if (activeSession.current === session) onDismiss();
         },
         onError: (err) => toast.error(errorMessage(err, "Couldn't update this reminder.")),
       },
@@ -134,7 +143,7 @@ export function ReminderFlow({
   showBack?: boolean;
   onBack?: () => void;
 }) {
-  const { save, busy } = useSaveReminder(bookmark, onDismiss);
+  const { save, busy } = useSaveReminder(bookmark, onDismiss, visible);
   const [page, setPage] = useOverlaySessionMode<"presets" | "custom">(visible, "presets");
   const bookmarkRef = React.useRef(bookmark);
   if (bookmark) bookmarkRef.current = bookmark;
