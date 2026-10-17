@@ -109,7 +109,7 @@ export function LibraryHeader({ tools, query, onQueryChange, onFilter, filtersOn
   onFilter: (anchor: MenuAnchorRect) => void; filtersOn?: boolean;
   filterOpen?: boolean;
   maxWidth?: number;
-  selection?: { count: number; selectableCount: number; onCancel: () => void; onToggleSelectAll: () => void };
+  selection?: Pick<React.ComponentProps<typeof SelectionHeader>, "store" | "selectableCount" | "onCancel" | "onToggleSelectAll">;
 }) {
   const { palette } = useTheme();
   const router = useRouter();

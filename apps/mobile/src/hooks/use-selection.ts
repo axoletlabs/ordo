@@ -35,7 +35,9 @@ export const useSelectionUiStore = create<{ active: boolean }>(() => ({ active: 
 
 export function useSelectionMode() {
   const [store] = useState(createSelectionState);
-  const { active, ids, revision } = useStore(store);
+  // The screen owns mode/layout only. Rows and contextual controls subscribe
+  // independently; a range update must not reconcile the list and its dialogs.
+  const active = useStore(store, state => state.active);
 
   const bump = useCallback((next: ReadonlySet<SelectionKey>, nextActive: boolean) => {
     commitSelection(store, next, nextActive);
@@ -70,11 +72,15 @@ export function useSelectionMode() {
 
   /** Drag-select writes the set without a haptic on every row. */
   const assign = useCallback(
-    (keys: readonly SelectionKey[]) => {
-      bump(new Set(keys), true);
+    (keys: ReadonlySet<SelectionKey>) => {
+      bump(keys, true);
     },
     [bump],
   );
+
+  const toggleAll = useCallback((keys: readonly SelectionKey[]) => {
+    replace(store.getState().ids.size === keys.length ? [] : keys);
+  }, [replace, store]);
 
   const activeRef = useRef(active);
   const focusedRef = useRef(false);
@@ -109,14 +115,11 @@ export function useSelectionMode() {
   return {
     store,
     active,
-    ids,
-    count: ids.size,
-    revision,
     enter,
     exit,
     toggle,
     replace,
     assign,
-    has: (key: SelectionKey) => ids.has(key),
+    toggleAll,
   };
 }

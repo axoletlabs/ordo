@@ -7,7 +7,15 @@ export function createSelectionState() {
 }
 export type SelectionStore = ReturnType<typeof createSelectionState>;
 export function commitSelection(store: SelectionStore, ids: ReadonlySet<SelectionKey>, active: boolean) {
-  store.setState({ ids, active, revision: store.getState().revision + 1 });
+  const previous = store.getState();
+  if (previous.active === active && previous.ids.size === ids.size) {
+    let equal = true;
+    if (previous.ids !== ids) for (const key of ids) {
+      if (!previous.ids.has(key)) { equal = false; break; }
+    }
+    if (equal) return;
+  }
+  store.setState({ ids, active, revision: previous.revision + 1 });
 }
 export function toggleSelection(store: SelectionStore, key: SelectionKey) {
   const ids = new Set(store.getState().ids);

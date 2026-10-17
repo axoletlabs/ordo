@@ -146,14 +146,6 @@ export default function BookmarksScreen() {
   // too, so a cold start never paints folders and then pops bookmarks in.
   const libraryLoading =
     !search.active && ((folders.isPending && !folders.isError) || (bookmarks.isPending && !bookmarks.isError));
-  const selectedBookmarks = useMemo(
-    () => items.filter((bookmark) => selection.has(bookmarkKey(bookmark.id))),
-    [items, selection],
-  );
-  const selectedFolders = useMemo(
-    () => folderItems.filter((folder) => selection.has(folderKey(folder.id))),
-    [folderItems, selection],
-  );
   const selectableKeys = useMemo(
     () => [...folderItems.map((folder) => folderKey(folder.id)), ...items.map((bookmark) => bookmarkKey(bookmark.id))],
     [folderItems, items],
@@ -242,7 +234,7 @@ export default function BookmarksScreen() {
   const drag = useSelectionDrag({
     enabled: selection.active,
     keys: selectableKeys,
-    selected: selection.ids,
+    selectionStore: selection.store,
     onSelectedChange: selection.assign,
   });
   const collapsingFab = useCollapsingFab();
@@ -364,13 +356,10 @@ export default function BookmarksScreen() {
         resultLabel={search.active ? `${libraryItems.length}${search.search.hasNextPage ? "+" : ""} ${libraryItems.length === 1 ? "result" : "results"}` : undefined}
         filters={search.filtersOn ? <LibraryFilters filters={search.filters} folders={folders.data ?? []} tags={tags.data ?? []} onChange={search.setFilters} /> : undefined}
         selection={selection.active ? {
-          count: selection.count,
+          store: selection.store,
           selectableCount: selectableKeys.length,
           onCancel: selection.exit,
-          onToggleSelectAll: () => {
-            if (selection.count === selectableKeys.length) selection.replace([]);
-            else selection.replace(selectableKeys);
-          },
+          onToggleSelectAll: () => selection.toggleAll(selectableKeys),
         } : undefined} />
 
       <ExtractionProgressLine />
@@ -532,9 +521,10 @@ export default function BookmarksScreen() {
       />
 
       <SelectionTools
+        store={selection.store}
         active={selection.active}
-        bookmarks={selectedBookmarks}
-        folders={selectedFolders}
+        bookmarks={items}
+        folders={folderItems}
         fromFolderId={null}
         onFinished={selection.exit}
         bottom={dockInset}

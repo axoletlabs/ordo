@@ -9,19 +9,19 @@ import { alphaTint, stateLayerCorners } from "../../theme/state-layer";
  * Use a fixed JS driver when the view also has JS-driven animated styles:
  * making any part of its Animated graph native promotes the other values too.
  */
-export function useStateVisibility(active: boolean, useNativeDriver = Platform.OS !== "web", initialActive = active) {
+export function useStateVisibility(active: boolean, useNativeDriver = Platform.OS !== "web", initialActive = active, immediate = false) {
   const { reducedMotion } = useMaterialMotion();
   const opacity = useRef(new Animated.Value(initialActive ? 1 : 0)).current;
-  const previous = useRef({ active: initialActive, reducedMotion });
+  const previous = useRef({ active: initialActive, reducedMotion, immediate });
   useEffect(() => {
-    if (previous.current.active === active && previous.current.reducedMotion === reducedMotion) return;
-    previous.current = { active, reducedMotion };
-    if (reducedMotion) { opacity.stopAnimation(); opacity.setValue(active ? 1 : 0); return; }
+    if (previous.current.active === active && previous.current.reducedMotion === reducedMotion && previous.current.immediate === immediate) return;
+    previous.current = { active, reducedMotion, immediate };
+    if (reducedMotion || immediate) { opacity.stopAnimation(); opacity.setValue(active ? 1 : 0); return; }
     const animation = Animated.spring(opacity, { toValue: active ? 1 : 0, ...materialMotion.effects.fast,
       useNativeDriver, isInteraction: false });
     animation.start();
     return () => animation.stop();
-  }, [opacity, reducedMotion, active, useNativeDriver]);
+  }, [opacity, reducedMotion, active, useNativeDriver, immediate]);
   return opacity;
 }
 

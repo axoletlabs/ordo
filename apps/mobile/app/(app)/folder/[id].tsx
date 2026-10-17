@@ -116,10 +116,6 @@ export default function FolderDetailScreen() {
     () => sortBookmarksBy(flattenPages(bookmarks.data?.pages ?? []), bookmarkSort),
     [bookmarkSort, bookmarks.data],
   );
-  const selectedBookmarks = useMemo(
-    () => items.filter((bookmark) => selection.has(bookmarkKey(bookmark.id))),
-    [items, selection],
-  );
   const selectableKeys = useMemo(() => items.map((bookmark) => bookmarkKey(bookmark.id)), [items]);
   const getItemLayout = useBookmarkListLayout(items);
   const isEmpty = !foldersLoading && !bookmarks.isLoading && !showLocked && !loadFailed && items.length === 0;
@@ -148,7 +144,7 @@ export default function FolderDetailScreen() {
   const drag = useSelectionDrag({
     enabled: selection.active,
     keys: selectableKeys,
-    selected: selection.ids,
+    selectionStore: selection.store,
     onSelectedChange: selection.assign,
   });
 
@@ -225,13 +221,10 @@ export default function FolderDetailScreen() {
     <View style={{ flex: 1, backgroundColor: palette.background }}>
       {selection.active ? (
         <SelectionHeader
-          count={selection.count}
+          store={selection.store}
           selectableCount={selectableKeys.length}
           onCancel={selection.exit}
-          onToggleSelectAll={() => {
-            if (selection.count === selectableKeys.length) selection.replace([]);
-            else selection.replace(selectableKeys);
-          }}
+          onToggleSelectAll={() => selection.toggleAll(selectableKeys)}
           maxWidth={pageMax}
         />
       ) : (
@@ -405,8 +398,9 @@ export default function FolderDetailScreen() {
       />
 
       <SelectionTools
+        store={selection.store}
         active={selection.active}
-        bookmarks={selectedBookmarks}
+        bookmarks={items}
         fromFolderId={folderId}
         onFinished={selection.exit}
         bottom={dockInset}

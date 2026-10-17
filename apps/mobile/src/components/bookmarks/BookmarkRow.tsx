@@ -228,6 +228,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
           : nativeHoverEvents({}, setHovered))}
     >
       <RowHighlight rest={expressive ? listCorners(position, false) : undefined} expressive={expressive}
+        selectionMode={!!selectionMode}
         hovered={hovered} pressed={pressed} selected={!!selected || !!highlighted} />
       <SelectionDragHandle
         selectionKey={bookmarkKey(bookmark.id)}

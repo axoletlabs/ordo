@@ -5,11 +5,14 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { layout } from "../../theme/tokens";
 import { View } from "react-native";
 import { Text } from "../ui/Text";
-export function SelectionHeader({ count, selectableCount, onCancel, onToggleSelectAll, maxWidth = layout.maxContentWidth, embedded = false }: {
-  count: number; selectableCount: number; onCancel: () => void; onToggleSelectAll: () => void; maxWidth?: number;
+import { useStore } from "zustand";
+import type { SelectionStore } from "../../lib/selection-state";
+export function SelectionHeader({ store, selectableCount, onCancel, onToggleSelectAll, maxWidth = layout.maxContentWidth, embedded = false }: {
+  store: SelectionStore; selectableCount: number; onCancel: () => void; onToggleSelectAll: () => void; maxWidth?: number;
   embedded?: boolean;
 }) {
   const { palette } = useTheme();
+  const count = useStore(store, state => state.ids.size);
   const all = selectableCount > 0 && count === selectableCount;
   const title = count ? `${count} selected` : "Select items";
   if (embedded) return <View style={{ minHeight: 56, flexDirection: "row", alignItems: "center", gap: 8,

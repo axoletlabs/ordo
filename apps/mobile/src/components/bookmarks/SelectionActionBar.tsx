@@ -1,11 +1,10 @@
 import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Animated, Platform, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Animated, StyleSheet, View, useWindowDimensions } from "react-native";
 import { useColumnPadding } from "../../hooks/use-scene-column-insets";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { AppIcon } from "../ui/PinIcon";
 import { StretchablePill } from "../ui/StretchablePill";
 import { Text } from "../ui/Text";
-import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 import { useSelectionBarMotion, type SelectionPillMotion } from "../../hooks/use-selection-bar-motion";
 import { type MeasureNode } from "../../lib/menu-anchor";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -48,7 +47,7 @@ export function SelectionActionBar({
 
   // Current actions lead accessibility order; departing actions cannot receive
   // touches or keyboard focus, even during the first frame after selection changes.
-  const ordered = [...actions, ...motion.retainedKeys.filter(key => !keys.includes(key)).map(key => retained.current.get(key)!)];
+  const ordered = keys.length ? actions : motion.retainedKeys.map(key => retained.current.get(key)!);
   const containerStyle = { opacity: motion.containerOpacity, transform: [{ translateY: motion.containerShift }] };
 
   return (
@@ -78,8 +77,7 @@ export function SelectionActionBar({
         >
           <View ref={railRef} style={styles.actions}>
             {ordered.map(action => <ActionSlot key={action.key} action={action} present={!keys.length || keys.includes(action.key)} exiting={!keys.length}
-              pill={motion.values.get(action.key)!} canvasWidth={available} geometryReady={motion.geometryReady}
-              departureOpacity={motion.departureOpacity} onPressed={setPressedKey}
+              pill={motion.values.get(action.key)!} canvasWidth={available} onPressed={setPressedKey}
               onPress={() => action.onPress({ measureInWindow: callback => railRef.current?.measureInWindow((x, y, _width, height) => {
                 const target = motion.getTarget(action.key);
                 if (target) callback(x + available - target.right - target.width, y, target.width, height);
@@ -91,44 +89,21 @@ export function SelectionActionBar({
   );
 }
 
-function ActionSlot({ action, present, exiting, pill, canvasWidth, geometryReady, departureOpacity, onPressed, onPress }: {
+function ActionSlot({ action, present, exiting, pill, canvasWidth, onPressed, onPress }: {
   action: SelectionAction;
   present: boolean;
   exiting: boolean;
   pill: SelectionPillMotion;
   canvasWidth: number;
-  geometryReady: boolean;
-  departureOpacity: Animated.Value;
   onPressed: (key: string | null) => void;
   onPress: () => void;
 }) {
   const { palette, expressive } = useTheme();
-  const motion = useMaterialMotion();
-  const opacity = useRef(new Animated.Value(0)).current;
-  const entered = useRef(false);
-  const [readyToPress, setReadyToPress] = useState(false);
   const key = action.key;
-  useLayoutEffect(() => {
-    if (!present) {
-      entered.current = false;
-      setReadyToPress(false);
-      return;
-    }
-    if (!geometryReady && !entered.current) { opacity.stopAnimation(); opacity.setValue(0); return; }
-    if (!geometryReady) return;
-    entered.current = true;
-    setReadyToPress(true);
-    if (motion.reducedMotion) { opacity.stopAnimation(); opacity.setValue(1); return; }
-    const animation = Animated.spring(opacity, { toValue: 1, ...materialMotion.effects.fast,
-      useNativeDriver: Platform.OS !== "web", isInteraction: false });
-    animation.start();
-    return () => animation.stop();
-  }, [present, geometryReady, motion.reducedMotion, opacity]);
   const shift = useMemo(() => Animated.multiply(pill.right, -1), [pill.right]);
-  const departingOpacity = useMemo(() => Animated.multiply(opacity, departureOpacity), [opacity, departureOpacity]);
-  const slotStyle = { transform: [{ translateX: shift }], opacity: present ? opacity : departingOpacity };
+  const slotStyle = { transform: [{ translateX: shift }] };
   const color = action.danger ? palette.onErrorContainer : palette.onSecondaryContainer;
-  const interactive = present && readyToPress && !exiting;
+  const interactive = present && !exiting;
   return <Animated.View pointerEvents={interactive ? "box-none" : "none"} aria-hidden={!interactive}
     accessibilityElementsHidden={!interactive} importantForAccessibility={interactive ? "auto" : "no-hide-descendants"}
     style={[styles.slot, { width: canvasWidth }, slotStyle]}>

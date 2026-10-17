@@ -10,22 +10,22 @@ import { materialMotion } from "./material-motion";
 
 export type CornerRadii = { borderTopLeftRadius: number; borderTopRightRadius: number; borderBottomLeftRadius: number; borderBottomRightRadius: number };
 
-export function useRowLift({ expressive, hovered, pressed, selected = false, hoverRadius = 16, pressRadius = 20, reducedMotion }: {
-  expressive: boolean; hovered: boolean; pressed?: boolean; selected?: boolean; hoverRadius?: number; pressRadius?: number; reducedMotion: boolean;
+export function useRowLift({ expressive, hovered, pressed, selected = false, hoverRadius = 16, pressRadius = 20, reducedMotion, immediate = false }: {
+  expressive: boolean; hovered: boolean; pressed?: boolean; selected?: boolean; hoverRadius?: number; pressRadius?: number; reducedMotion: boolean; immediate?: boolean;
 }) {
   const target = !expressive ? 0 : pressed || selected ? pressRadius : hovered ? hoverRadius : 0;
   // Recycled/already-selected rows must paint the right shape on their first frame.
   const lift = useRef(new Animated.Value(target)).current;
-  const previous = useRef({ target, reducedMotion });
+  const previous = useRef({ target, reducedMotion, immediate });
   useEffect(() => {
-    if (previous.current.target === target && previous.current.reducedMotion === reducedMotion) return;
-    previous.current = { target, reducedMotion };
-    if (reducedMotion) { lift.stopAnimation(); lift.setValue(target); return; }
+    if (previous.current.target === target && previous.current.reducedMotion === reducedMotion && previous.current.immediate === immediate) return;
+    previous.current = { target, reducedMotion, immediate };
+    if (reducedMotion || immediate) { lift.stopAnimation(); lift.setValue(target); return; }
     // borderRadius is not native-drivable; one hovered/pressed row at a time keeps this off the hot path.
     const animation = Animated.spring(lift, { toValue: target, ...materialMotion.effects.fast, useNativeDriver: false, isInteraction: false });
     animation.start();
     return () => animation.stop();
-  }, [lift, reducedMotion, target]);
+  }, [lift, reducedMotion, target, immediate]);
   return lift;
 }
 

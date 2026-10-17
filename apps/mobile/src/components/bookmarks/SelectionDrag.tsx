@@ -21,6 +21,9 @@ import {
   type ViewStyle,
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { useSharedValue } from "react-native-reanimated";
+import { scheduleOnRN } from "react-native-worklets";
+import { useSelectionDragInput } from "../../hooks/use-selection-drag-input";
 import { haptics } from "../../lib/haptics";
 import {
   autoScrollStep,
@@ -45,15 +48,19 @@ type Measurable = {
 type DragContextValue = {
   register: (key: string, node: Measurable | null) => void;
   consumePress: () => boolean;
-  beginFromKey: (key: string, y: number) => void;
+  beginFromKey: (key: string, y: number, mode?: SelectionDragMode) => void;
   moveTo: (y: number) => void;
   end: () => void;
+  pointer: ReturnType<typeof useSelectionDragInput>;
+  beginNative: (token: number, key: string, y: number, mode?: SelectionDragMode) => void;
+  endNative: (token: number, y: number) => void;
 };
 
 const SelectionDragContext = React.createContext<DragContextValue | null>(null);
 
 type DragSession = {
   anchorKey: string;
+  anchorIndex: number;
   mode: SelectionDragMode;
   baseline: ReadonlySet<string>;
   applied: Set<string>;
@@ -61,6 +68,8 @@ type DragSession = {
   originY: number;
   moved: boolean;
   lastIndex: number;
+  appliedIndex: number;
+  ready: boolean;
 };
 
 export function useSelectionDragRow(key: string | null) {
@@ -121,6 +130,9 @@ export function SelectionDragHandle({
   // Stay on the long-press config until the entering finger lifts, so the
   // handler that just activated is not reconfigured mid-gesture.
   const [armed, setArmed] = React.useState(selectionMode);
+  const armedRef = useRef(armed);
+  armedRef.current = armed;
+  const touchState = useSharedValue({ x: 0, y: 0, claimed: false, token: 0 });
 
   useEffect(() => {
     if (!fingerDown.current) setArmed(selectionMode);
@@ -132,12 +144,66 @@ export function SelectionDragHandle({
     ctxRef.current?.end();
   }, []);
 
+  const startNative = useCallback((token: number, y: number) => {
+    fingerDown.current = true;
+    const entering = !modeRef.current;
+    if (entering) onEnterRef.current?.();
+    ctxRef.current?.beginNative(token, keyRef.current, y, entering ? "select" : undefined);
+  }, []);
+  const finishNative = useCallback((token: number, y: number) => {
+    fingerDown.current = false;
+    setArmed(modeRef.current);
+    ctxRef.current?.endNative(token, y);
+  }, []);
+
   // Built once per arming state, and that state does not change while the
   // finger is down. A pull fails on screen movement: the row slides with
   // the finger, so the gesture's own translation stays near zero and would
   // otherwise turn the pull into a selection after the long-press delay.
+  // Reanimated compiles handler bodies to worklets at build time, so on web
+  // the shared-value writes inside a worklet cannot reach the JS gesture
+  // callbacks. Web keeps the JS-only pan; native uses the mailbox, and a
+  // mid-hold remount of the row's favicon into a checkbox keeps `armed`
+  // fresh through the ref so the active gesture is never reconfigured.
   const pan = useMemo(() => {
     const holding = armed;
+    if (Platform.OS !== "web" && ctx) {
+      const pointer = ctx.pointer;
+      return Gesture.Pan()
+        .cancelsTouchesInView(false)
+        .shouldCancelWhenOutside(false)
+        .activateAfterLongPress(holding ? 0 : SELECTION_LONG_PRESS_MS)
+        .activeOffsetY(holding ? [-MARK_ACTIVATE_PX, MARK_ACTIVATE_PX] : [-10000, 10000])
+        .onTouchesDown(event => {
+          const touch = event.allTouches[0];
+          if (touch) touchState.value = { x: touch.absoluteX, y: touch.absoluteY, claimed: false, token: 0 };
+        })
+        .onTouchesMove((event, manager) => {
+          if (holding || touchState.value.claimed) return;
+          const touch = event.allTouches[0] ?? event.changedTouches[0];
+          if (!touch) return;
+          const dx = touch.absoluteX - touchState.value.x;
+          const dy = touch.absoluteY - touchState.value.y;
+          if (dx * dx + dy * dy > SELECTION_DRAG_SLOP * SELECTION_DRAG_SLOP) manager.fail();
+        })
+        .onStart(event => {
+          const token = pointer.value.token + 1;
+          touchState.value = { ...touchState.value, claimed: true, token };
+          pointer.value = { token, y: event.absoluteY, active: true };
+          scheduleOnRN(startNative, token, event.absoluteY);
+        })
+        .onUpdate(event => {
+          // No runOnJS per touch event: overwrite the latest position on UI.
+          pointer.value = { token: touchState.value.token, y: event.absoluteY, active: true };
+        })
+        .onFinalize(event => {
+          if (!touchState.value.claimed) return;
+          const token = touchState.value.token;
+          touchState.value = { ...touchState.value, claimed: false };
+          if (pointer.value.token === token) pointer.value = { token, y: event.absoluteY, active: false };
+          scheduleOnRN(finishNative, token, event.absoluteY);
+        });
+    }
     let originX = 0;
     let originY = 0;
     let claimed = false;
@@ -165,17 +231,18 @@ export function SelectionDragHandle({
       .onStart((event) => {
         claimed = true;
         fingerDown.current = true;
-        if (!modeRef.current) onEnterRef.current?.();
-        ctxRef.current?.beginFromKey(keyRef.current, event.absoluteY);
+        const entering = !modeRef.current;
+        if (entering) onEnterRef.current?.();
+        ctxRef.current?.beginFromKey(keyRef.current, event.absoluteY, entering ? "select" : undefined);
       })
       .onUpdate((event) => {
         ctxRef.current?.moveTo(event.absoluteY);
       })
       .onFinalize(() => {
+        if (claimed) finish();
         claimed = false;
-        finish();
       });
-  }, [armed, finish]);
+  }, [armed, ctx, finish, finishNative, startNative, touchState]);
 
   return (
     <GestureDetector gesture={pan}>
@@ -189,13 +256,13 @@ export function SelectionDragHandle({
 export function useSelectionDrag({
   enabled,
   keys,
-  selected,
+  selectionStore,
   onSelectedChange,
 }: {
   enabled: boolean;
   keys: readonly SelectionKey[];
-  selected: ReadonlySet<SelectionKey>;
-  onSelectedChange: (keys: SelectionKey[]) => void;
+  selectionStore: SelectionStore;
+  onSelectedChange: (keys: ReadonlySet<SelectionKey>) => void;
 }) {
   const listRef = useRef<FlatList<any>>(null);
   const hostRef = useRef<View>(null);
@@ -203,10 +270,11 @@ export function useSelectionDrag({
   const nodes = useRef(new Map<string, Measurable>());
   const keysRef = useRef(keys);
   keysRef.current = keys;
-  const enabledRef = useRef(enabled);
-  enabledRef.current = enabled;
-  const selectedRef = useRef(selected);
-  selectedRef.current = selected;
+  const indices = useMemo(() => new Map(keys.map((key, index) => [key, index])), [keys]);
+  const indicesRef = useRef(indices);
+  indicesRef.current = indices;
+  const storeRef = useRef(selectionStore);
+  storeRef.current = selectionStore;
   const onChangeRef = useRef(onSelectedChange);
   onChangeRef.current = onSelectedChange;
 
@@ -219,6 +287,7 @@ export function useSelectionDrag({
   const viewportRef = useRef({ top: 0, bottom: 0, height: 0 });
   const contentHeightRef = useRef(0);
   const rafRef = useRef(0);
+  const nativeToken = useRef<number | null>(null);
   const clearSuppressRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Once a drag is moving, keep the frames that onScroll shifts. A late
@@ -231,7 +300,9 @@ export function useSelectionDrag({
   }, []);
 
   const measureNode = useCallback((key: string, node: Measurable) => {
+    const session = dragRef.current;
     node.measureInWindow?.((x, y, width, height) => {
+      if (dragRef.current !== session) return;
       if (nodes.current.get(key) !== node || height <= 0 || width <= 0) return;
       placeFrame(key, y, height);
     });
@@ -253,6 +324,7 @@ export function useSelectionDrag({
   );
 
   const remeasureAll = useCallback((done: () => void) => {
+    const session = dragRef.current;
     const entries = [...nodes.current.entries()];
     if (entries.length === 0) {
       done();
@@ -269,7 +341,7 @@ export function useSelectionDrag({
         continue;
       }
         node.measureInWindow((x, y, width, height) => {
-          if (nodes.current.get(key) === node && height > 0 && width > 0) {
+          if (dragRef.current === session && nodes.current.get(key) === node && height > 0 && width > 0) {
             placeFrame(key, y, height);
           }
           finish();
@@ -278,12 +350,14 @@ export function useSelectionDrag({
   }, [placeFrame]);
 
   const measureHost = useCallback((done?: () => void) => {
+    const session = dragRef.current;
     const node = hostRef.current;
     if (!node?.measureInWindow) {
       done?.();
       return;
     }
     node.measureInWindow((x, y, width, height) => {
+      if (dragRef.current !== session) return;
       if (height > 0) {
         viewportRef.current = { top: y, bottom: y + height, height };
         maxOffsetRef.current = Math.max(0, contentHeightRef.current - height);
@@ -295,15 +369,18 @@ export function useSelectionDrag({
   const applyAt = useCallback((pointerY: number) => {
     // Window coordinates, shifted only by the scroll delta.
     const session = dragRef.current;
-    if (!session) return;
-    const hit = indexForDrag(keysRef.current, frames.current, pointerY);
+    if (!session?.ready) return;
+    const hit = indexForDrag(keysRef.current, frames.current, pointerY, indicesRef.current);
     const index = hit ?? session.lastIndex;
     if (hit != null) session.lastIndex = hit;
-    const next = keysAfterDrag(keysRef.current, session.baseline, session.anchorKey, index, session.mode);
+    // Stationary frames and movement within a row do no set cloning or writes.
+    if (index === session.appliedIndex) return;
+    session.appliedIndex = index;
+    const next = keysAfterDrag(keysRef.current, session.baseline, session.anchorKey, index, session.mode, session.anchorIndex);
     if (!next || sameSelection(session.applied, next)) return;
     session.applied = new Set(next);
     haptics.selection();
-    onChangeRef.current(next as SelectionKey[]);
+    onChangeRef.current(session.applied as Set<SelectionKey>);
   }, []);
 
   const stopLoop = useCallback(() => {
@@ -342,11 +419,14 @@ export function useSelectionDrag({
     list?.getNativeScrollRef?.()?.setNativeProps?.({ scrollEnabled: enabled });
   }, []);
 
-  const endDrag = useCallback(() => {
+  const endDrag = useCallback((commitPending = true) => {
     detachPointer.current?.();
     detachPointer.current = null;
     const hadSession = dragRef.current != null;
+    const session = dragRef.current;
+    if (commitPending && storeRef.current.getState().active && session?.moved) applyAt(session.pointerY);
     dragRef.current = null;
+    nativeToken.current = null;
     replaceFrames.current = true;
     stopLoop();
     setListScrollEnabled(true);
@@ -356,39 +436,47 @@ export function useSelectionDrag({
     clearSuppressRef.current = setTimeout(() => {
       suppressRef.current = false;
     }, 120);
-  }, [setListScrollEnabled, stopLoop]);
+  }, [applyAt, setListScrollEnabled, stopLoop]);
 
   const beginFromKey = useCallback(
-    (key: string, y: number) => {
+    (key: string, y: number, mode?: SelectionDragMode) => {
       const anchorIndex = keysRef.current.indexOf(key as SelectionKey);
       if (anchorIndex < 0) return;
       detachPointer.current?.();
       detachPointer.current = null;
-      const baseline = new Set(selectedRef.current);
+      if (clearSuppressRef.current) clearTimeout(clearSuppressRef.current);
+      const baseline = new Set(storeRef.current.getState().ids);
       suppressRef.current = true;
       replaceFrames.current = true;
-      dragRef.current = {
+      const session: DragSession = {
         anchorKey: key,
-        mode: baseline.has(key as SelectionKey) ? "deselect" : "select",
+        anchorIndex,
+        mode: mode ?? (baseline.has(key as SelectionKey) ? "deselect" : "select"),
         baseline,
         applied: new Set(baseline),
         pointerY: y,
         originY: y,
         moved: false,
         lastIndex: anchorIndex,
+        appliedIndex: anchorIndex,
+        ready: false,
       };
+      dragRef.current = session;
+      stopLoop();
+      const initial = keysAfterDrag(keysRef.current, baseline, key, anchorIndex, session.mode, anchorIndex);
+      if (initial && !sameSelection(session.applied, initial)) {
+        session.applied = new Set(initial);
+        onChangeRef.current(session.applied as Set<SelectionKey>);
+      }
       // Stop the list from also scrolling or arming pull-to-refresh under this finger.
       setListScrollEnabled(false);
       measureHost(() => {
+        if (dragRef.current !== session) return;
         remeasureAll(() => {
-          if (!dragRef.current) return;
+          if (dragRef.current !== session) return;
           replaceFrames.current = false;
-          const session = dragRef.current;
-          const next = keysAfterDrag(keysRef.current, session.baseline, session.anchorKey, anchorIndex, session.mode);
-          if (next && !sameSelection(session.applied, next)) {
-            session.applied = new Set(next);
-            onChangeRef.current(next as SelectionKey[]);
-          }
+          session.ready = true;
+          if (session.moved) applyAt(session.pointerY);
           stopLoop();
           rafRef.current = requestAnimationFrame(tick);
         });
@@ -399,9 +487,12 @@ export function useSelectionDrag({
           if (!session) return;
           session.pointerY = event.clientY;
           session.moved ||= Math.abs(event.clientY - session.originY) > MARK_ACTIVATE_PX;
-          if (session.moved) applyAt(event.clientY);
         };
-        const up = () => endDrag();
+        const up = (event: PointerEvent) => {
+          const session = dragRef.current;
+          if (session) session.pointerY = event.clientY;
+          endDrag();
+        };
         window.addEventListener("pointermove", move);
         window.addEventListener("pointerup", up);
         window.addEventListener("pointercancel", up);
@@ -421,13 +512,29 @@ export function useSelectionDrag({
       if (!session) return;
       session.pointerY = y;
       session.moved ||= Math.abs(y - session.originY) > MARK_ACTIVATE_PX;
-      if (session.moved) applyAt(y);
     },
-    [applyAt],
+    [],
   );
+
+  const pointer = useSelectionDragInput((token, y) => {
+    if (nativeToken.current === token) moveTo(y);
+  });
+  const beginNative = useCallback((token: number, key: string, y: number, mode?: SelectionDragMode) => {
+    if (nativeToken.current != null && nativeToken.current !== token) return;
+    nativeToken.current = token;
+    beginFromKey(key, y, mode);
+  }, [beginFromKey]);
+  const endNative = useCallback((token: number, y: number) => {
+    if (nativeToken.current !== token) return;
+    nativeToken.current = null;
+    moveTo(y);
+    endDrag();
+  }, [endDrag, moveTo]);
 
   useEffect(
     () => () => {
+      dragRef.current = null;
+      nativeToken.current = null;
       detachPointer.current?.();
       detachPointer.current = null;
       stopLoop();
@@ -437,8 +544,11 @@ export function useSelectionDrag({
   );
 
   useEffect(() => {
-    if (!enabled) endDrag();
+    if (!enabled) endDrag(false);
   }, [enabled, endDrag]);
+
+  // Sorting, filtering or paging changes invalidate the range's cached indices.
+  useEffect(() => { endDrag(false); }, [keys, endDrag]);
 
   const context = useMemo<DragContextValue>(
     () => ({
@@ -447,8 +557,11 @@ export function useSelectionDrag({
       beginFromKey,
       moveTo,
       end: endDrag,
+      pointer,
+      beginNative,
+      endNative,
     }),
-    [beginFromKey, endDrag, moveTo, register],
+    [beginFromKey, beginNative, endDrag, endNative, moveTo, pointer, register],
   );
 
   const onScroll = useCallback((event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -460,9 +573,7 @@ export function useSelectionDrag({
       frame.top -= delta;
       frame.bottom -= delta;
     }
-    const session = dragRef.current;
-    if (session?.moved) applyAt(session.pointerY);
-  }, [applyAt]);
+  }, []);
 
   const onContentSizeChange = useCallback((_width: number, height: number) => {
     contentHeightRef.current = height;

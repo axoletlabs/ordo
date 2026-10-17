@@ -3,7 +3,9 @@
  * what every selected item can do: bookmarks get read/move/more/delete (tags
  * and copy live in the More menu); folders get pin/delete; a mix only deletes.
  */
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import { useStore } from "zustand";
+import { useShallow } from "zustand/react/shallow";
 import type { BookmarkDto, FolderDto } from "@ordo/shared";
 import { SelectionActionBar, type SelectionAction } from "./SelectionActionBar";
 import { AddTagsSheet } from "./AddTagsSheet";
@@ -20,16 +22,22 @@ import { haptics } from "../../lib/haptics";
 import { deleteUndoable } from "../../lib/undoable-delete";
 import { toast } from "../ui/toast-store";
 import { layout } from "../../theme/tokens";
+import type { SelectionStore } from "../../lib/selection-state";
+import { indexSelectionItems, selectedItems, selectionCapabilities } from "../../lib/selection-items";
+
+const noFolders: readonly FolderDto[] = [];
 
 export function SelectionTools({
+  store,
   active,
-  bookmarks,
-  folders = [],
+  bookmarks: candidateBookmarks,
+  folders: candidateFolders = noFolders,
   fromFolderId,
   onFinished,
   bottom,
   maxWidth = layout.maxContentWidth,
 }: {
+  store: SelectionStore;
   active: boolean;
   bookmarks: readonly BookmarkDto[];
   folders?: readonly FolderDto[];
@@ -45,17 +53,21 @@ export function SelectionTools({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [more, setMore] = useState<{ open: boolean; anchor: MenuAnchorRect | null }>({ open: false, anchor: null });
   const busy = batchBookmarks.isPending || batchFolders.isPending;
-  const empty = bookmarks.length === 0 && folders.length === 0;
+  const items = useMemo(() => indexSelectionItems(candidateBookmarks, candidateFolders), [candidateBookmarks, candidateFolders]);
+  const { empty, bookmarksOnly, foldersOnly, allRead, allPinned } = useStore(store,
+    useShallow(state => selectionCapabilities(state.ids, items)));
+  const getSelected = () => selectedItems(store.getState().ids, items);
+  // Dialogs retain a snapshot through exit. Dragging must neither recreate
+  // their props on every row crossing nor change a pending bulk operation.
+  const [{ bookmarks, folders }, setSnapshot] = useState<{ bookmarks: BookmarkDto[]; folders: FolderDto[] }>({ bookmarks: [], folders: [] });
+  const captureSelection = () => setSnapshot(getSelected());
   const mixed = bookmarks.length > 0 && folders.length > 0;
-  const bookmarksOnly = bookmarks.length > 0 && folders.length === 0;
-  const foldersOnly = folders.length > 0 && bookmarks.length === 0;
-  const allRead = bookmarksOnly && bookmarks.every((bookmark) => bookmark.isRead);
-  const allPinned = foldersOnly && folders.every((folder) => folder.pinned);
+  const snapshotFoldersOnly = folders.length > 0 && bookmarks.length === 0;
 
   const runBookmarks = async (
     action: "delete" | "markRead" | "markUnread",
-    success: string,
   ) => {
+    const { bookmarks } = getSelected();
     try {
       haptics.medium();
       await batchBookmarks.mutateAsync({
@@ -63,7 +75,7 @@ export function SelectionTools({
         ids: bookmarks.map((bookmark) => bookmark.id),
         scopeFolderId: fromFolderId,
       });
-      toast.success(success);
+      toast.success(action === "markUnread" ? markedAsUnreadToast(bookmarks.length) : markedAsReadToast(bookmarks.length));
       onFinished();
     } catch (cause) {
       haptics.error();
@@ -72,6 +84,7 @@ export function SelectionTools({
   };
 
   const runFolders = async (action: "delete" | "pin", pinned?: boolean, success?: string) => {
+    const { folders } = getSelected();
     try {
       haptics.medium();
       await batchFolders.mutateAsync({
@@ -89,7 +102,7 @@ export function SelectionTools({
 
   const deleteTitle = mixed
     ? `Delete ${folders.length} ${folders.length === 1 ? "folder" : "folders"} and ${bookmarks.length} ${bookmarks.length === 1 ? "bookmark" : "bookmarks"}?`
-    : foldersOnly
+    : snapshotFoldersOnly
       ? folders.length === 1
         ? `Delete ${folders[0].name}?`
         : `Delete ${folders.length} folders?`
@@ -99,7 +112,7 @@ export function SelectionTools({
 
   const deleteMessage = mixed
     ? "Folders and their bookmarks will be deleted, along with the selected bookmarks. You can undo this."
-    : foldersOnly
+    : snapshotFoldersOnly
       ? folders.some((folder) => folder.bookmarkCount > 0)
         ? "Folders and every bookmark inside them will be deleted. You can undo this."
         : "You can undo this."
@@ -114,18 +127,14 @@ export function SelectionTools({
         icon: allRead ? "radio-button-off" : "checkmark-circle",
         label: allRead ? "Unread" : "Read",
         disabled,
-        onPress: () =>
-          void runBookmarks(
-            allRead ? "markUnread" : "markRead",
-            allRead ? markedAsUnreadToast(bookmarks.length) : markedAsReadToast(bookmarks.length),
-          ),
+        onPress: () => void runBookmarks(allRead ? "markUnread" : "markRead"),
       });
       actions.push({
         key: "move",
         icon: "folder-open-outline",
         label: "Move",
         disabled,
-        onPress: () => setMoveOpen(true),
+        onPress: () => { captureSelection(); setMoveOpen(true); },
       });
       // Tags and copy are real but secondary in bulk workflows; keeping them
       // out of the bar leaves four roomy pills on a narrow phone instead of
@@ -135,7 +144,7 @@ export function SelectionTools({
         icon: "ellipsis-horizontal",
         label: "More",
         disabled,
-        onPress: (trigger) => measureAnchor(trigger, (anchor) => setMore({ open: true, anchor })),
+        onPress: (trigger) => { captureSelection(); measureAnchor(trigger, (anchor) => setMore({ open: true, anchor })); },
       });
     } else if (foldersOnly) {
       actions.push({
@@ -153,7 +162,7 @@ export function SelectionTools({
       label: "Delete",
       danger: true,
       disabled,
-      onPress: () => setDeleteOpen(true),
+      onPress: () => { captureSelection(); setDeleteOpen(true); },
     });
   }
 

@@ -129,6 +129,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
           : nativeHoverEvents({}, setHovered))}
     >
       <RowHighlight rest={expressive ? listCorners(position, false) : undefined} expressive={expressive}
+        selectionMode={!!selectionMode}
         hovered={hovered} pressed={pressed} selected={!!selected || !!highlighted} />
       <SelectionDragHandle
         selectionKey={folderKey(folder.id)}

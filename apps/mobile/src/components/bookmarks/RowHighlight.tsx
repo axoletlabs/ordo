@@ -12,17 +12,20 @@ import { useMaterialMotion } from "../../theme/material-motion";
 import { useRowCornerStyle, useRowLift, type CornerRadii } from "../../theme/row-shape";
 import { useStateVisibility } from "../ui/StateLayer";
 
-export function RowHighlight({ rest, expressive, hovered, pressed, selected, hoverRadius, pressRadius }: {
+export function RowHighlight({ rest, expressive, hovered, pressed, selected, hoverRadius, pressRadius, selectionMode = false }: {
   rest?: CornerRadii; expressive: boolean; hovered: boolean; pressed: boolean; selected: boolean;
   hoverRadius?: number; pressRadius?: number;
+  selectionMode?: boolean;
 }) {
   const { palette } = useTheme();
   const { reducedMotion } = useMaterialMotion();
   // Opacity shares each view's graph with the JS-driven corner morph. Keep
   // both on JS, even in Standard mode, so toggling Expressive stays safe.
-  const selection = useStateVisibility(selected, false);
+  // Range and Select all feedback is immediate, not dozens of JS springs that
+  // continue chasing already-obsolete selection states after the finger lifts.
+  const selection = useStateVisibility(selected, false, selected, selectionMode);
   const feedback = useStateVisibility(pressed || hovered, false);
-  const lift = useRowLift({ expressive, hovered, pressed, selected, hoverRadius, pressRadius, reducedMotion });
+  const lift = useRowLift({ expressive, hovered, pressed, selected, hoverRadius, pressRadius, reducedMotion, immediate: selectionMode });
   const morph = useRowCornerStyle(lift, expressive ? rest : undefined);
   // Static rest corners under the interpolations: before the first animation
   // frame RN-web has not written the dynamic style yet, and the surface must

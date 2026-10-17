@@ -1,15 +1,14 @@
 import { useCallback, useLayoutEffect, useRef, useState } from "react";
-import { Animated, Easing, Platform } from "react-native";
+import { Animated, Platform } from "react-native";
 import { selectionActionLayout } from "../lib/selection-action-layout";
 import { materialMotion, useMaterialMotion } from "../theme/material-motion";
 
-export const SELECTION_DEPARTURE_MS = 90;
 export type SelectionPillMotion = { width: Animated.Value; right: Animated.Value };
 const nativeDriver = Platform.OS !== "web";
 
-/** The resize graph runs in Android's NativeAnimatedNodesManager, not in
- * Reanimated's per-frame Fabric commits. JS only retargets and handles completion.
- * No listeners, frame callbacks, or synchronous UI-runtime reads are needed. */
+/** Capability changes settle immediately. Only explicit button presses resize
+ * the group; dragging across folder/bookmark boundaries must not repeatedly
+ * choreograph a departure, a Delete expansion, and returning controls. */
 export function useSelectionBarMotion(keys: readonly string[], available: number, pressedKey: string | null) {
   const motion = useMaterialMotion();
   const activePress = keys.includes(pressedKey ?? "") ? pressedKey : null;
@@ -20,8 +19,6 @@ export function useSelectionBarMotion(keys: readonly string[], available: number
   latest.current = { key, keys, target, version: latest.current.version };
   const [retainedKeys, setRetainedKeys] = useState<readonly string[]>(keys);
   const [shown, setShown] = useState(keys.length > 0);
-  const [geometryReady, setGeometryReady] = useState(true);
-  const settledKey = useRef(key);
   const values = useRef(new Map<string, SelectionPillMotion>());
   for (const actionKey of keys) {
     if (!values.current.has(actionKey)) values.current.set(actionKey, {
@@ -31,41 +28,33 @@ export function useSelectionBarMotion(keys: readonly string[], available: number
   }
   const containerOpacity = useRef(new Animated.Value(0)).current;
   const containerShift = useRef(new Animated.Value(12)).current;
-  const departureOpacity = useRef(new Animated.Value(1)).current;
   const previousKeys = useRef<readonly string[]>(keys);
   const previousTarget = useRef(target);
+  const previousWidth = useRef(available);
   const resize = useRef<Animated.CompositeAnimation | null>(null);
-  const resizeGeneration = useRef(0);
   const moving = useRef(new Set<string>());
-  const fading = useRef(false);
 
   useLayoutEffect(() => {
-    const generation = ++resizeGeneration.current;
     resize.current?.stop();
     const current = latest.current;
-    const departing = previousKeys.current.some(actionKey => !current.keys.includes(actionKey));
-    const reopening = current.keys.length > 0 && previousKeys.current.length === 0;
+    const changedActions = JSON.stringify(previousKeys.current) !== current.key;
+    const changedWidth = previousWidth.current !== available;
     previousKeys.current = current.keys;
+    previousWidth.current = available;
     if (!current.keys.length) return;
-    setRetainedKeys(previous => [...current.keys, ...previous.filter(actionKey => !current.keys.includes(actionKey))]);
-    const finish = () => {
-      if (generation !== resizeGeneration.current) return;
-      settledKey.current = latest.current.key;
-      setGeometryReady(true);
-      setRetainedKeys(latest.current.keys);
-      moving.current.clear();
-      fading.current = false;
-    };
+    setRetainedKeys(current.keys);
     const animations: Animated.CompositeAnimation[] = [];
     const nextMoving = new Set<string>();
     for (const actionKey of current.keys) {
       const pill = values.current.get(actionKey)!;
       const next = current.target[actionKey]!;
       for (const property of ["width", "right"] as const) {
-        if (motion.reducedMotion || reopening) {
+        if (motion.reducedMotion || changedActions || changedWidth) {
           pill[property].stopAnimation();
           pill[property].setValue(next[property]);
         } else if (previousTarget.current[actionKey]?.[property] !== next[property] || moving.current.has(`${actionKey}:${property}`)) {
+          // A press interrupted by release or a motion-scheme change retargets
+          // from its current native value, without waiting for completion.
           nextMoving.add(`${actionKey}:${property}`);
           animations.push(Animated.spring(pill[property], { toValue: next[property], ...motion.spatial,
             overshootClamping: true, useNativeDriver: nativeDriver, isInteraction: false }));
@@ -74,32 +63,10 @@ export function useSelectionBarMotion(keys: readonly string[], available: number
     }
     previousTarget.current = current.target;
     moving.current = nextMoving;
-    if (motion.reducedMotion || reopening) {
-      departureOpacity.setValue(0);
-      finish();
-      return;
-    }
-    setGeometryReady(false);
-    const waitForDeparture = departing || fading.current;
-    if (departing && !fading.current) departureOpacity.setValue(1);
-    fading.current = waitForDeparture;
-    // Completion, not a timeout, hands the faded space to Delete. Unlike the
-    // old object spring, unchanged (including hidden) coordinates do no work.
-    const fadeAnimation = Animated.timing(departureOpacity, { toValue: 0, duration: SELECTION_DEPARTURE_MS,
-      easing: Easing.out(Easing.quad), useNativeDriver: nativeDriver, isInteraction: false });
-    const fade: Animated.CompositeAnimation = { ...fadeAnimation, start(callback) {
-      fadeAnimation.start(result => {
-        if (result.finished && generation === resizeGeneration.current) fading.current = false;
-        callback?.(result);
-      });
-    } };
-    const animation = waitForDeparture ? Animated.sequence([
-      fade,
-      Animated.parallel(animations),
-    ]) : Animated.parallel(animations);
+    const animation = Animated.parallel(animations);
     resize.current = animation;
-    animation.start(({ finished }) => { if (finished) finish(); });
-  }, [key, activePress, available, motion.spatial, motion.reducedMotion, departureOpacity]);
+    animation.start();
+  }, [key, activePress, available, motion.spatial, motion.reducedMotion]);
 
   const visible = keys.length > 0;
   useLayoutEffect(() => {
@@ -127,12 +94,9 @@ export function useSelectionBarMotion(keys: readonly string[], available: number
   }, [visible, motion.reducedMotion, motion.spatial, containerOpacity, containerShift]);
 
   useLayoutEffect(() => () => {
-    resizeGeneration.current++;
     resize.current?.stop();
   }, []);
   const getTarget = useCallback((actionKey: string) => latest.current.target[actionKey], []);
-  // New children render before layout effects run. Never give them the prior
-  // transition's `true` readiness for that first commit.
-  return { shown, retainedKeys, values: values.current, geometryReady: geometryReady && settledKey.current === key, departureOpacity,
+  return { shown, retainedKeys, values: values.current,
     containerOpacity, containerShift, getTarget };
 }

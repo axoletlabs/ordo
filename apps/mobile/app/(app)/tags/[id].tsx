@@ -73,10 +73,6 @@ export default function TagDetailScreen() {
   selectionRef.current = selection;
 
   const items = useMemo(() => flattenPages(list.data?.pages ?? []), [list.data]);
-  const selectedBookmarks = useMemo(
-    () => items.filter((bookmark) => selection.has(bookmarkKey(bookmark.id))),
-    [items, selection],
-  );
   const selectableKeys = useMemo(() => items.map((bookmark) => bookmarkKey(bookmark.id)), [items]);
   const getItemLayout = useBookmarkListLayout(items, 0, activeIds);
 
@@ -130,7 +126,7 @@ export default function TagDetailScreen() {
   const drag = useSelectionDrag({
     enabled: selection.active,
     keys: selectableKeys,
-    selected: selection.ids,
+    selectionStore: selection.store,
     onSelectedChange: selection.assign,
   });
 
@@ -190,13 +186,10 @@ export default function TagDetailScreen() {
     <View style={{ flex: 1, backgroundColor: palette.background }}>
       {selection.active ? (
         <SelectionHeader
-          count={selection.count}
+          store={selection.store}
           selectableCount={selectableKeys.length}
           onCancel={selection.exit}
-          onToggleSelectAll={() => {
-            if (selection.count === selectableKeys.length) selection.replace([]);
-            else selection.replace(selectableKeys);
-          }}
+          onToggleSelectAll={() => selection.toggleAll(selectableKeys)}
           maxWidth={pageMax}
         />
       ) : (
@@ -310,8 +303,9 @@ export default function TagDetailScreen() {
         }}
       />
       <SelectionTools
+        store={selection.store}
         active={selection.active}
-        bookmarks={selectedBookmarks}
+        bookmarks={items}
         fromFolderId={null}
         onFinished={selection.exit}
         bottom={dockInset}

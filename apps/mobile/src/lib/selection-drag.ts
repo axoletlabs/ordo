@@ -20,8 +20,8 @@ export function keysAfterDrag(
   anchorKey: string,
   currentIndex: number,
   mode: SelectionDragMode,
+  anchorIndex = keys.indexOf(anchorKey),
 ): string[] | null {
-  const anchorIndex = keys.indexOf(anchorKey);
   if (anchorIndex < 0 || currentIndex < 0 || currentIndex >= keys.length) return null;
   const next = new Set(baseline);
   const start = Math.min(anchorIndex, currentIndex);
@@ -48,13 +48,13 @@ export function indexAtPoint(
   keys: readonly string[],
   frames: ReadonlyMap<string, SelectionRowFrame>,
   y: number,
+  indices?: ReadonlyMap<string, number>,
 ): number | null {
   let best: number | null = null;
   let bestDist = Infinity;
-  for (let i = 0; i < keys.length; i++) {
-    const key = keys[i];
-    if (key == null) continue;
-    const frame = frames.get(key);
+  for (const [key, frame] of frames) {
+    const i = indices ? indices.get(key) : keys.indexOf(key);
+    if (i == null || i < 0) continue;
     if (!frame || frame.bottom <= frame.top) continue;
     if (y < frame.top || y >= frame.bottom) continue;
     const dist = Math.abs(y - (frame.top + frame.bottom) / 2);
@@ -74,15 +74,15 @@ export function indexForDrag(
   keys: readonly string[],
   frames: ReadonlyMap<string, SelectionRowFrame>,
   y: number,
+  indices?: ReadonlyMap<string, number>,
 ): number | null {
-  const hit = indexAtPoint(keys, frames, y);
+  const hit = indexAtPoint(keys, frames, y, indices);
   if (hit != null) return hit;
   let best: number | null = null;
   let bestDist = Infinity;
-  for (let i = 0; i < keys.length; i++) {
-    const key = keys[i];
-    if (key == null) continue;
-    const frame = frames.get(key);
+  for (const [key, frame] of frames) {
+    const i = indices ? indices.get(key) : keys.indexOf(key);
+    if (i == null || i < 0) continue;
     if (!frame || frame.bottom <= frame.top) continue;
     const dist = y < frame.top ? frame.top - y : y - frame.bottom;
     if (dist < bestDist) {
