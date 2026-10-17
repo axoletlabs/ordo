@@ -126,7 +126,7 @@ export const ReaderContents = React.memo(React.forwardRef<ReaderContentsHandle, 
       <Text variant={item.level === 1 ? "bodyStrong" : "body"} numberOfLines={2}>{item.text}</Text>
     </ListPressable>
   ), [baseLevel, expressive, headings.length, onKeyDown, palette.surfaceContainerLow, select]);
-  const listHeight = Math.min(320, (height - insets.top - insets.bottom) * 0.4, headings.length * (expressive ? 50 : 48));
+  const listHeight = Math.min(360, (height - insets.top - insets.bottom) * 0.45, headings.length * (expressive ? 50 : 48));
 
   return <>
     {/* Keep the trigger mounted for focus restoration and stable scroll clearance. */}
@@ -137,7 +137,7 @@ export const ReaderContents = React.memo(React.forwardRef<ReaderContentsHandle, 
         alignTo={embedded ? "parent" : "scene"} bottom={bottom} />
     </FABLayer>
     <FloatingPanel visible={visible} onDismiss={close} onExited={resetList}
-      maxWidth={Math.min(384, sceneWidth - spacing[48])} scrollBody={false} keepMounted={prepared}>
+      maxWidth={Math.min(416, sceneWidth - spacing[32])} scrollBody={false} keepMounted={prepared}>
       <PanelHeader title="Contents" titleVariant="titleLarge" onClose={close} />
       <View style={{ height: listHeight, maxHeight: listHeight, flexShrink: 1 }}>
         <FlatList key={initialIndex} ref={list} data={headings} renderItem={renderItem} keyExtractor={keyExtractor}
