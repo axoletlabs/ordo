@@ -8,7 +8,7 @@
  * is purely presentation: token-driven typography scaled by the reader
  * preferences, responsive images, select-to-highlight text, and external links.
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Linking,
   StyleSheet,
@@ -34,6 +34,8 @@ import { radius, resolveFont, spacing, type FontFamily } from "../../theme/token
 import type { HighlightDto, ReaderLineSpacing, ReaderPreferences } from "@ordo/shared";
 import { applyHighlightsToHtml, htmlToPlainText } from "@ordo/shared";
 import { readerArticleColors, READER_IGNORED_INLINE_STYLES } from "./reader-article-colors";
+import { useAnimationActivity } from "../../hooks/use-animation-activity";
+import { scheduleReaderWork } from "./reader-idle-work";
 import {
   READER_BODY_SIZE,
   readerLineHeight,
@@ -388,12 +390,14 @@ function ArticleSections({ sections, contentWidth, onReady }: {
   onReady?: () => void;
 }) {
   const [mountedCount, setMountedCount] = useState(1);
+  const active = useAnimationActivity();
   const count = Math.min(mountedCount, Math.max(1, sections.length));
   useEffect(() => {
-    if (count >= sections.length) return;
-    const timer = setTimeout(() => setMountedCount(count + 2), 16);
-    return () => clearTimeout(timer);
-  }, [count, sections]);
+    if (!active || count >= sections.length) return;
+    // Keep each native commit small, allow input to interrupt React's render,
+    // and stop preparing background content while Contents/another overlay owns it.
+    return scheduleReaderWork(() => startTransition(() => setMountedCount(count + 1)));
+  }, [active, count, sections]);
   useEffect(() => {
     if (count < sections.length) return;
     const frame = requestAnimationFrame(() => onReady?.());

@@ -3,11 +3,11 @@ import { parseDocument } from "htmlparser2";
 import { Document, Element, cloneNode, isTag, type ChildNode } from "domhandler";
 
 const CONTAINERS = new Set(["div", "article", "section", "main", "body", "html"]);
-export const ARTICLE_SECTION_BLOCKS = 64;
+export const ARTICLE_SECTION_BLOCKS = 8;
 export const ARTICLE_END_CLASS = "ordo-article-end";
 // Count text, not markup: adding a saved <mark> must not move every later
 // section boundary and invalidate all of their native trees.
-const SECTION_CHARACTERS = 24_000;
+const SECTION_CHARACTERS = 4_000;
 
 export interface SectionHeading { id: string; level: 1 | 2 | 3; text: string }
 

@@ -726,6 +726,13 @@ function ReaderPaneInner({
   const headingFrame = useRef(0);
   useEffect(() => () => cancelAnimationFrame(headingFrame.current), []);
 
+  const handleContentsRef = useCallback((handle: ReaderContentsHandle | null) => {
+    contentsRef.current = handle;
+    // Selection temporarily removes the Contents trigger. A remounted trigger
+    // can prepare immediately if the article's one-time ready event already ran.
+    if (htmlReadyRef.current) handle?.prepare();
+  }, []);
+
   const handleHeadingRef = useCallback((id: string, view: View | null) => {
     if (view) {
       headingRefs.current.set(id, view);
@@ -913,6 +920,7 @@ function ReaderPaneInner({
   const handleArticleReady = useCallback(() => {
     htmlReadyRef.current = true;
     maybeRestore();
+    contentsRef.current?.prepare();
   }, [maybeRestore]);
 
   // Start tracking once content exists; retry restore in case the native
@@ -1255,7 +1263,7 @@ function ReaderPaneInner({
       )}
 
       {hasContents && !selectionMenu ? (
-        <ReaderContents key={bookmark?.id} ref={contentsRef} headings={articleHeadings}
+        <ReaderContents key={bookmark?.id} ref={handleContentsRef} headings={articleHeadings}
           onSelect={handleHeadingSelect} expansion={collapsingFab.expansion}
           embedded={embedded} bottom={contentsFabBottom} sceneWidth={sceneWidth} />
       ) : null}
