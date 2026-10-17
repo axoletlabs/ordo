@@ -27,6 +27,7 @@ import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { useOverlayFocus } from "../../hooks/use-overlay-focus";
 import { dismissKeyboard, useKeyboardViewportHeight } from "../../hooks/use-keyboard-visible";
 import { haptics } from "../../lib/haptics";
+import { listenForMenuOutsideScroll } from "../../lib/menu-outside-scroll";
 import {
   CONTEXT_MENU_WIDTH,
   CONTEXT_MENU_EDGE,
@@ -96,6 +97,10 @@ function ContextMenuSurface({
     onExited,
   });
   const menuRef = useOverlayFocus(visible && rendered && backdrop, hideAndDismiss, "menu");
+  React.useEffect(() => {
+    if (!visible || !rendered || !backdrop || Platform.OS !== "web" || typeof document === "undefined") return;
+    return listenForMenuOutsideScroll(() => menuRef.current as unknown as HTMLElement | null, hideAndDismiss);
+  }, [visible, rendered, backdrop, menuRef, hideAndDismiss]);
   const pageProgress = useSharedValue(1);
   const pageLeaving = useSharedValue(0);
   // Outgoing content held in place while a fade-through hands off to the
@@ -278,6 +283,7 @@ function ContextMenuSurface({
             pointerEvents={visible ? "auto" : "none"}
             onPressIn={keyboardDismiss ? dismissKeyboard : undefined}
             onPress={hideAndDismiss}
+            onTouchMove={Platform.OS !== "web" ? hideAndDismiss : undefined}
           />
         ) : null}
         <Animated.View
