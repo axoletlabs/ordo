@@ -1,33 +1,55 @@
-/** Material 3: rounded 4dp segments, 4dp track gaps and a terminal stop mark. */
+/** Material 3 straight/wavy progress, shared by downloads and content progress. */
 import React, { useEffect, useState } from "react";
 import { View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, {
-  cancelAnimation, Easing, ReduceMotion, useAnimatedStyle, useSharedValue,
+  cancelAnimation, Easing, ReduceMotion, useAnimatedProps, useAnimatedStyle, useSharedValue,
   withRepeat, withTiming, type SharedValue,
 } from "react-native-reanimated";
+import Svg, { Path } from "react-native-svg";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useMaterialMotion } from "../../theme/material-motion";
 import { progressFraction } from "../../lib/progress-fraction";
-import { linearIndeterminateSegments } from "../../lib/material-progress";
+import { linearIndeterminateSegments, wavyProgressPath } from "../../lib/material-progress";
 
 const HEIGHT = 4;
 const GAP = 4;
 const segmentStyle = { position: "absolute", height: HEIGHT, borderRadius: HEIGHT / 2 } as const;
+const AnimatedPath = Animated.createAnimatedComponent(Path);
 
-export function LinearProgress({ value, animatedValue, label, style }: {
+export function LinearProgress({ value, animatedValue, label, style, wavy = false }: {
   value?: number;
   /** Reader scroll progress stays on the UI thread rather than rerendering. */
   animatedValue?: SharedValue<number>;
   label: string;
   style?: StyleProp<ViewStyle>;
+  /** Downloads opt into the Expressive wave in either design mode. */
+  wavy?: boolean;
 }) {
   const { palette } = useTheme();
   const { reducedMotion } = useMaterialMotion();
   const [width, setWidth] = useState(0);
   const phase = useSharedValue(0);
   const fill = useSharedValue(0);
+  const wave = useSharedValue(0);
+  const amplitude = useSharedValue(0);
   const progress = value == null ? null : progressFraction(value);
   const indeterminate = progress == null && !animatedValue;
+
+  useEffect(() => {
+    wave.value = 0;
+    if (wavy && !reducedMotion) {
+      wave.value = withRepeat(withTiming(1, { duration: 1000, easing: Easing.linear, reduceMotion: ReduceMotion.Never }), -1, false, undefined, ReduceMotion.Never);
+    }
+    return () => cancelAnimation(wave);
+  }, [wave, wavy, reducedMotion]);
+
+  const waveAmplitude = indeterminate || (progress != null && progress > 0.1 && progress < 0.95) ? 3 : 0;
+  useEffect(() => {
+    amplitude.value = reducedMotion ? waveAmplitude : withTiming(waveAmplitude, {
+      duration: 500, easing: Easing.bezier(0.2, 0, 0, 1),
+    });
+    return () => cancelAnimation(amplitude);
+  }, [amplitude, waveAmplitude, reducedMotion]);
 
   useEffect(() => {
     cancelAnimation(phase);
@@ -78,19 +100,35 @@ export function LinearProgress({ value, animatedValue, label, style }: {
     const gap = first.end > first.start ? GAP : 0;
     return { left: first.end + gap, width: Math.max(0, width - first.end - gap) };
   });
+  const firstWave = useAnimatedProps(() => {
+    if (!wavy) return { d: "" };
+    const segment = geometry()[0];
+    return { d: wavyProgressPath(segment.start, segment.end, width, wave.value, amplitude.value, indeterminate ? 20 : 40) };
+  });
+  const secondWave = useAnimatedProps(() => {
+    if (!wavy) return { d: "" };
+    const segment = geometry()[1];
+    return { d: wavyProgressPath(segment.start, segment.end, width, wave.value, amplitude.value, indeterminate ? 20 : 40) };
+  });
+  const trackStyle = { ...segmentStyle, top: wavy ? 3 : 0 };
   return (
-    <View testID="material-linear-progress" accessibilityRole="progressbar" accessibilityLabel={label}
+    <View testID={wavy ? "material-wavy-progress" : "material-linear-progress"} accessibilityRole="progressbar" accessibilityLabel={label}
       accessibilityValue={progress == null ? undefined : { min: 0, max: 100, now: Math.round(progress * 100) }}
       aria-valuemin={progress == null ? undefined : 0} aria-valuemax={progress == null ? undefined : 100}
       aria-valuenow={progress == null ? undefined : Math.round(progress * 100)}
       onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
-      style={[{ height: HEIGHT, width: "100%", borderRadius: HEIGHT / 2, overflow: "hidden" }, style]}>
-      <Animated.View style={[segmentStyle, { backgroundColor: palette.secondaryContainer }, before]} />
-      <Animated.View style={[segmentStyle, { backgroundColor: palette.secondaryContainer }, between]} />
-      <Animated.View style={[segmentStyle, { backgroundColor: palette.secondaryContainer }, after]} />
-      <Animated.View style={[segmentStyle, { backgroundColor: palette.primary }, leading]} />
-      <Animated.View style={[segmentStyle, { backgroundColor: palette.primary }, trailing]} />
-      {!indeterminate && progress !== 1 ? <View style={[segmentStyle, { right: 0, width: HEIGHT, backgroundColor: palette.primary }]} /> : null}
+      style={[{ height: wavy ? 10 : HEIGHT, width: "100%", overflow: "hidden" }, style]}>
+      <Animated.View style={[trackStyle, { backgroundColor: palette.secondaryContainer }, before]} />
+      <Animated.View style={[trackStyle, { backgroundColor: palette.secondaryContainer }, between]} />
+      <Animated.View style={[trackStyle, { backgroundColor: palette.secondaryContainer }, after]} />
+      {wavy ? <Svg width={width} height={10} style={{ position: "absolute" }}>
+        <AnimatedPath animatedProps={firstWave} stroke={palette.primary} strokeWidth={HEIGHT} strokeLinecap="round" fill="none" />
+        <AnimatedPath animatedProps={secondWave} stroke={palette.primary} strokeWidth={HEIGHT} strokeLinecap="round" fill="none" />
+      </Svg> : <>
+        <Animated.View style={[segmentStyle, { backgroundColor: palette.primary }, leading]} />
+        <Animated.View style={[segmentStyle, { backgroundColor: palette.primary }, trailing]} />
+      </>}
+      {!indeterminate && progress !== 1 ? <View style={[trackStyle, { right: 0, width: HEIGHT, backgroundColor: palette.primary }]} /> : null}
     </View>
   );
 }

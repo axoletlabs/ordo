@@ -1,5 +1,5 @@
 /**
- * Material grow/shrink arc shared by buttons, lists, refresh and overlays.
+ * Material circular progress, or the Expressive shape-morphing loading indicator.
  */
 import React, { useEffect } from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
@@ -8,15 +8,18 @@ import Animated, {
   ReduceMotion,
   cancelAnimation,
   useAnimatedProps,
+  useAnimatedStyle,
   useSharedValue,
   withRepeat,
   withTiming,
 } from "react-native-reanimated";
-import Svg, { Circle, Path } from "react-native-svg";
+import Svg, { Circle, G, Path } from "react-native-svg";
 import { useTheme } from "../../theme/ThemeProvider";
 import { radius } from "../../theme/tokens";
 import { useMaterialMotion } from "../../theme/material-motion";
 import { circularIndeterminateArc } from "../../lib/material-progress";
+import { loadingMorphPath, loadingMorphState, MORPH_INTERVAL, MORPH_STEPS } from "../../lib/material-loading";
+import { LOADING_SHAPE_SCALE } from "../../lib/material-loading-shapes";
 
 const SIZES = { sm: 16, md: 20, lg: 24 } as const;
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
@@ -45,9 +48,11 @@ export function Spinner({
   const { reducedMotion } = useMaterialMotion();
   const extent = spinnerExtent(size);
   const phase = useSharedValue(0);
+  const morph = useSharedValue(0);
+  const rotation = useSharedValue(0);
 
   useEffect(() => {
-    if (!spinning || reducedMotion) {
+    if (!spinning || reducedMotion || expressive) {
       cancelAnimation(phase);
       phase.value = 0;
       return;
@@ -61,26 +66,35 @@ export function Spinner({
       ReduceMotion.Never,
     );
     return () => cancelAnimation(phase);
-  }, [phase, spinning, reducedMotion]);
+  }, [phase, spinning, reducedMotion, expressive]);
 
   const stroke = Math.max(2, extent * 0.1);
   const radiusPx = extent / 2 - stroke / 2 - 0.5;
   const circumference = 2 * Math.PI * radiusPx;
-  const wave = React.useMemo(() => {
-    const points = Array.from({ length: 97 }, (_, index) => {
-      const angle = index / 96 * Math.PI * 2;
-      const amplitude = extent * 0.045;
-      const r = radiusPx - amplitude + amplitude * Math.sin(angle * 6);
-      return { x: extent / 2 + r * Math.cos(angle), y: extent / 2 + r * Math.sin(angle) };
-    });
-    let length = 0;
-    for (let i = 1; i < points.length; i++) length += Math.hypot(points[i].x - points[i - 1].x, points[i].y - points[i - 1].y);
-    return { path: points.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(3)},${point.y.toFixed(3)}`).join(" "), length };
-  }, [extent, radiusPx]);
+  useEffect(() => {
+    morph.value = 0;
+    rotation.value = 0;
+    if (expressive && spinning && !reducedMotion) {
+      morph.value = withRepeat(withTiming(MORPH_STEPS, {
+        duration: MORPH_INTERVAL * MORPH_STEPS, easing: Easing.linear, reduceMotion: ReduceMotion.Never,
+      }), -1, false, undefined, ReduceMotion.Never);
+      rotation.value = withRepeat(withTiming(360, {
+        duration: 4666, easing: Easing.linear, reduceMotion: ReduceMotion.Never,
+      }), -1, false, undefined, ReduceMotion.Never);
+    }
+    return () => { cancelAnimation(morph); cancelAnimation(rotation); };
+  }, [expressive, spinning, reducedMotion, morph, rotation]);
   const arc = useAnimatedProps(() => {
     const motion = !spinning || reducedMotion ? { start: -90, sweep: 90 } : circularIndeterminateArc(phase.value);
-    const length = expressive ? wave.length : circumference;
-    return { strokeDasharray: [length * motion.sweep / 360, length], strokeDashoffset: -length * motion.start / 360 };
+    return { strokeDasharray: [circumference * motion.sweep / 360, circumference], strokeDashoffset: -circumference * motion.start / 360 };
+  });
+  const shape = useAnimatedProps(() => {
+    const state = loadingMorphState(morph.value);
+    return { d: loadingMorphPath(state.index, state.progress) };
+  });
+  const shapeRotation = useAnimatedStyle(() => {
+    const angle = loadingMorphState(morph.value).rotation + rotation.value;
+    return { transform: [{ rotate: `${angle}deg` }] };
   });
 
   return (
@@ -89,12 +103,19 @@ export function Spinner({
       accessibilityRole={accessible ? "progressbar" : undefined}
       accessibilityLabel={accessible ? "Loading" : undefined}
       importantForAccessibility={accessible ? "auto" : "no"}
-      testID="material-circular-progress"
+      testID={expressive ? "material-loading-indicator" : "material-circular-progress"}
       style={[{ width: extent, height: extent }, style]}
     >
-      <Svg width={extent} height={extent} viewBox={`0 0 ${extent} ${extent}`}>
-        {expressive ? <AnimatedPath animatedProps={arc} d={wave.path} stroke={color ?? palette.primary} strokeWidth={stroke}
-          strokeLinecap="round" strokeLinejoin="round" fill="none" /> : <AnimatedCircle animatedProps={arc}
+      {expressive ? (
+        <Animated.View style={[{ width: extent, height: extent }, shapeRotation]}>
+          <Svg width={extent} height={extent} viewBox="0 0 1 1">
+            <G transform={`translate(0.5 0.5) scale(${LOADING_SHAPE_SCALE}) translate(-0.5 -0.5)`}>
+              <AnimatedPath animatedProps={shape} d={loadingMorphPath(0, 0)} fill={color ?? palette.primary} />
+            </G>
+          </Svg>
+        </Animated.View>
+      ) : <Svg width={extent} height={extent} viewBox={`0 0 ${extent} ${extent}`}>
+        <AnimatedCircle animatedProps={arc}
           cx={extent / 2}
           cy={extent / 2}
           r={radiusPx}
@@ -102,8 +123,8 @@ export function Spinner({
           strokeWidth={stroke}
           strokeLinecap="round"
           fill="none"
-        />}
-      </Svg>
+        />
+      </Svg>}
     </Animated.View>
   );
 }
@@ -122,7 +143,7 @@ export function ReloadSpinner({
 }) {
   return (
     <View style={[styles.chip, { backgroundColor, borderColor }]}>
-      <Spinner color={color} spinning={spinning} accessible={false} />
+      <Spinner size="lg" color={color} spinning={spinning} accessible={false} />
     </View>
   );
 }

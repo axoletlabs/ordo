@@ -94,7 +94,7 @@ export function NativeUpdateProgress() {
               </Text>
             )}
           </View>
-          <LinearProgress label={starting ? "Starting download" : amountLabel} value={starting ? undefined : update.progress} />
+          <LinearProgress wavy label={starting ? "Starting download" : amountLabel} value={starting ? undefined : update.progress} />
           <Button
             label="Cancel"
             variant="secondary"

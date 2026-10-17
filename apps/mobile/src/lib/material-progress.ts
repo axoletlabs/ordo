@@ -32,3 +32,27 @@ export function circularIndeterminateArc(phase: number) {
   const start = step * 252 + (expand ? 0 : 252 * ease) + cycle * 108;
   return { start, sweep };
 }
+
+/** Cubic Hermite sine wave: 4dp stroke, 3dp amplitude, 40/20dp wavelength. */
+export function wavyProgressPath(start: number, end: number, width: number, phase: number, amplitude: number, wavelength: number): string {
+  "worklet";
+  const left = Math.max(2, start + 2);
+  const right = Math.min(width - 2, end - 2);
+  if (right <= left) return "";
+  const frequency = 2 * Math.PI / wavelength;
+  let x = left;
+  let angle = (x / wavelength + phase) * 2 * Math.PI;
+  let y = 5 + amplitude * Math.sin(angle);
+  let path = `M${x},${y}`;
+  while (x < right) {
+    const next = Math.min(right, x + wavelength / 4);
+    const nextAngle = (next / wavelength + phase) * 2 * Math.PI;
+    const nextY = 5 + amplitude * Math.sin(nextAngle);
+    const third = (next - x) / 3;
+    path += ` C${x + third},${y + third * amplitude * frequency * Math.cos(angle)},${next - third},${nextY - third * amplitude * frequency * Math.cos(nextAngle)},${next},${nextY}`;
+    x = next;
+    angle = nextAngle;
+    y = nextY;
+  }
+  return path;
+}

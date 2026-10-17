@@ -115,7 +115,7 @@ export function OtaUpdateCard() {
           />
         );
       })}
-      {ota.status === "downloading" ? <LinearProgress label="Downloading app update" value={ota.downloadProgress} /> : null}
+      {ota.status === "downloading" ? <LinearProgress wavy label="Downloading app update" value={ota.downloadProgress} /> : null}
     </>
   );
 }
