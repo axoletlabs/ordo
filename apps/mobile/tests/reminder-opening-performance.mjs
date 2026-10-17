@@ -49,7 +49,7 @@ export async function reminderOpeningPerformance({ browser, fixture, login, sett
             const frame = time => {
               if (sample.start != null) {
                 sample.gaps.push(time - sample.last);
-                if (sample.firstContentMs == null && document.querySelector('[role="radiogroup"][aria-label="Reminder date"]')) sample.firstContentMs = performance.now() - sample.start;
+                if (sample.firstContentMs == null && document.querySelector('[data-testid="reminder-clock"] svg, [role="radiogroup"][aria-label="Reminder date"]')) sample.firstContentMs = performance.now() - sample.start;
               }
               sample.last = time; sample.frame = requestAnimationFrame(frame);
             };
@@ -69,16 +69,41 @@ export async function reminderOpeningPerformance({ browser, fixture, login, sett
           const measured = await page.evaluate(() => {
             const { sample, observer } = window.reminderSample;
             cancelAnimationFrame(sample.frame); observer.disconnect();
+            const dialog = document.querySelector('[role="dialog"][aria-modal="true"]');
             return { firstContentMs: sample.firstContentMs, maxTaskMs: Math.max(0, ...sample.tasks),
               totalLongTaskMs: sample.tasks.reduce((a, b) => a + b, 0), maxFrameGapMs: Math.max(0, ...sample.gaps),
-              dateFormats: window.reminderDateFormats };
+              dateFormats: window.reminderDateFormats, dialogNodes: dialog?.querySelectorAll("*").length,
+              controls: dialog?.querySelectorAll('[role="button"], [role="radio"], [role="slider"]').length };
           });
           const metricEnd = Object.fromEntries((await cdp.send("Performance.getMetrics")).metrics.map(({ name, value }) => [name, value]));
           if (profile) await writeFile(`${output}/reminder-profile-${expressive}.json`, JSON.stringify((await cdp.send("Profiler.stop")).profile));
           assert.ok(measured.firstContentMs > 0);
           if (process.env.ORDO_REMINDER_MAX_OPEN_MS) assert.ok(measured.firstContentMs < Number(process.env.ORDO_REMINDER_MAX_OPEN_MS),
             `Custom reminder took ${measured.firstContentMs}ms to show content`);
-          assert.equal(await dialog.getByRole("radiogroup", { name: "Reminder hour", exact: true }).getByRole("radio").count(), expressive ? 24 : 12);
+          if (await dialog.getByTestId("reminder-clock").count()) {
+            assert.equal(await dialog.getByRole("slider", { name: "Reminder hour", exact: true }).count(), 1);
+            assert.equal(await dialog.getByRole("radiogroup", { name: "Reminder date", exact: true }).count(), 0);
+            // A lighter first step must not just move the whole stall to Date.
+            for (const [section, selector, key] of [["Date", '[role="radiogroup"][aria-label="Reminder date"]', "dateStepMs"],
+              ["Time", '[data-testid="reminder-clock"] svg', "timeStepMs"]]) {
+              await page.evaluate(selector => {
+                const state = { start: null };
+                const promise = new Promise(resolve => {
+                  const frame = () => {
+                    if (state.start != null && document.querySelector(selector)) resolve(performance.now() - state.start);
+                    else requestAnimationFrame(frame);
+                  };
+                  requestAnimationFrame(frame);
+                });
+                window.reminderStep = { state, promise };
+              }, selector);
+              await dialog.getByRole("radiogroup", { name: "Reminder date or time", exact: true }).getByRole("radio", { name: section, exact: true })
+                .evaluate(node => { window.reminderStep.state.start = performance.now(); node.click(); });
+              await page.locator(selector).waitFor();
+              measured[key] = await page.evaluate(() => window.reminderStep.promise);
+              await settle(page);
+            }
+          } else assert.equal(await dialog.getByRole("radiogroup", { name: "Reminder hour", exact: true }).getByRole("radio").count(), expressive ? 24 : 12);
           results.reminderOpening.push({ expressive, opening, run, ...measured,
             scriptMs: (metricEnd.ScriptDuration - metricStart.ScriptDuration) * 1000,
             taskMs: (metricEnd.TaskDuration - metricStart.TaskDuration) * 1000 });
@@ -90,7 +115,8 @@ export async function reminderOpeningPerformance({ browser, fixture, login, sett
   const median = values => values.sort((a, b) => a - b)[Math.floor(values.length / 2)];
   results.reminderOpeningMedians = [false, true].flatMap(expressive => ["cold", "reopen"].map(opening => {
     const samples = results.reminderOpening.filter(item => item.expressive === expressive && item.opening === opening);
-    return { expressive, opening, ...Object.fromEntries(["firstContentMs", "maxTaskMs", "totalLongTaskMs", "maxFrameGapMs", "dateFormats", "scriptMs", "taskMs"]
+    return { expressive, opening, ...Object.fromEntries(["firstContentMs", "maxTaskMs", "totalLongTaskMs", "maxFrameGapMs", "dateFormats", "dialogNodes", "controls", "dateStepMs", "timeStepMs", "scriptMs", "taskMs"]
+      .filter(key => samples.every(item => Number.isFinite(item[key])))
       .map(key => [key, Math.round(median(samples.map(item => item[key])) * 100) / 100])) };
   }));
   console.log(JSON.stringify(results.reminderOpeningMedians, null, 2));

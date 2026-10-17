@@ -799,6 +799,7 @@ try {
     if (await button(page, "Dismiss notification").count()) await button(page, "Dismiss notification").click();
     await articleRow.click({ button: "right" }); await page.getByRole("menuitem", { name: "Remind", exact: true }).click();
     await capture(page, `${mode}-reminder-menu`); await page.getByRole("menuitem", { name: "Custom…", exact: true }).click();
+    await page.getByRole("radiogroup", { name: "Reminder date or time", exact: true }).getByRole("radio", { name: "Date", exact: true }).click();
     const reminderDates = page.getByRole("radiogroup", { name: "Reminder date", exact: true });
     await reminderDates.waitFor();
     await button(page, "Next month").click();

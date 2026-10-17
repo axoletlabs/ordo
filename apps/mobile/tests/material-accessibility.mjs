@@ -1,5 +1,6 @@
 /** Regression tests for every actionable Material audit finding, on the built app. */
 import assert from "node:assert/strict";
+import { chooseClockTime } from "./reminder-clock-helpers.mjs";
 
 export async function accessibilityMatrix({ browser, base, fixture, user, button, settle, capture, results }) {
   const field = (page, name) => page.getByRole("textbox", { name, exact: true });
@@ -93,12 +94,12 @@ export async function accessibilityMatrix({ browser, base, fixture, user, button
       const article = page.getByRole("button", { name: /^Building a more expressive design system,/ });
       await article.click({ button: "right" }); await page.getByRole("menuitem", { name: "Remind", exact: true }).click();
       await page.getByRole("menuitem", { name: "Custom…", exact: true }).click();
-      const days = page.getByRole("radiogroup", { name: "Reminder date", exact: true }); await days.waitFor();
       assert.equal(await page.getByRole("radiogroup", { name: "Day period", exact: true }).count(), expressive ? 0 : 1);
+      await page.getByRole("radiogroup", { name: "Reminder date or time", exact: true }).getByRole("radio", { name: "Date", exact: true }).click();
+      const days = page.getByRole("radiogroup", { name: "Reminder date", exact: true }); await days.waitFor();
       assert.ok(await days.getByRole("radio", { disabled: true }).count() > 0, "past dates must be inert");
       await days.getByRole("radio", { checked: true }).focus(); await page.keyboard.press("ArrowRight");
-      await page.getByRole("radiogroup", { name: "Reminder hour", exact: true }).getByRole("radio", { name: expressive ? "10 o'clock" : "12 o'clock", exact: true }).click();
-      await page.getByRole("radiogroup", { name: "Reminder minute", exact: true }).getByRole("radio", { name: "35 minutes", exact: true }).click();
+      await chooseClockTime(page, expressive ? 10 : 12, 35, !expressive);
       assert.equal(await button(page, "Remind").isEnabled(), true);
       await capture(page, `${mode}-portrait-reminder`);
       await page.setViewportSize({ width: 1280, height: 800 }); await settle(page);

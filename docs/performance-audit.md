@@ -279,6 +279,48 @@ branches; there is no connected native device for a runtime FPS claim. The
 broader animation suite's stale `Save` selector was updated to the existing
 `Save bookmark` accessible label (also present on the baseline).
 
+### Clock picker: reducing the remaining first-paint tree
+
+Baseline `32826a4` includes the idle-animation fix above. That fix did not remove
+the time grid itself: each of its 24–36 `AnimatedStatePressable` instances still
+initializes four shared values and four animated styles, plus its native/web
+view tree. The 31-date calendar also mounts alongside it. These are synchronous
+React/animation/layout costs before useful content can paint, not a deliberate
+opening timer or a backend/notification-permission request. The overlay portal
+publishes into a sibling host, so making the panel visible still has to mount
+that entire content tree before its first useful frame. The previous release's
+OTA job completed successfully; that alone does not establish which update an
+individual device has applied.
+
+The new picker has two explicit editing steps rather than a scrolling wall of
+date/hour/minute buttons:
+
+- **Time opens first:** a Material clock with large hour/minute readouts, the
+  device's 12/24-hour cycle, and AM/PM when applicable. Tap or drag a hand;
+  choosing an hour advances to minutes only after release. The 24-hour dial has
+  outer 1–12 and inner 00/13–23 rings.
+- **One adjustable surface:** SVG numerals are paint, not separate animated
+  pressables. A single gesture/slider handles the face, with native
+  increment/decrement actions and web arrow/Home/End/Page keys. Minute taps use
+  the existing five-minute steps; dragging supports individual minutes. Exact
+  existing minutes are preserved; keyboard/accessibility actions also adjust
+  by one minute.
+- **Date is a real, separate step:** it mounts the existing 48dp calendar,
+  preserving keyboard navigation and explicit Android-safe selection circles.
+  Time edits do not construct calendars/date labels. Date edits do not mount a
+  time grid. Switching steps retains the chosen datetime and the tab's focus.
+- Opening resets the draft before committing descendants, not in a post-mount
+  effect. A session-scoped datetime formatter avoids repeated ICU construction
+  during clock edits and respects the same hour cycle as the clock readout.
+
+No hidden prewarming, delayed body reveal, artificial opening sleep or shortened
+fade is used. The benchmark works with both exports and also measures switching
+to Date and back to Time, to detect merely moving the pause to the second step.
+Run with `ORDO_UI_REMINDER_PERF_ONLY=1` as above; the first-frame probe now accepts
+either the baseline calendar or the complete new clock SVG. `dialogNodes` and
+`controls` count descendants/interactive roles inside the dialog, not the app
+background. Native frame timing still requires an attached device.
+
 ## What changed
 
 ### Launch
