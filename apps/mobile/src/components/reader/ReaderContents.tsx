@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import React, { startTransition, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { FlatList, Platform, StyleSheet, View, useWindowDimensions, type ListRenderItemInfo, type ScrollViewProps } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { SharedValue } from "react-native-reanimated";
@@ -13,8 +13,9 @@ import type { WebPressKeyEvent } from "../ui/pressable-web";
 import { useTheme } from "../../theme/ThemeProvider";
 import { listCorners, listPosition } from "../../theme/list-shape";
 import { layout, radius, spacing } from "../../theme/tokens";
+import { scheduleReaderWork } from "./reader-idle-work";
 
-export interface ReaderContentsHandle { open: () => void }
+export interface ReaderContentsHandle { open: () => void; prepare: () => void }
 interface ReaderContentsProps {
   headings: readonly ArticleHeading[];
   onSelect: (id: string) => void;
@@ -34,19 +35,18 @@ export const ReaderContents = React.memo(React.forwardRef<ReaderContentsHandle, 
 }, ref) {
   const [visible, setVisible] = useState(false);
   const [prepared, setPrepared] = useState(false);
+  const [articleReady, setArticleReady] = useState(false);
   useEffect(() => {
-    // Only a viewport's worth of rows is prepared, at idle priority. A tap
-    // before this runs still opens immediately; no timer gates the action.
-    if (typeof requestIdleCallback === "function") {
-      const idle = requestIdleCallback(() => setPrepared(true));
-      return () => cancelIdleCallback(idle);
-    }
-    const timer = setTimeout(() => setPrepared(true), 500);
-    return () => clearTimeout(timer);
-  }, []);
-  const open = useCallback(() => setVisible(true), []);
+    // Do not mount a second native tree during article startup. Once content
+    // settles, prepare only a viewport of rows at interruptible idle priority.
+    // An earlier tap still opens immediately and retains that prepared surface.
+    if (!articleReady || prepared) return;
+    return scheduleReaderWork(() => startTransition(() => setPrepared(true)));
+  }, [articleReady, prepared]);
+  const prepare = useCallback(() => setArticleReady(true), []);
+  const open = useCallback(() => { setPrepared(true); setVisible(true); }, []);
   const close = useCallback(() => setVisible(false), []);
-  useImperativeHandle(ref, () => ({ open }), [open]);
+  useImperativeHandle(ref, () => ({ open, prepare }), [open, prepare]);
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { palette, expressive } = useTheme();

@@ -88,7 +88,7 @@ class OrdoSelectableTextModule(reactContext: ReactApplicationContext) :
     reactTags[text] = tag
     if (!hooked.add(text)) return
     text.isCursorVisible = false
-    text.setTextIsSelectable(true)
+    if (!text.isTextSelectable) text.setTextIsSelectable(true)
     text.customInsertionActionModeCallback = hiddenActionMode
     text.customSelectionActionModeCallback = suppressedSelectionMode(text)
     text.setOnTouchListener { view, event ->
@@ -105,6 +105,13 @@ class OrdoSelectableTextModule(reactContext: ReactApplicationContext) :
       }
       false
     }
+  }
+
+  // Only selection handles need frame-by-frame tracking. Registering a draw
+  // callback for every paragraph makes reader scrolls and Contents entrances
+  // walk the entire article on the Android UI thread, even with no selection.
+  private fun watchSelection(text: TextView) {
+    if (drawListeners.containsKey(text)) return
     val drawListener = ViewTreeObserver.OnPreDrawListener {
       try {
         emit(text)
@@ -116,13 +123,17 @@ class OrdoSelectableTextModule(reactContext: ReactApplicationContext) :
     text.viewTreeObserver.addOnPreDrawListener(drawListener)
   }
 
+  private fun stopWatchingSelection(text: TextView) {
+    drawListeners.remove(text)?.let { listener ->
+      if (text.viewTreeObserver.isAlive) text.viewTreeObserver.removeOnPreDrawListener(listener)
+    }
+  }
+
   private fun unhookText(text: TextView) {
     hooked.remove(text)
     lastRange.remove(text)
     reactTags.remove(text)
-    drawListeners.remove(text)?.let { listener ->
-      text.viewTreeObserver.removeOnPreDrawListener(listener)
-    }
+    stopWatchingSelection(text)
     text.setOnTouchListener(null)
     text.customInsertionActionModeCallback = null
     text.customSelectionActionModeCallback = null
@@ -132,6 +143,7 @@ class OrdoSelectableTextModule(reactContext: ReactApplicationContext) :
     return object : ActionMode.Callback2() {
       override fun onCreateActionMode(mode: ActionMode, menu: Menu): Boolean {
         menu.clear()
+        watchSelection(text)
         emit(text)
         hideSelectionMenu(mode)
         // Returning false aborts the mode and TextView drops the range on
@@ -147,7 +159,14 @@ class OrdoSelectableTextModule(reactContext: ReactApplicationContext) :
 
       override fun onActionItemClicked(mode: ActionMode, item: MenuItem): Boolean = false
 
-      override fun onDestroyActionMode(mode: ActionMode) {}
+      override fun onDestroyActionMode(mode: ActionMode) {
+        stopWatchingSelection(text)
+        // Read the actual range after TextView finishes closing the mode.
+        // Losing focus to our highlight menu must not fabricate a deselection.
+        text.post {
+          if (hooked.contains(text) && !drawListeners.containsKey(text)) emit(text)
+        }
+      }
 
       override fun onGetContentRect(mode: ActionMode, view: View, outRect: android.graphics.Rect) {
         val start = min(text.selectionStart, text.selectionEnd)
