@@ -56,9 +56,9 @@ import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
 import { sheetMenuStyles } from "../ui/SheetActionRow";
-import { FAB, FABLayer } from "../ui/FAB";
 import type { ArticleHeading } from "./ArticleHtml";
 import { ReaderArticle } from "./ReaderArticle";
+import { ReaderContents, type ReaderContentsHandle } from "./ReaderContents";
 import type { HighlightSelectDraft } from "./article-highlight-ui";
 import { ReaderControlsSheet } from "./ReaderControlsSheet";
 import { EditTagsSheet } from "../tags/EditTagsSheet";
@@ -92,8 +92,7 @@ import { useSettingsStore } from "../../store/settings";
 import { domainFromUrl, formatDate } from "../../lib/format";
 import { errorMessage, folderProtectedId, isFolderProtected } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
-import { layout, radius, spacing } from "../../theme/tokens";
-import { listCorners, listPosition } from "../../theme/list-shape";
+import { layout, spacing } from "../../theme/tokens";
 import { toast } from "../ui/toast-store";
 import { isMenuAnchorRect, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { BookmarkBrowser, type BookmarkBrowserHandle } from "../browser/BookmarkBrowser";
@@ -228,7 +227,7 @@ function ReaderPaneInner({
   onUpdatePreferences,
   readerPalette,
 }: ReaderPaneInnerProps) {
-  const { palette: appPalette, expressive } = useTheme();
+  const { palette: appPalette } = useTheme();
   const forceWebsiteDark = useSettingsStore((s) => s.forceWebsiteDark);
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -270,10 +269,11 @@ function ReaderPaneInner({
   const closeControls = useCallback(() => setControlsOpen(false), []);
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [actionPanel, setActionPanel] = useState<
-    "actions" | "contents" | "highlights" | "remind" | "remind-custom" | null
+    "actions" | "highlights" | "remind" | "remind-custom" | null
   >(null);
   const [actionsAnchor, setActionsAnchor] = useState<MenuAnchorRect | null>(null);
   const closeActions = useCallback(() => setActionPanel(null), []);
+  const contentsRef = useRef<ReaderContentsHandle>(null);
   const { save: saveReminder, busy: reminderBusy } = useSaveReminder(
     bookmark ?? null, closeActions, actionPanel === "remind" || actionPanel === "remind-custom",
   );
@@ -378,7 +378,6 @@ function ReaderPaneInner({
   const readerFont = resolveReaderFont(articlePreferences.fontFamily);
   const readerBoldFont = resolveReaderFont(articlePreferences.fontFamily, "700");
   const articleHeadings = headingState.bookmarkId === bookmark?.id ? headingState.headings : [];
-  const contentsBaseLevel = articleHeadings.reduce((level, heading) => Math.min(level, heading.level), 6);
   const highlights = detail.data?.highlights ?? EMPTY_HIGHLIGHTS;
 
   const handleHeadingsChange = useCallback(
@@ -1238,23 +1237,9 @@ function ReaderPaneInner({
       )}
 
       {hasContents && !selectionMenu ? (
-        // The modal scrim covers this trigger; keep it mounted for focus restoration.
-        <FABLayer maxWidth={layout.maxReaderWidth}>
-          <FAB
-            icon="list-outline"
-            label="Contents"
-            expansion={collapsingFab.expansion}
-            accessibilityLabel="Table of contents"
-            accessibilityHint="Jump to a section in this article."
-            onPress={(anchor) => {
-              setActionsAnchor(anchor);
-              setActionPanel("contents");
-            }}
-            maxContentWidth={layout.maxReaderWidth}
-            alignTo={embedded ? "parent" : "scene"}
-            bottom={contentsFabBottom}
-          />
-        </FABLayer>
+        <ReaderContents key={bookmark?.id} ref={contentsRef} headings={articleHeadings}
+          onSelect={handleHeadingSelect} expansion={collapsingFab.expansion}
+          embedded={embedded} bottom={contentsFabBottom} sceneWidth={sceneWidth} />
       ) : null}
 
       <ReaderControlsSheet
@@ -1293,7 +1278,10 @@ function ReaderPaneInner({
           <ContextMenuItem
             icon="list-outline"
             label="Table of contents"
-            onPress={() => setActionPanel("contents")}
+            onPress={() => {
+              closeActions();
+              contentsRef.current?.open();
+            }}
           />
         ) : null}
         {hasHtml && !showWebsiteView ? (
@@ -1421,43 +1409,6 @@ function ReaderPaneInner({
           void detail.refetch();
         }}
       />
-      <FloatingPanel
-        visible={actionPanel === "contents"}
-        onDismiss={closeActions}
-        maxWidth={Math.min(384, sceneWidth - spacing[48])}
-        scrollBody={false}
-      >
-        <PanelHeader title="Contents" titleVariant="titleLarge" onClose={closeActions} />
-        {/* Own the scroll area: FloatingPanel unwraps direct scroll-view children. */}
-        <View style={styles.tocBody}>
-          <ThemedScrollView style={[styles.tocList, { maxHeight: Math.min(320, (windowHeight - insets.top - insets.bottom) * 0.4) }]}>
-            {articleHeadings.map((heading, index) => (
-              <PressableScale
-                key={heading.id}
-                style={[
-                  styles.tocRow,
-                  { paddingLeft: spacing[16] + (heading.level - contentsBaseLevel) * spacing[16] },
-                  expressive ? {
-                    ...listCorners(listPosition(index, articleHeadings.length), false),
-                    backgroundColor: readerPalette.surfaceContainerLow,
-                    marginBottom: spacing[2],
-                  } : null,
-                ]}
-                onPress={() => handleHeadingSelect(heading.id)}
-                accessibilityRole="button"
-                accessibilityLabel={`Go to ${heading.text}`}
-              >
-                <Text
-                  variant={heading.level === 1 ? "bodyStrong" : "body"}
-                  numberOfLines={2}
-                >
-                  {heading.text}
-                </Text>
-              </PressableScale>
-            ))}
-          </ThemedScrollView>
-        </View>
-      </FloatingPanel>
       <FloatingPanel visible={actionPanel === "highlights"} onDismiss={() => setActionPanel(null)}>
         <PanelHeader
           title="Highlights"
@@ -1584,16 +1535,6 @@ const styles = StyleSheet.create({
   description: { marginTop: spacing[8] },
   byline: { marginTop: spacing[6] },
   content: { marginTop: spacing[24] },
-  tocBody: { flexShrink: 1 },
-  tocList: { flexShrink: 1 },
-  tocRow: {
-    minHeight: 48,
-    justifyContent: "center",
-    paddingHorizontal: spacing[16],
-    paddingVertical: spacing[8],
-    borderRadius: radius.xs,
-    overflow: "hidden",
-  },
   highlightList: { maxHeight: 420 },
   highlightRow: {
     minHeight: 48,

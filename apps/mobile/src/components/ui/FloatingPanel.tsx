@@ -53,6 +53,9 @@ export interface FloatingPanelProps {
   scrollBody?: boolean;
   /** Reset the notes/picker scroll position when its selected content changes. */
   scrollResetKey?: string;
+  /** Bounded navigation lists can prepare offscreen and retain their cells.
+   * The hidden surface never owns focus, Back, or background isolation. */
+  keepMounted?: boolean;
   /** Keep a draft mounted while a sibling picker is the active surface. */
   obscured?: boolean;
   /** An anchored dropdown can own focus/back without hiding its parent form. */
@@ -62,7 +65,7 @@ export interface FloatingPanelProps {
 export function FloatingPanel(props: FloatingPanelProps) {
   const [activated, setActivated] = React.useState(props.visible);
   if (props.visible && !activated) setActivated(true);
-  return activated ? <FloatingPanelSurface {...props} /> : null;
+  return activated || props.keepMounted ? <FloatingPanelSurface {...props} /> : null;
 }
 
 function FloatingPanelSurface({
@@ -79,6 +82,7 @@ function FloatingPanelSurface({
   dismissOnScrim = true,
   scrollBody = true,
   scrollResetKey,
+  keepMounted = false,
   obscured = false,
   interactive = true,
 }: FloatingPanelProps) {
@@ -243,7 +247,7 @@ function FloatingPanelSurface({
     transform: [{ translateY: keyboardShift.value + (1 - spatial.value) * 24 }, ...(Platform.OS === "ios" ? [{ scale: 0.94 + spatial.value * 0.06 }] : [])],
   }));
 
-  if (!rendered) return null;
+  if (!rendered && !keepMounted) return null;
 
   const sheetHeader = <View testID="material-sheet-header" onLayout={(event) => setSheetHeaderHeight(event.nativeEvent.layout.height)}
     style={{ backgroundColor: panelSurface }}>
@@ -282,13 +286,17 @@ function FloatingPanelSurface({
       </>;
 
   return (
-    <OverlayPortal active={visible && interactive && !obscured}>
+    <OverlayPortal blocking={rendered} active={visible && interactive && !obscured}>
       <View
         accessibilityViewIsModal={visible && interactive && !obscured}
-        importantForAccessibility={obscured ? "no-hide-descendants" : "auto"}
+        accessibilityElementsHidden={!visible || obscured}
+        importantForAccessibility={!visible || obscured ? "no-hide-descendants" : "auto"}
         aria-hidden={!visible || obscured}
         pointerEvents={visible && interactive && !obscured ? "auto" : "none"}
-        style={[styles.root, collapsedObscured ? { display: "none" } : null]}
+        // A retained surface stays laid out at opacity zero. display:none
+        // would discard its measurements and repeat the cold layout on open.
+        style={[styles.root, collapsedObscured ? { display: "none" } : null,
+          Platform.OS === "web" && !rendered ? { visibility: "hidden" } as unknown as ViewStyle : null]}
         onLayout={(event) => { const next = event.nativeEvent.layout.height; if (!obscured && next > 0) setAvailableHeight((current) => Math.abs(current - next) < 1 ? current : next); }}
       >
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, scrimStyle]}>

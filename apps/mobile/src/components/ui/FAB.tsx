@@ -17,11 +17,10 @@ import { useFloatingActions } from "../../store/floating-actions";
 import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
 import { FAB_DEFAULT_BOTTOM, FAB_SIZE, fabBottomOffset } from "../../lib/fab-layout";
 
-export interface FABProps {
+interface FABBaseProps {
   icon?: keyof typeof Ionicons.glyphMap;
   label?: string;
   expansion?: { spatial: SharedValue<number>; effects: SharedValue<number> };
-  onPress: (anchor: MenuAnchorRect) => void;
   onLongPress?: (anchor: MenuAnchorRect) => void;
   accessibilityLabel?: string;
   accessibilityHint?: string;
@@ -32,6 +31,11 @@ export interface FABProps {
   /** See `Header` `alignTo`. The embedded reader passes `parent`. */
   alignTo?: ColumnAlign;
 }
+
+export type FABProps = FABBaseProps & (
+  | { anchored?: true; onPress: (anchor: MenuAnchorRect) => void }
+  | { anchored: false; onPress: () => void }
+);
 
 interface FABLayerProps {
   children: React.ReactNode;
@@ -60,6 +64,7 @@ export function FAB({
   icon = "add",
   label,
   expansion,
+  anchored,
   onPress,
   onLongPress,
   accessibilityLabel = "Create",
@@ -110,7 +115,10 @@ export function FAB({
         shape={{ rest: expressive ? radius.xl : radius.lg, pressed: expressive ? radius.md : radius.lg }}
         onPress={(event) => {
           haptics.light();
-          emit(onPress, event);
+          // Centered dialogs don't need window coordinates. In particular,
+          // don't wait for a native layout/JS round trip before opening one.
+          if (anchored === false) onPress();
+          else emit(onPress, event);
         }}
         onLongPress={onLongPress ? (event) => emit(onLongPress, event) : undefined}
         delayLongPress={SELECTION_LONG_PRESS_MS}

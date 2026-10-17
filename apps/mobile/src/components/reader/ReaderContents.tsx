@@ -1,0 +1,158 @@
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { FlatList, Platform, StyleSheet, View, useWindowDimensions, type ListRenderItemInfo, type ScrollViewProps } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import type { SharedValue } from "react-native-reanimated";
+import type { ArticleHeading } from "./ArticleHtml";
+import { FAB, FABLayer } from "../ui/FAB";
+import { FloatingPanel } from "../ui/FloatingPanel";
+import { PanelHeader } from "../ui/PanelHeader";
+import { ListPressable } from "../ui/ListPressable";
+import { Text } from "../ui/Text";
+import { ThemedScrollView } from "../ui/ThemedScrollView";
+import type { WebPressKeyEvent } from "../ui/pressable-web";
+import { useTheme } from "../../theme/ThemeProvider";
+import { listCorners, listPosition } from "../../theme/list-shape";
+import { layout, radius, spacing } from "../../theme/tokens";
+
+export interface ReaderContentsHandle { open: () => void }
+interface ReaderContentsProps {
+  headings: readonly ArticleHeading[];
+  onSelect: (id: string) => void;
+  expansion: { spatial: SharedValue<number>; effects: SharedValue<number> };
+  embedded: boolean;
+  bottom: number;
+  sceneWidth: number;
+}
+
+const keyExtractor = (heading: ArticleHeading) => heading.id;
+const renderScrollComponent = (props: ScrollViewProps) => <ThemedScrollView {...props} />;
+
+/** Contents is navigation chrome, not article state. Opening/closing must not
+ * reconcile the reader or mount a whole article's worth of heading controls. */
+export const ReaderContents = React.memo(React.forwardRef<ReaderContentsHandle, ReaderContentsProps>(function ReaderContents({
+  headings, onSelect, expansion, embedded, bottom, sceneWidth,
+}, ref) {
+  const [visible, setVisible] = useState(false);
+  const [prepared, setPrepared] = useState(false);
+  useEffect(() => {
+    // Only a viewport's worth of rows is prepared, at idle priority. A tap
+    // before this runs still opens immediately; no timer gates the action.
+    if (typeof requestIdleCallback === "function") {
+      const idle = requestIdleCallback(() => setPrepared(true));
+      return () => cancelIdleCallback(idle);
+    }
+    const timer = setTimeout(() => setPrepared(true), 500);
+    return () => clearTimeout(timer);
+  }, []);
+  const open = useCallback(() => setVisible(true), []);
+  const close = useCallback(() => setVisible(false), []);
+  useImperativeHandle(ref, () => ({ open }), [open]);
+  const { height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const { palette, expressive } = useTheme();
+  const list = useRef<FlatList<ArticleHeading>>(null);
+  const [initialIndex, setInitialIndex] = useState(0);
+  const resetList = useCallback(() => {
+    setInitialIndex(0);
+    list.current?.scrollToOffset({ offset: 0, animated: false });
+  }, []);
+  const focusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingFocus = useRef<{ index: number; root: HTMLElement; attempts: number } | null>(null);
+  const focusHeading = useCallback(() => {
+    const pending = pendingFocus.current;
+    if (!pending) return;
+    const row = pending.root.querySelector<HTMLElement>(`[data-contents-index="${pending.index}"]`);
+    if (row) {
+      row.scrollIntoView({ block: "nearest" });
+      row.focus({ preventScroll: true });
+      pendingFocus.current = null;
+      return;
+    }
+    if (pending.attempts++ >= 10) { pendingFocus.current = null; return; }
+    focusTimer.current = setTimeout(focusHeading, 60);
+  }, []);
+  useEffect(() => {
+    if (!visible) {
+      pendingFocus.current = null;
+      if (focusTimer.current) clearTimeout(focusTimer.current);
+    }
+    return () => { if (focusTimer.current) clearTimeout(focusTimer.current); };
+  }, [visible]);
+  const onKeyDown = useCallback((event: WebPressKeyEvent, index: number) => {
+    if (Platform.OS !== "web") return;
+    const target = event.key === "ArrowDown" ? Math.min(headings.length - 1, index + 1)
+      : event.key === "ArrowUp" ? Math.max(0, index - 1)
+      : event.key === "Home" ? 0 : event.key === "End" ? headings.length - 1 : -1;
+    if (target < 0) return;
+    const root = (event.currentTarget as HTMLElement)?.closest<HTMLElement>('[role="dialog"]');
+    if (!root) return;
+    event.preventDefault();
+    if (focusTimer.current) clearTimeout(focusTimer.current);
+    pendingFocus.current = { index: target, root, attempts: 0 };
+    // FlatList cannot scroll directly to a distant, unmeasured variable-height
+    // row. Start a new bounded window there instead of mounting every row on
+    // the way to End/Home. Ordinary arrow navigation keeps the current list.
+    if (!root.querySelector(`[data-contents-index="${target}"]`)) setInitialIndex(target);
+    focusHeading();
+  }, [focusHeading, headings.length]);
+  const onScrollToIndexFailed = useCallback(({ index, averageItemLength }: { index: number; averageItemLength: number }) => {
+    // Initial scrolling can precede a two-line cell's first measurement.
+    list.current?.scrollToOffset({ offset: index * averageItemLength, animated: false });
+  }, []);
+  const baseLevel = useMemo(() => headings.reduce((level, heading) => Math.min(level, heading.level), 6), [headings]);
+  const selectRef = useRef(onSelect);
+  selectRef.current = onSelect;
+  const select = useCallback((id: string) => {
+    close();
+    selectRef.current(id);
+  }, [close]);
+  const renderItem = useCallback(({ item, index }: ListRenderItemInfo<ArticleHeading>) => (
+    <ListPressable
+      style={[
+        styles.row,
+        { paddingLeft: spacing[16] + (item.level - baseLevel) * spacing[16] },
+        expressive ? {
+          ...listCorners(listPosition(index, headings.length), false),
+          backgroundColor: palette.surfaceContainerLow,
+          marginBottom: spacing[2],
+        } : null,
+      ]}
+      onPress={() => select(item.id)}
+      accessibilityRole="button"
+      accessibilityLabel={`Go to ${item.text}`}
+      dataSet={Platform.OS === "web" ? { contentsIndex: String(index) } : undefined}
+      onKeyDown={(event) => onKeyDown(event, index)}
+    >
+      <Text variant={item.level === 1 ? "bodyStrong" : "body"} numberOfLines={2}>{item.text}</Text>
+    </ListPressable>
+  ), [baseLevel, expressive, headings.length, onKeyDown, palette.surfaceContainerLow, select]);
+  const listHeight = Math.min(320, (height - insets.top - insets.bottom) * 0.4, headings.length * (expressive ? 50 : 48));
+
+  return <>
+    {/* Keep the trigger mounted for focus restoration and stable scroll clearance. */}
+    <FABLayer maxWidth={layout.maxReaderWidth}>
+      <FAB icon="list-outline" label="Contents" expansion={expansion}
+        accessibilityLabel="Table of contents" accessibilityHint="Jump to a section in this article."
+        anchored={false} onPress={open} maxContentWidth={layout.maxReaderWidth}
+        alignTo={embedded ? "parent" : "scene"} bottom={bottom} />
+    </FABLayer>
+    <FloatingPanel visible={visible} onDismiss={close} onExited={resetList}
+      maxWidth={Math.min(384, sceneWidth - spacing[48])} scrollBody={false} keepMounted={prepared}>
+      <PanelHeader title="Contents" titleVariant="titleLarge" onClose={close} />
+      <View style={{ height: listHeight, maxHeight: listHeight, flexShrink: 1 }}>
+        <FlatList key={initialIndex} ref={list} data={headings} renderItem={renderItem} keyExtractor={keyExtractor}
+          renderScrollComponent={renderScrollComponent} style={{ flex: 1 }} initialScrollIndex={initialIndex}
+          initialNumToRender={8} maxToRenderPerBatch={4} windowSize={2}
+          onScrollToIndexFailed={onScrollToIndexFailed}
+          keyboardShouldPersistTaps="handled" />
+      </View>
+    </FloatingPanel>
+  </>;
+}));
+
+const styles = StyleSheet.create({
+  row: {
+    minHeight: 48, justifyContent: "center", paddingHorizontal: spacing[16], paddingVertical: spacing[8],
+    borderRadius: radius.xs, overflow: "hidden",
+  },
+});
