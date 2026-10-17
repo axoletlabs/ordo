@@ -118,7 +118,6 @@ export default function FolderDetailScreen() {
   );
   const selectableKeys = useMemo(() => items.map((bookmark) => bookmarkKey(bookmark.id)), [items]);
   const getItemLayout = useBookmarkListLayout(items);
-  const isEmpty = !foldersLoading && !bookmarks.isLoading && !showLocked && !loadFailed && items.length === 0;
   // Root isn't a folder row, so derive unread state from the loaded items.
   const hasUnread = folder ? folder.unreadCount > 0 : items.some((b) => !b.isRead);
 
@@ -171,7 +170,7 @@ export default function FolderDetailScreen() {
   });
   const refetchBookmarks = useCallback(async () => {
     resetPaging();
-    await bookmarks.refetch();
+    await bookmarks.refetch({ throwOnError: true });
   }, [bookmarks.refetch, resetPaging]);
   const { refreshing, onRefresh } = usePullToRefresh(refetchBookmarks);
 
@@ -213,6 +212,8 @@ export default function FolderDetailScreen() {
       scrollEnabled={drag.scrollEnabled}
       onEndReached={onEndReached}
       ListFooterComponent={loadingMore ? <ListLoadingFooter /> : null}
+      ListEmptyComponent={<View style={styles.empty}><EmptyState icon="bookmark-outline" title="No bookmarks here"
+        message="Save a link to start reading." action={<Button onPress={() => setAddOpen(true)} label="Save bookmark" />} /></View>}
     />
     </SelectionDragFrame>
   );
@@ -289,15 +290,6 @@ export default function FolderDetailScreen() {
             title="Couldn't load bookmarks"
             message={errorMessage(bookmarks.error)}
             action={<Button label="Retry" onPress={() => bookmarks.refetch()} />}
-          />
-        </ScreenContent>
-      ) : isEmpty ? (
-        <ScreenContent maxWidth={pageMax} style={styles.center}>
-          <EmptyState
-            icon="bookmark-outline"
-            title="No bookmarks here"
-            message="Save a link to start reading."
-            action={<Button onPress={() => setAddOpen(true)} label="Save bookmark" />}
           />
         </ScreenContent>
       ) : bookmarks.isLoading || (Boolean(folderId) && foldersLoading) ? (
@@ -414,4 +406,5 @@ export default function FolderDetailScreen() {
 const styles = StyleSheet.create({
   content: { flex: 1, width: "100%" },
   center: { flex: 1, width: "100%", justifyContent: "center" },
+  empty: { flex: 1, minHeight: 300, justifyContent: "center" },
 });

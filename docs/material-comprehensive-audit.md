@@ -89,6 +89,49 @@ on in-app routes.
   unchanged catalogue order after selecting a tag.
 - Library loading → empty, error → Retry → empty, and empty-state save action.
 
+## Overlay protection and refresh-feedback pass (2026-10-17)
+
+A later interaction pass fixed cross-screen overlay and refresh behavior in
+shared primitives rather than per-screen flags:
+
+- A central overlay registry (`overlay-registry.ts`) orders blocking layers.
+  While any blocking overlay is mounted — including during its exit animation —
+  `OverlayHost` marks the app background non-interactive and hidden from
+  accessibility, shared scroll wrappers freeze (`ThemedScrollView`/list
+  wrappers), and pull-to-refresh disarms. Tooltips and nonmodal selection
+  menus publish as non-blocking so hover tips and reader toolbars never lock
+  the page.
+- Web modal isolation (`modal-isolation.ts`) also locks `html`/body overflow,
+  so wheel/touch input cannot scroll the page behind a dialog even outside
+  React-managed scrollers.
+- Focus management (`use-overlay-focus.ts`) filters inert/hidden focusables,
+  re-routes focus kept on `body` after nested menu page swaps, contains Tab,
+  and restores the trigger after the exit isolation has actually released
+  (deadline-bounded), so closing a menu returns focus to its trigger instead
+  of dropping it on `body`.
+- Android Back ownership stays with the newest rendered surface across parent
+  re-renders: the Back handler subscribes once and always calls the latest
+  `onDismiss` (`use-overlay-presence.ts`).
+- User pull-to-refresh now guarantees a readable feedback window: a 700ms
+  minimum HUD visibility for cache-fast completions (`useRefreshFeedback`),
+  no added delay for slow requests, error toasts on refetch failure, and
+  empty folder/tag screens moved inside the refreshable list so they can be
+  pulled to refresh. The in-app website reload shares the same feedback
+  lifecycle and honors overlay-blocked scrolling/Back.
+- Folder/tag create-edit panels ignore extra submits and scrim dismissal
+  while their mutation is pending, and lock their inputs to prevent duplicate
+  creates.
+
+Verification during development (before the repository removed its test
+suite): mobile lint + typecheck, the then-current unit suite plus new
+registry/refresh/Back-ownership cases, a fixture-backed browser matrix
+(444 captures, 72 interaction groups, 0 page errors), an auth browser suite
+(74 captures, 17 scenarios, 0 errors), and a dedicated overlay-interaction
+matrix covering wheel lock, scroll restoration, nested-menu focus, Tab
+containment, trigger restoration, scrollable pickers and draft retention in
+both themes, both design modes, portrait and wide. Fixture-backed browser
+checks only; native touch/Back/IME behavior still needs device verification.
+
 These are fixture-backed UI checks, **not** browser-to-real-server end-to-end
 tests. Fixtures intentionally isolate presentation and routing. Authenticated
 screens are reached using the app's navigation; full reloads lose the in-memory

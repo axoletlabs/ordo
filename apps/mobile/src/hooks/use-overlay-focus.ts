@@ -12,16 +12,30 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
     if (!active || suspended || Platform.OS !== "web" || typeof document === "undefined") return;
     const node = () => ref.current as unknown as HTMLElement | null;
     let releaseIsolation: (() => void) | undefined;
+    let observer: MutationObserver | undefined;
+    let repairFrame = 0;
     const items = () => Array.from(node()?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []).filter((item) =>
-      item.getAttribute("aria-disabled") !== "true" && item.getClientRects().length > 0);
+      item.getAttribute("aria-disabled") !== "true" && !item.closest('[inert], [aria-hidden="true"]') && item.getClientRects().length > 0);
     let frame = requestAnimationFrame(() => {
       // Portal publication happens in a layout effect; allow the host to attach.
       frame = requestAnimationFrame(() => {
         const root = node();
         if (isolateBackground && root) releaseIsolation = isolateModal(root);
+        if (root) {
+          // Replacing a nested menu page removes its focused row without firing
+          // focusin. Keep keyboard ownership instead of leaving focus on body.
+          observer = new MutationObserver(() => {
+            cancelAnimationFrame(repairFrame);
+            repairFrame = requestAnimationFrame(() => {
+              const overlays = document.querySelectorAll('[data-material-overlay="true"]');
+              if (overlays[overlays.length - 1] === root && !root.contains(document.activeElement)) (items()[0] ?? root).focus();
+            });
+          });
+          observer.observe(root, { childList: true, subtree: true });
+        }
         // Returning from a dropdown should preserve its restored trigger focus.
         if (node()?.contains(document.activeElement) && document.activeElement !== node()) return;
-        const preferred = kind === "dialog" ? node()?.querySelector<HTMLElement>('input:not([disabled]), textarea:not([disabled])') : null;
+        const preferred = kind === "dialog" ? items().find((item) => /INPUT|TEXTAREA/.test(item.tagName) && !item.hasAttribute("readonly")) : null;
         (preferred ?? items()[0] ?? node())?.focus?.();
       });
     });
@@ -29,7 +43,7 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
       const root = node();
       if (!root) return;
       const overlays = document.querySelectorAll('[data-material-overlay="true"]');
-      if (!isolateBackground && overlays[overlays.length - 1] !== root) return;
+      if (overlays[overlays.length - 1] !== root) return;
       if (event.key === "Escape" && dismissible) {
         event.preventDefault(); event.stopPropagation(); dismissRef.current(); return;
       }
@@ -52,11 +66,14 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
     document.addEventListener("keydown", key, true);
     const containFocus = (event: FocusEvent) => {
       const root = node();
-      if (isolateBackground && root && !root.contains(event.target as Node)) (items()[0] ?? root).focus();
+      const overlays = document.querySelectorAll('[data-material-overlay="true"]');
+      if (root && overlays[overlays.length - 1] === root && !root.contains(event.target as Node)) (items()[0] ?? root).focus();
     };
     document.addEventListener("focusin", containFocus, true);
     return () => {
       cancelAnimationFrame(frame);
+      cancelAnimationFrame(repairFrame);
+      observer?.disconnect();
       document.removeEventListener("keydown", key, true);
       document.removeEventListener("focusin", containFocus, true);
       releaseIsolation?.();
@@ -70,16 +87,26 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
     const previous = document.activeElement as HTMLElement | null;
     return () => {
       const root = ref.current as unknown as HTMLElement | null;
-      const restore = () => {
-        const overlays = document.querySelectorAll('[data-material-overlay="true"]');
-        const top = overlays[overlays.length - 1];
-        if (previous?.isConnected && !previous.closest('[data-material-overlay="false"]') &&
-          (!top || top.contains(previous)) &&
-          (root?.contains(document.activeElement) || document.activeElement === document.body)) previous.focus();
-      };
       // The portal publishes its closing/resumed interactive state in a second
       // commit. Wait for that publication, otherwise the outgoing dialog still
       // looks like the top active overlay and blocks restoration to its trigger.
+      // The deadline also rides out an exiting surface (tooltip or scrim) that
+      // still holds focus, so the trigger is never restored under a dying layer.
+      // The final rAF keeps the restore inside the same task that released
+      // isolation; restoring too early puts focus on a still-inert trigger,
+      // and Chromium then drops it to body without a second focus event.
+      const deadline = Date.now() + 600;
+      const restore = () => {
+        const overlays = document.querySelectorAll('[data-material-overlay="true"]');
+        const top = overlays[overlays.length - 1];
+        const inertTrigger = previous?.isConnected && previous.closest('[inert]');
+        if ((overlays.length || inertTrigger) && Date.now() < deadline) { requestAnimationFrame(restore); return; }
+        requestAnimationFrame(() => {
+          if (previous?.isConnected && !previous.closest('[data-material-overlay="false"]') &&
+            (!top || top.contains(previous)) &&
+            (document.activeElement === document.body || (root && root.contains(document.activeElement) && !root.contains(previous)))) previous.focus();
+        });
+      };
       requestAnimationFrame(restore);
     };
   }, [active]);

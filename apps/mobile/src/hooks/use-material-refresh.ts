@@ -24,6 +24,9 @@ export function useMaterialRefresh(refreshing: boolean, onRefresh?: (() => void)
     pull.current = null;
     setDy(0);
   }, []);
+  useEffect(() => {
+    if (!enabled) cancel();
+  }, [enabled, cancel]);
   const finish = useCallback(() => {
     const { refreshing, onRefresh, enabled, commitOnRelease } = options.current;
     const shouldRefresh = finishRefreshPull(pull.current, refreshing || committed.current);

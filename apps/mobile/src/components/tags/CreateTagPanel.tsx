@@ -36,6 +36,7 @@ export function CreateTagPanel({ visible, onDismiss, onCreated }: CreateTagPanel
   }, [visible]);
 
   const submit = async () => {
+    if (create.isPending) return;
     const trimmed = name.trim();
     if (!trimmed) {
       setError("Enter a tag name.");
@@ -53,13 +54,14 @@ export function CreateTagPanel({ visible, onDismiss, onCreated }: CreateTagPanel
   };
 
   return (
-    <FloatingPanel visible={visible} onDismiss={onDismiss}>
+    <FloatingPanel visible={visible} onDismiss={onDismiss} dismissible={!create.isPending}>
       <PanelHeader title="New tag" />
       <View style={styles.body}>
         <Input
           label="Tag name"
           required maxLength={TAG_NAME_MAX_LENGTH} showCounter
           value={name}
+          disabled={create.isPending}
           onChangeText={setName}
           placeholder="Tag name"
           autoFocus

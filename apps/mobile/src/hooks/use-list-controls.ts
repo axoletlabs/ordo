@@ -6,26 +6,23 @@
  * PERSONAL flash a reload chip at the bottom and never settle.
  * A next page that adds no unique rows is treated as the end.
  */
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
+import { useRefreshFeedback } from "./use-refresh-feedback";
+import { toast } from "../components/ui/toast-store";
+import { errorMessage } from "../lib/error-message";
 import { flattenPages } from "../lib/api/query-keys";
 import { pageLoadMadeProgress, shouldFetchNextPage } from "../lib/list-pagination";
 
 type PageChunk = { items: unknown[] };
 
 export function usePullToRefresh(refetch: () => Promise<unknown>) {
-  const [refreshing, setRefreshing] = useState(false);
-  const refreshingRef = useRef(false);
+  const { refreshing, start, finish } = useRefreshFeedback();
   const onRefresh = useCallback(() => {
-    if (refreshingRef.current) return;
-    refreshingRef.current = true;
-    setRefreshing(true);
-    void Promise.resolve().then(refetch).catch(() => {
-      // React Query owns the error state; never leak an unhandled rejection.
-    }).finally(() => {
-      refreshingRef.current = false;
-      setRefreshing(false);
-    });
-  }, [refetch]);
+    if (!start()) return;
+    void Promise.resolve().then(refetch).catch((cause) => {
+      toast.error(errorMessage(cause));
+    }).finally(finish);
+  }, [refetch, start, finish]);
   return { refreshing, onRefresh };
 }
 

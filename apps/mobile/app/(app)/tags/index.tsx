@@ -30,7 +30,7 @@ export default function TagsScreen() {
   const router = useRouter();
   const { listOverlayClearance } = useFloatingDockMetrics();
   const { data: tags, isLoading, error, refetch } = useTags();
-  const { refreshing, onRefresh } = usePullToRefresh(() => refetch());
+  const { refreshing, onRefresh } = usePullToRefresh(() => refetch({ throwOnError: true }));
 
   const [createOpen, setCreateOpen] = useState(false);
   const [actionsTag, setActionsTag] = useState<TagDto | null>(null);
@@ -93,15 +93,6 @@ export default function TagsScreen() {
               action={<Button label="Retry" onPress={() => refetch()} />}
             />
           </View>
-        ) : items.length === 0 ? (
-          <View style={styles.center}>
-            <EmptyState
-              icon="pricetags-outline"
-              title="No tags yet"
-              message="Create a tag to organize bookmarks."
-              action={<Button label="New tag" onPress={() => setCreateOpen(true)} />}
-            />
-          </View>
         ) : (
           <ThemedFlashList
             data={items}
@@ -111,6 +102,8 @@ export default function TagsScreen() {
             contentContainerStyle={listContentStyle}
             refreshing={refreshing}
             onRefresh={onRefresh}
+            ListEmptyComponent={<View style={styles.empty}><EmptyState icon="pricetags-outline" title="No tags yet"
+              message="Create a tag to organize bookmarks." action={<Button label="New tag" onPress={() => setCreateOpen(true)} />} /></View>}
           />
         )}
       </ScreenContent>
@@ -158,6 +151,7 @@ function TagListSkeleton({ count = 6 }: { count?: number }) {
 const styles = StyleSheet.create({
   content: { flex: 1, width: "100%" },
   center: { flex: 1, width: "100%", justifyContent: "center" },
+  empty: { flex: 1, minHeight: 300, justifyContent: "center" },
   skeletonRow: {
     flexDirection: "row",
     alignItems: "center",

@@ -31,14 +31,21 @@ export function CreateFolderPanel({
   const [error, setError] = useState("");
   const [iconOpen, setIconOpen] = useState(false);
 
-  const close = () => {
+  React.useEffect(() => {
+    if (!visible) return;
     setName("");
     setIcon(DEFAULT_FOLDER_ICON);
     setError("");
+    setIconOpen(false);
+  }, [visible]);
+
+  const close = () => {
+    if (createFolder.isPending) return;
     onDismiss();
   };
 
   const submit = async () => {
+    if (createFolder.isPending) return;
     setError("");
     const trimmed = name.trim();
     if (!trimmed) {
@@ -49,7 +56,7 @@ export function CreateFolderPanel({
       const folder = await createFolder.mutateAsync({ name: trimmed, icon });
       haptics.success();
       onCreated?.(folder);
-      close();
+      onDismiss();
     } catch (cause) {
       setError(errorMessage(cause));
     }
@@ -60,6 +67,7 @@ export function CreateFolderPanel({
       visible={visible}
       obscured={iconOpen}
       onDismiss={close}
+      dismissible={!createFolder.isPending}
     >
       <ThemedScrollView keyboardShouldPersistTaps="handled">
         <PanelHeader title="New folder" />
@@ -68,6 +76,7 @@ export function CreateFolderPanel({
             label="Name"
             required showRequiredIndicator={false} maxLength={100} showCounter
             value={name}
+            disabled={createFolder.isPending}
             onChangeText={setName}
             placeholder="e.g. Recipes"
             autoFocus

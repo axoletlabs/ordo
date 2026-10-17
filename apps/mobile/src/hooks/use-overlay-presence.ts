@@ -28,6 +28,8 @@ export function useOverlayPresence(
   const ready = options?.ready !== false;
   const onExited = useRef(options?.onExited);
   onExited.current = options?.onExited;
+  const dismissRef = useRef(onDismiss);
+  dismissRef.current = onDismiss;
   const hadSurface = useRef(visible);
   useEffect(() => {
     if (visible) hadSurface.current = true;
@@ -115,11 +117,11 @@ export function useOverlayPresence(
         dismissKeyboard();
         return true;
       }
-      onDismiss();
+      dismissRef.current();
       return true;
     });
     return () => sub.remove();
-  }, [onDismiss, rendered, visible, interactive]);
+  }, [rendered, visible, interactive]);
 
   return { rendered: visible || rendered, progress, spatial };
 }

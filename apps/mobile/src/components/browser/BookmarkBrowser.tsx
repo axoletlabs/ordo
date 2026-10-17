@@ -42,6 +42,8 @@ import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 import { RefreshHud } from "../ui/RefreshHud";
 import { LinearProgress } from "../ui/LinearProgress";
+import { useRefreshFeedback } from "../../hooks/use-refresh-feedback";
+import { useOverlayBlocked } from "../ui/overlay-host";
 
 export interface BookmarkBrowserProps {
   url: string;
@@ -59,6 +61,7 @@ export interface BookmarkBrowserHandle {
 export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowserProps>(
   function BookmarkBrowser({ url, active = true, onPageHost }, ref) {
     const { palette } = useTheme();
+    const blocked = useOverlayBlocked();
     const forceWebsiteDark = useSettingsStore((s) => s.forceWebsiteDark);
     const webRef = useRef<WebView>(null);
     const canGoBackRef = useRef(false);
@@ -68,7 +71,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     const [loading, setLoading] = useState(true);
     const [progress, setProgress] = useState(0);
     const [error, setError] = useState<string | null>(null);
-    const [refreshing, setRefreshing] = useState(false);
+    const { refreshing, start: startRefresh, finish: finishRefresh } = useRefreshFeedback();
     const [ptrDy, setPtrDy] = useState(0);
     const source = useMemo(() => ({ uri: url }), [url]);
     const chromeBackground = forceWebsiteDark
@@ -88,10 +91,10 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
       refreshingRef.current = false;
       setLoading(false);
       setProgress(1);
-      setRefreshing(false);
+      finishRefresh();
       ptrDyRef.current = 0;
       setPtrDy(0);
-    }, []);
+    }, [finishRefresh]);
 
     const beginLoad = useCallback(() => {
       setError(null);
@@ -110,14 +113,13 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     }, [chromeBackground]);
 
     const handleRefresh = useCallback(() => {
-      if (refreshingRef.current) return;
+      if (refreshingRef.current || !startRefresh()) return;
       refreshingRef.current = true;
       haptics.light();
-      setRefreshing(true);
       ptrDyRef.current = BROWSER_PTR_THRESHOLD;
       setPtrDy(BROWSER_PTR_THRESHOLD);
       reload();
-    }, [reload]);
+    }, [reload, startRefresh]);
 
     useImperativeHandle(
       ref,
@@ -137,14 +139,14 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     }, [url, forceWebsiteDark, beginLoad]);
 
     useEffect(() => {
-      if (!active || Platform.OS !== "android") return;
+      if (!active || blocked || Platform.OS !== "android") return;
       const sub = BackHandler.addEventListener("hardwareBackPress", () => {
         if (!canGoBackRef.current) return false;
         webRef.current?.goBack();
         return true;
       });
       return () => sub.remove();
-    }, [active]);
+    }, [active, blocked]);
 
     const handleShouldStart = useCallback(
       (request: { url: string; isTopFrame?: boolean }) => {
@@ -194,7 +196,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
       (event: { nativeEvent: { code: number; description: string } }) => {
         const { code, description } = event.nativeEvent;
         refreshingRef.current = false;
-        setRefreshing(false);
+        finishRefresh();
         ptrDyRef.current = 0;
         setPtrDy(0);
         if (isCancelledWebViewError(code, description)) {
@@ -204,13 +206,13 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
         setLoading(false);
         setError(description?.trim() || "Couldn't load this page");
       },
-      [finishLoad],
+      [finishLoad, finishRefresh],
     );
 
     const handleMessage = useCallback(
       (event: { nativeEvent: { data: string } }) => {
         const msg = parseBrowserPtrMessage(event.nativeEvent.data);
-        if (!msg) return;
+        if (!msg || blocked || !active) return;
         if (msg.phase === "move") {
           if (refreshingRef.current) return;
           const dy = Math.max(0, msg.dy);
@@ -236,7 +238,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           setPtrDy(0);
         }
       },
-      [handleRefresh],
+      [handleRefresh, blocked, active],
     );
 
     const recoverProcess = useCallback(() => {
@@ -269,6 +271,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           onRenderProcessGone={recoverProcess}
           setSupportMultipleWindows={false}
           bounces
+          scrollEnabled={!blocked}
           overScrollMode="never"
           cacheEnabled
           cacheMode="LOAD_DEFAULT"
@@ -297,7 +300,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           injectedJavaScript={injected}
         />
     ), [url, forceWebsiteDark, source, chromeBackground, beginLoad, finishLoad, handleProgress,
-      handleError, handleNav, handleShouldStart, handleOpenWindow, handleMessage, recoverProcess, injected]);
+      handleError, handleNav, handleShouldStart, handleOpenWindow, handleMessage, recoverProcess, injected, blocked]);
 
     return (
       <View testID="bookmark-browser" collapsable={false} style={[styles.wrap, { backgroundColor: chromeBackground }]}>

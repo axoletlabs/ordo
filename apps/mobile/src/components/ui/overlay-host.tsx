@@ -10,69 +10,76 @@
  * so ThemeOverrideProvider in the publisher (the reader, for example) is not
  * an ancestor. OverlayPortal snapshots that palette and re-provides it here.
  */
-import React, { createContext, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import React, { createContext, useContext, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { Platform, StyleSheet, View } from "react-native";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
+import { createOverlayRegistry, topBlockingLayer } from "../../lib/overlay-registry";
+import { isolateModal } from "../../lib/modal-isolation";
 
-type OverlayLayer = { id: string; node: React.ReactNode };
-
-type OverlayApi = {
-  upsert: (id: string, node: React.ReactNode | null) => void;
-};
+type OverlayApi = ReturnType<typeof createOverlayRegistry<React.ReactNode>>;
 
 const OverlayContext = createContext<OverlayApi | null>(null);
+const OverlayBlockedContext = createContext(false);
+export const useOverlayBlocked = () => useContext(OverlayBlockedContext);
 
 let nextId = 0;
 
 export function OverlayHost({ children }: { children: React.ReactNode }) {
-  const dispatchRef = useRef<OverlayApi | null>(null);
-  const api = useMemo<OverlayApi>(
-    () => ({
-      upsert: (id, node) => {
-        dispatchRef.current?.upsert(id, node);
-      },
-    }),
-    [],
-  );
+  const api = useMemo(() => createOverlayRegistry<React.ReactNode>(), []);
 
   return (
     <OverlayContext.Provider value={api}>
-      {children}
-      <OverlayLayers dispatchRef={dispatchRef} />
+      <OverlayBackground api={api}>{children}</OverlayBackground>
+      <OverlayLayers api={api} />
     </OverlayContext.Provider>
   );
 }
 
-function OverlayLayers({ dispatchRef }: { dispatchRef: React.MutableRefObject<OverlayApi | null> }) {
-  const [layers, setLayers] = useState<OverlayLayer[]>([]);
-  dispatchRef.current = {
-    upsert: (id, node) => {
-      setLayers((prev) => {
-        const index = prev.findIndex((layer) => layer.id === id);
-        if (node == null) return index < 0 ? prev : prev.filter((layer) => layer.id !== id);
-        if (index < 0) return [...prev, { id, node }];
-        // Updating a parent form must not raise it above its open picker.
-        if (prev[index]?.node === node) return prev;
-        return prev.map((layer, i) => i === index ? { id, node } : layer);
-      });
-    },
-  };
+function OverlayBackground({ api, children }: { api: OverlayApi; children: React.ReactNode }) {
+  const blocked = useSyncExternalStore(api.subscribe, api.isBlocked, api.isBlocked);
+  return <OverlayBlockedContext.Provider value={blocked}>
+    <View style={styles.background} pointerEvents={blocked ? "none" : "auto"}
+      accessibilityElementsHidden={blocked} importantForAccessibility={blocked ? "no-hide-descendants" : "auto"}>
+      {children}
+    </View>
+  </OverlayBlockedContext.Provider>;
+}
+
+function OverlayLayers({ api }: { api: OverlayApi }) {
+  const layers = useSyncExternalStore(api.subscribe, api.getLayers, api.getLayers);
+  const host = useRef<View>(null);
+  const topId = topBlockingLayer(layers);
+  const topIndex = layers.findIndex((layer) => layer.id === topId);
+  useLayoutEffect(() => {
+    if (Platform.OS !== "web" || !topId) return;
+    const root = (host.current as unknown as HTMLElement | null)?.querySelector<HTMLElement>(`[data-overlay-layer="${topId}"]`);
+    if (root) return isolateModal(root);
+  }, [topId]);
 
   return (
     <View
+      ref={host}
       pointerEvents={layers.length > 0 ? "box-none" : "none"}
       style={styles.host}
       collapsable={false}
     >
-      {layers.map((layer) => (
-        <React.Fragment key={layer.id}>{layer.node}</React.Fragment>
+      {layers.map((layer, index) => (
+        <OverlayBlockedContext.Provider key={layer.id} value={index < topIndex}>
+          <View pointerEvents={index < topIndex ? "none" : "box-none"}
+            importantForAccessibility={index < topIndex ? "no-hide-descendants" : "auto"}
+            accessibilityElementsHidden={index < topIndex}
+            {...(Platform.OS === "web" ? { dataSet: { overlayLayer: layer.id } } : {})}
+            style={StyleSheet.absoluteFill}>
+            {layer.node}
+          </View>
+        </OverlayBlockedContext.Provider>
       ))}
     </View>
   );
 }
 
 /** Render `children` into the root overlay host. Falls back in-place if none. */
-export function OverlayPortal({ children }: { children: React.ReactNode }) {
+export function OverlayPortal({ children, blocking = true, active = true }: { children: React.ReactNode; blocking?: boolean; active?: boolean }) {
   const ctx = useContext(OverlayContext);
   const { palette } = useTheme();
   const idRef = useRef<string | undefined>(undefined);
@@ -87,7 +94,7 @@ export function OverlayPortal({ children }: { children: React.ReactNode }) {
 
   useLayoutEffect(() => {
     if (!ctx) return;
-    ctx.upsert(id, node);
+    ctx.upsert(id, node, blocking, active);
   });
 
   useLayoutEffect(() => {
@@ -99,6 +106,7 @@ export function OverlayPortal({ children }: { children: React.ReactNode }) {
 }
 
 const styles = StyleSheet.create({
+  background: { flex: 1 },
   host: {
     ...StyleSheet.absoluteFill,
     zIndex: 80,

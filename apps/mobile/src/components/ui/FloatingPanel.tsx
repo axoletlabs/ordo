@@ -280,7 +280,7 @@ function FloatingPanelSurface({
       </>;
 
   return (
-    <OverlayPortal>
+    <OverlayPortal active={visible && interactive && !obscured}>
       <View
         accessibilityViewIsModal={visible && interactive && !obscured}
         importantForAccessibility={obscured ? "no-hide-descendants" : "auto"}

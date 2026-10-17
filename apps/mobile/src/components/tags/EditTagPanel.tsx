@@ -37,7 +37,7 @@ export function EditTagPanel({ visible, tag, onDismiss }: EditTagPanelProps) {
   }, [visible, tag]);
 
   const save = async () => {
-    if (!tag) return;
+    if (!tag || update.isPending) return;
     const trimmed = name.trim();
     if (!trimmed) {
       setError("Enter a tag name.");
@@ -66,13 +66,14 @@ export function EditTagPanel({ visible, tag, onDismiss }: EditTagPanelProps) {
   };
 
   return (
-    <FloatingPanel visible={visible && !!tag} onDismiss={onDismiss}>
+    <FloatingPanel visible={visible && !!tag} onDismiss={onDismiss} dismissible={!update.isPending}>
       <PanelHeader title="Edit tag" />
       <View style={styles.body}>
         <Input
           label="Tag name"
           required maxLength={TAG_NAME_MAX_LENGTH} showCounter
           value={name}
+          disabled={update.isPending}
           onChangeText={setName}
           placeholder="Tag name"
           autoCapitalize="words"

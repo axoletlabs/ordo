@@ -113,7 +113,7 @@ export default function TagDetailScreen() {
   });
   const refetchList = useCallback(async () => {
     resetPaging();
-    await list.refetch();
+    await list.refetch({ throwOnError: true });
   }, [list.refetch, resetPaging]);
   const { refreshing, onRefresh } = usePullToRefresh(refetchList);
 
@@ -171,6 +171,8 @@ export default function TagDetailScreen() {
       scrollEnabled={drag.scrollEnabled}
       onEndReached={onEndReached}
       ListFooterComponent={loadingMore ? <ListLoadingFooter /> : null}
+      ListEmptyComponent={<View style={styles.empty}><EmptyState icon="pricetag-outline" title="No bookmarks with this tag"
+        message="Save a bookmark with this tag, or pick another." /></View>}
     />
     </SelectionDragFrame>
   );
@@ -229,14 +231,6 @@ export default function TagDetailScreen() {
             title="Couldn't load bookmarks"
             message={errorMessage(list.error)}
             action={<Button label="Retry" onPress={() => list.refetch()} />}
-          />
-        </ScreenContent>
-      ) : items.length === 0 && !list.isLoading ? (
-        <ScreenContent maxWidth={pageMax} style={styles.center}>
-          <EmptyState
-            icon="pricetag-outline"
-            title="No bookmarks with this tag"
-            message="Save a bookmark with this tag, or pick another."
           />
         </ScreenContent>
       ) : list.isLoading ? (
@@ -318,4 +312,5 @@ export default function TagDetailScreen() {
 const styles = StyleSheet.create({
   content: { flex: 1, width: "100%" },
   center: { flex: 1, width: "100%", justifyContent: "center" },
+  empty: { flex: 1, minHeight: 300, justifyContent: "center" },
 });

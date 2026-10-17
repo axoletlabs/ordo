@@ -32,6 +32,7 @@ import { scrollViewShouldFill } from "../../theme/scrollbar";
 import { useMaterialRefresh } from "../../hooks/use-material-refresh";
 import { RefreshHud } from "./RefreshHud";
 import { LIST_END_REACHED_THRESHOLD } from "../../lib/list-pagination";
+import { useOverlayBlocked } from "./overlay-host";
 
 export type ThemedScrollViewProps = ScrollViewProps & {
   scrollBarInsets?: ScrollBarInsets;
@@ -60,7 +61,7 @@ const nativeScrollBarProps = {
 // the caret one extra character on Backspace in nested <input>s (server URL
 // fields, overlay forms). Overflow scrolling does not need the layer.
 const webNoContainingTransform: StyleProp<ViewStyle> =
-  Platform.OS === "web" ? { transform: "none" } : null;
+  Platform.OS === "web" ? { transform: "none", overscrollBehavior: "contain" } as ViewStyle : null;
 
 export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewProps>(
   function ThemedScrollView(
@@ -80,6 +81,7 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
     ref,
   ) {
     const bar = useVerticalScrollBar(scrollBarInsets);
+    const blocked = useOverlayBlocked();
     const reportScroll = React.useCallback((event: NativeScrollEvent) => {
       const synthetic = { nativeEvent: event } as Parameters<NonNullable<ScrollViewProps["onScroll"]>>[0];
       bar.onScrollActivity(synthetic);
@@ -112,6 +114,7 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
           scrollEventThrottle={scrollEventThrottle}
           showsVerticalScrollIndicator={false}
           {...props}
+          scrollEnabled={!blocked && props.scrollEnabled !== false}
         />
       );
     }
@@ -125,6 +128,7 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
         <VerticalScrollView
           ref={ref}
           {...props}
+          scrollEnabled={!blocked && props.scrollEnabled !== false}
           {...nativeScrollBarProps}
           showsVerticalScrollIndicator={
             Platform.OS === "web" ? (showsVerticalScrollIndicator ?? true) : false
@@ -217,9 +221,10 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
     ...rest
   } = props;
   const bar = useVerticalScrollBar(scrollBarInsets);
+  const blocked = useOverlayBlocked();
   const { wrapper, inner } = splitScrollLayoutStyle(style);
   const customRefresh = !refreshControl && !!onRefresh;
-  const refresh = useMaterialRefresh(!!refreshing, onRefresh, customRefresh && rest.scrollEnabled !== false);
+  const refresh = useMaterialRefresh(!!refreshing, onRefresh, customRefresh && !blocked && rest.scrollEnabled !== false);
   const fill = wrapper?.flex == null && wrapper?.maxHeight == null && wrapper?.height == null;
   const itemCount = Array.isArray(data) ? data.length : data == null ? 0 : 1;
   const motion = useMaterialMotion();
@@ -232,6 +237,7 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
       ref={ref}
       data={data}
       {...rest}
+      scrollEnabled={!blocked && rest.scrollEnabled !== false}
       {...(animateChanges && !motion.reducedMotion ? { itemLayoutAnimation: transition } : {})}
       {...nativeScrollBarProps}
       showsVerticalScrollIndicator={
@@ -244,7 +250,7 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
         { flexGrow: itemCount === 0 ? 1 : 0 },
         contentContainerStyle,
       ]}
-      style={[fill ? styles.fill : null, inner]}
+      style={[fill ? styles.fill : null, inner, webNoContainingTransform]}
       onScroll={chainHandlers(bar.onScroll, refresh.onScroll, onScroll)}
       onTouchStart={chainHandlers(Platform.OS === "web" ? refresh.onTouchStart : undefined, onTouchStart)}
       onTouchMove={chainHandlers(Platform.OS === "web" ? refresh.onTouchMove : undefined, onTouchMove)}

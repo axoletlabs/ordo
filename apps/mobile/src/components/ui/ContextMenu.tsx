@@ -93,6 +93,7 @@ function ContextMenuSurface({
   const bodyRef = React.useRef<View>(null);
   const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, {
     dismissKeyboard: backdrop && keyboardDismiss,
+    interactive: backdrop,
     ready: contentHeight > 0,
     onExited,
   });
@@ -269,7 +270,7 @@ function ContextMenuSurface({
   if (!rendered || !placed) return null;
 
   return (
-    <OverlayPortal>
+    <OverlayPortal blocking={backdrop} active={visible}>
       <View
         accessibilityViewIsModal={visible && backdrop}
         pointerEvents={visible ? (backdrop ? "auto" : "box-none") : "none"}
@@ -290,7 +291,7 @@ function ContextMenuSurface({
           ref={menuRef}
           accessibilityRole="menu"
           aria-hidden={!visible}
-          {...(Platform.OS === "web" ? { tabIndex: -1, dataSet: { materialOverlay: visible ? "true" : "false", menuPage: pageKey ?? "" } } : {})}
+          {...(Platform.OS === "web" ? { tabIndex: -1, dataSet: { materialOverlay: visible && backdrop ? "true" : "false", menuPage: pageKey ?? "" } } : {})}
           pointerEvents="auto"
           style={[
             styles.menu,

@@ -177,7 +177,7 @@ export default function BookmarksScreen() {
   });
   const refreshAll = useCallback(async () => {
     resetPaging();
-    await Promise.all([bookmarks.refetch(), folders.refetch(), tags.refetch(), ...(search.active ? [search.search.refetch()] : [])]);
+    await Promise.all([bookmarks.refetch({ throwOnError: true }), folders.refetch({ throwOnError: true }), tags.refetch({ throwOnError: true }), ...(search.active ? [search.search.refetch({ throwOnError: true })] : [])]);
   }, [bookmarks.refetch, folders.refetch, tags.refetch, resetPaging, search.active, search.search.refetch]);
   const { refreshing, onRefresh } = usePullToRefresh(refreshAll);
 
