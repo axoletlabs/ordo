@@ -10,7 +10,6 @@ export const AuthInput = React.forwardRef<TextInput, InputProps>(function AuthIn
       variant="outlined"
       required
       showRequiredIndicator={false}
-      reserveSupportingSpace={false}
       {...props}
     />
   );

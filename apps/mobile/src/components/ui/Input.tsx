@@ -64,9 +64,10 @@ export interface InputProps extends Omit<TextInputProps, "style"> {
   /** Preserve password keyboard/privacy semantics even while explicitly revealed. */
   sensitive?: boolean;
   required?: boolean;
-  /** Hide repeated visual markers when every field in the form is required. Semantics remain required. */
+  /** Hide the label asterisk when every field in the form is required. Semantics remain required. */
   showRequiredIndicator?: boolean;
   showCounter?: boolean;
+  /** Opt in to an empty supporting row; otherwise only real messages/counters take space. */
   reserveSupportingSpace?: boolean;
 }
 
@@ -97,7 +98,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   required = false,
   showRequiredIndicator = true,
   showCounter = false,
-  reserveSupportingSpace = !!label,
+  reserveSupportingSpace = false,
   ...rest
 }, ref) {
   const { palette } = useTheme();
@@ -110,7 +111,8 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   const canEdit = !inactive && !readOnly;
   const indicateRequired = required && showRequiredIndicator;
   const displayLabel = label && indicateRequired ? `${label} *` : label;
-  const support = error ?? (helper ? indicateRequired ? `${helper} * Required` : helper : indicateRequired ? "* Required" : undefined);
+  const support = error || helper;
+  const counterVisible = showCounter && rest.maxLength != null;
   const foreground = inactive ? alphaTint(palette.onSurface, 0.38) : palette.onSurface;
   const [hasText, setHasText] = useState(!!value);
   const [overlayWidth, setOverlayWidth] = useState(0);
@@ -339,10 +341,10 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
           </View>
         ) : null}
       </View>
-      {support || reserveSupportingSpace || showCounter ? <View style={[styles.msg, { minHeight: 16, flexDirection: "row", gap: 8 }]}>
+      {support || reserveSupportingSpace || counterVisible ? <View style={[styles.msg, { minHeight: 16, flexDirection: "row", gap: 8 }]}>
         <Text nativeID={messageId} variant="bodySmall" color={error ? "danger" : "secondary"}
           accessibilityRole={error ? "alert" : undefined} accessibilityLiveRegion={error ? "polite" : "none"} style={[{ flex: 1 }, inactive ? { color: foreground } : null]}>{support ?? " "}</Text>
-        {showCounter && rest.maxLength != null ? <Text variant="bodySmall" color="secondary" accessibilityLabel={`${value?.length ?? 0} of ${rest.maxLength} characters`}>{value?.length ?? 0}/{rest.maxLength}</Text> : null}
+        {counterVisible ? <Text variant="bodySmall" color="secondary" accessibilityLabel={`${value?.length ?? 0} of ${rest.maxLength} characters`}>{value?.length ?? 0}/{rest.maxLength}</Text> : null}
       </View> : null}
     </View>
   );
