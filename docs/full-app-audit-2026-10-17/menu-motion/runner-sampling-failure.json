@@ -1,0 +1,2255 @@
+{
+  "screens": [
+    "light-false-390-normal-theme-menu",
+    "light-false-390-normal-form-error",
+    "light-false-1280-normal-theme-menu",
+    "light-false-1280-normal-form-error",
+    "light-true-390-normal-theme-menu",
+    "light-true-390-normal-form-error",
+    "light-true-1280-normal-theme-menu",
+    "light-true-1280-normal-form-error",
+    "dark-false-390-normal-theme-menu",
+    "dark-false-390-normal-form-error",
+    "dark-false-1280-normal-theme-menu",
+    "dark-false-1280-normal-form-error",
+    "dark-true-390-normal-theme-menu",
+    "dark-true-390-normal-form-error",
+    "dark-true-1280-normal-theme-menu",
+    "dark-true-1280-normal-form-error",
+    "light-false-844-reduce-theme-menu",
+    "light-false-844-reduce-form-error",
+    "dark-true-390-reduce-theme-menu",
+    "dark-true-390-reduce-form-error"
+  ],
+  "checks": [
+    {
+      "name": "light-false-390-normal: bookmark menu highlights its row",
+      "pass": true,
+      "details": {
+        "selected": 1
+      }
+    },
+    {
+      "name": "light-false-390-normal: bookmark row fades during menu exit",
+      "pass": false,
+      "details": {
+        "label": "light-false-390-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-390-normal: bookmark row does not linger after menu removal",
+      "pass": false,
+      "details": {
+        "label": "light-false-390-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-390-normal: bookmark nested surface retains highlight",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal: folder menu highlights its row",
+      "pass": true,
+      "details": {
+        "selected": 1
+      }
+    },
+    {
+      "name": "light-false-390-normal: folder row fades during menu exit",
+      "pass": false,
+      "details": {
+        "label": "light-false-390-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-390-normal: folder row does not linger after menu removal",
+      "pass": false,
+      "details": {
+        "label": "light-false-390-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-390-normal: folder nested surface retains highlight",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal: closed dropdown chevron rests down",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal: open dropdown chevron points up",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-theme-menu: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-theme-menu: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-theme-menu: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal-theme-menu: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal: dismiss reverses disclosure motion",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal: rapid dismiss leaves chevron settled",
+      "pass": false
+    },
+    {
+      "name": "light-false-390-normal: form disclosure exposes expanded state",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal: form disclosure collapses",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal: checkbox toggles semantics immediately",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal: checkbox confirmation settles",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal: checkbox reversal clears mark",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal: animated error retains alert semantics",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal: form error fades in fully",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-form-error: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-form-error: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-form-error: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal-form-error: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-1280-normal: bookmark menu highlights its row",
+      "pass": true,
+      "details": {
+        "selected": 1
+      }
+    },
+    {
+      "name": "light-false-1280-normal: bookmark row fades during menu exit",
+      "pass": false,
+      "details": {
+        "label": "light-false-1280-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-1280-normal: bookmark row does not linger after menu removal",
+      "pass": false,
+      "details": {
+        "label": "light-false-1280-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-1280-normal: bookmark nested surface retains highlight",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-normal: folder menu highlights its row",
+      "pass": true,
+      "details": {
+        "selected": 1
+      }
+    },
+    {
+      "name": "light-false-1280-normal: folder row fades during menu exit",
+      "pass": false,
+      "details": {
+        "label": "light-false-1280-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-1280-normal: folder row does not linger after menu removal",
+      "pass": false,
+      "details": {
+        "label": "light-false-1280-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-1280-normal: folder nested surface retains highlight",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-normal: closed dropdown chevron rests down",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-normal: open dropdown chevron points up",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-normal-theme-menu: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-normal-theme-menu: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-normal-theme-menu: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-1280-normal-theme-menu: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-1280-normal: dismiss reverses disclosure motion",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-normal: rapid dismiss leaves chevron settled",
+      "pass": false
+    },
+    {
+      "name": "light-false-1280-normal: form disclosure exposes expanded state",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-normal: form disclosure collapses",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-normal: checkbox toggles semantics immediately",
+      "pass": false
+    },
+    {
+      "name": "light-false-1280-normal: checkbox confirmation settles",
+      "pass": false
+    },
+    {
+      "name": "light-false-1280-normal: checkbox reversal clears mark",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-normal: animated error retains alert semantics",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-normal: form error fades in fully",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-normal-form-error: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-normal-form-error: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-normal-form-error: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-1280-normal-form-error: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-390-normal: bookmark menu highlights its row",
+      "pass": true,
+      "details": {
+        "selected": 1
+      }
+    },
+    {
+      "name": "light-true-390-normal: bookmark row fades during menu exit",
+      "pass": false,
+      "details": {
+        "label": "light-true-390-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-true-390-normal: bookmark row does not linger after menu removal",
+      "pass": false,
+      "details": {
+        "label": "light-true-390-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-true-390-normal: bookmark nested surface retains highlight",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal: folder menu highlights its row",
+      "pass": true,
+      "details": {
+        "selected": 1
+      }
+    },
+    {
+      "name": "light-true-390-normal: folder row fades during menu exit",
+      "pass": false,
+      "details": {
+        "label": "light-true-390-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-true-390-normal: folder row does not linger after menu removal",
+      "pass": false,
+      "details": {
+        "label": "light-true-390-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-true-390-normal: folder nested surface retains highlight",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal: closed dropdown chevron rests down",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal: open dropdown chevron points up",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-theme-menu: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-theme-menu: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-theme-menu: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-390-normal-theme-menu: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-390-normal: dismiss reverses disclosure motion",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal: rapid dismiss leaves chevron settled",
+      "pass": false
+    },
+    {
+      "name": "light-true-390-normal: form disclosure exposes expanded state",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal: form disclosure collapses",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal: checkbox toggles semantics immediately",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal: checkbox confirmation settles",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal: checkbox reversal clears mark",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal: animated error retains alert semantics",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal: form error fades in fully",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-form-error: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-form-error: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-390-normal-form-error: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-390-normal-form-error: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-1280-normal: bookmark menu highlights its row",
+      "pass": true,
+      "details": {
+        "selected": 1
+      }
+    },
+    {
+      "name": "light-true-1280-normal: bookmark row fades during menu exit",
+      "pass": false,
+      "details": {
+        "label": "light-true-1280-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-true-1280-normal: bookmark row does not linger after menu removal",
+      "pass": false,
+      "details": {
+        "label": "light-true-1280-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-true-1280-normal: bookmark nested surface retains highlight",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-normal: folder menu highlights its row",
+      "pass": true,
+      "details": {
+        "selected": 1
+      }
+    },
+    {
+      "name": "light-true-1280-normal: folder row fades during menu exit",
+      "pass": false,
+      "details": {
+        "label": "light-true-1280-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-true-1280-normal: folder row does not linger after menu removal",
+      "pass": false,
+      "details": {
+        "label": "light-true-1280-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-true-1280-normal: folder nested surface retains highlight",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-normal: closed dropdown chevron rests down",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-normal: open dropdown chevron points up",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-normal-theme-menu: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-normal-theme-menu: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-normal-theme-menu: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-1280-normal-theme-menu: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-1280-normal: dismiss reverses disclosure motion",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-normal: rapid dismiss leaves chevron settled",
+      "pass": false
+    },
+    {
+      "name": "light-true-1280-normal: form disclosure exposes expanded state",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-normal: form disclosure collapses",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-normal: checkbox toggles semantics immediately",
+      "pass": false
+    },
+    {
+      "name": "light-true-1280-normal: checkbox confirmation settles",
+      "pass": false
+    },
+    {
+      "name": "light-true-1280-normal: checkbox reversal clears mark",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-normal: animated error retains alert semantics",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-normal: form error fades in fully",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-normal-form-error: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-normal-form-error: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-normal-form-error: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-1280-normal-form-error: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-390-normal: bookmark menu highlights its row",
+      "pass": true,
+      "details": {
+        "selected": 1
+      }
+    },
+    {
+      "name": "dark-false-390-normal: bookmark row fades during menu exit",
+      "pass": false,
+      "details": {
+        "label": "dark-false-390-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-false-390-normal: bookmark row does not linger after menu removal",
+      "pass": false,
+      "details": {
+        "label": "dark-false-390-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-false-390-normal: bookmark nested surface retains highlight",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal: folder menu highlights its row",
+      "pass": true,
+      "details": {
+        "selected": 1
+      }
+    },
+    {
+      "name": "dark-false-390-normal: folder row fades during menu exit",
+      "pass": false,
+      "details": {
+        "label": "dark-false-390-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-false-390-normal: folder row does not linger after menu removal",
+      "pass": false,
+      "details": {
+        "label": "dark-false-390-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-false-390-normal: folder nested surface retains highlight",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal: closed dropdown chevron rests down",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal: open dropdown chevron points up",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-theme-menu: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-theme-menu: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-theme-menu: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-390-normal-theme-menu: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-390-normal: dismiss reverses disclosure motion",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal: rapid dismiss leaves chevron settled",
+      "pass": false
+    },
+    {
+      "name": "dark-false-390-normal: form disclosure exposes expanded state",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal: form disclosure collapses",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal: checkbox toggles semantics immediately",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal: checkbox confirmation settles",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal: checkbox reversal clears mark",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal: animated error retains alert semantics",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal: form error fades in fully",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-form-error: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-form-error: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-390-normal-form-error: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-390-normal-form-error: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-1280-normal: bookmark menu highlights its row",
+      "pass": true,
+      "details": {
+        "selected": 1
+      }
+    },
+    {
+      "name": "dark-false-1280-normal: bookmark row fades during menu exit",
+      "pass": false,
+      "details": {
+        "label": "dark-false-1280-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-false-1280-normal: bookmark row does not linger after menu removal",
+      "pass": false,
+      "details": {
+        "label": "dark-false-1280-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-false-1280-normal: bookmark nested surface retains highlight",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-normal: folder menu highlights its row",
+      "pass": true,
+      "details": {
+        "selected": 1
+      }
+    },
+    {
+      "name": "dark-false-1280-normal: folder row fades during menu exit",
+      "pass": false,
+      "details": {
+        "label": "dark-false-1280-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-false-1280-normal: folder row does not linger after menu removal",
+      "pass": false,
+      "details": {
+        "label": "dark-false-1280-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-false-1280-normal: folder nested surface retains highlight",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-normal: closed dropdown chevron rests down",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-normal: open dropdown chevron points up",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-normal-theme-menu: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-normal-theme-menu: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-normal-theme-menu: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-1280-normal-theme-menu: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-1280-normal: dismiss reverses disclosure motion",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-normal: rapid dismiss leaves chevron settled",
+      "pass": false
+    },
+    {
+      "name": "dark-false-1280-normal: form disclosure exposes expanded state",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-normal: form disclosure collapses",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-normal: checkbox toggles semantics immediately",
+      "pass": false
+    },
+    {
+      "name": "dark-false-1280-normal: checkbox confirmation settles",
+      "pass": false
+    },
+    {
+      "name": "dark-false-1280-normal: checkbox reversal clears mark",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-normal: animated error retains alert semantics",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-normal: form error fades in fully",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-normal-form-error: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-normal-form-error: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-normal-form-error: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-1280-normal-form-error: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-normal: bookmark menu highlights its row",
+      "pass": true,
+      "details": {
+        "selected": 1
+      }
+    },
+    {
+      "name": "dark-true-390-normal: bookmark row fades during menu exit",
+      "pass": false,
+      "details": {
+        "label": "dark-true-390-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-390-normal: bookmark row does not linger after menu removal",
+      "pass": false,
+      "details": {
+        "label": "dark-true-390-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-390-normal: bookmark nested surface retains highlight",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal: folder menu highlights its row",
+      "pass": true,
+      "details": {
+        "selected": 1
+      }
+    },
+    {
+      "name": "dark-true-390-normal: folder row fades during menu exit",
+      "pass": false,
+      "details": {
+        "label": "dark-true-390-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-390-normal: folder row does not linger after menu removal",
+      "pass": false,
+      "details": {
+        "label": "dark-true-390-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-390-normal: folder nested surface retains highlight",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal: closed dropdown chevron rests down",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal: open dropdown chevron points up",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-theme-menu: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-theme-menu: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-theme-menu: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-normal-theme-menu: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-normal: dismiss reverses disclosure motion",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal: rapid dismiss leaves chevron settled",
+      "pass": false
+    },
+    {
+      "name": "dark-true-390-normal: form disclosure exposes expanded state",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal: form disclosure collapses",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal: checkbox toggles semantics immediately",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal: checkbox confirmation settles",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal: checkbox reversal clears mark",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal: animated error retains alert semantics",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal: form error fades in fully",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-form-error: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-form-error: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-normal-form-error: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-normal-form-error: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-normal: bookmark menu highlights its row",
+      "pass": true,
+      "details": {
+        "selected": 1
+      }
+    },
+    {
+      "name": "dark-true-1280-normal: bookmark row fades during menu exit",
+      "pass": false,
+      "details": {
+        "label": "dark-true-1280-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-1280-normal: bookmark row does not linger after menu removal",
+      "pass": false,
+      "details": {
+        "label": "dark-true-1280-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-1280-normal: bookmark nested surface retains highlight",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal: folder menu highlights its row",
+      "pass": true,
+      "details": {
+        "selected": 1
+      }
+    },
+    {
+      "name": "dark-true-1280-normal: folder row fades during menu exit",
+      "pass": false,
+      "details": {
+        "label": "dark-true-1280-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-1280-normal: folder row does not linger after menu removal",
+      "pass": false,
+      "details": {
+        "label": "dark-true-1280-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-1280-normal: folder nested surface retains highlight",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal: closed dropdown chevron rests down",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal: open dropdown chevron points up",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-theme-menu: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-theme-menu: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-theme-menu: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-normal-theme-menu: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-normal: dismiss reverses disclosure motion",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal: rapid dismiss leaves chevron settled",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal: form disclosure exposes expanded state",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal: form disclosure collapses",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal: checkbox toggles semantics immediately",
+      "pass": false
+    },
+    {
+      "name": "dark-true-1280-normal: checkbox confirmation settles",
+      "pass": false
+    },
+    {
+      "name": "dark-true-1280-normal: checkbox reversal clears mark",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal: animated error retains alert semantics",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal: form error fades in fully",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-form-error: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-form-error: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-normal-form-error: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-normal-form-error: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-844-reduce: bookmark menu highlights its row",
+      "pass": true,
+      "details": {
+        "selected": 1
+      }
+    },
+    {
+      "name": "light-false-844-reduce: bookmark row fades during menu exit",
+      "pass": false,
+      "details": {
+        "label": "light-false-844-reduce",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-844-reduce: bookmark row does not linger after menu removal",
+      "pass": false,
+      "details": {
+        "label": "light-false-844-reduce",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-844-reduce: bookmark nested surface retains highlight",
+      "pass": true
+    },
+    {
+      "name": "light-false-844-reduce: folder menu highlights its row",
+      "pass": true,
+      "details": {
+        "selected": 1
+      }
+    },
+    {
+      "name": "light-false-844-reduce: folder row fades during menu exit",
+      "pass": false,
+      "details": {
+        "label": "light-false-844-reduce",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-844-reduce: folder row does not linger after menu removal",
+      "pass": false,
+      "details": {
+        "label": "light-false-844-reduce",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-844-reduce: folder nested surface retains highlight",
+      "pass": true
+    },
+    {
+      "name": "light-false-844-reduce: closed dropdown chevron rests down",
+      "pass": true
+    },
+    {
+      "name": "light-false-844-reduce: open dropdown chevron points up",
+      "pass": true
+    },
+    {
+      "name": "light-false-844-reduce-theme-menu: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-844-reduce-theme-menu: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-844-reduce-theme-menu: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-844-reduce-theme-menu: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-844-reduce: dismiss reverses disclosure motion",
+      "pass": true
+    },
+    {
+      "name": "light-false-844-reduce: rapid dismiss leaves chevron settled",
+      "pass": true
+    },
+    {
+      "name": "light-false-844-reduce: form disclosure exposes expanded state",
+      "pass": true
+    },
+    {
+      "name": "light-false-844-reduce: form disclosure collapses",
+      "pass": true
+    },
+    {
+      "name": "light-false-844-reduce: checkbox toggles semantics immediately",
+      "pass": false
+    },
+    {
+      "name": "light-false-844-reduce: checkbox confirmation settles",
+      "pass": false
+    },
+    {
+      "name": "light-false-844-reduce: checkbox reversal clears mark",
+      "pass": true
+    },
+    {
+      "name": "light-false-844-reduce: animated error retains alert semantics",
+      "pass": true
+    },
+    {
+      "name": "light-false-844-reduce: form error fades in fully",
+      "pass": true
+    },
+    {
+      "name": "light-false-844-reduce-form-error: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-844-reduce-form-error: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-844-reduce-form-error: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-844-reduce-form-error: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-reduce: bookmark menu highlights its row",
+      "pass": true,
+      "details": {
+        "selected": 1
+      }
+    },
+    {
+      "name": "dark-true-390-reduce: bookmark row fades during menu exit",
+      "pass": false,
+      "details": {
+        "label": "dark-true-390-reduce",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-390-reduce: bookmark row does not linger after menu removal",
+      "pass": false,
+      "details": {
+        "label": "dark-true-390-reduce",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-390-reduce: bookmark nested surface retains highlight",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-reduce: folder menu highlights its row",
+      "pass": true,
+      "details": {
+        "selected": 1
+      }
+    },
+    {
+      "name": "dark-true-390-reduce: folder row fades during menu exit",
+      "pass": false,
+      "details": {
+        "label": "dark-true-390-reduce",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-390-reduce: folder row does not linger after menu removal",
+      "pass": false,
+      "details": {
+        "label": "dark-true-390-reduce",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-390-reduce: folder nested surface retains highlight",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-reduce: closed dropdown chevron rests down",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-reduce: open dropdown chevron points up",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-reduce-theme-menu: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-reduce-theme-menu: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-reduce-theme-menu: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-reduce-theme-menu: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-reduce: dismiss reverses disclosure motion",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-reduce: rapid dismiss leaves chevron settled",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-reduce: form disclosure exposes expanded state",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-reduce: form disclosure collapses",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-reduce: checkbox toggles semantics immediately",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-reduce: checkbox confirmation settles",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-reduce: checkbox reversal clears mark",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-reduce: animated error retains alert semantics",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-reduce: form error fades in fully",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-reduce-form-error: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-reduce-form-error: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-390-reduce-form-error: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-390-reduce-form-error: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "no uncaught browser errors",
+      "pass": false,
+      "details": [
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')"
+      ]
+    }
+  ],
+  "issues": [
+    {
+      "name": "light-false-390-normal: bookmark row fades during menu exit",
+      "details": {
+        "label": "light-false-390-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-390-normal: bookmark row does not linger after menu removal",
+      "details": {
+        "label": "light-false-390-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-390-normal: folder row fades during menu exit",
+      "details": {
+        "label": "light-false-390-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-390-normal: folder row does not linger after menu removal",
+      "details": {
+        "label": "light-false-390-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-390-normal: rapid dismiss leaves chevron settled"
+    },
+    {
+      "name": "light-false-1280-normal: bookmark row fades during menu exit",
+      "details": {
+        "label": "light-false-1280-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-1280-normal: bookmark row does not linger after menu removal",
+      "details": {
+        "label": "light-false-1280-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-1280-normal: folder row fades during menu exit",
+      "details": {
+        "label": "light-false-1280-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-1280-normal: folder row does not linger after menu removal",
+      "details": {
+        "label": "light-false-1280-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-1280-normal: rapid dismiss leaves chevron settled"
+    },
+    {
+      "name": "light-false-1280-normal: checkbox toggles semantics immediately"
+    },
+    {
+      "name": "light-false-1280-normal: checkbox confirmation settles"
+    },
+    {
+      "name": "light-true-390-normal: bookmark row fades during menu exit",
+      "details": {
+        "label": "light-true-390-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-true-390-normal: bookmark row does not linger after menu removal",
+      "details": {
+        "label": "light-true-390-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-true-390-normal: folder row fades during menu exit",
+      "details": {
+        "label": "light-true-390-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-true-390-normal: folder row does not linger after menu removal",
+      "details": {
+        "label": "light-true-390-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-true-390-normal: rapid dismiss leaves chevron settled"
+    },
+    {
+      "name": "light-true-1280-normal: bookmark row fades during menu exit",
+      "details": {
+        "label": "light-true-1280-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-true-1280-normal: bookmark row does not linger after menu removal",
+      "details": {
+        "label": "light-true-1280-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-true-1280-normal: folder row fades during menu exit",
+      "details": {
+        "label": "light-true-1280-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-true-1280-normal: folder row does not linger after menu removal",
+      "details": {
+        "label": "light-true-1280-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-true-1280-normal: rapid dismiss leaves chevron settled"
+    },
+    {
+      "name": "light-true-1280-normal: checkbox toggles semantics immediately"
+    },
+    {
+      "name": "light-true-1280-normal: checkbox confirmation settles"
+    },
+    {
+      "name": "dark-false-390-normal: bookmark row fades during menu exit",
+      "details": {
+        "label": "dark-false-390-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-false-390-normal: bookmark row does not linger after menu removal",
+      "details": {
+        "label": "dark-false-390-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-false-390-normal: folder row fades during menu exit",
+      "details": {
+        "label": "dark-false-390-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-false-390-normal: folder row does not linger after menu removal",
+      "details": {
+        "label": "dark-false-390-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-false-390-normal: rapid dismiss leaves chevron settled"
+    },
+    {
+      "name": "dark-false-1280-normal: bookmark row fades during menu exit",
+      "details": {
+        "label": "dark-false-1280-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-false-1280-normal: bookmark row does not linger after menu removal",
+      "details": {
+        "label": "dark-false-1280-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-false-1280-normal: folder row fades during menu exit",
+      "details": {
+        "label": "dark-false-1280-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-false-1280-normal: folder row does not linger after menu removal",
+      "details": {
+        "label": "dark-false-1280-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-false-1280-normal: rapid dismiss leaves chevron settled"
+    },
+    {
+      "name": "dark-false-1280-normal: checkbox toggles semantics immediately"
+    },
+    {
+      "name": "dark-false-1280-normal: checkbox confirmation settles"
+    },
+    {
+      "name": "dark-true-390-normal: bookmark row fades during menu exit",
+      "details": {
+        "label": "dark-true-390-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-390-normal: bookmark row does not linger after menu removal",
+      "details": {
+        "label": "dark-true-390-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-390-normal: folder row fades during menu exit",
+      "details": {
+        "label": "dark-true-390-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-390-normal: folder row does not linger after menu removal",
+      "details": {
+        "label": "dark-true-390-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-390-normal: rapid dismiss leaves chevron settled"
+    },
+    {
+      "name": "dark-true-1280-normal: bookmark row fades during menu exit",
+      "details": {
+        "label": "dark-true-1280-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-1280-normal: bookmark row does not linger after menu removal",
+      "details": {
+        "label": "dark-true-1280-normal",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-1280-normal: folder row fades during menu exit",
+      "details": {
+        "label": "dark-true-1280-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-1280-normal: folder row does not linger after menu removal",
+      "details": {
+        "label": "dark-true-1280-normal",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-1280-normal: checkbox toggles semantics immediately"
+    },
+    {
+      "name": "dark-true-1280-normal: checkbox confirmation settles"
+    },
+    {
+      "name": "light-false-844-reduce: bookmark row fades during menu exit",
+      "details": {
+        "label": "light-false-844-reduce",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-844-reduce: bookmark row does not linger after menu removal",
+      "details": {
+        "label": "light-false-844-reduce",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-844-reduce: folder row fades during menu exit",
+      "details": {
+        "label": "light-false-844-reduce",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-844-reduce: folder row does not linger after menu removal",
+      "details": {
+        "label": "light-false-844-reduce",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "light-false-844-reduce: checkbox toggles semantics immediately"
+    },
+    {
+      "name": "light-false-844-reduce: checkbox confirmation settles"
+    },
+    {
+      "name": "dark-true-390-reduce: bookmark row fades during menu exit",
+      "details": {
+        "label": "dark-true-390-reduce",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-390-reduce: bookmark row does not linger after menu removal",
+      "details": {
+        "label": "dark-true-390-reduce",
+        "kind": "bookmark",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-390-reduce: folder row fades during menu exit",
+      "details": {
+        "label": "dark-true-390-reduce",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "dark-true-390-reduce: folder row does not linger after menu removal",
+      "details": {
+        "label": "dark-true-390-reduce",
+        "kind": "folder",
+        "firstFadeMs": null,
+        "clearedMs": null,
+        "menuRemovedMs": null,
+        "samples": []
+      }
+    },
+    {
+      "name": "no uncaught browser errors",
+      "details": [
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')",
+        "Cannot read properties of null (reading 'getAttribute')"
+      ]
+    }
+  ],
+  "errors": [
+    "Cannot read properties of null (reading 'getAttribute')",
+    "Cannot read properties of null (reading 'getAttribute')",
+    "Cannot read properties of null (reading 'getAttribute')",
+    "Cannot read properties of null (reading 'getAttribute')",
+    "Cannot read properties of null (reading 'getAttribute')",
+    "Cannot read properties of null (reading 'getAttribute')",
+    "Cannot read properties of null (reading 'getAttribute')",
+    "Cannot read properties of null (reading 'getAttribute')",
+    "Cannot read properties of null (reading 'getAttribute')",
+    "Cannot read properties of null (reading 'getAttribute')",
+    "Cannot read properties of null (reading 'getAttribute')",
+    "Cannot read properties of null (reading 'getAttribute')",
+    "Cannot read properties of null (reading 'getAttribute')",
+    "Cannot read properties of null (reading 'getAttribute')",
+    "Cannot read properties of null (reading 'getAttribute')",
+    "Cannot read properties of null (reading 'getAttribute')",
+    "Cannot read properties of null (reading 'getAttribute')",
+    "Cannot read properties of null (reading 'getAttribute')",
+    "Cannot read properties of null (reading 'getAttribute')",
+    "Cannot read properties of null (reading 'getAttribute')"
+  ],
+  "performance": [],
+  "measurements": [
+    {
+      "label": "light-false-390-normal",
+      "kind": "bookmark",
+      "firstFadeMs": null,
+      "clearedMs": null,
+      "menuRemovedMs": null,
+      "samples": []
+    },
+    {
+      "label": "light-false-390-normal",
+      "kind": "folder",
+      "firstFadeMs": null,
+      "clearedMs": null,
+      "menuRemovedMs": null,
+      "samples": []
+    },
+    {
+      "label": "light-false-1280-normal",
+      "kind": "bookmark",
+      "firstFadeMs": null,
+      "clearedMs": null,
+      "menuRemovedMs": null,
+      "samples": []
+    },
+    {
+      "label": "light-false-1280-normal",
+      "kind": "folder",
+      "firstFadeMs": null,
+      "clearedMs": null,
+      "menuRemovedMs": null,
+      "samples": []
+    },
+    {
+      "label": "light-true-390-normal",
+      "kind": "bookmark",
+      "firstFadeMs": null,
+      "clearedMs": null,
+      "menuRemovedMs": null,
+      "samples": []
+    },
+    {
+      "label": "light-true-390-normal",
+      "kind": "folder",
+      "firstFadeMs": null,
+      "clearedMs": null,
+      "menuRemovedMs": null,
+      "samples": []
+    },
+    {
+      "label": "light-true-1280-normal",
+      "kind": "bookmark",
+      "firstFadeMs": null,
+      "clearedMs": null,
+      "menuRemovedMs": null,
+      "samples": []
+    },
+    {
+      "label": "light-true-1280-normal",
+      "kind": "folder",
+      "firstFadeMs": null,
+      "clearedMs": null,
+      "menuRemovedMs": null,
+      "samples": []
+    },
+    {
+      "label": "dark-false-390-normal",
+      "kind": "bookmark",
+      "firstFadeMs": null,
+      "clearedMs": null,
+      "menuRemovedMs": null,
+      "samples": []
+    },
+    {
+      "label": "dark-false-390-normal",
+      "kind": "folder",
+      "firstFadeMs": null,
+      "clearedMs": null,
+      "menuRemovedMs": null,
+      "samples": []
+    },
+    {
+      "label": "dark-false-1280-normal",
+      "kind": "bookmark",
+      "firstFadeMs": null,
+      "clearedMs": null,
+      "menuRemovedMs": null,
+      "samples": []
+    },
+    {
+      "label": "dark-false-1280-normal",
+      "kind": "folder",
+      "firstFadeMs": null,
+      "clearedMs": null,
+      "menuRemovedMs": null,
+      "samples": []
+    },
+    {
+      "label": "dark-true-390-normal",
+      "kind": "bookmark",
+      "firstFadeMs": null,
+      "clearedMs": null,
+      "menuRemovedMs": null,
+      "samples": []
+    },
+    {
+      "label": "dark-true-390-normal",
+      "kind": "folder",
+      "firstFadeMs": null,
+      "clearedMs": null,
+      "menuRemovedMs": null,
+      "samples": []
+    },
+    {
+      "label": "dark-true-1280-normal",
+      "kind": "bookmark",
+      "firstFadeMs": null,
+      "clearedMs": null,
+      "menuRemovedMs": null,
+      "samples": []
+    },
+    {
+      "label": "dark-true-1280-normal",
+      "kind": "folder",
+      "firstFadeMs": null,
+      "clearedMs": null,
+      "menuRemovedMs": null,
+      "samples": []
+    },
+    {
+      "label": "light-false-844-reduce",
+      "kind": "bookmark",
+      "firstFadeMs": null,
+      "clearedMs": null,
+      "menuRemovedMs": null,
+      "samples": []
+    },
+    {
+      "label": "light-false-844-reduce",
+      "kind": "folder",
+      "firstFadeMs": null,
+      "clearedMs": null,
+      "menuRemovedMs": null,
+      "samples": []
+    },
+    {
+      "label": "dark-true-390-reduce",
+      "kind": "bookmark",
+      "firstFadeMs": null,
+      "clearedMs": null,
+      "menuRemovedMs": null,
+      "samples": []
+    },
+    {
+      "label": "dark-true-390-reduce",
+      "kind": "folder",
+      "firstFadeMs": null,
+      "clearedMs": null,
+      "menuRemovedMs": null,
+      "samples": []
+    }
+  ]
+}

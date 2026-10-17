@@ -4,6 +4,7 @@ import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { Text } from "../ui/Text";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
 import { PressableScale } from "../ui/PressableScale";
+import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { haptics } from "../../lib/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
@@ -76,12 +77,7 @@ export function SettingsSelect<T extends string>({
           <Text variant="labelLarge" numberOfLines={1} ellipsizeMode="tail" style={[styles.triggerLabel, { color: palette.onSecondaryContainer }]}>
             {selected?.shortLabel ?? selected?.label ?? value}
           </Text>
-          <Ionicons
-            name="chevron-down"
-            size={14}
-            color={palette.onSecondaryContainer}
-            style={[styles.triggerChevron, iconGlyphStyle(14)]}
-          />
+          <DisclosureChevron expanded={open} size={14} color={palette.onSecondaryContainer} />
         </PressableScale>
       </View>
 
@@ -119,7 +115,6 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   triggerIcon: { flexShrink: 0 },
-  triggerChevron: { flexShrink: 0 },
   triggerLabel: {
     flexGrow: 1,
     flexShrink: 1,

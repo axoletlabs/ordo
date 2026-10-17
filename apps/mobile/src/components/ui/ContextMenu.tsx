@@ -384,6 +384,8 @@ export function ContextMenuItem({
   labelLines?: 1 | 2;
 }) {
   const { palette, expressive } = useTheme();
+  // Expressive menus deliberately use the complementary tertiary pair. With
+  // the teal app palette this can be blue; it is not a platform/default tint.
   const selectedContainer = expressive ? palette.tertiaryContainer : palette.surfaceContainerHighest;
   const selectedColor = expressive ? palette.onTertiaryContainer : palette.onSurface;
   const color = tone === "danger" ? palette.error : selected ? selectedColor : palette.onSurface;

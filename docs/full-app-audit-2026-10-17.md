@@ -267,6 +267,38 @@ The source inventory now fingerprints **348 TypeScript files and 30 routes/layou
 
 Local validation includes **46 mobile tests**, workspace typecheck/lint, production web export, and Android JS export (`--no-bytecode`, not a local native/Hermes build). Besides the sampling predicate, inert hook/event adapters execute the actual production scroll bridge to check all UI updates, custom-handler composition, sampled JS reports, and exact drag/momentum endpoints. This is not a native integration test. The previous commit's [APK workflow](https://github.com/axoletlabs/ordo/actions/runs/39063109078) completed successfully; artifact `ordo-apk-development` was confirmed non-expired (ID `12112547426`, 19,475,500 bytes). A new APK is dispatched for this continuation's published commit; neither build constitutes device verification.
 
+## Menu dismissal and control-motion follow-up
+
+This follow-up starts from `038175e721c390bf7323a961d27bdcbd983fb258` and addresses the reported lingering row indicator without adding animation work to virtualized rows.
+
+- **Concurrent dismissal:** bookmark/folder menu ownership now releases in the dismissal commit. The existing row fade runs alongside the overlay exit instead of waiting for `onExited` and then starting another fade. Nested pages/dialogs retain ownership while the overall action session remains visible. Owner tokens still prevent an older screen's cleanup from clearing a newer screen's highlight. Bookmark action handoffs still wait for the menu to leave the host.
+- **Overlay continuity:** existing shared presence springs, opacity timings, retained exit contents, interrupt/reopen guards, and reduced-motion handling remain. The indicator fix changes ownership timing rather than shortening/removing the menu's exit animation.
+- **Missing state transitions:** settings and form dropdowns share an interruptible rotating disclosure arrow; checkbox marks crossfade/settle without delaying checked semantics; newly mounted form-wide errors fade in without retaining cleared alerts. All use shared motion preferences/tokens, skip unnecessary mount springs, and stop on unmount. Bulk-list selection remains immediate.
+- **Cold-path restraint:** unopened disclosure arrows remain static icons with no Reanimated graph or motion subscriptions. Animation initializes on first expansion and stays mounted for interruptible reversal. An eager-initialization version and experimental overlay retiming were rejected during profiling; the final runtime retains the original presence parameters.
+- **Dropdown blue:** Expressive selected menu items deliberately pair `tertiaryContainer` with `onTertiaryContainer`; the complementary role can be blue in a teal theme. Standard menus retain `surfaceContainerHighest`/`onSurface`. No hardcoded blue or color-role change was introduced.
+
+The previous [APK workflow](https://github.com/axoletlabs/ordo/actions/runs/39065317921) succeeded for `038175e`; its non-expired development APK artifact was confirmed (ID `12112699499`, 19,475,818 bytes). It does not include this follow-up. Native Android verification remains excluded, and the earlier cold-dialog main-thread finding remains open.
+
+### Follow-up verification
+
+The [follow-up manifest](full-app-audit-2026-10-17/menu-motion/verification.json) fingerprints the exact final runtime, Android JS export, source inventory, regression runners, results and raw standalone CPU profiles. The new menu-motion suite passes **291 checks in 10 configurations**: both themes and design modes at phone/wide widths, plus reduced-motion portrait/landscape. It checks bookmark/folder dismissals, nested surfaces, rapid reopen, dropdown reversal, checkbox feedback, and synthetic login failure alerts.
+
+Sequential browser rAF sampling detects the row fade below 95% opacity **19–33ms after dismissal**, versus **229–250ms** for the previous export. The final row clears below 1% in **122–138ms**, before menu removal at **212–235ms**; the old row takes **346–365ms** to clear. Both reduced-motion configurations clear in the first sampled dismissal frame. The identical regression detects **32 expected failed latency checks** in the control, with no uncaught errors; that control run is not passing verification. These are synthetic browser observations, not native timing/FPS.
+
+Standalone three-sample, 4×-CPU-throttled profiles record cold maximum tasks of **218/208/203ms**, compared with control **216/211/205ms** and a repeated control **203/215/205ms**. Warm maxima are **182/161/166ms**, versus **175/160/154ms** and repeated control **171/162/171ms**. These small overlapping ranges do not establish an overall dialog speedup or guarantee absence of performance regressions. The demonstrated improvement is dismissal feedback latency; cold-dialog stalls remain open. Broad correctness suites ran concurrently, so their embedded quick-run timing figures are explicitly **not** comparable performance evidence.
+
+| Newly executed final-runtime suite | Captures | Checks |
+| --- | ---: | ---: |
+| Menu/control motion regression | 20 | 291 |
+| Quick interactions and reduced motion | 43 | 215 |
+| Phone overlays | 60 | 253 |
+| Wide overlays | 60 | 253 |
+| Narrow/empty/error states | 34 | 145 |
+| Repeated-dialog and large-list lifecycle | 0 | 120 |
+| **Total — zero issues/uncaught browser errors** | **217** | **1,277** |
+
+All **49 mobile tests**, workspace typecheck/lint, production web export, and Android JS export pass. Inert adapters execute the production highlight hook's dismissal, nested-session, owner-token and rapid-reopen logic, plus disclosure lazy activation, spring reversal, reduced-motion settlement and cancellation. They are not native integration tests. The lifecycle suite again runs 90 dialog cycles and a 1,000-bookmark fixture: DOM/listeners do not increase, and 18–30 matching rows remain mounted after scrolling. Post-GC heap still grows about 0.6–1.8MiB; no leak-free or native-memory/battery claim follows. Historical route/real-server suites are not counted as freshly executed here. The first two development invocations of the new runner had selector/sampling/consent-link targeting mistakes; their failed results are retained separately and excluded from passing totals.
+
 ## Coverage and remaining device checks
 
 | Area | Source/fixture coverage in this pass |
@@ -321,6 +353,7 @@ node apps/mobile/scripts/workflow-audit.mjs
 node apps/mobile/scripts/auth-policy-audit.mjs
 node apps/mobile/scripts/profile-dialogs.mjs
 node apps/mobile/scripts/motion-lifecycle-audit.mjs
+node apps/mobile/scripts/menu-motion-audit.mjs
 ```
 
 For actual server workflows, start a **new disposable loopback server**, never a normal local/remote installation. Build the server first, use a new database path each time, and keep secrets test-only:

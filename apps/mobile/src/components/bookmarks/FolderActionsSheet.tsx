@@ -95,11 +95,8 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
   if (folder) folderRef.current = folder;
   const displayFolder = folder ?? folderRef.current;
 
-  // Retain the folder row's highlight through nested pages AND the final exit,
-  // matching BookmarkActionsSheet: the row must not blink mid-fade or between
-  // surfaces, and a stale exit must not clear a quickly reopened menu.
-  const surface = mode === "menu" || mode === "lockChoice" ? "menu" : mode === "delete" ? "delete" : "dialog";
-  const onSurfaceExited = useMenuHighlight(visible, displayFolder ? folderKey(displayFolder.id) : null, surface);
+  // Nested pages share ownership; final dismissal starts the row's fade now.
+  useMenuHighlight(visible, displayFolder ? folderKey(displayFolder.id) : null);
 
   React.useEffect(() => {
     if (!visible) return;
@@ -393,7 +390,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
 
   return (
     <>
-      <ContextMenu visible={menuOpen} dismissible={!busy} onDismiss={onDismiss} onExited={() => onSurfaceExited("menu")} anchor={anchor ?? null} pageKey={mode} sessionKey={displayFolder?.id}>
+      <ContextMenu visible={menuOpen} dismissible={!busy} onDismiss={onDismiss} anchor={anchor ?? null} pageKey={mode} sessionKey={displayFolder?.id}>
         {displayFolder && mode === "menu" ? (
           <>
             {error ? <ContextMenuNote tone="danger">{error}</ContextMenuNote> : null}
@@ -429,7 +426,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
         ) : null}
       </ContextMenu>
 
-      <FloatingPanel visible={dialogOpen} dismissible={!busy} onDismiss={onDismiss} onExited={() => onSurfaceExited("dialog")}>
+      <FloatingPanel visible={dialogOpen} dismissible={!busy} onDismiss={onDismiss}>
       {folder && mode === "rename" ? (
         <>
           <PanelHeader title="Rename folder" />
@@ -762,7 +759,6 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
         }
         confirmLabel="Delete"
         onDismiss={() => showMode("menu")}
-        onExited={() => onSurfaceExited("delete")}
         onConfirm={doDelete}
       />
     </>
