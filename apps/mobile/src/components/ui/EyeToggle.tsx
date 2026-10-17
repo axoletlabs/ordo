@@ -2,7 +2,7 @@
  * Animated password-visibility toggle: spring crossfade between eye (masked)
  * and eye-off (visible) for a smooth morph.
  */
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { StyleSheet } from "react-native";
 import { PressableScale } from "./PressableScale";
 import Animated, {
@@ -30,8 +30,11 @@ export function EyeToggle({ visible, onPress, size = 24 }: EyeToggleProps) {
   const motion = useMaterialMotion();
   // 0 = masked (eye shown), 1 = visible (eye-off shown)
   const v = useSharedValue(visible ? 1 : 0);
+  const previous = useRef({ visible, reducedMotion: motion.reducedMotion });
 
   useEffect(() => {
+    if (previous.current.visible === visible && previous.current.reducedMotion === motion.reducedMotion) return;
+    previous.current = { visible, reducedMotion: motion.reducedMotion };
     v.value = motion.reducedMotion ? +visible : withSpring(+visible, materialMotion.effects.fast);
   }, [visible, v, motion.reducedMotion]);
 

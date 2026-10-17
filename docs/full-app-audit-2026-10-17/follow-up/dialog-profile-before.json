@@ -1,0 +1,404 @@
+[
+  {
+    "sample": 0,
+    "kind": "cold",
+    "actionAndSettleMs": 1424.9,
+    "tasks": [
+      {
+        "name": "self",
+        "entryType": "longtask",
+        "startTime": 3002.199999988079,
+        "duration": 71,
+        "navigationId": 8578,
+        "attribution": [
+          {
+            "name": "unknown",
+            "entryType": "taskattribution",
+            "startTime": 0,
+            "duration": 0,
+            "navigationId": 8578,
+            "containerType": "window",
+            "containerSrc": "",
+            "containerId": "",
+            "containerName": ""
+          }
+        ]
+      },
+      {
+        "name": "self",
+        "entryType": "longtask",
+        "startTime": 3236.800000011921,
+        "duration": 64,
+        "navigationId": 8578,
+        "attribution": [
+          {
+            "name": "unknown",
+            "entryType": "taskattribution",
+            "startTime": 0,
+            "duration": 0,
+            "navigationId": 8578,
+            "containerType": "window",
+            "containerSrc": "",
+            "containerId": "",
+            "containerName": ""
+          }
+        ]
+      },
+      {
+        "name": "self",
+        "entryType": "longtask",
+        "startTime": 3335.699999988079,
+        "duration": 290,
+        "navigationId": 8578,
+        "attribution": [
+          {
+            "name": "unknown",
+            "entryType": "taskattribution",
+            "startTime": 0,
+            "duration": 0,
+            "navigationId": 8578,
+            "containerType": "window",
+            "containerSrc": "",
+            "containerId": "",
+            "containerName": ""
+          }
+        ]
+      },
+      {
+        "name": "self",
+        "entryType": "longtask",
+        "startTime": 3627.300000011921,
+        "duration": 69,
+        "navigationId": 8578,
+        "attribution": [
+          {
+            "name": "unknown",
+            "entryType": "taskattribution",
+            "startTime": 0,
+            "duration": 0,
+            "navigationId": 8578,
+            "containerType": "window",
+            "containerSrc": "",
+            "containerId": "",
+            "containerName": ""
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "sample": 0,
+    "kind": "warm",
+    "actionAndSettleMs": 1007.9,
+    "tasks": [
+      {
+        "name": "self",
+        "entryType": "longtask",
+        "startTime": 5507,
+        "duration": 203,
+        "navigationId": 8578,
+        "attribution": [
+          {
+            "name": "unknown",
+            "entryType": "taskattribution",
+            "startTime": 0,
+            "duration": 0,
+            "navigationId": 8578,
+            "containerType": "window",
+            "containerSrc": "",
+            "containerId": "",
+            "containerName": ""
+          }
+        ]
+      },
+      {
+        "name": "self",
+        "entryType": "longtask",
+        "startTime": 5710.699999988079,
+        "duration": 57,
+        "navigationId": 8578,
+        "attribution": [
+          {
+            "name": "unknown",
+            "entryType": "taskattribution",
+            "startTime": 0,
+            "duration": 0,
+            "navigationId": 8578,
+            "containerType": "window",
+            "containerSrc": "",
+            "containerId": "",
+            "containerName": ""
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "sample": 1,
+    "kind": "cold",
+    "actionAndSettleMs": 1417.9,
+    "tasks": [
+      {
+        "name": "self",
+        "entryType": "longtask",
+        "startTime": 3015.5,
+        "duration": 78,
+        "navigationId": 8408,
+        "attribution": [
+          {
+            "name": "unknown",
+            "entryType": "taskattribution",
+            "startTime": 0,
+            "duration": 0,
+            "navigationId": 8408,
+            "containerType": "window",
+            "containerSrc": "",
+            "containerId": "",
+            "containerName": ""
+          }
+        ]
+      },
+      {
+        "name": "self",
+        "entryType": "longtask",
+        "startTime": 3271.9000000059605,
+        "duration": 53,
+        "navigationId": 8408,
+        "attribution": [
+          {
+            "name": "unknown",
+            "entryType": "taskattribution",
+            "startTime": 0,
+            "duration": 0,
+            "navigationId": 8408,
+            "containerType": "window",
+            "containerSrc": "",
+            "containerId": "",
+            "containerName": ""
+          }
+        ]
+      },
+      {
+        "name": "self",
+        "entryType": "longtask",
+        "startTime": 3354.800000011921,
+        "duration": 298,
+        "navigationId": 8408,
+        "attribution": [
+          {
+            "name": "unknown",
+            "entryType": "taskattribution",
+            "startTime": 0,
+            "duration": 0,
+            "navigationId": 8408,
+            "containerType": "window",
+            "containerSrc": "",
+            "containerId": "",
+            "containerName": ""
+          }
+        ]
+      },
+      {
+        "name": "self",
+        "entryType": "longtask",
+        "startTime": 3653.9000000059605,
+        "duration": 71,
+        "navigationId": 8408,
+        "attribution": [
+          {
+            "name": "unknown",
+            "entryType": "taskattribution",
+            "startTime": 0,
+            "duration": 0,
+            "navigationId": 8408,
+            "containerType": "window",
+            "containerSrc": "",
+            "containerId": "",
+            "containerName": ""
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "sample": 1,
+    "kind": "warm",
+    "actionAndSettleMs": 988.6,
+    "tasks": [
+      {
+        "name": "self",
+        "entryType": "longtask",
+        "startTime": 5522.5999999940395,
+        "duration": 209,
+        "navigationId": 8408,
+        "attribution": [
+          {
+            "name": "unknown",
+            "entryType": "taskattribution",
+            "startTime": 0,
+            "duration": 0,
+            "navigationId": 8408,
+            "containerType": "window",
+            "containerSrc": "",
+            "containerId": "",
+            "containerName": ""
+          }
+        ]
+      },
+      {
+        "name": "self",
+        "entryType": "longtask",
+        "startTime": 5900.699999988079,
+        "duration": 50,
+        "navigationId": 8408,
+        "attribution": [
+          {
+            "name": "unknown",
+            "entryType": "taskattribution",
+            "startTime": 0,
+            "duration": 0,
+            "navigationId": 8408,
+            "containerType": "window",
+            "containerSrc": "",
+            "containerId": "",
+            "containerName": ""
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "sample": 2,
+    "kind": "cold",
+    "actionAndSettleMs": 1429.8,
+    "tasks": [
+      {
+        "name": "self",
+        "entryType": "longtask",
+        "startTime": 2961.800000011921,
+        "duration": 73,
+        "navigationId": 4258,
+        "attribution": [
+          {
+            "name": "unknown",
+            "entryType": "taskattribution",
+            "startTime": 0,
+            "duration": 0,
+            "navigationId": 4258,
+            "containerType": "window",
+            "containerSrc": "",
+            "containerId": "",
+            "containerName": ""
+          }
+        ]
+      },
+      {
+        "name": "self",
+        "entryType": "longtask",
+        "startTime": 3192.5,
+        "duration": 61,
+        "navigationId": 4258,
+        "attribution": [
+          {
+            "name": "unknown",
+            "entryType": "taskattribution",
+            "startTime": 0,
+            "duration": 0,
+            "navigationId": 4258,
+            "containerType": "window",
+            "containerSrc": "",
+            "containerId": "",
+            "containerName": ""
+          }
+        ]
+      },
+      {
+        "name": "self",
+        "entryType": "longtask",
+        "startTime": 3289.300000011921,
+        "duration": 293,
+        "navigationId": 4258,
+        "attribution": [
+          {
+            "name": "unknown",
+            "entryType": "taskattribution",
+            "startTime": 0,
+            "duration": 0,
+            "navigationId": 4258,
+            "containerType": "window",
+            "containerSrc": "",
+            "containerId": "",
+            "containerName": ""
+          }
+        ]
+      },
+      {
+        "name": "self",
+        "entryType": "longtask",
+        "startTime": 3583.800000011921,
+        "duration": 73,
+        "navigationId": 4258,
+        "attribution": [
+          {
+            "name": "unknown",
+            "entryType": "taskattribution",
+            "startTime": 0,
+            "duration": 0,
+            "navigationId": 4258,
+            "containerType": "window",
+            "containerSrc": "",
+            "containerId": "",
+            "containerName": ""
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "sample": 2,
+    "kind": "warm",
+    "actionAndSettleMs": 1069.8,
+    "tasks": [
+      {
+        "name": "self",
+        "entryType": "longtask",
+        "startTime": 5478.700000017881,
+        "duration": 235,
+        "navigationId": 4258,
+        "attribution": [
+          {
+            "name": "unknown",
+            "entryType": "taskattribution",
+            "startTime": 0,
+            "duration": 0,
+            "navigationId": 4258,
+            "containerType": "window",
+            "containerSrc": "",
+            "containerId": "",
+            "containerName": ""
+          }
+        ]
+      },
+      {
+        "name": "self",
+        "entryType": "longtask",
+        "startTime": 5714.0999999940395,
+        "duration": 61,
+        "navigationId": 4258,
+        "attribution": [
+          {
+            "name": "unknown",
+            "entryType": "taskattribution",
+            "startTime": 0,
+            "duration": 0,
+            "navigationId": 4258,
+            "containerType": "window",
+            "containerSrc": "",
+            "containerId": "",
+            "containerName": ""
+          }
+        ]
+      }
+    ]
+  }
+]

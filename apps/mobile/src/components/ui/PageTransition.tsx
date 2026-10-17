@@ -36,5 +36,11 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
     // Preferences affect the NEXT navigation, not an already-focused settings
     // page. Otherwise choosing a transition replays that page's entrance.
   }, []));
-  return <AnimationActivityContext.Provider value={parentActive && focused}><View ref={ref} style={{ flex: 1 }}>{children}</View></AnimationActivityContext.Provider>;
+  const page = <View ref={ref} testID="material-page-transition" style={{ flex: 1 }}>{children}</View>;
+  // A translated incoming page must not enlarge the browser's root scroller.
+  // Clip at the scene viewport, not at the inner constrained content column;
+  // dialogs/menus already live in the root portal outside this boundary.
+  return <AnimationActivityContext.Provider value={parentActive && focused}>
+    {Platform.OS === "web" ? <View style={{ flex: 1, overflow: "hidden" }}>{page}</View> : page}
+  </AnimationActivityContext.Provider>;
 }

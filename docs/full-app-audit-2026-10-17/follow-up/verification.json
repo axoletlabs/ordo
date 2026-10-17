@@ -1,0 +1,144 @@
+{
+  "baseline": "e6616d475ba8291ff75a84f1dc63776e623e4025",
+  "source": "Follow-up source identified by source-inventory.json; all primary suites use the same final3 production web export.",
+  "webExport": [
+    {
+      "path": "_expo/static/js/web/ArticleHtml-1719be3640e02a6d0ab8aa8dd7059dd7.js",
+      "bytes": 551384,
+      "sha256": "c279c52b5f994173981a4b7359356cd296a9fd969d848811a414842230450406"
+    },
+    {
+      "path": "_expo/static/js/web/entry-007c0c29481899cb64cb4b649d4a845e.js",
+      "bytes": 3850147,
+      "sha256": "99528a8b3a46dcad049ab26d53081b7d209b5b96ead751980beea80ac1dbcd0f"
+    },
+    {
+      "path": "_expo/static/js/web/index-a4cf6b4dc3586e546e496f78dd0950e0.js",
+      "bytes": 58897,
+      "sha256": "5e98bf1c644940f820a6b571513373ac03404ba75c3e5748607999b5b4eea9ba"
+    },
+    {
+      "path": "index.html",
+      "bytes": 1177,
+      "sha256": "7b0a88beb8315f6340b4e5a98983538c93a24463391904fc172b359a8c29dd04"
+    },
+    {
+      "path": "metadata.json",
+      "bytes": 49,
+      "sha256": "aa5f19cc84d41c0f8c70ececb2bc82e863227ea1e121632aca879eb616056991"
+    }
+  ],
+  "androidJsExport": [
+    {
+      "path": "_expo/static/js/android/entry-4422ae08d0c8aa1ca9f8f1dd4632fbac.js",
+      "bytes": 4715558,
+      "sha256": "e795bc4c5c63480e8a89fc623c0d1ef92d9cdd5a6f5295adc1a1c8689f89e451"
+    },
+    {
+      "path": "metadata.json",
+      "bytes": 3487,
+      "sha256": "f58afdb85a024a223c647ea35dea270f46337e2dc3eae49e4ed2c03aaa4a0ee2"
+    }
+  ],
+  "suites": [
+    {
+      "name": "routes",
+      "captures": 200,
+      "checks": 801,
+      "issues": 0,
+      "uncaughtErrors": 0,
+      "result": "routes-results.json"
+    },
+    {
+      "name": "overlays",
+      "captures": 60,
+      "checks": 253,
+      "issues": 0,
+      "uncaughtErrors": 0,
+      "result": "overlays-results.json"
+    },
+    {
+      "name": "wide",
+      "captures": 60,
+      "checks": 253,
+      "issues": 0,
+      "uncaughtErrors": 0,
+      "result": "wide-results.json"
+    },
+    {
+      "name": "states",
+      "captures": 34,
+      "checks": 145,
+      "issues": 0,
+      "uncaughtErrors": 0,
+      "result": "states-results.json"
+    },
+    {
+      "name": "workflows",
+      "captures": 24,
+      "checks": 185,
+      "issues": 0,
+      "uncaughtErrors": 0,
+      "result": "workflows-results.json"
+    },
+    {
+      "name": "policies",
+      "captures": 48,
+      "checks": 233,
+      "issues": 0,
+      "uncaughtErrors": 0,
+      "result": "policies-results.json"
+    },
+    {
+      "name": "local",
+      "captures": 5,
+      "checks": 31,
+      "issues": 0,
+      "uncaughtErrors": 0,
+      "result": "local-results.json"
+    },
+    {
+      "name": "quick",
+      "captures": 43,
+      "checks": 215,
+      "issues": 0,
+      "uncaughtErrors": 0,
+      "result": "quick-results.json"
+    }
+  ],
+  "totals": {
+    "captures": 474,
+    "checks": 2116,
+    "issues": 0,
+    "uncaughtErrors": 0
+  },
+  "deterministic": {
+    "mobileTests": 31,
+    "paletteAssertions": 336,
+    "sqliteTests": 3,
+    "workspaceTypecheck": "pass",
+    "workspaceLint": "pass",
+    "serverBuild": "pass"
+  },
+  "profileRevisions": {
+    "before": "stage2-profile-web, published e6616d4",
+    "intermediate": "stage2-corrected-web, before the later batched delete/Undo and enrollment/page viewport changes"
+  },
+  "interpretation": [
+    "Synthetic fixture matrices and real loopback-server workflows are separate suites, not native verification.",
+    "Layout/policy suites were parallelized for correctness; quick timings ran without other audit browser/build workloads.",
+    "The local suite creates and deletes only its disposable example.test account; no real user account is used.",
+    "CPU-profiler instrumentation differs from the quick timing helper. Intermediate profile differences are not a statistically significant improvement claim.",
+    "Android export validates JS only; physical frame times, TalkBack, IME, scaling, wallpaper colors, biometric and OS integration remain unverified."
+  ],
+  "screenshots": [
+    "pin-six-narrow.png",
+    "lock-pending-dark.png",
+    "save-retry.png",
+    "mfa-enrollment-qr.png",
+    "backup-code-narrow.png",
+    "import-preview.png",
+    "import-complete.png",
+    "import-invalid.png"
+  ]
+}

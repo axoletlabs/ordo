@@ -1,0 +1,1086 @@
+{
+  "screens": [
+    "light-false-320-registration-disabled",
+    "light-false-320-mfa-required",
+    "light-false-320-mfa-required-qr",
+    "light-false-320-backup-code",
+    "light-false-320-mfa-console-recovery",
+    "light-false-320-device-lock-web-unavailable",
+    "light-false-1280-registration-disabled",
+    "light-false-1280-mfa-required",
+    "light-false-1280-mfa-required-qr",
+    "light-false-1280-backup-code",
+    "light-false-1280-mfa-console-recovery",
+    "light-false-1280-device-lock-web-unavailable",
+    "light-true-320-registration-disabled",
+    "light-true-320-mfa-required",
+    "light-true-320-mfa-required-qr",
+    "light-true-320-backup-code",
+    "light-true-320-mfa-console-recovery",
+    "light-true-320-device-lock-web-unavailable",
+    "light-true-1280-registration-disabled",
+    "light-true-1280-mfa-required",
+    "light-true-1280-mfa-required-qr",
+    "light-true-1280-backup-code",
+    "light-true-1280-mfa-console-recovery",
+    "light-true-1280-device-lock-web-unavailable",
+    "dark-false-320-registration-disabled",
+    "dark-false-320-mfa-required",
+    "dark-false-320-mfa-required-qr",
+    "dark-false-320-backup-code",
+    "dark-false-320-mfa-console-recovery",
+    "dark-false-320-device-lock-web-unavailable",
+    "dark-false-1280-registration-disabled",
+    "dark-false-1280-mfa-required",
+    "dark-false-1280-mfa-required-qr",
+    "dark-false-1280-backup-code",
+    "dark-false-1280-mfa-console-recovery",
+    "dark-false-1280-device-lock-web-unavailable",
+    "dark-true-320-registration-disabled",
+    "dark-true-320-mfa-required",
+    "dark-true-320-mfa-required-qr",
+    "dark-true-320-backup-code",
+    "dark-true-320-mfa-console-recovery",
+    "dark-true-320-device-lock-web-unavailable",
+    "dark-true-1280-registration-disabled",
+    "dark-true-1280-mfa-required",
+    "dark-true-1280-mfa-required-qr",
+    "dark-true-1280-backup-code",
+    "dark-true-1280-mfa-console-recovery",
+    "dark-true-1280-device-lock-web-unavailable"
+  ],
+  "checks": [
+    {
+      "name": "light-false-320: disabled registration has no submit action",
+      "pass": true
+    },
+    {
+      "name": "light-false-320-registration-disabled: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-320-registration-disabled: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-320-registration-disabled: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-320-registration-disabled: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-320: required MFA cannot reveal library",
+      "pass": true
+    },
+    {
+      "name": "light-false-320: required MFA owns keyboard focus",
+      "pass": true
+    },
+    {
+      "name": "light-false-320-mfa-required: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-320-mfa-required: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-320-mfa-required: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-320-mfa-required: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-320-mfa-required-qr: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-320-mfa-required-qr: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-320-mfa-required-qr: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-320-mfa-required-qr: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-320: closing QR does not release enrollment gate",
+      "pass": true
+    },
+    {
+      "name": "light-false-320-backup-code: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-320-backup-code: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-320-backup-code: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-320-backup-code: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-320: backup-code keyboard replacement",
+      "pass": true
+    },
+    {
+      "name": "light-false-320-mfa-console-recovery: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-320-mfa-console-recovery: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-320-mfa-console-recovery: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-320-mfa-console-recovery: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-320-device-lock-web-unavailable: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-320-device-lock-web-unavailable: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-320-device-lock-web-unavailable: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-320-device-lock-web-unavailable: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-1280: disabled registration has no submit action",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-registration-disabled: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-registration-disabled: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-registration-disabled: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-1280-registration-disabled: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-1280: required MFA cannot reveal library",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280: required MFA owns keyboard focus",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-mfa-required: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-mfa-required: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-mfa-required: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-1280-mfa-required: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-1280-mfa-required-qr: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-mfa-required-qr: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-mfa-required-qr: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-1280-mfa-required-qr: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-1280: closing QR does not release enrollment gate",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-backup-code: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-backup-code: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-backup-code: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-1280-backup-code: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-1280: backup-code keyboard replacement",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-mfa-console-recovery: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-mfa-console-recovery: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-mfa-console-recovery: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-1280-mfa-console-recovery: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-1280-device-lock-web-unavailable: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-device-lock-web-unavailable: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-1280-device-lock-web-unavailable: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-1280-device-lock-web-unavailable: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-320: disabled registration has no submit action",
+      "pass": true
+    },
+    {
+      "name": "light-true-320-registration-disabled: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-320-registration-disabled: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-320-registration-disabled: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-320-registration-disabled: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-320: required MFA cannot reveal library",
+      "pass": true
+    },
+    {
+      "name": "light-true-320: required MFA owns keyboard focus",
+      "pass": true
+    },
+    {
+      "name": "light-true-320-mfa-required: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-320-mfa-required: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-320-mfa-required: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-320-mfa-required: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-320-mfa-required-qr: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-320-mfa-required-qr: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-320-mfa-required-qr: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-320-mfa-required-qr: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-320: closing QR does not release enrollment gate",
+      "pass": true
+    },
+    {
+      "name": "light-true-320-backup-code: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-320-backup-code: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-320-backup-code: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-320-backup-code: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-320: backup-code keyboard replacement",
+      "pass": true
+    },
+    {
+      "name": "light-true-320-mfa-console-recovery: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-320-mfa-console-recovery: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-320-mfa-console-recovery: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-320-mfa-console-recovery: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-320-device-lock-web-unavailable: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-320-device-lock-web-unavailable: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-320-device-lock-web-unavailable: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-320-device-lock-web-unavailable: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-1280: disabled registration has no submit action",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-registration-disabled: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-registration-disabled: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-registration-disabled: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-1280-registration-disabled: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-1280: required MFA cannot reveal library",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280: required MFA owns keyboard focus",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-mfa-required: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-mfa-required: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-mfa-required: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-1280-mfa-required: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-1280-mfa-required-qr: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-mfa-required-qr: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-mfa-required-qr: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-1280-mfa-required-qr: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-1280: closing QR does not release enrollment gate",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-backup-code: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-backup-code: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-backup-code: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-1280-backup-code: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-1280: backup-code keyboard replacement",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-mfa-console-recovery: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-mfa-console-recovery: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-mfa-console-recovery: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-1280-mfa-console-recovery: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-1280-device-lock-web-unavailable: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-device-lock-web-unavailable: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-1280-device-lock-web-unavailable: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-1280-device-lock-web-unavailable: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-320: disabled registration has no submit action",
+      "pass": true
+    },
+    {
+      "name": "dark-false-320-registration-disabled: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-320-registration-disabled: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-320-registration-disabled: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-320-registration-disabled: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-320: required MFA cannot reveal library",
+      "pass": true
+    },
+    {
+      "name": "dark-false-320: required MFA owns keyboard focus",
+      "pass": true
+    },
+    {
+      "name": "dark-false-320-mfa-required: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-320-mfa-required: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-320-mfa-required: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-320-mfa-required: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-320-mfa-required-qr: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-320-mfa-required-qr: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-320-mfa-required-qr: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-320-mfa-required-qr: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-320: closing QR does not release enrollment gate",
+      "pass": true
+    },
+    {
+      "name": "dark-false-320-backup-code: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-320-backup-code: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-320-backup-code: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-320-backup-code: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-320: backup-code keyboard replacement",
+      "pass": true
+    },
+    {
+      "name": "dark-false-320-mfa-console-recovery: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-320-mfa-console-recovery: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-320-mfa-console-recovery: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-320-mfa-console-recovery: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-320-device-lock-web-unavailable: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-320-device-lock-web-unavailable: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-320-device-lock-web-unavailable: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-320-device-lock-web-unavailable: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-1280: disabled registration has no submit action",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-registration-disabled: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-registration-disabled: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-registration-disabled: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-1280-registration-disabled: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-1280: required MFA cannot reveal library",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280: required MFA owns keyboard focus",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-mfa-required: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-mfa-required: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-mfa-required: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-1280-mfa-required: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-1280-mfa-required-qr: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-mfa-required-qr: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-mfa-required-qr: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-1280-mfa-required-qr: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-1280: closing QR does not release enrollment gate",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-backup-code: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-backup-code: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-backup-code: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-1280-backup-code: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-1280: backup-code keyboard replacement",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-mfa-console-recovery: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-mfa-console-recovery: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-mfa-console-recovery: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-1280-mfa-console-recovery: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-1280-device-lock-web-unavailable: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-device-lock-web-unavailable: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-1280-device-lock-web-unavailable: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-1280-device-lock-web-unavailable: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-320: disabled registration has no submit action",
+      "pass": true
+    },
+    {
+      "name": "dark-true-320-registration-disabled: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-320-registration-disabled: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-320-registration-disabled: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-320-registration-disabled: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-320: required MFA cannot reveal library",
+      "pass": true
+    },
+    {
+      "name": "dark-true-320: required MFA owns keyboard focus",
+      "pass": true
+    },
+    {
+      "name": "dark-true-320-mfa-required: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-320-mfa-required: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-320-mfa-required: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-320-mfa-required: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-320-mfa-required-qr: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-320-mfa-required-qr: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-320-mfa-required-qr: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-320-mfa-required-qr: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-320: closing QR does not release enrollment gate",
+      "pass": true
+    },
+    {
+      "name": "dark-true-320-backup-code: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-320-backup-code: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-320-backup-code: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-320-backup-code: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-320: backup-code keyboard replacement",
+      "pass": true
+    },
+    {
+      "name": "dark-true-320-mfa-console-recovery: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-320-mfa-console-recovery: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-320-mfa-console-recovery: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-320-mfa-console-recovery: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-320-device-lock-web-unavailable: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-320-device-lock-web-unavailable: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-320-device-lock-web-unavailable: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-320-device-lock-web-unavailable: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280: disabled registration has no submit action",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-registration-disabled: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-registration-disabled: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-registration-disabled: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-registration-disabled: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280: required MFA cannot reveal library",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280: required MFA owns keyboard focus",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-mfa-required: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-mfa-required: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-mfa-required: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-mfa-required: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-mfa-required-qr: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-mfa-required-qr: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-mfa-required-qr: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-mfa-required-qr: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280: closing QR does not release enrollment gate",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-backup-code: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-backup-code: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-backup-code: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-backup-code: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280: backup-code keyboard replacement",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-mfa-console-recovery: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-mfa-console-recovery: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-mfa-console-recovery: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-mfa-console-recovery: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-device-lock-web-unavailable: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-device-lock-web-unavailable: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-1280-device-lock-web-unavailable: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-1280-device-lock-web-unavailable: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "no uncaught account/server-policy errors",
+      "pass": true,
+      "details": []
+    }
+  ],
+  "issues": [],
+  "errors": [],
+  "performance": []
+}

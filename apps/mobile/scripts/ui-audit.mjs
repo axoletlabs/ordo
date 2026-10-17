@@ -34,13 +34,14 @@ function check(condition, name, details) {
   results.checks.push({ name, pass: !!condition, ...(details ? { details } : {}) });
   if (!condition) results.issues.push({ name, details });
 }
-async function context({ theme = "dark", expressive = true, width = 390, height = 844, authenticated = true, count = 40, catalogue = 1, reducedMotion = "no-preference", delayHomeMs = 0, homeState = "ready" } = {}) {
+async function context({ theme = "dark", expressive = true, width = 390, height = 844, authenticated = true, count = 40, catalogue = 1, reducedMotion = "no-preference", delayHomeMs = 0, homeState = "ready", userState = {}, folderState = {}, serverState = {} } = {}) {
+  const currentUser = { ...user, ...userState }, currentFolder = { ...folder, ...folderState };
   const context = await browser.newContext({ viewport: { width, height }, colorScheme: theme, reducedMotion });
   await context.addInitScript(({ user, theme, expressive, authenticated }) => {
     localStorage.setItem("ordo.settings", JSON.stringify({ themeMode: theme, expressive, materialYouColors: false }));
     if (authenticated) localStorage.setItem("secure.ordo.auth", JSON.stringify({ user,
       tokens: { accessToken: "fixture", refreshToken: "fixture", expiresIn: 3600 }, accessExpiresAt: Date.now() + 3600e3, sessionUpdatedAt: Date.now() }));
-  }, { user, theme, expressive, authenticated });
+  }, { user: currentUser, theme, expressive, authenticated });
   const page = await context.newPage();
   currentPage = page;
   page.on("pageerror", (error) => results.errors.push(error.message));
@@ -54,14 +55,14 @@ async function context({ theme = "dark", expressive = true, width = 390, height 
     });
     let body = { success: true };
     if (path === "/api/server/info") body = { name: "ordo", version: "0.3.0", registrationEnabled: true,
-      emailVerificationRequired: false, smtpConfigured: true, mfaRequired: false, folderLockTypes: true, reminders: true };
-    else if (path === "/api/auth/me" || path === "/api/auth/preferences") body = user;
+      emailVerificationRequired: false, smtpConfigured: true, mfaRequired: false, folderLockTypes: true, reminders: true, ...serverState };
+    else if (path === "/api/auth/me" || path === "/api/auth/preferences") body = currentUser;
     else if (path === "/api/auth/sessions") body = [{ id: "current", current: true, deviceType: "desktop", deviceName: "This browser", lastSeenAt: stamp, createdAt: stamp },
       { id: "other", current: false, deviceType: "phone", deviceName: "Pixel 9", lastSeenAt: stamp, createdAt: stamp }];
-    else if (path === "/api/auth/refresh") body = { user, tokens: { accessToken: "fixture", refreshToken: "fixture", expiresIn: 3600 } };
+    else if (path === "/api/auth/refresh") body = { user: currentUser, tokens: { accessToken: "fixture", refreshToken: "fixture", expiresIn: 3600 } };
     else if (path === "/api/auth/mfa/totp/begin") body = { secret: "TESTKEY", otpauthUrl: "otpauth://totp/Test?secret=TESTKEY&issuer=Test" };
-    else if (path === "/api/folders") body = homeState === "empty" ? [] : [folder];
-    else if (path === "/api/folders/collection") body = folder;
+    else if (path === "/api/folders") body = homeState === "empty" ? [] : [currentFolder];
+    else if (path === "/api/folders/collection") body = currentFolder;
     else if (path === "/api/tags") body = [tag, ...Array.from({ length: catalogue - 1 }, (_, i) => ({ ...tag, id: `tag-${i}`, name: `Topic ${i}` }))];
     else if (path === "/api/tags/design") body = tag;
     else if (path === "/api/bookmarks/extraction-progress") body = { pending: 0, total: count };
@@ -91,7 +92,7 @@ async function screen(page, name) {
       const rect = node.getBoundingClientRect();
       return node.checkVisibility({ opacityProperty: true, visibilityProperty: true }) && rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.top < innerHeight;
     };
-    const smallTargets = [...document.querySelectorAll('[role="button"], [role="radio"], [role="checkbox"], [role="switch"], [role^="menuitem"]')]
+    const smallTargets = [...document.querySelectorAll('[role="button"], [role="radio"], [role="checkbox"], [role="switch"], [role^="menuitem"], input:not([type="hidden"]), textarea')]
       .filter((node) => visible(node) && !node.closest('[aria-hidden="true"], [inert]')).flatMap((node) => {
         const rect = node.getBoundingClientRect();
         return rect.width < 47.9 || rect.height < 47.9 ? [{ label: node.getAttribute("aria-label") ?? node.textContent.slice(0, 60), width: rect.width, height: rect.height }] : [];
@@ -132,6 +133,16 @@ async function interactions(options) {
   await page.goto(base);
   await button(page, "Save bookmark").first().waitFor();
   await settle(page);
+  if (options.reducedMotion !== "reduce") {
+    const bounded = await page.locator('[data-testid="material-page-transition"]').last().evaluate((node) => {
+      const probe = node.animate([{ transform: "translateX(24px)" }, { transform: "translateX(24px)" }], { duration: 2000 });
+      probe.pause(); probe.currentTime = 100;
+      const scroll = document.documentElement.scrollWidth;
+      probe.cancel();
+      return scroll <= innerWidth + 1;
+    });
+    check(bounded, `${label}: incoming page motion stays inside viewport`);
+  }
   // Full-height inline tag actions must fit inside exact virtual-list slots.
   const tagGeometry = await page.locator('[aria-label="Show bookmarks tagged Design"]').first().evaluate((node) => {
     const bodyNode = node.closest('[aria-label^="Building a more expressive"]');
@@ -286,6 +297,7 @@ async function states() {
   await screen(page, "states-library-recovered");
   await ctx.close();
 }
+if (process.env.ORDO_AUDIT_LIBRARY !== "1") {
 try {
   if (process.argv.includes("--states-only")) await states();
   else {
@@ -333,3 +345,6 @@ try {
 }
 console.log(JSON.stringify({ screens: results.screens.length, checks: results.checks.length, issues: results.issues, errors: results.errors, performance: results.performance }, null, 2));
 if (!baseline) assert.equal(results.issues.length, 0, `Audit failures; see ${output}/results.json`);
+}
+
+export { browser, context, screen, settle, button, check, results, base, output };

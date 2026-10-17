@@ -5,12 +5,10 @@
  * launch. Refreshes settle after the UI is up; the offline gate covers a
  * confirmed-down host once the probe answers.
  */
-import { AppState } from "react-native";
-import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
+import { AppState, Platform } from "react-native";
 import {
   persistQueryClientRestore,
   persistQueryClientSave,
-  type PersistedClient,
   type Persister,
 } from "@tanstack/react-query-persist-client";
 import type { QueryCacheNotifyEvent } from "@tanstack/react-query";
@@ -30,17 +28,12 @@ import {
   isPersistedBookmarkListKey,
   protectedFolderIdsFromFolders,
   queryCacheStorageKey,
-  sanitizePersistedClient,
   shouldPersistQueryKey,
-  type PersistedClientSnapshot,
+  createSnapshotPersister,
 } from "./query-persist";
 import { useAuthStore } from "../store/auth";
 import { useSettingsStore } from "../store/settings";
 import { resumePendingDeletes } from "./undoable-delete";
-
-function sanitizeForDisk(client: PersistedClient): PersistedClient {
-  return sanitizePersistedClient(client as unknown as PersistedClientSnapshot) as unknown as PersistedClient;
-}
 
 let mmkv: MMKV | null | undefined;
 let activeStorageKey: string | null = null;
@@ -63,25 +56,7 @@ function protectedFolderIdsFromCache() {
 }
 
 function createQueryCachePersister(storageKey: string): Persister {
-  const storage = getMmkv();
-  return createSyncStoragePersister({
-    storage: storage
-      ? {
-          getItem: (key) => storage.getString(key) ?? null,
-          setItem: (key, value) => {
-            storage.set(key, value);
-          },
-          removeItem: (key) => {
-            storage.remove(key);
-          },
-        }
-      : undefined,
-    key: storageKey,
-    // subscribePersistence below already coalesces writes.
-    throttleTime: 0,
-    serialize: (client) => JSON.stringify(sanitizeForDisk(client)),
-    deserialize: (cachedString) => sanitizeForDisk(JSON.parse(cachedString) as PersistedClient),
-  });
+  return createSnapshotPersister(getMmkv(), storageKey);
 }
 
 /** Built per save so the folder lock lookup runs once, not once per query. */
@@ -144,11 +119,14 @@ function subscribePersistence(options: ReturnType<typeof persistOptions>): () =>
   const appState = AppState.addEventListener("change", (state) => {
     if (state !== "active" && timer) save();
   });
+  const flush = () => { if (timer) save(); };
+  if (Platform.OS === "web" && typeof window !== "undefined") window.addEventListener("pagehide", flush);
   return () => {
     if (timer) clearTimeout(timer);
     timer = null;
     unsubscribeCache();
     appState.remove();
+    if (Platform.OS === "web" && typeof window !== "undefined") window.removeEventListener("pagehide", flush);
   };
 }
 

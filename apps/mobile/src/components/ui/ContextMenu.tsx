@@ -50,6 +50,7 @@ export interface ContextMenuProps {
   children: React.ReactNode;
   width?: number;
   backdrop?: boolean;
+  dismissible?: boolean;
   preferredPlacement?: MenuPlacement["placement"];
   estimatedHeight?: number;
   sessionKey?: string | number | null;
@@ -75,6 +76,7 @@ function ContextMenuSurface({
   children,
   width = CONTEXT_MENU_WIDTH,
   backdrop = true,
+  dismissible = true,
   preferredPlacement,
   estimatedHeight = 200,
   sessionKey,
@@ -88,9 +90,10 @@ function ContextMenuSurface({
   const windowHeight = useKeyboardViewportHeight(height, visible);
   const insets = useSafeAreaInsets();
   const hideAndDismiss = React.useCallback(() => {
+    if (!dismissible) return;
     if (backdrop && keyboardDismiss) dismissKeyboard();
     onDismiss();
-  }, [backdrop, keyboardDismiss, onDismiss]);
+  }, [backdrop, dismissible, keyboardDismiss, onDismiss]);
   const [contentHeight, setContentHeight] = React.useState(0);
   const contentHeightRef = React.useRef(0);
   const bodyRef = React.useRef<View>(null);
@@ -100,7 +103,7 @@ function ContextMenuSurface({
     ready: contentHeight > 0,
     onExited,
   });
-  const menuRef = useOverlayFocus(visible && rendered && backdrop, hideAndDismiss, "menu", true, false, false, onNavigate);
+  const menuRef = useOverlayFocus(visible && rendered && backdrop, hideAndDismiss, "menu", dismissible, false, false, onNavigate);
   React.useEffect(() => {
     if (!visible || !rendered || !backdrop || Platform.OS !== "web" || typeof document === "undefined") return;
     return listenForMenuOutsideScroll(() => menuRef.current as unknown as HTMLElement | null, hideAndDismiss);

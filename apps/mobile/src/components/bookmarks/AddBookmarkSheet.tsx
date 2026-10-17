@@ -246,6 +246,7 @@ function AddBookmarkContent({
               <PressableScale
                 accessibilityRole="button"
                 accessibilityLabel="Edit link"
+                disabled={create.isPending}
                 onPress={() => setUrlEditing(true)}
                 style={[
                   styles.urlPreview,
@@ -270,6 +271,7 @@ function AddBookmarkContent({
               <Input
                 ref={urlRef}
                 label="Link"
+                disabled={create.isPending}
                 variant="outlined"
                 value={url}
                 onChangeText={(next) => { setUrl(next); if (error) setError(""); }}
@@ -292,10 +294,10 @@ function AddBookmarkContent({
               </Text>
             ) : null}
 
-            {allowFolderSelection ? <PickerField label="Folder" value={destination ?? "Bookmarks"} dropdown expanded={destinationOpen}
+            {allowFolderSelection ? <PickerField label="Folder" value={destination ?? "Bookmarks"} dropdown expanded={destinationOpen} disabled={create.isPending}
               icon={selectedFolder?.icon ?? "bookmark-outline"} onPress={(anchor) => { setDestinationAnchor(anchor); setDestinationOpen(true); }} />
               : destination ? <Text variant="bodyMedium" color="secondary">Saving to {destination}</Text> : null}
-            <PickerField label="Tags" icon="pricetags-outline" dropdown expanded={showTagPicker}
+            <PickerField label="Tags" icon="pricetags-outline" dropdown expanded={showTagPicker} disabled={create.isPending}
               value={selectedTagIds.length ? selectedTagIds.map((id) => tags?.find((tag) => tag.id === id)?.name).filter(Boolean).join(", ") || `${selectedTagIds.length} tags selected` : "Add tags"}
               onPress={(anchor) => { setTagAnchor(anchor); setShowTagPicker(true); }} />
             </View>

@@ -1,6 +1,6 @@
 /** A consistent, full-width entry into folder, tag, and icon selection. */
 import React, { useRef } from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View, useWindowDimensions } from "react-native";
 import { MaterialIcon } from "./MaterialIcon";
 import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
@@ -8,15 +8,16 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { radius, spacing } from "../../theme/tokens";
 import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 
-export function PickerField({ label, value, icon, onPress, dropdown = false, expanded = false }: {
+export function PickerField({ label, value, icon, onPress, dropdown = false, expanded = false, disabled = false }: {
   label: string; value: string; icon: keyof typeof MaterialIcon.glyphMap; onPress: (anchor: MenuAnchorRect) => void;
-  dropdown?: boolean; expanded?: boolean;
+  dropdown?: boolean; expanded?: boolean; disabled?: boolean;
 }) {
   const { palette } = useTheme();
+  const { fontScale } = useWindowDimensions();
   const anchorRef = useRef<View>(null);
   return <View ref={anchorRef} collapsable={false}>
     <PressableScale accessibilityRole="button" accessibilityLabel={`${label}, ${value}`}
-      accessibilityState={{ expanded }} aria-haspopup={dropdown ? "menu" : "dialog"}
+      disabled={disabled} accessibilityState={{ expanded, disabled }} aria-haspopup={dropdown ? "menu" : "dialog"}
       accessibilityHint={`Choose ${label.toLocaleLowerCase()}.`} onPress={(event) => {
         // RN web's div-backed buttons don't consistently focus on a pointer
         // click. Capture this trigger before the dropdown takes over focus.
@@ -24,9 +25,9 @@ export function PickerField({ label, value, icon, onPress, dropdown = false, exp
         measureAnchor(anchorRef.current, onPress, event);
       }}
       stateLayerColor={palette.onSurface}
-      style={[styles.field, { backgroundColor: palette.surfaceContainerHighest }]}>
+      style={[styles.field, { backgroundColor: palette.surfaceContainerHighest, opacity: disabled ? 0.38 : 1 }]}>
       <MaterialIcon name={icon} size={24} color={palette.onSurfaceVariant} />
-      <Text variant="bodyLarge" numberOfLines={1} style={{ flex: 1, minWidth: 0, paddingTop: spacing[16] }}>{value}</Text>
+      <Text variant="bodyLarge" numberOfLines={1} style={{ flex: 1, minWidth: 0, paddingTop: spacing[8] + 16 * fontScale, paddingBottom: spacing[8] }}>{value}</Text>
       <MaterialIcon name={dropdown ? expanded ? "chevron-up" : "chevron-down" : "chevron-forward"} size={24} color={palette.onSurfaceVariant} />
     </PressableScale>
     <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: expanded ? 2 : 1, backgroundColor: expanded ? palette.primary : palette.outline }} />
