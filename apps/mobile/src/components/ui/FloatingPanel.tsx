@@ -128,11 +128,14 @@ function FloatingPanelSurface({
   const obscuredFade = useSharedValue(obscured ? 0 : 1);
   const [collapsedObscured, setCollapsedObscured] = React.useState(obscured);
   const lastObscured = React.useRef(obscured);
+  const previousFade = React.useRef({ obscured, reducedMotion: motion.reducedMotion });
   const finishObscuring = React.useCallback(() => {
     if (lastObscured.current) setCollapsedObscured(true);
   }, []);
   React.useLayoutEffect(() => {
     lastObscured.current = obscured;
+    if (previousFade.current.obscured === obscured && previousFade.current.reducedMotion === motion.reducedMotion) return;
+    previousFade.current = { obscured, reducedMotion: motion.reducedMotion };
     if (motion.reducedMotion) {
       obscuredFade.value = obscured ? 0 : 1;
       setCollapsedObscured(obscured);
@@ -212,10 +215,15 @@ function FloatingPanelSurface({
     return () => { show.remove(); hide.remove(); };
   }, [rendered]);
 
+  const previousLift = React.useRef({ lift: 0, reducedMotion: motion.reducedMotion });
   React.useEffect(() => {
+    // Browser layout already follows its visual viewport; no keyboard worklet.
+    if (Platform.OS === "web") return;
     const center = (restHeight + insets.top - insets.bottom) / 2;
-    const lift = Platform.OS === "web" ? 0 : sheet ? Math.min(0, viewportHeight - restHeight)
+    const lift = sheet ? Math.min(0, viewportHeight - restHeight)
       : panelKeyboardLift(center, panelHeight, viewportHeight, insets.top + spacing[16], bottomInset + spacing[16]);
+    if (previousLift.current.lift === lift && previousLift.current.reducedMotion === motion.reducedMotion) return;
+    previousLift.current = { lift, reducedMotion: motion.reducedMotion };
     keyboardShift.value = withTiming(lift, { duration: motion.reducedMotion ? 0 : 250, easing: Easing.bezier(0.2, 0, 0, 1) });
   }, [restHeight, panelHeight, viewportHeight, insets.top, insets.bottom, bottomInset, keyboardShift, motion.reducedMotion, sheet]);
 

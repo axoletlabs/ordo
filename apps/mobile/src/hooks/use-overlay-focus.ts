@@ -27,6 +27,9 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
           // Replacing a nested menu page removes its focused row without firing
           // focusin. Keep keyboard ownership instead of leaving focus on body.
           observer = new MutationObserver(() => {
+            // Most content updates leave focus intact. Don't wake a repair
+            // frame for every keystroke, loading label or appended list batch.
+            if (root.contains(document.activeElement)) return;
             cancelAnimationFrame(repairFrame);
             repairFrame = requestAnimationFrame(() => {
               const overlays = document.querySelectorAll('[data-material-overlay="true"]');
@@ -106,7 +109,7 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
         const overlays = document.querySelectorAll('[data-material-overlay="true"]');
         const top = overlays[overlays.length - 1];
         const inertTrigger = previous?.isConnected && previous.closest('[inert]');
-        if ((overlays.length || inertTrigger) && Date.now() < deadline) { requestAnimationFrame(restore); return; }
+        if ((top === root || (top && (!previous || !top.contains(previous))) || inertTrigger) && Date.now() < deadline) { requestAnimationFrame(restore); return; }
         requestAnimationFrame(() => {
           if (previous?.isConnected && !previous.closest('[data-material-overlay="false"]') &&
             (!top || top.contains(previous)) &&

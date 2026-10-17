@@ -59,7 +59,27 @@ export function chainHandlers<Args extends unknown[]>(
   };
 }
 
-export function useVerticalScrollBar(insets?: ScrollBarInsets) {
+const ignoreScroll = () => {};
+
+/** Browser scrollbars need no shared values, animation effects or idle timers. */
+function useBrowserScrollBar(_insets?: ScrollBarInsets) {
+  const { palette } = useTheme();
+  return {
+    onLayout: ignoreScroll,
+    onContentSizeChange: ignoreScroll,
+    onScroll: ignoreScroll,
+    updateScroll: ignoreScroll,
+    onScrollActivity: ignoreScroll,
+    overlay: null,
+    hideNativeIndicator: true,
+    indicatorStyle: palette.mode === "dark" ? ("white" as const) : ("black" as const),
+  };
+}
+
+// Platform is fixed for the lifetime of a renderer; hook order never switches.
+export const useVerticalScrollBar = Platform.OS === "web" ? useBrowserScrollBar : useNativeScrollBar;
+
+function useNativeScrollBar(insets?: ScrollBarInsets) {
   const { palette } = useTheme();
   const colors = scrollbarColors(palette);
   const topInset = insets?.top ?? SCROLLBAR_END_INSET;

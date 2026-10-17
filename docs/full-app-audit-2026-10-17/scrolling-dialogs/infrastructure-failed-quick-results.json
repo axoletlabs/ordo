@@ -1,0 +1,171 @@
+{
+  "screens": [
+    "cold-cache-loading",
+    "light-false-390-normal-save",
+    "light-false-390-normal-sort",
+    "light-false-390-normal-tags-filter"
+  ],
+  "checks": [
+    {
+      "name": "cold-cache launch does not wait for library network",
+      "pass": true,
+      "details": {
+        "elapsedMs": 895.2,
+        "networkDelayMs": 5000
+      }
+    },
+    {
+      "name": "cold-cache-loading: painted content",
+      "pass": true
+    },
+    {
+      "name": "cold-cache-loading: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "cold-cache-loading: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "cold-cache-loading: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal: incoming page motion stays inside viewport",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal: inline tag fits row",
+      "pass": true,
+      "details": {
+        "target": {
+          "x": 88,
+          "y": 195,
+          "width": 56,
+          "height": 48,
+          "top": 195,
+          "right": 144,
+          "bottom": 243,
+          "left": 88
+        },
+        "body": {
+          "x": 72,
+          "y": 137,
+          "width": 250,
+          "height": 118,
+          "top": 137,
+          "right": 322,
+          "bottom": 255,
+          "left": 72
+        },
+        "row": {
+          "x": 16,
+          "y": 136,
+          "width": 358,
+          "height": 120,
+          "top": 136,
+          "right": 374,
+          "bottom": 256,
+          "left": 16
+        },
+        "fits": true
+      }
+    },
+    {
+      "name": "light-false-390-normal: save focus",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-save: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-save: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-save: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal-save: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal: Escape dismisses dialog",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-sort: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-sort: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-sort: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal-sort: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal: bounded filter menu",
+      "pass": true,
+      "details": {
+        "mountedTags": 13
+      }
+    },
+    {
+      "name": "light-false-390-normal-tags-filter: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-tags-filter: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal-tags-filter: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal-tags-filter: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-390-normal: End reaches last unmounted catalogue item",
+      "pass": true
+    },
+    {
+      "name": "light-false-390-normal: catalogue Home and arrow wrapping retain focus",
+      "pass": true
+    }
+  ],
+  "issues": [
+    {
+      "name": "test execution",
+      "details": "locator.waitFor: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: 'Table of contents', exact: true }) to be visible\u001b[22m\n\n    at interactions (/root/.t3/worktrees/ordo/t3-3407b0ad/apps/mobile/scripts/ui-audit.mjs:184:43)\n    at async file:///root/.t3/worktrees/ordo/t3-3407b0ad/apps/mobile/scripts/ui-audit.mjs:328:84"
+    }
+  ],
+  "errors": [],
+  "performance": [
+    {
+      "name": "light-false-390-normal: cold save dialog",
+      "cpuThrottle": 4,
+      "actionAndSettleMs": 730.8,
+      "longTasks": 2,
+      "maxLongTaskMs": 173,
+      "totalLongTaskMs": 240
+    }
+  ]
+}
