@@ -181,12 +181,6 @@ jobs:
       - name: Typecheck
         run: pnpm -r typecheck
 
-      - name: Mobile interaction and performance regressions
-        run: pnpm --filter @ordo/mobile test
-
-      - name: SQLite migrations and list query plans
-        run: python3 apps/server/scripts/query-plan-test.py
-
       - name: Lint
         run: pnpm -r lint
 

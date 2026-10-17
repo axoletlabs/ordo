@@ -94,7 +94,7 @@ normalize_fingerprint() {
   jq -f "$SCRIPT_DIR/normalize-android-fingerprint.jq" "$1" > "$1.normalized"
 }
 
-# extra.ordo and packageJson:scripts change every JS commit / test file
+# extra.ordo and packageJson:scripts change with JS commits and tooling edits
 # but do not affect native compatibility. Stripping them for routing
 # avoids minting a new APK (and abandoning the previous runtime).
 normalize_fingerprint /tmp/fingerprint-previous.json

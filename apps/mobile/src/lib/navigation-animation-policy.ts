@@ -1,6 +1,5 @@
 /**
- * Pure page-animation policy. Kept free of React Native so node:test can
- * cover which transition picks up a new page-animation setting.
+ * Pure page-animation policy for applying page-animation preferences.
  */
 import type { NavigationAnimation } from "../store/settings";
 

@@ -39,15 +39,9 @@ Server-dialog delayed focus now returns a timeout handle accepted by
 `FloatingPanel`; its effect cancels that handle on dismissal/obscuring. No
 additional timer mechanism is needed.
 
-## Reproducible browser verification
+## Historical browser verification
 
-`apps/mobile/tests/material-ui-smoke.mjs` tests the production Expo web export.
-Run `pnpm --filter @ordo/mobile test:ui` against a static SPA server using
-`ORDO_UI_URL`. It imports `playwright` by default; isolated environments may set
-`PLAYWRIGHT_MODULE` and `PLAYWRIGHT_CHROMIUM`. Screenshots and results go to
-`ORDO_UI_OUTPUT`. Optional `ORDO_UI_THEME` and `ORDO_UI_EXPRESSIVE` narrow the run.
-`ORDO_UI_SKIP_SCREEN_MATRIX=1` is only for debugging overlay scenarios; it is
-not the full screen matrix and was not used for the final full-run counts.
+All test runners and artifacts have been removed from the repository. The following describes historical verification, not currently available suites.
 
 The matrix covers light/dark × Standard/Expressive, 390×844 portrait and
 1280×800 landscape. Creation forms also run at 320×420; reduced-motion menus
@@ -191,14 +185,6 @@ backend checks in a fresh checkout. The initial missing-client failure was a
 build setup issue, not a tested API defect. Server end-to-end suites cover auth/
 recovery, MFA/avatars, bookmarks/folders/tags/reminders/search, protected-folder
 visibility, encryption, import, cookies/CORS/CSRF, rate limits and telemetry.
-
-Example browser run after exporting the latest app:
-
-```sh
-# From apps/mobile; serve this directory with an index.html SPA fallback.
-pnpm exec expo export --platform web --output-dir /tmp/opencode/ordo-comprehensive-after
-ORDO_UI_URL=http://127.0.0.1:8235 pnpm test:ui
-```
 
 ## Verification limits and follow-up
 

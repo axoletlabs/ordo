@@ -13,7 +13,6 @@ export default tseslint.config(
       "**/build/**",
       "**/.expo/**",
       "**/.turbo/**",
-      "**/coverage/**",
       "**/src/generated/**",
       "**/*.config.js",
       "**/expo-env.d.ts",

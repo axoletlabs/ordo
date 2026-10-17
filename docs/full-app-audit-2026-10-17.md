@@ -1,5 +1,7 @@
 # App-wide performance, Material 3, and motion audit
 
+> Historical report. All test runners and saved audit artifacts have been removed from the current repository. Counts below describe past runs, not currently available suites or CI gates.
+
 The [scrolling and dialog continuation](#scrolling-and-dialog-continuation) adds measured dialog improvements and lower-overhead scroll bookkeeping. The [session-isolation continuation](#session-isolation-smtp-and-encrypted-library-continuation) retains the earlier real SMTP, two-server switching, and encrypted-library evidence. Earlier results remain historical evidence, not freshly executed checks for later changes. **This is not exhaustive release approval.** Native verification is explicitly deferred; first-dialog main-thread stalls are reduced, not eliminated.
 
 ## Scope and confidence
@@ -7,7 +9,7 @@ The [scrolling and dialog continuation](#scrolling-and-dialog-continuation) adds
 Date: 2026-10-17. Baseline: `01af889` (`perf(mobile): eliminate contents menu mounting stalls`).
 Target: the Expo/React Native app, its shared UI/data paths, and server bookmark-list queries.
 
-The [source inventory](full-app-audit-2026-10-17/source-inventory.json) covers **343 TypeScript files and 30 route/layout files**, including exact line, JSX interaction-site, and motion-call totals. It records paths and source hashes; it is an inventory, **not proof that every branch was executed**. The scanner can also emit individual handlers and motion call locations.
+The historical source inventory covered **343 TypeScript files and 30 route/layout files**, including exact line, JSX interaction-site, and motion-call totals. It recorded paths and source hashes; it was an inventory, **not proof that every branch was executed**.
 
 This is an implementation and fixture-backed verification pass, not a claim of complete Material certification or device-level smoothness. No Android device was attached. Web screenshots, DOM geometry, CPU-throttled browser long tasks, and cache microbenchmarks cannot establish native FPS, battery use, TalkBack behavior, or IME correctness.
 
@@ -76,7 +78,7 @@ The new regression suite exercises real TanStack Query operations, not a reimple
 
 Initial browser results were collected against production Expo exports with synthetic API/session fixtures. No real user's account, folder, bookmark, authentication setting, or session was modified. The follow-up additionally uses newly created disposable accounts on an isolated loopback server. The screen helper waits for a visible route marker and splash dismissal before capture; early captures taken before that readiness fix were discarded.
 
-The [verification manifest](full-app-audit-2026-10-17/verification.json) records export fingerprints and links the complete passing result files:
+The historical verification manifest recorded export fingerprints and the following passing results:
 
 | Suite | Captures | Checks | Result |
 | --- | ---: | ---: | --- |
@@ -110,21 +112,21 @@ These are staged runs: the layout matrices use the `final2` export; the final `f
 
 This measures cache work only, not server mutation latency or complete UI transition time. The larger regression fixture additionally contains detail and reminder caches and publishes 11 updates; its CI invariant is bounded notifications, not a hardware-specific wall-clock threshold.
 
-[All five samples per implementation](full-app-audit-2026-10-17/cache-benchmark.json) are retained, alongside a separately labeled [baseline browser summary](full-app-audit-2026-10-17/baseline-browser-summary.json).
+Five samples per implementation and a separately labeled baseline browser summary were recorded at the time; those artifacts are no longer retained.
 
 ### Representative captures
 
-- [Standard appearance](full-app-audit-2026-10-17/appearance-standard.png) and [Expressive appearance](full-app-audit-2026-10-17/appearance-expressive.png): complete contrast labels at 390px.
-- [Narrow save dialog](full-app-audit-2026-10-17/save-narrow.png): 320px viewport, persistent field labels, and visible actions.
-- [Dark authenticator QR dialog](full-app-audit-2026-10-17/authenticator-dark.png): modal hierarchy and contained QR geometry.
+- Standard and Expressive appearance: complete contrast labels at 390px.
+- Narrow save dialog: 320px viewport, persistent field labels, and visible actions.
+- Dark authenticator QR dialog: modal hierarchy and contained QR geometry.
 
-These are synthetic-fixture browser screenshots, not Android screenshots.
+These were synthetic-fixture browser screenshots, not Android screenshots; they are no longer retained.
 
 ## Follow-up workflow and policy audit
 
-The continuation starts from published commit `e6616d4`, keeping the original evidence above as historical results. Its separate [verification manifest](full-app-audit-2026-10-17/follow-up/verification.json) records the production export fingerprints, exact suite totals, and complete result files. Earlier failing experiments are not counted as passes.
+The continuation starts from published commit `e6616d4`. Its historical verification manifest recorded the production export fingerprints, exact suite totals, and complete result files. Earlier failing experiments are not counted as passes.
 
-The updated [source inventory](full-app-audit-2026-10-17/follow-up/source-inventory.json) contains **344 TypeScript files, 30 route/layout files, 41,435 lines, 603 interaction sites, and 115 motion calls**. These are source counts, not dynamic coverage percentages.
+The updated historical source inventory contained **344 TypeScript files, 30 route/layout files, 41,435 lines, 603 interaction sites, and 115 motion calls**. These are source counts, not dynamic coverage percentages.
 
 All eight primary follow-up suites use the same `final3` production web export:
 
@@ -177,7 +179,7 @@ The initial [development APK workflow](https://github.com/axoletlabs/ordo/action
 
 ## Session isolation, SMTP, and encrypted-library continuation
 
-This continuation starts from `8b621581b547feb943e78dacb039e20f3d572ede`, on the same audit branch. Native Android device verification is intentionally excluded as requested. The separate [verification manifest](full-app-audit-2026-10-17/session-isolation/verification.json) identifies the exact web/Android JS export fingerprints, test-script/server-source hashes, results, and curated screenshots. Its [source inventory](full-app-audit-2026-10-17/session-isolation/source-inventory.json) covers **347 TypeScript files, 30 routes/layouts, 41,612 lines, 603 interaction sites, and 115 motion calls**; these remain source counts, not executed-branch percentages.
+This continuation starts from `8b621581b547feb943e78dacb039e20f3d572ede`, on the same audit branch. Native Android device verification is intentionally excluded as requested. The historical verification manifest identified the exact web/Android JS export fingerprints, test-script/server-source hashes, results, and curated screenshots. Its source inventory covered **347 TypeScript files, 30 routes/layouts, 41,612 lines, 603 interaction sites, and 115 motion calls**; these remain source counts, not executed-branch percentages.
 
 ### Corrections
 
@@ -210,8 +212,7 @@ The first route invocation exceeded its 240-second harness deadline after 152 ca
 
 **Deterministic/build checks:** all **44 mobile tests** pass (including 336 palette assertions), as do workspace typecheck/lint, three SQLite migration/query-plan tests, server build, production web export, and Android JS export. Held-network and actual TanStack tests cover stale refreshes, independent refresh flights, stale responses/errors, mutation success/rollback, queued writes, offline retry, synchronous cache clearing, and an already-awaiting stale snapshot restore. Delete/Undo regression coverage also verifies old callbacks cannot restore or dispatch after a new login.
 
-![Encrypted library on the real local server](full-app-audit-2026-10-17/session-isolation/encrypted-library.png)
-![Offline gate retaining the session](full-app-audit-2026-10-17/session-isolation/server-offline.png)
+Historical captures showed the encrypted library on the local server and the offline gate retaining the session; those captures have been removed.
 
 ### Remaining performance finding and APK status
 
@@ -249,7 +250,7 @@ Both control and final exports use the same pointer-driven `profile-dialogs.mjs`
 
 After a three-cycle warmup versus cycle 15, listener counts are unchanged in all six contexts; DOM node counts are unchanged in five and increase by four in reduced-motion landscape. Post-GC JS heap grows by roughly 0.6–1.9MB over that interval; this is diagnostic, **not a proof of a heap plateau, absence of leaks, or reduced native RAM**. No direct battery improvement is claimed. Existing foreground/overlay activity gates continue to pause repeating indicators; native battery, allocation, and frame traces remain deferred.
 
-The [continuation manifest](full-app-audit-2026-10-17/scrolling-dialogs/verification.json) records exact export/source fingerprints and the newly executed regression results. Earlier real-server suites are historical evidence and are not counted again for this UI-only continuation. The first quick invocation used a static server without SPA fallback and stopped at reader navigation; that infrastructure failure is excluded from passing totals. The complete rerun uses SPA fallback and the identical export.
+The historical continuation manifest recorded exact export/source fingerprints and the regression results. Earlier real-server suites are historical evidence and are not counted again for this UI-only continuation. The first quick invocation used a static server without SPA fallback and stopped at reader navigation; that infrastructure failure is excluded from passing totals. The complete rerun used SPA fallback and the identical export.
 
 | Newly executed suite | Captures | Checks |
 | --- | ---: | ---: |
@@ -281,7 +282,7 @@ The previous [APK workflow](https://github.com/axoletlabs/ordo/actions/runs/3906
 
 ### Follow-up verification
 
-The [follow-up manifest](full-app-audit-2026-10-17/menu-motion/verification.json) fingerprints the exact final runtime, Android JS export, source inventory, regression runners, results and raw standalone CPU profiles. The new menu-motion suite passes **291 checks in 10 configurations**: both themes and design modes at phone/wide widths, plus reduced-motion portrait/landscape. It checks bookmark/folder dismissals, nested surfaces, rapid reopen, dropdown reversal, checkbox feedback, and synthetic login failure alerts.
+The historical follow-up manifest fingerprinted the exact final runtime, Android JS export, source inventory, regression runners, results and raw standalone CPU profiles. The menu-motion suite passed **291 checks in 10 configurations**: both themes and design modes at phone/wide widths, plus reduced-motion portrait/landscape. It checked bookmark/folder dismissals, nested surfaces, rapid reopen, dropdown reversal, checkbox feedback, and synthetic login failure alerts.
 
 Sequential browser rAF sampling detects the row fade below 95% opacity **19–33ms after dismissal**, versus **229–250ms** for the previous export. The final row clears below 1% in **122–138ms**, before menu removal at **212–235ms**; the old row takes **346–365ms** to clear. Both reduced-motion configurations clear in the first sampled dismissal frame. The identical regression detects **32 expected failed latency checks** in the control, with no uncaught errors; that control run is not passing verification. These are synthetic browser observations, not native timing/FPS.
 
@@ -323,62 +324,20 @@ Before native release approval:
 5. Profile background/foreground and obscured overlays on native to confirm repeating-work/battery improvements; check interrupted transitions and preference changes during animation.
 6. Extend the loopback end-to-end mutations with account/server switching during progress writes, database upgrade on a backed-up production-like database, offline reconnect, and native encrypted/protected-folder access. The executed loopback subset is not approval of every server/OS workflow.
 
-## Reproduction
+## Build and static checks
+
+Test reproduction commands were removed with the suites. CI retains typecheck, lint, dependency/security checks, and build/release tooling, but runs no tests.
 
 ```sh
 pnpm db:generate
 pnpm --filter @ordo/shared build
-pnpm --filter @ordo/mobile test
-python3 apps/server/scripts/query-plan-test.py
 pnpm -r typecheck
 pnpm -r lint
 pnpm --filter @ordo/server build
 
-node apps/mobile/scripts/audit-inventory.mjs /tmp/opencode/ordo-source-inventory.json
-node --expose-gc apps/mobile/scripts/cache-move-benchmark.cjs 01af889
-
 pnpm --filter @ordo/mobile exec expo export --platform web --output-dir /tmp/opencode/ordo-audit-web
 pnpm --filter @ordo/mobile exec expo export --platform android --no-bytecode --output-dir /tmp/opencode/ordo-audit-android
 ```
-
-Serve the web export with a static **SPA-fallback** server. Install Playwright separately or provide an existing installation; it is deliberately not a new runtime dependency. Configure `ORDO_UI_URL`, `ORDO_UI_OUTPUT`, optional `PLAYWRIGHT_MODULE` (module path), and `PLAYWRIGHT_CHROMIUM` (executable), then run:
-
-```sh
-node apps/mobile/scripts/ui-audit.mjs --routes-only
-node apps/mobile/scripts/ui-audit.mjs --overlays-only
-node apps/mobile/scripts/ui-audit.mjs --overlays-only --wide-overlays
-node apps/mobile/scripts/ui-audit.mjs --states-only
-node apps/mobile/scripts/ui-audit.mjs --quick
-node apps/mobile/scripts/workflow-audit.mjs
-node apps/mobile/scripts/auth-policy-audit.mjs
-node apps/mobile/scripts/profile-dialogs.mjs
-node apps/mobile/scripts/motion-lifecycle-audit.mjs
-node apps/mobile/scripts/menu-motion-audit.mjs
-```
-
-For actual server workflows, start a **new disposable loopback server**, never a normal local/remote installation. Build the server first, use a new database path each time, and keep secrets test-only:
-
-```sh
-NODE_ENV=test PORT=8260 LISTEN_HOST=127.0.0.1 \
-DATABASE_URL="file:/tmp/opencode/ordo-audit-$(date +%s).db" \
-JWT_SECRET="$(node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))')" \
-LIBRARY_KEK="$(node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))')" \
-REGISTRATION_ENABLED=true EMAIL_VERIFICATION_REQUIRED=false SMTP_URL= SMTP_REQUIRED=false \
-RATE_LIMIT_ENABLED=false pnpm --filter @ordo/server start
-```
-
-In a separate terminal, with the exported web app served and the same Playwright environment configured:
-
-```sh
-ORDO_AUDIT_API=http://127.0.0.1:8260 node apps/mobile/scripts/local-server-audit.mjs
-
-# Launches its own disposable API servers, SQLite databases and SMTP sink:
-node apps/mobile/scripts/extended-server-audit.mjs
-```
-
-The local-server runner refuses non-loopback endpoints, creates its own account, and deletes that account after the successful end-to-end run. Failed runs can leave disposable accounts in the disposable database; do not point this runner at real data. Give each script its own `ORDO_UI_OUTPUT`. Run timing comparisons **without** the other browser/build processes; parallel layout matrices are only correctness evidence.
-
-Use a different output directory per invocation. Run `--quick` without competing browser/build workloads when comparing timings. `--baseline` records known baseline findings without failing. Timing includes Playwright actionability and an explicit settle window; it is **not an animation duration or FPS measurement**. CI runs deterministic mobile regressions and SQLite migration/query-plan tests; browser export testing remains opt-in.
 
 The Android `--no-bytecode` export validates native JS bundling only. This ARM64 environment's supplied Hermes compiler is x86-64; actual Hermes/native APK compilation belongs to GitHub's Android build, not a claimed local native build.
 
