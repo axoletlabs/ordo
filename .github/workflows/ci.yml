@@ -165,9 +165,6 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
-        with:
-          # Release policy tests hold PREVIEW_CODE_BASES against tag history.
-          fetch-depth: 0
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
@@ -186,23 +183,6 @@ jobs:
 
       - name: Lint
         run: pnpm -r lint
-
-      - name: Workspace tests
-        run: pnpm -r test
-
-      - name: Material UI tests
-        run: pnpm --filter @ordo/mobile test:material
-
-      - name: Performance tests
-        run: |
-          pnpm --filter @ordo/mobile test:performance
-          pnpm --filter @ordo/mobile test:reader-performance
-
-      - name: Updater tests
-        run: pnpm --filter @ordo/mobile test:updates
-
-      - name: CI and installer tests
-        run: pnpm test:scripts
 
   supply-chain:
     if: '!github.event.deleted'

@@ -7,10 +7,8 @@
  */
 import type { HighlightDto } from "./types.js";
 
-// Local copies of HIGHLIGHT_MARK_ID_PREFIX / HIGHLIGHT_CONTEXT_LENGTH: the
-// node test runner loads src/*.ts directly and cannot resolve cross-file
-// value imports with .js specifiers. highlights.test.ts asserts these stay
-// in sync with constants.ts.
+// Local copies of HIGHLIGHT_MARK_ID_PREFIX / HIGHLIGHT_CONTEXT_LENGTH:
+// keep in sync with constants.ts.
 const MARK_ID_PREFIX = "ordo-hl-";
 const DEFAULT_CONTEXT = 32;
 

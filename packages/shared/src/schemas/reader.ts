@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // Value lists mirror ../reader-preferences.ts (zod-free, used by clients);
-// reader.test.ts keeps the two in sync.
+// keep the two in sync.
 // Reader families are reading typefaces. "mono" is no longer offered for
 // long-form articles; stored preferences normalize it to Sans.
 export const ReaderFontFamilySchema = z.preprocess(
