@@ -215,6 +215,70 @@ keyboard date/hour selection, month navigation, short-window scrolling, busy
 save, dismissal and reopening. Locale unit cases cover en-US, en-GB, ar-EG,
 ja-JP and leap/non-leap months. Native-device runtime remains unverified.
 
+### Remaining picker stall: idle control animation setup
+
+Follow-up baseline: `6efe90c` (the date-formatter/SVG optimization above is
+already present). Tracing both bookmark actions and the reader/notification
+reminder flows leads to the same `ReminderCustomPanel` and shared controls.
+There is no network request, intentional opening timeout, or wait for the
+outgoing menu to finish before the custom panel is made visible.
+
+The remaining avoidable work was in the controls mounted by that panel:
+
+- `AnimatedStatePressable` initialized its shared values at their resting
+  targets, then started background, press, state-layer and corner springs to
+  those **same targets** in mount effects. The hour/minute grid alone started
+  96 unnecessary springs in 12-hour mode or 144 in 24-hour mode. Compare
+  committed targets in refs instead; still animate actual presses, selection,
+  palette and shape changes, and settle live reduced-motion changes. Do not
+  read shared `.value` on the JS thread to perform the comparison.
+- Ordinary `StateLayer` instances allocated animation values, subscribed to
+  motion preferences, and mounted invisible animated views even before any
+  interaction. Mount that feedback subtree on first use, then retain it for
+  its entrance/release fades. An untouched October calendar now mounts **zero**
+  feedback subtrees instead of 31. The actual pressable, focus target and date
+  circle geometry stay in place.
+
+These changes keep the shared primitives and the existing Material motion;
+they do not prewarm a hidden picker, defer its contents, shorten the entrance,
+or move the stall to the preset menu.
+
+The opening benchmark now fixes only `Date`, rather than installing
+Playwright's clock (which also instruments timers/animation frames). Compare
+before/after exports with this same updated harness; do not compare the
+numbers directly with the older timer-instrumented results above. Set
+`ORDO_REMINDER_MAX_OPEN_MS` to enforce an explicit per-sample budget on a
+controlled runner.
+
+Same-host release-web measurements (Chromium headless shell 1243, ARM64,
+390×844, dark, en-US/12-hour Standard and en-GB/24-hour Expressive, 4× CPU
+throttle; medians of three fresh contexts, each cold + reopen):
+
+| Mode / opening | First content before → after (ms) | Largest task before → after (ms) |
+| --- | --- | --- |
+| Standard / first | 303.3 → 270.5 | 254 → 218 |
+| Standard / reopen | 268.7 → 230.7 | 229 → 197 |
+| Expressive / first | 355.3 → 286.1 | 304 → 242 |
+| Expressive / reopen | 303.4 → 249.1 | 267 → 214 |
+
+The export builds completed before measurement; no concurrent builds/tests
+from this session. This is still a shared host, not an isolated native-device
+latency guarantee. Residual mounting/rendering work remains; this is an
+11–19% reduction in the observed first-content medians, not a claim of zero
+long tasks or native 60/120 FPS. First content is detected by RAF, not the end
+of the 200ms fade. Profiles/raw samples are in
+`/home/builder/ci/ordo-reminder-freeze-oct17/artifacts/date-only-{before,after}`
+on the build host (temporary artifacts, not checked in).
+
+Validation: 598 mobile tests, 118 Material tests, mobile typecheck/lint,
+release-web and Android JS-only exports pass. The picker, shared-control hover
+and overlay-layout matrices pass (112 captures; light/dark,
+Standard/Expressive, portrait/wide, 12/24-hour cycles, keyboard, reduced motion,
+busy save and reopening). Deterministic lifecycle tests exercise web/Android/iOS
+branches; there is no connected native device for a runtime FPS claim. The
+broader animation suite's stale `Save` selector was updated to the existing
+`Save bookmark` accessible label (also present on the baseline).
+
 ## What changed
 
 ### Launch

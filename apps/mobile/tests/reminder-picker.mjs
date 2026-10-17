@@ -28,6 +28,7 @@ export async function reminderPickerMatrix({ browser, fixture, login, button, se
       assert.equal(measurement.hourButtons, expressive ? 24 : 12);
       assert.equal(measurement.minuteButtons, 12);
       assert.equal(measurement.textboxes, 0, "Opening a reminder must not require typing");
+      assert.equal(await dates.getByTestId("material-state-layer").count(), 0, "Untouched dates must not mount invisible feedback views");
       const panel = await dialog.boundingBox();
       for (const target of await dates.getByRole("radio").all()) {
         const rect = await target.boundingBox();
@@ -40,6 +41,7 @@ export async function reminderPickerMatrix({ browser, fixture, login, button, se
       // Exercise the transition that used to reveal a square native background:
       // an ordinary (flattened) date becomes selected, unlike today's bordered view.
       await today.click();
+      assert.equal(await today.getByTestId("material-state-layer").count(), 1, "A date mounts feedback on first interaction");
       await assertDateCircle(today, true, false);
       assert.equal(await dates.locator("svg").count(), 1, "Ordinary dates must not mount invisible SVG trees");
       for (let attempt = 0; attempt < 2; attempt++) {

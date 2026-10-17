@@ -9,10 +9,10 @@ import { alphaTint, stateLayerCorners } from "../../theme/state-layer";
  * Use a fixed JS driver when the view also has JS-driven animated styles:
  * making any part of its Animated graph native promotes the other values too.
  */
-export function useStateVisibility(active: boolean, useNativeDriver = Platform.OS !== "web") {
+export function useStateVisibility(active: boolean, useNativeDriver = Platform.OS !== "web", initialActive = active) {
   const { reducedMotion } = useMaterialMotion();
-  const opacity = useRef(new Animated.Value(active ? 1 : 0)).current;
-  const previous = useRef({ active, reducedMotion });
+  const opacity = useRef(new Animated.Value(initialActive ? 1 : 0)).current;
+  const previous = useRef({ active: initialActive, reducedMotion });
   useEffect(() => {
     if (previous.current.active === active && previous.current.reducedMotion === reducedMotion) return;
     previous.current = { active, reducedMotion };
@@ -25,10 +25,23 @@ export function useStateVisibility(active: boolean, useNativeDriver = Platform.O
   return opacity;
 }
 
-export function StateLayer({ color, fraction, surfaceStyle, inset = 0, testID = "material-state-layer" }: {
+type StateLayerProps = {
   color: string; fraction: number; surfaceStyle?: StyleProp<ViewStyle>; inset?: number; testID?: string;
-}) {
-  const opacity = useStateVisibility(fraction > 0);
+};
+
+export function StateLayer(props: StateLayerProps) {
+  // An untouched action has no ink to paint. Avoid allocating animation values,
+  // motion subscriptions and an invisible view for every date in a picker.
+  // Retain after the first interaction so release still gets its full fade.
+  const activated = useRef(props.fraction > 0);
+  if (props.fraction > 0) activated.current = true;
+  return activated.current ? <ActiveStateLayer {...props} /> : null;
+}
+
+function ActiveStateLayer({ color, fraction, surfaceStyle, inset = 0, testID = "material-state-layer" }: StateLayerProps) {
+  // Start the first on-demand layer transparent, retaining the same entrance
+  // spring as an already-mounted layer (or settling immediately if reduced).
+  const opacity = useStateVisibility(fraction > 0, Platform.OS !== "web", false);
   // Keep ink through exit. Clearing its alpha on release used to make the
   // fade animate an already-invisible layer (a one-frame feedback blink).
   const ink = useRef(fraction);

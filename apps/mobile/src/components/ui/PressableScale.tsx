@@ -120,12 +120,15 @@ function AnimatedStatePressable({
   const flat = StyleSheet.flatten(visualStyle ?? style as StyleProp<ViewStyle>);
   const background = useSharedValue(typeof flat?.backgroundColor === "string" ? flat.backgroundColor : "transparent");
   const backgroundColor = flat?.backgroundColor;
+  const previousBackground = useRef({ color: backgroundColor, reducedMotion: motion.reducedMotion });
   const focusLayer = focused && (!focusOnlyVisible || Platform.OS !== "web" || focusVisible);
   const fraction = stateLayerOpacity({ disabled, pressed: down, focused: focusLayer, hovered });
   const ink = useRef(fraction);
   if (fraction > 0) ink.current = fraction;
   useEffect(() => {
     if (typeof backgroundColor !== "string") return;
+    if (previousBackground.current.color === backgroundColor && previousBackground.current.reducedMotion === motion.reducedMotion) return;
+    previousBackground.current = { color: backgroundColor, reducedMotion: motion.reducedMotion };
     background.value = motion.reducedMotion ? backgroundColor : withSpring(backgroundColor, materialMotion.effects.fast);
   }, [background, backgroundColor, motion.reducedMotion]);
   const backgroundStyle = useAnimatedStyle(() => typeof backgroundColor === "string" ? { backgroundColor: background.value } : {});
@@ -134,15 +137,30 @@ function AnimatedStatePressable({
   const pressedShape = cornerValues(shape?.pressed ?? restCorner);
   const corners = useSharedValue(restShape);
   const cornerKey = [...restShape, ...pressedShape].join(":");
+  // Shared values already contain the resting paint. Starting four springs per
+  // untouched control on mount stalls dense pickers before their first frame.
+  // Compare targets, not .value (a synchronous UI-thread read on native).
+  const previousFeedback = useRef({ pressed: false, active: false, reducedMotion: motion.reducedMotion });
+  const previousCorners = useRef({ target: restShape.join(":"), reducedMotion: motion.reducedMotion });
 
   useEffect(() => {
     const pressed = down && !disabled;
-    progress.value = motion.reducedMotion ? (pressed ? 1 : 0) : withSpring(pressed ? 1 : 0, motion.fast);
-    layer.value = motion.reducedMotion ? (fraction > 0 ? 1 : 0) : withSpring(fraction > 0 ? 1 : 0, materialMotion.effects.fast);
+    const active = fraction > 0;
+    const previous = previousFeedback.current;
+    if (previous.pressed !== pressed || previous.reducedMotion !== motion.reducedMotion) {
+      progress.value = motion.reducedMotion ? Number(pressed) : withSpring(Number(pressed), motion.fast);
+    }
+    if (previous.active !== active || previous.reducedMotion !== motion.reducedMotion) {
+      layer.value = motion.reducedMotion ? Number(active) : withSpring(Number(active), materialMotion.effects.fast);
+    }
+    previousFeedback.current = { pressed, active, reducedMotion: motion.reducedMotion };
   }, [down, hovered, focused, focusVisible, focusOnlyVisible, disabled, progress, layer, motion.fast, motion.reducedMotion, fraction]);
   useEffect(() => {
     const values = cornerKey.split(":").map(Number);
     const target = down && !disabled ? values.slice(4) : values.slice(0, 4);
+    const key = target.join(":");
+    if (previousCorners.current.target === key && previousCorners.current.reducedMotion === motion.reducedMotion) return;
+    previousCorners.current = { target: key, reducedMotion: motion.reducedMotion };
     corners.value = motion.reducedMotion ? target : withSpring(target, motion.fast);
   }, [cornerKey, corners, down, disabled, motion.fast, motion.reducedMotion]);
   const cornerStyle = useAnimatedStyle(() => ({
