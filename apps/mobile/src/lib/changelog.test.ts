@@ -20,6 +20,7 @@ const {
   changelogFromGithubPayload,
   changelogHref,
   changelogMark,
+  changelogVisible,
   changelogBuildKey,
   unseenChangelogRelease,
   isChangelogReleaseList,
@@ -299,6 +300,17 @@ test("marks the installed build, then an offered update, then Preview", () => {
   assert.equal(changelogMark(preview, "0.2.0-preview.1", null), "installed");
   assert.equal(changelogMark(next, "—", null), null);
   assert.equal(changelogMark(stable, "0.1.0", "0.1.0"), "installed");
+});
+
+test("preview readers list stable history; stable readers stay on their line", () => {
+  const stable = { version: "0.3.0", prerelease: false, publishedAt: "2026-10-01T00:00:00Z" };
+  const preview = { version: "0.3.0-preview.2", prerelease: true, publishedAt: "2026-09-30T00:00:00Z" };
+  assert.equal(changelogVisible(stable, "preview"), true);
+  assert.equal(changelogVisible(preview, "preview"), true);
+  assert.equal(changelogVisible(stable, "development"), true);
+  assert.equal(changelogVisible(preview, "development"), true);
+  assert.equal(changelogVisible(stable, "stable"), true);
+  assert.equal(changelogVisible(preview, "stable"), false);
 });
 
 test("cache rows need the fields the screen renders", () => {

@@ -9,6 +9,8 @@ import {
   compareVersions,
   isNewerVersion,
   parseVersion,
+  releaseMatchesVariant,
+  type AppVariant,
   type VersionedRelease,
 } from "./app-version";
 
@@ -46,6 +48,16 @@ export type ChangelogBlock =
   | { type: "table"; align: ChangelogAlign[]; header: ChangelogInline[][]; rows: ChangelogInline[][][] };
 
 export type ChangelogMark = "installed" | "available" | "early";
+
+/**
+ * Which published releases a changelog reader lists. Stable reads its own
+ * line only; Preview also reads the stable history; Development reads all.
+ * Update offers keep the stricter releaseMatchesVariant filter.
+ */
+export function changelogVisible(release: VersionedRelease, variant: AppVariant): boolean {
+  if (variant === "stable") return releaseMatchesVariant(release, "stable");
+  return true;
+}
 
 /** Bundle commit, not the downloaded/pending update or the APK's old version. */
 export function changelogBuildKey(version: string, gitHash: string | null): string | null {
