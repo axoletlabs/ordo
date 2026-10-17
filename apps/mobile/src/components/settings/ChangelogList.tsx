@@ -204,8 +204,12 @@ function InlineChildren({
   ));
 }
 
-function InlineRun({ inlines, variant }: { inlines: ChangelogInline[]; variant: InlineVariant }) {
-  const tone: TextColor = variant === "callout" ? "secondary" : "primary";
+function InlineRun({ inlines, variant, color }: {
+  inlines: ChangelogInline[];
+  variant: InlineVariant;
+  color?: TextColor;
+}) {
+  const tone: TextColor = color ?? (variant === "callout" ? "secondary" : "primary");
   return (
     <Text variant={variant} color={tone} selectable accessibilityRole={variant === "title3" || variant === "headline" ? "header" : undefined}>
       <InlineChildren inlines={inlines} variant={variant} tone={tone} />
@@ -393,7 +397,7 @@ function BlockView({
   const { palette } = useTheme();
   if (block.type === "heading") {
     const variant = block.level <= 2 ? "title3" : "headline";
-    return <InlineRun inlines={block.inlines} variant={variant} />;
+    return <InlineRun inlines={block.inlines} variant={variant} color="accent" />;
   }
   if (block.type === "list") return <NoteList items={block.items} nested={nested} />;
   if (block.type === "quote") {
@@ -530,13 +534,13 @@ function ChangelogSheetBody({
   return (
     <FloatingPanel visible={visible} onDismiss={onDismiss} onShow={onShow} maxWidth={640}
       presentation="bottom-sheet" scrollResetKey={selected?.tagName}>
-      <PanelHeader title="What's new" titleVariant={expressive ? "headlineMedium" : "headlineSmall"} align="left"
+      <PanelHeader title="What's new" titleVariant={expressive ? "headlineSmall" : "titleLarge"} titleColor="accent" align="left"
         accessory={selected ? <Text variant="bodyMedium" color="secondary">{`v${selected.version}`}</Text> : undefined} />
       {body}
       <PanelActions confirmLabel="Got it" onConfirm={onDismiss} fullWidth={!compactActions} inline={compactActions}>
         {releases && releases.length > 1 && selected ? (
           <View style={[styles.versions, compactActions ? { marginTop: 0 } : null]}>
-            {!compactActions ? <Text variant="label" color="secondary">Earlier updates</Text> : null}
+            {!compactActions ? <Text variant="label" color="accent">Earlier updates</Text> : null}
             <ScrollView
               horizontal
               accessibilityLabel="Release history"

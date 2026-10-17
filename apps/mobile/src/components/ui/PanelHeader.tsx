@@ -5,7 +5,7 @@
 import React from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { MaterialIcon as Ionicons } from "./MaterialIcon";
-import { Text, type TextVariant } from "./Text";
+import { Text, type TextColor, type TextVariant } from "./Text";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { spacing } from "../../theme/tokens";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -20,7 +20,8 @@ export function PanelHeader({
   icon,
   iconColor,
   iconBackground,
-   titleVariant = "headlineSmall",
+  titleVariant = "headlineSmall",
+  titleColor = "primary",
   subtitleVariant = "bodyMedium",
   numberOfLines = 3,
   accessory,
@@ -34,6 +35,7 @@ export function PanelHeader({
   iconColor?: string;
   iconBackground?: string;
   titleVariant?: TextVariant;
+  titleColor?: TextColor;
   subtitleVariant?: TextVariant;
   numberOfLines?: number;
   accessory?: React.ReactNode;
@@ -69,6 +71,7 @@ export function PanelHeader({
       <View style={[styles.copy, align === "left" ? { alignItems: "flex-start" } : null]}>
         <Text
           variant={titleVariant}
+          color={titleColor}
           nativeID={titleId}
           accessibilityRole="header"
           align={align ?? (icon ? "center" : "left")}
