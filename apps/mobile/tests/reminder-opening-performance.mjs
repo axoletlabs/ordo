@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 /** Release-web proxy for shared JS work, not native frame-rate measurement.
  * ORDO_UI_REMINDER_PERF_ONLY=1 [ORDO_REMINDER_PROFILE=1] node tests/material-ui-smoke.mjs
  * Run without a concurrent build; compare the same Chromium binary/host.
+ * ORDO_REMINDER_MAX_OPEN_MS optionally enforces a controlled-runner budget.
  */
 export async function reminderOpeningPerformance({ browser, fixture, login, settle, results, output }) {
   const { writeFile } = await import("node:fs/promises");
@@ -12,13 +13,21 @@ export async function reminderOpeningPerformance({ browser, fixture, login, sett
       locale: expressive ? "en-GB" : "en-US" });
     await context.addInitScript(({ expressive }) => {
       localStorage.setItem("ordo.settings", JSON.stringify({ themeMode: "dark", expressive, materialYouColors: false }));
+      // Fix Date only. Playwright's clock also instruments every timer/RAF,
+      // distorting profiles of a dialog with many animated controls.
+      const NativeDate = Date;
+      const fixed = new NativeDate("2026-10-15T12:00:00").getTime();
+      window.Date = new Proxy(NativeDate, {
+        apply: () => new NativeDate(fixed).toString(),
+        construct: (target, args) => Reflect.construct(target, args.length ? args : [fixed]),
+        get: (target, key) => key === "now" ? () => fixed : Reflect.get(target, key),
+      });
       const original = Date.prototype.toLocaleDateString;
       window.reminderDateFormats = 0;
       Date.prototype.toLocaleDateString = function (...args) { window.reminderDateFormats++; return original.apply(this, args); };
     }, { expressive });
     try {
         const page = await context.newPage();
-        await page.clock.setFixedTime(new Date("2026-10-15T12:00:00"));
         await fixture(page); await login(page); await settle(page);
         const cdp = await context.newCDPSession(page);
         await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
@@ -67,6 +76,8 @@ export async function reminderOpeningPerformance({ browser, fixture, login, sett
           const metricEnd = Object.fromEntries((await cdp.send("Performance.getMetrics")).metrics.map(({ name, value }) => [name, value]));
           if (profile) await writeFile(`${output}/reminder-profile-${expressive}.json`, JSON.stringify((await cdp.send("Profiler.stop")).profile));
           assert.ok(measured.firstContentMs > 0);
+          if (process.env.ORDO_REMINDER_MAX_OPEN_MS) assert.ok(measured.firstContentMs < Number(process.env.ORDO_REMINDER_MAX_OPEN_MS),
+            `Custom reminder took ${measured.firstContentMs}ms to show content`);
           assert.equal(await dialog.getByRole("radiogroup", { name: "Reminder hour", exact: true }).getByRole("radio").count(), expressive ? 24 : 12);
           results.reminderOpening.push({ expressive, opening, run, ...measured,
             scriptMs: (metricEnd.ScriptDuration - metricStart.ScriptDuration) * 1000,

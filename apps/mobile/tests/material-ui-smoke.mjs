@@ -578,13 +578,14 @@ async function overlayLayoutMatrix() {
         const layer = node.querySelector('[data-testid="material-state-layer"]'), style = getComputedStyle(node);
         return { height: rect.height, left: rect.left, textInset: text.left - rect.left, textFlexGrow: +getComputedStyle(node.firstElementChild).flexGrow,
           centerOffset: Math.abs((text.top + text.height / 2) - (rect.top + rect.height / 2)), radius: parseFloat(style.borderTopLeftRadius),
-          layerMatches: layer && Math.abs(layer.getBoundingClientRect().width - rect.width) < 1 };
+          layerMatches: !layer || Math.abs(layer.getBoundingClientRect().width - rect.width) < 1 };
       }));
       check(headingMeasurements.every(row => row.height >= 48 && row.centerOffset < 1 && row.textFlexGrow === 0 && row.layerMatches), `${mode}: contents rows must center non-stretching text within bounded 48px targets`);
       check(headingMeasurements[0].textInset === 16 && headingMeasurements[1].textInset === 16 && headingMeasurements[2].textInset === 32 && headingMeasurements[3].textInset === 32,
         `${mode}: heading hierarchy uses relative 16px indents`);
       check(headingMeasurements[0].radius > 0, `${mode}: contents hover must have a Material shape`);
       const before = await targets.first().boundingBox(); await targets.first().hover(); await settle(page);
+      assert.equal(await targets.first().getByTestId("material-state-layer").count(), 1, "Hover mounts bounded feedback on demand");
       const hovered = await targets.first().boundingBox();
       check(["x", "y", "width", "height"].every(key => Math.abs(before[key] - hovered[key]) < 0.5), `${mode}: hover must not shift contents`);
       await auditStateLayers(page, mode); await capture(page, `${mode}-contents-hover`);
