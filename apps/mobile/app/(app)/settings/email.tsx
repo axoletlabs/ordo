@@ -24,7 +24,7 @@ import { useRequestEmailChange } from "../../../src/hooks/use-auth-actions";
 import { useAuthStore } from "../../../src/store/auth";
 import { useServerInfo } from "../../../src/hooks/queries";
 import { errorMessage, isMfaRequiredError } from "../../../src/lib/error-message";
-import { otpRequestFooter, otpSentToast } from "../../../src/lib/otp-copy";
+import { otpSentToast } from "../../../src/lib/otp-copy";
 import { haptics } from "../../../src/lib/haptics";
 import { toast } from "../../../src/components/ui/toast-store";
 import { ChangeEmailSchema } from "@ordo/shared/schemas";
@@ -110,7 +110,7 @@ function ChangeEmailForm() {
         style={{ flex: 1 }}
       >
         <SettingsScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-          <SettingsGroup compact footer={otpRequestFooter(smtpConfigured, "email-change")}>
+          <SettingsGroup compact>
             <SettingsForm key={mfaOpen ? "mfa-locked" : "editable"}>
               <OtpDeliveryHint smtpConfigured={smtpConfigured} compact />
               <Input

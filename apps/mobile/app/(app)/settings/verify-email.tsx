@@ -20,7 +20,7 @@ import { OtpInput, holdOtpSuccess, type OtpStatus } from "../../../src/component
 import { useResendEmailChange, useVerifyEmailChange } from "../../../src/hooks/use-auth-actions";
 import { useServerInfo } from "../../../src/hooks/queries";
 import { errorMessage } from "../../../src/lib/error-message";
-import { otpEnterHelper, otpSentToast } from "../../../src/lib/otp-copy";
+import { otpSentToast } from "../../../src/lib/otp-copy";
 import { haptics } from "../../../src/lib/haptics";
 import { toast } from "../../../src/components/ui/toast-store";
 import { OtpDeliveryHint } from "../../../src/components/auth/OtpDeliveryHint";
@@ -101,7 +101,7 @@ function VerifyEmailChangeForm({ email }: { email: string }) {
         style={{ flex: 1 }}
       >
         <SettingsScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
-          <SettingsGroup compact footer={otpEnterHelper(smtpConfigured, email || undefined)}>
+          <SettingsGroup compact>
             <SettingsForm>
               <OtpDeliveryHint smtpConfigured={smtpConfigured} compact />
               <OtpInput

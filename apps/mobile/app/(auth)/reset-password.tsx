@@ -19,7 +19,7 @@ import { OtpInput, holdOtpSuccess, type OtpStatus } from "../../src/components/u
 import { useForgotPassword, useResetPassword } from "../../src/hooks/use-auth-actions";
 import { useServerInfo } from "../../src/hooks/queries";
 import { errorMessage } from "../../src/lib/error-message";
-import { otpEnterHelper, otpSentToast } from "../../src/lib/otp-copy";
+import { otpSentToast } from "../../src/lib/otp-copy";
 import { passwordAutofillProps } from "../../src/lib/password-autofill";
 import { haptics } from "../../src/lib/haptics";
 import { spacing } from "../../src/theme/tokens";
@@ -123,7 +123,6 @@ export default function ResetPasswordScreen() {
   return (
     <AuthShell
       title={stage === "code" ? "Enter your reset code" : "Choose a new password"}
-      subtitle={stage === "code" ? otpEnterHelper(smtpConfigured, email || undefined) : undefined}
       footer={
         <View style={styles.row}>
           <AuthLink href="/(auth)/login" label="Back to sign in" replace />

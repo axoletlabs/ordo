@@ -653,7 +653,6 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             iconColor={palette.danger}
             iconBackground={palette.dangerSoft}
             title="Remove lock?"
-            subtitle="Enter your account password."
           />
           <Input
             label="Account password"

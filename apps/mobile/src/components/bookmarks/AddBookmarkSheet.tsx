@@ -235,7 +235,7 @@ export function AddBookmarkSheet({
           />
         ) : (
           <>
-            <PanelHeader title="Save bookmark" subtitle="Add a link to your library." onClose={!shareIntake && !create.isPending ? close : undefined} />
+            <PanelHeader title="Save bookmark" onClose={!shareIntake && !create.isPending ? close : undefined} />
             <View style={styles.body}>
             {showUrlPreview ? (
               <PressableScale
@@ -269,7 +269,6 @@ export function AddBookmarkSheet({
                 value={url}
                 onChangeText={(next) => { setUrl(next); if (error) setError(""); }}
                 placeholder="Paste a link"
-                helper="Paste a URL or use the clipboard button."
                 keyboardType="url"
                 autoCapitalize="none"
                 autoCorrect={false}

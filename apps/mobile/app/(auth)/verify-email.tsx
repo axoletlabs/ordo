@@ -16,7 +16,7 @@ import { OtpInput, holdOtpSuccess, type OtpStatus } from "../../src/components/u
 import { useVerifyEmail, useResendVerification } from "../../src/hooks/use-auth-actions";
 import { useServerInfo } from "../../src/hooks/queries";
 import { errorMessage } from "../../src/lib/error-message";
-import { otpEnterHelper, otpSentToast, otpVerifySubtitle } from "../../src/lib/otp-copy";
+import { otpSentToast } from "../../src/lib/otp-copy";
 import { haptics } from "../../src/lib/haptics";
 import { spacing } from "../../src/theme/tokens";
 import { toast } from "../../src/components/ui/toast-store";
@@ -103,14 +103,7 @@ export default function VerifyEmailScreen() {
   };
 
   return (
-    <AuthShell
-      title="Verify your email"
-      subtitle={
-        email.trim()
-          ? otpEnterHelper(smtpConfigured, email.trim())
-          : otpVerifySubtitle(smtpConfigured)
-      }
-    >
+    <AuthShell title="Verify your email">
       <OtpDeliveryHint smtpConfigured={smtpConfigured} />
       <Input
         label="Email"

@@ -15,7 +15,7 @@ import { Text } from "../../src/components/ui/Text";
 import { useForgotPassword } from "../../src/hooks/use-auth-actions";
 import { useServerInfo } from "../../src/hooks/queries";
 import { errorMessage } from "../../src/lib/error-message";
-import { otpRequestFooter, otpSentToast } from "../../src/lib/otp-copy";
+import { otpSentToast } from "../../src/lib/otp-copy";
 import { haptics } from "../../src/lib/haptics";
 import { spacing } from "../../src/theme/tokens";
 import { toast } from "../../src/components/ui/toast-store";
@@ -50,7 +50,6 @@ export default function ForgotPasswordScreen() {
   return (
     <AuthShell
       title="Reset your password"
-      subtitle={otpRequestFooter(smtpConfigured, "reset")}
       footer={
         <View style={styles.row}>
           <Text variant="footnote" color="secondary">Remembered it? </Text>

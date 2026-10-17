@@ -66,7 +66,7 @@ export function CreateFolderPanel({
         <View style={styles.body}>
           <Input
             label="Name"
-            required maxLength={100} showCounter
+            required showRequiredIndicator={false} maxLength={100} showCounter
             value={name}
             onChangeText={setName}
             placeholder="e.g. Recipes"

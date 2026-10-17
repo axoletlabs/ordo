@@ -102,7 +102,6 @@ export default function LoginMfaScreen() {
 
   return (
     <AuthShell title={mode === "backup" ? "Use a backup code" : mode === "email" ? "Check your email" : "Check your authenticator"}
-      subtitle={mode === "backup" ? "Enter one of the backup codes you saved when setting up your authenticator." : mode === "email" ? "Enter the sign-in code sent to your email." : "Enter the code shown in your authenticator app."}
       footer={<Button label="Back to sign in" variant="ghost" block onPress={backToSignIn} disabled={busy} />}>
       {mode === "totp" ? (
         <>
