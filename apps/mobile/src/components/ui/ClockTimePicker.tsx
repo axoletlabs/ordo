@@ -11,6 +11,8 @@ import { Text } from "./Text";
 
 const PERIODS = [{ value: "am", label: "AM" }, { value: "pm", label: "PM" }] as const;
 const INDEXES = Array.from({ length: 12 }, (_, index) => index);
+/** Rendered dial size. Geometry stays in CLOCK_SIZE units; the SVG viewBox scales. */
+const DIAL_DISPLAY_SIZE = 224;
 
 /** One gesture/adjustable surface paints the dial; numerals have no hooks or animations. */
 export function ClockTimePicker({ hour, minute, hour12, disabled = false, onChange }: {
@@ -133,13 +135,15 @@ export function ClockTimePicker({ hour, minute, hour12, disabled = false, onChan
         {field === "minute" && minute % 5 !== 0 ? <Circle cx={hand.x} cy={hand.y} r={3} fill={palette.onPrimary} /> : null}
       </Svg>
     </View>
-    <Text variant="bodySmall" color="secondary" align="center" accessibilityLiveRegion="polite">{field === "hour" ? "Choose an hour" : "Choose minutes"}</Text>
+    <Text accessibilityLiveRegion="polite" style={styles.fieldLive}>{field === "hour" ? "Hour" : "Minutes"}</Text>
   </View>;
 }
 
 const styles = StyleSheet.create({
-  root: { gap: spacing[16] },
+  root: { gap: spacing[12] },
   readout: { flexDirection: "row", justifyContent: "center", alignItems: "center", gap: spacing[8] },
-  value: { minWidth: 88, minHeight: 72, alignItems: "center", justifyContent: "center", borderRadius: radius.sm },
-  clock: { width: "100%", maxWidth: CLOCK_SIZE, aspectRatio: 1, alignSelf: "center", borderRadius: CLOCK_CENTER },
+  value: { minWidth: 84, minHeight: 64, alignItems: "center", justifyContent: "center", borderRadius: radius.sm },
+  clock: { width: "100%", maxWidth: DIAL_DISPLAY_SIZE, aspectRatio: 1, alignSelf: "center", borderRadius: CLOCK_CENTER },
+  // Announces field switches without spending a visible caption row.
+  fieldLive: { position: "absolute", width: 1, height: 1, opacity: 0, overflow: "hidden" },
 });

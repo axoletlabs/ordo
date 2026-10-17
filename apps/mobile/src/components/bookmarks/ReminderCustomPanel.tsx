@@ -56,12 +56,12 @@ function ReminderCustomPanelContent({ visible, initialUnix, onDismiss, onExited,
           onChange={(hour, minute) => setDraft((state) => ({ ...state, at: applyLocalTime(state.at, hour, minute) }))} /></View>}
       {!future ? <Text variant="footnote" color="danger" align="center" accessibilityLiveRegion="polite" style={styles.rail}>Pick a time in the future.</Text> : null}
     </View>
-    <PanelActions confirmLabel="Remind" onConfirm={() => onConfirm(at)} onCancel={onDismiss} loading={busy} confirmDisabled={!future || busy} />
+    <PanelActions confirmLabel="Remind" onConfirm={() => onConfirm(at)} onCancel={onDismiss} loading={busy} confirmDisabled={!future || busy} topSpacing={16} />
   </FloatingPanel>;
 }
 
 const styles = StyleSheet.create({
   panel: { paddingHorizontal: spacing[8] },
   rail: { marginHorizontal: spacing[16] },
-  body: { gap: spacing[16] },
+  body: { gap: spacing[12] },
 });
