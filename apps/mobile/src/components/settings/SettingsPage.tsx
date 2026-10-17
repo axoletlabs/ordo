@@ -11,6 +11,7 @@ import { Header } from "../ui/Header";
 import { ThemedScrollView, type ThemedScrollViewProps } from "../ui/ThemedScrollView";
 import { useScrollBarInsets } from "../ui/ScrollBar";
 import { Text } from "../ui/Text";
+import { AutofillForm } from "../ui/AutofillForm";
 import { SettingRow, type SettingRowProps } from "../ui/SettingRow";
 import { useTheme } from "../../theme/ThemeProvider";
 import { layout, spacing } from "../../theme/tokens";
@@ -116,7 +117,7 @@ export function SettingsForm({
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
 }) {
-  return <View style={[styles.formColumn, style]}>{children}</View>;
+  return <AutofillForm><View style={[styles.formColumn, style]}>{children}</View></AutofillForm>;
 }
 
 export function SettingsSectionLabel({

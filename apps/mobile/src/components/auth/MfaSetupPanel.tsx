@@ -115,6 +115,7 @@ export function MfaSetupPanel({
         status={confirming ? "loading" : error ? "error" : "idle"}
         error={error || undefined}
         label="Authenticator code"
+        editable={!qrExpanded}
       />
       <FloatingPanel visible={qrExpanded} onDismiss={() => setQrExpanded(false)} maxWidth={384}>
         <PanelHeader title="Authenticator QR code" />

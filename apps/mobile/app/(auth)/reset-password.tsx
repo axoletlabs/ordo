@@ -20,7 +20,8 @@ import { useForgotPassword, useResetPassword } from "../../src/hooks/use-auth-ac
 import { useServerInfo } from "../../src/hooks/queries";
 import { errorMessage } from "../../src/lib/error-message";
 import { otpSentToast } from "../../src/lib/otp-copy";
-import { passwordAutofillProps } from "../../src/lib/password-autofill";
+import { lockedSecretDisplay, passwordAutofillProps, usernameAutofillProps } from "../../src/lib/password-autofill";
+import { useCredentialLock } from "../../src/hooks/use-credential-lock";
 import { haptics } from "../../src/lib/haptics";
 import { spacing } from "../../src/theme/tokens";
 import { toast } from "../../src/components/ui/toast-store";
@@ -45,6 +46,9 @@ export default function ResetPasswordScreen() {
   const [otpError, setOtpError] = useState("");
   const [otpStatus, setOtpStatus] = useState<OtpStatus>("idle");
   const inFlight = useRef(false);
+  const credentialsLocked = useCredentialLock();
+  const passwordField = lockedSecretDisplay(newPassword, credentialsLocked, showPwd);
+  const confirmField = lockedSecretDisplay(confirm, credentialsLocked, showPwd);
 
   const goToPassword = (code: string) => {
     setToken(code);
@@ -165,6 +169,7 @@ export default function ResetPasswordScreen() {
       ) : (
         <>
           <Input
+            nativeID="reset-username"
             label="Email"
             value={email}
             readOnly
@@ -172,19 +177,19 @@ export default function ResetPasswordScreen() {
             showSoftInputOnFocus={false}
             caretHidden
             keyboardType="email-address"
-            textContentType="emailAddress"
-            autoComplete="email"
-            importantForAutofill="yes"
+            {...usernameAutofillProps(credentialsLocked)}
           />
           <View style={{ height: spacing[16] }} />
           <Input
+            key={credentialsLocked ? "password-locked" : "password"}
+            nativeID="reset-password"
             label="New password"
             required maxLength={256}
-            value={newPassword}
+            value={passwordField.value}
             onChangeText={setNewPassword}
             placeholder="At least 8 characters"
-            secureTextEntry={!showPwd}
-            {...passwordAutofillProps("new-password")}
+            secureTextEntry={passwordField.secureTextEntry}
+            {...passwordAutofillProps("new-password", credentialsLocked)}
             passwordRules="minlength: 8;"
             rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
             error={fieldError?.field === "newPassword" ? fieldError.message : undefined}
@@ -194,14 +199,16 @@ export default function ResetPasswordScreen() {
           />
           <View style={{ height: spacing[16] }} />
           <Input
+            key={credentialsLocked ? "confirm-locked" : "confirm"}
+            nativeID="reset-password-confirm"
             ref={confirmRef}
             label="Confirm new password"
             required maxLength={256}
-            value={confirm}
+            value={confirmField.value}
             onChangeText={setConfirm}
             placeholder="Re-enter your new password"
-            secureTextEntry={!showPwd}
-            {...passwordAutofillProps("new-password")}
+            secureTextEntry={confirmField.secureTextEntry}
+            {...passwordAutofillProps("new-password", credentialsLocked)}
             passwordRules="minlength: 8;"
             error={fieldError?.field === "confirm" ? fieldError.message : undefined}
             returnKeyType="done"

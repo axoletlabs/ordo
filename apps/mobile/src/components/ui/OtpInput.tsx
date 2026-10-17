@@ -35,6 +35,8 @@ import { haptics } from "../../lib/haptics";
 import { InputSurfaceContext } from "./input-surface";
 import { alphaTint } from "../../theme/state-layer";
 import { editOtp, normalizeOtp } from "../../lib/otp-edit";
+import { otpAutofillProps } from "../../lib/otp-autofill";
+import { useCredentialLock } from "../../hooks/use-credential-lock";
 
 export type OtpStatus = "idle" | "loading" | "success" | "error";
 
@@ -58,7 +60,7 @@ export interface OtpInputProps {
   onComplete?: (code: string) => void;
   autoFocus?: boolean;
   editable?: boolean;
-  /** `pin` disables SMS one-time-code autofill. */
+  /** `pin` masks digits, marks the native fields secure, and disables code autofill. */
   purpose?: "otp" | "pin";
   style?: ViewStyle;
 }
@@ -91,8 +93,10 @@ export function OtpInput({
   const [, refreshSelection] = React.useReducer((revision: number) => revision + 1, 0);
 
   const chars = normalizeOtp(value, kind, length);
-  const locked = !editable || status === "loading" || status === "success";
-  const inactive = !editable || status === "loading";
+  const routeLocked = useCredentialLock();
+  const locked = routeLocked || !editable || status === "loading" || status === "success";
+  const inactive = routeLocked || !editable || status === "loading";
+  const privateCode = purpose === "pin" || kind === "backup";
   const focusCell = (index: number) => {
     if (locked) return;
     inputRefs.current[Math.min(Math.max(index, 0), chars.length, length - 1)]?.focus();
@@ -222,7 +226,7 @@ export function OtpInput({
     <DigitBox
       key={i}
       index={i}
-      digit={chars[i] ?? ""}
+      digit={chars[i] ? privateCode ? "•" : chars[i] : ""}
       active={focusedIndex === i && !locked && !chars[i]}
       filled={Boolean(chars[i])}
       focused={focusedIndex === i && !locked}
@@ -272,9 +276,8 @@ export function OtpInput({
         autoCorrect={false}
         autoCapitalize="none"
         spellCheck={false}
-        autoComplete={purpose === "pin" || kind === "backup" ? "off" : "one-time-code"}
-        textContentType={purpose === "pin" ? "none" : kind === "numeric" ? "oneTimeCode" : "none"}
-        importantForAutofill={purpose === "pin" || kind === "backup" ? "no" : "yes"}
+        disableFullscreenUI
+        {...otpAutofillProps(purpose, kind, i === (focusedIndex ?? 0), locked)}
         keyboardType={kind === "backup" ? "default" : "number-pad"}
         inputMode={kind === "backup" ? "text" : "numeric"}
         keyboardAppearance={palette.mode === "dark" ? "dark" : "light"}
@@ -577,7 +580,8 @@ const styles = StyleSheet.create({
     left: -2,
     right: -2,
     zIndex: 2,
-    opacity: 0.02,
+    // Keep the native editing/autofill target fully visible to OS heuristics.
+    // Only its text is transparent; the accessible native value is authoritative.
     color: "transparent",
     backgroundColor: "transparent",
     padding: 0,

@@ -23,6 +23,8 @@ import { radius, spacing } from "../../src/theme/tokens";
 import { isPendingEmailVerificationResponse } from "@ordo/shared";
 import { RegisterSchema } from "@ordo/shared/schemas";
 import { readSignupDraft, saveSignupDraft } from "../../src/lib/signup-draft";
+import { lockedSecretDisplay, passwordAutofillProps, usernameAutofillProps } from "../../src/lib/password-autofill";
+import { useCredentialLock } from "../../src/hooks/use-credential-lock";
 
 function routeParam(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0] ?? "";
@@ -57,6 +59,9 @@ export default function RegisterScreen() {
   const inFlight = useRef(false);
   const skipAgeToggle = useRef(false);
   const emailRef = useRef<TextInput>(null);
+  const credentialsLocked = useCredentialLock();
+  const passwordField = lockedSecretDisplay(password, credentialsLocked, showPwd);
+  const confirmField = lockedSecretDisplay(confirm, credentialsLocked, showPwd);
   const markLegalOpen = () => {
     skipAgeToggle.current = true;
     setTimeout(() => {
@@ -152,16 +157,18 @@ export default function RegisterScreen() {
       ) : (
         <>
           <AuthInput
+            nativeID="register-name"
             label="Display name"
             maxLength={64}
             disabled={register.isPending}
             value={displayName}
             onChangeText={setDisplayName}
             placeholder="Your name"
-            textContentType="name"
-            autoComplete="name"
+            textContentType={credentialsLocked ? "none" : "name"}
+            autoComplete={credentialsLocked ? "off" : "name"}
             autoCapitalize="words"
-            importantForAutofill="yes"
+            importantForAutofill={credentialsLocked ? "no" : "yes"}
+            editable={!credentialsLocked}
             error={errorField === "displayName" ? formError : undefined}
             returnKeyType="next"
             submitBehavior="submit"
@@ -170,6 +177,7 @@ export default function RegisterScreen() {
           <View style={{ height: spacing[16] }} />
           <AuthInput
             ref={emailRef}
+            nativeID="register-username"
             label="Email"
             maxLength={254}
             disabled={register.isPending}
@@ -177,8 +185,7 @@ export default function RegisterScreen() {
             onChangeText={setEmail}
             placeholder="you@example.com"
             keyboardType="email-address"
-            textContentType="emailAddress"
-            autoComplete="email"
+            {...usernameAutofillProps(credentialsLocked)}
             autoCapitalize="none"
             autoFocus={focusEmail}
             error={errorField === "email" ? formError : undefined}
@@ -188,36 +195,38 @@ export default function RegisterScreen() {
           />
           <View style={{ height: spacing[16] }} />
           <AuthInput
+            key={credentialsLocked ? "password-locked" : "password"}
+            nativeID="register-password"
             label="Password"
             maxLength={256}
             disabled={register.isPending}
             ref={passwordRef}
-            value={password}
+            value={passwordField.value}
             onChangeText={setPassword}
             helper="At least 8 characters"
             error={errorField === "password" ? formError : undefined}
             returnKeyType="next"
             submitBehavior="submit"
             onSubmitEditing={() => confirmRef.current?.focus()}
-            secureTextEntry={!showPwd}
-            textContentType="newPassword"
-            autoComplete="new-password"
-            importantForAutofill="yes"
+            secureTextEntry={passwordField.secureTextEntry}
+            {...passwordAutofillProps("new-password", credentialsLocked)}
+            passwordRules="minlength: 8; maxlength: 256;"
             rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
           />
           <View style={{ height: spacing[16] }} />
           <AuthInput
+            key={credentialsLocked ? "confirm-locked" : "confirm"}
+            nativeID="register-password-confirm"
             label="Confirm password"
             maxLength={256}
             disabled={register.isPending}
             ref={confirmRef}
-            value={confirm}
+            value={confirmField.value}
             onChangeText={setConfirm}
             placeholder="Re-enter your password"
-            secureTextEntry={!showPwd}
-            textContentType="newPassword"
-            autoComplete="new-password"
-            importantForAutofill="yes"
+            secureTextEntry={confirmField.secureTextEntry}
+            {...passwordAutofillProps("new-password", credentialsLocked)}
+            passwordRules="minlength: 8; maxlength: 256;"
             error={errorField === "confirm" ? formError : undefined}
             returnKeyType="done"
             onSubmitEditing={() => void submit()}

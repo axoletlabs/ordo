@@ -7,6 +7,7 @@ import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { useTheme } from "../../theme/ThemeProvider";
 import { layout, spacing } from "../../theme/tokens";
 import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
+import { AutofillForm } from "../ui/AutofillForm";
 
 export interface AuthShellProps {
   title: string;
@@ -46,7 +47,7 @@ export function AuthShell({ title, subtitle, children, footer, secondaryFooter, 
               <Text variant={compact ? "headlineSmall" : expressive ? "displaySmall" : "headlineLarge"} accessibilityRole="header">{title}</Text>
               {subtitle ? <Text variant="bodyMedium" color="secondary">{subtitle}</Text> : null}
             </View>
-            <View style={{ marginTop: compact ? spacing[16] : spacing[24] }}>{children}</View>
+            <View style={{ marginTop: compact ? spacing[16] : spacing[24] }}><AutofillForm>{children}</AutofillForm></View>
             {footer ? <View style={styles.footer}>{footer}</View> : null}
             {secondaryFooter ? (
               <View style={styles.secondaryFooter}>

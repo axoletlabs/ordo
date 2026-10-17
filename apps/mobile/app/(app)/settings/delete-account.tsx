@@ -19,6 +19,8 @@ import { useDeleteAccount } from "../../../src/hooks/use-auth-actions";
 import { lockedSecretDisplay, passwordAutofillProps } from "../../../src/lib/password-autofill";
 import { errorMessage, isMfaRequiredError } from "../../../src/lib/error-message";
 import { haptics } from "../../../src/lib/haptics";
+import { useCredentialLock } from "../../../src/hooks/use-credential-lock";
+import { AccountAutofillIdentity } from "../../../src/components/auth/AccountAutofillIdentity";
 export default function DeleteAccountScreen() {
   const deleteAccount = useDeleteAccount();
   const [currentPassword, setCurrentPassword] = useState("");
@@ -26,6 +28,7 @@ export default function DeleteAccountScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [formError, setFormError] = useState("");
   const [mfaOpen, setMfaOpen] = useState(false);
+  const credentialsLocked = useCredentialLock(mfaOpen);
   const submittedRef = useRef({ currentPassword: "", confirmation: "" });
 
   const runDelete = async (mfaCode?: string) => {
@@ -73,7 +76,7 @@ export default function DeleteAccountScreen() {
   };
 
   const confirmed = confirmation === DELETE_ACCOUNT_CONFIRMATION;
-  const passwordField = lockedSecretDisplay(currentPassword, mfaOpen, showPassword);
+  const passwordField = lockedSecretDisplay(currentPassword, credentialsLocked, showPassword);
 
   return (
     <SettingsPage title="Delete account">
@@ -83,21 +86,24 @@ export default function DeleteAccountScreen() {
       >
         <SettingsScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           <SettingsGroup compact>
-            <SettingsForm key={mfaOpen ? "mfa-locked" : "editable"}>
+            <SettingsForm key={credentialsLocked ? "credentials-locked" : "editable"}>
               <Text variant="bodyMedium" color="secondary">
                 Deleting your account permanently removes your bookmarks, folders, tags, and account data. Export your library first if you want to keep it. This cannot be undone.
               </Text>
+              <AccountAutofillIdentity nativeID="delete-account-username" locked={credentialsLocked} />
               <Input
+                nativeID="delete-account-password"
                 label="Password"
                 required
                 value={passwordField.value}
                 onChangeText={setCurrentPassword}
                 placeholder="Enter your password"
                 secureTextEntry={passwordField.secureTextEntry}
-                {...passwordAutofillProps("password", mfaOpen)}
+                {...passwordAutofillProps("current-password", credentialsLocked)}
                 rightAccessory={<EyeToggle visible={showPassword} onPress={() => setShowPassword((value) => !value)} />}
               />
               <Input
+                nativeID="delete-account-confirmation"
                 label="Confirmation"
                 required
                 value={confirmation}
@@ -106,6 +112,7 @@ export default function DeleteAccountScreen() {
                 helper={`Type ${DELETE_ACCOUNT_CONFIRMATION} to confirm.`}
                 autoCapitalize="characters"
                 autoCorrect={false}
+                editable={!credentialsLocked}
                 mono
                 onSubmitEditing={submit}
               />

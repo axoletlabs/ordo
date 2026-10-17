@@ -6,6 +6,7 @@ import { TOKEN_TTL, type FolderLockType, type FolderPinLength } from "@ordo/shar
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
+import { AutofillForm } from "../ui/AutofillForm";
 import { Button } from "../ui/Button";
 import { Text } from "../ui/Text";
 import { EyeToggle } from "../ui/EyeToggle";
@@ -19,6 +20,7 @@ import { getDeviceLockCredential } from "../../lib/device-folder-lock";
 import { errorMessage } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
 import { spacing } from "../../theme/tokens";
+import { localPasswordAutofillProps } from "../../lib/password-autofill";
 
 const UNLOCK_MINUTES = Math.round(TOKEN_TTL.FOLDER_MS / 60_000);
 
@@ -185,7 +187,7 @@ export function UnlockForm({
   const title = folderName ? `Unlock ${folderName}` : "Unlock folder";
 
   return (
-    <View style={styles.form}>
+    <AutofillForm><View style={styles.form}>
       <PanelHeader title={title} subtitle={unlockSubtitle(lockType, digits)} />
       <View style={styles.body}>
       {lockType === "device" ? (
@@ -242,6 +244,7 @@ export function UnlockForm({
         </View>
       ) : (
         <Input
+          nativeID="folder-unlock-password"
           label="Password"
           required disabled={unlock.isPending}
           value={password}
@@ -251,6 +254,7 @@ export function UnlockForm({
           }}
           placeholder="Folder password"
           secureTextEntry={!showPassword}
+          {...localPasswordAutofillProps}
           autoFocus
           error={error || undefined}
           onSubmitEditing={() => void submitPassword()}
@@ -289,7 +293,7 @@ export function UnlockForm({
       <Text variant="footnote" color="tertiary" align="center" style={styles.footnote}>
         Unlocked for {UNLOCK_MINUTES} minutes on this device.
       </Text>
-    </View>
+    </View></AutofillForm>
   );
 }
 

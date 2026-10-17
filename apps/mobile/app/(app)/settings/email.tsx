@@ -30,7 +30,8 @@ import { toast } from "../../../src/components/ui/toast-store";
 import { ChangeEmailSchema } from "@ordo/shared/schemas";
 import { OtpDeliveryHint } from "../../../src/components/auth/OtpDeliveryHint";
 import { MfaStepUpPanel } from "../../../src/components/auth/MfaStepUpPanel";
-import { lockedSecretDisplay, passwordAutofillProps } from "../../../src/lib/password-autofill";
+import { lockedSecretDisplay, passwordAutofillProps, usernameAutofillProps } from "../../../src/lib/password-autofill";
+import { useCredentialLock } from "../../../src/hooks/use-credential-lock";
 
 export default function ChangeEmailScreen() {
   const email = useAuthStore((s) => s.user?.email ?? "");
@@ -50,6 +51,7 @@ function ChangeEmailForm() {
   const [formError, setFormError] = useState("");
   const [errorField, setErrorField] = useState<string | null>(null);
   const [mfaOpen, setMfaOpen] = useState(false);
+  const credentialsLocked = useCredentialLock(mfaOpen);
   const submittedRef = useRef({ currentPassword: "", newEmail: "" });
 
   const parsedBody = () =>
@@ -101,7 +103,7 @@ function ChangeEmailForm() {
     }
   };
 
-  const passwordField = lockedSecretDisplay(currentPassword, mfaOpen, showPwd);
+  const passwordField = lockedSecretDisplay(currentPassword, credentialsLocked, showPwd);
 
   return (
     <SettingsPage title="Email">
@@ -111,18 +113,18 @@ function ChangeEmailForm() {
       >
         <SettingsScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           <SettingsGroup compact>
-            <SettingsForm key={mfaOpen ? "mfa-locked" : "editable"}>
+            <SettingsForm key={credentialsLocked ? "credentials-locked" : "editable"}>
               <OtpDeliveryHint smtpConfigured={smtpConfigured} compact />
               <Input
+                nativeID="change-email-username"
                 label="Current email"
                 value={user?.email ?? ""}
                 onChangeText={() => {}}
                 readOnly
-                autoComplete="off"
-                textContentType="none"
-                importantForAutofill="no"
+                {...usernameAutofillProps(credentialsLocked)}
               />
               <Input
+                nativeID="change-email-new"
                 label="New email"
                 required maxLength={254}
                 value={newEmail}
@@ -132,17 +134,19 @@ function ChangeEmailForm() {
                 autoComplete="off"
                 textContentType="none"
                 importantForAutofill="no"
+                editable={!credentialsLocked}
                 autoCapitalize="none"
                 error={errorField === "newEmail" ? formError : undefined}
               />
               <Input
+                nativeID="change-email-password"
                 label="Current password"
                 required
                 value={passwordField.value}
                 onChangeText={setCurrentPassword}
                 placeholder="Enter your current password"
                 secureTextEntry={passwordField.secureTextEntry}
-                {...passwordAutofillProps("password", mfaOpen)}
+                {...passwordAutofillProps("current-password", credentialsLocked)}
                 error={errorField === "currentPassword" ? formError : undefined}
                 rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
               />

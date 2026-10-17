@@ -5,6 +5,7 @@ import { FloatingPanel } from "../ui/FloatingPanel";
 import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
+import { AutofillForm } from "../ui/AutofillForm";
 import { Button } from "../ui/Button";
 import { Text } from "../ui/Text";
 import { ContextMenu, ContextMenuItem, ContextMenuNote } from "../ui/ContextMenu";
@@ -42,6 +43,8 @@ import { useFolderTokenStore } from "../../store/folder-tokens";
 import { folderKey } from "../../hooks/use-selection";
 import { useMenuHighlight } from "../../hooks/use-menu-highlight";
 import { useOverlaySessionMode } from "../../lib/overlay-session-mode";
+import { localPasswordAutofillProps, passwordAutofillProps } from "../../lib/password-autofill";
+import { AccountAutofillIdentity } from "../auth/AccountAutofillIdentity";
 
 type Mode = "menu" | "rename" | "lockChoice" | "lockCredential" | "icon" | "delete" | "removePassword" | "removePasswordAccount";
 
@@ -499,14 +502,16 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
               />
             </View>
           ) : (
-            <>
+            <AutofillForm>
               <Input
                 label="Password"
+                nativeID="folder-new-password"
                 required
                 value={password}
                 onChangeText={setPassword}
                 placeholder="At least 4 characters"
                 secureTextEntry={!showPassword}
+                {...localPasswordAutofillProps}
                 autoFocus
                 error={error || undefined}
                 autoCapitalize="none"
@@ -515,16 +520,18 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
               />
               <Input
                 label="Confirm password"
+                nativeID="folder-confirm-password"
                 required
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
                 placeholder="Enter password again"
                 secureTextEntry
+                {...localPasswordAutofillProps}
                 autoCapitalize="none"
                 autoCorrect={false}
                 containerStyle={styles.confirmInput}
               />
-            </>
+            </AutofillForm>
           )}
           <View style={sheetMenuStyles.stack}>
             {lockType === "pattern" || lockType === "pin" ? (
@@ -600,20 +607,22 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
               />
             </View>
           ) : (
-            <Input
+            <AutofillForm><Input
               label="Folder password"
+              nativeID="folder-remove-password"
               required
               value={password}
               onChangeText={setPassword}
               placeholder="Folder password"
               secureTextEntry={!showPassword}
+              {...localPasswordAutofillProps}
               autoFocus
               autoCapitalize="none"
               autoCorrect={false}
               error={error || undefined}
               onSubmitEditing={() => void removeWithFolderPassword()}
               rightAccessory={<EyeToggle visible={showPassword} onPress={() => setShowPassword((value) => !value)} />}
-            />
+            /></AutofillForm>
           )}
           <PressableScale
             accessibilityRole="button"
@@ -649,8 +658,11 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             iconBackground={palette.dangerSoft}
             title="Remove lock?"
           />
+          <AutofillForm>
+          <AccountAutofillIdentity nativeID="folder-account-username" />
           <Input
             label="Account password"
+            nativeID="folder-account-password"
             required
             value={accountPassword}
             onChangeText={setAccountPassword}
@@ -661,10 +673,10 @@ export function FolderActionsSheet({ visible, onDismiss, folder, anchor, onDelet
             autoCorrect={false}
             error={error || undefined}
             onSubmitEditing={submitAccountBypass}
-            textContentType="password"
-            autoComplete="password"
+            {...passwordAutofillProps("current-password")}
             rightAccessory={<EyeToggle visible={showAccountPassword} onPress={() => setShowAccountPassword((value) => !value)} />}
           />
+          </AutofillForm>
           <PressableScale
             accessibilityRole="button"
             accessibilityLabel={(folder.lockType ?? "password") === "device" ? "Use device lock" : "Use folder password"}
