@@ -30,6 +30,7 @@ const { createLatestWriteQueue } = load("lib/latest-write-queue.ts");
 const { resolvePalette } = load("theme/theme.ts");
 const { createSnapshotPersister } = load("lib/query-persist.ts");
 const { otpGroups } = load("lib/otp-layout.ts");
+const { shouldReportScroll } = load("lib/scroll-report.ts");
 const stamp = "2026-10-01T00:00:00.000Z";
 function bookmark(id, folderId = "source") {
   return { id: String(id), folderId, title: `Item ${String(id).padStart(5, "0")}`, url: "https://example.test",
@@ -53,6 +54,55 @@ function fixture(count = 1000) {
   qc.setQueryData(qk.reminders, [{ id: "0", folderId: "source", remindAt: 123 }]);
   return { qc, items, source, destination };
 }
+test("scroll bookkeeping is sampled independently of 60/120Hz paint and handles clock resets", () => {
+  for (const fps of [60, 120]) {
+    let last, reports = 0;
+    for (let frame = 0; frame < fps; frame++) {
+      const now = frame * 1000 / fps;
+      if (shouldReportScroll(now, last)) { reports++; last = now; }
+    }
+    assert.ok(reports >= 10 && reports <= 13, `${fps}Hz must not bridge every frame: ${reports}`);
+  }
+  assert.equal(shouldReportScroll(100, 100), false);
+  assert.equal(shouldReportScroll(179, 100), false);
+  assert.equal(shouldReportScroll(180, 100), true);
+  assert.equal(shouldReportScroll(50, 100), true);
+});
+
+test("production scroll bridge keeps every UI update, composes motion and flushes exact endpoints", () => {
+  // Execute the production hook with inert hook/event adapters. This checks its
+  // actual handlers, not a second implementation; it isn't a native runtime test.
+  const source = readFileSync(resolve(__dirname, "../src/components/ui/ThemedScrollView.tsx"), "utf8");
+  const parsed = ts.createSourceFile("scroll.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const hook = parsed.statements.find((node) => ts.isFunctionDeclaration(node) && node.name?.text === "useSampledScrollBridge");
+  assert.ok(hook);
+  const { outputText } = ts.transpileModule(hook.getText(parsed), { compilerOptions: { target: ts.ScriptTarget.ES2022 } });
+  let bridges = 0;
+  const create = new Function("React", "useAnimatedScrollHandler", "useComposedEventHandler", "runOnJS", "shouldReportScroll",
+    `${outputText}\nreturn useSampledScrollBridge;`)(
+    { useCallback: (callback) => callback }, (handlers) => handlers, (handlers) => handlers,
+    (callback) => (...args) => { bridges++; callback(...args); }, shouldReportScroll);
+  const paint = [], activity = [], reports = [], motion = {};
+  const composed = create({ animatedScrollHandler: motion, updateScroll: (event) => paint.push(event),
+    onScrollActivity: (event) => activity.push(event.nativeEvent), onScroll: (event) => reports.push(event.nativeEvent) });
+  assert.equal(composed[0], motion);
+  const handler = composed[1], context = {};
+  const realNow = Date.now;
+  try {
+    for (let frame = 0; frame < 120; frame++) {
+      Date.now = () => frame * 1000 / 120;
+      handler.onScroll({ contentOffset: { y: frame } }, context);
+    }
+  } finally { Date.now = realNow; }
+  assert.equal(paint.length, 120, "scrollbar paint must never be JS-throttled");
+  assert.ok(bridges <= 13 && bridges >= 10);
+  const periodic = bridges;
+  const endDrag = { contentOffset: { y: 123 } }, endMomentum = { contentOffset: { y: 456 } };
+  handler.onEndDrag(endDrag); handler.onMomentumEnd(endMomentum);
+  assert.equal(bridges, periodic + 2, "endpoints bypass the periodic throttle");
+  assert.deepEqual(reports.slice(-2), [endDrag, endMomentum]);
+  assert.deepEqual(activity, reports);
+});
 const rows = (qc, key) => flattenPages(qc.getQueryData(key).pages);
 
 test("snapshot writes are synchronous and restored data remains visible but stale", () => {

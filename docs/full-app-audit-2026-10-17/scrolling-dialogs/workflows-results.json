@@ -1,0 +1,822 @@
+{
+  "screens": [
+    "light-false-lock-pending",
+    "light-false-lock-retry",
+    "light-false-rename-error",
+    "light-false-save-error",
+    "light-false-pin-six-narrow",
+    "light-false-pin-reduced-landscape",
+    "light-true-lock-pending",
+    "light-true-lock-retry",
+    "light-true-rename-error",
+    "light-true-save-error",
+    "light-true-pin-six-narrow",
+    "light-true-pin-reduced-landscape",
+    "dark-false-lock-pending",
+    "dark-false-lock-retry",
+    "dark-false-rename-error",
+    "dark-false-save-error",
+    "dark-false-pin-six-narrow",
+    "dark-false-pin-reduced-landscape",
+    "dark-true-lock-pending",
+    "dark-true-lock-retry",
+    "dark-true-rename-error",
+    "dark-true-save-error",
+    "dark-true-pin-six-narrow",
+    "dark-true-pin-reduced-landscape"
+  ],
+  "checks": [
+    {
+      "name": "light-false: lock input disabled while pending",
+      "pass": true
+    },
+    {
+      "name": "light-false: lock Back disabled while pending",
+      "pass": true
+    },
+    {
+      "name": "light-false: lock: Escape does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "light-false: lock: scrim does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "light-false-lock-pending: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-lock-pending: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-lock-pending: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-lock-pending: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false: only one lock request in flight",
+      "pass": true
+    },
+    {
+      "name": "light-false: rejected lock retains draft",
+      "pass": true
+    },
+    {
+      "name": "light-false: rejected lock can retry",
+      "pass": true
+    },
+    {
+      "name": "light-false-lock-retry: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-lock-retry: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-lock-retry: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-lock-retry: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false: one explicit retry succeeds",
+      "pass": true
+    },
+    {
+      "name": "light-false: rename field disabled while pending",
+      "pass": true
+    },
+    {
+      "name": "light-false: rename: Escape does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "light-false: rename: scrim does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "light-false: failed rename retains input",
+      "pass": true
+    },
+    {
+      "name": "light-false-rename-error: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-rename-error: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-rename-error: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-rename-error: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false: pending save disables link",
+      "pass": true
+    },
+    {
+      "name": "light-false: pending save disables destination picker",
+      "pass": true
+    },
+    {
+      "name": "light-false: pending save disables tag picker",
+      "pass": true
+    },
+    {
+      "name": "light-false: save: Escape does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "light-false: save: scrim does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "light-false: save error retains URL",
+      "pass": true
+    },
+    {
+      "name": "light-false-save-error: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-save-error: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-save-error: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-save-error: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-pin-six-narrow: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-pin-six-narrow: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-pin-six-narrow: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-pin-six-narrow: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false: all narrow PIN cells mounted",
+      "pass": true
+    },
+    {
+      "name": "light-false: OTP draft survives grouped layout change",
+      "pass": true
+    },
+    {
+      "name": "light-false: OTP keyboard focus survives grouped layout change",
+      "pass": true
+    },
+    {
+      "name": "light-false-pin-reduced-landscape: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-false-pin-reduced-landscape: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-false-pin-reduced-landscape: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false-pin-reduced-landscape: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-false: reduced motion dismisses dialog without retained blocker",
+      "pass": true
+    },
+    {
+      "name": "light-true: lock input disabled while pending",
+      "pass": true
+    },
+    {
+      "name": "light-true: lock Back disabled while pending",
+      "pass": true
+    },
+    {
+      "name": "light-true: lock: Escape does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "light-true: lock: scrim does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "light-true-lock-pending: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-lock-pending: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-lock-pending: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-lock-pending: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true: only one lock request in flight",
+      "pass": true
+    },
+    {
+      "name": "light-true: rejected lock retains draft",
+      "pass": true
+    },
+    {
+      "name": "light-true: rejected lock can retry",
+      "pass": true
+    },
+    {
+      "name": "light-true-lock-retry: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-lock-retry: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-lock-retry: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-lock-retry: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true: one explicit retry succeeds",
+      "pass": true
+    },
+    {
+      "name": "light-true: rename field disabled while pending",
+      "pass": true
+    },
+    {
+      "name": "light-true: rename: Escape does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "light-true: rename: scrim does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "light-true: failed rename retains input",
+      "pass": true
+    },
+    {
+      "name": "light-true-rename-error: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-rename-error: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-rename-error: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-rename-error: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true: pending save disables link",
+      "pass": true
+    },
+    {
+      "name": "light-true: pending save disables destination picker",
+      "pass": true
+    },
+    {
+      "name": "light-true: pending save disables tag picker",
+      "pass": true
+    },
+    {
+      "name": "light-true: save: Escape does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "light-true: save: scrim does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "light-true: save error retains URL",
+      "pass": true
+    },
+    {
+      "name": "light-true-save-error: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-save-error: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-save-error: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-save-error: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-pin-six-narrow: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-pin-six-narrow: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-pin-six-narrow: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-pin-six-narrow: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true: all narrow PIN cells mounted",
+      "pass": true
+    },
+    {
+      "name": "light-true: OTP draft survives grouped layout change",
+      "pass": true
+    },
+    {
+      "name": "light-true: OTP keyboard focus survives grouped layout change",
+      "pass": true
+    },
+    {
+      "name": "light-true-pin-reduced-landscape: painted content",
+      "pass": true
+    },
+    {
+      "name": "light-true-pin-reduced-landscape: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "light-true-pin-reduced-landscape: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true-pin-reduced-landscape: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "light-true: reduced motion dismisses dialog without retained blocker",
+      "pass": true
+    },
+    {
+      "name": "dark-false: lock input disabled while pending",
+      "pass": true
+    },
+    {
+      "name": "dark-false: lock Back disabled while pending",
+      "pass": true
+    },
+    {
+      "name": "dark-false: lock: Escape does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "dark-false: lock: scrim does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "dark-false-lock-pending: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-lock-pending: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-lock-pending: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-lock-pending: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false: only one lock request in flight",
+      "pass": true
+    },
+    {
+      "name": "dark-false: rejected lock retains draft",
+      "pass": true
+    },
+    {
+      "name": "dark-false: rejected lock can retry",
+      "pass": true
+    },
+    {
+      "name": "dark-false-lock-retry: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-lock-retry: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-lock-retry: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-lock-retry: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false: one explicit retry succeeds",
+      "pass": true
+    },
+    {
+      "name": "dark-false: rename field disabled while pending",
+      "pass": true
+    },
+    {
+      "name": "dark-false: rename: Escape does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "dark-false: rename: scrim does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "dark-false: failed rename retains input",
+      "pass": true
+    },
+    {
+      "name": "dark-false-rename-error: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-rename-error: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-rename-error: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-rename-error: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false: pending save disables link",
+      "pass": true
+    },
+    {
+      "name": "dark-false: pending save disables destination picker",
+      "pass": true
+    },
+    {
+      "name": "dark-false: pending save disables tag picker",
+      "pass": true
+    },
+    {
+      "name": "dark-false: save: Escape does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "dark-false: save: scrim does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "dark-false: save error retains URL",
+      "pass": true
+    },
+    {
+      "name": "dark-false-save-error: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-save-error: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-save-error: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-save-error: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-pin-six-narrow: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-pin-six-narrow: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-pin-six-narrow: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-pin-six-narrow: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false: all narrow PIN cells mounted",
+      "pass": true
+    },
+    {
+      "name": "dark-false: OTP draft survives grouped layout change",
+      "pass": true
+    },
+    {
+      "name": "dark-false: OTP keyboard focus survives grouped layout change",
+      "pass": true
+    },
+    {
+      "name": "dark-false-pin-reduced-landscape: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-false-pin-reduced-landscape: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-false-pin-reduced-landscape: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false-pin-reduced-landscape: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-false: reduced motion dismisses dialog without retained blocker",
+      "pass": true
+    },
+    {
+      "name": "dark-true: lock input disabled while pending",
+      "pass": true
+    },
+    {
+      "name": "dark-true: lock Back disabled while pending",
+      "pass": true
+    },
+    {
+      "name": "dark-true: lock: Escape does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "dark-true: lock: scrim does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "dark-true-lock-pending: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-lock-pending: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-lock-pending: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-lock-pending: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true: only one lock request in flight",
+      "pass": true
+    },
+    {
+      "name": "dark-true: rejected lock retains draft",
+      "pass": true
+    },
+    {
+      "name": "dark-true: rejected lock can retry",
+      "pass": true
+    },
+    {
+      "name": "dark-true-lock-retry: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-lock-retry: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-lock-retry: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-lock-retry: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true: one explicit retry succeeds",
+      "pass": true
+    },
+    {
+      "name": "dark-true: rename field disabled while pending",
+      "pass": true
+    },
+    {
+      "name": "dark-true: rename: Escape does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "dark-true: rename: scrim does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "dark-true: failed rename retains input",
+      "pass": true
+    },
+    {
+      "name": "dark-true-rename-error: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-rename-error: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-rename-error: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-rename-error: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true: pending save disables link",
+      "pass": true
+    },
+    {
+      "name": "dark-true: pending save disables destination picker",
+      "pass": true
+    },
+    {
+      "name": "dark-true: pending save disables tag picker",
+      "pass": true
+    },
+    {
+      "name": "dark-true: save: Escape does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "dark-true: save: scrim does not discard pending mutation",
+      "pass": true
+    },
+    {
+      "name": "dark-true: save error retains URL",
+      "pass": true
+    },
+    {
+      "name": "dark-true-save-error: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-save-error: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-save-error: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-save-error: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-pin-six-narrow: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-pin-six-narrow: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-pin-six-narrow: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-pin-six-narrow: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true: all narrow PIN cells mounted",
+      "pass": true
+    },
+    {
+      "name": "dark-true: OTP draft survives grouped layout change",
+      "pass": true
+    },
+    {
+      "name": "dark-true: OTP keyboard focus survives grouped layout change",
+      "pass": true
+    },
+    {
+      "name": "dark-true-pin-reduced-landscape: painted content",
+      "pass": true
+    },
+    {
+      "name": "dark-true-pin-reduced-landscape: no viewport overflow",
+      "pass": true
+    },
+    {
+      "name": "dark-true-pin-reduced-landscape: 48px control targets",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true-pin-reduced-landscape: complete action labels",
+      "pass": true,
+      "details": []
+    },
+    {
+      "name": "dark-true: reduced motion dismisses dialog without retained blocker",
+      "pass": true
+    },
+    {
+      "name": "no uncaught workflow errors",
+      "pass": true,
+      "details": []
+    }
+  ],
+  "issues": [],
+  "errors": [],
+  "performance": []
+}

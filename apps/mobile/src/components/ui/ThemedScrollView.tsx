@@ -33,6 +33,7 @@ import { useMaterialRefresh } from "../../hooks/use-material-refresh";
 import { RefreshHud } from "./RefreshHud";
 import { LIST_END_REACHED_THRESHOLD } from "../../lib/list-pagination";
 import { useOverlayBlocked } from "./overlay-host";
+import { shouldReportScroll } from "../../lib/scroll-report";
 
 export type ThemedScrollViewProps = ScrollViewProps & {
   scrollBarInsets?: ScrollBarInsets;
@@ -82,25 +83,10 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
   ) {
     const bar = useVerticalScrollBar(scrollBarInsets);
     const blocked = useOverlayBlocked();
-    const reportScroll = React.useCallback((event: NativeScrollEvent) => {
-      const synthetic = { nativeEvent: event } as Parameters<NonNullable<ScrollViewProps["onScroll"]>>[0];
-      bar.onScrollActivity(synthetic);
-      onScroll?.(synthetic);
-    }, [bar.onScrollActivity, onScroll]);
-    const updateScroll = bar.updateScroll;
-    const bridge = useAnimatedScrollHandler({
-      onScroll: (event, context: { lastReport?: number }) => {
-        updateScroll(event);
-        const now = Date.now();
-        if (context.lastReport != null && now - context.lastReport < 80) return;
-        context.lastReport = now;
-        runOnJS(reportScroll)(event);
-      },
-      onEndDrag: (event) => { runOnJS(reportScroll)(event); },
-      onMomentumEnd: (event) => { runOnJS(reportScroll)(event); },
-    });
-    const composed = useComposedEventHandler([animatedScrollHandler ?? null, bridge]);
-    const VerticalScrollView = animatedScrollHandler ? Animated.ScrollView : ScrollView;
+    // Plain browser scrollers don't need Reanimated event registration. Keep
+    // those hooks below a separate component, off every dialog's mount path.
+    const animated = Platform.OS !== "web" || !!animatedScrollHandler;
+    const VerticalScrollView = animated ? AnimatedVerticalScrollView : ScrollView;
     const { wrapper, inner } = splitScrollLayoutStyle(style);
     if (horizontal) {
       return (
@@ -140,7 +126,8 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
             inner,
             webNoContainingTransform,
           ]}
-          onScroll={animatedScrollHandler ? composed : chainHandlers(Platform.OS === "web" ? undefined : bar.onScroll, onScroll)}
+          {...(animated ? { animatedScrollHandler, updateScroll: bar.updateScroll, onScrollActivity: bar.onScrollActivity } : {})}
+          onScroll={onScroll}
           onContentSizeChange={chainHandlers(Platform.OS === "web" ? undefined : bar.onContentSizeChange, onContentSizeChange)}
           scrollEventThrottle={scrollEventThrottle ?? 16}
         />
@@ -149,6 +136,52 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
     );
   },
 );
+
+type ScrollBridgeProps = {
+  animatedScrollHandler?: ScrollHandlerProcessed<Record<string, unknown>>;
+  updateScroll?: (event: NativeScrollEvent) => void;
+  onScrollActivity?: NonNullable<ScrollViewProps["onScroll"]>;
+  onScroll?: ScrollViewProps["onScroll"];
+};
+
+function useSampledScrollBridge({ animatedScrollHandler, updateScroll, onScrollActivity, onScroll }: ScrollBridgeProps) {
+  const reportScroll = React.useCallback((event: NativeScrollEvent) => {
+    const synthetic = { nativeEvent: event } as Parameters<NonNullable<ScrollViewProps["onScroll"]>>[0];
+    onScrollActivity?.(synthetic);
+    onScroll?.(synthetic);
+  }, [onScrollActivity, onScroll]);
+  const bridge = useAnimatedScrollHandler({
+    onScroll: (event, context: { lastReport?: number }) => {
+      updateScroll?.(event);
+      const now = Date.now();
+      if (!shouldReportScroll(now, context.lastReport)) return;
+      context.lastReport = now;
+      runOnJS(reportScroll)(event);
+    },
+    onEndDrag: (event) => { runOnJS(reportScroll)(event); },
+    onMomentumEnd: (event) => { runOnJS(reportScroll)(event); },
+  });
+  return useComposedEventHandler([animatedScrollHandler ?? null, bridge]);
+}
+
+const AnimatedVerticalScrollView = React.forwardRef<ScrollView, ScrollViewProps & ScrollBridgeProps>(
+  function AnimatedVerticalScrollView({ animatedScrollHandler, updateScroll, onScrollActivity, onScroll, ...props }, ref) {
+  const composed = useSampledScrollBridge({ animatedScrollHandler, updateScroll, onScrollActivity, onScroll });
+  return <Animated.ScrollView ref={ref} {...props} onScroll={composed} />;
+});
+
+// Ordinary lists need event worklets, not an extra animated layout cell per row.
+const EventAnimatedFlatList = Animated.createAnimatedComponent(FlatList) as unknown as typeof FlatList;
+const NativeAnimatedFlatList = React.forwardRef(function NativeAnimatedFlatList<T>(
+  { updateScroll, onScrollActivity, onScroll, animateChanges, ...props }: FlatListProps<T> & ScrollBridgeProps & { animateChanges?: boolean },
+  ref: React.ForwardedRef<FlatList<T>>,
+) {
+  const composed = useSampledScrollBridge({ updateScroll, onScrollActivity, onScroll });
+  const List = (animateChanges ? Animated.FlatList : EventAnimatedFlatList) as typeof FlatList;
+  // createAnimatedComponent accepts processed handlers at runtime; the generic
+  // FlatList cast above preserves item/ref inference, not Reanimated's prop type.
+  return <List ref={ref} {...props} onScroll={composed as unknown as ScrollViewProps["onScroll"]} />;
+}) as <T>(props: FlatListProps<T> & ScrollBridgeProps & { animateChanges?: boolean; ref?: React.Ref<FlatList<T>> }) => React.ReactElement;
 
 /**
  * Bookmark lists are FlatLists. FlashList v2 cached 200px slots and
@@ -230,7 +263,7 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
   const motion = useMaterialMotion();
   const transition = React.useMemo(() => LinearTransition.springify().mass(motion.fast.mass)
     .stiffness(motion.fast.stiffness).damping(motion.fast.damping), [motion.fast]);
-  const List = (animateChanges ? Animated.FlatList : FlatList) as typeof FlatList;
+  const List = (Platform.OS !== "web" ? NativeAnimatedFlatList : animateChanges ? Animated.FlatList : FlatList) as typeof FlatList;
 
   const list = (
     <List
@@ -251,7 +284,8 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
         contentContainerStyle,
       ]}
       style={[fill ? styles.fill : null, inner, webNoContainingTransform]}
-      onScroll={chainHandlers(Platform.OS === "web" ? undefined : bar.onScroll, customRefresh ? refresh.onScroll : undefined, onScroll)}
+      {...(Platform.OS !== "web" ? { updateScroll: bar.updateScroll, onScrollActivity: bar.onScrollActivity, animateChanges } : {})}
+      onScroll={chainHandlers(customRefresh ? refresh.onScroll : undefined, onScroll)}
       onTouchStart={chainHandlers(Platform.OS === "web" ? refresh.onTouchStart : undefined, onTouchStart)}
       onTouchMove={chainHandlers(Platform.OS === "web" ? refresh.onTouchMove : undefined, onTouchMove)}
       onTouchEnd={chainHandlers(Platform.OS === "web" ? refresh.onTouchEnd : undefined, onTouchEnd)}

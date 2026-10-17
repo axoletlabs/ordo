@@ -1,0 +1,21 @@
+{
+  "screens": [],
+  "checks": [
+    {
+      "name": "{\"theme\":\"light\",\"expressive\":false}: open 0 focuses the field once",
+      "pass": true,
+      "details": {
+        "calls": 1
+      }
+    }
+  ],
+  "issues": [
+    {
+      "name": "lifecycle execution",
+      "details": "page.waitForFunction: Timeout 1000ms exceeded.\n    at cycle (/root/.t3/worktrees/ordo/t3-3407b0ad/apps/mobile/scripts/motion-lifecycle-audit.mjs:51:20)\n    at async file:///root/.t3/worktrees/ordo/t3-3407b0ad/apps/mobile/scripts/motion-lifecycle-audit.mjs:69:33"
+    }
+  ],
+  "errors": [],
+  "performance": [],
+  "measurements": []
+}

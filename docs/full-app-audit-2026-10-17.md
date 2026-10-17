@@ -1,6 +1,6 @@
 # App-wide performance, Material 3, and motion audit
 
-The [session-isolation continuation](#session-isolation-smtp-and-encrypted-library-continuation) is the latest pass: **479 captures, 2,151 checks, 44 mobile tests**, plus real local SMTP, two-server switching, and encrypted-library checks. The earlier [follow-up pass](#follow-up-workflow-and-policy-audit) and initial results below remain historical evidence. **This is not exhaustive release approval.** Native verification is explicitly deferred; the documented first-dialog main-thread costs remain unresolved.
+The [scrolling and dialog continuation](#scrolling-and-dialog-continuation) adds measured dialog improvements and lower-overhead scroll bookkeeping. The [session-isolation continuation](#session-isolation-smtp-and-encrypted-library-continuation) retains the earlier real SMTP, two-server switching, and encrypted-library evidence. Earlier results remain historical evidence, not freshly executed checks for later changes. **This is not exhaustive release approval.** Native verification is explicitly deferred; first-dialog main-thread stalls are reduced, not eliminated.
 
 ## Scope and confidence
 
@@ -221,6 +221,52 @@ The [follow-up APK workflow](https://github.com/axoletlabs/ordo/actions/runs/390
 
 The requested non-native workflow expansion and regression reruns above are complete, but **cold-dialog performance remains an open non-native finding**. Native Back/IME, OS accessibility services, biometrics, WebView, installation/share/update flows, real wallpaper palettes/scaling, and physical frame/battery measurements remain explicitly deferred. No claim of exhaustive branch execution or Material certification is made.
 
+## Scrolling and dialog continuation
+
+This continuation starts from `1a07f56a71aacdfefbd9ddf73fa8b434fc4bd2a2`. It changes shared primitives without adding dependencies or changing Material geometry, colors, navigation, or motion schemes.
+
+- **Dialog opening:** web `Input` delegates autofocus to the dialog's existing post-publication focus owner. It no longer forces layout/focus during an incomplete portal commit; the dialog establishes focus after attachment. Native autofocus is unchanged. This changes focus timing, not a claim that every baseline opening called `focus()` twice.
+- **Browser scrolling:** ordinary scroll surfaces no longer allocate unused native-scrollbar shared values/effects or register Reanimated scroll handlers. Reader scroll animation retains its composed handler.
+- **Native scrolling:** scrollbar offset/size updates run in the UI-thread scroll handler. App-owned JS bookkeeping is sampled every 80ms, with unconditional drag/momentum endpoint reports. The deterministic 60/120Hz simulation emits 10–13 periodic reports per second rather than one per frame. This does not eliminate React Native's own virtualization bookkeeping or establish native frame times. Ordinary lists use an event-only animated wrapper, not additional layout-animation cells; pickers retain their existing optional item transitions.
+- **Idle motion/focus work:** panels avoid redundant initial obscuring/zero-lift animations. Browser keyboard-lift work is omitted. A content update with intact focus no longer schedules a repair frame. Closing a nested menu can restore its parent trigger immediately instead of polling the full 600ms deadline merely because the parent dialog remains open.
+
+### Comparable isolated profiles
+
+Both control and final exports use the same pointer-driven `profile-dialogs.mjs`, three fresh contexts, Expressive/light/390px, 4× CPU throttling, and CPU/timeline recording. Runs were sequential without competing browser/build workloads. These are small diagnostic samples, not a statistical/native performance guarantee.
+
+| Metric | Control `1a07f56` | Final runtime |
+| --- | --- | --- |
+| Cold maximum long tasks, three runs | 289 / 311 / 306ms | 224 / 221 / 208ms |
+| Cold median maximum long task | 306ms | 221ms (**28% lower**) |
+| Cold total long-task time, three runs | 504 / 535 / 459ms | 374 / 364 / 342ms |
+| Warm maximum long tasks, three runs | 225 / 223 / 235ms | 187 / 158 / 162ms |
+
+**Cold-dialog stalls remain open:** 208–224ms is still a substantial browser main-thread task, not “smooth at 60/120Hz.” An intermediate focus-only sample reached 213–226ms; the final results above, rather than that intermediate export or earlier summaries, identify the published runtime. Action-and-settle time includes automation overhead and explicit waiting.
+
+### Memory/lifecycle confidence and limits
+
+`motion-lifecycle-audit.mjs` passed **120 checks** across light/dark, Standard/Expressive, wide, and reduced-motion landscape. It executes 15 open/edit/close cycles in each of six contexts (90 total), checks a single focus call per open, verifies nested-menu draft preservation/trigger restoration, and scrolls a synthetic 1,000-bookmark library with real wheel input. Only **18–30 matching bookmark rows** remain mounted after scrolling. Running the same script against the control export fails the nested-menu trigger-restoration deadline (1,000ms); that expected control failure is retained separately and is not counted as a passing suite.
+
+After a three-cycle warmup versus cycle 15, listener counts are unchanged in all six contexts; DOM node counts are unchanged in five and increase by four in reduced-motion landscape. Post-GC JS heap grows by roughly 0.6–1.9MB over that interval; this is diagnostic, **not a proof of a heap plateau, absence of leaks, or reduced native RAM**. No direct battery improvement is claimed. Existing foreground/overlay activity gates continue to pause repeating indicators; native battery, allocation, and frame traces remain deferred.
+
+The [continuation manifest](full-app-audit-2026-10-17/scrolling-dialogs/verification.json) records exact export/source fingerprints and the newly executed regression results. Earlier real-server suites are historical evidence and are not counted again for this UI-only continuation. The first quick invocation used a static server without SPA fallback and stopped at reader navigation; that infrastructure failure is excluded from passing totals. The complete rerun uses SPA fallback and the identical export.
+
+| Newly executed suite | Captures | Checks |
+| --- | ---: | ---: |
+| Route matrix | 200 | 801 |
+| Phone overlays | 60 | 253 |
+| Wide overlays | 60 | 253 |
+| Narrow/loading/error states | 34 | 145 |
+| Quick interactions and reduced motion | 43 | 215 |
+| Form/draft workflows | 24 | 185 |
+| Account/server policy fixtures | 48 | 233 |
+| Focus, repeated dialogs, and large-list lifecycle | 0 | 120 |
+| **Total — zero issues/uncaught browser errors** | **469** | **2,205** |
+
+The source inventory now fingerprints **348 TypeScript files and 30 routes/layouts**; it is not executed-branch coverage. The source-comment explanation of autofocus was corrected after the initial export; rebuilding both platforms produced byte-for-byte identical exports, recorded in `source-equivalence.json`. Raw isolated CPU profiles/timelines are included in `isolated-profiles.tar.gz`, with compact summaries and curated screenshots beside the manifest.
+
+Local validation includes **46 mobile tests**, workspace typecheck/lint, production web export, and Android JS export (`--no-bytecode`, not a local native/Hermes build). Besides the sampling predicate, inert hook/event adapters execute the actual production scroll bridge to check all UI updates, custom-handler composition, sampled JS reports, and exact drag/momentum endpoints. This is not a native integration test. The previous commit's [APK workflow](https://github.com/axoletlabs/ordo/actions/runs/39063109078) completed successfully; artifact `ordo-apk-development` was confirmed non-expired (ID `12112547426`, 19,475,500 bytes). A new APK is dispatched for this continuation's published commit; neither build constitutes device verification.
+
 ## Coverage and remaining device checks
 
 | Area | Source/fixture coverage in this pass |
@@ -274,6 +320,7 @@ node apps/mobile/scripts/ui-audit.mjs --quick
 node apps/mobile/scripts/workflow-audit.mjs
 node apps/mobile/scripts/auth-policy-audit.mjs
 node apps/mobile/scripts/profile-dialogs.mjs
+node apps/mobile/scripts/motion-lifecycle-audit.mjs
 ```
 
 For actual server workflows, start a **new disposable loopback server**, never a normal local/remote installation. Build the server first, use a new database path each time, and keep secrets test-only:

@@ -19,6 +19,7 @@ import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
 import { caretAfterKey, shouldCorrectWebCaret } from "../../lib/web-input-caret";
 import { useMaterialMotion } from "../../theme/material-motion";
 import { InputSurfaceContext } from "./input-surface";
+import { PanelTitleContext } from "./panel-title";
 import { nativeInputEdit } from "../../lib/native-input-edit";
 import { alphaTint } from "../../theme/state-layer";
 import { isSensitiveInput, privateKeyboardType } from "../../lib/input-privacy";
@@ -106,6 +107,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   const { fontScale } = useWindowDimensions();
   const messageId = React.useId();
   const fieldSurface = React.useContext(InputSurfaceContext) ?? palette.surface;
+  const panelTitle = React.useContext(PanelTitleContext);
   const motion = useMaterialMotion();
   const [focused, setFocused] = useState(false);
   const [hovered, setHovered] = useState(false);
@@ -252,6 +254,10 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
           cursorColor={palette.primary}
           keyboardAppearance={palette.mode}
           {...rest}
+          // The panel focuses after its portal is attached. Mount-time web
+          // autofocus forces layout in the middle of that publication, before
+          // the dialog can establish keyboard ownership.
+          autoFocus={Platform.OS === "web" && panelTitle ? false : rest.autoFocus}
           // Never let a sensitive field opt into spelling, correction or casing.
           {...(secret ? { autoCorrect: false, spellCheck: false, autoCapitalize: "none" as const, disableFullscreenUI: true } : null)}
           accessibilityState={{ ...rest.accessibilityState, disabled: inactive }}
