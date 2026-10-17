@@ -151,7 +151,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
     reminderLabel,
     ...tags.map((t) => `Tag ${t.name}`),
     hasSuggestions ? `${suggestedTags.length} tag suggestions` : undefined,
-    !bookmark.isRead ? "Unread" : undefined,
+    bookmark.isRead ? "Read" : "Unread",
     isArticle ? "Article" : undefined,
     isPending ? "Article processing" : undefined,
     opensAsWebsite ? "Opens as website" : undefined,
@@ -269,7 +269,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
           openBookmark();
         }}
       >
-        <View pointerEvents="none">
+        <View pointerEvents="none" style={styles.leadingBox}>
         {selectionMode ? (
           <SelectionMark selected={!!selected} />
         ) : (
@@ -299,6 +299,18 @@ export const BookmarkRow = React.memo(function BookmarkRow({
             )}
           </View>
         )}
+        {/* Launcher-style notification dot on the tile corner; the glyph's
+            8dp inset keeps it clear of the favicon itself. */}
+        {!bookmark.isRead ? (
+          <View
+            testID="bookmark-unread-indicator"
+            accessible={false}
+            importantForAccessibility="no-hide-descendants"
+            style={[styles.unreadDot, {
+              backgroundColor: selected || highlighted ? palette.onSecondaryContainer : palette.primary,
+            }]}
+          />
+        ) : null}
         </View>
       </ListPressable>
       </SelectionDragHandle>
@@ -437,6 +449,17 @@ const styles = StyleSheet.create({
   },
   favicon: { width: 24, height: 24, borderRadius: radius.xs },
   content: { flex: 1, minWidth: 0 },
+  leadingBox: { position: "relative" },
+  // Launcher-style badge: hangs off the tile's top-end corner. The tile keeps
+  // its footprint, so read state never changes row or title geometry.
+  unreadDot: {
+    position: "absolute",
+    top: -spacing[2],
+    right: -spacing[2],
+    width: spacing[8],
+    height: spacing[8],
+    borderRadius: radius.full,
+  },
   detailsRow: {
     flexDirection: "row",
     alignItems: "center",
