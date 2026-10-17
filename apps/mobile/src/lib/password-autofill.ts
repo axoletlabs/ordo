@@ -1,47 +1,59 @@
 /**
- * Password managers treat every password field on the page as one set.
- * When an MFA/OTP field is focused, Autofill will happily write the new
- * password into the current-password box too. While a step-up prompt is
- * open, drop those fields out of the password graph and keep the values
- * the user already submitted.
+ * Keep credential roles consistent across native and web. While a step-up
+ * prompt or another route is open, drop the background fields out of the
+ * password graph and keep the values the user already submitted.
  */
 import type { TextInputProps } from "react-native";
 
-export type PasswordAutofillRole = "current-password" | "new-password" | "password";
+export type PasswordAutofillRole = "current-password" | "new-password";
 
 type AutofillProps = Pick<
   TextInputProps,
   "autoComplete" | "textContentType" | "importantForAutofill" | "editable"
->;
+> & { sensitive?: boolean };
+
+/** Local folder secrets must never offer/overwrite the account's saved login. */
+export const localPasswordAutofillProps = {
+  sensitive: true,
+  autoComplete: "off",
+  textContentType: "none",
+  importantForAutofill: "no",
+} as const;
+
+/** An email used to sign in is a username, not a contact-address field. */
+export function usernameAutofillProps(locked = false): AutofillProps {
+  return locked ? disabledAutofillProps : {
+    autoComplete: "username",
+    textContentType: "username",
+    importantForAutofill: "yes",
+  };
+}
+
+const disabledAutofillProps = {
+  autoComplete: "off",
+  textContentType: "none",
+  importantForAutofill: "no",
+  editable: false,
+} as const;
 
 export function passwordAutofillProps(
   role: PasswordAutofillRole,
   locked = false,
 ): AutofillProps {
   if (locked) {
-    return {
-      autoComplete: "off",
-      textContentType: "none",
-      importantForAutofill: "no",
-      editable: false,
-    };
+    return disabledAutofillProps;
   }
   if (role === "new-password") {
     return {
+      sensitive: true,
       autoComplete: "new-password",
       textContentType: "newPassword",
       importantForAutofill: "yes",
     };
   }
-  if (role === "current-password") {
-    return {
-      autoComplete: "current-password",
-      textContentType: "password",
-      importantForAutofill: "yes",
-    };
-  }
   return {
-    autoComplete: "password",
+    sensitive: true,
+    autoComplete: "current-password",
     textContentType: "password",
     importantForAutofill: "yes",
   };

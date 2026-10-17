@@ -18,6 +18,8 @@ import { toast } from "../../../src/components/ui/toast-store";
 import { ChangePasswordSchema } from "@ordo/shared/schemas";
 import { MfaStepUpPanel } from "../../../src/components/auth/MfaStepUpPanel";
 import { lockedSecretDisplay, passwordAutofillProps } from "../../../src/lib/password-autofill";
+import { useCredentialLock } from "../../../src/hooks/use-credential-lock";
+import { AccountAutofillIdentity } from "../../../src/components/auth/AccountAutofillIdentity";
 
 export default function ChangePasswordScreen() {
   const router = useRouter();
@@ -30,6 +32,7 @@ export default function ChangePasswordScreen() {
   const [formError, setFormError] = useState("");
   const [errorField, setErrorField] = useState<string | null>(null);
   const [mfaOpen, setMfaOpen] = useState(false);
+  const credentialsLocked = useCredentialLock(mfaOpen);
   const submittedRef = useRef({ currentPassword: "", newPassword: "" });
 
   const runChange = async (mfaCode?: string) => {
@@ -79,9 +82,9 @@ export default function ChangePasswordScreen() {
     }
   };
 
-  const currentField = lockedSecretDisplay(currentPassword, mfaOpen, showPwd);
-  const newField = lockedSecretDisplay(newPassword, mfaOpen, showPwd);
-  const confirmField = lockedSecretDisplay(confirm, mfaOpen, showPwd);
+  const currentField = lockedSecretDisplay(currentPassword, credentialsLocked, showPwd);
+  const newField = lockedSecretDisplay(newPassword, credentialsLocked, showPwd);
+  const confirmField = lockedSecretDisplay(confirm, credentialsLocked, showPwd);
 
   return (
     <SettingsPage title="Password">
@@ -91,29 +94,34 @@ export default function ChangePasswordScreen() {
       >
         <SettingsScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
           <SettingsGroup compact>
-            <SettingsForm key={mfaOpen ? "mfa-locked" : "editable"}>
+            <SettingsForm key={credentialsLocked ? "credentials-locked" : "editable"}>
+              <AccountAutofillIdentity nativeID="change-password-username" locked={credentialsLocked} />
               <Input
+                nativeID="change-password-current"
                 label="Current password"
                 required
                 value={currentField.value}
                 onChangeText={setCurrentPassword}
                 placeholder="Enter your current password"
                 secureTextEntry={currentField.secureTextEntry}
-                {...passwordAutofillProps("current-password", mfaOpen)}
+                {...passwordAutofillProps("current-password", credentialsLocked)}
                 error={errorField === "currentPassword" ? formError : undefined}
                 rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
               />
               <Input
+                nativeID="change-password-new"
                 label="New password"
                 required maxLength={256}
                 value={newField.value}
                 onChangeText={setNewPassword}
                 placeholder="At least 8 characters"
                 secureTextEntry={newField.secureTextEntry}
-                {...passwordAutofillProps("new-password", mfaOpen)}
+                {...passwordAutofillProps("new-password", credentialsLocked)}
+                passwordRules="minlength: 8; maxlength: 256;"
                 error={errorField === "newPassword" ? formError : undefined}
               />
               <Input
+                nativeID="change-password-confirm"
                 label="Confirm new password"
                 required maxLength={256}
                 error={errorField === "confirm" ? formError : undefined}
@@ -121,7 +129,8 @@ export default function ChangePasswordScreen() {
                 onChangeText={setConfirm}
                 placeholder="Re-enter your new password"
                 secureTextEntry={confirmField.secureTextEntry}
-                {...passwordAutofillProps("new-password", mfaOpen)}
+                {...passwordAutofillProps("new-password", credentialsLocked)}
+                passwordRules="minlength: 8; maxlength: 256;"
               />
 
               <FormError message={errorField ? undefined : formError} />

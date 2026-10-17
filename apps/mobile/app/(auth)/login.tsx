@@ -1,9 +1,9 @@
 /**
  * Login screen. Cloud is the default; self-host is a secondary opt-in.
  */
-import React, { useCallback, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { StyleSheet, View, type TextInput } from "react-native";
-import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { AuthLink } from "../../src/components/auth/AuthLink";
 import { FormError } from "../../src/components/ui/FormError";
 import { AuthShell } from "../../src/components/auth/AuthShell";
@@ -26,7 +26,8 @@ import { useTheme } from "../../src/theme/ThemeProvider";
 import { spacing } from "../../src/theme/tokens";
 import { ErrorCode, isMfaRequiredResponse } from "@ordo/shared";
 import { LoginSchema } from "@ordo/shared/schemas";
-import { lockedSecretDisplay, passwordAutofillProps } from "../../src/lib/password-autofill";
+import { lockedSecretDisplay, passwordAutofillProps, usernameAutofillProps } from "../../src/lib/password-autofill";
+import { useCredentialLock } from "../../src/hooks/use-credential-lock";
 
 function routeParam(value: string | string[] | undefined): string {
   if (Array.isArray(value)) return value[0] ?? "";
@@ -58,14 +59,7 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
   const [errorField, setErrorField] = useState<string | null>(null);
   const passwordRef = useRef<TextInput>(null);
   const inFlight = useRef(false);
-  const [screenFocused, setScreenFocused] = useState(true);
-
-  useFocusEffect(
-    useCallback(() => {
-      setScreenFocused(true);
-      return () => setScreenFocused(false);
-    }, []),
-  );
+  const credentialsLocked = useCredentialLock(showSelfHost || showServer || confirmCloud);
 
   const submit = async () => {
     if (inFlight.current) return;
@@ -108,7 +102,7 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
     }
   };
 
-  const passwordField = lockedSecretDisplay(password, !screenFocused, showPwd);
+  const passwordField = lockedSecretDisplay(password, credentialsLocked, showPwd);
 
   return (
     <>
@@ -142,6 +136,7 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
         )}
       >
         <AuthInput
+          nativeID="login-username"
           label="Email"
           maxLength={254}
           disabled={login.isPending}
@@ -149,10 +144,8 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
           onChangeText={setIdentifier}
           placeholder="you@example.com"
           keyboardType="email-address"
-          textContentType="emailAddress"
-          autoComplete="email"
+          {...usernameAutofillProps(credentialsLocked)}
           autoCapitalize="none"
-          importantForAutofill="yes"
           error={errorField === "identifier" ? formError : undefined}
           returnKeyType="next"
           submitBehavior="submit"
@@ -161,13 +154,14 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
         <View style={{ height: spacing[16] }} />
         <AuthInput
           ref={passwordRef}
-          key={screenFocused ? "password" : "password-locked"}
+          key={credentialsLocked ? "password-locked" : "password"}
+          nativeID="login-password"
           label="Password"
           disabled={login.isPending}
           value={passwordField.value}
           onChangeText={setPassword}
           secureTextEntry={passwordField.secureTextEntry}
-          {...passwordAutofillProps("current-password", !screenFocused)}
+          {...passwordAutofillProps("current-password", credentialsLocked)}
           rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
           error={errorField === "password" ? formError : undefined}
           returnKeyType="go"

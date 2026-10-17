@@ -20,6 +20,7 @@ import { useMaterialMotion } from "../../theme/material-motion";
 import { InputSurfaceContext } from "./input-surface";
 import { nativeInputEdit } from "../../lib/native-input-edit";
 import { alphaTint } from "../../theme/state-layer";
+import { isSensitiveInput, privateKeyboardType } from "../../lib/input-privacy";
 const AnimatedLabel = Animated.createAnimatedComponent(Text);
 
 type WebCaretNode = TextInput & {
@@ -60,6 +61,8 @@ export interface InputProps extends Omit<TextInputProps, "style"> {
   containerStyle?: ViewStyle;
   disabled?: boolean;
   readOnly?: boolean;
+  /** Preserve password keyboard/privacy semantics even while explicitly revealed. */
+  sensitive?: boolean;
   required?: boolean;
   /** Hide repeated visual markers when every field in the form is required. Semantics remain required. */
   showRequiredIndicator?: boolean;
@@ -85,6 +88,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   onChangeText,
   onKeyPress,
   secureTextEntry,
+  sensitive,
   keyboardType,
   value,
   editable = true,
@@ -119,7 +123,8 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   // Android re-applies a controlled `value` on every keystroke and walks the
   // caret (type/backspace in the middle). Leave the native field uncontrolled
   // while editing; remount when an external value arrives while blurred.
-  const androidUncontrolled = Platform.OS === "android" && !secureTextEntry;
+  const secret = isSensitiveInput({ sensitive, secureTextEntry, ...rest });
+  const androidUncontrolled = Platform.OS === "android" && !secret;
 
   const setInputRef = (node: TextInput | null) => {
     inputRef.current = node;
@@ -166,9 +171,8 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   }, [floating, floatProgress, motion.reducedMotion]);
   const labelPosition = useAnimatedStyle(() => ({ top: 16 - (filled ? 8 : 24) * floatProgress.value }));
   const labelType = useAnimatedStyle(() => ({ fontSize: 16 - 4 * floatProgress.value, lineHeight: 24 - 8 * floatProgress.value }));
-  // iOS Password AutoFill silently ignores secure fields that use a custom
-  // font. Use the system face while the value is masked.
-  const fontFamily = secureTextEntry
+  // Keep the system face for secure editing/AutoFill, including across reveal.
+  const fontFamily = secret
     ? undefined
     : mono && Platform.OS !== "android"
       ? resolveFont("mono", "400")
@@ -182,8 +186,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
         : undefined;
   // RN-web maps keyboardType="url" onto <input type="url">; Android's URI
   // variation walks the caret the same way. Keep a URL keyboard on iOS only.
-  const resolvedKeyboardType =
-    Platform.OS !== "ios" && keyboardType === "url" ? "default" : keyboardType;
+  const resolvedKeyboardType = privateKeyboardType(Platform.OS, secret, secureTextEntry, keyboardType);
   const webCaretFix =
     Platform.OS === "web"
       ? ({
@@ -230,6 +233,9 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
            placeholderTextColor={inactive ? foreground : palette.onSurfaceVariant}
           autoCorrect={false}
           autoCapitalize="none"
+          autoComplete="off"
+          textContentType={rest.autoComplete && rest.autoComplete !== "off" ? undefined : "none"}
+          importantForAutofill={rest.autoComplete && rest.autoComplete !== "off" ? "yes" : "no"}
           secureTextEntry={secureTextEntry}
           keyboardType={resolvedKeyboardType}
           underlineColorAndroid="transparent"
@@ -239,6 +245,8 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
           cursorColor={palette.primary}
           keyboardAppearance={palette.mode}
           {...rest}
+          // Never let a sensitive field opt into spelling, correction or casing.
+          {...(secret ? { autoCorrect: false, spellCheck: false, autoCapitalize: "none" as const, disableFullscreenUI: true } : null)}
           accessibilityState={{ ...rest.accessibilityState, disabled: inactive }}
           accessibilityHint={rest.accessibilityHint ?? (readOnly ? "Read only." : required ? "Required." : undefined)}
           // RN-web promotes even aria-readonly=false to HTML readOnly=true.
