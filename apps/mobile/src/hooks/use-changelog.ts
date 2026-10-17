@@ -4,10 +4,10 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "../components/ui/toast-store";
-import { compareReleaseCandidates, releaseMatchesVariant } from "../lib/app-version";
+import { compareReleaseCandidates } from "../lib/app-version";
 import { APP_VARIANT } from "../lib/app-variant";
 import { ChangelogFetchError, fetchChangelogReleases } from "../lib/changelog-feed";
-import { isChangelogReleaseList, type ChangelogRelease } from "../lib/changelog";
+import { changelogVisible, isChangelogReleaseList, type ChangelogRelease } from "../lib/changelog";
 import { prefsGet, prefsSet, StorageKeys } from "../lib/storage";
 
 const FRESH_MS = 60_000;
@@ -23,7 +23,7 @@ let memory: MemoryCache | null = null;
 async function readCache(): Promise<ChangelogRelease[] | null> {
   const cached = await prefsGet<{ releases?: unknown }>(StorageKeys.CHANGELOG);
   if (!cached || !isChangelogReleaseList(cached.releases)) return null;
-  return cached.releases.filter((release) => APP_VARIANT === "development" || releaseMatchesVariant(release, APP_VARIANT))
+  return cached.releases.filter((release) => changelogVisible(release, APP_VARIANT))
     .sort((left, right) => compareReleaseCandidates(right, left));
 }
 
@@ -48,7 +48,7 @@ export function useChangelog(enabled = true) {
 
     try {
       const fetched = await fetchChangelogReleases(controller.signal);
-      const next = fetched.filter((release) => APP_VARIANT === "development" || releaseMatchesVariant(release, APP_VARIANT));
+      const next = fetched.filter((release) => changelogVisible(release, APP_VARIANT));
       if (request.current !== id) return;
       memory = { releases: next, fetchedAt: Date.now() };
       setReleases(next);
