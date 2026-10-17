@@ -6,6 +6,29 @@
  * lists (they can include locked-folder rows), and protected-folder lists.
  */
 import { isBookmarkListSort, type FolderDto } from "@ordo/shared";
+import type { PersistedClient, Persister } from "@tanstack/react-query-persist-client";
+
+type SnapshotStorage = { getString: (key: string) => string | undefined; set: (key: string, value: string) => void; remove: (key: string) => unknown };
+
+/** The subscriber owns throttling. A second zero-delay timer here can lose
+ * the final write during pagehide/native suspension, so persistence is sync. */
+export function createSnapshotPersister(storage: SnapshotStorage | null, key: string): Persister {
+  const sanitize = (client: PersistedClient) => sanitizePersistedClient(client as unknown as PersistedClientSnapshot) as unknown as PersistedClient;
+  return {
+    persistClient: (client) => { storage?.set(key, JSON.stringify(sanitize(client))); },
+    restoreClient: () => {
+      const raw = storage?.getString(key);
+      if (!raw) return undefined;
+      const client = sanitize(JSON.parse(raw) as PersistedClient);
+      // Disk is a first-paint/offline fallback, never proof of server freshness.
+      // A previous process/tab may have exited before its last mutation saved.
+      return { ...client, clientState: { ...client.clientState, queries: client.clientState.queries.map((query) => ({
+        ...query, state: { ...query.state, isInvalidated: true },
+      })) } };
+    },
+    removeClient: () => { storage?.remove(key); },
+  };
+}
 
 /** Keep restored lists around for the persist maxAge window. */
 export const PERSISTED_QUERY_GC_TIME_MS = 7 * 24 * 60 * 60_000;

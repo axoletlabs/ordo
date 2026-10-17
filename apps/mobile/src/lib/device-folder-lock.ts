@@ -15,6 +15,7 @@ export async function isDeviceLockAvailable(): Promise<boolean> {
 }
 
 export async function createDeviceLockCredential(folderId: string): Promise<string> {
+  if (Platform.OS === "web") throw new Error("Device locks require the Android or iOS app.");
   // One prompt only: on Android, SecureStore shows its own (crypto-bound) biometric
   // prompt for requireAuthentication writes, so an extra authenticateAsync here would
   // ask twice. On iOS a first-time keychain add never authenticates, so confirm once
@@ -44,6 +45,7 @@ export async function createDeviceLockCredential(folderId: string): Promise<stri
 }
 
 export async function getDeviceLockCredential(folderId: string): Promise<string | null> {
+  if (Platform.OS === "web") return null;
   return SecureStore.getItemAsync(keyFor(folderId), {
     requireAuthentication: true,
     authenticationPrompt: "Unlock this folder",
@@ -51,5 +53,6 @@ export async function getDeviceLockCredential(folderId: string): Promise<string 
 }
 
 export async function deleteDeviceLockCredential(folderId: string): Promise<void> {
+  if (Platform.OS === "web") return;
   await SecureStore.deleteItemAsync(keyFor(folderId));
 }

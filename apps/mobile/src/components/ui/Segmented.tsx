@@ -1,5 +1,5 @@
 /** Baseline segmented buttons / Expressive connected toggle button group. */
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Platform, StyleSheet, View, useWindowDimensions, type TextStyle } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { PressableScale } from "./PressableScale";
@@ -14,7 +14,10 @@ function SegmentLabel({ label, foreground, selected, labelStyle }: { label: stri
   const motion = useMaterialMotion();
   const tint = useSharedValue(foreground);
   const selection = useSharedValue(selected ? 1 : 0);
+  const previous = useRef({ foreground, selected, reducedMotion: motion.reducedMotion });
   useEffect(() => {
+    if (previous.current.foreground === foreground && previous.current.selected === selected && previous.current.reducedMotion === motion.reducedMotion) return;
+    previous.current = { foreground, selected, reducedMotion: motion.reducedMotion };
     tint.value = motion.reducedMotion ? foreground : withSpring(foreground, materialMotion.effects.fast);
     selection.value = motion.reducedMotion ? Number(selected) : withSpring(Number(selected), materialMotion.effects.fast);
   }, [foreground, selected, motion.reducedMotion, tint, selection]);

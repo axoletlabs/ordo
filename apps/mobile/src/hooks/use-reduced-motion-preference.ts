@@ -6,12 +6,17 @@ import { useReducedMotion } from "react-native-reanimated";
 const listeners = new Set<() => void>();
 let nativeValue: boolean | undefined;
 let cleanup: (() => void) | undefined;
+let webQuery: MediaQueryList | undefined;
+function reducedMotionQuery() {
+  if (typeof window === "undefined") return undefined;
+  return webQuery ??= window.matchMedia("(prefers-reduced-motion: reduce)");
+}
 function subscribe(listener: () => void) {
   listeners.add(listener);
   if (listeners.size === 1) {
     const notify = () => listeners.forEach((callback) => callback());
     if (Platform.OS === "web" && typeof window !== "undefined") {
-      const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+      const query = reducedMotionQuery()!;
       query.addEventListener("change", notify);
       cleanup = () => query.removeEventListener("change", notify);
     } else if (Platform.OS !== "web") {
@@ -30,5 +35,5 @@ function subscribe(listener: () => void) {
 export function useReducedMotionPreference() {
   const initial = useReducedMotion();
   return useSyncExternalStore(subscribe, () => Platform.OS === "web" && typeof window !== "undefined"
-    ? window.matchMedia("(prefers-reduced-motion: reduce)").matches : nativeValue ?? initial, () => initial);
+    ? reducedMotionQuery()!.matches : nativeValue ?? initial, () => initial);
 }

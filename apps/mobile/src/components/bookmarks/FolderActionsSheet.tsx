@@ -88,6 +88,9 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
   const [icon, setIcon] = useState<FolderIcon>(DEFAULT_FOLDER_ICON);
   const [error, setError] = useState("");
   const [removing, setRemoving] = useState(false);
+  const [locking, setLocking] = useState(false);
+  const lockingRef = React.useRef(false);
+  const busy = locking || removing || rename.isPending || update.isPending;
   const folderRef = React.useRef(folder);
   if (folder) folderRef.current = folder;
   const displayFolder = folder ?? folderRef.current;
@@ -120,6 +123,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
   }, [visible, folder?.id]);
 
   const showMode = (nextMode: Mode) => {
+    if (busy || lockingRef.current) return;
     dismissKeyboard();
     setError("");
     if (nextMode !== "lockCredential" && nextMode !== "removePassword") {
@@ -147,7 +151,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
   };
 
   const doRename = async () => {
-    if (!folder) return;
+    if (!folder || busy) return;
     const trimmed = name.trim();
     if (!trimmed) {
       setError("Enter a folder name.");
@@ -164,7 +168,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
   };
 
   const doUpdateIcon = async () => {
-    if (!folder) return;
+    if (!folder || busy) return;
     try {
       await update.mutateAsync({ id: folder.id, input: { icon } });
       haptics.success();
@@ -188,7 +192,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
   };
 
   const doSetCredential = async (patternOverride?: number[], pinOverride?: string) => {
-    if (!folder) return;
+    if (!folder || busy || lockingRef.current) return;
     const nodes = patternOverride ?? pattern;
     const pin = pinOverride ?? password;
     const credential = lockType === "pattern" ? nodes.join("-") : lockType === "pin" ? pin : password;
@@ -233,6 +237,8 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
       setError("Passwords do not match.");
       return;
     }
+    lockingRef.current = true;
+    setLocking(true);
     try {
       await foldersApi.setPassword(folder.id, { password: credential, lockType });
       patchFolderLock(folder.id, {
@@ -248,6 +254,9 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
       onDismiss();
     } catch (cause) {
       setError(errorMessage(cause));
+    } finally {
+      lockingRef.current = false;
+      setLocking(false);
     }
   };
 
@@ -264,7 +273,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
       try {
         await foldersApi.setPassword(folder.id, { password: credential, lockType: "device" });
       } catch (cause) {
-        await deleteDeviceLockCredential(folder.id);
+        await deleteDeviceLockCredential(folder.id).catch(() => undefined);
         throw cause;
       }
       patchFolderLock(folder.id, { protected: true, lockType: "device" });
@@ -288,7 +297,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
     invalidateBookmarks();
     haptics.success();
     toast.success("Lock removed");
-    void deleteDeviceLockCredential(folder.id);
+    void deleteDeviceLockCredential(folder.id).catch((cause) => console.warn("Device lock credential cleanup failed", cause));
     onDismiss();
   };
 
@@ -384,19 +393,19 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
 
   return (
     <>
-      <ContextMenu visible={menuOpen} onDismiss={onDismiss} onExited={() => onSurfaceExited("menu")} anchor={anchor ?? null} pageKey={mode} sessionKey={displayFolder?.id}>
+      <ContextMenu visible={menuOpen} dismissible={!busy} onDismiss={onDismiss} onExited={() => onSurfaceExited("menu")} anchor={anchor ?? null} pageKey={mode} sessionKey={displayFolder?.id}>
         {displayFolder && mode === "menu" ? (
           <>
             {error ? <ContextMenuNote tone="danger">{error}</ContextMenuNote> : null}
-            <ContextMenuItem icon={displayFolder.pinned ? "pin" : "pin-outline"} label={displayFolder.pinned ? "Unpin folder" : "Pin folder"} onPress={doTogglePinned} />
-            <ContextMenuItem icon="happy-outline" label="Change icon" onPress={() => showMode("icon")} />
-            <ContextMenuItem icon="create-outline" label="Rename" onPress={() => showMode("rename")} />
+            <ContextMenuItem icon={displayFolder.pinned ? "pin" : "pin-outline"} label={displayFolder.pinned ? "Unpin folder" : "Pin folder"} disabled={busy} busy={update.isPending} onPress={doTogglePinned} />
+            <ContextMenuItem icon="happy-outline" label="Change icon" disabled={busy} onPress={() => showMode("icon")} />
+            <ContextMenuItem icon="create-outline" label="Rename" disabled={busy} onPress={() => showMode("rename")} />
             {displayFolder.protected ? (
-              <ContextMenuItem icon="lock-open-outline" label="Remove lock" onPress={() => showMode("removePassword")} />
+              <ContextMenuItem icon="lock-open-outline" label="Remove lock" disabled={busy} onPress={() => showMode("removePassword")} />
             ) : (
-              <ContextMenuItem icon="lock-closed-outline" label="Lock folder" onPress={() => showMode("lockChoice")} />
+              <ContextMenuItem icon="lock-closed-outline" label="Lock folder" disabled={busy} onPress={() => showMode("lockChoice")} />
             )}
-            <ContextMenuItem icon="trash-outline" label="Delete folder" tone="danger" onPress={() => showMode("delete")} />
+            <ContextMenuItem icon="trash-outline" label="Delete folder" tone="danger" disabled={busy} onPress={() => showMode("delete")} />
           </>
         ) : null}
         {displayFolder && mode === "lockChoice" ? (
@@ -411,21 +420,22 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
             {lockTypesSupported ? (
               <>
                 <ContextMenuItem icon="finger-print-outline" label="Device lock" onPress={doSetDeviceLock} disabled={removing} />
-                <ContextMenuItem icon="apps-outline" label="Pattern" onPress={() => { setLockType("pattern"); showMode("lockCredential"); }} />
-                <ContextMenuItem icon="keypad-outline" label="PIN" onPress={() => { setLockType("pin"); showMode("lockCredential"); }} />
+                <ContextMenuItem icon="apps-outline" label="Pattern" disabled={busy} onPress={() => { setLockType("pattern"); showMode("lockCredential"); }} />
+                <ContextMenuItem icon="keypad-outline" label="PIN" disabled={busy} onPress={() => { setLockType("pin"); showMode("lockCredential"); }} />
               </>
             ) : null}
-            <ContextMenuItem icon="text-outline" label="Text password" onPress={() => { setLockType("password"); showMode("lockCredential"); }} />
+            <ContextMenuItem icon="text-outline" label="Text password" disabled={busy} onPress={() => { setLockType("password"); showMode("lockCredential"); }} />
           </>
         ) : null}
       </ContextMenu>
 
-      <FloatingPanel visible={dialogOpen} onDismiss={onDismiss} onExited={() => onSurfaceExited("dialog")}>
+      <FloatingPanel visible={dialogOpen} dismissible={!busy} onDismiss={onDismiss} onExited={() => onSurfaceExited("dialog")}>
       {folder && mode === "rename" ? (
         <>
           <PanelHeader title="Rename folder" />
           <Input
             label="Name"
+            disabled={busy}
             required maxLength={100} showCounter
             value={name}
             onChangeText={setName}
@@ -438,6 +448,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
             onConfirm={doRename}
             onCancel={() => showMode("menu")}
             loading={rename.isPending}
+            cancelDisabled={busy}
           />
         </>
       ) : null}
@@ -471,6 +482,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
                 }}
                 onComplete={(nodes) => void doSetCredential(nodes)}
                 error={Boolean(error)}
+                disabled={busy}
               />
               {error ? <Text variant="footnote" color="danger" align="center">{error}</Text> : null}
             </>
@@ -479,6 +491,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
               {savedPin ? null : (
                 <Segmented
                   accessibilityLabel="PIN length"
+                  disabled={busy}
                   options={[
                     { value: "4", label: "4 digits" },
                     { value: "6", label: "6 digits" },
@@ -501,7 +514,8 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
                   if (error) setError("");
                 }}
                 onComplete={(code) => void doSetCredential(undefined, code)}
-                status={error ? "error" : "idle"}
+                status={locking ? "loading" : error ? "error" : "idle"}
+                editable={!busy}
                 error={error || undefined}
                 style={savedPin ? undefined : styles.pinBoxes}
               />
@@ -510,6 +524,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
             <AutofillForm>
               <Input
                 label="Password"
+                disabled={busy}
                 nativeID="folder-new-password"
                 required
                 value={password}
@@ -525,6 +540,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
               />
               <Input
                 label="Confirm password"
+                disabled={busy}
                 nativeID="folder-confirm-password"
                 required
                 value={confirmPassword}
@@ -540,13 +556,15 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
           )}
           <View style={sheetMenuStyles.stack}>
             {lockType === "pattern" || lockType === "pin" ? (
-              <Button label="Back" variant="secondary" onPress={() => showMode("lockChoice")} />
+              <Button label="Back" variant="secondary" disabled={busy} onPress={() => showMode("lockChoice")} />
             ) : (
               <PanelActions
                 confirmLabel="Lock folder"
                 cancelLabel="Back"
                 onConfirm={() => void doSetCredential()}
                 onCancel={() => showMode("lockChoice")}
+                loading={locking}
+                cancelDisabled={busy}
               />
             )}
           </View>
@@ -614,6 +632,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
           ) : (
             <AutofillForm><Input
               label="Folder password"
+              disabled={busy}
               nativeID="folder-remove-password"
               required
               value={password}
@@ -632,6 +651,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
           <PressableScale
             accessibilityRole="button"
             accessibilityLabel="Use account password"
+            disabled={busy}
             hitSlop={8}
             onPress={() => showMode("removePasswordAccount")}
             style={styles.forgot}
@@ -667,6 +687,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
           <AccountAutofillIdentity nativeID="folder-account-username" />
           <Input
             label="Account password"
+            disabled={busy}
             nativeID="folder-account-password"
             required
             value={accountPassword}
@@ -685,6 +706,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
           <PressableScale
             accessibilityRole="button"
             accessibilityLabel={(folder.lockType ?? "password") === "device" ? "Use device lock" : "Use folder password"}
+            disabled={busy}
             hitSlop={8}
             onPress={() => showMode("removePassword")}
             style={styles.forgot}
@@ -714,7 +736,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
         <>
           <PanelHeader title="Choose an icon" />
           <View>
-            <FolderIconGrid value={icon} onChange={setIcon} />
+            <FolderIconGrid value={icon} onChange={setIcon} disabled={busy} />
             {error ? <Text variant="footnote" color="danger" style={styles.error}>{error}</Text> : null}
           </View>
           <PanelActions
@@ -722,6 +744,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
             onConfirm={doUpdateIcon}
             onCancel={() => showMode("menu")}
             loading={update.isPending}
+            cancelDisabled={busy}
             confirmDisabled={icon === folder.icon}
           />
         </>

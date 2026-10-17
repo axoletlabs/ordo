@@ -432,6 +432,7 @@ function PreviewState({
                 iconColor={unlocked ? palette.success : undefined}
                 label={folder.name}
                 onPress={() => onUnlock(folder)}
+                disabled={confirming}
                 value={unlocked ? "Unlocked" : "Unlock"}
               />
             );
@@ -458,6 +459,7 @@ function PreviewState({
           <SettingRow
             icon="options-outline"
             label="Advanced"
+            disabled={confirming}
             onPress={onAdvanced}
             value={advanced ? "Hide" : "Show"}
           />
@@ -466,12 +468,12 @@ function PreviewState({
               <Text variant="label" color="secondary">
                 Duplicates
               </Text>
-              <Segmented accessibilityLabel="Duplicate bookmarks" options={POLICY_OPTIONS} value={policy} onChange={onPolicy} />
+              <Segmented accessibilityLabel="Duplicate bookmarks" options={POLICY_OPTIONS} value={policy} onChange={onPolicy} disabled={confirming} />
               <SettingRow
                 icon="shield-checkmark-outline"
                 label="All at once"
                 description={atomic ? "Everything or nothing" : "Keep rows that succeed"}
-                right={<Toggle value={atomic} onValueChange={onAtomic} />}
+                right={<Toggle value={atomic} onValueChange={onAtomic} disabled={confirming} />}
                 rightFit="content"
               />
             </View>

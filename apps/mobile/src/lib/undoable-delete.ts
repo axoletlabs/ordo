@@ -20,13 +20,13 @@ import { tagsApi } from "./api/tags";
 import { sortFoldersDefault, sortTagsDefault } from "./list-sort";
 import { qk, tagsAnyAccess } from "./api/query-keys";
 import {
-  bumpFolderCount,
+  moveFolderCounts,
   collectCachedBookmarks,
-  insertBookmarkIfAbsent,
+  insertBookmarksIfAbsent,
   mapCachedBookmarks,
   removeBookmarksEverywhere,
   removeRemindersFromCache,
-  syncReminderInCache,
+  syncRemindersInCache,
 } from "./cache-helpers";
 import { deletedBookmarksToast, deletedFoldersToast, deletedTagsToast } from "./copy";
 import { errorMessage } from "./error-message";
@@ -211,12 +211,10 @@ function hideBookmarks(bookmarks: BookmarkDto[], bumpCounts: boolean) {
       );
     }
   }
-  removeBookmarksEverywhere(queryClient, new Set(bookmarks.map((bookmark) => bookmark.id)));
-  removeRemindersFromCache(queryClient, new Set(bookmarks.map((bookmark) => bookmark.id)));
-  for (const bookmark of bookmarks) {
-    queryClient.removeQueries({ queryKey: qk.bookmark(bookmark.id) });
-    if (bumpCounts) bumpFolderCount(queryClient, bookmark.folderId, -1, bookmark.isRead ? 0 : -1);
-  }
+  removeBookmarksEverywhere(queryClient, ids);
+  removeRemindersFromCache(queryClient, ids);
+  queryClient.removeQueries({ queryKey: ["bookmarks", "detail"], predicate: (query) => ids.has(String(query.queryKey[2])) });
+  if (bumpCounts) moveFolderCounts(queryClient, bookmarks, null);
   return { details, lists };
 }
 
@@ -227,18 +225,26 @@ function restoreBookmarks(
 ) {
   if (bookmarks.length === 0) return;
   for (const bookmark of bookmarks) pendingBookmarkIds.delete(bookmark.id);
-  for (const bookmark of bookmarks) {
-    for (const query of queryClient.getQueryCache().findAll({ queryKey: ["bookmarks"] })) {
-      const previouslyPresent = snapshot.lists.get(bookmark.id)?.some((key) =>
-        JSON.stringify(key) === JSON.stringify(query.queryKey));
-      if (!previouslyPresent && !listKeyAllowsRestore(query.queryKey, bookmark.folderId)) continue;
-      insertBookmarkIfAbsent(queryClient, query.queryKey, bookmark);
+  const memberships = new Map<string, Set<string>>();
+  for (const [id, keys] of snapshot.lists) {
+    for (const key of keys) {
+      const hash = JSON.stringify(key);
+      const ids = memberships.get(hash) ?? new Set<string>();
+      ids.add(id); memberships.set(hash, ids);
     }
-    if (bumpCounts) bumpFolderCount(queryClient, bookmark.folderId, +1, bookmark.isRead ? 0 : +1);
+  }
+  for (const query of queryClient.getQueryCache().findAll({ queryKey: ["bookmarks"] })) {
+    if (!isPagedBookmarks(query.state.data)) continue;
+    const previouslyPresent = memberships.get(JSON.stringify(query.queryKey));
+    const incoming = bookmarks.filter((bookmark) => previouslyPresent?.has(bookmark.id) || listKeyAllowsRestore(query.queryKey, bookmark.folderId));
+    if (incoming.length) insertBookmarksIfAbsent(queryClient, query.queryKey, incoming);
+  }
+  if (bumpCounts) moveFolderCounts(queryClient, bookmarks, null, -1);
+  syncRemindersInCache(queryClient, bookmarks.filter((bookmark) => bookmark.remindAt != null));
+  for (const bookmark of bookmarks) {
     const detail = snapshot.details.get(bookmark.id);
     if (detail) queryClient.setQueryData(qk.bookmark(bookmark.id), detail);
     if (bookmark.remindAt != null) {
-      syncReminderInCache(queryClient, bookmark);
       void import("./reminder-notifications").then(({ syncBookmarkReminder }) =>
         syncBookmarkReminder(bookmark),
       );

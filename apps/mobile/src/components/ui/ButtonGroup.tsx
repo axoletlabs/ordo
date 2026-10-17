@@ -1,5 +1,5 @@
 /** M3 standard button group: 15% expansion, borrowed from adjacent buttons. */
-import React, { createContext, useContext, useState } from "react";
+import React, { createContext, useContext, useRef, useState } from "react";
 import { View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { useMaterialMotion } from "../../theme/material-motion";
@@ -28,7 +28,10 @@ export function ButtonGroup({ children, itemWidth = 48, visualInset = 4, gap = 4
 function GroupItem({ width, children, onInteraction }: { width: number; children: React.ReactNode; onInteraction: (pressed: boolean) => void }) {
   const motion = useMaterialMotion();
   const size = useSharedValue(width);
+  const previous = useRef({ width, spring: motion.fast, reducedMotion: motion.reducedMotion });
   React.useEffect(() => {
+    if (previous.current.width === width && previous.current.spring === motion.fast && previous.current.reducedMotion === motion.reducedMotion) return;
+    previous.current = { width, spring: motion.fast, reducedMotion: motion.reducedMotion };
     size.value = motion.reducedMotion ? width : withSpring(width, motion.fast);
   }, [width, motion.fast, motion.reducedMotion, size]);
   const animated = useAnimatedStyle(() => ({ width: size.value }));

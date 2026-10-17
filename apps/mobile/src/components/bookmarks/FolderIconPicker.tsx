@@ -17,10 +17,12 @@ export function FolderIconPicker({
   value,
   onChange,
   onOpenChange,
+  disabled = false,
 }: {
   value: FolderIcon;
   onChange: (icon: FolderIcon) => void;
   onOpenChange?: (open: boolean) => void;
+  disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const close = () => { setOpen(false); onOpenChange?.(false); };
@@ -28,7 +30,7 @@ export function FolderIconPicker({
   return (
     <>
     <PickerField label="Icon" value={value.replace(/-outline$/, "").replace(/-/g, " ").replace(/^./, (letter) => letter.toUpperCase())}
-      icon={value} onPress={() => { dismissKeyboard(); setOpen(true); onOpenChange?.(true); }} />
+      icon={value} disabled={disabled} onPress={() => { dismissKeyboard(); setOpen(true); onOpenChange?.(true); }} />
     <FloatingPanel visible={open} onDismiss={close} scrollBody={false}>
       <PanelHeader title="Folder icon" onClose={close} />
        <FolderIconGrid value={value} onChange={onChange} onConfirm={close} />
@@ -37,9 +39,9 @@ export function FolderIconPicker({
   );
 }
 
-export function FolderIconGrid({ value, onChange, onConfirm }: { value: FolderIcon; onChange: (icon: FolderIcon) => void; onConfirm?: () => void }) {
+export function FolderIconGrid({ value, onChange, onConfirm, disabled = false }: { value: FolderIcon; onChange: (icon: FolderIcon) => void; onConfirm?: () => void; disabled?: boolean }) {
   const { palette, expressive } = useTheme();
-   const keys = useRadioGroupKeys(FOLDER_ICONS, onChange, 5);
+    const keys = useRadioGroupKeys(FOLDER_ICONS, (icon) => { if (!disabled) onChange(icon); }, 5);
    return <View {...keys} accessibilityRole="radiogroup" accessibilityLabel="Folder icon" style={{ flexShrink: 1 }}>
       <ThemedFlatList data={FOLDER_ICONS} numColumns={5} keyExtractor={(icon) => icon}
          extraData={value} initialNumToRender={Platform.OS === "web" ? FOLDER_ICONS.length : 20} maxToRenderPerBatch={20} windowSize={3}
@@ -50,7 +52,7 @@ export function FolderIconGrid({ value, onChange, onConfirm }: { value: FolderIc
           <View style={styles.cell}><ListPressable
             accessibilityRole="radio"
             accessibilityLabel={icon.replace(/-outline$/, "").replace(/-/g, " ")}
-            accessibilityState={{ checked: selected }}
+            accessibilityState={{ checked: selected, disabled }} disabled={disabled}
             {...(Platform.OS === "web" ? { tabIndex: selected ? 0 : -1 } : {})}
             onPress={() => {
               haptics.selection();

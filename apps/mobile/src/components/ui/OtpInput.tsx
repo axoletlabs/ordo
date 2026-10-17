@@ -9,6 +9,7 @@ import {
   StyleSheet,
   TextInput,
   View,
+  useWindowDimensions,
   type TextStyle,
   type ViewStyle,
 } from "react-native";
@@ -38,6 +39,7 @@ import { editOtp, normalizeOtp } from "../../lib/otp-edit";
 import { otpAutofillProps } from "../../lib/otp-autofill";
 import { useCredentialLock } from "../../hooks/use-credential-lock";
 import { useAnimationActivity } from "../../hooks/use-animation-activity";
+import { otpGroups } from "../../lib/otp-layout";
 
 export type OtpStatus = "idle" | "loading" | "success" | "error";
 
@@ -95,6 +97,12 @@ export function OtpInput({
   const [, refreshSelection] = React.useReducer((revision: number) => revision + 1, 0);
 
   const chars = normalizeOtp(value, kind, length);
+  const { fontScale } = useWindowDimensions();
+  const compact = kind === "backup";
+  const grouped = compact && length === MFA.BACKUP_CODE_LENGTH;
+  const groups = otpGroups(length, width, grouped);
+  const stacked = groups.length > 1;
+  const cellHeight = Math.max(compact ? 48 : 56, fontSize[compact ? "2xl" : "3xl"] * fontScale + 16);
   const routeLocked = useCredentialLock();
   const locked = routeLocked || !editable || status === "loading" || status === "success";
   const inactive = routeLocked || !editable || status === "loading";
@@ -132,7 +140,7 @@ export function OtpInput({
       return;
     }
     inputRefs.current[Math.min(focusedIndex, chars.length, length - 1)]?.focus();
-  }, [focusedIndex, chars, locked, length]);
+  }, [focusedIndex, chars, locked, length, stacked]);
 
   useEffect(() => {
     if (chars.length > prevLen.current) haptics.selection();
@@ -208,9 +216,6 @@ export function OtpInput({
 
   const message = error || helper;
   const messageDanger = Boolean(error);
-  const compact = kind === "backup";
-  const grouped = compact && length === MFA.BACKUP_CODE_LENGTH;
-  const stacked = grouped && width < 448;
   const boxPalette = {
     text: inactive ? alphaTint(palette.onSurface, 0.38) : palette.text,
     border: inactive ? alphaTint(palette.onSurface, 0.12) : palette.outline,
@@ -234,6 +239,7 @@ export function OtpInput({
       focused={focusedIndex === i && !locked}
       status={status}
       compact={compact}
+      height={cellHeight}
       palette={boxPalette}
     >
       <TextInput
@@ -309,13 +315,13 @@ export function OtpInput({
 
       <View style={styles.hit} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
         <Animated.View style={[styles.row, !grouped && width > 0 && width < length * 48 + (length - 1) * spacing[6] ? styles.tightRow : null, stacked ? styles.stackedRow : null, rowMotion]}>
-          {grouped ? (
+          {grouped || stacked ? (
             <>
-              <View style={[styles.group, stacked ? styles.stackedGroup : null]}>{Array.from({ length: 4 }, (_, i) => renderBox(i))}</View>
+              <View style={[styles.group, stacked ? styles.stackedGroup : null]}>{(stacked ? groups[0] : [0, 1, 2, 3]).map(renderBox)}</View>
               {!stacked ? <Text variant="title3" color="tertiary" style={styles.hyphen}>
                 -
               </Text> : null}
-              <View style={[styles.group, stacked ? styles.stackedGroup : null]}>{Array.from({ length: 4 }, (_, i) => renderBox(i + 4))}</View>
+              <View style={[styles.group, stacked ? styles.stackedGroup : null]}>{(stacked ? groups[1] : [4, 5, 6, 7]).map(renderBox)}</View>
             </>
           ) : (
             Array.from({ length }, (_, i) => renderBox(i))
@@ -353,6 +359,7 @@ const DigitBox = React.memo(function DigitBox({
   focused,
   status,
   compact,
+  height,
   palette,
   children,
 }: {
@@ -363,6 +370,7 @@ const DigitBox = React.memo(function DigitBox({
   focused: boolean;
   status: OtpStatus;
   compact?: boolean;
+  height: number;
   palette: BoxPalette;
   children: React.ReactNode;
 }) {
@@ -487,7 +495,7 @@ const DigitBox = React.memo(function DigitBox({
     <Animated.View
       style={[
         compact ? styles.boxCompact : styles.box,
-        { borderRadius: radius.sm, zIndex: focused || status !== "idle" ? 2 : 1 },
+        { height, minWidth: 48, borderRadius: radius.sm, zIndex: focused || status !== "idle" ? 2 : 1 },
         boxStyle,
       ]}
     >

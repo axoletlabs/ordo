@@ -94,7 +94,7 @@ export function insertBookmarkIfAbsent(
   insertBookmarksIfAbsent(qc, queryKey, [bookmark]);
 }
 
-function insertBookmarksIfAbsent(qc: QueryClient, queryKey: readonly unknown[], bookmarks: readonly BookmarkDto[]) {
+export function insertBookmarksIfAbsent(qc: QueryClient, queryKey: readonly unknown[], bookmarks: readonly BookmarkDto[]) {
   qc.setQueriesData<BookmarkData>({ queryKey }, (data) => {
     if (!data?.pages[0]) return data;
     const present = new Set(data.pages.flatMap((page) => page.items.map((item) => item.id)));
@@ -249,26 +249,25 @@ export function syncReminderInCache(
   bookmark: Pick<BookmarkDto, "id" | "folderId" | "title" | "remindAt"> &
     Partial<Pick<BookmarkDto, "domain" | "description">>,
 ) {
+  syncRemindersInCache(qc, [bookmark]);
+}
+
+/** Reconcile a selection with one lookup/sort/publication, including Undo. */
+export function syncRemindersInCache(qc: QueryClient, bookmarks: readonly (Pick<BookmarkDto, "id" | "folderId" | "title" | "remindAt"> &
+  Partial<Pick<BookmarkDto, "domain" | "description">>)[]) {
+  if (!bookmarks.length) return;
   qc.setQueryData<BookmarkReminderDto[]>(qk.reminders, (old) => {
-    const rows = Array.isArray(old) ? old : [];
-    if (bookmark.remindAt == null) {
-      const next = rows.filter((row) => row.id !== bookmark.id);
-      return next.length === rows.length ? old : next;
+    const rows = new Map((Array.isArray(old) ? old : []).map((row) => [row.id, row]));
+    let changed = false;
+    for (const bookmark of bookmarks) {
+      if (bookmark.remindAt == null) { changed = rows.delete(bookmark.id) || changed; continue; }
+      const existing = rows.get(bookmark.id);
+      rows.set(bookmark.id, { id: bookmark.id, folderId: bookmark.folderId, title: bookmark.title || existing?.title || "",
+        domain: bookmark.domain || existing?.domain || "", description: bookmark.description !== undefined ? bookmark.description : (existing?.description ?? null),
+        remindAt: bookmark.remindAt });
+      changed = true;
     }
-    const existing = rows.find((row) => row.id === bookmark.id);
-    const item: BookmarkReminderDto = {
-      id: bookmark.id,
-      folderId: bookmark.folderId,
-      title: bookmark.title || existing?.title || "",
-      domain: bookmark.domain || existing?.domain || "",
-      description:
-        bookmark.description !== undefined ? bookmark.description : (existing?.description ?? null),
-      remindAt: bookmark.remindAt,
-    };
-    const index = rows.findIndex((row) => row.id === bookmark.id);
-    const next = index === -1 ? [...rows, item] : rows.map((row, i) => (i === index ? item : row));
-    next.sort((a, b) => a.remindAt - b.remindAt || a.id.localeCompare(b.id));
-    return next;
+    return changed ? [...rows.values()].sort((a, b) => a.remindAt - b.remindAt || a.id.localeCompare(b.id)) : old;
   });
 }
 

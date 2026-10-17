@@ -27,6 +27,7 @@ export interface SettingRowProps {
   position?: "first" | "middle" | "last" | "only";
   selectionRole?: "radio" | "checkbox";
   checked?: boolean;
+  disabled?: boolean;
 }
 
 export function SettingRow({
@@ -44,6 +45,7 @@ export function SettingRow({
   position = "only",
   selectionRole,
   checked,
+  disabled = false,
 }: SettingRowProps) {
   const { palette, expressive } = useTheme();
   const { width } = useWindowDimensions();
@@ -57,7 +59,8 @@ export function SettingRow({
     borderBottomLeftRadius: position === "last" || position === "only" ? expressive ? radius.xl : radius.lg : undefined,
     borderBottomRightRadius: position === "last" || position === "only" ? expressive ? radius.xl : radius.lg : undefined,
     marginBottom: expressive ? spacing[2] : 0,
-    borderBottomWidth: expressive || !divider ? 0 : StyleSheet.hairlineWidth }];
+    borderBottomWidth: expressive || !divider ? 0 : StyleSheet.hairlineWidth,
+    opacity: disabled ? 0.38 : 1 }];
 
   const content = (
     <>
@@ -96,7 +99,8 @@ export function SettingRow({
   return (
     <PressableScale
       accessibilityRole={selectionRole ?? "button"}
-      accessibilityState={selectionRole ? { checked: !!checked } : undefined}
+      disabled={disabled}
+      accessibilityState={{ disabled, ...(selectionRole ? { checked: !!checked } : {}) }}
       accessibilityLabel={description ? `${label}, ${description}` : label}
       style={rowStyle}
       onPress={() => {

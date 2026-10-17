@@ -3,7 +3,7 @@
  * singular route identities, including when multiple taps are queued.
  */
 import React, { useEffect } from "react";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { Stack } from "expo-router";
 import { enableFreeze } from "react-native-screens";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
@@ -18,6 +18,8 @@ import { MfaEnrollmentScreen } from "../../src/components/auth/MfaEnrollmentScre
 import { ReminderNotificationHost } from "../../src/components/bookmarks/ReminderNotificationHost";
 import { PageTransition } from "../../src/components/ui/PageTransition";
 import { ChangelogAnnouncementHost } from "../../src/components/settings/ChangelogAnnouncementHost";
+import { useOverlayFocus } from "../../src/hooks/use-overlay-focus";
+import { AnimationActivityContext, useAnimationActivity } from "../../src/hooks/use-animation-activity";
 
 enableFreeze(true);
 
@@ -34,6 +36,7 @@ function MfaEnrollmentGate() {
   const { palette } = useTheme();
   const reducedMotion = useReducedMotionPreference();
   const opacity = useSharedValue(0);
+  const focusRef = useOverlayFocus(true, () => {}, "dialog", false);
 
   useEffect(() => {
     opacity.value = withTiming(1, { duration: reducedMotion ? 0 : 200 });
@@ -43,6 +46,8 @@ function MfaEnrollmentGate() {
 
   return (
     <Animated.View
+      ref={focusRef}
+      {...(Platform.OS === "web" ? { dataSet: { materialOverlay: "true" } } : {})}
       accessibilityViewIsModal
       importantForAccessibility="yes"
       style={[
@@ -95,6 +100,7 @@ export default function AppLayout() {
 
 function AuthenticatedAppLayout() {
   const { palette } = useTheme();
+  const animationActive = useAnimationActivity();
   const user = useAuthStore((s) => s.user);
   const status = useAuthStore((s) => s.status);
   const reducedMotion = useReducedMotionPreference();
@@ -105,6 +111,14 @@ function AuthenticatedAppLayout() {
   useValidateSession();
 
   const needsMfaEnrollment = Boolean(serverInfo?.mfaRequired && user && !user.mfaEnabled);
+  const contentRef = React.useRef<View>(null);
+  React.useLayoutEffect(() => {
+    if (Platform.OS !== "web") return;
+    const root = contentRef.current as unknown as HTMLElement | null;
+    if (!root) return;
+    root.inert = needsMfaEnrollment;
+    return () => { root.inert = false; };
+  }, [needsMfaEnrollment]);
 
   const stack = (
     <Stack
@@ -143,8 +157,15 @@ function AuthenticatedAppLayout() {
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.background }}>
-      <View style={{ flex: 1 }}>{stack}</View>
-      <ReminderNotificationHost />
+      <View ref={contentRef} style={{ flex: 1 }} pointerEvents={needsMfaEnrollment ? "none" : "auto"}
+        accessibilityElementsHidden={needsMfaEnrollment}
+        importantForAccessibility={needsMfaEnrollment ? "no-hide-descendants" : "auto"}
+        {...(Platform.OS === "web" ? { "aria-hidden": needsMfaEnrollment } : {})}>
+        <AnimationActivityContext.Provider value={animationActive && !needsMfaEnrollment}>
+          {stack}
+          <ReminderNotificationHost />
+        </AnimationActivityContext.Provider>
+      </View>
       <ChangelogAnnouncementHost enabled={status === "authenticated" && Boolean(serverInfo) && !needsMfaEnrollment} />
       {needsMfaEnrollment ? <MfaEnrollmentGate /> : null}
     </View>

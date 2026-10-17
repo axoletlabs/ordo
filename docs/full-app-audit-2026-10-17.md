@@ -1,5 +1,7 @@
 # App-wide performance, Material 3, and motion audit
 
+The [follow-up pass](#follow-up-workflow-and-policy-audit) extends the initial results below with real-server workflows, delayed/rejected mutations, narrow OTP fields, and mandatory-MFA accessibility. **This is still not exhaustive native release approval.** Native/device checks and the documented first-dialog main-thread costs remain open.
+
 ## Scope and confidence
 
 Date: 2026-10-17. Baseline: `01af889` (`perf(mobile): eliminate contents menu mounting stalls`).
@@ -72,7 +74,7 @@ Minimalism is maintained through shared rails, typography, tonal grouping, bound
 
 The new regression suite exercises real TanStack Query operations, not a reimplementation of the batching algorithm. Cases cover destination/source/search/index membership, duplicate reconciliation, detail retention, mixed/root moves, reminder rollback, concurrent independent moves, row geometry, extraction invalidation, progress-threshold behavior, serialized/coalesced writes, failed-write recovery, and tonal contrast.
 
-Browser results are collected against production Expo exports with synthetic API/session fixtures. No real account is used and no real folder, bookmark, authentication setting, or session is modified. The screen helper waits for a visible route marker and splash dismissal before capture; early captures taken before that readiness fix were discarded.
+Initial browser results were collected against production Expo exports with synthetic API/session fixtures. No real user's account, folder, bookmark, authentication setting, or session was modified. The follow-up additionally uses newly created disposable accounts on an isolated loopback server. The screen helper waits for a visible route marker and splash dismissal before capture; early captures taken before that readiness fix were discarded.
 
 The [verification manifest](full-app-audit-2026-10-17/verification.json) records export fingerprints and links the complete passing result files:
 
@@ -118,20 +120,75 @@ This measures cache work only, not server mutation latency or complete UI transi
 
 These are synthetic-fixture browser screenshots, not Android screenshots.
 
+## Follow-up workflow and policy audit
+
+The continuation starts from published commit `e6616d4`, keeping the original evidence above as historical results. Its separate [verification manifest](full-app-audit-2026-10-17/follow-up/verification.json) records the production export fingerprints, exact suite totals, and complete result files. Earlier failing experiments are not counted as passes.
+
+The updated [source inventory](full-app-audit-2026-10-17/follow-up/source-inventory.json) contains **344 TypeScript files, 30 route/layout files, 41,435 lines, 603 interaction sites, and 115 motion calls**. These are source counts, not dynamic coverage percentages.
+
+All eight primary follow-up suites use the same `final3` production web export:
+
+| Suite | Captures | Checks | Result |
+| --- | ---: | ---: | --- |
+| Routes | 200 | 801 | Pass |
+| Phone overlays | 60 | 253 | Pass |
+| Wide overlays | 60 | 253 | Pass |
+| Narrow/empty/error/Retry states | 34 | 145 | Pass |
+| Delayed/rejected mutations and OTP workflows | 24 | 185 | Pass |
+| Account/server policy branches | 48 | 233 | Pass |
+| Actual loopback-server workflows | 5 | 31 | Pass |
+| Isolated interactions, timing, and held transition | 43 | 215 | Pass |
+| **Total** | **474** | **2,116** | **0 issues, 0 uncaught browser errors** |
+
+The quick suite's first invocation found the static server stopped (`ERR_CONNECTION_REFUSED`) and executed no checks. It was rerun after restarting the identical export; the passing rerun above is the packaged result, not a counted pass for the failed invocation.
+
+### Additional findings and corrections
+
+| Finding | Correction |
+| --- | --- |
+| Rapid folder creation followed by reload could restore an older, still-"fresh" empty snapshot | Flush pending persistence on `pagehide`; remove the second deferred storage-write timer; restore disk snapshots as invalidated so mounted queries revalidate without blocking cached first paint. Retain the same account/server keys and private-content filtering |
+| Folder password/PIN/pattern setup lacked an in-flight guard; folder editing could change pages or dismiss while pending | Guard lock submission synchronously, show pending state, disable affected inputs/options/actions, and prevent Back/scrim/Escape dismissal while the mutation owns the surface. Errors retain drafts and re-enable explicit retry |
+| Save/create forms and import previews allowed changing request options while pending | Add shared disabled behavior to picker fields, icon grids, and setting rows; disable save destinations/tags, folder icons, and import duplicate/atomic/advanced controls during the request |
+| Removing a password lock on web also called native-only SecureStore cleanup, raising an uncaught error | Platform-guard device credential access and make post-success cleanup failures handled. Native device-lock creation remains unavailable on web; no fallback secret is stored there |
+| Six OTP/PIN cells could shrink below 48dp in narrow dialogs | Split narrow codes into ordered groups, preserve editing/focus across group-layout changes, and scale cell height with system font scale. Extend DOM target checks to text inputs, not only role-based controls |
+| Mandatory MFA enrollment visually covered the library but left its controls keyboard/assistive-technology reachable on web | Keep navigation mounted, but make the background inert, hide its accessibility subtree, block pointer events, and suspend its repeating animation activity. Enrollment owns web focus; its QR/backup-code overlays still use the shared portal |
+| Incoming web slide transitions could temporarily widen the root scroller | Clip at the scene viewport rather than at the constrained content column. A held-mid-transition regression checks containment, rather than relying on capture timing; native stack motion is unchanged |
+| Bulk delete/Undo still republished list/count/reminder data per selected bookmark | Batch insertions, aggregated count deltas, detail removals, and reminder reconciliation. A real QueryClient regression deletes/restores 500 of 1,000 bookmarks while another deletion stays pending; Undo publishes six success/data updates in that fixture and retains article bodies, search/index membership, counts, and reminders |
+| Newly mounted controls started springs already at their settled target, and reduced-motion snapshots created repeated media queries | Reuse the shared media-query object; skip redundant initial springs in switch, eye toggle, connected-selector label, and standard button-group consumers. Actual state/preference changes still animate or settle according to the shared motion scheme |
+
+### Executed workflow coverage
+
+- **Delayed/rejected fixture mutations:** lock and rename drafts, one request in flight, disabled fields/pickers, non-dismissible pending surfaces, retry, and pending-save options across both themes and both design modes. Six-digit PIN targets at 320px, orientation regrouping with value **and keyboard focus** retained, live reduced-motion changes, and dismissal without a retained blocker.
+- **Account/server policy fixtures:** registration disabled; mandatory MFA blocking the background and owning keyboard focus; mandatory-enrollment QR open/close; backup-code editing; no-SMTP recovery presentation; and unavailable device keys on web. Checked at 320px and 1280px in light/dark and Standard/Expressive.
+- **Actual loopback server:** registration mismatch/success; nested folder creation and bookmark save; immediate reload consistency; password-lock setup/mismatch; rejected/successful unlock; account-password recovery; CSV preview/commit; delayed import option locking; duplicate and malformed-file handling; JSON/HTML/CSV browser downloads containing committed data; TOTP enrollment; logout; incorrect MFA rejection; backup-code sign-in; and account-deletion step-up/cancellation/completion. Only the freshly created `example.test` account is deleted. This uses real server/auth/database requests, not fixture mutation responses.
+- **Deterministic checks:** 31 mobile tests, including actual TanStack hydration/background revalidation, persistence, device-lock web guards, OTP layout, batched delete/Undo, existing move/progress/autofill regressions, and 336 palette assertions. Workspace typecheck/lint, SQLite tests, server build, and both production web and Android JS exports are rerun.
+
+The local server has its own `/tmp/opencode` SQLite database, test-only secrets, no SMTP, and no existing account credentials. Native file pickers, share sheets, installation, real biometric prompts, TalkBack, physical frame timing, display/font scaling, and OEM wallpaper palettes are **not** verified by these browser workflows. The app's backend-enforced MFA policy is distinct from the corrected background accessibility behavior; this finding is not a claim that server authorization was bypassed.
+
+### Residual performance and release status
+
+The added `profile-dialogs.mjs` records cold/warm save opens with a CPU sampler, optional timeline trace, 4× CPU throttling, and synthetic data. Three pre-change cold samples had largest long tasks of **290–298ms**; three intermediate follow-up samples had **279–288ms**. Warm samples also overlapped (**203–235ms** versus **206–230ms**). These small, instrumented samples do **not** establish a statistically significant cold-dialog improvement and are not directly comparable to the earlier unsampled browser timings. The summaries are retained separately. React commit/focus/layout work remains a diagnostic lead, not an eliminated bottleneck or a native FPS result.
+
+The isolated final3 quick run still records largest cold-save long tasks of **243–275ms** across five normal-motion configurations and **213ms** in reduced-motion landscape. Cold contents records **140–146ms** normally and **133ms** with reduced motion. These results reinforce the unresolved first-open finding; correctness checks passing does not mean the timing costs meet a native frame budget.
+
+The initial [development APK workflow](https://github.com/axoletlabs/ordo/actions/runs/39040664088) completed successfully, including the APK build, package/signing checks, and `ordo-apk-development` artifact upload. That artifact belongs to `e6616d4`, not the follow-up source. A newly dispatched workflow is reported separately when the follow-up is published. `adb devices` still reports no attached device; this host also has no configured Android SDK/emulator or KVM device.
+
+**Open work:** the native release checklist below; SMTP delivery/reset/email-change integration; broader account/server switching and offline race testing; native protected/encrypted-library and WebView workflows; and further cold-dialog profiling/remediation. The source inventory and executed matrices are not an assertion that every possible validation, permission, account, and OS branch has been executed.
+
 ## Coverage and remaining device checks
 
 | Area | Source/fixture coverage in this pass |
 | --- | --- |
 | Auth | Sign in, registration, recovery, reset code, email verification, MFA challenge routes; shared inputs/OTP/autofill policy tests |
 | Library | Home, folder, tag manager/detail, unified search/filter/sort menus, tagged-row geometry, save/move/edit-tags/delete surfaces |
-| Folder workflows | Rename, icon picker, delete confirmation, pattern/PIN/password setup, accessible pattern buttons, nested creation and retained parent/child drafts |
+| Folder workflows | Rename, icon picker, delete confirmation, pattern/PIN/password setup, accessible pattern buttons, nested creation and retained parent/child drafts; follow-up adds delayed mutation checks and actual password-lock/unlock/recovery requests |
 | Reader | Article, contents, preferences, reminder presets/custom date/calendar, reduced-motion landscape interaction checks; progress queue unit tests |
 | Settings | Root, account, name, email/verification, password, security, sessions, appearance, controls, server, data, about, account deletion routes |
-| Settings overlays | Theme keyboard navigation, enlarged authenticator QR, revoke-session and sign-out confirmation |
+| Settings overlays | Theme keyboard navigation, enlarged authenticator QR, revoke-session and sign-out confirmation; follow-up adds actual import/export, authenticator enrollment/sign-in, and account-deletion step-up |
 | Loading and failure | Cold-cache skeleton with delayed network, empty-library save action, server error and successful Retry recovery |
 | Shared UI | Buttons, icon actions, fields, selectors, lists, menu/dialog focus and dismissal, spinner/progress/skeleton/OTP lifecycle, scrollbars, root/page motion |
 
-“Route coverage” is not every possible account/server/permission combination. Not dynamically completed here: real authentication/SMTP, import/export/native file pickers, OS share/update/install flows, biometric unlock, persisted encrypted-library/server integration, native WebView selection/scrolling, or every validation/error branch. Existing historical reports are not counted as newly executed verification.
+“Route coverage” is not every possible account/server/permission combination. The follow-up completes the specific actual authentication/import/export/protected-folder workflows listed above, but not SMTP delivery, native file pickers, OS share/update/install flows, biometric unlock, every encrypted-library/server scenario, native WebView selection/scrolling, or every validation/error branch. Existing historical reports are not counted as newly executed verification.
 
 Before native release approval:
 
@@ -140,7 +197,7 @@ Before native release approval:
 3. Run TalkBack/Switch Access/D-pad through all list, form, OTP, pattern, menu, and confirmation workflows; verify virtualized catalogue navigation beyond initially mounted rows, including Home/End behavior.
 4. Verify system font scales through 200%, display scaling, Android 12+ real wallpaper palettes, AMOLED, and all contrast levels. Generated static palette checks do not validate OEM palette extraction or text over every image.
 5. Profile background/foreground and obscured overlays on native to confirm repeating-work/battery improvements; check interrupted transitions and preference changes during animation.
-6. Exercise real-server mutations, account/server switching during progress writes, database upgrade on a backed-up production-like database, offline reconnect, and encrypted/protected-folder access. Fixture success is not server end-to-end validation.
+6. Extend the loopback end-to-end mutations with account/server switching during progress writes, database upgrade on a backed-up production-like database, offline reconnect, and native encrypted/protected-folder access. The executed loopback subset is not approval of every server/OS workflow.
 
 ## Reproduction
 
@@ -168,7 +225,29 @@ node apps/mobile/scripts/ui-audit.mjs --overlays-only
 node apps/mobile/scripts/ui-audit.mjs --overlays-only --wide-overlays
 node apps/mobile/scripts/ui-audit.mjs --states-only
 node apps/mobile/scripts/ui-audit.mjs --quick
+node apps/mobile/scripts/workflow-audit.mjs
+node apps/mobile/scripts/auth-policy-audit.mjs
+node apps/mobile/scripts/profile-dialogs.mjs
 ```
+
+For actual server workflows, start a **new disposable loopback server**, never a normal local/remote installation. Build the server first, use a new database path each time, and keep secrets test-only:
+
+```sh
+NODE_ENV=test PORT=8260 LISTEN_HOST=127.0.0.1 \
+DATABASE_URL="file:/tmp/opencode/ordo-audit-$(date +%s).db" \
+JWT_SECRET="$(node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))')" \
+LIBRARY_KEK="$(node -e 'console.log(require("node:crypto").randomBytes(32).toString("hex"))')" \
+REGISTRATION_ENABLED=true EMAIL_VERIFICATION_REQUIRED=false SMTP_URL= SMTP_REQUIRED=false \
+RATE_LIMIT_ENABLED=false pnpm --filter @ordo/server start
+```
+
+In a separate terminal, with the exported web app served and the same Playwright environment configured:
+
+```sh
+ORDO_AUDIT_API=http://127.0.0.1:8260 node apps/mobile/scripts/local-server-audit.mjs
+```
+
+The local-server runner refuses non-loopback endpoints, creates its own account, and deletes that account after the successful end-to-end run. Failed runs can leave disposable accounts in the disposable database; do not point this runner at real data. Give each script its own `ORDO_UI_OUTPUT`. Run timing comparisons **without** the other browser/build processes; parallel layout matrices are only correctness evidence.
 
 Use a different output directory per invocation. Run `--quick` without competing browser/build workloads when comparing timings. `--baseline` records known baseline findings without failing. Timing includes Playwright actionability and an explicit settle window; it is **not an animation duration or FPS measurement**. CI runs deterministic mobile regressions and SQLite migration/query-plan tests; browser export testing remains opt-in.
 

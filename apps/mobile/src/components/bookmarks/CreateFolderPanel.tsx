@@ -88,7 +88,7 @@ function CreateFolderContent({
             error={error || undefined}
             onSubmitEditing={submit}
           />
-          <FolderIconPicker value={icon} onChange={setIcon} onOpenChange={setIconOpen} />
+          <FolderIconPicker value={icon} onChange={setIcon} onOpenChange={setIconOpen} disabled={createFolder.isPending} />
         </View>
         <PanelActions
           confirmLabel="Create folder"
