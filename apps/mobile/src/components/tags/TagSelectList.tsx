@@ -3,13 +3,14 @@
  * inline "New tag" affordance. Shared by the save sheet and edit-tags sheet.
  */
 import React, { useMemo, useState } from "react";
-import { Keyboard, Platform, StyleSheet, View, type PressableProps } from "react-native";
+import { Keyboard, StyleSheet, View } from "react-native";
 import { ThemedFlatList } from "../ui/ThemedScrollView";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { type TagColor } from "@ordo/shared";
 import { Text } from "../ui/Text";
 import { Input } from "../ui/Input";
 import { PressableScale } from "../ui/PressableScale";
+import { ContextMenuItem } from "../ui/ContextMenu";
 import { useTags, useCreateTag } from "../../hooks/use-tags";
 import { useTheme } from "../../theme/ThemeProvider";
 import { radius, spacing } from "../../theme/tokens";
@@ -82,11 +83,22 @@ export function TagSelectList({
     }
   };
 
-  const renderRow = (tag: { id: string; name: string; color: TagColor }, selected: boolean) => (
+  const renderRow = (tag: { id: string; name: string; color: TagColor }, selected: boolean) => menu ? (
+    // Dropdowns share menu selection colors/shape in both design modes; the
+    // standalone checklist below deliberately keeps its list-selection roles.
+    <ContextMenuItem
+      key={tag.id}
+      label={tag.name}
+      labelLines={1}
+      leading={<View style={[styles.dot, { backgroundColor: tagColorValue(tag.color).dot }]} />}
+      selected={selected}
+      selectionRole="menuitemcheckbox"
+      onPress={() => onToggle(tag.id)}
+    />
+  ) : (
     <PressableScale
       key={tag.id}
       accessibilityRole="checkbox"
-      {...(menu && Platform.OS === "web" ? { role: "menuitemcheckbox" as PressableProps["role"] } : null)}
       accessibilityLabel={tag.name}
       accessibilityState={{ checked: selected }}
       stateLayerColor={selected ? palette.onSecondaryContainer : palette.onSurface}
@@ -102,9 +114,21 @@ export function TagSelectList({
   );
 
   const createRow =
-    autoCreate && query.trim() ? (
+    menu && autoCreate && (query.trim() || onRequestCreateTag) ? (
+      <ContextMenuItem
+        label={query.trim() ? `Create “${query.trim()}”` : "New tag"}
+        labelLines={1}
+        leading={<View style={[styles.dot, { backgroundColor: palette.accent }]} />}
+        trailing={<Ionicons name={query.trim() ? "add" : "chevron-forward"} size={18} color={palette.onSurfaceVariant} />}
+        busy={!!query.trim() && create.isPending}
+        onPress={() => {
+          if (query.trim()) void createAndSelect(query.trim());
+          else { Keyboard.dismiss(); onRequestCreateTag?.(); }
+        }}
+      />
+    ) : autoCreate && query.trim() ? (
       <PressableScale
-        accessibilityRole={menu ? "menuitem" : "button"}
+        accessibilityRole="button"
         accessibilityLabel={`Create tag ${query.trim()}`}
         disabled={create.isPending}
         accessibilityState={{ busy: create.isPending }}
@@ -119,7 +143,7 @@ export function TagSelectList({
       </PressableScale>
     ) : autoCreate && onRequestCreateTag ? (
       <PressableScale
-        accessibilityRole={menu ? "menuitem" : "button"}
+        accessibilityRole="button"
         accessibilityLabel="New tag"
         style={styles.row}
         onPress={() => {
