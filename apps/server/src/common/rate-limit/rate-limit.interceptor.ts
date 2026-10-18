@@ -48,6 +48,11 @@ export class RateLimitInterceptor implements NestInterceptor {
       case "resend-verification":
         this.rateLimit.consumeResendVerification(ip, emailFromBody(req));
         return;
+      case "email-change-resend": {
+        const userId = req.user?.userId;
+        if (userId) this.rateLimit.consumeResendEmailChange(userId);
+        return;
+      }
       case "verify-email":
         this.rateLimit.consumeVerifyEmail(ip);
         return;
