@@ -114,7 +114,9 @@ export default function DeleteAccountScreen() {
                 autoCorrect={false}
                 editable={!credentialsLocked}
                 mono
-                onSubmitEditing={submit}
+                onSubmitEditing={() => {
+                  if (currentPassword && confirmed) void submit();
+                }}
               />
               <Button
                 label="Delete account"

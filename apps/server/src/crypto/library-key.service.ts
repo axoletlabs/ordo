@@ -1,5 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
-import { tagNameKey } from "@ordo/shared";
+import { ErrorCode, tagNameKey } from "@ordo/shared";
+import { AppError } from "../common/errors/app-error.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { APP_CONFIG, type AppConfig } from "../config/config.module.js";
 import {
@@ -35,11 +36,15 @@ export class LibraryKeyService {
     },
     password: string,
   ): Promise<{ dek: Buffer }> {
-    if (
-      user.dataEncryptionVersion >= DATA_ENCRYPTION_VERSION &&
-      user.dekKdfSalt &&
-      user.dekPasswordWrapped
-    ) {
+    if (user.dataEncryptionVersion >= DATA_ENCRYPTION_VERSION) {
+      // The account already stores ciphertext. Issuing a fresh DEK here would
+      // orphan every encrypted field, so refuse instead of silently re-keying.
+      if (!user.dekKdfSalt || !user.dekPasswordWrapped) {
+        throw new AppError(
+          ErrorCode.INTERNAL_ERROR,
+          "This account's library keys are incomplete. Ask the server owner to restore the key wrap.",
+        );
+      }
       const dek = await unwrapDekWithPassword(user.dekPasswordWrapped, password, user.dekKdfSalt);
       await this.ensureServerWrap(user.id, dek);
       return { dek };
@@ -78,17 +83,25 @@ export class LibraryKeyService {
     };
   }
 
-  async rewrapPassword(userId: string, dek: Buffer, newPassword: string): Promise<void> {
+  /**
+   * Compute the password-wrapped DEK fields for a new password. Returned as a
+   * value so callers persist them together with `passwordHash` in a single
+   * write — a password change must never land without its re-wrap (that would
+   * leave the encrypted library readable only with the old password).
+   */
+  async wrapPasswordMaterial(dek: Buffer, newPassword: string): Promise<{
+    dekKdfSalt: string;
+    dekPasswordWrapped: string;
+    dekServerWrapped: string;
+    dataEncryptionVersion: number;
+  }> {
     const salt = this.crypto.generateKdfSalt();
-    await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        dekKdfSalt: salt,
-        dekPasswordWrapped: await wrapDekWithPassword(dek, newPassword, salt),
-        dekServerWrapped: wrapDekWithServerKek(dek, this.kek()),
-        dataEncryptionVersion: DATA_ENCRYPTION_VERSION,
-      },
-    });
+    return {
+      dekKdfSalt: salt,
+      dekPasswordWrapped: await wrapDekWithPassword(dek, newPassword, salt),
+      dekServerWrapped: wrapDekWithServerKek(dek, this.kek()),
+      dataEncryptionVersion: DATA_ENCRYPTION_VERSION,
+    };
   }
 
   async unwrapWithServerKek(wrapped: string): Promise<Buffer> {

@@ -134,6 +134,15 @@ export class RateLimitService implements OnModuleInit, OnModuleDestroy {
     this.consumeAll(checks);
   }
 
+  consumeResendEmailChange(userId: string): void {
+    if (!this.enabled) return;
+    this.consumeWindow(
+      `email-change-resend:${userId}`,
+      RATE_LIMIT.emailChangeResendUser,
+      "email change codes",
+    );
+  }
+
   consumeVerifyEmail(ip: string): void {
     if (!this.enabled) return;
     this.consumeWindow(

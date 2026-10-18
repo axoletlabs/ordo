@@ -12,14 +12,16 @@ import { MfaSetupPanel } from "../../../src/components/auth/MfaSetupPanel";
 import { MfaStepUpPanel } from "../../../src/components/auth/MfaStepUpPanel";
 import { toast } from "../../../src/components/ui/toast-store";
 import { useAuthStore } from "../../../src/store/auth";
-import { authApi } from "../../../src/lib/api/auth";
 import { haptics } from "../../../src/lib/haptics";
+import { useDisableTotp, useRegenerateBackupCodes } from "../../../src/hooks/use-auth-actions";
 
 type StepUp = "regenerate" | "disable" | null;
 
 export default function SecurityScreen() {
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
+  const disableTotp = useDisableTotp();
+  const regenerateBackupCodes = useRegenerateBackupCodes();
   const [backupCodes, setBackupCodes] = useState<string[] | null>(null);
   const [stepUp, setStepUp] = useState<StepUp>(null);
 
@@ -78,15 +80,14 @@ export default function SecurityScreen() {
         confirmVariant={stepUp === "disable" ? "danger" : "primary"}
         onConfirm={async (code) => {
           if (stepUp === "disable") {
-            const updated = await authApi.totpDisable({ mfaCode: code });
-            setUser(updated);
+            await disableTotp.mutateAsync({ mfaCode: code });
             haptics.success();
             toast.success("Authenticator turned off");
             setStepUp(null);
             return;
           }
           if (stepUp !== "regenerate") return;
-          const result = await authApi.regenerateBackupCodes({ mfaCode: code });
+          const result = await regenerateBackupCodes.mutateAsync({ mfaCode: code });
           haptics.success();
           setStepUp(null);
           requestAnimationFrame(() => setBackupCodes(result.backupCodes));

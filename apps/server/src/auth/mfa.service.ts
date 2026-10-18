@@ -102,7 +102,9 @@ export class MfaService {
       throw this.invalid();
     }
     const stash = this.readStash(challengeToken, challenge.payload);
-    await this.prisma.mfaChallenge.delete({ where: { id: challenge.id } }).catch(() => undefined);
+    // Claim the challenge so the same token can't mint two sessions.
+    const claimed = await this.prisma.mfaChallenge.deleteMany({ where: { id: challenge.id } });
+    if (claimed.count === 0) throw this.invalid();
     return { user, ...stash };
   }
 
@@ -118,13 +120,16 @@ export class MfaService {
     const user = await this.requireUser(challenge.userId);
     const stash = this.readStash(challengeToken, challenge.payload);
     const record = await this.matchRecoveryOtp(user.id, otp);
-    await this.prisma.$transaction([
-      this.prisma.emailVerificationToken.update({
-        where: { id: record.id },
+    const claimed = await this.prisma.$transaction(async (tx) => {
+      const consumed = await tx.emailVerificationToken.updateMany({
+        where: { id: record.id, consumedAt: null },
         data: { consumedAt: new Date() },
-      }),
-      this.prisma.mfaChallenge.deleteMany({ where: { userId: user.id } }),
-    ]);
+      });
+      if (consumed.count === 0) return false;
+      await tx.mfaChallenge.deleteMany({ where: { userId: user.id } });
+      return true;
+    });
+    if (!claimed) throw this.invalidOtp();
     try {
       await this.mail.sendMfaRecoveryNotice(user.email);
     } catch (err) {
@@ -264,10 +269,13 @@ export class MfaService {
     });
     if (!row) return false;
     if (opts.consumeBackup) {
-      await this.prisma.mfaBackupCode.update({
-        where: { id: row.id },
+      // Guard the write on `usedAt: null` so two concurrent requests carrying
+      // the same backup code can't both spend it.
+      const consumed = await this.prisma.mfaBackupCode.updateMany({
+        where: { id: row.id, usedAt: null },
         data: { usedAt: new Date() },
       });
+      if (consumed.count === 0) return false;
     }
     return true;
   }
@@ -368,7 +376,12 @@ export class MfaService {
       const stash = this.crypto.unwrapMfaStash(challengeToken, payload);
       return { dek: stash.dek };
     } catch {
-      return { dek: null };
+      // A stash we can't open would mint a session without the library key.
+      // Fail the sign-in instead of leaving the user in a broken session.
+      throw new AppError(
+        ErrorCode.SESSION_REVOKED,
+        "Your sign-in attempt expired. Please sign in again.",
+      );
     }
   }
 

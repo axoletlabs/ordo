@@ -47,6 +47,11 @@ export default function ChangePasswordScreen() {
       throw new Error(message);
     }
     await changePassword.mutateAsync(parsed.data);
+    setCurrentPassword("");
+    setNewPassword("");
+    setConfirm("");
+    setShowPwd(false);
+    setFormError("");
     haptics.success();
     toast.success("Password changed. All devices were signed out.");
     router.back();

@@ -75,7 +75,11 @@ function VerifyEmailChangeForm({ email }: { email: string }) {
       await holdOtpSuccess();
       resetOtp();
       verify.reset();
-      router.replace("/settings");
+      // Return to the Account screen that opened this flow (it now shows the
+      // new address). A plain replace("/settings") would stack a second Settings
+      // hub. The fallback keeps deep links from stranding the user.
+      if (router.canGoBack()) router.back();
+      else router.replace("/settings");
     } catch (e) {
       inFlight.current = false;
       setOtpStatus("error");

@@ -31,6 +31,8 @@ export const RATE_LIMIT = {
   resetPasswordIp: { limit: 10, windowMs: 15 * MINUTE } satisfies WindowPolicy,
   resendVerificationEmail: { limit: 3, windowMs: HOUR } satisfies WindowPolicy,
   resendVerificationIp: { limit: 10, windowMs: HOUR } satisfies WindowPolicy,
+  /** Re-sends of an email-change code, per signed-in account. */
+  emailChangeResendUser: { limit: 5, windowMs: HOUR } satisfies WindowPolicy,
   verifyEmailIp: { limit: 10, windowMs: 15 * MINUTE } satisfies WindowPolicy,
   bookmarkCreateUser: { limit: 30, windowMs: MINUTE } satisfies WindowPolicy,
   bookmarkPrefetchUser: { limit: 60, windowMs: MINUTE } satisfies WindowPolicy,

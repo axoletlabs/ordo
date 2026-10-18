@@ -295,6 +295,7 @@ export class AuthController {
 
   @Post("email/change/resend")
   @UseGuards(AuthGuard)
+  @RateLimit("email-change-resend")
   @HttpCode(200)
   async resendEmailChange(@CurrentUser() user: AuthContext): Promise<{ success: true }> {
     await this.auth.resendEmailChange(user.userId);
@@ -303,6 +304,7 @@ export class AuthController {
 
   @Post("email/verify-change")
   @UseGuards(AuthGuard)
+  @RateLimit("verify-email")
   @HttpCode(200)
   async verifyEmailChange(
     @CurrentUser() user: AuthContext,
@@ -380,6 +382,7 @@ export class AuthController {
 
   @Post("mfa/totp/disable")
   @UseGuards(AuthGuard)
+  @RateLimit("mfa-verify")
   @HttpCode(200)
   async totpDisable(
     @CurrentUser() user: AuthContext,
@@ -391,6 +394,7 @@ export class AuthController {
 
   @Post("mfa/backup-codes/regenerate")
   @UseGuards(AuthGuard)
+  @RateLimit("mfa-verify")
   @HttpCode(200)
   async regenerateBackupCodes(
     @CurrentUser() user: AuthContext,
