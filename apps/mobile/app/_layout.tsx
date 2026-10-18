@@ -58,6 +58,7 @@ import {
 import { enableFreeze } from "react-native-screens";
 import { normalizeReaderPreferences } from "@ordo/shared";
 import { useReducedMotionPreference } from "../src/hooks/use-reduced-motion-preference";
+import { useAutomaticOtaUpdate } from "../src/hooks/use-automatic-ota-update";
 
 enableFreeze(true);
 initAppLifecycle();
@@ -97,6 +98,7 @@ function RootShell() {
   const userId = useAuthStore((s) => s.user?.id);
   const serverUrl = useSettingsStore((s) => s.serverUrl);
   const restarting = useUpdateRestartStore((s) => s.restarting);
+  const otaLaunch = useAutomaticOtaUpdate();
   const { restartCount } = Updates.useUpdates();
   const runtimeRestart = restarting || restartCount > 0 || peekRestartCover() != null;
   const sharedUrl = useIncomingShareStore((s) => s.pendingUrl);
@@ -175,7 +177,7 @@ function RootShell() {
   // Before the first reveal the brand cover guards every reconciliation gap.
   // After it, auth changes crossfade between groups — re-covering with the
   // logo on each sign-in/out reads as a flash, not a handoff.
-  const coveredByLaunch = !routeMatchesAuth || !minElapsed;
+  const coveredByLaunch = !routeMatchesAuth || !minElapsed || otaLaunch.phase !== null;
   const showSplash = restarting || (!revealedRef.current && coveredByLaunch);
 
   useEffect(() => {
@@ -193,6 +195,12 @@ function RootShell() {
     SplashScreen.hideAsync().catch(() => {});
     clearRestartCover();
   }, [showSplash]);
+
+  // Reveal React's progress screen instead of leaving downloads hidden behind
+  // the native logo. Navigation stays covered until the bounded update ends.
+  useEffect(() => {
+    if (otaLaunch.phase !== null) SplashScreen.hideAsync().catch(() => {});
+  }, [otaLaunch.phase]);
 
   return (
     <>
@@ -235,6 +243,7 @@ function RootShell() {
       {showSplash && (
         <LaunchSplash
           onPresented={restarting ? markRestartSplashPresented : undefined}
+          update={otaLaunch.phase ? { phase: otaLaunch.phase, progress: otaLaunch.progress } : undefined}
         />
       )}
     </>

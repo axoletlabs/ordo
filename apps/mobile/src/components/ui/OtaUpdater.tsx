@@ -1,6 +1,6 @@
 /** About-page rows for OTA bundles and native app releases. Both stay visible. */
 import React from "react";
-import { StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Button } from "./Button";
 import { SettingRow } from "./SettingRow";
 import { toast } from "./toast-store";
@@ -8,6 +8,7 @@ import { useAppUpdate } from "../../hooks/use-app-update";
 import type { AppUpdatePhase } from "../../lib/app-update-action";
 import { useUpdateRestartStore } from "../../store/update-restart";
 import { LinearProgress } from "./LinearProgress";
+import { spacing } from "../../theme/tokens";
 
 function phaseLabel(phase: AppUpdatePhase): string {
   if (phase.action === "download") return "Download";
@@ -62,41 +63,44 @@ export function OtaUpdateCard() {
       });
       return;
     }
-    if (phase.action === "download") {
-      void ota.download().catch(() => toast.error("Couldn't download the update."));
-      return;
-    }
-    void ota.restart().catch(() => toast.error("Couldn't restart to apply the update."));
   };
 
-  if (phases.length === 0) {
-    const busy = update.checking || manualChecking;
-    return (
-      <SettingRow
-        icon="cloud-download-outline"
-        label="App updates"
-        right={
-          <Button
-            label={busy ? "Checking…" : "Check"}
-            size="md"
-            loading={busy}
-            disabled={!update.enabled}
-            style={styles.checkButton}
-            onPress={() => { void check(); }}
-          />
-        }
-      />
-    );
-  }
+  const busy = update.checking || manualChecking || ota.status === "downloading";
+  const ready = ota.status === "ready";
+  const description = ota.status === "downloading" ? "Downloading automatically…"
+    : ready ? "Ready for your next launch. Or restart now."
+      : ota.message ? "Couldn't update. We'll try again automatically."
+        : "Updates download and apply automatically on startup.";
 
   return (
     <>
-      {phases.map((phase) => {
+      <SettingRow
+        icon="cloud-download-outline"
+        label="App updates"
+        description={ota.enabled ? description : "Check for a new app version."}
+        right={
+          <Button
+            label={ready ? "Restart now" : busy ? ota.status === "downloading" ? "Downloading…" : "Checking…" : "Check"}
+            size="md"
+            loading={busy || restarting}
+            disabled={!update.enabled || busy || update.downloading || native.installing || restarting}
+            style={styles.checkButton}
+            onPress={() => {
+              if (ready) void ota.restart().catch(() => toast.error("Couldn't restart to apply the update."));
+              else void check();
+            }}
+          />
+        }
+      />
+      {ota.status === "downloading" ? (
+        <View style={styles.progress}>
+          <LinearProgress wavy label="Downloading app update" value={ota.downloadProgress} />
+        </View>
+      ) : null}
+      {phases.filter((phase) => phase.kind === "native").map((phase) => {
         const nativeBusy =
           phase.kind === "native" &&
           (native.status === "downloading" || native.installing);
-        const otaBusy = phase.kind === "ota" && ota.status === "downloading";
-        const busy = nativeBusy || otaBusy;
         return (
           <SettingRow
             key={phase.kind}
@@ -106,7 +110,7 @@ export function OtaUpdateCard() {
               <Button
                 label={phaseLabel(phase)}
                 size="md"
-                loading={busy}
+                loading={nativeBusy}
                 disabled={!update.enabled || update.checking || manualChecking || update.downloading || native.installing || restarting}
                 style={styles.checkButton}
                 onPress={() => runPhase(phase)}
@@ -115,11 +119,11 @@ export function OtaUpdateCard() {
           />
         );
       })}
-      {ota.status === "downloading" ? <LinearProgress wavy label="Downloading app update" value={ota.downloadProgress} /> : null}
     </>
   );
 }
 
 const styles = StyleSheet.create({
   checkButton: { width: "100%" },
+  progress: { paddingHorizontal: spacing[16], paddingVertical: spacing[16] },
 });
