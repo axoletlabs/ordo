@@ -1,16 +1,12 @@
 /**
  * OTA update state, derived reactively from expo-updates' `useUpdates()` so it
  * always reflects the native module's truth: a downloaded update stays "ready"
- * across remounts (the previous useState-driven version lost that). Actions
- * route through the `Updates` module, whose emitted events drive the reactive
- * state. expo-updates is disabled in dev builds, so everything guards on
- * `enabled` and surfaces a disabled state.
+ * across remounts. This is read-only build/debug metadata; all fetching is
+ * owned by the silent root updater, never by a user-facing update action.
  */
-import { useCallback } from "react";
 import * as Updates from "expo-updates";
-import { restartForUpdate } from "../store/update-restart";
 import { resolveOtaStatus, type OtaStatus } from "../lib/ota-update-state";
-import { checkOta, downloadOta, otaUpdatesEnabled } from "../lib/ota-update-actions";
+import { otaUpdatesEnabled } from "../lib/ota-update-actions";
 
 export type { OtaStatus } from "../lib/ota-update-state";
 
@@ -37,9 +33,6 @@ export interface UseOtaUpdate {
   /** When we last checked for an update this session. */
   lastChecked: Date | null;
   downloadProgress: number | undefined;
-  check: () => Promise<boolean>;
-  download: () => Promise<void>;
-  restart: () => Promise<void>;
 }
 
 export function useOtaUpdate(): UseOtaUpdate {
@@ -75,25 +68,6 @@ export function useOtaUpdate(): UseOtaUpdate {
   const message =
     checkError?.message ?? downloadError?.message ?? null;
 
-  const check = useCallback(async () => {
-    if (!enabled) return false;
-    const available = await checkOta();
-    // Manual checks use the same prompt-free download behavior as startup.
-    if (available) await downloadOta();
-    return available;
-  }, [enabled]);
-
-  const download = useCallback(async () => {
-    if (!enabled) return;
-    await downloadOta();
-  }, [enabled]);
-
-  const restart = useCallback(async () => {
-    if (!enabled) return;
-    // Reloads into the downloaded update after the branded fallback paints.
-    await restartForUpdate();
-  }, [enabled]);
-
   // Web config can expose an unresolved fingerprint policy object despite
   // expo-updates' string type. Only resolved strings are displayable metadata.
   const runtime = currentlyRunning.runtimeVersion ?? Updates.runtimeVersion;
@@ -113,8 +87,5 @@ export function useOtaUpdate(): UseOtaUpdate {
     availableUpdateCreatedAt: availableUpdate?.createdAt ?? null,
     lastChecked: lastCheckForUpdateTimeSinceRestart ?? null,
     downloadProgress,
-    check,
-    download,
-    restart,
   };
 }

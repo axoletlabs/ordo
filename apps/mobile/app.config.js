@@ -72,8 +72,8 @@ module.exports = {
     enabled: variant !== "development",
     ...(updatesChannel ? { requestHeaders: { "expo-channel-name": updatesChannel } } : {}),
     url: "https://u.expo.dev/c044b586-2816-42c7-b564-bef8556e21da",
-    // Custom Check / Download / Restart UI owns the fetch. Native ON_LOAD
-    // would race that JS path (pending bundle vs advertised update).
+    // JS downloads OTA updates silently; native launch selects the cached
+    // bundle automatically. ON_LOAD would duplicate the background fetch.
     checkAutomatically: "NEVER",
     // Code signing needs a paid EAS plan; updates ship unsigned (https only).
   },

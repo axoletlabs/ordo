@@ -1,24 +1,21 @@
-/** About-page rows for OTA bundles and native app releases. Both stay visible. */
+/** Only full app releases are user-facing. OTA never changes this UI. */
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet } from "react-native";
 import { Button } from "./Button";
 import { SettingRow } from "./SettingRow";
 import { toast } from "./toast-store";
 import { useAppUpdate } from "../../hooks/use-app-update";
 import type { AppUpdatePhase } from "../../lib/app-update-action";
 import { useUpdateRestartStore } from "../../store/update-restart";
-import { LinearProgress } from "./LinearProgress";
-import { spacing } from "../../theme/tokens";
 
 function phaseLabel(phase: AppUpdatePhase): string {
   if (phase.action === "download") return "Download";
-  if (phase.action === "install") return "Install";
-  return "Restart";
+  return "Install";
 }
 
 export function OtaUpdateCard() {
   const update = useAppUpdate();
-  const { ota, native, phases } = update;
+  const { native, phases } = update;
   const [manualChecking, setManualChecking] = React.useState(false);
   const checkInFlight = React.useRef(false);
   const restarting = useUpdateRestartStore((state) => state.restarting);
@@ -65,47 +62,38 @@ export function OtaUpdateCard() {
     }
   };
 
-  const busy = update.checking || manualChecking || ota.status === "downloading";
-  const ready = ota.status === "ready";
-  const description = ota.status === "downloading" ? "Downloading automatically…"
-    : ready ? "Ready for your next launch. Or restart now."
-      : ota.message ? "Couldn't update. We'll try again automatically."
-        : "Updates download and apply automatically on startup.";
+  const busy = update.checking || manualChecking;
 
-  return (
-    <>
+  if (phases.length === 0) {
+    return (
       <SettingRow
         icon="cloud-download-outline"
         label="App updates"
-        description={ota.enabled ? description : "Check for a new app version."}
         right={
           <Button
-            label={ready ? "Restart now" : busy ? ota.status === "downloading" ? "Downloading…" : "Checking…" : "Check"}
+            label={busy ? "Checking…" : "Check"}
             size="md"
-            loading={busy || restarting}
-            disabled={!update.enabled || busy || update.downloading || native.installing || restarting}
+            loading={busy}
+            disabled={!update.enabled || busy || restarting}
             style={styles.checkButton}
-            onPress={() => {
-              if (ready) void ota.restart().catch(() => toast.error("Couldn't restart to apply the update."));
-              else void check();
-            }}
+            onPress={() => { void check(); }}
           />
         }
       />
-      {ota.status === "downloading" ? (
-        <View style={styles.progress}>
-          <LinearProgress wavy label="Downloading app update" value={ota.downloadProgress} />
-        </View>
-      ) : null}
-      {phases.filter((phase) => phase.kind === "native").map((phase) => {
+    );
+  }
+
+  return (
+    <>
+      {phases.map((phase) => {
         const nativeBusy =
           phase.kind === "native" &&
           (native.status === "downloading" || native.installing);
         return (
           <SettingRow
             key={phase.kind}
-            icon={phase.kind === "native" ? "phone-portrait-outline" : "cloud-download-outline"}
-            label={phase.kind === "native" ? "Install update" : "App update"}
+            icon="phone-portrait-outline"
+            label="Install update"
             right={
               <Button
                 label={phaseLabel(phase)}
@@ -125,5 +113,4 @@ export function OtaUpdateCard() {
 
 const styles = StyleSheet.create({
   checkButton: { width: "100%" },
-  progress: { paddingHorizontal: spacing[16], paddingVertical: spacing[16] },
 });
