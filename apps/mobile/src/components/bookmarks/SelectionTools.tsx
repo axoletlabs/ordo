@@ -24,19 +24,11 @@ import { toast } from "../ui/toast-store";
 import { layout } from "../../theme/tokens";
 import type { SelectionStore } from "../../lib/selection-state";
 import { indexSelectionItems, selectedItems, selectionCapabilities } from "../../lib/selection-items";
+import { LazyMount } from "../ui/LazyMount";
 
 const noFolders: readonly FolderDto[] = [];
 
-export function SelectionTools({
-  store,
-  active,
-  bookmarks: candidateBookmarks,
-  folders: candidateFolders = noFolders,
-  fromFolderId,
-  onFinished,
-  bottom,
-  maxWidth = layout.maxContentWidth,
-}: {
+interface SelectionToolsProps {
   store: SelectionStore;
   active: boolean;
   bookmarks: readonly BookmarkDto[];
@@ -45,7 +37,24 @@ export function SelectionTools({
   onFinished: () => void;
   bottom: number;
   maxWidth?: number;
-}) {
+}
+
+export function SelectionTools(props: SelectionToolsProps) {
+  // Opening a folder needs rows, not a second index and mutation subscriptions
+  // for a toolbar that has never been used. Retain it after first selection.
+  return <LazyMount active={props.active}>{() => <SelectionToolsContent {...props} />}</LazyMount>;
+}
+
+function SelectionToolsContent({
+  store,
+  active,
+  bookmarks: candidateBookmarks,
+  folders: candidateFolders = noFolders,
+  fromFolderId,
+  onFinished,
+  bottom,
+  maxWidth = layout.maxContentWidth,
+}: SelectionToolsProps) {
   const batchBookmarks = useBatchBookmarks();
   const batchFolders = useBatchFolders();
   const [moveOpen, setMoveOpen] = useState(false);

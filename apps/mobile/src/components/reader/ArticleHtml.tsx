@@ -35,7 +35,8 @@ import type { HighlightDto, ReaderLineSpacing, ReaderPreferences } from "@ordo/s
 import { applyHighlightsToHtml, htmlToPlainText } from "@ordo/shared";
 import { readerArticleColors, READER_IGNORED_INLINE_STYLES } from "./reader-article-colors";
 import { useAnimationActivity } from "../../hooks/use-animation-activity";
-import { scheduleReaderWork } from "./reader-idle-work";
+import { scheduleIdleWork } from "../../lib/idle-work";
+import type { ReaderWorkScheduler } from "./reader-work";
 import {
   READER_BODY_SIZE,
   readerLineHeight,
@@ -252,6 +253,7 @@ export interface ArticleHtmlProps {
   onHeadingRef?: (id: string, view: ViewType | null) => void;
   /** Fires once the native HTML tree is actually mounted (after first paint). */
   onReady?: () => void;
+  workScheduler?: ReaderWorkScheduler;
 }
 
 export interface ArticleHeading {
@@ -384,10 +386,11 @@ const ARTICLE_CLASSES_STYLES = { [ARTICLE_END_CLASS]: { marginBottom: 0 } };
 
 /** Keep the scheduler below the providers: appending a section must not update
  * engine/config contexts or walk every already-mounted article component. */
-function ArticleSections({ sections, contentWidth, onReady }: {
+function ArticleSections({ sections, contentWidth, onReady, workScheduler }: {
   sections: ReturnType<typeof prepareArticleSections>["sections"];
   contentWidth: number;
   onReady?: () => void;
+  workScheduler?: ReaderWorkScheduler;
 }) {
   const [mountedCount, setMountedCount] = useState(1);
   const active = useAnimationActivity();
@@ -396,16 +399,17 @@ function ArticleSections({ sections, contentWidth, onReady }: {
     if (!active || count >= sections.length) return;
     // Keep each native commit small, allow input to interrupt React's render,
     // and stop preparing background content while Contents/another overlay owns it.
-    return scheduleReaderWork(() => startTransition(() => setMountedCount(count + 1)));
-  }, [active, count, sections]);
+    return (workScheduler?.schedule ?? scheduleIdleWork)(() => startTransition(() => setMountedCount(count + 1)));
+  }, [active, count, sections, workScheduler]);
   useEffect(() => {
     if (count < sections.length) return;
     const frame = requestAnimationFrame(() => onReady?.());
     return () => cancelAnimationFrame(frame);
   }, [count, sections, onReady]);
-  return <>{sections.slice(0, count).map((source, index) => (
+  // A background-activity change cancels work, not already-mounted HTML trees.
+  return useMemo(() => <>{sections.slice(0, count).map((source, index) => (
     <RenderHTMLSource key={index} source={source} contentWidth={contentWidth} />
-  ))}</>;
+  ))}</>, [sections, count, contentWidth]);
 }
 
 export const ArticleHtml = React.memo(function ArticleHtml({
@@ -417,6 +421,7 @@ export const ArticleHtml = React.memo(function ArticleHtml({
   onHeadingsChange,
   onHeadingRef,
   onReady,
+  workScheduler,
 }: ArticleHtmlProps) {
   const { palette } = useTheme();
   const colors = readerArticleColors(palette);
@@ -520,7 +525,7 @@ export const ArticleHtml = React.memo(function ArticleHtml({
       renderers={ARTICLE_RENDERERS}
       defaultTextProps={defaultTextProps}
     >
-      <ArticleSections sections={sections} contentWidth={contentWidth} onReady={onReady} />
+      <ArticleSections sections={sections} contentWidth={contentWidth} onReady={onReady} workScheduler={workScheduler} />
     </RenderHTMLConfigProvider>
     </TRenderEngineProvider>
     </HighlightUiContext.Provider>

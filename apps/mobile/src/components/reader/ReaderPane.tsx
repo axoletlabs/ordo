@@ -23,7 +23,7 @@ import {
 import { useWindowDimensions } from "react-native";
 import { useSystemColorScheme } from "../../theme/use-system-color-scheme";
 import { useSceneColumnInsets } from "../../hooks/use-scene-column-insets";
-import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
+import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useComposedEventHandler, useSharedValue, type SharedValue } from "react-native-reanimated";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { StatusBar, setStatusBarStyle } from "expo-status-bar";
 import { useAppRouter as useRouter } from "../../hooks/use-app-router";
@@ -59,6 +59,7 @@ import { sheetMenuStyles } from "../ui/SheetActionRow";
 import type { ArticleHeading } from "./ArticleHtml";
 import { ReaderArticle } from "./ReaderArticle";
 import { ReaderContents, type ReaderContentsHandle } from "./ReaderContents";
+import { createReaderWorkScheduler } from "./reader-work";
 import type { HighlightSelectDraft } from "./article-highlight-ui";
 import { ReaderControlsSheet } from "./ReaderControlsSheet";
 import { EditTagsSheet } from "../tags/EditTagsSheet";
@@ -332,21 +333,23 @@ function ReaderPaneInner({
   const markedRef = useRef<string | null>(null);
   const browserRef = useRef<BookmarkBrowserHandle>(null);
   const scrollRef = useRef<ScrollView>(null);
+  const readerWork = useMemo(() => createReaderWorkScheduler(), [bookmarkId]);
+  useEffect(() => () => readerWork.dispose(), [readerWork]);
   const offsetRef = useRef(0);
   // Chrome (header + progress rule) overlays the article and slides away on
   // real user drags only; programmatic scrolls (position restore, TOC jumps)
   // never yank it around. The article scrolls underneath the overlay.
-  const collapsingFab = useReaderChrome(!!selectionMenu);
+  const chromeHeightSV = useSharedValue(0);
+  const collapsingFab = useReaderChrome(!!selectionMenu, chromeHeightSV);
   const expandChromeRef = useRef(collapsingFab.expand);
   expandChromeRef.current = collapsingFab.expand;
   const chromeHeightRef = useRef(0);
-  const chromeHeightSV = useSharedValue(0);
   const [chromeHeight, setChromeHeight] = useState(0);
   // Capture only the shared value: the controller also owns a JS-only native
   // event registration that Worklets cannot serialize onto the UI thread.
-  const chromeExpansion = collapsingFab.expansion.spatial;
+  const chromeHidden = collapsingFab.hidden;
   const chromeShiftStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -chromeHeightSV.value * (1 - chromeExpansion.value) }],
+    transform: [{ translateY: -Math.min(chromeHeightSV.value, Math.max(0, chromeHidden.value)) }],
   }));
   const websiteViewRef = useRef(false);
   const [keptBrowserId, setKeptBrowserId] = useState<string | null>(null);
@@ -838,11 +841,19 @@ function ReaderPaneInner({
   }, [persistProgress]);
 
   const progressSV = useSharedValue(0);
+  const progressTrackingSV = useSharedValue(false);
+  const progressScrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      if (progressTrackingSV.value) progressSV.value = scrollReadingProgress(
+        event.contentOffset.y, event.layoutMeasurement.height, event.contentSize.height,
+      );
+    },
+  });
+  const readerScrollHandler = useComposedEventHandler([collapsingFab.scrollHandler, progressScrollHandler]);
 
   const handleFraction = useCallback(
     (fraction: number) => {
       if (!trackProgressRef.current) return;
-      progressSV.value = fraction;
       progressLabelRef.current(fraction);
       latestProgressRef.current = fraction;
       const last = persistedProgressRef.current;
@@ -853,7 +864,7 @@ function ReaderPaneInner({
         flushTimerRef.current = setTimeout(flushProgress, PROGRESS_DEBOUNCE_MS);
       }
     },
-    [flushProgress, progressSV],
+    [flushProgress],
   );
 
   // Per-article baseline from the server; flush best-effort when leaving.
@@ -867,6 +878,7 @@ function ReaderPaneInner({
     persistedProgressRef.current = baseline;
     restoredRef.current = false;
     htmlReadyRef.current = false;
+    progressTrackingSV.value = false;
     pendingHeading.current = null;
     cancelAnimationFrame(headingFrame.current);
     offsetRef.current = 0;
@@ -882,7 +894,7 @@ function ReaderPaneInner({
     return () => {
       flushProgress();
     };
-  }, [bookmark?.id, chromeHeightSV]);
+  }, [bookmark?.id, chromeHeightSV, progressTrackingSV]);
 
   // A persisted list row can be older than the freshly fetched detail. Accept
   // its canonical position until rendering finishes, never after a user jump.
@@ -919,20 +931,24 @@ function ReaderPaneInner({
 
   const handleArticleReady = useCallback(() => {
     htmlReadyRef.current = true;
+    progressTrackingSV.value = true;
     maybeRestore();
     contentsRef.current?.prepare();
-  }, [maybeRestore]);
+  }, [maybeRestore, progressTrackingSV]);
 
   // Start tracking once content exists; retry restore in case the native
   // layout events fired before tracking was armed.
   useEffect(() => {
     trackProgressRef.current = hasContent;
+    progressTrackingSV.value = hasContent && (!hasHtml || htmlReadyRef.current);
     if (hasContent) maybeRestore();
-  }, [hasContent, maybeRestore]);
+  }, [bookmark?.id, hasContent, hasHtml, maybeRestore, progressTrackingSV]);
 
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+      if (contentSize.height - contentOffset.y - layoutMeasurement.height > layoutMeasurement.height * 2) readerWork.scrolling();
+      else readerWork.resume();
       offsetRef.current = contentOffset.y;
       viewHeightRef.current = layoutMeasurement.height;
       contentHeightRef.current = contentSize.height;
@@ -958,7 +974,7 @@ function ReaderPaneInner({
         scrollReadingProgress(contentOffset.y, layoutMeasurement.height, contentSize.height),
       );
     },
-    [handleFraction, hasHtml, windowHeight],
+    [handleFraction, hasHtml, readerWork, windowHeight],
   );
 
   // Recompute when content settles/grows (images loading, HTML rendering).
@@ -968,9 +984,11 @@ function ReaderPaneInner({
       maybeRestore();
       if (h <= 0 || viewHeightRef.current <= 0) return;
       if (hasHtml && !htmlReadyRef.current) return;
-      handleFraction(scrollReadingProgress(offsetRef.current, viewHeightRef.current, h));
+      const fraction = scrollReadingProgress(offsetRef.current, viewHeightRef.current, h);
+      handleFraction(fraction);
+      progressSV.value = fraction;
     },
-    [handleFraction, hasHtml, maybeRestore],
+    [handleFraction, hasHtml, maybeRestore, progressSV],
   );
 
   const onScrollViewLayout = useCallback(
@@ -1161,7 +1179,8 @@ function ReaderPaneInner({
             onLayout={onScrollViewLayout}
             onContentSizeChange={onContentSizeChange}
             onScroll={onScroll}
-            animatedScrollHandler={collapsingFab.scrollHandler}
+            onScrollBeginDrag={readerWork.scrolling}
+            animatedScrollHandler={readerScrollHandler}
             scrollEventThrottle={16}
             contentContainerStyle={{
               // The chrome is an overlay: pad the content so it starts below
@@ -1195,6 +1214,7 @@ function ReaderPaneInner({
                     onHeadingsChange={handleHeadingsChange}
                     onHeadingRef={handleHeadingRef}
                     onReady={handleArticleReady}
+                    workScheduler={readerWork}
                   />
                 </View>
               ) : detailFetchFailed ? (
@@ -1265,7 +1285,7 @@ function ReaderPaneInner({
       {hasContents && !selectionMenu ? (
         <ReaderContents key={bookmark?.id} ref={handleContentsRef} headings={articleHeadings}
           onSelect={handleHeadingSelect} expansion={collapsingFab.expansion}
-          embedded={embedded} bottom={contentsFabBottom} sceneWidth={sceneWidth} />
+          embedded={embedded} bottom={contentsFabBottom} sceneWidth={sceneWidth} workScheduler={readerWork} />
       ) : null}
 
       <ReaderControlsSheet

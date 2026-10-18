@@ -6,6 +6,7 @@ export function scrollReadingProgress(
   viewportHeight: number,
   contentHeight: number,
 ): number {
+  "worklet";
   if (viewportHeight <= 0 || contentHeight <= 0) return 0;
   const scrollable = contentHeight - viewportHeight;
   if (scrollable <= 0) return 1;

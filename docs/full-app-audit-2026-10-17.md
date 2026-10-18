@@ -2,6 +2,8 @@
 
 > Historical report. All test runners and saved audit artifacts have been removed from the current repository. Counts below describe past runs, not currently available suites or CI gates.
 
+The [reader, folder, and pop-up contention follow-up](#reader-folder-and-pop-up-contention-follow-up) records the 2026-10-18 source changes and their narrower, static/build-only validation. Earlier browser measurements do not validate this follow-up.
+
 The [scrolling and dialog continuation](#scrolling-and-dialog-continuation) adds measured dialog improvements and lower-overhead scroll bookkeeping. The [session-isolation continuation](#session-isolation-smtp-and-encrypted-library-continuation) retains the earlier real SMTP, two-server switching, and encrypted-library evidence. Earlier results remain historical evidence, not freshly executed checks for later changes. **This is not exhaustive release approval.** Native verification is explicitly deferred; first-dialog main-thread stalls are reduced, not eliminated.
 
 ## Scope and confidence
@@ -299,6 +301,39 @@ Standalone three-sample, 4×-CPU-throttled profiles record cold maximum tasks of
 | **Total — zero issues/uncaught browser errors** | **217** | **1,277** |
 
 All **49 mobile tests**, workspace typecheck/lint, production web export, and Android JS export pass. Inert adapters execute the production highlight hook's dismissal, nested-session, owner-token and rapid-reopen logic, plus disclosure lazy activation, spring reversal, reduced-motion settlement and cancellation. They are not native integration tests. The lifecycle suite again runs 90 dialog cycles and a 1,000-bookmark fixture: DOM/listeners do not increase, and 18–30 matching rows remain mounted after scrolling. Post-GC heap still grows about 0.6–1.8MiB; no leak-free or native-memory/battery claim follows. Historical route/real-server suites are not counted as freshly executed here. The first two development invocations of the new runner had selector/sampling/consent-link targeting mistakes; their failed results are retained separately and excluded from passing totals.
+
+## Reader, folder, and pop-up contention follow-up
+
+Date: 2026-10-18. Baseline: `63847717edd76014e441e9edab915bcbeaaaeb3d`.
+
+The source review traced the reader's scroll/progress/render/Contents paths, shared list mounting and row offsets, selection tools, native-stack scene lifecycle, and shared panel/menu/portal/presence/focus behavior. Existing launch/cache, native text-selection, protected-folder access, and reduced-motion policies remain in place. This is not a new exhaustive route execution or native frame-time audit.
+
+| Contention found in source | Change |
+| --- | --- |
+| App bar waited for 48dp hysteresis then chased a spring, while scroll progress crossed JS at the sampled bookkeeping rate | App bar now follows clamped user-scroll deltas on the UI thread, with a bounded settle on release. FAB hysteresis remains separate. Reading-progress fraction is computed in the UI scroll handler; accessibility labels and persistence retain sampled JS bookkeeping. Programmatic heading jumps do not arm user momentum |
+| Progress segments animated `left` and `width`, requiring layout-affecting updates during scrolling/download animation | Fixed segment geometry with translation/scaling; progress no longer animates Yoga width/position. Wave rendering, palette roles, and reduced-motion behavior remain |
+| Idle JS callbacks could append native article sections while the native scroller was flinging | Per-reader cancellable scheduler pauses optional section/Contents work until 180ms after scroll activity. Expansion resumes within two viewports of the mounted end to avoid starving fast readers. Overlay/background activity also cancels optional preparation; mounted article trees remain stable |
+| Cold reader engine/content and populated folder lists could mount during the native push | A scene-readiness context waits for the native stack's opening `transitionEnd`, with an animation-duration-plus-150ms fallback for restored/deep-linked scenes. Only cold list/article content waits; navigation chrome paints immediately. Web, instant navigation, and reduced motion bypass the wait. Ready content is not unmounted on blur or return |
+| List geometry eagerly allocated offsets for every loaded row, and unused selection tools built a second item index on list entry | Cache row offsets by requested prefix; retain existing exact normal-font geometry and intrinsic accessibility-font sizing. Selection tools use the existing first-use `LazyMount` pattern and remain mounted after activation |
+| Native dialog animation could elapse during its first layout, and ordinary dialogs allocated unused sheet gesture worklets | Wait for a positive panel layout before native entrance/autofocus callbacks; retained Contents surfaces reuse their layout. Sheet gesture creation lives in the sheet handle only and is memoized. Header/action/body partitioning is cached across local layout updates |
+| Contents heading measurement and scrolling began while its exit was still animating | Hand off selection from the panel's `onExited`; reopening cancels an obsolete pending jump. Exit content, Back/keyboard dismissal, focus restoration, and retained prepared cells are preserved |
+
+Validation completed without adding or running repository-owned tests:
+
+- `pnpm -r typecheck` and `pnpm -r lint`.
+- Production web export and Android JavaScript export with `--no-bytecode`.
+- `git diff --check`; repository-owned test paths, runner imports, and package commands remain absent.
+
+The prior [development APK run](https://github.com/axoletlabs/ordo/actions/runs/39075917981) succeeded, including native compilation, package verification, and APK upload, for **`6384771` only**. It does not validate the source changes above.
+
+**Limits and residual work:** the desktop browser is disconnected, so no fresh phone/wide, theme/design-mode, keyboard, reduced-motion visual, or timing matrix was executed. Native Android device verification is explicitly excluded. There is no new measured FPS, latency, overall speedup, or leak-free claim. Whole-document HTML/highlight preprocessing remains synchronous; oversized indivisible blocks still mount together, and complete articles still retain their native text views to preserve selection/heading behavior. Cold first-use form rendering, native keyboard behavior, and frame pacing on older devices remain unverified. Global experimental Reanimated/Fabric flags were not enabled: several affect hit testing or require additional native feature-level configuration.
+
+Official references reviewed through the agent-reach web-reader route (2026-10-18):
+
+- [React Native performance](https://reactnative.dev/docs/performance): separate JS/UI frame budgets, avoid heavy work during transitions, prefer transform-based native animation, measure production builds.
+- [FlatList configuration](https://reactnative.dev/docs/optimizing-flatlist-configuration): balance bounded batches/windows against blank areas and responsiveness; preserve accurate `getItemLayout` where geometry is known.
+- [Reanimated performance](https://docs.swmansion.com/react-native-reanimated/docs/guides/performance/) and [feature flags](https://docs.swmansion.com/react-native-reanimated/docs/guides/feature-flags/): avoid layout animation on scroll hot paths; account for flag-specific touch/runtime caveats rather than enabling every flag blindly.
+- [Native-stack navigation](https://reactnavigation.org/docs/native-stack-navigator/): defer nonessential cold content until the opening transition ends while preserving the native navigator's motion.
 
 ## Coverage and remaining device checks
 

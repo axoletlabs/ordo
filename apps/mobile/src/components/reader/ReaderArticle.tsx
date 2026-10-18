@@ -3,6 +3,9 @@ import { View } from "react-native";
 import type { ArticleHtmlProps } from "./ArticleHtml";
 import { Skeleton, SkeletonGroup } from "../ui/Skeleton";
 import { spacing } from "../../theme/tokens";
+import { useSceneReady } from "../../hooks/use-scene-ready";
+import { scheduleIdleWork } from "../../lib/idle-work";
+import { useAnimationActivity } from "../../hooks/use-animation-activity";
 
 let renderer: React.ComponentType<ArticleHtmlProps> | null = null;
 let loading: Promise<typeof import("./ArticleHtml")> | null = null;
@@ -13,28 +16,28 @@ export function ReaderArticle(props: ArticleHtmlProps) {
   const [paintedHtml, setPaintedHtml] = useState<string | null>(null);
   const [failure, setFailure] = useState<Error | null>(null);
   const html = props.html;
+  const sceneReady = useSceneReady();
+  const active = useAnimationActivity();
   useEffect(() => {
+    if (!sceneReady || !active || paintedHtml === html) return;
     let cancelled = false;
-    let nextFrame = 0;
-    const frame = requestAnimationFrame(() => {
-      nextFrame = requestAnimationFrame(() => {
-        if (renderer) {
-          setRenderer(() => renderer);
-          setPaintedHtml(html);
-          return;
-        }
-        loading ??= import("./ArticleHtml");
-        void loading.then((module) => {
-          renderer = module.ArticleHtml;
-          if (!cancelled) { setRenderer(() => renderer); setPaintedHtml(html); }
-        }).catch((error: unknown) => {
-          loading = null;
-          if (!cancelled) setFailure(error instanceof Error ? error : new Error("Couldn't load the reader."));
-        });
+    const cancel = scheduleIdleWork(() => {
+      if (renderer) {
+        setRenderer(() => renderer);
+        setPaintedHtml(html);
+        return;
+      }
+      loading ??= import("./ArticleHtml");
+      void loading.then((module) => {
+        renderer = module.ArticleHtml;
+        if (!cancelled) { setRenderer(() => renderer); setPaintedHtml(html); }
+      }).catch((error: unknown) => {
+        loading = null;
+        if (!cancelled) setFailure(error instanceof Error ? error : new Error("Couldn't load the reader."));
       });
     });
-    return () => { cancelled = true; cancelAnimationFrame(frame); cancelAnimationFrame(nextFrame); };
-  }, [html]);
+    return () => { cancelled = true; cancel(); };
+  }, [active, html, paintedHtml, sceneReady]);
   if (failure) throw failure;
   if (Renderer && paintedHtml === html) return <Renderer {...props} />;
   return <SkeletonGroup><View accessibilityLabel="Loading article" style={{ gap: spacing[12] }}>

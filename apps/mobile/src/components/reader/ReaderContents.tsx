@@ -13,7 +13,8 @@ import type { WebPressKeyEvent } from "../ui/pressable-web";
 import { useTheme } from "../../theme/ThemeProvider";
 import { listCorners, listPosition } from "../../theme/list-shape";
 import { layout, radius, spacing } from "../../theme/tokens";
-import { scheduleReaderWork } from "./reader-idle-work";
+import type { ReaderWorkScheduler } from "./reader-work";
+import { useAnimationActivity } from "../../hooks/use-animation-activity";
 
 export interface ReaderContentsHandle { open: () => void; prepare: () => void }
 interface ReaderContentsProps {
@@ -23,6 +24,7 @@ interface ReaderContentsProps {
   embedded: boolean;
   bottom: number;
   sceneWidth: number;
+  workScheduler: ReaderWorkScheduler;
 }
 
 const keyExtractor = (heading: ArticleHeading) => heading.id;
@@ -31,20 +33,24 @@ const renderScrollComponent = (props: ScrollViewProps) => <ThemedScrollView {...
 /** Contents is navigation chrome, not article state. Opening/closing must not
  * reconcile the reader or mount a whole article's worth of heading controls. */
 export const ReaderContents = React.memo(React.forwardRef<ReaderContentsHandle, ReaderContentsProps>(function ReaderContents({
-  headings, onSelect, expansion, embedded, bottom, sceneWidth,
+  headings, onSelect, expansion, embedded, bottom, sceneWidth, workScheduler,
 }, ref) {
   const [visible, setVisible] = useState(false);
   const [prepared, setPrepared] = useState(false);
   const [articleReady, setArticleReady] = useState(false);
+  const active = useAnimationActivity();
+  const pendingSelection = useRef<string | null>(null);
+  const selectRef = useRef(onSelect);
+  selectRef.current = onSelect;
   useEffect(() => {
     // Do not mount a second native tree during article startup. Once content
     // settles, prepare only a viewport of rows at interruptible idle priority.
     // An earlier tap still opens immediately and retains that prepared surface.
-    if (!articleReady || prepared) return;
-    return scheduleReaderWork(() => startTransition(() => setPrepared(true)));
-  }, [articleReady, prepared]);
+    if (!active || !articleReady || prepared) return;
+    return workScheduler.schedule(() => startTransition(() => setPrepared(true)));
+  }, [active, articleReady, prepared, workScheduler]);
   const prepare = useCallback(() => setArticleReady(true), []);
-  const open = useCallback(() => { setPrepared(true); setVisible(true); }, []);
+  const open = useCallback(() => { pendingSelection.current = null; setPrepared(true); setVisible(true); }, []);
   const close = useCallback(() => setVisible(false), []);
   useImperativeHandle(ref, () => ({ open, prepare }), [open, prepare]);
   const { height } = useWindowDimensions();
@@ -55,6 +61,9 @@ export const ReaderContents = React.memo(React.forwardRef<ReaderContentsHandle, 
   const resetList = useCallback(() => {
     setInitialIndex(0);
     list.current?.scrollToOffset({ offset: 0, animated: false });
+    const id = pendingSelection.current;
+    pendingSelection.current = null;
+    if (id) selectRef.current(id);
   }, []);
   const focusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingFocus = useRef<{ index: number; root: HTMLElement; attempts: number } | null>(null);
@@ -100,11 +109,9 @@ export const ReaderContents = React.memo(React.forwardRef<ReaderContentsHandle, 
     list.current?.scrollToOffset({ offset: index * averageItemLength, animated: false });
   }, []);
   const baseLevel = useMemo(() => headings.reduce((level, heading) => Math.min(level, heading.level), 6), [headings]);
-  const selectRef = useRef(onSelect);
-  selectRef.current = onSelect;
   const select = useCallback((id: string) => {
+    pendingSelection.current = id;
     close();
-    selectRef.current(id);
   }, [close]);
   const renderItem = useCallback(({ item, index }: ListRenderItemInfo<ArticleHeading>) => (
     <ListPressable
