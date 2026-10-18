@@ -15,18 +15,19 @@ import {
 } from "@ordo/shared";
 import { toast } from "../components/ui/toast-store";
 import { bookmarksApi } from "./api/bookmarks";
+import { assertSessionScope, captureSessionScope, isSessionScopeCurrent } from "./session-scope";
 import { foldersApi } from "./api/folders";
 import { tagsApi } from "./api/tags";
 import { sortFoldersDefault, sortTagsDefault } from "./list-sort";
 import { qk, tagsAnyAccess } from "./api/query-keys";
 import {
-  bumpFolderCount,
+  moveFolderCounts,
   collectCachedBookmarks,
-  insertBookmarkIfAbsent,
+  insertBookmarksIfAbsent,
   mapCachedBookmarks,
   removeBookmarksEverywhere,
   removeRemindersFromCache,
-  syncReminderInCache,
+  syncRemindersInCache,
 } from "./cache-helpers";
 import { deletedBookmarksToast, deletedFoldersToast, deletedTagsToast } from "./copy";
 import { errorMessage } from "./error-message";
@@ -211,12 +212,10 @@ function hideBookmarks(bookmarks: BookmarkDto[], bumpCounts: boolean) {
       );
     }
   }
-  removeBookmarksEverywhere(queryClient, new Set(bookmarks.map((bookmark) => bookmark.id)));
-  removeRemindersFromCache(queryClient, new Set(bookmarks.map((bookmark) => bookmark.id)));
-  for (const bookmark of bookmarks) {
-    queryClient.removeQueries({ queryKey: qk.bookmark(bookmark.id) });
-    if (bumpCounts) bumpFolderCount(queryClient, bookmark.folderId, -1, bookmark.isRead ? 0 : -1);
-  }
+  removeBookmarksEverywhere(queryClient, ids);
+  removeRemindersFromCache(queryClient, ids);
+  queryClient.removeQueries({ queryKey: ["bookmarks", "detail"], predicate: (query) => ids.has(String(query.queryKey[2])) });
+  if (bumpCounts) moveFolderCounts(queryClient, bookmarks, null);
   return { details, lists };
 }
 
@@ -227,18 +226,26 @@ function restoreBookmarks(
 ) {
   if (bookmarks.length === 0) return;
   for (const bookmark of bookmarks) pendingBookmarkIds.delete(bookmark.id);
-  for (const bookmark of bookmarks) {
-    for (const query of queryClient.getQueryCache().findAll({ queryKey: ["bookmarks"] })) {
-      const previouslyPresent = snapshot.lists.get(bookmark.id)?.some((key) =>
-        JSON.stringify(key) === JSON.stringify(query.queryKey));
-      if (!previouslyPresent && !listKeyAllowsRestore(query.queryKey, bookmark.folderId)) continue;
-      insertBookmarkIfAbsent(queryClient, query.queryKey, bookmark);
+  const memberships = new Map<string, Set<string>>();
+  for (const [id, keys] of snapshot.lists) {
+    for (const key of keys) {
+      const hash = JSON.stringify(key);
+      const ids = memberships.get(hash) ?? new Set<string>();
+      ids.add(id); memberships.set(hash, ids);
     }
-    if (bumpCounts) bumpFolderCount(queryClient, bookmark.folderId, +1, bookmark.isRead ? 0 : +1);
+  }
+  for (const query of queryClient.getQueryCache().findAll({ queryKey: ["bookmarks"] })) {
+    if (!isPagedBookmarks(query.state.data)) continue;
+    const previouslyPresent = memberships.get(JSON.stringify(query.queryKey));
+    const incoming = bookmarks.filter((bookmark) => previouslyPresent?.has(bookmark.id) || listKeyAllowsRestore(query.queryKey, bookmark.folderId));
+    if (incoming.length) insertBookmarksIfAbsent(queryClient, query.queryKey, incoming);
+  }
+  if (bumpCounts) moveFolderCounts(queryClient, bookmarks, null, -1);
+  syncRemindersInCache(queryClient, bookmarks.filter((bookmark) => bookmark.remindAt != null));
+  for (const bookmark of bookmarks) {
     const detail = snapshot.details.get(bookmark.id);
     if (detail) queryClient.setQueryData(qk.bookmark(bookmark.id), detail);
     if (bookmark.remindAt != null) {
-      syncReminderInCache(queryClient, bookmark);
       void import("./reminder-notifications").then(({ syncBookmarkReminder }) =>
         syncBookmarkReminder(bookmark),
       );
@@ -376,7 +383,9 @@ async function deleteIfPresent(run: () => Promise<unknown>) {
 }
 
 async function replayDeleteIntent(key: string, intent: DeleteIntent) {
+  const owner = captureSessionScope();
   const assertScope = () => {
+    assertSessionScope(owner);
     if (deleteJournalKey() !== key) throw new Error("Deletion paused after account or server changed.");
   };
   const removeChunks = async (ids: string[], batch: (ids: string[]) => Promise<unknown>, single: (id: string) => Promise<unknown>) => {
@@ -404,6 +413,7 @@ async function replayDeleteIntent(key: string, intent: DeleteIntent) {
     assertScope();
     await deleteIfPresent(() => tagsApi.remove(id));
   }
+  assertScope();
   forgetDeleteIntent(key, intent.id);
   if (deleteJournalKey() !== key) return;
   releaseIntent(intent);
@@ -428,8 +438,9 @@ export function resumePendingDeletes() {
       for (const id of intent.tags) pendingTagIds.add(id);
       if (activeIntents.has(activeKey)) continue;
       activeIntents.add(activeKey);
+      const owner = captureSessionScope();
       void replayDeleteIntent(key, intent).catch((cause) => {
-        if (deleteJournalKey() !== key) return;
+        if (!isSessionScopeCurrent(owner) || deleteJournalKey() !== key) return;
         const status = (cause as { status?: number }).status;
         if (status && status >= 400 && status < 500) {
           // Expired folder access requires an explicit unlock, not an invisible
@@ -458,6 +469,7 @@ export function resumePendingDeletes() {
 }
 
 export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; commit: () => void } {
+  const owner = captureSessionScope();
   const noop = { undo: () => {}, commit: () => {} };
   syncJournalScope();
   const folders = (opts.folders ?? []).filter((folder) => !pendingFolderIds.has(folder.id));
@@ -511,7 +523,7 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
 
   const settle = (undo: boolean): boolean => {
     if (settled) return true;
-    if (deleteJournalKey() !== journal.key || generation !== scopeGeneration) return false;
+    if (!isSessionScopeCurrent(owner) || deleteJournalKey() !== journal.key || generation !== scopeGeneration) return false;
     if (undo) {
       try { forgetDeleteIntent(journal.key, journal.intent.id); } catch (cause) {
         toast.error(errorMessage(cause, "Couldn't save Undo. Try again."));
@@ -527,7 +539,7 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
       return true;
     }
     void replayDeleteIntent(journal.key, journal.intent).catch((cause) => {
-      if (deleteJournalKey() !== journal.key || generation !== scopeGeneration) return;
+      if (!isSessionScopeCurrent(owner) || deleteJournalKey() !== journal.key || generation !== scopeGeneration) return;
       const status = (cause as { status?: number }).status;
       if (status && status >= 400 && status < 500) {
         try { forgetDeleteIntent(journal.key, journal.intent.id); } catch (storageError) {

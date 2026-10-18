@@ -5,13 +5,12 @@ export function shouldRefreshExtractionQuery(
   previousPending: number | null,
   pending: number,
 ): boolean {
-  if (queryKey[0] !== "bookmarks" || queryKey[1] === "extraction-progress") return false;
+  if (queryKey[0] !== "bookmarks" || queryKey[1] === "extraction-progress" || queryKey[1] === "library-index") return false;
   if (previousPending !== null && pending < previousPending) return true;
   // While the count holds steady (a completion masked by another save), only
   // refresh views that actually show a pending row. The progressively-loaded
   // search index is excluded so polls cannot refetch every page; search
   // results recompile from the refreshed list/detail copies instead.
-  if (queryKey[1] === "library-index") return false;
   return hasPendingExtraction(data);
 }
 

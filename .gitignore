@@ -58,9 +58,6 @@ apps/mobile/ios/
 /ios/
 /app.json
 
-# coverage
-coverage/
-
 # os
 .DS_Store
 Thumbs.db

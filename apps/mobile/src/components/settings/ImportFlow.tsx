@@ -4,7 +4,8 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import * as DocumentPicker from "expo-document-picker";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSessionMutation as useMutation } from "../../hooks/use-session-mutation";
 import type { DuplicatePolicy, FolderDto, ImportJobDto, ImportPreviewDto } from "@ordo/shared";
 import { IMPORT_EXPORT, normalizeImportPreview } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
@@ -432,6 +433,7 @@ function PreviewState({
                 iconColor={unlocked ? palette.success : undefined}
                 label={folder.name}
                 onPress={() => onUnlock(folder)}
+                disabled={confirming}
                 value={unlocked ? "Unlocked" : "Unlock"}
               />
             );
@@ -458,6 +460,7 @@ function PreviewState({
           <SettingRow
             icon="options-outline"
             label="Advanced"
+            disabled={confirming}
             onPress={onAdvanced}
             value={advanced ? "Hide" : "Show"}
           />
@@ -466,12 +469,12 @@ function PreviewState({
               <Text variant="label" color="secondary">
                 Duplicates
               </Text>
-              <Segmented accessibilityLabel="Duplicate bookmarks" options={POLICY_OPTIONS} value={policy} onChange={onPolicy} />
+              <Segmented accessibilityLabel="Duplicate bookmarks" options={POLICY_OPTIONS} value={policy} onChange={onPolicy} disabled={confirming} />
               <SettingRow
                 icon="shield-checkmark-outline"
                 label="All at once"
                 description={atomic ? "Everything or nothing" : "Keep rows that succeed"}
-                right={<Toggle value={atomic} onValueChange={onAtomic} />}
+                right={<Toggle value={atomic} onValueChange={onAtomic} disabled={confirming} />}
                 rightFit="content"
               />
             </View>

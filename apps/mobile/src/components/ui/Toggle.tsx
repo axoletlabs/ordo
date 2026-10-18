@@ -18,15 +18,21 @@ export function Toggle({ value, onValueChange, disabled, accessibilityLabel }: T
   const pressed = useSharedValue(0);
   const state = useSharedValue(0);
   const interaction = useRef({ pressed: false, focused: false, hovered: false });
+  const previousPosition = useRef({ value, spring: motion.fast, reducedMotion: motion.reducedMotion });
+  const previousHalo = useRef({ disabled, spring: motion.fast, reducedMotion: motion.reducedMotion });
   const updateHalo = () => {
     const active = stateLayerOpacity({ ...interaction.current, disabled }) > 0;
     state.value = motion.reducedMotion ? (active ? 1 : 0) : withSpring(active ? 1 : 0, materialMotion.effects.fast);
   };
   useEffect(() => {
+    if (previousPosition.current.value === value && previousPosition.current.spring === motion.fast && previousPosition.current.reducedMotion === motion.reducedMotion) return;
+    previousPosition.current = { value, spring: motion.fast, reducedMotion: motion.reducedMotion };
     position.value = motion.reducedMotion ? +value : withSpring(+value, motion.fast);
     effect.value = motion.reducedMotion ? +value : withSpring(+value, materialMotion.effects.fast);
   }, [value, motion.fast, motion.reducedMotion, position, effect]);
   useEffect(() => {
+    if (previousHalo.current.disabled === disabled && previousHalo.current.spring === motion.fast && previousHalo.current.reducedMotion === motion.reducedMotion) return;
+    previousHalo.current = { disabled, spring: motion.fast, reducedMotion: motion.reducedMotion };
     const active = stateLayerOpacity({ ...interaction.current, disabled }) > 0;
     state.value = motion.reducedMotion ? +active : withSpring(+active, materialMotion.effects.fast);
     if (disabled) interaction.current.pressed = false;

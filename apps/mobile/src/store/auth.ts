@@ -57,6 +57,8 @@ export interface PersistedAuth {
 }
 
 export interface AuthState {
+  /** Runtime-only ownership boundary; token rotation does not change it. */
+  sessionGeneration: number;
   user: UserDto | null;
   tokens: AuthTokens | null;
   accessExpiresAt: number | null;
@@ -104,6 +106,7 @@ function tokensFromSidecar(current: AuthTokens, sidecar: {
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
+  sessionGeneration: 0,
   user: null,
   tokens: null,
   accessExpiresAt: null,
@@ -132,6 +135,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       }
       const nextUpdatedAt = sessionUpdatedAt ?? Date.now();
       set({
+        sessionGeneration: get().sessionGeneration + 1,
         user,
         tokens,
         accessExpiresAt,
@@ -143,6 +147,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       // Partial/corrupt blob: drop it so it isn't re-parsed on every launch.
       if (saved) void secureDelete(StorageKeys.AUTH);
       set({
+        sessionGeneration: get().sessionGeneration + 1,
         user: null,
         tokens: null,
         accessExpiresAt: null,
@@ -154,9 +159,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   reconcileShareSession: async () => {
-    const { user, tokens, sessionUpdatedAt, status } = get();
+    const { user, tokens, sessionUpdatedAt, status, sessionGeneration } = get();
+    const serverUrl = useSettingsStore.getState().serverUrl;
     if (status !== "authenticated" || !user || !tokens) return;
     const sidecar = await readQuickShareSession();
+    if (get().sessionGeneration !== sessionGeneration || get().tokens !== tokens || useSettingsStore.getState().serverUrl !== serverUrl) return;
     if (!shouldAdoptQuickShareSession(sessionUpdatedAt, sidecar)) return;
     const nextTokens = tokensFromSidecar(tokens, sidecar);
     set({
@@ -171,6 +178,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const accessExpiresAt = session.accessExpiresAt ?? accessExpiresAtFromNow(session.tokens.expiresIn);
     const sessionUpdatedAt = Date.now();
     set({
+      sessionGeneration: get().sessionGeneration + 1,
       user: session.user,
       tokens: session.tokens,
       accessExpiresAt,
@@ -198,6 +206,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
   clear: async () => {
     set({
+      sessionGeneration: get().sessionGeneration + 1,
       user: null,
       tokens: null,
       accessExpiresAt: null,

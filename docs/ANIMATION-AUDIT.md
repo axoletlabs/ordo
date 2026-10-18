@@ -4,10 +4,9 @@
 
 The source ledger includes **all 30 routes/layouts, 136 UI source files, and
 1,650 JSX occurrences in the initial snapshot**, including conditional elements.
-Regenerate it with `node apps/mobile/tests/ui-inventory.mjs`. The ledger records
-each occurrence's file, line, props and file hash, rather than only visible
-controls. `animation-coverage.test.mjs` prevents a screen being omitted from
-the route fixture matrix or a new raw interaction bypassing shared primitives.
+The historical ledger recorded each occurrence's file, line, props and file hash,
+rather than only visible controls. All inventory/coverage runners and test artifacts
+have since been removed; this report does not describe current test gates.
 
 Static text, icons, images, badges and containers do not need gratuitous motion.
 The review follows their containing row, page or overlay through state changes.
@@ -107,10 +106,10 @@ fixture measurement, not a native-device frame-rate guarantee.
   entrance continuity, reopen during exit, dismissal during page handoff,
   persistent selection, keyboard selection, live reduced motion, stable loading
   button width, segmented exit retention and no current-page transition replay.
-- `motion-lifecycle.test.mjs`: executes the actual shared hook/component source
+- Historical motion-lifecycle suite (removed): executed the actual shared hook/component source
   with deterministic commit/completion scheduling. Checks readiness, stale close
   callbacks, live reduced motion and retained feedback ink. Not a device emulator.
-- `row-animation-driver.test.mjs`: actual React Native Animated graph/driver guard
+- Historical row-animation-driver suite (removed): actual React Native Animated graph/driver guard
   on Android/iOS/web, plus selected shape and already-selected mount regressions.
 - Full built-web smoke matrix, TypeScript, lint, unit tests, and Android/iOS bundle
   export. Screenshots are fixture-based, not production-account/backend tests.

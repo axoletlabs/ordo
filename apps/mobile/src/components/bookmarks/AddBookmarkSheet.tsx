@@ -33,6 +33,7 @@ import { spacing, radius } from "../../theme/tokens";
 import { useTheme } from "../../theme/ThemeProvider";
 import { domainFromUrl } from "../../lib/format";
 import { isSupportedUrl } from "@ordo/shared";
+import { LazyMount } from "../ui/LazyMount";
 
 export interface AddBookmarkSheetProps {
   visible: boolean;
@@ -64,7 +65,11 @@ function destinationLabel(folderId: string | null, folderName?: string | null): 
   return folderId === null ? "Bookmarks" : null;
 }
 
-export function AddBookmarkSheet({
+export function AddBookmarkSheet(props: AddBookmarkSheetProps) {
+  return <LazyMount active={props.visible}>{() => <AddBookmarkContent {...props} />}</LazyMount>;
+}
+
+function AddBookmarkContent({
   visible,
   onDismiss,
   folderId,
@@ -241,6 +246,7 @@ export function AddBookmarkSheet({
               <PressableScale
                 accessibilityRole="button"
                 accessibilityLabel="Edit link"
+                disabled={create.isPending}
                 onPress={() => setUrlEditing(true)}
                 style={[
                   styles.urlPreview,
@@ -265,6 +271,7 @@ export function AddBookmarkSheet({
               <Input
                 ref={urlRef}
                 label="Link"
+                disabled={create.isPending}
                 variant="outlined"
                 value={url}
                 onChangeText={(next) => { setUrl(next); if (error) setError(""); }}
@@ -287,10 +294,10 @@ export function AddBookmarkSheet({
               </Text>
             ) : null}
 
-            {allowFolderSelection ? <PickerField label="Folder" value={destination ?? "Bookmarks"} dropdown expanded={destinationOpen}
+            {allowFolderSelection ? <PickerField label="Folder" value={destination ?? "Bookmarks"} dropdown expanded={destinationOpen} disabled={create.isPending}
               icon={selectedFolder?.icon ?? "bookmark-outline"} onPress={(anchor) => { setDestinationAnchor(anchor); setDestinationOpen(true); }} />
               : destination ? <Text variant="bodyMedium" color="secondary">Saving to {destination}</Text> : null}
-            <PickerField label="Tags" icon="pricetags-outline" dropdown expanded={showTagPicker}
+            <PickerField label="Tags" icon="pricetags-outline" dropdown expanded={showTagPicker} disabled={create.isPending}
               value={selectedTagIds.length ? selectedTagIds.map((id) => tags?.find((tag) => tag.id === id)?.name).filter(Boolean).join(", ") || `${selectedTagIds.length} tags selected` : "Add tags"}
               onPress={(anchor) => { setTagAnchor(anchor); setShowTagPicker(true); }} />
             </View>

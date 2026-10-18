@@ -518,7 +518,7 @@ export function useSelectionDrag({
 
   const pointer = useSelectionDragInput((token, y) => {
     if (nativeToken.current === token) moveTo(y);
-  });
+  }, enabled);
   const beginNative = useCallback((token: number, key: string, y: number, mode?: SelectionDragMode) => {
     if (nativeToken.current != null && nativeToken.current !== token) return;
     nativeToken.current = token;

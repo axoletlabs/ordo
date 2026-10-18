@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import React, { startTransition, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { FlatList, Platform, StyleSheet, View, useWindowDimensions, type ListRenderItemInfo, type ScrollViewProps } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { SharedValue } from "react-native-reanimated";
@@ -13,8 +13,10 @@ import type { WebPressKeyEvent } from "../ui/pressable-web";
 import { useTheme } from "../../theme/ThemeProvider";
 import { listCorners, listPosition } from "../../theme/list-shape";
 import { layout, radius, spacing } from "../../theme/tokens";
+import type { ReaderWorkScheduler } from "./reader-work";
+import { useAnimationActivity } from "../../hooks/use-animation-activity";
 
-export interface ReaderContentsHandle { open: () => void }
+export interface ReaderContentsHandle { open: () => void; prepare: () => void }
 interface ReaderContentsProps {
   headings: readonly ArticleHeading[];
   onSelect: (id: string) => void;
@@ -22,6 +24,7 @@ interface ReaderContentsProps {
   embedded: boolean;
   bottom: number;
   sceneWidth: number;
+  workScheduler: ReaderWorkScheduler;
 }
 
 const keyExtractor = (heading: ArticleHeading) => heading.id;
@@ -30,23 +33,26 @@ const renderScrollComponent = (props: ScrollViewProps) => <ThemedScrollView {...
 /** Contents is navigation chrome, not article state. Opening/closing must not
  * reconcile the reader or mount a whole article's worth of heading controls. */
 export const ReaderContents = React.memo(React.forwardRef<ReaderContentsHandle, ReaderContentsProps>(function ReaderContents({
-  headings, onSelect, expansion, embedded, bottom, sceneWidth,
+  headings, onSelect, expansion, embedded, bottom, sceneWidth, workScheduler,
 }, ref) {
   const [visible, setVisible] = useState(false);
   const [prepared, setPrepared] = useState(false);
+  const [articleReady, setArticleReady] = useState(false);
+  const active = useAnimationActivity();
+  const pendingSelection = useRef<string | null>(null);
+  const selectRef = useRef(onSelect);
+  selectRef.current = onSelect;
   useEffect(() => {
-    // Only a viewport's worth of rows is prepared, at idle priority. A tap
-    // before this runs still opens immediately; no timer gates the action.
-    if (typeof requestIdleCallback === "function") {
-      const idle = requestIdleCallback(() => setPrepared(true));
-      return () => cancelIdleCallback(idle);
-    }
-    const timer = setTimeout(() => setPrepared(true), 500);
-    return () => clearTimeout(timer);
-  }, []);
-  const open = useCallback(() => setVisible(true), []);
+    // Do not mount a second native tree during article startup. Once content
+    // settles, prepare only a viewport of rows at interruptible idle priority.
+    // An earlier tap still opens immediately and retains that prepared surface.
+    if (!active || !articleReady || prepared) return;
+    return workScheduler.schedule(() => startTransition(() => setPrepared(true)));
+  }, [active, articleReady, prepared, workScheduler]);
+  const prepare = useCallback(() => setArticleReady(true), []);
+  const open = useCallback(() => { pendingSelection.current = null; setPrepared(true); setVisible(true); }, []);
   const close = useCallback(() => setVisible(false), []);
-  useImperativeHandle(ref, () => ({ open }), [open]);
+  useImperativeHandle(ref, () => ({ open, prepare }), [open, prepare]);
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { palette, expressive } = useTheme();
@@ -55,6 +61,9 @@ export const ReaderContents = React.memo(React.forwardRef<ReaderContentsHandle, 
   const resetList = useCallback(() => {
     setInitialIndex(0);
     list.current?.scrollToOffset({ offset: 0, animated: false });
+    const id = pendingSelection.current;
+    pendingSelection.current = null;
+    if (id) selectRef.current(id);
   }, []);
   const focusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingFocus = useRef<{ index: number; root: HTMLElement; attempts: number } | null>(null);
@@ -100,11 +109,9 @@ export const ReaderContents = React.memo(React.forwardRef<ReaderContentsHandle, 
     list.current?.scrollToOffset({ offset: index * averageItemLength, animated: false });
   }, []);
   const baseLevel = useMemo(() => headings.reduce((level, heading) => Math.min(level, heading.level), 6), [headings]);
-  const selectRef = useRef(onSelect);
-  selectRef.current = onSelect;
   const select = useCallback((id: string) => {
+    pendingSelection.current = id;
     close();
-    selectRef.current(id);
   }, [close]);
   const renderItem = useCallback(({ item, index }: ListRenderItemInfo<ArticleHeading>) => (
     <ListPressable
@@ -126,7 +133,7 @@ export const ReaderContents = React.memo(React.forwardRef<ReaderContentsHandle, 
       <Text variant={item.level === 1 ? "bodyStrong" : "body"} numberOfLines={2}>{item.text}</Text>
     </ListPressable>
   ), [baseLevel, expressive, headings.length, onKeyDown, palette.surfaceContainerLow, select]);
-  const listHeight = Math.min(320, (height - insets.top - insets.bottom) * 0.4, headings.length * (expressive ? 50 : 48));
+  const listHeight = Math.min(360, (height - insets.top - insets.bottom) * 0.45, headings.length * (expressive ? 50 : 48));
 
   return <>
     {/* Keep the trigger mounted for focus restoration and stable scroll clearance. */}
@@ -137,7 +144,7 @@ export const ReaderContents = React.memo(React.forwardRef<ReaderContentsHandle, 
         alignTo={embedded ? "parent" : "scene"} bottom={bottom} />
     </FABLayer>
     <FloatingPanel visible={visible} onDismiss={close} onExited={resetList}
-      maxWidth={Math.min(384, sceneWidth - spacing[48])} scrollBody={false} keepMounted={prepared}>
+      maxWidth={Math.min(416, sceneWidth - spacing[32])} scrollBody={false} keepMounted={prepared}>
       <PanelHeader title="Contents" titleVariant="titleLarge" onClose={close} />
       <View style={{ height: listHeight, maxHeight: listHeight, flexShrink: 1 }}>
         <FlatList key={initialIndex} ref={list} data={headings} renderItem={renderItem} keyExtractor={keyExtractor}

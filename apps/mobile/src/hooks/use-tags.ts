@@ -5,13 +5,14 @@
  */
 import {
   useInfiniteQuery,
-  useMutation,
   useQuery,
   useQueryClient,
+  type QueryClient,
 } from "@tanstack/react-query";
+import { useSessionMutation as useMutation } from "./use-session-mutation";
 import { LIST_PAGE_SIZE } from "../lib/list-pagination";
 import { sortTagsDefault } from "../lib/list-sort";
-import { type TagColor, type TagDto } from "@ordo/shared";
+import { type BookmarkDto, type TagColor, type TagDto, type TagSummaryDto } from "@ordo/shared";
 import { tagsApi } from "../lib/api/tags";
 import { queryClient } from "../lib/query-client";
 import { nextPageCursor, qk, tagsAnyAccess } from "../lib/api/query-keys";
@@ -52,38 +53,76 @@ export interface TagUpdateInput {
   input: { name?: string; color?: TagColor };
 }
 
+function mapBookmarkTags(bookmark: BookmarkDto, mapper: (tag: TagSummaryDto) => TagSummaryDto) {
+  const tags = bookmark.tags.map(mapper);
+  const suggestedTags = bookmark.suggestedTags.map(mapper);
+  return tags.some((tag, i) => tag !== bookmark.tags[i]) ||
+    suggestedTags.some((tag, i) => tag !== bookmark.suggestedTags[i])
+    ? { ...bookmark, tags, suggestedTags }
+    : bookmark;
+}
+
+function updateTagInBookmarks(qc: QueryClient, id: string, input: TagUpdateInput["input"]) {
+  mapCachedBookmarks(qc, (bookmark) => mapBookmarkTags(bookmark, (tag) =>
+    tag.id === id ? { ...tag, ...input } : tag,
+  ));
+}
+
+/** Undo only fields this mutation still owns, not concurrent bookmark/tag edits. */
+function restoreTagFields<T extends TagSummaryDto>(
+  tag: T,
+  previous: TagSummaryDto | undefined,
+  input: TagUpdateInput["input"],
+): T {
+  if (!previous) return tag;
+  return {
+    ...tag,
+    ...(input.name !== undefined && tag.name === input.name ? { name: previous.name } : {}),
+    ...(input.color !== undefined && tag.color === input.color ? { color: previous.color } : {}),
+  };
+}
+
 export function useUpdateTag() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, input }: TagUpdateInput) => tagsApi.update(id, input),
-    onMutate: ({ id, input }) => {
+    onMutate: async ({ id, input }) => {
+      await Promise.all([
+        qc.cancelQueries({ queryKey: tagsAnyAccess }),
+        qc.cancelQueries({ queryKey: ["bookmarks"] }),
+      ]);
       const prev = qc.getQueriesData<TagDto[]>({ queryKey: tagsAnyAccess });
+      const bookmarks = new Map<string, BookmarkDto>();
       qc.setQueriesData<TagDto[]>({ queryKey: tagsAnyAccess }, (old) =>
         old ? old.map((t) => (t.id === id ? { ...t, ...input } : t)) : old,
       );
       mapCachedBookmarks(qc, (b) => {
-        let changed = false;
-        const tags = b.tags.map((t) => {
-          if (t.id !== id) return t;
-          changed = true;
-          return { ...t, ...input };
-        });
-        const suggestedTags = b.suggestedTags.map((t) => {
-          if (t.id !== id) return t;
-          changed = true;
-          return { ...t, ...input };
-        });
-        return changed ? { ...b, tags, suggestedTags } : b;
+        const next = mapBookmarkTags(b, (t) => t.id === id ? { ...t, ...input } : t);
+        if (next !== b) bookmarks.set(b.id, b);
+        return next;
       });
-      return { prev };
+      return { prev, bookmarks };
     },
-    onError: (_e, _v, ctx) => {
-      ctx?.prev.forEach(([key, data]) => qc.setQueryData(key, data));
+    onError: (_e, { id, input }, ctx) => {
+      ctx?.prev.forEach(([key, data]) => qc.setQueryData<TagDto[]>(key, (current) =>
+        current?.map((tag) => tag.id === id
+          ? restoreTagFields(tag, data?.find((t) => t.id === id), input)
+          : tag),
+      ));
+      mapCachedBookmarks(qc, (bookmark) => {
+        const previous = ctx?.bookmarks.get(bookmark.id);
+        const original = [...(previous?.tags ?? []), ...(previous?.suggestedTags ?? [])]
+          .find((tag) => tag.id === id);
+        return mapBookmarkTags(bookmark, (tag) => tag.id === id
+          ? restoreTagFields(tag, original, input)
+          : tag);
+      });
     },
     onSuccess: (updated, { id }) => {
       qc.setQueriesData<TagDto[]>({ queryKey: tagsAnyAccess }, (old) =>
-        old ? old.map((t) => (t.id === id ? { ...t, ...updated } : t)) : old,
+        old ? sortTags(old.map((t) => (t.id === id ? { ...t, ...updated } : t))) : old,
       );
+      updateTagInBookmarks(qc, id, { name: updated.name, color: updated.color });
     },
   });
 }

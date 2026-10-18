@@ -4,10 +4,12 @@ import { Platform, type View } from "react-native";
 import { isolateModal } from "../lib/modal-isolation";
 
 const FOCUSABLE = 'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
-export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "dialog" | "menu", dismissible = true, isolateBackground = false, suspended = false) {
+export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "dialog" | "menu", dismissible = true, isolateBackground = false, suspended = false, onNavigate?: (key: string) => boolean) {
   const ref = useRef<View>(null);
   const dismissRef = useRef(onDismiss);
   dismissRef.current = onDismiss;
+  const navigateRef = useRef(onNavigate);
+  navigateRef.current = onNavigate;
   useEffect(() => {
     if (!active || suspended || Platform.OS !== "web" || typeof document === "undefined") return;
     const node = () => ref.current as unknown as HTMLElement | null;
@@ -25,6 +27,9 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
           // Replacing a nested menu page removes its focused row without firing
           // focusin. Keep keyboard ownership instead of leaving focus on body.
           observer = new MutationObserver(() => {
+            // Most content updates leave focus intact. Don't wake a repair
+            // frame for every keystroke, loading label or appended list batch.
+            if (root.contains(document.activeElement)) return;
             cancelAnimationFrame(repairFrame);
             repairFrame = requestAnimationFrame(() => {
               const overlays = document.querySelectorAll('[data-material-overlay="true"]');
@@ -35,8 +40,9 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
         }
         // Returning from a dropdown should preserve its restored trigger focus.
         if (node()?.contains(document.activeElement) && document.activeElement !== node()) return;
-        const preferred = kind === "dialog" ? items().find((item) => /INPUT|TEXTAREA/.test(item.tagName) && !item.hasAttribute("readonly")) : null;
-        (preferred ?? items()[0] ?? node())?.focus?.();
+        const controls = items();
+        const preferred = kind === "dialog" ? controls.find((item) => /INPUT|TEXTAREA/.test(item.tagName) && !item.hasAttribute("readonly")) : null;
+        (preferred ?? controls[0] ?? node())?.focus?.({ preventScroll: true });
       });
     });
     const key = (event: KeyboardEvent) => {
@@ -47,6 +53,7 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
       if (event.key === "Escape" && dismissible) {
         event.preventDefault(); event.stopPropagation(); dismissRef.current(); return;
       }
+      if (event.key !== "Tab" && !(kind === "menu" && ["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key))) return;
       const controls = items();
       if (!controls.length) { if (event.key === "Tab") event.preventDefault(); return; }
       const index = controls.indexOf(document.activeElement as HTMLElement);
@@ -55,6 +62,8 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
         else if (!event.shiftKey && (index < 0 || index === controls.length - 1)) { event.preventDefault(); controls[0].focus(); }
       }
       if (kind !== "menu" || /INPUT|TEXTAREA|SELECT/.test((document.activeElement as HTMLElement)?.tagName ?? "")) return;
+      // A virtualized catalogue must navigate its data, not just mounted rows.
+      if (navigateRef.current?.(event.key)) { event.preventDefault(); return; }
       const rows = controls.filter((item) => item.getAttribute("role")?.startsWith("menuitem"));
       if (!rows.length) return;
       const current = rows.indexOf(document.activeElement as HTMLElement);
@@ -100,7 +109,7 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
         const overlays = document.querySelectorAll('[data-material-overlay="true"]');
         const top = overlays[overlays.length - 1];
         const inertTrigger = previous?.isConnected && previous.closest('[inert]');
-        if ((overlays.length || inertTrigger) && Date.now() < deadline) { requestAnimationFrame(restore); return; }
+        if ((top === root || (top && (!previous || !top.contains(previous))) || inertTrigger) && Date.now() < deadline) { requestAnimationFrame(restore); return; }
         requestAnimationFrame(() => {
           if (previous?.isConnected && !previous.closest('[data-material-overlay="false"]') &&
             (!top || top.contains(previous)) &&

@@ -33,7 +33,8 @@ export function Button({ label, onPress, variant = "primary", size = "sm", loadi
     : variant === "primary" ? palette.primary : variant === "danger" ? palette.error
     : variant === "tonal" || variant === "secondary" ? palette.secondaryContainer : variant === "elevated" ? palette.surfaceContainerLow : "transparent";
   const foreground = inactive ? `${palette.onSurface}61` : variant === "primary" ? palette.onPrimary
-    : variant === "danger" ? palette.onError : variant === "tonal" || variant === "secondary" ? palette.onSecondaryContainer : palette.primary;
+    : variant === "danger" ? palette.onError : variant === "tonal" || variant === "secondary" ? palette.onSecondaryContainer
+    : variant === "outlined" && expressive ? palette.onSurfaceVariant : palette.primary;
   return <View style={[{ minHeight: 48, minWidth: 48, justifyContent: "center", ...(block ? { width: "100%" as const } : {}) }, style]}>
     <PressableScale testID={testID} disabled={inactive} accessibilityRole="button" accessibilityLabel={label}
       accessibilityState={{ disabled: inactive, busy: loading }} stateLayerColor={foreground}
@@ -43,7 +44,7 @@ export function Button({ label, onPress, variant = "primary", size = "sm", loadi
       visualStyle={[styles.base, { height: tokens.height, alignSelf: "stretch", paddingHorizontal: size === "sm" && !expressive ? 24 : tokens.padding,
         backgroundColor: surface, borderRadius: tokens.height / 2,
         borderWidth: variant === "outlined" ? 1 : 0,
-        borderColor: inactive ? `${palette.onSurface}1f` : palette.outline },
+        borderColor: inactive ? `${palette.onSurface}1f` : expressive ? palette.outlineVariant : palette.outline },
         variant === "elevated" && !inactive ? shadows.level1 : null]}>
       <View style={styles.content}>
         <View pointerEvents="none" aria-hidden={loading} importantForAccessibility={loading ? "no-hide-descendants" : "auto"}

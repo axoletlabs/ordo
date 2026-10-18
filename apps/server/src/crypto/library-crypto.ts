@@ -49,7 +49,7 @@ export function encryptText(dek: Buffer, plaintext: string, aad: string): string
 }
 
 /**
- * Plaintext (no `enc1.` prefix) passes through so tests and pre-migration rows
+ * Plaintext (no `enc1.` prefix) passes through so pre-migration rows
  * keep working. Ciphertext without a DEK throws rather than leaking blobs to
  * the client.
  */
@@ -135,12 +135,11 @@ function requireKek(kek: Buffer): Buffer {
 }
 
 function scryptParams() {
-  const test = process.env.NODE_ENV === "test";
   return {
-    N: test ? 16 : 16_384,
+    N: 16_384,
     r: SCRYPT_R,
     p: SCRYPT_P,
-    maxmem: test ? 32 * 1024 * 1024 : 64 * 1024 * 1024,
+    maxmem: 64 * 1024 * 1024,
   };
 }
 

@@ -6,7 +6,6 @@
  * Writes src/theme/material-icon-glyphs.ts and assets/fonts/MaterialIcons-Ordo.ttf
  * (only the glyphs the app references, from @expo/vector-icons' MaterialIcons).
  * Needs fontTools' pyftsubset on PATH, or PYFTSUBSET=/path/to/pyftsubset.
- * tests/icon-font.test.mjs fails CI when the subset is stale.
  */
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";

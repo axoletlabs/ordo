@@ -5,7 +5,7 @@
  * the mark to the vertical center of the paragraph.
  */
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { Animated, StyleSheet, View } from "react-native";
 import { PressableScale } from "./PressableScale";
 import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { Text } from "./Text";
@@ -13,6 +13,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { CHECK_GLYPH, FOOTNOTE_LINE_BOX } from "../../theme/type-metrics";
 import { radius, spacing } from "../../theme/tokens";
+import { useStateVisibility } from "./StateLayer";
 
 export function CheckLine({
   checked,
@@ -27,6 +28,9 @@ export function CheckLine({
   children?: React.ReactNode;
 }) {
   const { palette } = useTheme();
+  const progress = useStateVisibility(checked);
+  const outlineOpacity = React.useMemo(() => progress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }), [progress]);
+  const markScale = React.useMemo(() => progress.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }), [progress]);
   return (
     <PressableScale
       accessibilityRole="checkbox"
@@ -37,12 +41,13 @@ export function CheckLine({
       style={styles.row}
     >
       <View style={styles.box} pointerEvents="none">
-        <Ionicons
-          name={checked ? "checkbox" : "square-outline"}
-          size={CHECK_GLYPH}
-          color={checked ? palette.accent : palette.textTertiary}
-          style={iconGlyphStyle(CHECK_GLYPH)}
-        />
+        <Animated.View style={{ opacity: outlineOpacity }}>
+          <Ionicons name="square-outline" size={CHECK_GLYPH} color={palette.onSurfaceVariant} style={iconGlyphStyle(CHECK_GLYPH)} />
+        </Animated.View>
+        <Animated.View testID="material-checkbox-mark" style={[StyleSheet.absoluteFill, styles.box,
+          { opacity: progress, transform: [{ scale: markScale }] }]}>
+          <Ionicons name="checkbox" size={CHECK_GLYPH} color={palette.primary} style={iconGlyphStyle(CHECK_GLYPH)} />
+        </Animated.View>
       </View>
       <Text variant="footnote" style={styles.label}>
         {children ?? label}

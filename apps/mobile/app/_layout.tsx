@@ -23,6 +23,7 @@ import { APP_IDENTITY } from "../src/lib/app-variant";
 import {
   discardQueryCache,
   prepareLaunchLibrary,
+  installSessionCacheIsolation,
   restoreQueryPersistence,
   stopQueryPersistence,
 } from "../src/lib/query-cache";
@@ -56,6 +57,7 @@ import {
 } from "../src/store/update-restart";
 import { enableFreeze } from "react-native-screens";
 import { normalizeReaderPreferences } from "@ordo/shared";
+import { useReducedMotionPreference } from "../src/hooks/use-reduced-motion-preference";
 
 enableFreeze(true);
 initAppLifecycle();
@@ -87,6 +89,7 @@ const AUTH_HANDOFF_CLEAR_MS = 700;
 
 function RootShell() {
   const { palette } = useTheme();
+  const reducedMotion = useReducedMotionPreference();
   const router = useRouter();
   const segments = useSegments();
   const status = useAuthStore((s) => s.status);
@@ -199,7 +202,7 @@ function RootShell() {
           screenOptions={{
             headerShown: false,
             contentStyle: { backgroundColor: palette.background },
-            animation: "fade",
+            animation: reducedMotion ? "none" : "fade",
             animationDuration: 260,
           }}
         >
@@ -243,12 +246,15 @@ export default function RootLayout() {
   const restartCover = peekRestartCover();
 
   useEffect(() => {
+    const releaseIsolation = installSessionCacheIsolation();
     (async () => {
+      // Connectivity is an advisory signal, not a prerequisite for painting a
+      // locally-restored session. A slow native network probe must not hold boot.
+      void useOnlineStore.getState().init().catch((error) => console.warn("Connectivity bootstrap failed", error));
       const results = await Promise.allSettled([
         Font.loadAsync(launchFonts),
         useSettingsStore.getState().hydrate(),
         useFolderTokenStore.getState().hydrate(),
-        useOnlineStore.getState().init(),
       ]);
 
       for (const result of results) {
@@ -277,6 +283,7 @@ export default function RootLayout() {
         void recordColdStart();
       }
     })();
+    return releaseIsolation;
   }, []);
 
   return (

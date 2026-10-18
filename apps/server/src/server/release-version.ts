@@ -3,7 +3,7 @@ import { join } from "node:path";
 
 /**
  * Read the version from apps/server/package.json so it can't drift from the
- * declared one. Works from both src/ (tests) and dist/ (two levels down).
+ * declared one. Works from both src/ and dist/ (two levels down).
  */
 function readPackageVersion(): string {
   try {

@@ -4,7 +4,7 @@
  * literal in the app that is an Ionicons (or mapped) name is a candidate.
  * Persisted folder icons come from the closed FOLDER_ICONS list.
  *
- * Shared by scripts/build-icon-font.mjs and tests/icon-font.test.mjs.
+ * Used by scripts/build-icon-font.mjs.
  * Run under `node --experimental-strip-types` (it imports a .ts module).
  */
 import { readdirSync, readFileSync } from "node:fs";
@@ -31,7 +31,7 @@ function sourceFiles(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
     const file = path.join(dir, entry.name);
     if (entry.isDirectory()) return sourceFiles(file);
-    return /\.(ts|tsx)$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name) ? [file] : [];
+    return /\.(ts|tsx)$/.test(entry.name) ? [file] : [];
   });
 }
 

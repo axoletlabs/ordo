@@ -9,7 +9,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { OverlayPortal } from "./overlay-host";
@@ -86,7 +86,7 @@ function FloatingPanelSurface({
   obscured = false,
   interactive = true,
 }: FloatingPanelProps) {
-  const { palette, expressive } = useTheme();
+  const { palette } = useTheme();
   const sheet = presentation === "bottom-sheet";
   const panelSurface = sheet ? palette.surfaceContainerLow : palette.surfaceContainerHigh;
   const titleId = React.useId();
@@ -98,14 +98,8 @@ function FloatingPanelSurface({
   const [panelHeight, setPanelHeight] = React.useState(0);
   const [sheetHeaderHeight, setSheetHeaderHeight] = React.useState(0);
   const [sheetActionsHeight, setSheetActionsHeight] = React.useState(0);
+  const [measured, setMeasured] = React.useState(false);
   const dragOffset = useSharedValue(0);
-  const handlePressAfter = React.useRef(0);
-  const beginHandleDrag = React.useCallback(() => { handlePressAfter.current = Infinity; }, []);
-  const endHandleDrag = React.useCallback(() => {
-    // RN Web can deliver a click after a pan ends. Don't interpret that
-    // release as a second, tap-to-dismiss gesture (including cancelled pans).
-    if (handlePressAfter.current === Infinity) handlePressAfter.current = Date.now() + 200;
-  }, []);
   const resting = React.useRef({ width, height });
   if (width !== resting.current.width || Platform.OS === "web") resting.current = { width, height };
   else resting.current.height = Math.max(resting.current.height, height);
@@ -118,7 +112,12 @@ function FloatingPanelSurface({
     dismissKeyboard();
     onDismiss();
   }, [dismissible, onDismiss]);
-  const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, { interactive: interactive && !obscured, onExited });
+  const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, {
+    interactive: interactive && !obscured, onExited, ready: Platform.OS === "web" || measured,
+  });
+  React.useEffect(() => {
+    if (!rendered && !keepMounted) setMeasured(false);
+  }, [rendered, keepMounted]);
   const panelRef = useOverlayFocus(visible && rendered, hideAndDismiss, "dialog", dismissible, false, !interactive || obscured);
   // A sibling picker obscures this panel while staying mounted above it.
   // Crossfade this panel and its scrim (same 200ms inOut quad as the
@@ -128,11 +127,14 @@ function FloatingPanelSurface({
   const obscuredFade = useSharedValue(obscured ? 0 : 1);
   const [collapsedObscured, setCollapsedObscured] = React.useState(obscured);
   const lastObscured = React.useRef(obscured);
+  const previousFade = React.useRef({ obscured, reducedMotion: motion.reducedMotion });
   const finishObscuring = React.useCallback(() => {
     if (lastObscured.current) setCollapsedObscured(true);
   }, []);
   React.useLayoutEffect(() => {
     lastObscured.current = obscured;
+    if (previousFade.current.obscured === obscured && previousFade.current.reducedMotion === motion.reducedMotion) return;
+    previousFade.current = { obscured, reducedMotion: motion.reducedMotion };
     if (motion.reducedMotion) {
       obscuredFade.value = obscured ? 0 : 1;
       setCollapsedObscured(obscured);
@@ -150,10 +152,13 @@ function FloatingPanelSurface({
   }, [obscured, obscuredFade, finishObscuring, motion.reducedMotion]);
   const lastChildren = React.useRef(children);
   if (visible) lastChildren.current = children;
-  const nodes = panelChildren(visible ? children : lastChildren.current);
-  const headers = nodes.filter((node) => React.isValidElement(node) && node.type === PanelHeader);
-  const actions = nodes.filter((node) => React.isValidElement(node) && node.type === PanelActions);
-  const body = nodes.filter((node) => !headers.includes(node) && !actions.includes(node));
+  const displayedChildren = visible ? children : lastChildren.current;
+  const { headers, actions, body } = React.useMemo(() => {
+    const nodes = panelChildren(displayedChildren);
+    const headers = nodes.filter((node) => React.isValidElement(node) && node.type === PanelHeader);
+    const actions = nodes.filter((node) => React.isValidElement(node) && node.type === PanelActions);
+    return { headers, actions, body: nodes.filter((node) => !headers.includes(node) && !actions.includes(node)) };
+  }, [displayedChildren]);
   const viewportHeight = Math.min(height, availableHeight, keyboardTop ?? Infinity);
   const bottomInset = keyboardTop == null ? insets.bottom : 0;
   const heightLimit = sheet
@@ -161,12 +166,13 @@ function FloatingPanelSurface({
     : Math.max(80, viewportHeight - insets.top - bottomInset - spacing[32]);
   const sheetInset = width < 600 ? spacing[16] : spacing[24];
   const sheetWidth = Math.min(maxWidth, width - insets.left - insets.right);
+  const dialogWidth = Math.max(0, Math.min(maxWidth, width - insets.left - insets.right - spacing[32]));
   const corners = sheet ? {
-    borderTopLeftRadius: expressive ? radius["3xl"] : radius["2xl"],
-    borderTopRightRadius: expressive ? radius["3xl"] : radius["2xl"],
+    borderTopLeftRadius: radius["2xl"],
+    borderTopRightRadius: radius["2xl"],
     borderBottomLeftRadius: 0,
     borderBottomRightRadius: 0,
-  } : { borderRadius: expressive ? radius["3xl"] : radius["2xl"] };
+  } : { borderRadius: radius["2xl"] };
   // Opening the keyboard must not also change the form's horizontal padding.
   const panelPadding = restHeight - insets.top - insets.bottom - spacing[32] < 480 ? spacing[16] : layout.overlayPadding;
   // In short windows/above the IME, let the title scroll with the content so
@@ -181,13 +187,13 @@ function FloatingPanelSurface({
     : <View style={{ flexShrink: 1, maxHeight: bodyLimit }}>{scrollNodes}</View>;
 
   React.useEffect(() => {
-    if (!visible || obscured || !interactive) return;
+    if (!visible || obscured || !interactive || (Platform.OS !== "web" && !measured)) return;
     const cleanup = onShowRef.current?.();
     return () => {
       if (typeof cleanup === "function") cleanup();
       else if (cleanup != null) clearTimeout(cleanup);
     };
-  }, [visible, obscured, interactive]);
+  }, [visible, obscured, interactive, measured]);
 
   React.useLayoutEffect(() => {
     if (!visible) return;
@@ -211,27 +217,17 @@ function FloatingPanelSurface({
     return () => { show.remove(); hide.remove(); };
   }, [rendered]);
 
+  const previousLift = React.useRef({ lift: 0, reducedMotion: motion.reducedMotion });
   React.useEffect(() => {
+    // Browser layout already follows its visual viewport; no keyboard worklet.
+    if (Platform.OS === "web") return;
     const center = (restHeight + insets.top - insets.bottom) / 2;
-    const lift = Platform.OS === "web" ? 0 : sheet ? Math.min(0, viewportHeight - restHeight)
+    const lift = sheet ? Math.min(0, viewportHeight - restHeight)
       : panelKeyboardLift(center, panelHeight, viewportHeight, insets.top + spacing[16], bottomInset + spacing[16]);
+    if (previousLift.current.lift === lift && previousLift.current.reducedMotion === motion.reducedMotion) return;
+    previousLift.current = { lift, reducedMotion: motion.reducedMotion };
     keyboardShift.value = withTiming(lift, { duration: motion.reducedMotion ? 0 : 250, easing: Easing.bezier(0.2, 0, 0, 1) });
   }, [restHeight, panelHeight, viewportHeight, insets.top, insets.bottom, bottomInset, keyboardShift, motion.reducedMotion, sheet]);
-
-  // Only the handle owns dismissal gestures; dragging/selection in long notes
-  // stays with their ScrollView. An incomplete drag springs back in place.
-  const handlePan = Gesture.Pan().enabled(sheet && dismissible && visible && interactive && !obscured)
-    .activeOffsetY(8)
-    .onStart(() => { runOnJS(beginHandleDrag)(); })
-    .onUpdate((event) => { dragOffset.value = Math.max(0, event.translationY); })
-    .onEnd((event) => {
-      if (event.translationY > 64 || (event.translationY > 8 && event.velocityY > 800)) runOnJS(hideAndDismiss)();
-      else dragOffset.value = motion.reducedMotion ? 0 : withSpring(0, motion.spatial);
-    })
-    .onFinalize((_event, success) => {
-      runOnJS(endHandleDrag)();
-      if (!success) dragOffset.value = motion.reducedMotion ? 0 : withSpring(0, motion.spatial);
-    });
 
   const scrimStyle = useAnimatedStyle(() => ({
     opacity: progress.value * obscuredFade.value,
@@ -251,12 +247,8 @@ function FloatingPanelSurface({
 
   const sheetHeader = <View testID="material-sheet-header" onLayout={(event) => setSheetHeaderHeight(event.nativeEvent.layout.height)}
     style={{ backgroundColor: panelSurface }}>
-    <GestureDetector gesture={handlePan}>
-      <PressableScale accessibilityRole="button" accessibilityLabel="Dismiss sheet" disabled={!dismissible}
-        onPress={() => { if (Date.now() >= handlePressAfter.current) hideAndDismiss(); }} style={styles.sheetHandleTarget}>
-        <View style={[styles.sheetHandle, { backgroundColor: palette.onSurfaceVariant }]} />
-      </PressableScale>
-    </GestureDetector>
+    <SheetHandle enabled={dismissible && visible && interactive && !obscured} dismissible={dismissible}
+      onDismiss={hideAndDismiss} dragOffset={dragOffset} />
     <View style={{ paddingHorizontal: sheetInset, paddingBottom: spacing[8] }}>
       {headers.map((header) => React.isValidElement<{ style?: StyleProp<ViewStyle> }>(header)
         ? React.cloneElement(header, { style: [header.props.style, { marginBottom: 0 }] }) : header)}
@@ -297,7 +289,7 @@ function FloatingPanelSurface({
         // would discard its measurements and repeat the cold layout on open.
         style={[styles.root, collapsedObscured ? { display: "none" } : null,
           Platform.OS === "web" && !rendered ? { visibility: "hidden" } as unknown as ViewStyle : null]}
-        onLayout={(event) => { const next = event.nativeEvent.layout.height; if (!obscured && next > 0) setAvailableHeight((current) => Math.abs(current - next) < 1 ? current : next); }}
+        onLayout={Platform.OS === "web" ? undefined : (event) => { const next = event.nativeEvent.layout.height; if (!obscured && next > 0) setAvailableHeight((current) => Math.abs(current - next) < 1 ? current : next); }}
       >
         <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, scrimStyle]}>
           <View style={[StyleSheet.absoluteFill, { backgroundColor: palette.overlay }]} />
@@ -310,11 +302,16 @@ function FloatingPanelSurface({
           onPress={dismissible && dismissOnScrim ? hideAndDismiss : undefined}
         />
           <View pointerEvents="box-none" style={[styles.frame, { paddingTop: insets.top + spacing[16], paddingBottom: insets.bottom + spacing[16] },
-            sheet ? { justifyContent: "flex-end", paddingBottom: 0, paddingLeft: insets.left, paddingRight: insets.right } : null,
+            sheet ? { justifyContent: "flex-end", paddingBottom: 0, paddingLeft: insets.left, paddingRight: insets.right }
+              : { paddingLeft: insets.left + spacing[16], paddingRight: insets.right + spacing[16] },
             Platform.OS !== "web" ? { flex: 0, height: restHeight } : null]}>
           <Animated.View
             ref={panelRef}
-            onLayout={(event) => setPanelHeight(event.nativeEvent.layout.height)}
+            onLayout={Platform.OS === "web" ? undefined : (event) => {
+              const next = event.nativeEvent.layout.height;
+              if (next > 0) setMeasured(true);
+              setPanelHeight(next);
+            }}
             role="dialog"
             aria-modal={visible && interactive && !obscured}
             aria-hidden={!visible}
@@ -326,10 +323,10 @@ function FloatingPanelSurface({
             style={[
               styles.panel,
               {
-                width: sheet ? sheetWidth : fitContent ? undefined : Math.min(maxWidth, width - spacing[32]),
-                maxWidth: sheet ? sheetWidth : Math.min(maxWidth, width - spacing[32]),
+                width: sheet ? sheetWidth : fitContent ? undefined : dialogWidth,
+                maxWidth: sheet ? sheetWidth : dialogWidth,
                 padding: sheet ? 0 : panelPadding,
-                minWidth: fitContent ? 220 : undefined,
+                minWidth: fitContent ? Math.min(280, dialogWidth) : undefined,
                 maxHeight: heightLimit,
                 backgroundColor: Platform.OS === "web" ? "transparent" : panelSurface,
                 ...corners,
@@ -354,7 +351,7 @@ function FloatingPanelSurface({
               {sheet ? sheetContent : <>
               {!scrollHeader ? headers.map((header) => React.isValidElement<{ style?: StyleProp<ViewStyle> }>(header)
                 ? React.cloneElement(header, { style: [header.props.style, { marginBottom: 0 }] }) : header) : null}
-              {scrollingBody ? <View style={{ flexShrink: 1, marginTop: !scrollHeader && headers.length ? spacing[24] : 0 }}>{scrollingBody}</View> : null}{!scrollAll ? actions : null}
+              {scrollingBody ? <View style={{ flexShrink: 1, marginTop: !scrollHeader && headers.length ? spacing[16] : 0 }}>{scrollingBody}</View> : null}{!scrollAll ? actions : null}
               </>}
             </InputSurfaceContext.Provider>
             </PanelTitleContext.Provider>
@@ -364,6 +361,38 @@ function FloatingPanelSurface({
       </View>
     </OverlayPortal>
   );
+}
+
+/** Dialogs never allocate/register sheet gesture worklets. Only the handle
+ * owns dismissal: dragging or selecting long notes stays with the scroller. */
+function SheetHandle({ enabled, dismissible, onDismiss, dragOffset }: {
+  enabled: boolean; dismissible: boolean; onDismiss: () => void; dragOffset: SharedValue<number>;
+}) {
+  const { palette } = useTheme();
+  const { reducedMotion, spatial } = useMaterialMotion();
+  const pressAfter = React.useRef(0);
+  const beginDrag = React.useCallback(() => { pressAfter.current = Infinity; }, []);
+  const endDrag = React.useCallback(() => {
+    // RN Web may send a click after a pan, including a cancelled pan.
+    if (pressAfter.current === Infinity) pressAfter.current = Date.now() + 200;
+  }, []);
+  const pan = React.useMemo(() => Gesture.Pan().enabled(enabled).activeOffsetY(8)
+    .onStart(() => { runOnJS(beginDrag)(); })
+    .onUpdate((event) => { dragOffset.value = Math.max(0, event.translationY); })
+    .onEnd((event) => {
+      if (event.translationY > 64 || (event.translationY > 8 && event.velocityY > 800)) runOnJS(onDismiss)();
+      else dragOffset.value = reducedMotion ? 0 : withSpring(0, spatial);
+    })
+    .onFinalize((_event, success) => {
+      runOnJS(endDrag)();
+      if (!success) dragOffset.value = reducedMotion ? 0 : withSpring(0, spatial);
+    }), [beginDrag, dragOffset, enabled, endDrag, onDismiss, reducedMotion, spatial]);
+  return <GestureDetector gesture={pan}>
+    <PressableScale accessibilityRole="button" accessibilityLabel="Dismiss sheet" disabled={!dismissible}
+      onPress={() => { if (Date.now() >= pressAfter.current) onDismiss(); }} style={styles.sheetHandleTarget}>
+      <View style={[styles.sheetHandle, { backgroundColor: palette.onSurfaceVariant }]} />
+    </PressableScale>
+  </GestureDetector>;
 }
 
 const styles = StyleSheet.create({

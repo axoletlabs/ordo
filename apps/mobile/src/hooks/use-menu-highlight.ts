@@ -3,7 +3,7 @@
  * selector so opening a menu does not re-render the whole list.
  */
 import { create } from "zustand";
-import { useCallback, useLayoutEffect, useRef } from "react";
+import { useLayoutEffect } from "react";
 import type { SelectionKey } from "./use-selection";
 
 export const useMenuHighlightStore = create<{
@@ -24,35 +24,10 @@ export const useMenuHighlightStore = create<{
   },
 }));
 
-/** Retain ownership through nested surfaces AND their final exit. Passing a
- * surface requires its onExited callback; without one, release on dismissal. */
-export function useMenuHighlight(visible: boolean, key: SelectionKey | null, surface?: string) {
-  const session = useRef({ visible, key, surface, release: null as (() => void) | null });
+/** Nested pages retain ownership while the action session is visible. Release
+ * at dismissal so the row fades WITH the surface, not after its exit callback. */
+export function useMenuHighlight(visible: boolean, key: SelectionKey | null) {
   useLayoutEffect(() => {
-    const current = session.current;
-    const opening = visible && !current.visible;
-    current.visible = visible;
-    if (visible && key) {
-      current.surface = surface;
-      if (opening || !current.release || current.key !== key) {
-        const previous = current.release;
-        current.release = useMenuHighlightStore.getState().claim(key);
-        current.key = key;
-        previous?.();
-      }
-    } else if (surface == null || key == null) {
-      current.release?.();
-      current.release = null;
-    }
-  }, [visible, key, surface]);
-  useLayoutEffect(() => () => {
-    session.current.release?.();
-    session.current.release = null;
-  }, []);
-  return useCallback((exitedSurface: string) => {
-    const current = session.current;
-    if (current.visible || current.surface !== exitedSurface) return;
-    current.release?.();
-    current.release = null;
-  }, []);
+    if (visible && key) return useMenuHighlightStore.getState().claim(key);
+  }, [visible, key]);
 }

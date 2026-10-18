@@ -15,6 +15,7 @@ import { Platform, StyleSheet, View } from "react-native";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 import { createOverlayRegistry, topBlockingLayer } from "../../lib/overlay-registry";
 import { isolateModal } from "../../lib/modal-isolation";
+import { AnimationActivityContext } from "../../hooks/use-animation-activity";
 
 type OverlayApi = ReturnType<typeof createOverlayRegistry<React.ReactNode>>;
 
@@ -40,7 +41,7 @@ function OverlayBackground({ api, children }: { api: OverlayApi; children: React
   return <OverlayBlockedContext.Provider value={blocked}>
     <View style={styles.background} pointerEvents={blocked ? "none" : "auto"}
       accessibilityElementsHidden={blocked} importantForAccessibility={blocked ? "no-hide-descendants" : "auto"}>
-      {children}
+      <AnimationActivityContext.Provider value={!blocked}>{children}</AnimationActivityContext.Provider>
     </View>
   </OverlayBlockedContext.Provider>;
 }
@@ -70,7 +71,9 @@ function OverlayLayers({ api }: { api: OverlayApi }) {
             accessibilityElementsHidden={index < topIndex}
             {...(Platform.OS === "web" ? { dataSet: { overlayLayer: layer.id } } : {})}
             style={StyleSheet.absoluteFill}>
-            {layer.node}
+            <AnimationActivityContext.Provider value={layer.active && index >= topIndex}>
+              {layer.node}
+            </AnimationActivityContext.Provider>
           </View>
         </OverlayBlockedContext.Provider>
       ))}

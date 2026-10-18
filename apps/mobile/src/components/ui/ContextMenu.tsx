@@ -50,6 +50,7 @@ export interface ContextMenuProps {
   children: React.ReactNode;
   width?: number;
   backdrop?: boolean;
+  dismissible?: boolean;
   preferredPlacement?: MenuPlacement["placement"];
   estimatedHeight?: number;
   sessionKey?: string | number | null;
@@ -57,6 +58,8 @@ export interface ContextMenuProps {
   keyboardDismiss?: boolean;
   /** Nested pages share an origin and transition in place, sizing to their contents. */
   pageKey?: string;
+  /** Optional data-aware keyboard navigation for virtualized menu pages. */
+  onNavigate?: (key: string) => boolean;
 }
 
 export function ContextMenu(props: ContextMenuProps) {
@@ -73,21 +76,24 @@ function ContextMenuSurface({
   children,
   width = CONTEXT_MENU_WIDTH,
   backdrop = true,
+  dismissible = true,
   preferredPlacement,
   estimatedHeight = 200,
   sessionKey,
   scrollBody = true,
   keyboardDismiss = true,
   pageKey,
+  onNavigate,
 }: ContextMenuProps) {
   const { palette, shadows, expressive } = useTheme();
   const { width: windowWidth, height } = useWindowDimensions();
   const windowHeight = useKeyboardViewportHeight(height, visible);
   const insets = useSafeAreaInsets();
   const hideAndDismiss = React.useCallback(() => {
+    if (!dismissible) return;
     if (backdrop && keyboardDismiss) dismissKeyboard();
     onDismiss();
-  }, [backdrop, keyboardDismiss, onDismiss]);
+  }, [backdrop, dismissible, keyboardDismiss, onDismiss]);
   const [contentHeight, setContentHeight] = React.useState(0);
   const contentHeightRef = React.useRef(0);
   const bodyRef = React.useRef<View>(null);
@@ -97,7 +103,7 @@ function ContextMenuSurface({
     ready: contentHeight > 0,
     onExited,
   });
-  const menuRef = useOverlayFocus(visible && rendered && backdrop, hideAndDismiss, "menu");
+  const menuRef = useOverlayFocus(visible && rendered && backdrop, hideAndDismiss, "menu", dismissible, false, false, onNavigate);
   React.useEffect(() => {
     if (!visible || !rendered || !backdrop || Platform.OS !== "web" || typeof document === "undefined") return;
     return listenForMenuOutsideScroll(() => menuRef.current as unknown as HTMLElement | null, hideAndDismiss);
@@ -300,7 +306,7 @@ function ContextMenuSurface({
               top: placed.top,
               width: menuWidth,
               maxHeight: heightLimit,
-              backgroundColor: palette.surfaceContainerHigh,
+              backgroundColor: expressive ? palette.surfaceContainerLow : palette.surfaceContainer,
               borderRadius: expressive ? radius.xl : radius.xs,
               paddingVertical: menuPadding,
               ...shadows.level2,
@@ -360,6 +366,7 @@ export function ContextMenuItem({
   onPress,
   selectionRole,
   role = "menuitem",
+  labelLines = 2,
 }: {
   icon?: keyof typeof Ionicons.glyphMap;
   leading?: React.ReactNode;
@@ -374,9 +381,15 @@ export function ContextMenuItem({
   onPress: () => void;
   selectionRole?: "menuitemradio" | "menuitemcheckbox";
   role?: "menuitem" | "button";
+  labelLines?: 1 | 2;
 }) {
   const { palette, expressive } = useTheme();
-  const color = tone === "danger" ? palette.error : selected ? palette.onSecondaryContainer : palette.onSurface;
+  // Expressive menus deliberately use the complementary tertiary pair. With
+  // the teal app palette this can be blue; it is not a platform/default tint.
+  const selectedContainer = expressive ? palette.tertiaryContainer : palette.surfaceContainerHighest;
+  const selectedColor = expressive ? palette.onTertiaryContainer : palette.onSurface;
+  const color = tone === "danger" ? palette.error : selected ? selectedColor : palette.onSurface;
+  const iconColor = tone === "danger" ? palette.error : selected ? selectedColor : palette.onSurfaceVariant;
   const inactive = disabled || busy;
 
   return (
@@ -401,14 +414,14 @@ export function ContextMenuItem({
         detail ? styles.itemWithDetail : null,
         Platform.OS === "web" ? styles.itemWeb : null,
         inactive && styles.itemDisabled,
-        { backgroundColor: selected ? palette.secondaryContainer : "transparent" },
+        { backgroundColor: selected ? selectedContainer : "transparent" },
         { borderRadius: expressive ? radius.md : radius.xs, marginHorizontal: expressive ? spacing[8] : 0, paddingHorizontal: expressive ? spacing[16] : spacing[12], overflow: "hidden" },
       ]}
     >
       <View style={styles.iconSlot}>
-        {leading ?? (icon ? <AppIcon name={icon} size={24} color={color} /> : null)}
+        {leading ?? (icon ? <AppIcon name={icon} size={24} color={iconColor} /> : null)}
       </View>
-      <Text variant="bodyLarge" style={[styles.itemLabel, { color }]} numberOfLines={2}>
+      <Text variant="bodyLarge" style={[styles.itemLabel, { color }]} numberOfLines={labelLines}>
         {label}
       </Text>
       {busy ? (
@@ -417,7 +430,7 @@ export function ContextMenuItem({
         <Ionicons
           name="checkmark"
           size={16}
-           color={palette.onSecondaryContainer}
+           color={selectedColor}
           style={[styles.itemSide, iconGlyphStyle(16)]}
         />
       ) : trailing ? (

@@ -1,7 +1,5 @@
 /**
  * Pure helpers for ordo's built-in website WebView (BookmarkBrowser).
- *
- * Keep this file free of react-native so node tests can import it.
  */
 
 /** Schemes the WebView may navigate itself. `data:` is iframe-only. */

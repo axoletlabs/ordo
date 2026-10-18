@@ -49,11 +49,6 @@ export class RateLimitService implements OnModuleInit, OnModuleDestroy {
     this.store.clear();
   }
 
-  /** Drop every bucket. Used by tests; production buckets expire on their own. */
-  resetAll(): void {
-    this.store.clear();
-  }
-
   /**
    * Reject if this account is locked. Counts every attempt (success or failure)
    * against the source-IP window so bcrypt cannot be used as a cheap DoS.

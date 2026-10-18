@@ -44,9 +44,8 @@ export interface AppConfig {
    */
   smtpRequired: boolean;
   /**
-   * When false, every rate-limit check is a no-op. Defaults on except in
-   * `NODE_ENV=test` (Jest), so local/prod are protected and existing tests
-   * keep their unlimited register/login loops. Override with RATE_LIMIT_ENABLED.
+   * When false, every rate-limit check is a no-op. Defaults on.
+   * Override with RATE_LIMIT_ENABLED.
    */
   rateLimitEnabled: boolean;
   /**
@@ -160,11 +159,6 @@ function resolveSecret(): { value: string; explicit: boolean } {
   const fromEnv = process.env.JWT_SECRET?.trim();
   if (fromEnv) return { value: fromEnv, explicit: true };
 
-  // Jest should not write a key file into the package directory.
-  if (process.env.NODE_ENV === "test") {
-    return { value: randomBytes(48).toString("hex"), explicit: false };
-  }
-
   const secretPath = join(process.cwd(), ".ordo-secret");
   if (existsSync(secretPath)) {
     return { value: readFileSync(secretPath, "utf8").trim(), explicit: false };
@@ -183,11 +177,6 @@ function resolveSecret(): { value: string; explicit: boolean } {
 function resolveLibraryKek(): { value: string; explicit: boolean } {
   const fromEnv = process.env.LIBRARY_KEK?.trim();
   if (fromEnv) return { value: normalizeLibraryKek(fromEnv), explicit: true };
-
-  // Jest should not write a key file into the package directory.
-  if (process.env.NODE_ENV === "test") {
-    return { value: randomBytes(32).toString("hex"), explicit: false };
-  }
 
   const keyPath = join(process.cwd(), ".ordo-library-key");
   if (existsSync(keyPath)) {
@@ -245,7 +234,7 @@ export function resolveDatabaseUrl(raw: string): string {
   return `file:${resolve(process.cwd(), "prisma", pathPart)}`;
 }
 
-/** Unique per database file so tests and instances don't share `/tmp/avatars`. */
+/** Unique per database file so instances don't share avatar storage. */
 export function defaultAvatarDir(databaseUrl: string): string {
   const dbPath = sqliteFilePath(databaseUrl);
   if (dbPath) {
@@ -256,10 +245,7 @@ export function defaultAvatarDir(databaseUrl: string): string {
 }
 
 export function loadConfig(): AppConfig {
-  // Tests pass env explicitly. A local `.env` should not leak into Jest.
-  if (process.env.NODE_ENV !== "test") {
-    applyDotEnvFile(join(process.cwd(), ".env"));
-  }
+  applyDotEnvFile(join(process.cwd(), ".env"));
   const parsed = EnvSchema.parse(process.env);
   const secret = resolveSecret();
   const libraryKek = resolveLibraryKek();
@@ -303,7 +289,7 @@ export function loadConfig(): AppConfig {
 
 function resolveRateLimitEnabled(raw: string | undefined): boolean {
   if (raw !== undefined && raw.trim() !== "") return toBool(raw);
-  return process.env.NODE_ENV !== "test";
+  return true;
 }
 
 const LISTEN_HOSTS = new Set(["127.0.0.1", "0.0.0.0", "::1", "::"]);

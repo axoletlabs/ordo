@@ -5,15 +5,13 @@
  * launch. Refreshes settle after the UI is up; the offline gate covers a
  * confirmed-down host once the probe answers.
  */
-import { AppState } from "react-native";
-import { createSyncStoragePersister } from "@tanstack/query-sync-storage-persister";
+import { AppState, Platform } from "react-native";
 import {
-  persistQueryClientRestore,
   persistQueryClientSave,
-  type PersistedClient,
   type Persister,
 } from "@tanstack/react-query-persist-client";
-import type { QueryCacheNotifyEvent } from "@tanstack/react-query";
+import { hydrate, type QueryCacheNotifyEvent } from "@tanstack/react-query";
+import { captureSessionScope, isSessionScopeCurrent } from "./session-scope";
 import { DEFAULT_BOOKMARK_LIST_SORT } from "@ordo/shared";
 import { createMMKV, type MMKV } from "react-native-mmkv";
 import { bookmarksApi } from "./api/bookmarks";
@@ -30,23 +28,50 @@ import {
   isPersistedBookmarkListKey,
   protectedFolderIdsFromFolders,
   queryCacheStorageKey,
-  sanitizePersistedClient,
   shouldPersistQueryKey,
-  type PersistedClientSnapshot,
+  createSnapshotPersister,
 } from "./query-persist";
-import { raceDeadline } from "./fetch-timeout";
 import { useAuthStore } from "../store/auth";
 import { useSettingsStore } from "../store/settings";
+import { useFolderTokenStore } from "../store/folder-tokens";
 import { resumePendingDeletes } from "./undoable-delete";
-
-function sanitizeForDisk(client: PersistedClient): PersistedClient {
-  return sanitizePersistedClient(client as unknown as PersistedClientSnapshot) as unknown as PersistedClient;
-}
 
 let mmkv: MMKV | null | undefined;
 let activeStorageKey: string | null = null;
 let unsubscribe: (() => void) | undefined;
 let restoreGeneration = 0;
+
+/** Runs synchronously with the stores, before a new account can observe shared
+ * query keys. Keep the outgoing painted library only until the next sign-in. */
+export function installSessionCacheIsolation(): () => void {
+  let owner: string | null = null;
+  let lastState = "";
+  const update = () => {
+    const auth = useAuthStore.getState();
+    if (auth.status === "loading") return;
+    const next = auth.user && auth.status === "authenticated"
+      ? queryCacheStorageKey(auth.user.id, useSettingsStore.getState().serverUrl) : null;
+    const state = `${auth.status}:${next ?? ""}`;
+    if (state === lastState) return;
+    lastState = state;
+    if (!next) {
+      stopQueryPersistence();
+      resumePendingDeletes(); // drop account-scoped tombstones and Undo surfaces
+      void useFolderTokenStore.getState().clearAll();
+      return;
+    }
+    if (owner && owner !== next) {
+      discardQueryCache();
+      void useFolderTokenStore.getState().clearAll();
+      resumePendingDeletes();
+    }
+    owner = next;
+  };
+  const releaseAuth = useAuthStore.subscribe(update);
+  const releaseSettings = useSettingsStore.subscribe(update);
+  update();
+  return () => { releaseAuth(); releaseSettings(); };
+}
 
 function getMmkv(): MMKV | null {
   if (mmkv !== undefined) return mmkv;
@@ -64,25 +89,7 @@ function protectedFolderIdsFromCache() {
 }
 
 function createQueryCachePersister(storageKey: string): Persister {
-  const storage = getMmkv();
-  return createSyncStoragePersister({
-    storage: storage
-      ? {
-          getItem: (key) => storage.getString(key) ?? null,
-          setItem: (key, value) => {
-            storage.set(key, value);
-          },
-          removeItem: (key) => {
-            storage.remove(key);
-          },
-        }
-      : undefined,
-    key: storageKey,
-    // subscribePersistence below already coalesces writes.
-    throttleTime: 0,
-    serialize: (client) => JSON.stringify(sanitizeForDisk(client)),
-    deserialize: (cachedString) => sanitizeForDisk(JSON.parse(cachedString) as PersistedClient),
-  });
+  return createSnapshotPersister(getMmkv(), storageKey);
 }
 
 /** Built per save so the folder lock lookup runs once, not once per query. */
@@ -145,11 +152,14 @@ function subscribePersistence(options: ReturnType<typeof persistOptions>): () =>
   const appState = AppState.addEventListener("change", (state) => {
     if (state !== "active" && timer) save();
   });
+  const flush = () => { if (timer) save(); };
+  if (Platform.OS === "web" && typeof window !== "undefined") window.addEventListener("pagehide", flush);
   return () => {
     if (timer) clearTimeout(timer);
     timer = null;
     unsubscribeCache();
     appState.remove();
+    if (Platform.OS === "web" && typeof window !== "undefined") window.removeEventListener("pagehide", flush);
   };
 }
 
@@ -183,7 +193,17 @@ export async function restoreQueryPersistence(userId: string, serverUrl: string)
   const options = persistOptions(createQueryCachePersister(storageKey));
 
   try {
-    await persistQueryClientRestore(options);
+    const snapshot = await options.persister.restoreClient();
+    // Check after the storage await and before synchronous hydration. Checking
+    // only after persistQueryClientRestore is too late: it already hydrated.
+    if (generation !== restoreGeneration || activeStorageKey !== storageKey) return;
+    if (snapshot) {
+      if (!snapshot.timestamp || Date.now() - snapshot.timestamp > options.maxAge || snapshot.buster !== options.buster) {
+        await options.persister.removeClient();
+      } else {
+        hydrate(queryClient, snapshot.clientState, options.hydrateOptions);
+      }
+    }
   } catch (error) {
     console.warn("Query cache restore failed", error);
   }
@@ -207,18 +227,18 @@ async function fetchHomeLibrary(): Promise<void> {
       queryFn: fetchFoldersNormalized,
       staleTime: 30_000,
       gcTime: PERSISTED_QUERY_GC_TIME_MS,
-      // Launch fetches never retry: the splash deadline (below) is the only
-      // budget they get, and mounted observers retry with their own policy.
+      // Launch prefetches never retry; mounted observers own retry feedback.
       retry: false,
     }),
     queryClient.fetchInfiniteQuery({
       queryKey: qk.bookmarks(null, DEFAULT_BOOKMARK_LIST_SORT),
-      queryFn: ({ pageParam }) =>
+      queryFn: ({ pageParam, signal }) =>
         bookmarksApi.list({
           folderId: null,
           cursor: pageParam ?? undefined,
           limit: LIST_PAGE_SIZE,
           sort: DEFAULT_BOOKMARK_LIST_SORT,
+          signal,
         }),
       initialPageParam: null as string | null,
       getNextPageParam: nextPageCursor,
@@ -244,19 +264,13 @@ async function prefetchServerInfo(serverUrl: string): Promise<void> {
 }
 
 /**
- * How long a cold-cache launch may hold the splash on the network. Past the
- * deadline the app continues (skeletons cover the gap) while the fetches keep
- * running and paint the library the moment they land.
- */
-const LAUNCH_FETCH_DEADLINE_MS = 3_500;
-
-/**
- * Restore the disk snapshot, then fill a cold cache before the home screen
- * mounts. The snapshot restore is local-only and always runs first; a dead or
- * slow host can add at most LAUNCH_FETCH_DEADLINE_MS to the launch, never the
- * per-request timeout stack.
+ * Only local restoration gates first paint. Fill a cold cache in parallel
+ * with navigation; the library's skeleton already handles this state. Waiting
+ * for the network here used to add up to 3.5 seconds of non-interactive splash
+ * even when the fonts, session, and route were ready.
  */
 export async function prepareLaunchLibrary(): Promise<void> {
+  const owner = captureSessionScope();
   const auth = useAuthStore.getState();
   if (auth.status !== "authenticated" || !auth.user) {
     stopQueryPersistence();
@@ -265,20 +279,10 @@ export async function prepareLaunchLibrary(): Promise<void> {
   const serverUrl = useSettingsStore.getState().serverUrl;
 
   await restoreQueryPersistence(auth.user.id, serverUrl);
+  if (!isSessionScopeCurrent(owner)) return;
 
-  if (homeLibraryCached()) {
-    void prefetchServerInfo(serverUrl);
-    return;
-  }
-
-  const fill = Promise.allSettled([prefetchServerInfo(serverUrl), fetchHomeLibrary()]).then(
-    (results) => {
-      for (const result of results) {
-        if (result.status === "rejected") {
-          console.warn("Launch library fetch failed", result.reason);
-        }
-      }
-    },
-  );
-  await raceDeadline(fill, LAUNCH_FETCH_DEADLINE_MS);
+  void prefetchServerInfo(serverUrl);
+  if (!homeLibraryCached()) void fetchHomeLibrary().catch((error) => {
+    console.warn("Launch library fetch failed", error);
+  });
 }

@@ -15,8 +15,13 @@ import { haptics } from "../../lib/haptics";
 import { errorMessage } from "../../lib/error-message";
 import { spacing } from "../../theme/tokens";
 import { DEFAULT_FOLDER_ICON, type FolderDto, type FolderIcon } from "@ordo/shared";
+import { LazyMount } from "../ui/LazyMount";
 
-export function CreateFolderPanel({
+export function CreateFolderPanel(props: Parameters<typeof CreateFolderContent>[0]) {
+  return <LazyMount active={props.visible}>{() => <CreateFolderContent {...props} />}</LazyMount>;
+}
+
+function CreateFolderContent({
   visible,
   onDismiss,
   onCreated,
@@ -83,7 +88,7 @@ export function CreateFolderPanel({
             error={error || undefined}
             onSubmitEditing={submit}
           />
-          <FolderIconPicker value={icon} onChange={setIcon} onOpenChange={setIconOpen} />
+          <FolderIconPicker value={icon} onChange={setIcon} onOpenChange={setIconOpen} disabled={createFolder.isPending} />
         </View>
         <PanelActions
           confirmLabel="Create folder"

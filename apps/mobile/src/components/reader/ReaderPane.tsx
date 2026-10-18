@@ -23,7 +23,7 @@ import {
 import { useWindowDimensions } from "react-native";
 import { useSystemColorScheme } from "../../theme/use-system-color-scheme";
 import { useSceneColumnInsets } from "../../hooks/use-scene-column-insets";
-import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
+import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useComposedEventHandler, useSharedValue, type SharedValue } from "react-native-reanimated";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { StatusBar, setStatusBarStyle } from "expo-status-bar";
 import { useAppRouter as useRouter } from "../../hooks/use-app-router";
@@ -59,6 +59,7 @@ import { sheetMenuStyles } from "../ui/SheetActionRow";
 import type { ArticleHeading } from "./ArticleHtml";
 import { ReaderArticle } from "./ReaderArticle";
 import { ReaderContents, type ReaderContentsHandle } from "./ReaderContents";
+import { createReaderWorkScheduler } from "./reader-work";
 import type { HighlightSelectDraft } from "./article-highlight-ui";
 import { ReaderControlsSheet } from "./ReaderControlsSheet";
 import { EditTagsSheet } from "../tags/EditTagsSheet";
@@ -105,8 +106,12 @@ import {
 import { copyLink, copyText } from "../../lib/copy-link";
 import { ackBookmarkOpened, openExternalBrowser, openLivePage } from "../../lib/open-website";
 import { reminderClearsOnOpen } from "../../lib/bookmark-reminders";
-import { scrollReadingProgress, shouldFlushReadingProgress } from "../../lib/reading-progress";
+import { reconcileReadingProgress, scrollReadingProgress, shouldFlushReadingProgress } from "../../lib/reading-progress";
 import { fabContentPadding } from "../../lib/fab-layout";
+import { useReducedMotionPreference } from "../../hooks/use-reduced-motion-preference";
+import { createLatestWriteQueue } from "../../lib/latest-write-queue";
+import { captureSessionScope, isSessionScopeCurrent, type SessionScope } from "../../lib/session-scope";
+import { useAuthStore } from "../../store/auth";
 
 function useSetContentKindMissing() {
   return { mutate: () => undefined, isPending: false };
@@ -131,6 +136,21 @@ const PROGRESS_DELTA = 0.08;
 /** Trailing idle window before a progress write is flushed. */
 const PROGRESS_DEBOUNCE_MS = 1_500;
 const SELECT_OPEN_MS = 280;const SELECT_CLOSE_MS = 140;
+
+// Survive reader unmount/reopen: a late write from the previous screen must
+// not race the new screen's progress for the same account/server/article.
+const saveProgress = createLatestWriteQueue(
+  async (write: { id: string; folderId: string | null; progress: number; userId: string | undefined; server: string; scope: SessionScope }) => {
+    if (!isSessionScopeCurrent(write.scope) || !write.userId || useAuthStore.getState().user?.id !== write.userId || useSettingsStore.getState().serverUrl !== write.server) return null;
+    return bookmarksApi.update(write.id, { readProgress: write.progress }, { folderId: write.folderId });
+  },
+  (updated, write) => {
+    if (!updated || !isSessionScopeCurrent(write.scope) || useAuthStore.getState().user?.id !== write.userId || useSettingsStore.getState().serverUrl !== write.server) return;
+    // A concurrent move/tag edit is unrelated to progress. Do not restore its
+    // older folder/tags from the full DTO returned by this request.
+    updateBookmarkEverywhere(queryClient, write.id, (bookmark) => reconcileReadingProgress(bookmark, updated));
+  },
+);
 
 /** Collapse whitespace/newlines so stored titles render as one line-ish. */
 function normalizeTitle(raw: string | null | undefined): string {
@@ -234,7 +254,10 @@ function ReaderPaneInner({
   const { height: windowHeight } = useWindowDimensions();
   const { sceneWidth } = useSceneColumnInsets();
 
-  const cached = bookmarkId ? findBookmarkInCache(queryClient, bookmarkId) : undefined;
+  // The row is only a first-paint fallback; detail is the live query. Do not
+  // scan every loaded folder/search page whenever reader chrome changes.
+  const cached = useMemo(() => bookmarkId ? findBookmarkInCache(queryClient, bookmarkId) : undefined, [bookmarkId]);
+  const reducedMotion = useReducedMotionPreference();
   const skipWebsiteDetail =
     (cached?.fetchStatus === "unsupported" || cached?.fetchStatus === "failed") &&
     cached.contentKindOverride !== "article" &&
@@ -310,21 +333,23 @@ function ReaderPaneInner({
   const markedRef = useRef<string | null>(null);
   const browserRef = useRef<BookmarkBrowserHandle>(null);
   const scrollRef = useRef<ScrollView>(null);
+  const readerWork = useMemo(() => createReaderWorkScheduler(), [bookmarkId]);
+  useEffect(() => () => readerWork.dispose(), [readerWork]);
   const offsetRef = useRef(0);
   // Chrome (header + progress rule) overlays the article and slides away on
   // real user drags only; programmatic scrolls (position restore, TOC jumps)
   // never yank it around. The article scrolls underneath the overlay.
-  const collapsingFab = useReaderChrome(!!selectionMenu);
+  const chromeHeightSV = useSharedValue(0);
+  const collapsingFab = useReaderChrome(!!selectionMenu, chromeHeightSV);
   const expandChromeRef = useRef(collapsingFab.expand);
   expandChromeRef.current = collapsingFab.expand;
   const chromeHeightRef = useRef(0);
-  const chromeHeightSV = useSharedValue(0);
   const [chromeHeight, setChromeHeight] = useState(0);
   // Capture only the shared value: the controller also owns a JS-only native
   // event registration that Worklets cannot serialize onto the UI thread.
-  const chromeExpansion = collapsingFab.expansion.spatial;
+  const chromeHidden = collapsingFab.hidden;
   const chromeShiftStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: -chromeHeightSV.value * (1 - chromeExpansion.value) }],
+    transform: [{ translateY: -Math.min(chromeHeightSV.value, Math.max(0, chromeHidden.value)) }],
   }));
   const websiteViewRef = useRef(false);
   const [keptBrowserId, setKeptBrowserId] = useState<string | null>(null);
@@ -687,6 +712,9 @@ function ReaderPaneInner({
 
   const trackProgressRef = useRef(false);
   const currentArticleRef = useRef<{ id: string; folderId: string | null } | null>(null);
+  // Capture ownership before navigation/logout cleanup can change global auth.
+  // An outgoing reader must never enqueue its article against the next account.
+  const progressOwner = useRef({ userId: useAuthStore.getState().user?.id, server: useSettingsStore.getState().serverUrl, scope: captureSessionScope() }).current;
   const initialProgressRef = useRef(0);
   const latestProgressRef = useRef(0);
   const persistedProgressRef = useRef<number | null>(null);
@@ -700,6 +728,13 @@ function ReaderPaneInner({
   const selectHeadingRef = useRef<(id: string) => void>(() => {});
   const headingFrame = useRef(0);
   useEffect(() => () => cancelAnimationFrame(headingFrame.current), []);
+
+  const handleContentsRef = useCallback((handle: ReaderContentsHandle | null) => {
+    contentsRef.current = handle;
+    // Selection temporarily removes the Contents trigger. A remounted trigger
+    // can prepare immediately if the article's one-time ready event already ran.
+    if (htmlReadyRef.current) handle?.prepare();
+  }, []);
 
   const handleHeadingRef = useCallback((id: string, view: View | null) => {
     if (view) {
@@ -726,7 +761,7 @@ function ReaderPaneInner({
     collapsingFab.expand(offsetRef.current);
     const jump = (contentY: number) => {
       if (!Number.isFinite(contentY)) return;
-      scroll.scrollTo({ y: Math.max(0, contentY - spacing[16]), animated: true });
+      scroll.scrollTo({ y: Math.max(0, contentY - spacing[16]), animated: !reducedMotion });
     };
     // Content-space Y = heading window Y - content-origin window Y, measured
     // in the same frame. measureLayout against the inner view silently no-ops
@@ -770,11 +805,13 @@ function ReaderPaneInner({
         jump(headingY - originY);
       },
     );
-  }, [collapsingFab]);
+  }, [collapsingFab, reducedMotion]);
   selectHeadingRef.current = handleHeadingSelect;
 
   const persistProgress = useCallback(
     (id: string, folderId: string | null, value: number) => {
+      const { userId, server, scope } = progressOwner;
+      if (!isSessionScopeCurrent(scope) || !userId || useAuthStore.getState().user?.id !== userId || useSettingsStore.getState().serverUrl !== server) return;
       const rounded = Math.round(Math.min(1, Math.max(0, value)) * 1000) / 1000;
       // Optimistic: reflect in the detail + list caches immediately.
       updateBookmarkEverywhere(queryClient, id, (b) => ({
@@ -784,18 +821,9 @@ function ReaderPaneInner({
           ? { isRead: true, completedAt: b.completedAt ?? new Date().toISOString() }
           : {}),
       }));
-      bookmarksApi
-        .update(id, { readProgress: rounded }, { folderId })
-        .then((updated) => {
-          // Reconcile with server truth (completedAt/isRead); the spread keeps
-          // detail-only fields like contentHtml.
-          updateBookmarkEverywhere(queryClient, id, (b) => ({ ...b, ...updated }));
-        })
-        .catch(() => {
-          /* best-effort; the server position stays canonical for next open */
-        });
+      saveProgress(`${server}:${userId}:${scope.generation}:${id}`, { id, folderId, progress: rounded, userId, server, scope });
     },
-    [],
+    [progressOwner],
   );
 
   const flushProgress = useCallback(() => {
@@ -813,11 +841,19 @@ function ReaderPaneInner({
   }, [persistProgress]);
 
   const progressSV = useSharedValue(0);
+  const progressTrackingSV = useSharedValue(false);
+  const progressScrollHandler = useAnimatedScrollHandler({
+    onScroll: (event) => {
+      if (progressTrackingSV.value) progressSV.value = scrollReadingProgress(
+        event.contentOffset.y, event.layoutMeasurement.height, event.contentSize.height,
+      );
+    },
+  });
+  const readerScrollHandler = useComposedEventHandler([collapsingFab.scrollHandler, progressScrollHandler]);
 
   const handleFraction = useCallback(
     (fraction: number) => {
       if (!trackProgressRef.current) return;
-      progressSV.value = fraction;
       progressLabelRef.current(fraction);
       latestProgressRef.current = fraction;
       const last = persistedProgressRef.current;
@@ -828,7 +864,7 @@ function ReaderPaneInner({
         flushTimerRef.current = setTimeout(flushProgress, PROGRESS_DEBOUNCE_MS);
       }
     },
-    [flushProgress, progressSV],
+    [flushProgress],
   );
 
   // Per-article baseline from the server; flush best-effort when leaving.
@@ -842,6 +878,7 @@ function ReaderPaneInner({
     persistedProgressRef.current = baseline;
     restoredRef.current = false;
     htmlReadyRef.current = false;
+    progressTrackingSV.value = false;
     pendingHeading.current = null;
     cancelAnimationFrame(headingFrame.current);
     offsetRef.current = 0;
@@ -857,7 +894,7 @@ function ReaderPaneInner({
     return () => {
       flushProgress();
     };
-  }, [bookmark?.id, chromeHeightSV]);
+  }, [bookmark?.id, chromeHeightSV, progressTrackingSV]);
 
   // A persisted list row can be older than the freshly fetched detail. Accept
   // its canonical position until rendering finishes, never after a user jump.
@@ -894,19 +931,24 @@ function ReaderPaneInner({
 
   const handleArticleReady = useCallback(() => {
     htmlReadyRef.current = true;
+    progressTrackingSV.value = true;
     maybeRestore();
-  }, [maybeRestore]);
+    contentsRef.current?.prepare();
+  }, [maybeRestore, progressTrackingSV]);
 
   // Start tracking once content exists; retry restore in case the native
   // layout events fired before tracking was armed.
   useEffect(() => {
     trackProgressRef.current = hasContent;
+    progressTrackingSV.value = hasContent && (!hasHtml || htmlReadyRef.current);
     if (hasContent) maybeRestore();
-  }, [hasContent, maybeRestore]);
+  }, [bookmark?.id, hasContent, hasHtml, maybeRestore, progressTrackingSV]);
 
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+      if (contentSize.height - contentOffset.y - layoutMeasurement.height > layoutMeasurement.height * 2) readerWork.scrolling();
+      else readerWork.resume();
       offsetRef.current = contentOffset.y;
       viewHeightRef.current = layoutMeasurement.height;
       contentHeightRef.current = contentSize.height;
@@ -932,7 +974,7 @@ function ReaderPaneInner({
         scrollReadingProgress(contentOffset.y, layoutMeasurement.height, contentSize.height),
       );
     },
-    [handleFraction, hasHtml, windowHeight],
+    [handleFraction, hasHtml, readerWork, windowHeight],
   );
 
   // Recompute when content settles/grows (images loading, HTML rendering).
@@ -942,9 +984,11 @@ function ReaderPaneInner({
       maybeRestore();
       if (h <= 0 || viewHeightRef.current <= 0) return;
       if (hasHtml && !htmlReadyRef.current) return;
-      handleFraction(scrollReadingProgress(offsetRef.current, viewHeightRef.current, h));
+      const fraction = scrollReadingProgress(offsetRef.current, viewHeightRef.current, h);
+      handleFraction(fraction);
+      progressSV.value = fraction;
     },
-    [handleFraction, hasHtml, maybeRestore],
+    [handleFraction, hasHtml, maybeRestore, progressSV],
   );
 
   const onScrollViewLayout = useCallback(
@@ -1135,7 +1179,8 @@ function ReaderPaneInner({
             onLayout={onScrollViewLayout}
             onContentSizeChange={onContentSizeChange}
             onScroll={onScroll}
-            animatedScrollHandler={collapsingFab.scrollHandler}
+            onScrollBeginDrag={readerWork.scrolling}
+            animatedScrollHandler={readerScrollHandler}
             scrollEventThrottle={16}
             contentContainerStyle={{
               // The chrome is an overlay: pad the content so it starts below
@@ -1169,6 +1214,7 @@ function ReaderPaneInner({
                     onHeadingsChange={handleHeadingsChange}
                     onHeadingRef={handleHeadingRef}
                     onReady={handleArticleReady}
+                    workScheduler={readerWork}
                   />
                 </View>
               ) : detailFetchFailed ? (
@@ -1237,9 +1283,9 @@ function ReaderPaneInner({
       )}
 
       {hasContents && !selectionMenu ? (
-        <ReaderContents key={bookmark?.id} ref={contentsRef} headings={articleHeadings}
+        <ReaderContents key={bookmark?.id} ref={handleContentsRef} headings={articleHeadings}
           onSelect={handleHeadingSelect} expansion={collapsingFab.expansion}
-          embedded={embedded} bottom={contentsFabBottom} sceneWidth={sceneWidth} />
+          embedded={embedded} bottom={contentsFabBottom} sceneWidth={sceneWidth} workScheduler={readerWork} />
       ) : null}
 
       <ReaderControlsSheet
