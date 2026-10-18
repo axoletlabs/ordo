@@ -312,11 +312,12 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
     if (!ok) {
       throw new AppError(ErrorCode.INVALID_CREDENTIALS, "Incorrect password.");
     }
-    await this.mfa.assertStepUp(user, mfaCode);
-
+    // Reject an address the account already uses before stepping up, so a typo
+    // never burns a one-time backup code.
     if (newEmail === user.email) {
       throw new AppError(ErrorCode.VALIDATION_ERROR, "New email must be different from your current email.");
     }
+    await this.mfa.assertStepUp(user, mfaCode);
 
     const taken = await this.prisma.user.findUnique({ where: { email: newEmail } });
     if (taken) {
@@ -330,7 +331,12 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
 
   async resendEmailChange(userId: string): Promise<void> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
-    if (!user || !user.pendingEmail) return;
+    if (!user || !user.pendingEmail) {
+      throw new AppError(
+        ErrorCode.VALIDATION_ERROR,
+        "There's no email change waiting to be verified. Start the change again.",
+      );
+    }
     await this.createAndSendOtp(userId, user.pendingEmail, EMAIL_OTP_PURPOSE.EMAIL_CHANGE);
   }
 
@@ -342,25 +348,69 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
         "No pending email change to verify.",
       );
     }
-    const record = await this.matchOtp(userId, token, EMAIL_OTP_PURPOSE.EMAIL_CHANGE);
-    const updated = await this.prisma.$transaction(async (tx) => {
-      await tx.emailVerificationToken.update({
-        where: { id: record.id },
-        data: { consumedAt: new Date() },
+    const pendingEmail = user.pendingEmail;
+    // The code is bound to the address it was sent to, so a code issued for a
+    // previous target can never authorize a later one.
+    const record = await this.matchOtp(userId, token, EMAIL_OTP_PURPOSE.EMAIL_CHANGE, pendingEmail);
+
+    if (await this.emailChangeTargetTaken(pendingEmail)) {
+      await this.clearPendingEmail(userId, pendingEmail);
+      throw this.emailChangeTargetTakenError();
+    }
+
+    let updated: User;
+    try {
+      const claimed = await this.prisma.$transaction(async (tx) => {
+        // Claim the OTP and swap the address atomically: a concurrent verify or
+        // resend can only ever win once, and the target must still be pending.
+        const consumed = await tx.emailVerificationToken.updateMany({
+          where: { id: record.id, consumedAt: null },
+          data: { consumedAt: new Date() },
+        });
+        if (consumed.count === 0) return null;
+        const changed = await tx.user.updateMany({
+          where: { id: userId, pendingEmail },
+          data: { email: pendingEmail, pendingEmail: null, emailVerifiedAt: new Date() },
+        });
+        if (changed.count === 0) return null;
+        return tx.user.findUnique({ where: { id: userId } });
       });
-      return tx.user.update({
-        where: { id: userId },
-        data: {
-          email: user.pendingEmail as string,
-          pendingEmail: null,
-          emailVerifiedAt: new Date(),
-        },
-      });
-    });
-    const previousEmail = user.email;
-    const nextEmail = user.pendingEmail as string;
-    await this.mail.sendEmailChangedNotice(previousEmail, nextEmail).catch(() => undefined);
+      if (!claimed) {
+        throw new AppError(
+          ErrorCode.INVALID_VERIFICATION_TOKEN,
+          "No pending email change to verify.",
+        );
+      }
+      updated = claimed;
+    } catch (err) {
+      // Another account claimed the address between our check and the write.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
+        await this.clearPendingEmail(userId, pendingEmail);
+        throw this.emailChangeTargetTakenError();
+      }
+      throw err;
+    }
+
+    await this.mail.sendEmailChangedNotice(user.email, pendingEmail).catch(() => undefined);
     return this.presentUser(updated);
+  }
+
+  private async emailChangeTargetTaken(email: string): Promise<boolean> {
+    const taken = await this.prisma.user.findUnique({ where: { email }, select: { id: true } });
+    return taken !== null;
+  }
+
+  private async clearPendingEmail(userId: string, pendingEmail: string): Promise<void> {
+    await this.prisma.user
+      .updateMany({ where: { id: userId, pendingEmail }, data: { pendingEmail: null } })
+      .catch(() => undefined);
+  }
+
+  private emailChangeTargetTakenError(): AppError {
+    return new AppError(
+      ErrorCode.EMAIL_ALREADY_EXISTS,
+      "That email address was taken by another account. Start the change again with a different address.",
+    );
   }
 
   async changePassword(
@@ -383,16 +433,19 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
       (user.dekPasswordWrapped && user.dekKdfSalt
         ? await this.crypto.unwrapPassword(user.dekPasswordWrapped, currentPassword, user.dekKdfSalt)
         : null);
+    // Store the new hash and the re-wrapped library key in one write; a
+    // password change that landed without its re-wrap would lock the library.
     const updated = await this.prisma.user.update({
       where: { id: userId },
-      data: { passwordHash },
+      data: {
+        passwordHash,
+        ...(dek ? await this.libraryKeys.wrapPasswordMaterial(dek, newPassword) : {}),
+      },
     });
-    if (dek) await this.libraryKeys.rewrapPassword(userId, dek, newPassword);
     // Sign out everywhere (including this session) and start fresh.
     await this.sessions.revokeAll(userId);
     const { session, tokens } = await this.sessions.create(updated.id, meta, dek);
-    const fresh = dek ? ((await this.prisma.user.findUnique({ where: { id: userId } })) ?? updated) : updated;
-    return this.buildAuthResponse(fresh, session, tokens);
+    return this.buildAuthResponse(updated, session, tokens);
   }
 
   async deleteAccount(
@@ -450,6 +503,9 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
       }
     }
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_COST);
+    // Re-wrap the library key alongside the new hash in the same transaction so
+    // the two can never disagree about which password opens the library.
+    const keyMaterial = dek ? await this.libraryKeys.wrapPasswordMaterial(dek, newPassword) : {};
     await this.prisma.$transaction([
       this.prisma.emailVerificationToken.update({
         where: { id: record.id },
@@ -460,10 +516,10 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
         data: {
           passwordHash,
           emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
+          ...keyMaterial,
         },
       }),
     ]);
-    if (dek) await this.libraryKeys.rewrapPassword(user.id, dek, newPassword);
     await this.sessions.revokeAll(user.id);
   }
 
@@ -478,7 +534,7 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
       data: {
         userId,
         purpose,
-        token: hashEmailOtp(userId, token, this.cfg.jwtSecret),
+        token: this.hashOtp(userId, token, this.otpScope(purpose, email)),
         expiresAt: new Date(Date.now() + EMAIL_OTP.TTL_MS),
       },
     });
@@ -496,8 +552,13 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
     }
   }
 
-  private hashOtp(userId: string, otp: string): string {
-    return hashEmailOtp(userId, otp, this.cfg.jwtSecret);
+  private hashOtp(userId: string, otp: string, scope?: string): string {
+    return hashEmailOtp(userId, otp, scope ? `${this.cfg.jwtSecret}:${scope}` : this.cfg.jwtSecret);
+  }
+
+  /** Email-change codes are bound to the address they were sent to. */
+  private otpScope(purpose: EmailOtpPurpose, email: string): string | undefined {
+    return purpose === EMAIL_OTP_PURPOSE.EMAIL_CHANGE ? email : undefined;
   }
 
   private invalidOtp(): AppError {
@@ -508,7 +569,7 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
   }
 
   /** Validate a user-scoped OTP. Does not consume on success (caller does). */
-  private async matchOtp(userId: string, otp: string, purpose: EmailOtpPurpose) {
+  private async matchOtp(userId: string, otp: string, purpose: EmailOtpPurpose, scope?: string) {
     const record = await this.prisma.emailVerificationToken.findFirst({
       where: { userId, purpose, consumedAt: null },
       orderBy: { createdAt: "desc" },
@@ -516,7 +577,7 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
     if (!record || record.expiresAt < new Date()) {
       throw this.invalidOtp();
     }
-    if (!equalHex(this.hashOtp(userId, otp), record.token)) {
+    if (!equalHex(this.hashOtp(userId, otp, scope), record.token)) {
       const attempts = record.attempts + 1;
       await this.prisma.emailVerificationToken.update({
         where: { id: record.id },
