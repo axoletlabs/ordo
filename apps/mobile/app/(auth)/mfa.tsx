@@ -9,6 +9,7 @@ import { Button } from "../../src/components/ui/Button";
 import { Text } from "../../src/components/ui/Text";
 import { OtpInput, type OtpStatus } from "../../src/components/ui/OtpInput";
 import { OtpDeliveryHint } from "../../src/components/auth/OtpDeliveryHint";
+import { EMAIL_OTP, MFA } from "@ordo/shared";
 import { useLoginMfa, useLoginMfaEmailVerify } from "../../src/hooks/use-auth-actions";
 import { useServerInfo } from "../../src/hooks/queries";
 import { authApi } from "../../src/lib/api/auth";
@@ -100,6 +101,27 @@ export default function LoginMfaScreen() {
     }
   };
 
+  // A retyped code (identical value) never re-fires OtpInput's onComplete, so an
+  // explicit action is the only way to retry after a failed attempt.
+  const activeCode = mode === "totp" ? totp : mode === "backup" ? backup : emailCode;
+  const activeLength = mode === "backup" ? MFA.BACKUP_CODE_LENGTH : EMAIL_OTP.LENGTH;
+  const verifyButton = (
+    <>
+      <View style={{ height: spacing[16] }} />
+      <Button
+        label="Verify"
+        block
+        size="md"
+        onPress={() => {
+          if (mode === "email") void submitEmail(emailCode);
+          else void submitCode(mode === "backup" ? backup : totp);
+        }}
+        loading={otpStatus === "loading"}
+        disabled={busy || activeCode.length !== activeLength}
+      />
+    </>
+  );
+
   return (
     <AuthShell title={mode === "backup" ? "Use a backup code" : mode === "email" ? "Check your email" : "Check your authenticator"}
       footer={<Button label="Back to sign in" variant="ghost" block onPress={backToSignIn} disabled={busy} />}>
@@ -119,6 +141,7 @@ export default function LoginMfaScreen() {
             error={error || undefined}
             label="Authenticator code"
           />
+          {verifyButton}
           <View style={{ height: spacing[16] }} />
           <Button
             label="Use a backup code"
@@ -158,6 +181,7 @@ export default function LoginMfaScreen() {
             error={error || undefined}
             label="Backup code"
           />
+          {verifyButton}
           <View style={{ height: spacing[16] }} />
           <Button
             label="Use an authenticator code"
@@ -184,6 +208,7 @@ export default function LoginMfaScreen() {
             error={error || undefined}
             label="Email sign-in code"
           />
+          {verifyButton}
           <View style={{ height: spacing[16] }} />
           <Text variant="footnote" color="secondary">
             This signs you in once. Your authenticator stays on.

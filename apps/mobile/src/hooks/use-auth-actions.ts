@@ -124,6 +124,18 @@ export function useDeleteAccount() {
   });
 }
 
+export function useDisableTotp() {
+  const updateUser = useUpdateUser();
+  return useMutation({
+    mutationFn: authApi.totpDisable,
+    onSuccess: updateUser,
+  });
+}
+
+export function useRegenerateBackupCodes() {
+  return useMutation({ mutationFn: authApi.regenerateBackupCodes });
+}
+
 export function useRevokeSession() {
   const qc = useQueryClient();
   return useMutation({
