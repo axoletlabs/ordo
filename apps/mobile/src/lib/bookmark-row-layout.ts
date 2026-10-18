@@ -41,11 +41,15 @@ export function estimateBookmarkRowSize(bookmark: BookmarkDto | null | undefined
   return bookmark.remindAt != null || bookmark.suggestedTags?.length ? 96 : BOOKMARK_ROW_BASE_SIZE;
 }
 
-export function listRowLayouts(heights: readonly number[]) {
+export function lazyListRowLayout(count: number, getHeight: (index: number) => number) {
+  const rows: { length: number; offset: number; index: number }[] = [];
   let offset = 0;
-  return heights.map((length, index) => {
-    const row = { length, offset, index };
-    offset += length;
-    return row;
-  });
+  return (_data: unknown, index: number) => {
+    while (rows.length <= index && rows.length < count) {
+      const length = getHeight(rows.length);
+      rows.push({ length, offset, index: rows.length });
+      offset += length;
+    }
+    return rows[index]!;
+  };
 }

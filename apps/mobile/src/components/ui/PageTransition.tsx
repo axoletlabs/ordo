@@ -1,10 +1,13 @@
 /** Native stacks own native motion; web native-stack needs an explicit transition. */
-import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
+import React, { startTransition, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Platform, View } from "react-native";
-import { useFocusEffect } from "expo-router";
+import { useFocusEffect, useNavigation, useRoute } from "expo-router";
 import { useMaterialMotion } from "../../theme/material-motion";
 import { useSettingsStore } from "../../store/settings";
 import { AnimationActivityContext } from "../../hooks/use-animation-activity";
+import { SceneReadyContext } from "../../hooks/use-scene-ready";
+import { screenAnimationDuration } from "../../lib/navigation-animation";
+import { scheduleIdleWork } from "../../lib/idle-work";
 
 export function PageTransition({ children }: { children: React.ReactNode }) {
   const ref = useRef<View>(null);
@@ -16,6 +19,27 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
   }, []));
   const { reducedMotion } = useMaterialMotion();
   const preference = useSettingsStore((state) => state.navigationAnimation);
+  const navigation = useNavigation();
+  const route = useRoute();
+  const immediate = Platform.OS === "web" || reducedMotion || preference === "instant";
+  const [ready, setReady] = useState(() => immediate || navigation.getState()?.routes[0]?.key === route.key);
+  useLayoutEffect(() => {
+    if (ready) return;
+    if (immediate) { setReady(true); return; }
+    let cancelWork: (() => void) | undefined;
+    const finish = () => {
+      if (cancelWork) return;
+      cancelWork = scheduleIdleWork(() => startTransition(() => setReady(true)));
+    };
+    // Expo exports the base navigation type, not the native-stack event map.
+    const stack = navigation as typeof navigation & {
+      addListener(event: "transitionEnd", listener: (event: { data: { closing: boolean } }) => void): () => void;
+    };
+    const unsubscribe = stack.addListener("transitionEnd", (event) => { if (!event.data.closing) finish(); });
+    // Deep links/restored scenes can mount without a transition event.
+    const fallback = setTimeout(finish, screenAnimationDuration(preference) + 150);
+    return () => { unsubscribe(); clearTimeout(fallback); cancelWork?.(); };
+  }, [immediate, navigation, preference, ready]);
   const settings = useRef({ reducedMotion, preference });
   settings.current = { reducedMotion, preference };
   const active = useRef<Animation | undefined>(undefined);
@@ -40,7 +64,8 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
   // A translated incoming page must not enlarge the browser's root scroller.
   // Clip at the scene viewport, not at the inner constrained content column;
   // dialogs/menus already live in the root portal outside this boundary.
-  return <AnimationActivityContext.Provider value={parentActive && focused}>
+  return <SceneReadyContext.Provider value={ready}>
+    <AnimationActivityContext.Provider value={parentActive && focused && ready}>
     {Platform.OS === "web" ? <View style={{ flex: 1, overflow: "hidden" }}>{page}</View> : page}
-  </AnimationActivityContext.Provider>;
+  </AnimationActivityContext.Provider></SceneReadyContext.Provider>;
 }

@@ -34,6 +34,8 @@ import { RefreshHud } from "./RefreshHud";
 import { LIST_END_REACHED_THRESHOLD } from "../../lib/list-pagination";
 import { useOverlayBlocked } from "./overlay-host";
 import { shouldReportScroll } from "../../lib/scroll-report";
+import { useSceneReady } from "../../hooks/use-scene-ready";
+import { BookmarkListSkeleton } from "./BookmarkListSkeleton";
 
 export type ThemedScrollViewProps = ScrollViewProps & {
   scrollBarInsets?: ScrollBarInsets;
@@ -192,6 +194,7 @@ export const ThemedFlashList = React.forwardRef(function ThemedFlashList<T>(
   props: ThemedFlashListProps<T>,
   ref: React.ForwardedRef<FlatList<T>>,
 ) {
+  const sceneReady = useSceneReady();
   const chromeInsets = useScrollBarInsets();
   const {
     getItemType: _getItemType,
@@ -213,6 +216,7 @@ export const ThemedFlashList = React.forwardRef(function ThemedFlashList<T>(
     ...flatListProps
   } = props;
 
+  if (!sceneReady) return <View style={styles.fill}><BookmarkListSkeleton /></View>;
   return (
     <ThemedFlatList
       ref={ref}

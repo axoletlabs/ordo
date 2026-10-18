@@ -1,6 +1,6 @@
-/** Yield a paint before optional reader work, then use spare JS time rather
+/** Yield a paint before optional content work, then use spare JS time rather
  * than a fixed 16ms timer that competes with scrolling and native layout. */
-export function scheduleReaderWork(work: () => void): () => void {
+export function scheduleIdleWork(work: () => void): () => void {
   let cancelled = false;
   let idle: number | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;

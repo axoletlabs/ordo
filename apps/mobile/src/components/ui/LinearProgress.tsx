@@ -17,6 +17,14 @@ const GAP = 4;
 const segmentStyle = { position: "absolute", height: HEIGHT, borderRadius: HEIGHT / 2 } as const;
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
+/** Keep Yoga geometry fixed: progress must not relayout the reader header (or
+ * its article sibling) on every scroll/animation frame. */
+function segmentTransform(start: number, end: number, width: number) {
+  "worklet";
+  const length = Math.max(0, end - start);
+  return { transform: [{ translateX: start + length / 2 - width / 2 }, { scaleX: width > 0 ? length / width : 0 }] };
+}
+
 export function LinearProgress({ value, animatedValue, label, style, wavy = false }: {
   value?: number;
   /** Reader scroll progress stays on the UI thread rather than rerendering. */
@@ -82,26 +90,26 @@ export function LinearProgress({ value, animatedValue, label, style, wavy = fals
   };
   const leading = useAnimatedStyle(() => {
     const segment = geometry()[0];
-    return { left: segment.start, width: Math.max(0, segment.end - segment.start) };
+    return segmentTransform(segment.start, segment.end, width);
   });
   const trailing = useAnimatedStyle(() => {
     const segment = geometry()[1];
-    return { left: segment.start, width: Math.max(0, segment.end - segment.start) };
+    return segmentTransform(segment.start, segment.end, width);
   });
   const before = useAnimatedStyle(() => {
     const [first, second] = geometry();
     const end = second.end > second.start ? second.start : first.start;
-    return { left: 0, width: Math.max(0, end - GAP) };
+    return segmentTransform(0, Math.max(0, end - GAP), width);
   });
   const between = useAnimatedStyle(() => {
     const [first, second] = geometry();
     const visible = second.end > second.start;
-    return { left: second.end + GAP, width: visible ? Math.max(0, first.start - second.end - GAP * 2) : 0 };
+    return segmentTransform(second.end + GAP, visible ? Math.max(second.end + GAP, first.start - GAP) : second.end + GAP, width);
   });
   const after = useAnimatedStyle(() => {
     const first = geometry()[0];
     const gap = first.end > first.start ? GAP : 0;
-    return { left: first.end + gap, width: Math.max(0, width - first.end - gap) };
+    return segmentTransform(first.end + gap, width, width);
   });
   const firstWave = useAnimatedProps(() => {
     if (!wavy) return { d: "" };
@@ -113,7 +121,8 @@ export function LinearProgress({ value, animatedValue, label, style, wavy = fals
     const segment = geometry()[1];
     return { d: wavyProgressPath(segment.start, segment.end, width, wave.value, amplitude.value, indeterminate ? 20 : 40) };
   });
-  const trackStyle = { ...segmentStyle, top: wavy ? 3 : 0 };
+  const fixedSegmentStyle = { ...segmentStyle, left: 0, width };
+  const trackStyle = { ...fixedSegmentStyle, top: wavy ? 3 : 0 };
   return (
     <View testID={wavy ? "material-wavy-progress" : "material-linear-progress"} accessibilityRole="progressbar" accessibilityLabel={label}
       accessibilityValue={progress == null ? undefined : { min: 0, max: 100, now: Math.round(progress * 100) }}
@@ -128,10 +137,10 @@ export function LinearProgress({ value, animatedValue, label, style, wavy = fals
         <AnimatedPath animatedProps={firstWave} stroke={palette.primary} strokeWidth={HEIGHT} strokeLinecap="round" fill="none" />
         <AnimatedPath animatedProps={secondWave} stroke={palette.primary} strokeWidth={HEIGHT} strokeLinecap="round" fill="none" />
       </Svg> : <>
-        <Animated.View style={[segmentStyle, { backgroundColor: palette.primary }, leading]} />
-        <Animated.View style={[segmentStyle, { backgroundColor: palette.primary }, trailing]} />
+        <Animated.View style={[fixedSegmentStyle, { backgroundColor: palette.primary }, leading]} />
+        <Animated.View style={[fixedSegmentStyle, { backgroundColor: palette.primary }, trailing]} />
       </>}
-      {!indeterminate && progress !== 1 ? <View style={[trackStyle, { right: 0, width: HEIGHT, backgroundColor: palette.primary }]} /> : null}
+      {!indeterminate && progress !== 1 ? <View style={[segmentStyle, { top: wavy ? 3 : 0, right: 0, width: HEIGHT, backgroundColor: palette.primary }]} /> : null}
     </View>
   );
 }
