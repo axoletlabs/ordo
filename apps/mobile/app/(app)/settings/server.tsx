@@ -33,6 +33,7 @@ import {
   isCloudServerUrl,
 } from "../../../src/lib/hosting";
 import { hostOf, instanceNameOf } from "../../../src/lib/instance-name";
+import { releaseName } from "../../../src/lib/release-name";
 import {
   describeProbeField,
   normalizeServerUrl,
@@ -98,7 +99,7 @@ export default function ServerScreen() {
                   </Text>
                   <View style={styles.status}>
                     <Text variant="bodySmall" color={serverInfo.error ? "danger" : "secondary"}>
-                      {statusLabel}{serverInfo.data ? ` · v${serverInfo.data.version}` : ""}
+                      {statusLabel}{serverInfo.data ? ` · ${releaseName(serverInfo.data.version)}` : ""}
                     </Text>
                     {serverInfo.isFetching ? <Spinner size={16} color={palette.onSurfaceVariant} /> : null}
                   </View>

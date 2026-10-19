@@ -19,6 +19,7 @@ import { useBuildInfo } from "../../../src/hooks/use-build-info";
 import { useOtaUpdate } from "../../../src/hooks/use-ota-update";
 import { useNativeUpdateStore } from "../../../src/store/native-update";
 import { APP_VARIANT } from "../../../src/lib/app-variant";
+import { releaseName } from "../../../src/lib/release-name";
 import { haptics } from "../../../src/lib/haptics";
 import { CLOUD_WEBSITE_URL } from "../../../src/lib/hosting";
 import { useTheme } from "../../../src/theme/ThemeProvider";
@@ -81,7 +82,7 @@ export default function AboutScreen() {
           compact
           footer={build.gitDirty ? "Built from a working copy with uncommitted changes." : undefined}
         >
-          <SettingRow icon="pricetag-outline" label="Version" value={`v${build.version}`} />
+          <SettingRow icon="pricetag-outline" label="Version" value={releaseName(build.version)} />
           <SettingRow icon="flask-outline" label="Variant" value={APP_VARIANT === "stable" ? "Stable" : APP_VARIANT === "preview" ? "Preview" : "Development"} />
           <SettingRow
             icon="git-commit-outline"
@@ -123,7 +124,7 @@ export default function AboutScreen() {
           <SettingRow
             icon="newspaper-outline"
             label="Changelog"
-            value={nativeUpdate.release ? `v${nativeUpdate.release.version}` : undefined}
+            value={nativeUpdate.release ? releaseName(nativeUpdate.release.version) : undefined}
             onPress={() => setChangelogOpen(true)}
             showChevron
           />

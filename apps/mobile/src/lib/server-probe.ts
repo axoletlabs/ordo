@@ -7,6 +7,7 @@
 import { APP_NAME, type ServerInfoDto } from "@ordo/shared";
 import { isAbortError, isDeadlineError, raceDeadline } from "./fetch-timeout";
 import { hostOf } from "./instance-name";
+import { releaseName } from "./release-name";
 import { canonicalizeServerUrl } from "./hosting";
 
 export { hostOf } from "./instance-name";
@@ -62,7 +63,7 @@ export function describeProbeField(state: {
   if (state.idle) return {};
   if (state.probing) return { helper: "Checking this server…" };
   if (state.reachable) {
-    const bits = [state.info?.name, state.info?.version ? `v${state.info.version}` : null].filter(
+    const bits = [state.info?.name, state.info?.version ? releaseName(state.info.version) : null].filter(
       (part): part is string => Boolean(part),
     );
     return { helper: bits.length ? `Reachable · ${bits.join(" ")}` : "This server is reachable" };
@@ -141,7 +142,7 @@ export async function probeServer(
         command: `GET /api/server/info`,
         state: "success",
         latencyMs: Date.now() - t0,
-        detail: `${info?.name ?? APP_NAME} v${info?.version ?? "?"}`,
+        detail: `${info?.name ?? APP_NAME} ${releaseName(info?.version ?? "?")}`,
       };
       emit();
       return { url: origin, status: "up", latencyMs: Date.now() - t0, info, detail: "reachable" };

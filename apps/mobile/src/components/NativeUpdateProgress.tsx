@@ -17,8 +17,14 @@ import {
   downloadPercentLabel,
   downloadProgressLabel,
 } from "../lib/native-download-progress";
+import { releaseName } from "../lib/release-name";
 import { useTheme } from "../theme/ThemeProvider";
 import { layout, spacing } from "../theme/tokens";
+
+/** Ready-to-install message with the release's proper name. */
+function readyLabel(version: string | null | undefined): string {
+  return version ? `${APP_NAME} ${releaseName(version)} is ready.` : `${APP_NAME} is ready.`;
+}
 
 export function NativeUpdateProgress() {
   const { palette } = useTheme();
@@ -71,7 +77,7 @@ export function NativeUpdateProgress() {
               ? "Your current version is unchanged."
               : installUnfinished
                 ? "Your current version is unchanged."
-                : `${APP_NAME} v${update.release?.version ?? ""} is ready.`
+                : readyLabel(update.release?.version)
         }
       />
 

@@ -23,6 +23,7 @@ import {
   type ChangelogRelease,
 } from "../../lib/changelog";
 import { haptics } from "../../lib/haptics";
+import { releaseName } from "../../lib/release-name";
 import { useChangelog } from "../../hooks/use-changelog";
 import { useTheme } from "../../theme/ThemeProvider";
 import { AppIcon } from "../ui/PinIcon";
@@ -535,7 +536,7 @@ function ChangelogSheetBody({
     <FloatingPanel visible={visible} onDismiss={onDismiss} onShow={onShow} maxWidth={640}
       presentation="bottom-sheet" scrollResetKey={selected?.tagName}>
       <PanelHeader title="What's new" titleVariant={expressive ? "headlineSmall" : "titleLarge"} titleColor="accent" align="left"
-        accessory={selected ? <Text variant="bodyMedium" color="secondary">{`v${selected.version}`}</Text> : undefined} />
+        accessory={selected ? <Text variant="bodyMedium" color="secondary">{releaseName(selected.version)}</Text> : undefined} />
       {body}
       <PanelActions confirmLabel="Got it" onConfirm={onDismiss} fullWidth={!compactActions} inline={compactActions}>
         {releases && releases.length > 1 && selected ? (
@@ -551,7 +552,7 @@ function ChangelogSheetBody({
                 return (
                   <VersionPill
                     key={release.tagName}
-                    label={`v${release.version}`}
+                    label={releaseName(release.version)}
                     selected={release.tagName === selected.tagName}
                     onPress={() => {
                       haptics.selection();

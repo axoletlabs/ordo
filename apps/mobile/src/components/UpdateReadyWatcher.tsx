@@ -8,6 +8,7 @@ import { useAppUpdate } from "../hooks/use-app-update";
 import { restartForUpdate } from "../store/update-restart";
 import { toast } from "./ui/toast-store";
 import { haptics } from "../lib/haptics";
+import { releaseName } from "../lib/release-name";
 
 const UPDATE_TOAST_DURATION = 3000;
 
@@ -27,7 +28,7 @@ export function UpdateReadyWatcher() {
     lastNativeDownloadShown.current = native.release.tagName;
 
     haptics.light();
-    toast.show(`${APP_NAME} v${native.release.version} is available`, {
+    toast.show(`${APP_NAME} ${releaseName(native.release.version)} is available`, {
       duration: 6000,
       swipeable: true,
       action: {
@@ -45,7 +46,7 @@ export function UpdateReadyWatcher() {
     lastNativeInstallShown.current = native.release.tagName;
 
     haptics.light();
-    toast.show(`${APP_NAME} v${native.release.version} is ready to install`, {
+    toast.show(`${APP_NAME} ${releaseName(native.release.version)} is ready to install`, {
       duration: 6000,
       swipeable: true,
       action: {
