@@ -1,30 +1,38 @@
 import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
-import { APP_NAME, DEFAULT_FOLDER_ICON, type FolderDto, type FolderIcon, type FolderLockType, type FolderPinLength } from "@ordo/shared";
+import { Image } from "expo-image";
+import { APP_NAME, DEFAULT_FOLDER_ICON, type BookmarkDto, type FolderDto, type FolderIcon, type FolderLockType, type FolderPinLength } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
-import { ThemedScrollView } from "../ui/ThemedScrollView";
+import { ThemedFlatList, ThemedScrollView } from "../ui/ThemedScrollView";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
 import { AutofillForm } from "../ui/AutofillForm";
 import { Button } from "../ui/Button";
 import { Text } from "../ui/Text";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { ContextMenu, ContextMenuItem, ContextMenuNote } from "../ui/ContextMenu";
-import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { PanelActions, sheetMenuStyles } from "../ui/SheetActionRow";
 import { EyeToggle } from "../ui/EyeToggle";
 import { PressableScale } from "../ui/PressableScale";
 import { Segmented } from "../ui/Segmented";
+import { SettingRow } from "../ui/SettingRow";
+import { ListPressable } from "../ui/ListPressable";
+import { Spinner } from "../ui/Spinner";
 import { OtpInput } from "../ui/OtpInput";
 import { FolderIconGrid } from "./FolderIconPicker";
 import { PatternInput } from "./PatternInput";
 import { useTheme } from "../../theme/ThemeProvider";
-import { spacing } from "../../theme/tokens";
+import { iconGlyphStyle } from "../../theme/icon-glyph";
+import { radius, spacing } from "../../theme/tokens";
 import { haptics } from "../../lib/haptics";
 import { toast } from "../ui/toast-store";
+import { domainFromUrl } from "../../lib/format";
 import { errorMessage } from "../../lib/error-message";
 import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
 import type { MenuAnchorRect } from "../../lib/menu-anchor";
 import { foldersApi } from "../../lib/api/folders";
+import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
+import { useFolderBookmarkOptions } from "../../hooks/use-bookmarks";
 import {
   createDeviceLockCredential,
   deleteDeviceLockCredential,
@@ -89,11 +97,19 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
   const [error, setError] = useState("");
   const [removing, setRemoving] = useState(false);
   const [locking, setLocking] = useState(false);
+  const [keepOpen, setKeepOpen] = useState(false);
+  const [keepIds, setKeepIds] = useState<string[]>([]);
   const lockingRef = React.useRef(false);
   const busy = locking || removing || rename.isPending || update.isPending;
   const folderRef = React.useRef(folder);
   if (folder) folderRef.current = folder;
   const displayFolder = folder ?? folderRef.current;
+  const { height } = useResponsiveLayout();
+
+  // Folder contents for the keep-on-delete picker; fetched only while expanded.
+  const keepOptions = useFolderBookmarkOptions(displayFolder?.id ?? null, visible && keepOpen);
+  const keepCount = keepIds.length;
+  const keepTotal = keepOptions.data ? keepOptions.data.length : displayFolder?.bookmarkCount ?? 0;
 
   // Nested pages share ownership; final dismissal starts the row's fade now.
   useMenuHighlight(visible, displayFolder ? folderKey(displayFolder.id) : null);
@@ -116,6 +132,8 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
     setIcon(currentFolder?.icon ?? DEFAULT_FOLDER_ICON);
     setError("");
     setRemoving(false);
+    setKeepOpen(false);
+    setKeepIds([]);
     void isDeviceLockAvailable().then(setDeviceLockAvailable);
   }, [visible, folder?.id]);
 
@@ -123,6 +141,10 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
     if (busy || lockingRef.current) return;
     dismissKeyboard();
     setError("");
+    if (nextMode !== "delete") {
+      setKeepOpen(false);
+      setKeepIds([]);
+    }
     if (nextMode !== "lockCredential" && nextMode !== "removePassword") {
       setPassword("");
       setConfirmPassword("");
@@ -378,11 +400,18 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
     if (!folder) return;
     haptics.medium();
     del.mutate(folder, {
+      keepIds,
       onDeleted: () => {
         onDeleted?.(folder.id);
         onDismiss();
       },
     });
+  };
+
+  const toggleKeep = (id: string) => {
+    setKeepIds((current) =>
+      current.includes(id) ? current.filter((other) => other !== id) : [...current, id],
+    );
   };
 
   const menuOpen = visible && !!displayFolder && (mode === "menu" || mode === "lockChoice");
@@ -748,26 +777,167 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
       ) : null}
       </FloatingPanel>
 
-      <ConfirmDialog
+      <FloatingPanel
         visible={visible && !!displayFolder && mode === "delete"}
-        icon="trash-outline"
-        title={displayFolder ? `Delete ${displayFolder.name}?` : "Delete folder?"}
-        message={
-          displayFolder && displayFolder.bookmarkCount > 0
-            ? "This folder and every bookmark inside it will be deleted. You can undo this."
-            : "You can undo this."
-        }
-        confirmLabel="Delete"
+        scrollBody={false}
+        dismissible={!busy}
         onDismiss={() => showMode("menu")}
-        onConfirm={doDelete}
-      />
+      >
+        {displayFolder ? (
+          <>
+            <PanelHeader
+              icon="trash-outline"
+              iconColor={palette.danger}
+              iconBackground={palette.dangerSoft}
+              title={`Delete ${displayFolder.name}?`}
+              subtitle={
+                keepOpen
+                  ? "Ticked bookmarks move to Bookmarks. The rest are deleted. You can undo this."
+                  : displayFolder.bookmarkCount > 0
+                    ? "This folder and every bookmark inside it will be deleted. You can undo this."
+                    : "You can undo this."
+              }
+            />
+            {displayFolder.bookmarkCount > 0 ? (
+              <>
+                <SettingRow
+                  icon="bookmark-outline"
+                  label="Keep bookmarks"
+                  value={keepCount > 0 ? `${keepCount} of ${keepTotal}` : "None"}
+                  onPress={() => setKeepOpen((open) => !open)}
+                  showChevron
+                  chevronUp={keepOpen}
+                  disabled={busy}
+                />
+                {keepOpen ? (
+                  <ThemedFlatList
+                    data={keepOptions.data ?? []}
+                    keyExtractor={(item) => item.id}
+                    renderItem={({ item }) => (
+                      <KeepBookmarkRow
+                        item={item}
+                        checked={keepIds.includes(item.id)}
+                        disabled={busy}
+                        onToggle={toggleKeep}
+                      />
+                    )}
+                    style={{ maxHeight: Math.min(320, height * 0.45), marginTop: spacing[4] }}
+                    contentContainerStyle={{ gap: spacing[2], padding: spacing[2] }}
+                    ListEmptyComponent={
+                      keepOptions.isPending ? (
+                        <View style={styles.keepStatus}><Spinner /></View>
+                      ) : keepOptions.isError ? (
+                        <Text variant="footnote" color="danger" align="center" style={styles.keepStatus}>
+                          {errorMessage(keepOptions.error)}
+                        </Text>
+                      ) : (
+                        <Text variant="footnote" color="tertiary" align="center" style={styles.keepStatus}>
+                          No bookmarks in this folder.
+                        </Text>
+                      )
+                    }
+                  />
+                ) : null}
+              </>
+            ) : null}
+            <PanelActions
+              confirmLabel={keepCount > 0 ? `Keep ${keepCount} · delete folder` : "Delete"}
+              confirmVariant="danger"
+              onConfirm={doDelete}
+              onCancel={() => showMode("menu")}
+              cancelDisabled={busy}
+            />
+          </>
+        ) : null}
+      </FloatingPanel>
     </>
   );
 }
+
+/** One tickable row of the keep-on-delete picker. Mirrors the library row's
+ * favicon treatment and the data screen's checkbox idiom. */
+const KeepBookmarkRow = React.memo(function KeepBookmarkRow({
+  item,
+  checked,
+  disabled,
+  onToggle,
+}: {
+  item: BookmarkDto;
+  checked: boolean;
+  disabled: boolean;
+  onToggle: (id: string) => void;
+}) {
+  const { palette, expressive } = useTheme();
+  const domain = item.domain || domainFromUrl(item.url);
+  const title = (item.title || domain).replace(/\s+/g, " ");
+  const faviconUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64`;
+  const [failedFavicon, setFailedFavicon] = React.useState(false);
+  return (
+    <ListPressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked, disabled: disabled || undefined }}
+      accessibilityLabel={title}
+      disabled={disabled}
+      onPress={() => onToggle(item.id)}
+      style={[styles.keepRow, { borderRadius: expressive ? radius.xl : radius.lg, backgroundColor: palette.surfaceContainerLow }]}
+    >
+      <View style={styles.keepFaviconFrame}>
+        {failedFavicon ? (
+          <Ionicons
+            name="globe-outline"
+            size={20}
+            color={palette.textTertiary}
+            accessible={false}
+            style={iconGlyphStyle(20)}
+          />
+        ) : (
+          <Image
+            source={{ uri: faviconUrl }}
+            recyclingKey={item.id}
+            style={styles.keepFavicon}
+            contentFit="contain"
+            cachePolicy="memory-disk"
+            accessible={false}
+            onError={() => setFailedFavicon(true)}
+          />
+        )}
+      </View>
+      <View style={styles.keepBody}>
+        <Text variant="bodyLarge" numberOfLines={1} color="primary">{title}</Text>
+        <Text variant="footnote" color="tertiary" numberOfLines={1}>{domain}</Text>
+      </View>
+      <Ionicons
+        name={checked ? "checkbox" : "square-outline"}
+        size={22}
+        color={checked ? palette.accent : palette.textFaint}
+        accessible={false}
+        style={iconGlyphStyle(22)}
+      />
+    </ListPressable>
+  );
+});
 
 const styles = StyleSheet.create({
   error: { marginTop: spacing[8] },
   forgot: { alignSelf: "center", minHeight: 48, justifyContent: "center", paddingHorizontal: spacing[16], borderRadius: 24, marginTop: spacing[8] },
   confirmInput: { marginTop: spacing[12] },
   pinBoxes: { marginTop: spacing[12] },
+  keepStatus: { paddingVertical: spacing[24], paddingHorizontal: spacing[16] },
+  keepRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing[14],
+    minHeight: 64,
+    paddingHorizontal: spacing[16],
+    paddingVertical: spacing[8],
+  },
+  keepFaviconFrame: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  keepFavicon: { width: 24, height: 24, borderRadius: radius.xs },
+  keepBody: { flex: 1, minWidth: 0, gap: spacing[2] },
 });

@@ -118,8 +118,8 @@ export function useUpdateFolder() {
 
 export function useDeleteFolder() {
   return {
-    mutate: (folder: FolderDto, opts?: { onDeleted?: () => void }) =>
-      deleteUndoable({ folders: [folder], onDeleted: opts?.onDeleted }),
+    mutate: (folder: FolderDto, opts?: { keepIds?: readonly string[]; onDeleted?: () => void }) =>
+      deleteUndoable({ folders: [folder], keepIds: opts?.keepIds, onDeleted: opts?.onDeleted }),
   };
 }
 
