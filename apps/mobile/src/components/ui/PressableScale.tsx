@@ -7,7 +7,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 import { useButtonGroupInteraction } from "./ButtonGroup";
 import { StateLayer } from "./StateLayer";
-import { alphaTint, stateLayerCorners, stateLayerOpacity } from "../../theme/state-layer";
+import { alphaTint, opaqueComponents, stateLayerCorners, stateLayerOpacity } from "../../theme/state-layer";
 import { webSelectionKeys, type WebPressKeyEvent } from "./pressable-web";
 import { nativeHoverEvents } from "../../lib/pointer-hover";
 
@@ -24,8 +24,13 @@ export type PressableSurfaceState = {
   children: React.ReactNode;
   backgroundStyle?: StyleProp<AnimatedStyle<ViewStyle>>;
   cornerStyle: StyleProp<AnimatedStyle<ViewStyle>>;
+  /** Animated fill for the state layer's painted parts. Applied to every part
+   * (not as an overlay opacity) so the feedback never rests or transitions at
+   * a sub-1 element opacity, which rasterizers composite as a group whose
+   * radius clips and edges stop matching the surface beneath. */
   stateLayerStyle?: StyleProp<AnimatedStyle<ViewStyle>>;
-  /** Shared Material ink, including the state fraction. */
+  /** Shared Material ink, including the state fraction. Used when a surface
+   * paints the layer statically (no animated fill available). */
   stateLayerColor: string;
 };
 export type PressableScaleProps = Omit<PressableProps, "style"> & {
@@ -116,8 +121,10 @@ function AnimatedStatePressable({
   useEffect(() => () => { if (releaseFrame.current != null) cancelAnimationFrame(releaseFrame.current); }, []);
   const progress = useSharedValue(0);
   const layer = useSharedValue(0);
-  const targetStyle = StyleSheet.flatten(style as StyleProp<ViewStyle>);
+  // One flatten feeds both the resting paint and the corners; only a visual
+  // inset needs the untouched style too.
   const flat = StyleSheet.flatten(visualStyle ?? style as StyleProp<ViewStyle>);
+  const targetStyle = visualStyle ? StyleSheet.flatten(style as StyleProp<ViewStyle>) : flat;
   const background = useSharedValue(typeof flat?.backgroundColor === "string" ? flat.backgroundColor : "transparent");
   const backgroundColor = flat?.backgroundColor;
   const previousBackground = useRef({ color: backgroundColor, reducedMotion: motion.reducedMotion });
@@ -125,6 +132,12 @@ function AnimatedStatePressable({
   const fraction = stateLayerOpacity({ disabled, pressed: down, focused: focusLayer, hovered });
   const ink = useRef(fraction);
   if (fraction > 0) ink.current = fraction;
+  const tint = stateLayerColor ?? palette.onSurface;
+  const tintRgb = opaqueComponents(tint);
+  // Captured per render: useAnimatedStyle refreshes its closure, so fraction
+  // changes (hover -> press) reach the worklet without a shared-value read.
+  // The ref's retained ink keeps a release fade at the last visible fraction.
+  const inkFraction = ink.current;
   useEffect(() => {
     if (typeof backgroundColor !== "string") return;
     if (previousBackground.current.color === backgroundColor && previousBackground.current.reducedMotion === motion.reducedMotion) return;
@@ -171,13 +184,20 @@ function AnimatedStatePressable({
     transform: [{ scale: motion.reducedMotion ? 1 : 1 + (scaleTo - 1) * progress.value }],
     opacity: dim ? 1 - Math.max(0, Math.min(1, progress.value)) * 0.12 : flat?.opacity ?? 1,
   }));
-  const layerStyle = useAnimatedStyle(() => ({ opacity: layer.value }));
+  const layerStyle = useAnimatedStyle(() => {
+    if (!tintRgb) return { opacity: layer.value };
+    // The fade lives in the color: a sub-1 ELEMENT opacity makes the
+    // compositor rasterize the layer and its radius clips as a group that
+    // stops matching the surface beneath it (squared-off caps, edge slivers).
+    const alpha = Math.max(0, Math.min(1, layer.value * inkFraction));
+    return { backgroundColor: `rgba(${tintRgb[0]},${tintRgb[1]},${tintRgb[2]},${alpha})` };
+  });
   const content = typeof children === "function" ? children({ pressed: down }) : children;
   const contents = renderSurface ? renderSurface({ children: content, backgroundStyle, cornerStyle,
-    stateLayerStyle: layerStyle, stateLayerColor: alphaTint(stateLayerColor ?? palette.onSurface, ink.current) }) : <>
+    stateLayerStyle: layerStyle, stateLayerColor: alphaTint(tint, ink.current) }) : <>
     {content}
     <Animated.View testID="material-state-layer" pointerEvents="none" accessible={false} style={[{ position: "absolute", top: stateLayerInset, bottom: stateLayerInset, left: stateLayerInset, right: stateLayerInset }, stateLayerCorners(flat), {
-      overflow: "hidden", backgroundColor: alphaTint(stateLayerColor ?? palette.onSurface, ink.current),
+      overflow: "hidden", backgroundColor: tintRgb ? "transparent" : alphaTint(tint, ink.current),
     }, cornerStyle, layerStyle]} />
   </>;
   const ActionPressable = nativeGesture && Platform.OS !== "web" ? AnimatedGesturePressable : AnimatedPressable;

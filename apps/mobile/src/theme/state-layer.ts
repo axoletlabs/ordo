@@ -33,3 +33,15 @@ export function alphaTint(color: string, fraction: number): string {
   const alpha = Math.round(Math.min(1, Math.max(0, fraction || 0)) * 255).toString(16).padStart(2, "0");
   return `#${hex[1]}${alpha}`;
 }
+
+/**
+ * Base channels of a hex tint, for fades that live in the color instead of a
+ * sub-1 element opacity (which the compositor rasterizes as a group that
+ * distorts radius clips and can drift off the surface it must match).
+ * Null for "transparent" and unknown formats; callers keep their old fade.
+ */
+export function opaqueComponents(color: string): [number, number, number] | null {
+  const hex = /^#([0-9a-f]{6})([0-9a-f]{2})?$/i.exec(color.trim());
+  if (!hex) return null;
+  return [parseInt(hex[1].slice(0, 2), 16), parseInt(hex[1].slice(2, 4), 16), parseInt(hex[1].slice(4, 6), 16)];
+}
