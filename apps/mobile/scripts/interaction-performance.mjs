@@ -168,7 +168,9 @@ try {
             samples.push(await measure(page, "Reader overflow", button(page, "More article actions"), { selector: '[role="menuitem"]', text: "Open original" }));
             await page.keyboard.press("Escape"); await page.waitForTimeout(400);
             samples.push(await measure(page, "Reader settings", button(page, "Reader settings"), { selector: '[role="dialog"]', text: "Text size" }));
-            await page.waitForTimeout(600);
+            // Timings stop at first content; captures wait for optional preview
+            // fonts as well, so both layouts show the same settled state.
+            await page.waitForTimeout(2500);
             await page.keyboard.press("Tab");
             assert.ok(await page.getByRole("dialog").evaluate(node => node.contains(document.activeElement)), "Keyboard focus stays inside reader settings");
             await page.screenshot({ path: `${output}/${mode}-reader-settings.png` });
