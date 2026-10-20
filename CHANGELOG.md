@@ -2,17 +2,33 @@
 
 ## 0.3.0 Preview 2
 
-The second preview of the 0.3.0 cycle, polishing updates and everyday reliability.
+The second preview of the 0.3.0 cycle improves release notes, reminder responsiveness, backup-code downloads, and reading comfort.
 
-- A cleaner in-app changelog, announcing each installed update's notes once.
-- Backup codes save through the standard export flow; cancelling shows no error.
-- Faster custom reminder calendar.
-- Row selection feedback no longer flashes during layout resizes.
-- No extra blank space at the end of articles.
+### Included in the Preview 2 release
 
-**Install:** Installs in place over Preview 1. Ships `versionCode=4`, continuing the preview count. Self-hosted: select this release with `--release v0.3.0-preview.2`, or include previews with `--pre`.
+- **What's new:** Automatically show the running release's notes once per installed build, including compatible OTA updates. Wait until sign-in and any required MFA are complete and the library is open; do not interrupt incoming shares or a deep-linked reader. Notes remain available from About.
+- **Changelog reader:** Clearer typography, more reading space, persistent release navigation and dismissal, and a scroll reset when switching versions. Preserve Markdown formatting, selectable text, and keyboard navigation. Correct the Expressive version chips' pressed-shape animation.
+- **Backup codes:** Save `ordo-backup-codes.txt` through the same file-export flow as library exports: Android Save As, iOS file sharing, and web download, with a share-sheet fallback for older Android APKs. Cancelling no longer shows an error or error haptic.
+- **Custom reminders:** Reduce repeated date formatting and unnecessary calendar drawing when opening the picker or editing the date/time. Keep localized date labels, month navigation, and the circular today/selected-date indicators.
+- **Library feedback:** Keep row selection and press/hover feedback stable during layout resizes and row updates instead of rebuilding their corner-animation graphs.
+- **Reader:** Remove redundant article-end margins and reduce excess bottom clearance while keeping the final content clear of the Contents button.
 
-[Full commit history](https://github.com/axoletlabs/ordo/compare/v0.3.0-preview.1...v0.3.0-preview.2)
+### Follow-up changes on the Preview 2 branch
+
+These JS-only changes were merged after the original `v0.3.0-preview.2` tag. They are eligible for compatible Preview-channel OTA delivery, but are not part of the original tagged APK.
+
+- **Bottom-sheet changelog:** Open What's new from the bottom, with drag-to-dismiss, a minimal heading and version, and one continuous surface without separator lines or segmented note cards. Keep Earlier updates and Got it accessible, adapt to short/wide windows, and respect light/dark themes, Expressive mode, and reduced motion.
+- **Release history:** Let Preview users read stable release notes as well as previews. This changes the changelog only; Preview still receives Preview updates, not Stable APKs.
+- **Reminder opening:** Avoid starting animations toward unchanged resting states and creating invisible feedback layers for untouched controls. This reduces picker-opening work while retaining feedback for actual interactions, theme changes, and reduced-motion changes.
+
+### Maintenance and compatibility
+
+- Expanded regression coverage for article-end spacing, reminder formatting and interaction, row feedback during resize, backup-code export/cancellation, update announcements, changelog layout, and shared-control animation lifecycles. Performance audit notes distinguish web measurements from unverified native-device performance.
+- Updated app and server release metadata to `0.3.0-preview.2`. No server behavior, database schema, native plugins, or runtime dependencies changed in this release range.
+
+**Install:** The Preview 2 APK uses `versionCode=4` and updates Preview 1 (`versionCode=3`) in place; no uninstall is needed. The follow-up JS changes do not require another native rebuild, subject to the OTA compatibility checks. Self-hosted: select the tagged server release with `--release v0.3.0-preview.2`, or include previews with `--pre`.
+
+[Preview 1 → Preview 2 release commits](https://github.com/axoletlabs/ordo/compare/v0.3.0-preview.1...v0.3.0-preview.2) · [Post-tag follow-up commits through the bottom-sheet update](https://github.com/axoletlabs/ordo/compare/v0.3.0-preview.2...b8e265b)
 
 ## 0.3.0 Preview 1
 
