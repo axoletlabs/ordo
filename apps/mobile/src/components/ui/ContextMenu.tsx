@@ -44,8 +44,11 @@ export type { MenuAnchorRect };
 export interface ContextMenuProps {
   visible: boolean;
   onDismiss: () => void;
-  /** Handoff to a sibling only after this menu has left the overlay host. */
+  /** Handoff to a sibling when this menu's exit animation completes. */
   onExited?: () => void;
+  /** Handoff as the exit fade begins: the menu is already dismissed (Back,
+   * focus, and scrim released), so a sibling can open while it fades. */
+  onExiting?: () => void;
   anchor: MenuAnchorRect | null;
   children: React.ReactNode;
   width?: number;
@@ -72,6 +75,7 @@ function ContextMenuSurface({
   visible,
   onDismiss,
   onExited,
+  onExiting,
   anchor,
   children,
   width = CONTEXT_MENU_WIDTH,
@@ -102,6 +106,7 @@ function ContextMenuSurface({
     interactive: backdrop,
     ready: contentHeight > 0,
     onExited,
+    onExiting,
   });
   const menuRef = useOverlayFocus(visible && rendered && backdrop, hideAndDismiss, "menu", dismissible, false, false, onNavigate);
   React.useEffect(() => {

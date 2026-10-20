@@ -37,6 +37,9 @@ export interface FloatingPanelProps {
   visible: boolean;
   onDismiss: () => void;
   onExited?: () => void;
+  /** Handoff hook: runs the moment the exit fade starts, while this panel's
+   * retained contents finish fading beneath the successor surface. */
+  onExiting?: () => void;
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   maxWidth?: number;
@@ -72,6 +75,7 @@ function FloatingPanelSurface({
   visible,
   onDismiss,
   onExited,
+  onExiting,
   children,
   style,
   maxWidth = layout.overlayMaxWidth,
@@ -113,7 +117,7 @@ function FloatingPanelSurface({
     onDismiss();
   }, [dismissible, onDismiss]);
   const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, {
-    interactive: interactive && !obscured, onExited, ready: Platform.OS === "web" || measured,
+    interactive: interactive && !obscured, onExited, onExiting, ready: Platform.OS === "web" || measured,
   });
   React.useEffect(() => {
     if (!rendered && !keepMounted) setMeasured(false);

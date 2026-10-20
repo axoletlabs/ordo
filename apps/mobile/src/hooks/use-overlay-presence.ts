@@ -15,7 +15,17 @@ const CLOSE_FALLBACK_MS = CLOSE_MS + 70;
 export function useOverlayPresence(
   visible: boolean,
   onDismiss: () => void,
-  options?: { dismissKeyboard?: boolean; interactive?: boolean; ready?: boolean; onExited?: () => void },
+  options?: {
+    dismissKeyboard?: boolean;
+    interactive?: boolean;
+    ready?: boolean;
+    /** Fired once when a rendered surface's exit actually completes. */
+    onExited?: () => void;
+    /** Fired once the moment a rendered surface starts exiting, while the
+     * retained tree is still fading: a sibling handoff can begin now and
+     * overlap its entrance with this surface's exit. */
+    onExiting?: () => void;
+  },
 ) {
   const progress = useSharedValue(0);
   const spatial = useSharedValue(0);
@@ -23,29 +33,35 @@ export function useOverlayPresence(
   const [rendered, setRendered] = useState(visible);
   const generation = useRef(0);
   const wasVisible = useRef(false);
+  const wasOpen = useRef(false);
+  const settled = useRef(-1);
   const hideKeyboard = options?.dismissKeyboard !== false;
   const interactive = options?.interactive !== false;
   const ready = options?.ready !== false;
   const onExited = useRef(options?.onExited);
   onExited.current = options?.onExited;
+  const onExiting = useRef(options?.onExiting);
+  onExiting.current = options?.onExiting;
   const dismissRef = useRef(onDismiss);
   dismissRef.current = onDismiss;
-  const hadSurface = useRef(visible);
-  useEffect(() => {
-    if (visible) hadSurface.current = true;
-    if (visible || rendered || !hadSurface.current) return;
-    hadSurface.current = false;
-    onExited.current?.();
-  }, [visible, rendered]);
 
   const hide = useCallback((token: number) => {
-    if (generation.current !== token) return;
+    // The animation callback and the fallback timer can both land this call;
+    // a reopen stales the token. Either way the exit notifies exactly once.
+    if (generation.current !== token || settled.current === token) return;
+    settled.current = token;
+    // Unmount and release the handoff in the same batch. Firing onExited from
+    // an effect after the unmount commit inserted a full render of the screen
+    // behind the overlay between the fade finishing and the next surface
+    // opening, which read as a close-then-delay on menu handoffs.
     setRendered(false);
+    onExited.current?.();
   }, []);
 
   useLayoutEffect(() => {
     if (visible) {
       setRendered(true);
+      wasOpen.current = true;
       if (!ready) {
         // Measure/position an invisible surface before starting its entrance.
         // Otherwise a slow first layout consumes the fade while hidden and
@@ -71,10 +87,16 @@ export function useOverlayPresence(
       return;
     }
     wasVisible.current = false;
+    const closing = wasOpen.current;
+    wasOpen.current = false;
     if (!rendered) return;
     // Hide IME while the overlay tree is still mounted. Android leaves the
     // keyboard up if a focused TextInput is removed without a blur.
     if (hideKeyboard) dismissKeyboard();
+    // Once per close: the retained tree is still mounted and fading, Back and
+    // focus are already released, and the overlay host yields top position to
+    // an active sibling — safe to hand off while this surface exits.
+    if (closing) onExiting.current?.();
     const token = generation.current;
     if (motion.reducedMotion) {
       cancelAnimation(progress);
