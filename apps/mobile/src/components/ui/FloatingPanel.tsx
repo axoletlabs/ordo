@@ -21,6 +21,7 @@ import { PanelHeader } from "./PanelHeader";
 import { PanelActions } from "./SheetActionRow";
 import { ThemedScrollView } from "./ThemedScrollView";
 import { InputSurfaceContext } from "./input-surface";
+import { InputFocusScopeContext, useInputFocusScope } from "./input-focus-scope";
 import { panelKeyboardLift } from "../../lib/panel-keyboard-layout";
 import { useMaterialMotion } from "../../theme/material-motion";
 import { PressableScale } from "./PressableScale";
@@ -247,6 +248,9 @@ function FloatingPanelSurface({
     transform: [{ translateY: keyboardShift.value + (1 - spatial.value) * 24 }, ...(Platform.OS === "ios" ? [{ scale: 0.94 + spatial.value * 0.06 }] : [])],
   }));
 
+  const inputFocusScope = useInputFocusScope(visible && rendered && interactive && !obscured,
+    Platform.OS === "web" || measured, visible);
+
   if (!rendered && !keepMounted) return null;
 
   const sheetHeader = <View testID="material-sheet-header" onLayout={(event) => setSheetHeaderHeight(event.nativeEvent.layout.height)}
@@ -283,6 +287,7 @@ function FloatingPanelSurface({
 
   return (
     <OverlayPortal blocking={rendered} active={visible && interactive && !obscured}>
+      <InputFocusScopeContext.Provider value={inputFocusScope}>
       <View
         accessibilityViewIsModal={visible && interactive && !obscured}
         accessibilityElementsHidden={!visible || obscured}
@@ -363,6 +368,7 @@ function FloatingPanelSurface({
           </Animated.View>
           </View>
       </View>
+      </InputFocusScopeContext.Provider>
     </OverlayPortal>
   );
 }

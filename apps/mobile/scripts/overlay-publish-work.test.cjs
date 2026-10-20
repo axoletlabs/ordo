@@ -57,9 +57,11 @@ const flattenStyle = style => {
 const kebab = key => key.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`);
 const pendingMeasures = [];
 let nativeMeasureHeight = ELEMENT_HEIGHT;
+let dialogLayout;
 
 function host(tag) {
   return React.forwardRef(function Host({ children, style, dataSet, onLayout, pointerEvents, ...rest }, ref) {
+    if (rest.role === "dialog") dialogLayout = onLayout;
     const attach = React.useCallback(node => {
       // RN Web puts measure() on every host node; native measure is async and
       // is driven by hand below so the readiness gate can be observed.
@@ -191,6 +193,8 @@ stub("components/ui/Spinner.tsx", { Spinner: () => React.createElement("span") }
 stub("components/ui/Text.tsx", {
   Text: ({ children }) => React.createElement("span", null, children),
 });
+stub("components/ui/PanelHeader.tsx", { PanelHeader: ({ children }) => children ?? null });
+stub("components/ui/SheetActionRow.tsx", { PanelActions: ({ children }) => children ?? null });
 stub("components/ui/ThemedScrollView.tsx", {
   ThemedScrollView: React.forwardRef(function ThemedScrollViewStub({ children }, ref) {
     return React.createElement("div", { ref }, children);
@@ -399,6 +403,63 @@ test("native ContextMenu keeps its entrance gated on the async body measurement"
     t.diagnostic(`native mount: entranceStarts=${timingCalls.filter(call => call.value === 1).length}, menuTop=${style.top}, measures=${pendingMeasures.length}`);
     await tree.unmount();
   } finally {
+    reactNative.Platform.OS = "web";
+  }
+});
+
+test("native panel input scope waits for layout and suspends during sibling pickers", async () => {
+  resetWork();
+  reactNative.Platform.OS = "android";
+  const { FloatingPanel } = load(resolve(sourceRoot, "components/ui/FloatingPanel.tsx"));
+  const { InputFocusScopeContext } = load(resolve(sourceRoot, "components/ui/input-focus-scope.ts"));
+  let scope;
+  function Probe() { scope = React.useContext(InputFocusScopeContext); return React.createElement("span", null, "input"); }
+  const tree = mount();
+  const render = props => tree.render(React.createElement(OverlayHost, null,
+    React.createElement(FloatingPanel, { visible: true, onDismiss() {}, ...props }, React.createElement(Probe))));
+  try {
+    await render({});
+    assert.deepEqual(scope, { active: true, ready: false, session: 0 }, "mount autofocus must wait for the native opening/keyboard-dismiss step");
+    assert.equal(typeof dialogLayout, "function");
+    await act(async () => { dialogLayout({ nativeEvent: { layout: { height: 200 } } }); });
+    assert.deepEqual(scope, { active: true, ready: true, session: 0 });
+    await render({ interactive: false });
+    assert.deepEqual(scope, { active: false, ready: true, session: 0 });
+    await render({});
+    assert.deepEqual(scope, { active: true, ready: true, session: 0 });
+    await render({ obscured: true });
+    assert.equal(scope.active, false, "a sibling creation dialog owns focus");
+    await render({ visible: false });
+    assert.equal(scope.active, false, "exit-retained inputs cannot take focus");
+    await render({});
+    assert.equal(scope.session, 1, "a rapid reopen is a new focus session, not a picker resume");
+    await render({ interactive: false });
+    await render({});
+    assert.equal(scope.session, 1, "resuming the same parent never replays autofocus");
+  } finally {
+    await tree.unmount();
+    reactNative.Platform.OS = "web";
+  }
+});
+
+test("native menu inputs become ready only after measurement and inactive on close", async () => {
+  resetWork();
+  reactNative.Platform.OS = "android";
+  const { InputFocusScopeContext } = load(resolve(sourceRoot, "components/ui/input-focus-scope.ts"));
+  let scope;
+  function Probe() { scope = React.useContext(InputFocusScopeContext); return React.createElement("span", null, "search"); }
+  const tree = mount();
+  const render = visible => tree.render(React.createElement(OverlayHost, null,
+    React.createElement(ContextMenu, { visible, onDismiss() {}, anchor: { x: 20, y: 100, width: 200, height: 48 } }, React.createElement(Probe))));
+  try {
+    await render(true);
+    assert.deepEqual(scope, { active: true, ready: false, session: 0 });
+    await act(async () => { pendingMeasures.at(-1).callback(0, 0, 200, 160); });
+    assert.deepEqual(scope, { active: true, ready: true, session: 0 });
+    await render(false);
+    assert.equal(scope.active, false);
+  } finally {
+    await tree.unmount();
     reactNative.Platform.OS = "web";
   }
 });

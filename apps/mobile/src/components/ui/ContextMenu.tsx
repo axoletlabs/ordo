@@ -22,6 +22,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Text } from "./Text";
 import { PressableScale } from "./PressableScale";
 import { OverlayPortal } from "./overlay-host";
+import { InputFocusScopeContext, useInputFocusScope } from "./input-focus-scope";
 import { ThemedScrollView } from "./ThemedScrollView";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
@@ -269,11 +270,14 @@ function ContextMenuSurface({
     opacity: progress.value,
     transform: [{ translateY: interpolate(spatial.value, [0, 1], [fromY * 2, 0]) }],
   }));
+  const inputFocusScope = useInputFocusScope(visible && rendered,
+    Platform.OS === "web" || contentHeight > 0, visible);
 
   if (!rendered || !placed) return null;
 
   return (
     <OverlayPortal blocking={backdrop} active={visible}>
+      <InputFocusScopeContext.Provider value={inputFocusScope}>
       <View
         accessibilityViewIsModal={visible && backdrop}
         pointerEvents={visible ? (backdrop ? "auto" : "box-none") : "none"}
@@ -329,6 +333,7 @@ function ContextMenuSurface({
             </MenuBody>
         </Animated.View>
       </View>
+      </InputFocusScopeContext.Provider>
     </OverlayPortal>
   );
 }
