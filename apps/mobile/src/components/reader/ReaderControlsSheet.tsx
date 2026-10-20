@@ -14,7 +14,8 @@ import { Toggle } from "../ui/Toggle";
 import { LazyMount } from "../ui/LazyMount";
 import { spacing } from "../../theme/tokens";
 import { resolveReaderFont } from "./reader-typography";
-import { loadReaderFonts, READER_FONT_FAMILY_LIST, readerFontsReady, useReaderFontRevision } from "../../theme/fonts";
+import { loadReaderFontPreview, READER_FONT_FAMILY_LIST, readerFontPreviewReady, useReaderFontRevision } from "../../theme/fonts";
+import { scheduleIdleWork } from "../../lib/idle-work";
 import type {
   ReaderFontFamily,
   ReaderFontSize,
@@ -56,6 +57,11 @@ const themeOptions: readonly { value: ReaderTheme; label: string }[] = [
   { value: "light", label: "Light" },
   { value: "dark", label: "Dark" },
 ];
+
+/** Let the panel's entrance finish before optional preview faces load. */
+const PREVIEW_DELAY_MS = 240;
+/** Stagger starts so font polling overlaps instead of serializing. */
+const PREVIEW_STAGGER_MS = 160;
 
 export interface ReaderControlsSheetProps {
   visible: boolean;
@@ -101,14 +107,36 @@ const ReaderControlsContent = React.memo(function ReaderControlsContent({
 }: ReaderControlsSheetProps) {
   const { width, fontScale } = useWindowDimensions();
   const orientation = width < 360 || fontScale > 1.3 ? "vertical" : "horizontal";
-  // Previews need every reading family. They load with the panel; a label
-  // takes its face once loaded (native text keeps the face it laid out with).
+  // Previews need every reading family's regular face. Loading those is still
+  // a batch of font registrations, so never do it on the open path: let the
+  // panel paint and finish its entrance, then start one family per idle slice.
+  // Starts are staggered rather than chained so several faces observe in
+  // parallel; waiting for one before starting the next kept font polling busy
+  // for seconds on slow devices. A close cancels anything not started.
   const fontRevision = useReaderFontRevision();
   useEffect(() => {
-    if (visible) READER_FONT_FAMILY_LIST.forEach((family) => void loadReaderFonts(family));
+    if (!visible) return;
+    let cancelled = false;
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    const idleCancels: (() => void)[] = [];
+    READER_FONT_FAMILY_LIST
+      .filter((family) => !readerFontPreviewReady(family))
+      .forEach((family, index) => {
+        timers.push(setTimeout(() => {
+          if (cancelled) return;
+          idleCancels.push(scheduleIdleWork(() => {
+            if (!cancelled) void loadReaderFontPreview(family);
+          }));
+        }, PREVIEW_DELAY_MS + index * PREVIEW_STAGGER_MS));
+      });
+    return () => {
+      cancelled = true;
+      timers.forEach(clearTimeout);
+      idleCancels.forEach((cancel) => cancel());
+    };
   }, [visible]);
   const typefaceOptions = useMemo(
-    () => familyOptions.map((option) => readerFontsReady(option.value) ? option : { ...option, labelStyle: undefined }),
+    () => familyOptions.map((option) => readerFontPreviewReady(option.value) ? option : { ...option, labelStyle: undefined }),
     // Readiness lives outside React; the revision says when it changed.
     [fontRevision],
   );
