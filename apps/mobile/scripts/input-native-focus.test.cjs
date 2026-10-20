@@ -151,6 +151,8 @@ function reactHarness() {
   let keyboardVisible = true;
   let nativeFocusedInput = null;
   let overlayBlocked = false;
+  let appState = "active";
+  const appStateListeners = new Set();
   const TextInput = function TextInputHost() {};
   TextInput.State = {
     currentlyFocusedInput: () => nativeFocusedInput,
@@ -163,6 +165,14 @@ function reactHarness() {
     },
   };
   const reactNative = {
+    AppState: {
+      get currentState() { return appState; },
+      addEventListener(type, listener) {
+        if (type !== "change") return { remove() {} };
+        appStateListeners.add(listener);
+        return { remove() { appStateListeners.delete(listener); } };
+      },
+    },
     Platform: {
       OS: "android",
       select: (choices) => choices.android ?? choices.default ?? {},
@@ -357,12 +367,17 @@ function reactHarness() {
     get nativeFocusedInput() { return nativeFocusedInput; },
     setNativeFocusedInput(value) { nativeFocusedInput = value; },
     setOverlayBlocked(value) { overlayBlocked = value; },
+    setAppState(value) {
+      appState = value;
+      for (const listener of [...appStateListeners]) listener(value);
+    },
+    get appStateListenerCount() { return appStateListeners.size; },
     get pendingFrames() { return scheduledFrames.size; },
     get focusRequests() { return focusRequests; },
   };
 }
 
-function createInputHost(initialProps, initialScope = null, initialFocus = null, initialBlocked = false) {
+function createInputHost(initialProps, initialScope = null, initialFocus = null, initialBlocked = false, initialAppState = "active") {
   const h = reactHarness();
   const Input = h.loadInput();
   let focusScope = initialScope;
@@ -418,6 +433,7 @@ function createInputHost(initialProps, initialScope = null, initialFocus = null,
   };
   h.setNativeFocusedInput(initialFocus);
   h.setOverlayBlocked(initialBlocked);
+  h.setAppState(initialAppState);
   host.first = host.render();
   return host;
 }
@@ -520,6 +536,7 @@ test("scoped native autoFocus waits for panel readiness and the opening keyboard
   assert.equal(host.h.autoFocusRequests, 0);
   assert.equal(host.h.focusCalls, 0);
   assert.equal(host.h.pendingFrames, 0, "a not-ready owner schedules nothing yet");
+  assert.equal(host.h.appStateListenerCount, 1, "the pending initial intent watches app state while measuring");
 
   // useOverlayPresence's opening layout dismisses any previous IME before the
   // entrance starts. The input's frame must run after that dismissal.
@@ -533,6 +550,7 @@ test("scoped native autoFocus waits for panel readiness and the opening keyboard
 
   assert.equal(host.h.focusCalls, 1, "the ready panel focuses its field exactly once");
   assert.equal(host.h.blurCalls, 0, "an unfocused target needs no extra blur");
+  assert.equal(host.h.appStateListenerCount, 0, "consuming the take disposes the observer");
   assert.deepEqual(host.h.eventLog, ["panel-layout-dismiss", "focus"]);
   assert.equal(host.input(), first, "the deferred focus uses the same native TextInput");
   assert.equal(host.h.mounts, 1);
@@ -565,6 +583,7 @@ test("a scope that is initially inactive never takes focus when it resumes", () 
   host.h.runFrames();
   assert.equal(host.h.focusCalls, 0, "an inactive initial owner has no autofocus intent");
   assert.equal(host.h.pendingFrames, 0);
+  assert.equal(host.h.appStateListenerCount, 0, "an inactive owner installs no app-state observer");
 });
 
 test("manual focus cancels a scheduled scoped autofocus take", () => {
@@ -573,6 +592,7 @@ test("manual focus cancels a scheduled scoped autofocus take", () => {
 
   host.focus();
   assert.equal(host.h.pendingFrames, 0, "the user already owns focus");
+  assert.equal(host.h.appStateListenerCount, 0, "cancelling removes the pending-only listener");
   host.h.runFrames();
   assert.equal(host.h.focusCalls, 0, "the pending programmatic take is cancelled");
   assert.equal(host.input().focused, true, "the manual focus remains in place");
@@ -599,6 +619,7 @@ test("rising autoFocus on an already mounted scoped field does not take focus", 
   assert.equal(host.input(), first);
   assert.equal(host.h.focusCalls, 0, "only a fresh Input mount can request scoped autofocus");
   assert.equal(host.h.mounts, 1);
+  assert.equal(host.h.appStateListenerCount, 0, "a field without autofocus intent never observes app state");
 });
 
 test("unscoped native fields keep their existing mount autoFocus behavior", () => {
@@ -607,6 +628,7 @@ test("unscoped native fields keep their existing mount autoFocus behavior", () =
   assert.equal(host.h.autoFocusRequests, 1);
   assert.equal(host.h.focusCalls, 0, "unscoped focus is still the native mount request");
   assert.equal(host.h.pendingFrames, 0);
+  assert.equal(host.h.appStateListenerCount, 0, "unscoped fields never observe app state");
 });
 
 test("readonly and disabled fields keep one node and still show external values", () => {
@@ -639,6 +661,7 @@ test("a retained scoped field focuses once for each new session", () => {
 
   assert.equal(host.h.focusCalls, 2, "the new session takes focus once");
   assert.equal(host.h.blurCalls, 0, "a visible IME on the same field is not disturbed");
+  assert.equal(host.h.appStateListenerCount, 0, "the pending-only app-state listener is removed");
   assert.equal(host.input(), first, "the retained native TextInput keeps its identity");
   assert.equal(host.h.mounts, 1);
 
@@ -756,4 +779,105 @@ test("an unscoped native field mounted under a covering overlay skips mount auto
   assert.equal(host.h.autoFocusRequests, 0, "but the mount has passed, so focus is not stolen");
   assert.equal(host.h.focusCalls, 0);
   assert.equal(host.h.mounts, 1);
+});
+
+test("backgrounding before the queued scoped frame cancels the take for good", () => {
+  for (const state of ["background", "inactive"]) {
+    const host = createInputHost(
+      { label: "Link", value: "", autoFocus: true },
+      { active: true, ready: false, session: 1 },
+    );
+    host.setScope({ active: true, ready: true, session: 1 });
+    assert.equal(host.h.pendingFrames, 1);
+    assert.equal(host.h.appStateListenerCount, 1, "the take subscribes only while pending");
+
+    host.h.setAppState(state);
+    assert.equal(host.h.pendingFrames, 0, `${state} cancels the queued frame`);
+    assert.equal(host.h.appStateListenerCount, 0, `${state} removes the ephemeral listener`);
+    host.h.setAppState("active");
+    host.h.runFrames();
+
+    assert.equal(host.h.focusCalls, 0, `resume after ${state} must not reopen the IME`);
+    assert.equal(host.h.blurCalls, 0, `resume after ${state} must not blur a field`);
+    assert.equal(host.h.appStateListenerCount, 0);
+  }
+});
+
+test("a field readied while backgrounded never queues focus on resume", () => {
+  const host = createInputHost(
+    { label: "Link", value: "", autoFocus: true },
+    { active: true, ready: true, session: 1 },
+    null,
+    false,
+    "background",
+  );
+  host.h.runFrames();
+  assert.equal(host.h.focusCalls, 0);
+  assert.equal(host.h.pendingFrames, 0);
+  assert.equal(host.h.appStateListenerCount, 0, "no listener is installed for a backgrounded take");
+
+  host.h.setAppState("active");
+  host.h.runFrames();
+  assert.equal(host.h.focusCalls, 0, "foreground resume does not replay the initial take");
+  assert.equal(host.h.blurCalls, 0);
+});
+
+test("a fresh session after background still takes focus once", () => {
+  const host = createInputHost(
+    { label: "Link", value: "", autoFocus: true },
+    { active: true, ready: false, session: 1 },
+  );
+  host.setScope({ active: true, ready: true, session: 1 });
+  host.h.setAppState("background");
+  host.h.setAppState("active");
+  host.h.runFrames();
+  assert.equal(host.h.focusCalls, 0);
+
+  host.setScope({ active: false, ready: true, session: 1 });
+  host.setScope({ active: true, ready: true, session: 2 });
+  assert.equal(host.h.pendingFrames, 1);
+  host.h.runFrames();
+  assert.equal(host.h.focusCalls, 1, "a fresh session still takes focus once");
+  assert.equal(host.h.blurCalls, 0);
+  assert.equal(host.h.appStateListenerCount, 0);
+});
+
+test("backgrounding while the panel is still measuring cancels the same-session take", () => {
+  const host = createInputHost(
+    { label: "Link", value: "", autoFocus: true },
+    { active: true, ready: false, session: 1 },
+  );
+  assert.equal(host.h.pendingFrames, 0);
+  assert.equal(host.h.appStateListenerCount, 1, "the waiting intent is observed before measurement");
+
+  host.h.setAppState("background");
+  assert.equal(host.h.appStateListenerCount, 0, "background cancels the waiting intent");
+  host.h.setAppState("active");
+  host.setScope({ active: true, ready: true, session: 1 });
+  assert.equal(host.h.pendingFrames, 0, "resuming and measuring cannot revive the take");
+  host.h.runFrames();
+
+  assert.equal(host.h.focusCalls, 0);
+  assert.equal(host.h.blurCalls, 0);
+  assert.equal(host.h.appStateListenerCount, 0);
+});
+
+test("a new session after a backgrounded measurement still focuses once", () => {
+  const host = createInputHost(
+    { label: "Link", value: "", autoFocus: true },
+    { active: true, ready: false, session: 1 },
+  );
+  host.h.setAppState("background");
+  host.h.setAppState("active");
+  host.setScope({ active: true, ready: true, session: 1 });
+  host.h.runFrames();
+  assert.equal(host.h.focusCalls, 0, "the interrupted first session stays consumed");
+
+  host.setScope({ active: false, ready: true, session: 1 });
+  host.setScope({ active: true, ready: true, session: 2 });
+  assert.equal(host.h.pendingFrames, 1);
+  host.h.runFrames();
+  assert.equal(host.h.focusCalls, 1, "a fresh session can still take focus once");
+  assert.equal(host.h.blurCalls, 0);
+  assert.equal(host.h.appStateListenerCount, 0);
 });

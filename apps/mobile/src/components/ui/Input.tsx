@@ -3,11 +3,13 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { StateLayer } from "./StateLayer";
 import {
+  AppState,
   Platform,
   StyleSheet,
   TextInput,
   View,
   useWindowDimensions,
+  type AppStateStatus,
   type TextInputProps,
   type TextStyle,
   type ViewStyle,
@@ -47,6 +49,11 @@ function restoreWebCaret(node: WebCaretNode | null, start: number | null) {
   } catch {
     // Some input types throw if selection isn't supported.
   }
+}
+
+/** A pending native focus frame must not run against a backgrounded app. */
+function appCanTakeFocus(state: AppStateStatus) {
+  return state !== "background" && state !== "inactive";
 }
 
 export interface InputProps extends Omit<TextInputProps, "style"> {
@@ -167,6 +174,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   );
   const scopedAutoFocusDone = useRef(false);
   const scopedFocusFrame = useRef<number | null>(null);
+  const scopedAppState = useRef<ReturnType<typeof AppState.addEventListener> | null>(null);
   const scopedFocusBaseline = useRef<unknown>(null);
   const scopedBaselineSession = useRef<number | null>(null);
   const scopeActive = useRef(focusScope?.active === true && !nativeOverlayBlocked);
@@ -182,13 +190,19 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
     else if (ref) ref.current = node;
   };
 
-  const cancelScopedAutoFocus = () => {
-    if (!scopedNativeAutoFocus) return;
-    scopedAutoFocusDone.current = true;
+  const clearScopedFocusTake = () => {
     if (scopedFocusFrame.current != null) {
       cancelAnimationFrame(scopedFocusFrame.current);
       scopedFocusFrame.current = null;
     }
+    scopedAppState.current?.remove();
+    scopedAppState.current = null;
+  };
+
+  const cancelScopedAutoFocus = () => {
+    if (!scopedNativeAutoFocus) return;
+    scopedAutoFocusDone.current = true;
+    clearScopedFocusTake();
   };
 
   useEffect(() => {
@@ -206,11 +220,19 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
     if (!rest.autoFocus) {
       // The parent cancelled this session's intent before it took effect.
       scopedAutoFocusDone.current = true;
+      clearScopedFocusTake();
       return;
     }
     if (!scopeActive.current) {
       // Started suspended/closing: never steal focus if this owner resumes.
       scopedAutoFocusDone.current = true;
+      clearScopedFocusTake();
+      return;
+    }
+    if (!appCanTakeFocus(AppState.currentState)) {
+      // Ready or still measuring: a background opening has no focus claim.
+      scopedAutoFocusDone.current = true;
+      clearScopedFocusTake();
       return;
     }
     if (scopedBaselineSession.current !== scopeSession) {
@@ -221,11 +243,21 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
       scopedBaselineSession.current = scopeSession;
       scopedFocusBaseline.current = TextInput.State?.currentlyFocusedInput?.() ?? null;
     }
-    if (!scopeReady.current) return;
+    // The initial intent is pending even before the panel reports ready. Keep
+    // one pending-only observer so backgrounding during measurement cancels it;
+    // normal mounted fields never subscribe.
+    if (scopedAppState.current == null) {
+      scopedAppState.current = AppState.addEventListener("change", (state) => {
+        if (state !== "active") cancelScopedAutoFocus();
+      });
+    }
+    if (!scopeReady.current) return clearScopedFocusTake;
     const frame = requestAnimationFrame(() => {
       scopedFocusFrame.current = null;
+      scopedAppState.current?.remove();
+      scopedAppState.current = null;
       scopedAutoFocusDone.current = true;
-      if (!scopeActive.current || !scopeReady.current) return;
+      if (!scopeActive.current || !scopeReady.current || !appCanTakeFocus(AppState.currentState)) return;
       const target = inputRef.current;
       if (!target) return;
       const focused = TextInput.State?.currentlyFocusedInput?.() ?? null;
@@ -238,12 +270,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
       focusTextInput(target);
     });
     scopedFocusFrame.current = frame;
-    return () => {
-      if (scopedFocusFrame.current === frame) {
-        cancelAnimationFrame(frame);
-        scopedFocusFrame.current = null;
-      }
-    };
+    return clearScopedFocusTake;
   }, [scopedNativeAutoFocus, nativeOverlayBlocked, scopeSession, focusScope?.active, focusScope?.ready, rest.autoFocus]);
 
   useLayoutEffect(() => {
