@@ -44,8 +44,7 @@ import { haptics } from "../../../src/lib/haptics";
 import { toast } from "../../../src/components/ui/toast-store";
 import { markedAsReadToast } from "../../../src/lib/copy";
 import { errorMessage, isFolderProtected } from "../../../src/lib/error-message";
-import { flattenPages } from "../../../src/lib/api/query-keys";
-import { sortBookmarksBy } from "../../../src/lib/list-sort";
+import { sortBookmarkPagesBy } from "../../../src/lib/list-sort";
 import { layout } from "../../../src/theme/tokens";
 import { DEFAULT_BOOKMARK_LIST_SORT, type BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
@@ -182,7 +181,7 @@ export default function FolderDetailScreen() {
   }, [showLocked]);
   const loadFailed = !!bookmarks.error && !showLocked && !bookmarks.data;
   const items = useMemo(
-    () => sortBookmarksBy(flattenPages(bookmarks.data?.pages ?? []), bookmarkSort),
+    () => sortBookmarkPagesBy(bookmarks.data?.pages ?? [], bookmarkSort),
     [bookmarkSort, bookmarks.data],
   );
   const selectableKeys = useMemo(() => items.map((bookmark) => bookmarkKey(bookmark.id)), [items]);

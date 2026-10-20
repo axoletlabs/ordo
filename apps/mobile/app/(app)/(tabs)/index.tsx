@@ -33,7 +33,7 @@ import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
 import { useFolders } from "../../../src/hooks/use-folders";
 import { useFolderTokenStore } from "../../../src/store/folder-tokens";
 import { useListSortStore } from "../../../src/store/list-sort";
-import { sortBookmarksBy, sortFoldersBy } from "../../../src/lib/list-sort";
+import { sortBookmarkPagesBy, sortFoldersBy } from "../../../src/lib/list-sort";
 import { useTags } from "../../../src/hooks/use-tags";
 import { useLoadMore, usePullToRefresh } from "../../../src/hooks/use-list-controls";
 import {
@@ -51,7 +51,6 @@ import { haptics } from "../../../src/lib/haptics";
 import { toast } from "../../../src/components/ui/toast-store";
 import { markedAsReadToast } from "../../../src/lib/copy";
 import { errorMessage } from "../../../src/lib/error-message";
-import { flattenPages } from "../../../src/lib/api/query-keys";
 import {
   useSettingsStore,
   type CreateButtonAction,
@@ -188,7 +187,7 @@ export default function BookmarksScreen() {
   selectionRef.current = selection;
 
   const homeItems = useMemo(
-    () => sortBookmarksBy(flattenPages(bookmarks.data?.pages ?? []), unfiledSort),
+    () => sortBookmarkPagesBy(bookmarks.data?.pages ?? [], unfiledSort),
     [bookmarks.data, unfiledSort],
   );
    const search = useLibrarySearch(homeItems, folders.data ?? []);
