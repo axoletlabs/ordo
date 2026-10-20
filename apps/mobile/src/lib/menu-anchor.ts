@@ -82,7 +82,7 @@ export function measureAnchor(
   // RN web's measureInWindow defers the callback. Read the existing DOM box
   // synchronously so a picker owns Escape as soon as its trigger is pressed,
   // rather than letting that key dismiss the still-interactive parent first.
-  if (node?.getBoundingClientRect) {
+  if (typeof HTMLElement !== "undefined" && node instanceof HTMLElement) {
     const rect = node.getBoundingClientRect();
     if (isMenuAnchorRect(rect)) {
       finish({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
