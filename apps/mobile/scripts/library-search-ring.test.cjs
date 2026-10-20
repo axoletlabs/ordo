@@ -85,6 +85,7 @@ function headerHost() {
   const h = reactHarness();
   const events = [];
   const registered = [];
+  const overlay = { blocked: false };
   const searchBack = { editing: undefined, exit: null, filterOpen: undefined };
   const inputRefs = [];
   const inputNode = {
@@ -144,6 +145,7 @@ function headerHost() {
     "../../theme/ThemeProvider": { useTheme: () => ({ palette: { primary: "teal", onSurfaceVariant: "x", onSecondaryContainer: "y", surfaceContainerHigh: "z", overlay: "o" } }) },
     "../../theme/tokens": { layout: { maxContentWidth: 800 }, radius: { full: 999 }, spacing: { 4: 4, 8: 8, 16: 16 } },
     "../../lib/search-field-focus": { registerSearchFieldFocus: (focus) => { registered.push(focus); return () => {}; } },
+    "../ui/overlay-host": { useOverlayBlocked: () => overlay.blocked },
     "../ui/MaterialIcon": { MaterialIcon: "MaterialIcon" },
     "../ui/Input": {
       Input: (props) => {
@@ -177,7 +179,7 @@ function headerHost() {
     filterOpen: false,
   };
   const host = {
-    h, events, registered, searchBack, inputRefs, inputNode, props, tree: null,
+    h, events, registered, searchBack, inputRefs, inputNode, props, tree: null, overlay,
     render: (overrides = {}) => { host.tree = h.render(() => LibraryHeader({ ...props, ...overrides })); return host.tree; },
     input: () => findNode(host.tree, (n) => n.type === "Input")?.props,
     ringOpacity: () => {
@@ -282,4 +284,84 @@ test("the search field stays registered for tab-press focusing", () => {
   assert.equal(host.inputNode.focusCalls, 1, "registered handler focuses the field");
   host.render();
   assert.equal(host.ringOpacity(), 1, "focus signal propagates to the ring");
+});
+
+test("route autofocus spent behind an overlay is not replayed when it closes", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const host = headerHost();
+    host.render({ autoFocusSearch: true });
+    t.mock.timers.tick(100);
+
+    // The save sheet opens before the 200ms route timer fires.
+    host.overlay.blocked = true;
+    host.render({ autoFocusSearch: true });
+    t.mock.timers.tick(100); // the original deadline passes while blocked
+    assert.equal(host.inputNode.focusCalls, 0, "no focus while an overlay owns the surface");
+    assert.equal(host.ringOpacity(), 0, "no focus ring behind the overlay");
+
+    // Unblocking is not a new route request; the spent intent must not replay.
+    host.overlay.blocked = false;
+    host.render({ autoFocusSearch: true });
+    t.mock.timers.tick(1000);
+    assert.equal(host.inputNode.focusCalls, 0, "closing the overlay must not refocus the library");
+    assert.equal(host.ringOpacity(), 0, "the field never gained focus");
+
+    // A genuinely new autoFocus request still works exactly once.
+    host.render({ autoFocusSearch: false });
+    host.render({ autoFocusSearch: true });
+    t.mock.timers.tick(200);
+    assert.equal(host.inputNode.focusCalls, 1, "a fresh route request focuses once");
+    host.render({ autoFocusSearch: true });
+    assert.equal(host.ringOpacity(), 1, "the fresh focus reaches the ring");
+    t.mock.timers.tick(1000);
+    assert.equal(host.inputNode.focusCalls, 1, "the fresh request never repeats");
+  } finally {
+    t.mock.timers.reset();
+  }
+});
+
+test("route autofocus requested while blocked is not replayed after unblock", (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  try {
+    const host = headerHost();
+    host.overlay.blocked = true;
+    host.render({ autoFocusSearch: true });
+    t.mock.timers.tick(200);
+    assert.equal(host.inputNode.focusCalls, 0, "a blocked request never takes focus");
+    host.overlay.blocked = false;
+    host.render({ autoFocusSearch: true });
+    t.mock.timers.tick(1000);
+    assert.equal(host.inputNode.focusCalls, 0, "unblocking must not replay the consumed request");
+    assert.equal(host.ringOpacity(), 0);
+  } finally {
+    t.mock.timers.reset();
+  }
+});
+
+test("tab focus refuses a blocked take and resumes without losing the session", () => {
+  const host = headerHost();
+  host.render();
+  host.focus();
+  host.input().onChangeText("podcast");
+  host.render();
+  host.blur(); // the overlay steals focus; the editing session stays
+
+  host.overlay.blocked = true;
+  host.render();
+  host.registered[0]();
+  assert.equal(host.inputNode.focusCalls, 0, "the tab handler must not focus behind an overlay");
+  assert.equal(host.ringOpacity(), 0, "no false focus ring behind the overlay");
+  assert.equal(host.input().value, "podcast", "query preserved while blocked");
+  assert.equal(host.input().placeholder, "Search your library", "editing session preserved while blocked");
+  assert.equal(host.slot("Exit search").props.pointerEvents, "box-none", "search chrome stays reachable afterwards");
+
+  host.overlay.blocked = false;
+  host.render();
+  host.registered[0]();
+  assert.equal(host.inputNode.focusCalls, 1, "an explicit tab press focuses after the overlay closes");
+  host.render();
+  assert.equal(host.ringOpacity(), 1, "focus ring restores with the real focus");
+  assert.equal(host.input().value, "podcast", "query survives the blocked take");
+  assert.ok(new Set(host.inputRefs).size === 1, "the same input node is reused — no remount");
 });

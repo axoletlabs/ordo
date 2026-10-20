@@ -12,6 +12,7 @@ import { useAuthStore } from "../../store/auth";
 import { useTheme } from "../../theme/ThemeProvider";
 import { layout, radius, spacing } from "../../theme/tokens";
 import { registerSearchFieldFocus } from "../../lib/search-field-focus";
+import { useOverlayBlocked } from "../ui/overlay-host";
 import { MaterialIcon } from "../ui/MaterialIcon";
 import { Input } from "../ui/Input";
 import { IconButton } from "../ui/IconButton";
@@ -50,6 +51,9 @@ const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoF
   const [text, setText] = useState(query);
   const focused = useRef(false);
   const [editing, setEditing] = useState(false);
+  const overlayBlocked = useOverlayBlocked();
+  const overlayBlockedRef = useRef(overlayBlocked);
+  useLayoutEffect(() => { overlayBlockedRef.current = overlayBlocked; }, [overlayBlocked]);
   const clearProgress = useSharedValue(query ? 1 : 0);
   useEffect(() => {
     clearProgress.value = motion.reducedMotion ? (text ? 1 : 0) : withSpring(text ? 1 : 0, materialMotion.effects.fast);
@@ -70,12 +74,42 @@ const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoF
   useSearchBack(editing, exitSearch, filterOpen);
   useEffect(() => { if (selecting) exitSearch(); }, [selecting, exitSearch]);
   useEffect(() => { if (!focused.current) setText(query); }, [query]);
-  useFocusEffect(useCallback(() => registerSearchFieldFocus(() => inputRef.current?.focus()), []));
+  useFocusEffect(useCallback(() => registerSearchFieldFocus(() => {
+    // The tab handler can run while an overlay owns the surface. Native has no
+    // focus trap, so the background field must refuse the take itself.
+    if (overlayBlockedRef.current) return;
+    inputRef.current?.focus();
+  }), []));
+  // Route autofocus is a one-shot intent. If a popup claims the surface before
+  // the delayed take fires, the intent is spent: closing the popup must never
+  // replay it and pull the keyboard back into the library. A fresh
+  // autoFocus false -> true request is a new intent.
+  const routeFocusIntent = useRef(0);
+  const routeFocusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!autoFocus) return;
-    const timer = setTimeout(() => inputRef.current?.focus(), 200);
-    return () => clearTimeout(timer);
+    const intent = ++routeFocusIntent.current;
+    if (overlayBlockedRef.current) return;
+    const timer = setTimeout(() => {
+      if (routeFocusTimer.current === timer) routeFocusTimer.current = null;
+      if (routeFocusIntent.current !== intent || overlayBlockedRef.current) return;
+      inputRef.current?.focus();
+    }, 200);
+    routeFocusTimer.current = timer;
+    return () => {
+      if (routeFocusTimer.current === timer) routeFocusTimer.current = null;
+      clearTimeout(timer);
+    };
   }, [autoFocus]);
+  // Blocking consumes the current intent outright. The unblocked render is
+  // deliberately not a new request, so closing the overlay cannot replay it.
+  useEffect(() => {
+    if (!overlayBlocked) return;
+    routeFocusIntent.current += 1;
+    if (routeFocusTimer.current == null) return;
+    clearTimeout(routeFocusTimer.current);
+    routeFocusTimer.current = null;
+  }, [overlayBlocked]);
   const change = (next: string) => {
     setText(next);
     onChange(next);
