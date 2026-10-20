@@ -35,10 +35,12 @@ function SearchBarActions({ active, style, children }: { active: boolean; style:
     style={style}>{children}</Animated.View>;
 }
 
-const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoFocus, onFilter, filtersOn, onFocusChange, filterOpen, selecting, spatialProgress, effectsProgress }: {
+const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoFocus, onFilter, filtersOn, onFocusChange, onInputFocusChange, filterOpen, selecting, spatialProgress, effectsProgress }: {
   query: string; onChange: (query: string) => void; autoFocus?: boolean;
   onFilter: (anchor: MenuAnchorRect) => void; filtersOn: boolean;
   onFocusChange: (focused: boolean) => void;
+  /** Reports the field's real focus only; the editing session outlives blur. */
+  onInputFocusChange?: (focused: boolean) => void;
   filterOpen: boolean; selecting: boolean;
   spatialProgress: SharedValue<number>; effectsProgress: SharedValue<number>;
 }) {
@@ -61,9 +63,10 @@ const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoF
   const exitSearch = useCallback(() => {
     setEditing(false);
     onFocusChange(false);
+    onInputFocusChange?.(false);
     inputRef.current?.blur();
     Keyboard.dismiss();
-  }, [onFocusChange]);
+  }, [onFocusChange, onInputFocusChange]);
   useSearchBack(editing, exitSearch, filterOpen);
   useEffect(() => { if (selecting) exitSearch(); }, [selecting, exitSearch]);
   useEffect(() => { if (!focused.current) setText(query); }, [query]);
@@ -81,8 +84,8 @@ const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoF
   return <View><Input ref={inputRef} variant="search" showFocusIndicator={false} value={text} onChangeText={change}
     placeholder={editing ? "Search your library" : "Library"} accessibilityLabel="Search your library"
     accessibilityHint="Search saved bookmarks and folders."
-    onFocus={() => { focused.current = true; setEditing(true); onFocusChange(true); }}
-    onBlur={() => { focused.current = false; }}
+    onFocus={() => { focused.current = true; setEditing(true); onFocusChange(true); onInputFocusChange?.(true); }}
+    onBlur={() => { focused.current = false; onInputFocusChange?.(false); }}
     autoCorrect={false} spellCheck={false} autoCapitalize="none" returnKeyType="search"
     onSubmitEditing={exitSearch}
     onKeyPress={(event) => { if (event.nativeEvent.key === "Escape") exitSearch(); }}
@@ -119,14 +122,25 @@ export function LibraryHeader({ tools, query, onQueryChange, onFilter, filtersOn
   const barLayout = appBarLayout({ topInset: insets.top, tonal: true, compact: compactHeight });
   const motion = useMaterialMotion();
   const [focused, setFocused] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
   const spatialProgress = useSharedValue(0);
   const effectsProgress = useSharedValue(0);
+  const ringProgress = useSharedValue(0);
   useEffect(() => {
     const target = focused ? 1 : 0;
     spatialProgress.value = motion.reducedMotion ? target : withSpring(target, { ...motion.spatial, overshootClamping: true });
     effectsProgress.value = motion.reducedMotion ? target : withSpring(target, materialMotion.effects.spatial);
   }, [focused, spatialProgress, effectsProgress, motion.reducedMotion, motion.expressive]);
-  const focusStyle = useAnimatedStyle(() => ({ opacity: effectsProgress.value }));
+  // The ring mirrors the field's real focus, not the editing session: an
+  // overlay that steals focus (save sheet, picker) clears only the ring,
+  // while the search chrome — back, clear, filters — and the query stay
+  // until the user actually exits search. Nothing refocuses on blur.
+  useEffect(() => {
+    ringProgress.value = motion.reducedMotion
+      ? (inputFocused ? 1 : 0)
+      : withSpring(inputFocused ? 1 : 0, materialMotion.effects.fast);
+  }, [inputFocused, ringProgress, motion.reducedMotion, motion.expressive]);
+  const ringStyle = useAnimatedStyle(() => ({ opacity: ringProgress.value }));
   // The input and action slots never resize: fade/translate the two groups in
   // place instead of clipping and squeezing live buttons on every frame.
   const toolsStyle = useAnimatedStyle(() => ({ opacity: 1 - effectsProgress.value,
@@ -138,7 +152,7 @@ export function LibraryHeader({ tools, query, onQueryChange, onFilter, filtersOn
     paddingTop: barLayout.paddingTop, paddingBottom: barLayout.paddingBottom,
     paddingLeft: column.left, paddingRight: column.right }}>
     <View style={[styles.appBar, { backgroundColor: palette.surfaceContainerHigh }, selection ? { display: "none" } : null]}>
-      <View style={styles.search}><LibrarySearch query={query} onChange={onQueryChange} autoFocus={autoFocusSearch} onFilter={onFilter} filtersOn={filtersOn} onFocusChange={setFocused} filterOpen={filterOpen} selecting={!!selection} spatialProgress={spatialProgress} effectsProgress={effectsProgress} /></View>
+      <View style={styles.search}><LibrarySearch query={query} onChange={onQueryChange} autoFocus={autoFocusSearch} onFilter={onFilter} filtersOn={filtersOn} onFocusChange={setFocused} onInputFocusChange={setInputFocused} filterOpen={filterOpen} selecting={!!selection} spatialProgress={spatialProgress} effectsProgress={effectsProgress} /></View>
       <SearchBarActions active={!focused} style={[styles.searchAccessories, toolsStyle]}>{tools}
       <PressableScale accessibilityRole="button" accessibilityLabel="Account and settings"
         onPress={() => router.navigate("/settings")} stateLayerColor={palette.onSurface}
@@ -147,7 +161,7 @@ export function LibraryHeader({ tools, query, onQueryChange, onFilter, filtersOn
         {user ? <UserAvatar user={user} size={40} /> : <MaterialIcon name="person-circle" size={24} color={palette.onSecondaryContainer} />}
        </PressableScale>
        </SearchBarActions>
-       <Animated.View testID="library-search-focus-ring" pointerEvents="none" style={[StyleSheet.absoluteFill, styles.focusRing, { borderColor: palette.primary }, focusStyle]} />
+       <Animated.View testID="library-search-focus-ring" pointerEvents="none" style={[StyleSheet.absoluteFill, styles.focusRing, { borderColor: palette.primary }, ringStyle]} />
     </View>
     {selection ? <SelectionHeader {...selection} embedded /> : null}
     {!selection && resultLabel ?
