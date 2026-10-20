@@ -22,8 +22,15 @@ export const materialMotion = {
   effects: { fast: spring(3800, 1), spatial: spring(1600, 1), slow: spring(800, 1) },
 } as const;
 
+// Motion is a shared value object, not render state. Stable identities let
+// memoized control groups and labels reuse it when their parent re-renders.
+// Keep both settings reactive, without allocating a wrapper for every caller.
+const motionSchemes = [false, true].map((expressive) => [false, true].map((reducedMotion) =>
+  Object.freeze({ ...materialMotion[expressive ? "expressive" : "standard"], expressive, reducedMotion }),
+));
+
 export function useMaterialMotion() {
   const expressive = useSettingsStore((s) => s.expressive);
   const reducedMotion = useReducedMotionPreference();
-  return { ...materialMotion[expressive ? "expressive" : "standard"], expressive, reducedMotion };
+  return motionSchemes[Number(expressive)][Number(reducedMotion)];
 }
