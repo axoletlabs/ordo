@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.3.0 Preview 4
+
+The fourth preview makes folder deletion more flexible, keeps compatible updates quiet, and improves account security and reliability.
+
+- **Keep bookmarks when deleting a folder:** Tick the bookmarks you want to keep; they move to Bookmarks while the rest are deleted with the folder. Undo and restart-safe deletion recovery remain available.
+- **Quiet updates:** Compatible updates download in the background and take effect on the next cold launch, without download banners or restart prompts. Full APK updates still offer Download and Install.
+- **Account settings and sign-in:** Fix MFA and account-settings edge cases, and harden email changes, password changes, and MFA operations with additional checks and rate limits.
+- **Clearer release names:** Show readable Preview and release names instead of raw version tags in update notices, progress, About, and release history.
+
+**Install:** The Preview 4 APK uses `versionCode=6` and replaces Preview 3 (`versionCode=5`) in place; no uninstall is needed. Install the new APK to receive the updated native launch configuration. Self-hosted: select `--release v0.3.0-preview.4`, or include previews with `--pre`. No new database migrations, native plugins, or runtime dependencies were added since Preview 3.
+
+[Preview 3 → Preview 4 release changes](https://github.com/axoletlabs/ordo/compare/v0.3.0-preview.3...v0.3.0-preview.4)
+
+## 0.3.0 Preview 3
+
+The third preview of the 0.3.0 cycle completes the app-wide Material UI, motion and cache audit, rolls back rejected tag edits, and ships the matching server updates.
+
+### Included in the Preview 3 release
+
+- **App-wide Material audit:** Audited every screen for Material UI, motion and cache hot paths. Dialog focus and scroll bookkeeping are deferred off the interaction path, menu highlights stay synchronized with lightweight control motion, session work is isolated from the UI, and idle time no longer competes with gestures or animations.
+- **Reader:** Reduced startup, contents-menu and scroll contention in the reader, with slightly more room for the contents panel.
+- **Tag editing:** Edits rejected by the server now roll back across the bookmark caches instead of leaving stale tags behind, and the tag dropdown shares its selection behavior with the other menus.
+- **Server:** Added bookmark sort indexes (including a database migration applied on update), isolated session work with verified SMTP workflows, and removed audit-flagged rate-limit and configuration overhead.
+
+### Maintenance and compatibility
+
+- Removed the repository test suite and test infrastructure; audit evidence now ships as measurement documents instead.
+- Updated app and server release metadata to `0.3.0-preview.3`. The server update applies the `20261017120000_bookmark_sort_indexes` migration; no native plugins or runtime dependencies changed in this release range.
+
+**Install:** The Preview 3 APK uses `versionCode=5` and updates Preview 2 (`versionCode=4`) in place; no uninstall is needed. Self-hosted: select the tagged server release with `--release v0.3.0-preview.3`, or include previews with `--pre`.
+
+[Preview 2 → Preview 3 release commits](https://github.com/axoletlabs/ordo/compare/v0.3.0-preview.2...v0.3.0-preview.3)
+
 ## 0.3.0 Preview 2
 
 The second preview of the 0.3.0 cycle improves release notes, reminder responsiveness, backup-code downloads, and reading comfort.

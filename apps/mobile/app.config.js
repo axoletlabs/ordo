@@ -33,7 +33,7 @@ const gitDirty = git("status --porcelain").length > 0;
 // CI extra-publishes the same JS onto older APK fingerprints. eas update has
 // no --runtime-version flag, so the job sets this to that APK's raw hash.
 const otaRuntime = process.env.ORDO_OTA_RUNTIME_VERSION;
-const version = "0.3.0";
+const version = "0.3.0-preview.4";
 const branch = process.env.ORDO_BUILD_BRANCH || git("branch --show-current") || "main";
 const variant = process.env.ORDO_APP_VARIANT || resolveUpdatesChannel(version, branch);
 if (!variant || !Object.hasOwn(APP_VARIANTS, variant)) throw new Error(`Invalid app variant or version ${version} for branch ${branch}`);
