@@ -131,4 +131,3 @@ export async function restartRuntime(beforeReload?: () => Promise<void>): Promis
     throw error;
   }
 }
-
