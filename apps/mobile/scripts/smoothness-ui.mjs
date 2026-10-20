@@ -346,6 +346,10 @@ try {
             check(await picker.getByRole("menuitemradio", { name: "Reading list", exact: true }).count() === 0, "picker search filters non-matching folders out");
             check(await picker.getByRole("menuitemradio", { name: "Bookmarks", exact: true }).count() === 0, "picker search hides the root row when it does not match");
             check((await librarySearch.count()) === 0 || (await librarySearch.inputValue()) === "", "typing in the picker never touches the library search");
+            // The anchor's old pointer position can land over the search field
+            // in wide layouts but not portrait. Compare the same focused,
+            // non-hovered state in both screenshots.
+            await page.mouse.move(1, 1);
             await capture("save-folder-picker", 2500);
             // Active keyboard: Tab stays in the menu, Escape closes only the picker.
             check(await picker.evaluate(node => node.contains(document.activeElement)), "picker search owns keyboard focus");
