@@ -1,6 +1,6 @@
 /** Run: node --test apps/mobile/scripts/silent-ota-update.test.cjs */
 const assert = require("node:assert/strict");
-const { readFileSync } = require("node:fs");
+const { readFileSync, readdirSync, existsSync } = require("node:fs");
 const { resolve } = require("node:path");
 const { test } = require("node:test");
 const ts = require("typescript");
@@ -199,4 +199,25 @@ test("silent OTA cannot import reload, splash, toast, haptic, or progress UI", (
   const root = readFileSync(resolve(__dirname, "../app/_layout.tsx"), "utf8");
   assert.match(root, /useAutomaticOtaUpdate\(\);/);
   assert.doesNotMatch(root, /otaLaunch|OtaLaunchProgress/);
+});
+
+function walkSources(dir) {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const path = resolve(dir, entry.name);
+    return entry.isDirectory() ? walkSources(path) : /\.(ts|tsx)$/.test(entry.name) ? [path] : [];
+  });
+}
+
+test("the removed combined checker and per-update restart action stay removed", () => {
+  // Silent OTA applies on the next cold launch; a restart-for-update action or
+  // an OTA+native combined check path must not quietly come back.
+  assert.equal(existsSync(resolve(__dirname, "../src/lib/app-update-check.ts")), false);
+  for (const path of walkSources(resolve(__dirname, "../src"))) {
+    const source = readFileSync(path, "utf8");
+    assert.doesNotMatch(source, /checkAppUpdateSources|app-update-check|restartForUpdate/, path);
+  }
+  const restart = readFileSync(resolve(__dirname, "../src/store/update-restart.ts"), "utf8");
+  // Runtime reload survives for server switches and error recovery only.
+  assert.match(restart, /export (async )?function restartRuntime/);
+  assert.match(restart, /export (async )?function reloadRuntime/);
 });
