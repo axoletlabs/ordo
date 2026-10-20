@@ -108,6 +108,30 @@ export function useInfiniteBookmarks(folderId: string | null, enabled = true) {
   });
 }
 
+/** Every bookmark in a folder, paged through to the end. Pickers that offer a
+ * folder's full contents (e.g. keep-on-folder-delete) need the whole list,
+ * not the first page. Result is never cached: the picker refetches per use. */
+export function useFolderBookmarkOptions(folderId: string | null | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ["bookmarks", "folder-options", folderId ?? null],
+    queryFn: async ({ signal }) => {
+      const target = folderId ?? null;
+      const items: BookmarkDto[] = [];
+      let cursor: string | null = null;
+      do {
+        const page = await bookmarksApi.list({ folderId: target, cursor, limit: LIST_PAGE_SIZE, signal });
+        items.push(...page.items);
+        cursor = page.nextCursor;
+      } while (cursor && !signal.aborted);
+      return items;
+    },
+    enabled: enabled && folderId != null,
+    staleTime: 30_000,
+    gcTime: 0,
+    retry: 1,
+  });
+}
+
 export function useInfiniteSearch(
   q: string,
   opts: {

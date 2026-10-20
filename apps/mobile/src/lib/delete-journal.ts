@@ -13,6 +13,9 @@ export interface DeleteIntent {
   folders: string[];
   tags: string[];
   contained: string[];
+  /** Bookmarks moved to the unfiled root before their folder cascades away.
+   * Optional so journals written before keep-on-delete still replay. */
+  keeps?: { id: string; folderId: string }[];
 }
 
 let storage: MMKV | undefined;
@@ -43,10 +46,14 @@ export function readDeleteIntents(key: string): DeleteIntent[] {
   const raw = read(key);
   if (!raw) return [];
   const entries = JSON.parse(raw) as DeleteIntent[];
+  const keepsValid = (keeps: DeleteIntent["keeps"]) =>
+    keeps === undefined ||
+    (Array.isArray(keeps) && keeps.every((keep) => typeof keep?.id === "string" && typeof keep?.folderId === "string"));
   if (!Array.isArray(entries) || entries.some((entry) =>
     typeof entry.id !== "string" || !Array.isArray(entry.bookmarks) ||
     entry.bookmarks.some((item) => typeof item.id !== "string" || !(item.folderId === null || typeof item.folderId === "string")) ||
-    [entry.folders, entry.tags, entry.contained].some((ids) => !Array.isArray(ids) || ids.some((id) => typeof id !== "string")))) {
+    [entry.folders, entry.tags, entry.contained].some((ids) => !Array.isArray(ids) || ids.some((id) => typeof id !== "string")) ||
+    !keepsValid(entry.keeps))) {
     throw new Error("Couldn't read pending deletions.");
   }
   return entries;
