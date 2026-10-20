@@ -21,8 +21,10 @@ function setup() {
     modules.set(filename, mod);
     const localRequire = (name) => {
       if (name === "@tanstack/react-query") return {
-        ...reactQuery, useQueryClient: () => qc, useMutation: (options) => options,
+        ...reactQuery, useQueryClient: () => qc,
       };
+      // These tests exercise tag callbacks, not the native session wrapper.
+      if (name === "./use-session-mutation") return { useSessionMutation: (options) => options };
       if (/api\/(tags|bookmarks)$|query-client$|folder-tokens$|undoable-delete$/.test(name)) return {};
       if (name.startsWith(".")) return load(resolve(dirname(filename), `${name}.ts`));
       return require(name);
