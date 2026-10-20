@@ -2,7 +2,7 @@
  * Floating dialog to validate and save a new URL.
  */
 import React, { useState } from "react";
-import { StyleSheet, View, type TextInput } from "react-native";
+import { Platform, StyleSheet, View, type TextInput } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
@@ -86,6 +86,7 @@ function AddBookmarkContent({
   const { data: tags } = useTags();
   const [url, setUrl] = useState("");
   const urlRef = React.useRef<TextInput>(null);
+  const tagSearchRef = React.useRef<TextInput>(null);
   const pasteEpoch = React.useRef(0);
   const active = React.useRef(visible);
   active.current = visible;
@@ -132,6 +133,22 @@ function AddBookmarkContent({
     const handle = setTimeout(() => prefetchExtraction(url), 400);
     return () => clearTimeout(handle);
   }, [url, visible]);
+
+  // The tag dropdown's search owns focus for its session, mirroring the
+  // folder picker: touch browsers focus the row under the finger via the
+  // synthesized click and native has no overlay focus hook, so take the
+  // field explicitly once the menu settles, cancelling on early dismissal.
+  React.useEffect(() => {
+    if (!visible || !showTagPicker || createTagOpen) return;
+    const timer = setTimeout(() => tagSearchRef.current?.focus(), 120);
+    return () => clearTimeout(timer);
+  }, [visible, showTagPicker, createTagOpen]);
+
+  /** Dropdowns own the surface: release the link field's focus before the
+   * picker opens so a suspended panel never keeps the caret or the IME. */
+  const handFocusToDropdown = () => {
+    if (Platform.OS === "web") urlRef.current?.blur();
+  };
 
   const reset = () => {
     setUrl("");
@@ -295,11 +312,11 @@ function AddBookmarkContent({
             ) : null}
 
             {allowFolderSelection ? <PickerField label="Folder" value={destination ?? "Bookmarks"} dropdown expanded={destinationOpen} disabled={create.isPending}
-              icon={selectedFolder?.icon ?? "bookmark-outline"} onPress={(anchor) => { setDestinationAnchor(anchor); setDestinationOpen(true); }} />
+              icon={selectedFolder?.icon ?? "bookmark-outline"} onPress={(anchor) => { handFocusToDropdown(); setDestinationAnchor(anchor); setDestinationOpen(true); }} />
               : destination ? <Text variant="bodyMedium" color="secondary">Saving to {destination}</Text> : null}
             <PickerField label="Tags" icon="pricetags-outline" dropdown expanded={showTagPicker} disabled={create.isPending}
               value={selectedTagIds.length ? selectedTagIds.map((id) => tags?.find((tag) => tag.id === id)?.name).filter(Boolean).join(", ") || `${selectedTagIds.length} tags selected` : "Add tags"}
-              onPress={(anchor) => { setTagAnchor(anchor); setShowTagPicker(true); }} />
+              onPress={(anchor) => { handFocusToDropdown(); setTagAnchor(anchor); setShowTagPicker(true); }} />
             </View>
             <PanelActions
               confirmLabel="Save bookmark"
@@ -314,8 +331,8 @@ function AddBookmarkContent({
         value={selectedFolderId} onChange={(id) => setSelectedDestination(id ?? ROOT_DESTINATION)}
         onCreate={() => { setDestinationOpen(false); setCreateFolderOpen(true); }} />
       <ContextMenu visible={showTagPicker && !createTagOpen} onDismiss={() => setShowTagPicker(false)} anchor={tagAnchor} width={tagAnchor?.width} scrollBody={false} keyboardDismiss={false} estimatedHeight={280}>
-        <View style={{ paddingHorizontal: spacing[8], flexShrink: 1 }}>
-        <TagSelectList selectedIds={selectedTagIds}
+        <View style={{ paddingHorizontal: spacing[16], flexShrink: 1 }}>
+        <TagSelectList selectedIds={selectedTagIds} searchInputRef={tagSearchRef}
           onToggle={(tagId) => setSelectedTagIds((previous) => previous.includes(tagId) ? previous.filter((id) => id !== tagId) : [...previous, tagId])}
           menu maxHeight={240} onRequestCreateTag={() => { setShowTagPicker(false); setCreateTagOpen(true); }} />
         </View>
