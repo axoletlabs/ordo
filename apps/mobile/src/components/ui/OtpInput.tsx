@@ -34,9 +34,12 @@ import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
 import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 import { haptics } from "../../lib/haptics";
 import { InputSurfaceContext } from "./input-surface";
+import { InputFocusScopeContext } from "./input-focus-scope";
+import { useOverlayBlocked } from "./overlay-host";
 import { alphaTint } from "../../theme/state-layer";
 import { editOtp, normalizeOtp } from "../../lib/otp-edit";
 import { otpAutofillProps } from "../../lib/otp-autofill";
+import { focusTextInput } from "../../lib/focus-text-input";
 import { useCredentialLock } from "../../hooks/use-credential-lock";
 import { useAnimationActivity } from "../../hooks/use-animation-activity";
 import { otpGroups } from "../../lib/otp-layout";
@@ -85,13 +88,14 @@ export function OtpInput({
 }: OtpInputProps) {
   const { palette } = useTheme();
   const fieldSurface = React.useContext(InputSurfaceContext) ?? palette.surface;
+  const inputFocusScope = React.useContext(InputFocusScopeContext);
+  const overlayBlocked = useOverlayBlocked();
   const messageId = React.useId();
   const motion = useMaterialMotion();
   const animationActive = useAnimationActivity();
   const inputRefs = useRef<(TextInput | null)[]>([]);
   const completedRef = useRef<string | null>(null);
   const prevLen = useRef(0);
-  const didFocus = useRef(false);
   const [focusedIndex, setFocusedIndex] = React.useState<number | null>(null);
   const [width, setWidth] = React.useState(0);
   const [, refreshSelection] = React.useReducer((revision: number) => revision + 1, 0);
@@ -107,8 +111,24 @@ export function OtpInput({
   const locked = routeLocked || !editable || status === "loading" || status === "success";
   const inactive = routeLocked || !editable || status === "loading";
   const privateCode = purpose === "pin" || kind === "backup";
+  // A retained route, sibling picker, blocking overlay, or backgrounded app is
+  // not the interactive surface. None of them may move this field's focus.
+  const scopedFocus = inputFocusScope !== null;
+  const scopeActive = inputFocusScope?.active ?? true;
+  const scopeReady = inputFocusScope?.ready ?? true;
+  const scopeSession = inputFocusScope?.session ?? 0;
+  // Never restore a stale cell when the route or a covering surface returns.
+  // A plain editable pause is still gated by `locked` below, but keeps the
+  // chosen cell for a failed-verification retry on the same surface.
+  const focusSuspended = overlayBlocked || !animationActive
+    || (scopedFocus && (!scopeActive || !scopeReady))
+    || routeLocked;
+  // The delayed opening take starts only for an owner that can receive it.
+  // Once covered/suspended/disabled it is consumed, never replayed.
+  const autoFocusBlocked = overlayBlocked || !animationActive
+    || (scopedFocus && !scopeActive) || !editable;
   const focusCell = (index: number) => {
-    if (locked) return;
+    if (locked || focusSuspended) return;
     inputRefs.current[Math.min(Math.max(index, 0), chars.length, length - 1)]?.focus();
   };
   // A kept-alive screen can remount this field already filled (previous OTP).
@@ -118,29 +138,88 @@ export function OtpInput({
   const shake = useSharedValue(0);
   const pulse = useSharedValue(1);
 
+  // Scope sessions are fresh visible openings. Suspending for a child picker
+  // keeps the same session, so its resume must not replay the opening take.
+  const autoFocusSession = useRef(scopeSession);
+  const autoFocusIntent = useRef(!scopedFocus || (autoFocus && scopeActive));
+  const autoFocusDone = useRef(false);
+  const autoFocusArmed = useRef(false);
+  // Publish ownership at commit, before passive cleanup. A discarded render
+  // must not change the live field's pending focus request.
+  const canTakeFocus = autoFocus && !locked && !autoFocusBlocked && (!scopedFocus || scopeReady);
+  const canTakeFocusRef = useRef(canTakeFocus);
+  const liveScopeSession = useRef(scopeSession);
+  useLayoutEffect(() => {
+    canTakeFocusRef.current = canTakeFocus;
+    liveScopeSession.current = scopeSession;
+  }, [canTakeFocus, scopeSession]);
   useEffect(() => {
-    if (!autoFocus || locked || didFocus.current) return;
+    if (!scopedFocus || autoFocusSession.current === scopeSession) return;
+    autoFocusSession.current = scopeSession;
+    autoFocusDone.current = false;
+    autoFocusArmed.current = false;
+    autoFocusIntent.current = autoFocus && scopeActive;
+  }, [scopedFocus, scopeSession, autoFocus, scopeActive]);
+
+  useEffect(() => {
+    if (!autoFocus || autoFocusDone.current) {
+      autoFocusArmed.current = false;
+      return;
+    }
+    if (scopedFocus && !autoFocusIntent.current) {
+      autoFocusArmed.current = false;
+      return;
+    }
+    if (autoFocusBlocked) {
+      autoFocusDone.current = true;
+      autoFocusArmed.current = false;
+      return;
+    }
+    if (locked) {
+      // The route/credential owner is not active yet. If a take was already in
+      // flight when verification or a route change began, consume it.
+      if (autoFocusArmed.current) {
+        autoFocusDone.current = true;
+        autoFocusArmed.current = false;
+      }
+      return;
+    }
+    if (scopedFocus && !scopeReady) return;
+    autoFocusArmed.current = true;
     // Don't steal focus after a failed verification or from another form field.
     const t = setTimeout(() => {
-      if (!inputRefs.current.some((input) => input?.isFocused())) {
-        didFocus.current = true;
-        inputRefs.current[Math.min(chars.length, length - 1)]?.focus();
+      autoFocusArmed.current = false;
+      autoFocusDone.current = true;
+      if (!canTakeFocusRef.current || liveScopeSession.current !== scopeSession) return;
+      const target = inputRefs.current[Math.min(chars.length, length - 1)];
+      // A fresh opening may still own the same cell. Only that explicit take
+      // reopens a retained Android IME; another focused cell keeps its focus.
+      const anyFocused = inputRefs.current.some((input) => input?.isFocused());
+      if (!anyFocused || target?.isFocused?.()) {
+        focusTextInput(target);
       }
     }, 280);
     return () => clearTimeout(t);
-  }, [autoFocus, locked, chars.length, length]);
+  }, [autoFocus, scopedFocus, scopeSession, scopeActive, scopeReady, autoFocusBlocked, locked, chars.length, length]);
 
   // Move only after the controlled value reaches the cells. Focusing during
   // onChangeText sees the old value and can bounce back to the previous end.
   useLayoutEffect(() => {
-    if (focusedIndex === null || locked) return;
+    if (focusedIndex === null) return;
+    if (focusSuspended) {
+      // The user already lost this surface; a later resume must start from a
+      // new deliberate focus, not this stale cell index.
+      setFocusedIndex(null);
+      return;
+    }
+    if (locked) return;
     if (Platform.OS === "web" && document.activeElement !== document.body &&
       !inputRefs.current.some((input) => input?.isFocused())) {
       setFocusedIndex(null);
       return;
     }
     inputRefs.current[Math.min(focusedIndex, chars.length, length - 1)]?.focus();
-  }, [focusedIndex, chars, locked, length, stacked]);
+  }, [focusedIndex, chars, locked, length, stacked, focusSuspended]);
 
   useEffect(() => {
     if (chars.length > prevLen.current) haptics.selection();
@@ -247,7 +326,6 @@ export function OtpInput({
         value={chars[i] ?? ""}
         onChangeText={(raw) => setCode(raw, i)}
         onFocus={() => {
-          didFocus.current = true;
           const target = Math.min(i, chars.length);
           if (target !== i) { focusCell(target); return; }
           setFocusedIndex(i);
