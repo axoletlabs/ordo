@@ -107,8 +107,8 @@ async function articleSignature(page) {
   });
 }
 
-/** Arm per-interaction counters, run `act`, then wait until the article style
- * signature moves and the tree has been mutation-quiet for three frames.
+/** Arm per-interaction counters, run `act`, then wait until the expected article
+ * style change and a mutation-quiet window. Equivalent appearance must stay put.
  * Reports React commits, long tasks and article/dialog DOM mutation classes. */
 async function instrumented(page, label, act, { expectArticleChange = true }) {
   const before = await articleSignature(page);
@@ -195,6 +195,9 @@ async function instrumented(page, label, act, { expectArticleChange = true }) {
   }, expectArticleChange);
   if (sample.timedOut) console.error(`${label} TIMED OUT:`, JSON.stringify(sample, null, 1));
   assert.equal(sample.timedOut, false, `${label}: ${JSON.stringify(sample.stillMutating ?? [])}`);
+  if (!expectArticleChange) {
+    assert.equal(await articleSignature(page), before, `${label}: the article's appearance must not change`);
+  }
   delete sample.stillMutating;
   return { label, ...sample };
 }
@@ -234,7 +237,8 @@ async function runMode(browser, { theme, expressive, viewport, mode }) {
     samples.push(await instrumented(page, "change text size large->medium",
       () => page.getByRole("radio", { name: "Medium", exact: true }).click(), {}));
     samples.push(await instrumented(page, "change theme system->light",
-      () => page.getByRole("radio", { name: "Light", exact: true }).click(), {}));
+      () => page.getByRole("radio", { name: "Light", exact: true }).click(), { expectArticleChange: theme !== "light" }));
+    await page.getByRole("radio", { name: "Light", exact: true }).and(page.locator('[aria-checked="true"]')).waitFor();
     samples.push(await instrumented(page, "change theme light->dark",
       () => page.getByRole("radio", { name: "Dark", exact: true }).click(), {}));
     samples.push(await instrumented(page, "toggle amoled on",
