@@ -51,6 +51,7 @@ export function isMenuAnchorRect(value: MenuAnchorRect | null | undefined): valu
 
 export type MeasureNode = {
   measureInWindow?: (callback: (x: number, y: number, width: number, height: number) => void) => void;
+  getBoundingClientRect?: () => MenuAnchorRect;
 };
 
 type PointEvent = { nativeEvent: { pageX: number; pageY: number } };
@@ -77,6 +78,17 @@ export function measureAnchor(
     }
     if (event) onMeasured(rectFromPoint(event));
   };
+
+  // RN web's measureInWindow defers the callback. Read the existing DOM box
+  // synchronously so a picker owns Escape as soon as its trigger is pressed,
+  // rather than letting that key dismiss the still-interactive parent first.
+  if (node?.getBoundingClientRect) {
+    const rect = node.getBoundingClientRect();
+    if (isMenuAnchorRect(rect)) {
+      finish({ x: rect.x, y: rect.y, width: rect.width, height: rect.height });
+      return;
+    }
+  }
 
   if (!node || typeof node.measureInWindow !== "function") {
     finish(null);

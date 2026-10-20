@@ -158,6 +158,7 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
     // opened as a sibling still owns its trigger when it becomes interactive.
     let session = sessionRef.current;
     const reopening = Boolean(session && session.restoring && session.trigger?.isConnected);
+    const retainedOpeningFocus = reopening ? document.activeElement : null;
     if (!session || (!session.active && !reopening)) {
       restoreGeneration += 1;
       const root = node();
@@ -174,16 +175,16 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
       };
       sessionRef.current = session;
     } else if (!session.active) {
-      // Reopening during the retained exit fade keeps the original trigger
-      // and caret instead of capturing the surface's own focused field.
+      // A fresh opening keeps the original launch trigger, not the old
+      // retained control (e.g. Paste). Only a child resume keeps lastFocus.
       restoreGeneration += 1;
       cancelRestore(session);
       // Closing evacuated focus from the retained tree. If nothing else has
       // taken it, resume the field the user was in once the surface returns.
-      const focused = document.activeElement as HTMLElement | null;
       session.active = true;
       session.alive = true;
-      session.focusPending = !focused || focused === document.body || !focused.isConnected;
+      session.lastFocus = null;
+      session.focusPending = !suspended;
     }
     const root = node();
     if (root) {
@@ -220,7 +221,8 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
       isolate();
       if (topOverlay() !== current) { session!.focusPending = false; return; }
       // Returning from a dropdown keeps its restored trigger focus.
-      if (current.contains(document.activeElement) && document.activeElement !== current) {
+      if (current.contains(document.activeElement) && document.activeElement !== current
+        && document.activeElement !== retainedOpeningFocus) {
         session!.focusPending = false;
         return;
       }
@@ -412,6 +414,15 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
       closing.active = false;
       if (!mountedRef.current) return;
       const root = closing.root;
+      const evacuate = () => {
+        if (!closing.alive || closing.active || activeRef.current) return;
+        const focused = document.activeElement as HTMLElement | null;
+        const surface = focused?.closest<HTMLElement>("[data-material-overlay]");
+        if (focused && (focused === root || root?.contains(focused)
+          || (surface?.getAttribute("data-material-overlay") === "false" && ownsSurface(surface, root)))) {
+          focused.blur();
+        }
+      };
       // A retained exit tree is already hidden/inert. Never leave keyboard
       // focus inside it while an exit animation or external isolation runs:
       // release to body now, then restore the trigger when it is focusable.
@@ -427,7 +438,13 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
       const successor = topOverlay();
       const handingOff = Boolean(successor && successor !== root && !successor.contains(root));
       if ((focusInThisSurface || focusInClosingChild) && !focusInActiveSurface && !handingOff) focused?.blur?.();
-      if (!closing.trigger) return;
+      if (!closing.trigger) {
+        closing.restoreFrame = requestAnimationFrame(() => {
+          closing.restoreFrame = 0;
+          evacuate();
+        });
+        return;
+      }
       const trigger = closing.trigger;
       const token = ++closing.restoreToken;
       // Session starts advance the generation; sibling closes in the same
@@ -472,6 +489,12 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
       const attempt = () => {
         closing.restoreFrame = 0;
         if (closing.restoreToken !== token || closing.restoring === false) return;
+        // The portal may publish aria-hidden/data-material-overlay one commit
+        // after its publisher closes. Do not trust that stale DOM flag. By the
+        // first frame successor hooks have captured their triggers, so release
+        // any remaining focus owned by this closed session before waiting for
+        // exit isolation to release the background.
+        evacuate();
         // A newer surface/close owns focus now. This observer is obsolete.
         if (generation !== restoreGeneration) { finish(); return; }
         if (!closing.alive || closing.active || !trigger.isConnected) { finish(); return; }

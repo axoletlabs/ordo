@@ -563,6 +563,48 @@ test("restoration waits for the exit isolation to release, then focuses the trig
 /* Keyboard / caret                                                    */
 /* ------------------------------------------------------------------ */
 
+test("close evacuates a retained portal before its delayed inactive DOM publication", async () => {
+  const app = mount();
+  const render = (active, published) => app.render(h("div", null,
+    h("div", { id: "portal-background" }, trigger("portal-fab")),
+    overlay({ id: "portal-sheet", active, published }, input("portal-link"), button("portal-close"))));
+  await render(false, false);
+  document.getElementById("portal-fab").focus();
+  await render(true, true);
+  await flush(3);
+  const release = isolateModal(document.getElementById("portal-sheet"));
+  document.getElementById("portal-close").focus();
+  // The publisher closes first; the portal's DOM still says active until its
+  // own next commit. The background stays inert throughout the exit fade.
+  await render(false, true);
+  await flush(1);
+  assert.notEqual(document.activeElement?.id, "portal-close");
+  assert.notEqual(document.activeElement?.id, "portal-fab");
+  await render(false, false);
+  release();
+  await settleMutation();
+  await flush(3);
+  assert.equal(document.activeElement?.id, "portal-fab");
+  await app.unmount();
+});
+
+test("a fresh retained reopen focuses Link rather than the last Paste action", async () => {
+  const app = mount();
+  const render = active => app.render(h("div", null,
+    trigger("paste-fab"),
+    overlay({ id: "paste-sheet", active, published: active }, input("paste-link"), button("paste-action"))));
+  await render(false);
+  document.getElementById("paste-fab").focus();
+  await render(true);
+  await flush(3);
+  document.getElementById("paste-action").focus();
+  await render(false);
+  await render(true);
+  await flush(3);
+  assert.equal(document.activeElement?.id, "paste-link");
+  await app.unmount();
+});
+
 test("Tab containment, only-top Escape, and typing keep the current caret", async () => {
   const app = mount();
   let dismissals = 0;
