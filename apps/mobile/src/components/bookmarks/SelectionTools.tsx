@@ -24,6 +24,7 @@ import { toast } from "../ui/toast-store";
 import { layout } from "../../theme/tokens";
 import type { SelectionStore } from "../../lib/selection-state";
 import { indexSelectionItems, selectedItems, selectionCapabilities } from "../../lib/selection-items";
+import { prepActionSheets } from "../../hooks/use-action-sheet-prep";
 import { LazyMount } from "../ui/LazyMount";
 
 const noFolders: readonly FolderDto[] = [];
@@ -212,6 +213,9 @@ function SelectionToolsContent({
           label="Add tags"
           disabled={empty || busy}
           onPress={() => {
+            // Mount the sheet in this press commit so the More menu's exit
+            // window covers it; the handoff lands on a prepared surface.
+            prepActionSheets("addTags");
             setMore({ open: false, anchor: null });
             setTagsOpen(true);
           }}

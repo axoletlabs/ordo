@@ -16,6 +16,7 @@ import { TagChip } from "./TagChip";
 import { TagSelectList } from "./TagSelectList";
 import { CreateTagPanel } from "./CreateTagPanel";
 import { useUpdateBookmarkTags } from "../../hooks/use-tags";
+import { useActionSheetPrep } from "../../hooks/use-action-sheet-prep";
 import { errorMessage } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -30,6 +31,9 @@ export interface EditTagsSheetProps {
 export function EditTagsSheet({ visible, onDismiss, bookmark }: EditTagsSheetProps) {
   const { palette } = useTheme();
   const updateTags = useUpdateBookmarkTags();
+  // Stay prepared (hidden, inert) between handoffs rather than remounting the
+  // catalogue and waiting for native measurement on every reopening.
+  const prep = useActionSheetPrep("editTags");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [createTagOpen, setCreateTagOpen] = useState(false);
@@ -86,20 +90,24 @@ export function EditTagsSheet({ visible, onDismiss, bookmark }: EditTagsSheetPro
     }
   };
 
-  if (!bookmark) return null;
+  // A warm shell still mounts the (expensive) catalogue list so the entrance
+  // has real content; the bookmark-dependent chips simply render empty until
+  // the handoff delivers the bookmark in the same commit as `visible`.
+  if (!bookmark && !(prep || visible)) return null;
 
+  const known = bookmark ? [...bookmark.tags, ...bookmark.suggestedTags] : [];
   const assigned = selectedIds
     .map((id) => {
-      const known = [...bookmark.tags, ...bookmark.suggestedTags].find((t) => t.id === id);
-      return known ? { id, name: known.name, color: known.color } : null;
+      const match = known.find((t) => t.id === id);
+      return match ? { id, name: match.name, color: match.color } : null;
     })
     .filter((t): t is { id: string; name: string; color: TagSummaryDto["color"] } => t !== null);
 
   return (
     <>
-      <FloatingPanel visible={visible} obscured={createTagOpen} onDismiss={onDismiss} scrollBody={false}>
+      <FloatingPanel visible={visible} keepMounted={prep || visible} obscured={createTagOpen} onDismiss={onDismiss} scrollBody={false}>
         <PanelHeader title="Edit tags" />
-        <TagSelectList selectedIds={selectedIds} onToggle={toggle} extraTags={bookmark.tags}
+        <TagSelectList selectedIds={selectedIds} onToggle={toggle} extraTags={bookmark?.tags ?? []}
           onRequestCreateTag={() => setCreateTagOpen(true)} header={<View style={styles.body}>
       {assigned.length > 0 ? (
         <ScrollView

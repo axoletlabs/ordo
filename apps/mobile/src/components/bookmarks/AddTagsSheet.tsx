@@ -15,10 +15,20 @@ import { errorMessage } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
 import { toast } from "../ui/toast-store";
 import { spacing } from "../../theme/tokens";
+import { useActionSheetPrep } from "../../hooks/use-action-sheet-prep";
 import { LazyMount } from "../ui/LazyMount";
 
-export function AddTagsSheet(props: Parameters<typeof AddTagsContent>[0]) {
-  return <LazyMount active={props.visible}>{() => <AddTagsContent {...props} />}</LazyMount>;
+export interface AddTagsSheetProps {
+  visible: boolean;
+  onDismiss: () => void;
+  bookmarkIds: readonly string[];
+  folderId?: string | null;
+  onAdded?: () => void;
+}
+
+export function AddTagsSheet(props: AddTagsSheetProps) {
+  const prep = useActionSheetPrep("addTags");
+  return <LazyMount active={props.visible || prep}>{() => <AddTagsContent {...props} prep={prep} />}</LazyMount>;
 }
 
 function AddTagsContent({
@@ -27,13 +37,8 @@ function AddTagsContent({
   bookmarkIds,
   folderId,
   onAdded,
-}: {
-  visible: boolean;
-  onDismiss: () => void;
-  bookmarkIds: readonly string[];
-  folderId?: string | null;
-  onAdded?: () => void;
-}) {
+  prep,
+}: AddTagsSheetProps & { prep: boolean }) {
   const batch = useBatchBookmarks();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [createTagOpen, setCreateTagOpen] = useState(false);
@@ -75,7 +80,7 @@ function AddTagsContent({
 
   return (
     <>
-      <FloatingPanel visible={visible} obscured={createTagOpen} onDismiss={onDismiss} scrollBody={false}>
+      <FloatingPanel visible={visible} keepMounted={prep} obscured={createTagOpen} onDismiss={onDismiss} scrollBody={false}>
         <PanelHeader title="Add tags" />
         <View style={styles.body}>
           <TagSelectList

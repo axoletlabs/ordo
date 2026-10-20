@@ -12,6 +12,7 @@ import { toast } from "../ui/toast-store";
 import { errorMessage } from "../../lib/error-message";
 import { bookmarkKey } from "../../hooks/use-selection";
 import { useMenuHighlight } from "../../hooks/use-menu-highlight";
+import { prepActionSheets } from "../../hooks/use-action-sheet-prep";
 import { useOverlaySessionMode } from "../../lib/overlay-session-mode";
 import { useServerInfo } from "../../hooks/queries";
 import { formatReminderWhen } from "../../lib/bookmark-reminders";
@@ -64,7 +65,10 @@ export function BookmarkActionsSheet({
   const displayBookmark = bookmark ?? bookmarkRef.current;
   const nextAction = React.useRef<(() => void) | null>(null);
   useLayoutEffect(() => { if (visible) nextAction.current = null; }, [visible]);
-  const handoff = (action: () => void) => {
+  const handoff = (target: "move" | "editTags", action: () => void) => {
+    // Retain the receiving surface after first use. The sanctioned exit-start
+    // handoff overlaps its entrance with this menu's retained exit fade.
+    prepActionSheets(target);
     nextAction.current = action;
     onDismiss();
   };
@@ -83,7 +87,7 @@ export function BookmarkActionsSheet({
       <ContextMenu
         visible={visible && (mode === "menu" || (mode === "remind" && remindPage === "presets"))}
         onDismiss={onDismiss}
-        onExited={() => {
+        onExiting={() => {
           const action = nextAction.current;
           nextAction.current = null;
           action?.();
@@ -117,7 +121,7 @@ export function BookmarkActionsSheet({
           icon="folder-open-outline"
           label="Move to folder"
           onPress={() => {
-            handoff(() => onMove(displayBookmark));
+            handoff("move", () => onMove(displayBookmark));
           }}
         />
         {onEditTags ? (
@@ -125,7 +129,7 @@ export function BookmarkActionsSheet({
             icon="pricetags-outline"
             label="Edit tags"
             onPress={() => {
-              handoff(() => onEditTags(displayBookmark));
+              handoff("editTags", () => onEditTags(displayBookmark));
             }}
           />
         ) : null}
