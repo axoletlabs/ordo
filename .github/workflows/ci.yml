@@ -181,6 +181,9 @@ jobs:
       - name: Mobile regression tests
         run: pnpm --filter @ordo/mobile test
 
+      - name: Server regression tests
+        run: pnpm --filter @ordo/server test
+
       - name: Typecheck
         run: pnpm -r typecheck
 
