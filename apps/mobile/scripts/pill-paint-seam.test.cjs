@@ -369,7 +369,7 @@ test("The pill state layer fades in its fill color, never an element opacity", (
   updaters.length = 0; sharedValueRegistry.length = 0;
   const result = mountPill(new MockValue(120), 342);
   assert.equal(result.sharedValueReads, 0, "mount reads no shared value from JS");
-  assert.equal(result.delta.sharedValues, 4, "progress, layer, background, corners — no extra state");
+  assert.equal(result.delta.sharedValues, 3, "layer, background, corners — the pill never scales, so no transform progress");
   // No part of the state layer carries an opacity style.
   const stateCanvas = byTestID(result.tree, "material-pill-state-layer")[0];
   assert.equal(flatStyle(stateCanvas.props.style).opacity, undefined, "the overlay canvas keeps opacity 1");
@@ -443,10 +443,10 @@ test("The shared pressable's fallback state layer also fades in color", () => {
   assert.ok(styleEntries(layer.props.style).some(e => e && e.__animatedStyle), "the animated fill is applied to the layer view");
 });
 
-test("Mounting a pill allocates exactly the animated pressable's four shared values", () => {
+test("Mounting a pill allocates exactly the shaped pressable's three shared values", () => {
   platformState.OS = "web";
   sharedValueRegistry.length = 0;
   const result = mountPill(new MockValue(120), 342);
-  assert.deepEqual(result.delta, { sharedValues: 4, animatedStyles: 4, springs: 0 }, "the fade redesign adds no Reanimated state");
+  assert.deepEqual(result.delta, { sharedValues: 3, animatedStyles: 3, springs: 0 }, "the fade redesign adds no Reanimated state");
   assert.equal(result.sharedValueReads, 0, "no synchronous shared-value JS reads");
 });

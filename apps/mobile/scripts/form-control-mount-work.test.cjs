@@ -17,6 +17,7 @@ const sourceRoot = process.env.ORDO_CONTROL_SOURCE_ROOT ?? resolve(__dirname, ".
 const frameMap = new Map();
 const effectsQueue = [];
 let activeFrame = null;
+let activePath = "";
 let renderDepth = 0;
 const counters = { sharedValues: 0, animatedStyles: 0, springs: 0, motionHooks: 0, sharedValueReads: 0, remounts: 0, pressableShapes: [], pressableImplementations: [] };
 let themeState = { expressive: true, reducedMotion: false };
@@ -53,22 +54,30 @@ const react = {
     return slots[index];
   },
   useEffect(fn) { activeFrame.cursor++; effectsQueue.push(fn); },
+  useLayoutEffect(fn) { activeFrame.cursor++; effectsQueue.push(fn); },
+  useId: () => "test-id",
+  forwardRef: render => render,
   useSyncExternalStore: (_subscribe, getSnapshot) => getSnapshot(),
   useContext: context => (context && typeof context === "object" && "_current" in context ? context._current : undefined),
   createContext: initial => ({ _current: initial, Provider: "Provider", Consumer: "Consumer" }),
   isValidElement: element => !!element && typeof element === "object" && "type" in element && "props" in element,
   cloneElement: (element, props, ...children) =>
     ({ ...element, props: { ...element.props, ...props, ...(children.length ? { children } : {}) } }),
-  memo: component => {
+  memo: (component, compare) => {
+    // Memo state is per mounted position, like React's fiber; a single `last`
+    // would make list items compare against their previous sibling.
     const memoized = Object.assign(props => {
-      if (memoized.last && Object.is(memoized.last.props, props)) return memoized.last.output;
-      if (memoized.last && Object.keys(memoized.last.props).length === Object.keys(props).length
-        && Object.keys(props).every(key => Object.is(memoized.last.props[key], props[key]))) return memoized.last.output;
+      const last = memoized.lastByPath.get(activePath);
+      if (last && Object.is(last.props, props)) return last.output;
+      const same = last && (compare ? compare(last.props, props)
+        : Object.keys(last.props).length === Object.keys(props).length
+          && Object.keys(props).every(key => Object.is(last.props[key], props[key])));
+      if (same) return last.output;
       memoized.invocations++;
       const output = component(props);
-      memoized.last = { props, output };
+      memoized.lastByPath.set(activePath, { props, output });
       return output;
-    }, { last: null, invocations: 0 });
+    }, { lastByPath: new Map(), invocations: 0, componentName: component.name });
     memoWrappers.push(memoized);
     return memoized;
   },
@@ -92,10 +101,12 @@ function renderNode(node, path) {
     if (node.type === pressableScaleType) counters.pressableShapes.push(node.props.shape);
     const frame = hooksFrame(path, node.type);
     const previous = activeFrame;
+    const previousPath = activePath;
     activeFrame = frame;
+    activePath = path;
     frame.cursor = 0;
     let output;
-    try { output = node.type(node.props); } finally { activeFrame = previous; }
+    try { output = node.type(node.props); } finally { activeFrame = previous; activePath = previousPath; }
     if (node.type === pressableScaleType) counters.pressableImplementations.push(output.type);
     frame.first = false;
     return renderNode(output, `${path}()`);
@@ -109,6 +120,9 @@ function renderNode(node, path) {
 function mount(component) {
   const path = `root/${component.name ?? Math.random()}`;
   frameMap.clear();
+  // A fresh mount starts from empty fibers, so memo caches cannot leak between
+  // tests that render different option sets at the same tree positions.
+  for (const wrapper of memoWrappers) wrapper.lastByPath.clear();
   const render = props => {
     renderDepth++;
     try {
@@ -189,6 +203,13 @@ const MOTION_CONFIGS = {
   standardFast: { id: "standard.fast" },
   expressiveFast: { id: "expressive.fast" },
 };
+// Real useMaterialMotion returns a frozen scheme shared by every caller with
+// the same expressive/reduced-motion flags.
+const MOTION_SCHEMES = Object.fromEntries([false, true].flatMap(expressive => [false, true].map(reducedMotion =>
+  [`${expressive}:${reducedMotion}`, {
+    fast: expressive ? MOTION_CONFIGS.expressiveFast : MOTION_CONFIGS.standardFast,
+    expressive, reducedMotion,
+  }])));
 const modules = new Map();
 function mockFor(resolved) {
   const base = resolved.slice(sourceRoot.length);
@@ -202,16 +223,14 @@ function mockFor(resolved) {
     materialMotion: { effects: { fast: MOTION_CONFIGS.effectsFast } },
     useMaterialMotion: () => {
       if (activeFrame?.first) counters.motionHooks++;
-      return {
-        fast: themeState.expressive ? MOTION_CONFIGS.expressiveFast : MOTION_CONFIGS.standardFast,
-        expressive: themeState.expressive,
-        reducedMotion: themeState.reducedMotion,
-      };
+      return MOTION_SCHEMES[`${themeState.expressive}:${themeState.reducedMotion}`];
     },
   };
   if (base === "/theme/tokens.ts") return {
     radius: { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, full: 9999 },
     spacing: new Proxy({}, { get: () => 8 }),
+    fontSize: { md: 16 },
+    resolveFont: () => undefined,
     layout: {},
     timing: { normal: 200, slow: 300 },
   };
@@ -242,7 +261,8 @@ function load(filename) {
     if (name === "react") return react;
     if (name === "react/jsx-runtime") return { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: "Fragment" };
     if (name === "react-native") return {
-      Platform: platformState, View: "View", Pressable: "Pressable", AppState: { currentState: "active" },
+      Platform: Object.assign(platformState, { select: choices => choices[platformState.OS] ?? choices.default }),
+      View: "View", Pressable: "Pressable", TextInput: "TextInput", AppState: { currentState: "active" },
       StyleSheet: {
         create: x => x,
         flatten: style => (Array.isArray(style) ? Object.assign({}, ...style.map(s => s && typeof s === "object" ? s : {})) : style ?? undefined),
@@ -274,13 +294,32 @@ test("Standard-mode icon buttons and buttons pass a non-morphing shape without m
   // Standard keeps the animated pressable on purpose: PressableScale selects
   // its implementation from the presence of `shape`, and a mode switch must not
   // swap implementations (that would remount focused/pressed controls).
-  assert.deepEqual(icon.delta, { sharedValues: 4, animatedStyles: 4, springs: 0, motionHooks: 1 });
+  assert.deepEqual(icon.delta, { sharedValues: 3, animatedStyles: 3, springs: 0, motionHooks: 1 });
   assert.deepEqual(icon.shapes, [{ rest: 20, pressed: 20 }], "the capsule keeps its resting corners");
   assert.equal(icon.implementations.length, 1);
   const button = counted(mount(ui("Button.tsx").Button), { label: "Save", onPress: () => {} });
-  assert.deepEqual(button.delta, { sharedValues: 4, animatedStyles: 4, springs: 0, motionHooks: 1 });
+  assert.deepEqual(button.delta, { sharedValues: 3, animatedStyles: 3, springs: 0, motionHooks: 1 });
   assert.equal(button.shapes[0].rest, button.shapes[0].pressed, "the pressed shape does not morph");
   assert.equal(button.implementations.length, 1);
+});
+
+test("Scaled and dimmed surfaces keep the full transform feedback state", () => {
+  themeState = { expressive: true, reducedMotion: false };
+  const render = mount(ui("PressableScale.tsx").PressableScale);
+  const props = { scaleTo: 0.96, style: { borderRadius: 20 }, accessibilityRole: "button", children: "X" };
+  const first = counted(render, props);
+  assert.deepEqual(first.delta, { sharedValues: 4, animatedStyles: 4, springs: 0, motionHooks: 1 },
+    "the scale strategy adds progress + its animated style to the three surface values");
+  assert.equal(first.sharedValueReads, 0);
+  // Pressing reaches the transform hook: the progress spring and the state
+  // layer fade both start, while the unchanged corner target stays put.
+  const pressable = findNode(first.tree, node => typeof node.props?.onPressIn === "function");
+  pressable.props.onPressIn({});
+  const pressed = counted(render, props);
+  assert.equal(pressed.delta.springs, 2, "progress + state layer spring on press");
+  assert.equal(pressed.sharedValueReads, 0, "the transform worklet reads no shared value from JS");
+  const dimmed = counted(mount(ui("PressableScale.tsx").PressableScale), { dim: true, style: { borderRadius: 20 }, accessibilityRole: "button", children: "X" });
+  assert.deepEqual(dimmed.delta, { sharedValues: 4, animatedStyles: 4, springs: 0, motionHooks: 1 });
 });
 
 test("Theme mode switches keep the same pressable implementation (no remount)", () => {
@@ -291,6 +330,7 @@ test("Theme mode switches keep the same pressable implementation (no remount)", 
     // A control without an explicit shape stays on the plain pressable; its
     // implementation must also survive mode switches.
     [mount(ui("Toggle.tsx").Toggle), { value: true, onValueChange: () => {} }, 1],
+    [mount(ui("PressableScale.tsx").PressableScale), { scaleTo: 0.96, style: { borderRadius: 20 }, accessibilityRole: "button", children: "X" }, 1],
   ];
   for (const [render, props, count] of cases) {
     themeState = { expressive: false, reducedMotion: false };
@@ -321,33 +361,70 @@ function findNode(node, predicate) {
   if (predicate(node)) return node;
   return findNode(node.props?.children, predicate);
 }
-function pressableOutline(tree) {
-  const pressable = findNode(tree, node => typeof node.props?.onFocus === "function" && node.props?.accessibilityRole === "button");
+function pressableOutline(tree, role = "button") {
+  const pressable = findNode(tree, node => typeof node.props?.onFocus === "function" && node.props?.accessibilityRole === role);
   assert.ok(pressable, "the control exposes a pressable");
   const style = Array.isArray(pressable.props.style)
     ? Object.assign({}, ...pressable.props.style.flat(Infinity).filter(entry => entry && typeof entry === "object")) : pressable.props.style;
   return style.outlineWidth;
 }
 
-test("Focus survives a theme mode switch instead of remounting the pressable", () => {
+function visualSurfaceNode(tree) {
+  return findNode(tree, node => node.props?.testID === "material-visual-surface");
+}
+function flatNodeStyle(node) {
+  return Array.isArray(node.props.style)
+    ? Object.assign({}, ...node.props.style.flat(Infinity).filter(entry => entry && typeof entry === "object")) : node.props.style;
+}
+
+test("Focus paints an inset ring on painted surfaces and keeps outer outlines elsewhere", () => {
   const previousPlatform = platformState.OS;
-  // Web exposes the focus-visible outline in the rendered style, so the test
-  // can observe live focus state rather than inferred implementation identity.
+  // Web exposes focus-visible feedback in the rendered style, so the test can
+  // observe live focus state rather than inferred implementation identity.
   platformState.OS = "web";
   try {
-    for (const [render, props] of [
-      [mount(ui("IconButton.tsx").IconButton), { name: "close", onPress: () => {} }],
-      [mount(ui("Button.tsx").Button), { label: "Save", onPress: () => {} }],
+    for (const [render, props, role] of [
+      [mount(ui("IconButton.tsx").IconButton), { name: "close", onPress: () => {} }, "button"],
+      [mount(ui("Button.tsx").Button), { label: "Save", onPress: () => {} }, "button"],
+      [mount(ui("Segmented.tsx").Segmented), { options: FOUR_OPTIONS, value: "a", onChange: () => {} }, "radio"],
     ]) {
       themeState = { expressive: false, reducedMotion: false };
       const resting = counted(render, props);
-      assert.equal(pressableOutline(resting.tree), undefined, "an unfocused control paints no outline");
-      const pressable = findNode(resting.tree, node => typeof node.props?.onFocus === "function" && node.props?.accessibilityRole === "button");
+      const restingSurface = visualSurfaceNode(resting.tree);
+      assert.ok(restingSurface, "the painted surface is present");
+      assert.equal(flatNodeStyle(restingSurface).outlineWidth, undefined, "an unfocused painted control has no ring");
+      assert.equal(pressableOutline(resting.tree, role), undefined, "and no outer outline");
+      const pressable = findNode(resting.tree, node => typeof node.props?.onFocus === "function" && node.props?.accessibilityRole === role);
       pressable.props.onFocus({ currentTarget: { matches: () => true } });
-      assert.equal(pressableOutline(counted(render, props).tree), 3, "focus-visible paints the 3dp outline");
+      const focused = counted(render, props);
+      const surface = visualSurfaceNode(focused.tree);
+      const surfaceStyle = flatNodeStyle(surface);
+      assert.equal(surfaceStyle.outlineWidth, 3, "focus paints the 3dp indicator on the painted surface");
+      assert.equal(surfaceStyle.outlineOffset, -3, "the indicator is inset so adjacent hitboxes cannot clip it");
+      assert.equal(typeof surfaceStyle.outlineColor, "string");
+      assert.equal(surface.props.style.length, 4, "the surface keeps visualStyle, paint, animated corners and the ring");
+      assert.equal(pressableOutline(focused.tree, role), undefined, "the square 48dp hit outline is not used");
+      const focusedHost = findNode(focused.tree, node => typeof node.props?.onFocus === "function" && node.props?.accessibilityRole === role);
+      assert.equal(flatNodeStyle(focusedHost).outlineStyle, "none", "the outer hitbox suppresses the browser's square focus outline");
       themeState = { expressive: true, reducedMotion: false };
-      const switched = counted(render, props);
-      assert.equal(pressableOutline(switched.tree), 3, "focus is retained across the mode switch");
+      assert.equal(flatNodeStyle(visualSurfaceNode(counted(render, props).tree)).outlineWidth, 3,
+        "focus is retained across the mode switch");
+    }
+    // Controls without a painted sub-surface keep the existing outer outline:
+    // ordinary pressables and custom renderSurface pills.
+    for (const props of [
+      { style: { borderRadius: 20 }, accessibilityRole: "button", children: "X" },
+      { shape: { rest: 20, pressed: 20 }, stateLayerColor: "#123456", renderSurface: state => state.children,
+        accessibilityRole: "button", children: "X" },
+    ]) {
+      themeState = { expressive: true, reducedMotion: false };
+      const render = mount(ui("PressableScale.tsx").PressableScale);
+      const resting = counted(render, props);
+      const pressable = findNode(resting.tree, node => typeof node.props?.onFocus === "function");
+      pressable.props.onFocus({ currentTarget: { matches: () => true } });
+      const focused = counted(render, props);
+      assert.equal(visualSurfaceNode(focused.tree), null, "no painted sub-surface without a visualStyle");
+      assert.equal(pressableOutline(focused.tree), 3, "ordinary/renderSurface controls keep the outer focus outline");
     }
   } finally { platformState.OS = previousPlatform; }
 });
@@ -368,11 +445,11 @@ test("Standard-mode segmented groups keep the plain outline shape and skip resel
   frameMap.clear();
   const segmented = mount(ui("Segmented.tsx").Segmented);
   const first = counted(segmented, { options: FOUR_OPTIONS, value: "a", onChange: () => {} });
-  // 4 pressables × 4 + 4 labels × 2 = 24. The pressables stay animated so the
-  // Expressive/Standard switch never replaces them.
-  assert.equal(first.delta.sharedValues, 24);
-  assert.equal(first.delta.animatedStyles, 24);
-  assert.equal(first.delta.motionHooks, 5, "one group subscription, one per pressable");
+  // 4 shaped pressables × 3 + 4 labels × 1 = 16. The pressables stay animated
+  // so the Expressive/Standard switch never replaces them.
+  assert.equal(first.delta.sharedValues, 16);
+  assert.equal(first.delta.animatedStyles, 20, "4 pressables × 3 + 4 labels × 2");
+  assert.equal(first.delta.motionHooks, 1, "the group shares one motion subscription with its segments");
   assert.equal(first.shapes.length, 4);
   // Standard keeps the outer capsule ends at 20dp and square interior corners;
   // either way rest and pressed are identical, so nothing morphs on press.
@@ -381,7 +458,7 @@ test("Standard-mode segmented groups keep the plain outline shape and skip resel
   for (const shape of first.shapes) assert.deepEqual(shape.pressed, shape.rest);
   const reselect = counted(segmented, { options: FOUR_OPTIONS, value: "b", onChange: () => {} });
   assert.equal(reselect.delta.sharedValues, 0, "selection changes allocate nothing");
-  assert.equal(reselect.delta.springs, 6, "two labels spring tint/check and two segment backgrounds tint");
+  assert.equal(reselect.delta.springs, 4, "two labels spring selection and two segment backgrounds tint");
 });
 
 test("Expressive segmented groups keep per-segment shape morphing and skip re-allocation", () => {
@@ -389,12 +466,12 @@ test("Expressive segmented groups keep per-segment shape morphing and skip re-al
   frameMap.clear();
   const segmented = mount(ui("Segmented.tsx").Segmented);
   const first = counted(segmented, { options: FOUR_OPTIONS, value: "a", onChange: () => {} });
-  assert.equal(first.delta.sharedValues, 24, "4 pressables × 4 + 4 labels × 2");
-  assert.equal(first.delta.motionHooks, 5, "one group subscription plus one per animated pressable");
+  assert.equal(first.delta.sharedValues, 16, "4 pressables × 3 + 4 labels × 1");
+  assert.equal(first.delta.motionHooks, 1, "one group subscription shared with every segment");
   assert.ok(first.shapes.every(shape => shape && shape.rest !== shape.pressed));
   const reselect = counted(segmented, { options: FOUR_OPTIONS, value: "b", onChange: () => {} });
   assert.equal(reselect.delta.sharedValues, 0);
-  assert.equal(reselect.delta.springs, 6, "two labels spring tint/check and two segments spring corners");
+  assert.equal(reselect.delta.springs, 4, "two labels spring selection and two segments spring corners");
 });
 
 test("Reduced-motion segmented groups set selection directly without springs", () => {
@@ -410,7 +487,7 @@ test("Segmented hidden measuring labels do not re-render on selection changes", 
   themeState = { expressive: true, reducedMotion: false };
   const segmented = mount(ui("Segmented.tsx").Segmented);
   segmented({ options: FOUR_OPTIONS, value: "a", onChange: () => {} });
-  const wrapper = memoWrappers.find(memo => memo.invocations > 0);
+  const wrapper = memoWrappers.find(memo => memo.componentName === "SegmentMeasures" && memo.invocations > 0);
   assert.ok(wrapper, "harness sees the measuring row render");
   const afterFirst = wrapper.invocations;
   segmented({ options: FOUR_OPTIONS, value: "b", onChange: () => {} });
@@ -451,6 +528,57 @@ test("No control reads a shared value synchronously from JavaScript while mounti
       assert.equal(result.sharedValueReads, 0, "mount must not read shared values from JS");
     }
   }
+});
+
+test("Selecting a segment repaints only the two options whose state changed", () => {
+  themeState = { expressive: true, reducedMotion: false };
+  const FIVE = [
+    { value: "a", label: "Alpha" }, { value: "b", label: "Beta" }, { value: "c", label: "Gamma" },
+    { value: "d", label: "Delta" }, { value: "e", label: "Epsilon" },
+  ];
+  frameMap.clear();
+  const segmented = mount(ui("Segmented.tsx").Segmented);
+  const segment = memoWrappers.find(memo => memo.componentName === "Segment");
+  const label = memoWrappers.find(memo => memo.componentName === "SegmentLabel");
+  const measures = memoWrappers.find(memo => memo.componentName === "SegmentMeasures");
+  assert.ok(segment && label && measures);
+  const before = { segment: segment.invocations, label: label.invocations, measures: measures.invocations };
+  segmented({ options: FIVE, value: "a", onChange: () => {} });
+  assert.equal(segment.invocations - before.segment, 5);
+  assert.equal(label.invocations - before.label, 5);
+  assert.equal(measures.invocations - before.measures, 1);
+  // A reselect re-renders the two selected pressables and their labels; the
+  // three unchanged options bail out through their memo comparator.
+  counted(segmented, { options: FIVE, value: "b", onChange: () => {} });
+  assert.equal(segment.invocations - before.segment, 7);
+  assert.equal(label.invocations - before.label, 7);
+  assert.equal(measures.invocations - before.measures, 1, "the hidden measuring row stays put");
+  // A parent re-render with a fresh callback but the same value repaints none
+  // of the segments or labels.
+  counted(segmented, { options: FIVE, value: "b", onChange: () => {} });
+  assert.equal(segment.invocations - before.segment, 7);
+  assert.equal(label.invocations - before.label, 7);
+});
+
+test("Input only pays for floating-label animation work when it has a label", () => {
+  themeState = { expressive: true, reducedMotion: false };
+  const unlabeled = counted(mount(ui("Input.tsx").Input), { value: "", onChangeText: () => {}, placeholder: "Search" });
+  assert.deepEqual(unlabeled.delta, { sharedValues: 0, animatedStyles: 0, springs: 0, motionHooks: 0 },
+    "search/inline fields mount no floating-label shared values or motion subscription");
+  const labeled = counted(mount(ui("Input.tsx").Input), { label: "Email", value: "", onChangeText: () => {} });
+  assert.deepEqual(labeled.delta, { sharedValues: 1, animatedStyles: 2, springs: 0, motionHooks: 1 },
+    "a labeled field keeps its one progress value and two animated label styles");
+  const idle = counted(mount(ui("Input.tsx").Input), { label: "Email", value: "", onChangeText: () => {} });
+  assert.equal(idle.delta.springs, 0, "an unchanged resting label does not animate on rerender");
+  const render = mount(ui("Input.tsx").Input);
+  render({ label: "Email", value: "", onChangeText: () => {} });
+  const floating = memoWrappers.find(memo => memo.componentName === "FloatingLabel");
+  assert.ok(floating);
+  const before = floating.invocations;
+  counted(render, { label: "Email", value: "", onChangeText: () => {} });
+  assert.equal(floating.invocations, before, "typing/rereendering the field does not rebuild the label graph");
+  counted(render, { label: "Email", value: "x", onChangeText: () => {} });
+  assert.equal(floating.invocations, before + 1, "a real floating-state change still repaints the label");
 });
 
 test("LinearProgress keeps its segment math after the module-scope geometry extraction", () => {

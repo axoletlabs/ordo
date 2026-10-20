@@ -73,6 +73,28 @@ export interface InputProps extends Omit<TextInputProps, "style"> {
   reserveSupportingSpace?: boolean;
 }
 
+/** Floating label owns its animation so unlabeled fields (search bars, inline
+ * pickers) don't allocate a shared value, two animated styles and a motion
+ * subscription that would never paint. */
+const FloatingLabel = React.memo(function FloatingLabel({ label, floating, filled, fontScale, left, backgroundColor, color }: {
+  label: string; floating: boolean; filled: boolean; fontScale: number;
+  left: number; backgroundColor: string; color: string;
+}) {
+  const motion = useMaterialMotion();
+  const floatProgress = useSharedValue(floating ? 1 : 0);
+  const previousFloat = useRef({ floating, reducedMotion: motion.reducedMotion });
+  useEffect(() => {
+    if (previousFloat.current.floating === floating && previousFloat.current.reducedMotion === motion.reducedMotion) return;
+    previousFloat.current = { floating, reducedMotion: motion.reducedMotion };
+    floatProgress.value = withTiming(floating ? 1 : 0, { duration: motion.reducedMotion ? 0 : 150 });
+  }, [floating, floatProgress, motion.reducedMotion]);
+  const labelPosition = useAnimatedStyle(() => ({ top: 16 - (filled ? 8 : 16 + 8 * fontScale) * floatProgress.value }));
+  const labelType = useAnimatedStyle(() => ({ fontSize: 16 - 4 * floatProgress.value, lineHeight: 24 - 8 * floatProgress.value }));
+  return <Animated.View pointerEvents="none" style={[styles.floatingLabel, { left, backgroundColor }, labelPosition]}>
+    <AnimatedLabel variant="bodyLarge" style={[{ color }, labelType]}>{label}</AnimatedLabel>
+  </Animated.View>;
+});
+
 export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   label,
   error,
@@ -108,7 +130,6 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   const messageId = React.useId();
   const fieldSurface = React.useContext(InputSurfaceContext) ?? palette.surface;
   const panelTitle = React.useContext(PanelTitleContext);
-  const motion = useMaterialMotion();
   const [focused, setFocused] = useState(false);
   const [hovered, setHovered] = useState(false);
   const inactive = disabled || (!editable && !readOnly);
@@ -171,15 +192,6 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   const borderColor = inactive ? alphaTint(palette.onSurface, 0.12) : error ? palette.error : focused ? palette.primary : hovered ? palette.onSurface : palette.outline;
   const borderWidth = search ? 0 : focused && !inactive ? 2 : 1;
   const floating = focused || hasText || !!value;
-  const floatProgress = useSharedValue(floating ? 1 : 0);
-  const previousFloat = useRef({ floating, reducedMotion: motion.reducedMotion });
-  useEffect(() => {
-    if (previousFloat.current.floating === floating && previousFloat.current.reducedMotion === motion.reducedMotion) return;
-    previousFloat.current = { floating, reducedMotion: motion.reducedMotion };
-    floatProgress.value = withTiming(floating ? 1 : 0, { duration: motion.reducedMotion ? 0 : 150 });
-  }, [floating, floatProgress, motion.reducedMotion]);
-  const labelPosition = useAnimatedStyle(() => ({ top: 16 - (filled ? 8 : 16 + 8 * fontScale) * floatProgress.value }));
-  const labelType = useAnimatedStyle(() => ({ fontSize: 16 - 4 * floatProgress.value, lineHeight: 24 - 8 * floatProgress.value }));
   // Keep the system face for secure editing/AutoFill, including across reveal.
   const fontFamily = secret
     ? undefined
@@ -229,12 +241,9 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
         {search && focused && showFocusIndicator ? <View testID="material-search-focus-ring" pointerEvents="none" style={[StyleSheet.absoluteFill, { borderColor, borderWidth: 2, borderRadius: radius.full }]} /> : null}
         {filled ? <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: borderWidth, backgroundColor: borderColor }} />
           : !search ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderColor, borderWidth, borderRadius: radius.sm }]} /> : null}
-        {label ? <Animated.View pointerEvents="none" style={[styles.floatingLabel, {
-          left: icon ? 48 : 12,
-          backgroundColor: filled || search ? "transparent" : fieldSurface,
-        }, labelPosition]}>
-          <AnimatedLabel variant="bodyLarge" style={[{ color: inactive ? foreground : error ? palette.error : focused ? palette.primary : palette.onSurfaceVariant }, labelType]}>{displayLabel}</AnimatedLabel>
-        </Animated.View> : null}
+        {label ? <FloatingLabel label={displayLabel ?? label} floating={floating} filled={filled} fontScale={fontScale}
+          left={icon ? 48 : 12} backgroundColor={filled || search ? "transparent" : fieldSurface}
+          color={inactive ? foreground : error ? palette.error : focused ? palette.primary : palette.onSurfaceVariant} /> : null}
         {icon ? <View pointerEvents="none" style={[styles.icon, inactive ? { opacity: 0.38 } : null]}>{leadingIcon}</View> : null}
         <TextInput
           ref={setInputRef}
