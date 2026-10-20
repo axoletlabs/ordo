@@ -11,6 +11,7 @@
     "web": "expo start --web",
     "start": "expo start",
     "lint": "eslint .",
+    "test": "node --test scripts/*.test.cjs",
     "typecheck": "tsc --noEmit",
     "clean": "rimraf .expo node_modules/.cache"
   },

@@ -35,6 +35,7 @@ export function useOverlayPresence(
   const wasVisible = useRef(false);
   const wasOpen = useRef(false);
   const settled = useRef(-1);
+  const mounted = useRef(true);
   const hideKeyboard = options?.dismissKeyboard !== false;
   const interactive = options?.interactive !== false;
   const ready = options?.ready !== false;
@@ -45,10 +46,15 @@ export function useOverlayPresence(
   const dismissRef = useRef(onDismiss);
   dismissRef.current = onDismiss;
 
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
+
   const hide = useCallback((token: number) => {
     // The animation callback and the fallback timer can both land this call;
     // a reopen stales the token. Either way the exit notifies exactly once.
-    if (generation.current !== token || settled.current === token) return;
+    if (!mounted.current || generation.current !== token || settled.current === token) return;
     settled.current = token;
     // Unmount and release the handoff in the same batch. Firing onExited from
     // an effect after the unmount commit inserted a full render of the screen

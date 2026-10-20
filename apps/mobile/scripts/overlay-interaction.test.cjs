@@ -109,6 +109,7 @@ function harness() {
       return result;
     },
     lastCommits: 0,
+    unmount() { slots.forEach(slot => slot?.cleanup?.()); },
   };
 }
 
@@ -172,6 +173,19 @@ test("a sibling handoff runs once per completed exit, and reopening cancels a pe
   h.animations.splice(0).forEach(animation => animation.callback?.(true));
   render(false);
   assert.equal(exits, 1);
+});
+
+test("unmounting the owner cancels a pending exit handoff", () => {
+  const h = harness(), { useOverlayPresence } = h.load(PRESENCE);
+  let exits = 0;
+  const render = visible => h.render(() => useOverlayPresence(visible, () => {}, { onExited: () => exits++ }));
+  render(true);
+  h.animations.splice(0).forEach(animation => animation.callback?.(true));
+  render(false);
+  const late = h.animations.at(-1);
+  h.unmount();
+  late.callback?.(true);
+  assert.equal(exits, 0, "a late animation callback must not open a sibling after navigation/unmount");
 });
 
 test("onExiting fires once at exit start while the tree is retained for the fade", () => {
