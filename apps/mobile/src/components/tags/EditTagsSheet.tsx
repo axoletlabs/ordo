@@ -16,7 +16,6 @@ import { TagChip } from "./TagChip";
 import { TagSelectList } from "./TagSelectList";
 import { CreateTagPanel } from "./CreateTagPanel";
 import { useUpdateBookmarkTags } from "../../hooks/use-tags";
-import { useActionSheetPrep } from "../../hooks/use-action-sheet-prep";
 import { errorMessage } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -31,9 +30,10 @@ export interface EditTagsSheetProps {
 export function EditTagsSheet({ visible, onDismiss, bookmark }: EditTagsSheetProps) {
   const { palette } = useTheme();
   const updateTags = useUpdateBookmarkTags();
-  // Stay prepared (hidden, inert) between handoffs rather than remounting the
-  // catalogue and waiting for native measurement on every reopening.
-  const prep = useActionSheetPrep("editTags");
+  // Retain only this editor after actual use. A global preparation flag mounted
+  // unopened editors on every retained screen, adding work to reader menus.
+  const prepared = React.useRef(visible);
+  if (visible) prepared.current = true;
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [createTagOpen, setCreateTagOpen] = useState(false);
@@ -90,10 +90,9 @@ export function EditTagsSheet({ visible, onDismiss, bookmark }: EditTagsSheetPro
     }
   };
 
-  // A warm shell still mounts the (expensive) catalogue list so the entrance
-  // has real content; the bookmark-dependent chips simply render empty until
-  // the handoff delivers the bookmark in the same commit as `visible`.
-  if (!bookmark && !(prep || visible)) return null;
+  // Keep the shell through exit even if its parent clears the bookmark, but
+  // never activate an editor on another screen just because this one opened.
+  if (!bookmark && !prepared.current) return null;
 
   const known = bookmark ? [...bookmark.tags, ...bookmark.suggestedTags] : [];
   const assigned = selectedIds
@@ -105,7 +104,7 @@ export function EditTagsSheet({ visible, onDismiss, bookmark }: EditTagsSheetPro
 
   return (
     <>
-      <FloatingPanel visible={visible} keepMounted={prep || visible} obscured={createTagOpen} onDismiss={onDismiss} scrollBody={false}>
+      <FloatingPanel visible={visible} keepMounted={prepared.current} obscured={createTagOpen} onDismiss={onDismiss} scrollBody={false}>
         <PanelHeader title="Edit tags" />
         <TagSelectList selectedIds={selectedIds} onToggle={toggle} extraTags={bookmark?.tags ?? []}
           onRequestCreateTag={() => setCreateTagOpen(true)} header={<View style={styles.body}>

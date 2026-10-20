@@ -1,68 +1,9 @@
-/** Run with: node --test apps/mobile/scripts/action-sheet-prep.test.cjs */
+/** Run with: node --test apps/mobile/scripts/action-sheet-handoff.test.cjs */
 const assert = require("node:assert/strict");
 const { readFileSync } = require("node:fs");
-const { resolve, dirname } = require("node:path");
+const { resolve } = require("node:path");
 const { test } = require("node:test");
 const ts = require("typescript");
-const zustand = require("zustand");
-
-// Transpile the real store module (only dependency is zustand) so the test
-// tracks the shipped source instead of a copy.
-function load(filename) {
-  const source = readFileSync(filename, "utf8");
-  const { outputText } = ts.transpileModule(source, {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-  });
-  const mod = { exports: {} };
-  const localRequire = (name) => (name === "zustand" ? zustand : require(name));
-  new Function("require", "module", "exports", outputText)(localRequire, mod, mod.exports);
-  return mod.exports;
-}
-
-const { useActionSheetPrepStore, selectActionSheetPrep, prepActionSheets } =
-  load(resolve(__dirname, "../src/hooks/use-action-sheet-prep.ts"));
-
-test("prep marks only the requested target sheet", () => {
-  prepActionSheets("editTags");
-  assert.equal(selectActionSheetPrep("editTags")(useActionSheetPrepStore.getState()), true);
-  assert.equal(selectActionSheetPrep("move")(useActionSheetPrepStore.getState()), false);
-  prepActionSheets("move");
-  assert.equal(selectActionSheetPrep("move")(useActionSheetPrepStore.getState()), true);
-});
-
-test("prep is sticky across later menu sessions (dismiss never unprepares)", () => {
-  prepActionSheets("editTags");
-  prepActionSheets("editTags");
-  // A closed menu, a cancelled handoff, and repeated presses must not drop
-  // the flag: a warm sheet unmounting mid-handoff would reintroduce the
-  // post-exit mount pause this store exists to remove.
-  assert.equal(selectActionSheetPrep("editTags")(useActionSheetPrepStore.getState()), true);
-});
-
-test("repeated prep calls notify subscribers only once", () => {
-  let notifications = 0;
-  let latest = selectActionSheetPrep("addTags")(useActionSheetPrepStore.getState());
-  const unsubscribe = useActionSheetPrepStore.subscribe((state) => {
-    notifications += 1;
-    latest = selectActionSheetPrep("addTags")(state);
-  });
-  prepActionSheets("addTags");
-  const firstBatch = notifications;
-  prepActionSheets("addTags");
-  prepActionSheets("addTags");
-  unsubscribe();
-  assert.equal(firstBatch, 1, "first mark notifies prepared sheets once");
-  assert.equal(notifications, 1, "same-value prep must not re-render warm sheets");
-  assert.equal(latest, true);
-});
-
-test("selectors return booleans so reference equality cannot cause renders", () => {
-  for (const target of ["editTags", "move", "addTags"]) {
-    for (const state of [{ prepped: {} }, { prepped: { [target]: true } }]) {
-      assert.equal(typeof selectActionSheetPrep(target)(state), "boolean");
-    }
-  }
-});
 
 function handoffHost() {
   const slots = [];
@@ -86,7 +27,6 @@ function handoffHost() {
     "../../lib/bookmark-reader": { bookmarkIsArticle: () => false, bookmarkCanBeArticle: () => false },
     "../../hooks/use-selection": { bookmarkKey: id => id },
     "../../hooks/use-menu-highlight": { useMenuHighlight() {} },
-    "../../hooks/use-action-sheet-prep": { prepActionSheets },
     "../../lib/overlay-session-mode": { useOverlaySessionMode: (_visible, initial) => [initial, () => {}] },
     "../../hooks/queries": { useServerInfo: () => ({ data: { reminders: false } }) },
     "./ReminderFlow": { useSaveReminder: () => ({ save() {}, busy: false }) },
@@ -98,6 +38,50 @@ function handoffHost() {
   new Function("require", "module", "exports", outputText)(name => mocks[name] ?? {}, mod, mod.exports);
   return props => { cursor = 0; return mod.exports.BookmarkActionsSheet(props); };
 }
+
+function editorHost() {
+  const slots = [];
+  let cursor = 0;
+  const react = {
+    useRef(initial) { return slots[cursor++] ??= { current: initial }; },
+    useState(initial) {
+      const index = cursor++;
+      if (!(index in slots)) slots[index] = initial;
+      return [slots[index], value => { slots[index] = typeof value === "function" ? value(slots[index]) : value; }];
+    },
+    useEffect() {}, useMemo: fn => fn(),
+  };
+  react.default = react;
+  const mocks = {
+    react,
+    "react/jsx-runtime": { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: "Fragment" },
+    "react-native": { StyleSheet: { create: value => value } },
+    "../ui/FloatingPanel": { FloatingPanel: "FloatingPanel" },
+    "../../theme/ThemeProvider": { useTheme: () => ({ palette: {} }) },
+    "../../hooks/use-tags": { useUpdateBookmarkTags: () => ({}) },
+    "../../theme/tokens": { spacing: {} },
+  };
+  const { outputText } = ts.transpileModule(readFileSync(resolve(__dirname, "../src/components/tags/EditTagsSheet.tsx"), "utf8"), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
+  });
+  const mod = { exports: {} };
+  new Function("require", "module", "exports", outputText)(name => mocks[name] ?? {}, mod, mod.exports);
+  return props => { cursor = 0; return mod.exports.EditTagsSheet(props); };
+}
+
+test("editor retention is local to the screen actually opened", () => {
+  const first = editorHost(), unopened = editorHost();
+  const props = { visible: false, onDismiss() {}, bookmark: { id: "article", tags: [], suggestedTags: [] } };
+  const panel = tree => findNode(tree, node => node.type === "FloatingPanel");
+  assert.equal(panel(first(props)).props.keepMounted, false);
+  assert.equal(panel(first({ ...props, visible: true })).props.keepMounted, true);
+  assert.equal(panel(first({ ...props, bookmark: null })).props.keepMounted, true, "retain its own exit/warm surface");
+  assert.equal(panel(unopened(props)).props.keepMounted, false, "never mount a different screen's unopened editor");
+});
+
+test("an unused empty editor creates no surface", () => {
+  assert.equal(editorHost()({ visible: false, bookmark: null, onDismiss() {} }), null);
+});
 
 function findNode(node, predicate) {
   if (Array.isArray(node)) return node.map(child => findNode(child, predicate)).find(Boolean);

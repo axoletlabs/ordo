@@ -12,7 +12,6 @@ import { toast } from "../ui/toast-store";
 import { errorMessage } from "../../lib/error-message";
 import { bookmarkKey } from "../../hooks/use-selection";
 import { useMenuHighlight } from "../../hooks/use-menu-highlight";
-import { prepActionSheets } from "../../hooks/use-action-sheet-prep";
 import { useOverlaySessionMode } from "../../lib/overlay-session-mode";
 import { useServerInfo } from "../../hooks/queries";
 import { formatReminderWhen } from "../../lib/bookmark-reminders";
@@ -65,10 +64,8 @@ export function BookmarkActionsSheet({
   const displayBookmark = bookmark ?? bookmarkRef.current;
   const nextAction = React.useRef<(() => void) | null>(null);
   useLayoutEffect(() => { if (visible) nextAction.current = null; }, [visible]);
-  const handoff = (target: "move" | "editTags", action: () => void) => {
-    // Retain the receiving surface after first use. The sanctioned exit-start
-    // handoff overlaps its entrance with this menu's retained exit fade.
-    prepActionSheets(target);
+  const handoff = (action: () => void) => {
+    // Overlap the receiving surface's entrance with this menu's retained exit.
     nextAction.current = action;
     onDismiss();
   };
@@ -121,7 +118,7 @@ export function BookmarkActionsSheet({
           icon="folder-open-outline"
           label="Move to folder"
           onPress={() => {
-            handoff("move", () => onMove(displayBookmark));
+            handoff(() => onMove(displayBookmark));
           }}
         />
         {onEditTags ? (
@@ -129,7 +126,7 @@ export function BookmarkActionsSheet({
             icon="pricetags-outline"
             label="Edit tags"
             onPress={() => {
-              handoff("editTags", () => onEditTags(displayBookmark));
+              handoff(() => onEditTags(displayBookmark));
             }}
           />
         ) : null}

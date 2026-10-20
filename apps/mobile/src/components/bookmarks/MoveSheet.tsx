@@ -21,7 +21,6 @@ import { spacing } from "../../theme/tokens";
 import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
 import { DEFAULT_FOLDER_ICON, type BookmarkDto, type FolderDto } from "@ordo/shared";
 import { useMoveBookmark, useBatchBookmarks } from "../../hooks/use-bookmarks";
-import { useActionSheetPrep } from "../../hooks/use-action-sheet-prep";
 import { LazyMount } from "../ui/LazyMount";
 
 export interface MoveSheetProps {
@@ -43,9 +42,8 @@ function isRootDestination(d: Destination): d is typeof ROOT_DESTINATION {
 }
 
 export function MoveSheet(props: MoveSheetProps) {
-  // Retain a prepared, inert surface between menu handoffs.
-  const prep = useActionSheetPrep("move");
-  return <LazyMount active={props.visible || prep}>{() => <MoveSheetContent {...props} prep={prep} />}</LazyMount>;
+  // Retain this surface after its own first use, never prepare other screens.
+  return <LazyMount active={props.visible}>{() => <MoveSheetContent {...props} />}</LazyMount>;
 }
 
 function MoveSheetContent({
@@ -55,8 +53,7 @@ function MoveSheetContent({
   bookmarks,
   fromFolderId,
   onMoved,
-  prep,
-}: MoveSheetProps & { prep: boolean }) {
+}: MoveSheetProps) {
   const { palette } = useTheme();
   const { data: folders } = useFolders();
   const move = useMoveBookmark(fromFolderId);
@@ -137,7 +134,7 @@ function MoveSheetContent({
   return (
     <FloatingPanel
       visible={visible}
-      keepMounted={prep}
+      keepMounted
       scrollBody={Boolean(lockedTarget)}
       dismissible={!busy}
       onDismiss={() => {
