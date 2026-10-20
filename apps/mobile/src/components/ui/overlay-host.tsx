@@ -91,14 +91,19 @@ export function OverlayPortal({ children, blocking = true, active = true }: { ch
     idRef.current = `overlay-${nextId}`;
   }
   const id = idRef.current;
-  const node = (
-    <ThemeOverrideProvider palette={palette}>{children}</ThemeOverrideProvider>
+  // Keep the published element stable until its contents or palette change.
+  // Publishers re-render for their own state (search text, press feedback,
+  // scroll offsets); rebuilding this node on every commit made the registry
+  // notify OverlayLayers, which then reconciled every mounted layer.
+  const node = useMemo(
+    () => <ThemeOverrideProvider palette={palette}>{children}</ThemeOverrideProvider>,
+    [children, palette],
   );
 
   useLayoutEffect(() => {
     if (!ctx) return;
     ctx.upsert(id, node, blocking, active);
-  });
+  }, [ctx, id, node, blocking, active]);
 
   useLayoutEffect(() => {
     return () => ctx?.upsert(id, null);

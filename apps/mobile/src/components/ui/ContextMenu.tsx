@@ -9,6 +9,7 @@ import {
   StyleSheet,
   View,
   useWindowDimensions,
+  type LayoutChangeEvent,
   type ViewStyle,
   type PressableProps,
 } from "react-native";
@@ -100,7 +101,11 @@ function ContextMenuSurface({
   }, [backdrop, dismissible, keyboardDismiss, onDismiss]);
   const [contentHeight, setContentHeight] = React.useState(0);
   const contentHeightRef = React.useRef(0);
-  const bodyRef = React.useRef<View>(null);
+  const applyBodyHeight = React.useCallback((height: number) => {
+    if (height <= 0 || Math.abs(height - contentHeightRef.current) < 1) return;
+    contentHeightRef.current = height;
+    setContentHeight(height);
+  }, []);
   const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, {
     dismissKeyboard: backdrop && keyboardDismiss,
     interactive: backdrop,
@@ -205,19 +210,6 @@ function ContextMenuSurface({
   }
   wasVisibleRef.current = visible;
   React.useLayoutEffect(() => {
-    if (!visible || contentHeightRef.current > 0) return;
-    let cancelled = false;
-    // A quick reopen can reuse the exiting tree at exactly the same size.
-    // ResizeObserver/onLayout then has no change to report: explicitly measure
-    // that retained body rather than waiting forever behind the readiness gate.
-    bodyRef.current?.measure((_x, _y, _width, measured) => {
-      if (cancelled || measured <= 0) return;
-      contentHeightRef.current = measured;
-      setContentHeight(measured);
-    });
-    return () => { cancelled = true; };
-  }, [visible, sessionKey]);
-  React.useLayoutEffect(() => {
     const opening = visible && !pageWasVisible.current;
     pageWasVisible.current = visible;
     if (!opening) return;
@@ -319,16 +311,14 @@ function ContextMenuSurface({
             menuStyle,
           ]}
         >
-            <View
-              ref={bodyRef}
-              collapsable={false}
+            <MenuBody
+              visible={visible}
+              measureKey={sessionKey}
+              onMeasure={applyBodyHeight}
               style={{ maxHeight: bodyHeightLimit, flexShrink: 1 }}
               onLayout={(event) => {
                 if (!visible) return;
-                const next = event.nativeEvent.layout.height;
-                if (next <= 0 || Math.abs(next - contentHeightRef.current) < 1) return;
-                contentHeightRef.current = next;
-                setContentHeight(next);
+                applyBodyHeight(event.nativeEvent.layout.height);
               }}
             >
               <Animated.View style={[{ flexShrink: 1 }, pageStyle]}>
@@ -336,11 +326,43 @@ function ContextMenuSurface({
                 {displayed ?? (visible ? children : lastChildren.current)}
               </ThemedScrollView> : displayed ?? (visible ? children : lastChildren.current)}
               </Animated.View>
-            </View>
+            </MenuBody>
         </Animated.View>
       </View>
     </OverlayPortal>
   );
+}
+
+/** Measures the menu body as soon as the portal mounts it. RN Web's
+ * `measure()` defers to a timer and `onLayout` waits for a ResizeObserver, so
+ * both landed after the first paint. Reading the border box in this layout
+ * effect keeps placement and the entrance in the mount task. */
+function MenuBody({ visible, measureKey, onMeasure, onLayout, style, children }: {
+  visible: boolean;
+  measureKey?: string | number | null;
+  onMeasure: (height: number) => void;
+  onLayout: (event: LayoutChangeEvent) => void;
+  style: ViewStyle;
+  children: React.ReactNode;
+}) {
+  const ref = React.useRef<View>(null);
+  React.useLayoutEffect(() => {
+    if (!visible) return;
+    const node = ref.current;
+    if (!node) return;
+    if (Platform.OS === "web") {
+      // Same border-box height RN Web's measure() reports, but read directly.
+      const height = (node as unknown as HTMLElement).offsetHeight ?? 0;
+      if (height > 0) onMeasure(height);
+      return;
+    }
+    let cancelled = false;
+    node.measure((_x, _y, _width, height) => {
+      if (!cancelled && height > 0) onMeasure(height);
+    });
+    return () => { cancelled = true; };
+  }, [measureKey, onMeasure, visible]);
+  return <View ref={ref} collapsable={false} style={style} onLayout={onLayout}>{children}</View>;
 }
 
 /** Helper copy inside a context menu, aligned to the item column. */
