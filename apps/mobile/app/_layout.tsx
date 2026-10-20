@@ -58,6 +58,7 @@ import {
 import { enableFreeze } from "react-native-screens";
 import { normalizeReaderPreferences } from "@ordo/shared";
 import { useReducedMotionPreference } from "../src/hooks/use-reduced-motion-preference";
+import { useAutomaticOtaUpdate } from "../src/hooks/use-automatic-ota-update";
 
 enableFreeze(true);
 initAppLifecycle();
@@ -97,6 +98,7 @@ function RootShell() {
   const userId = useAuthStore((s) => s.user?.id);
   const serverUrl = useSettingsStore((s) => s.serverUrl);
   const restarting = useUpdateRestartStore((s) => s.restarting);
+  useAutomaticOtaUpdate();
   const { restartCount } = Updates.useUpdates();
   const runtimeRestart = restarting || restartCount > 0 || peekRestartCover() != null;
   const sharedUrl = useIncomingShareStore((s) => s.pendingUrl);

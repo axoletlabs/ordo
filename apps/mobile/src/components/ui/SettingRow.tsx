@@ -23,6 +23,8 @@ export interface SettingRowProps {
   /** Override the icon tint when the row is not destructive. */
   iconColor?: string;
   showChevron?: boolean;
+  /** Point the chevron up instead of forward, for rows that expand in place. */
+  chevronUp?: boolean;
   divider?: boolean;
   position?: "first" | "middle" | "last" | "only";
   selectionRole?: "radio" | "checkbox";
@@ -41,6 +43,7 @@ export function SettingRow({
   destructive,
   iconColor,
   showChevron,
+  chevronUp = false,
   divider = false,
   position = "only",
   selectionRole,
@@ -90,7 +93,7 @@ export function SettingRow({
         </View>
       ) : null}
       {showChevron ? (
-        <Ionicons name="chevron-forward" size={ROW_ICON_GLYPH} color={palette.textFaint} />
+        <Ionicons name={chevronUp ? "chevron-up" : "chevron-forward"} size={ROW_ICON_GLYPH} color={palette.textFaint} />
       ) : null}
     </>
   );

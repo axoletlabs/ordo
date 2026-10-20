@@ -1,18 +1,12 @@
 /**
  * OTA update state, derived reactively from expo-updates' `useUpdates()` so it
  * always reflects the native module's truth: a downloaded update stays "ready"
- * across remounts (the previous useState-driven version lost that). Actions
- * route through the `Updates` module, whose emitted events drive the reactive
- * state. expo-updates is disabled in dev builds, so everything guards on
- * `enabled` and surfaces a disabled state.
+ * across remounts. This is read-only build/debug metadata; all fetching is
+ * owned by the silent root updater, never by a user-facing update action.
  */
-import { useCallback, useEffect } from "react";
-import { AppState } from "react-native";
 import * as Updates from "expo-updates";
-import { restartForUpdate } from "../store/update-restart";
 import { resolveOtaStatus, type OtaStatus } from "../lib/ota-update-state";
-import { APP_IDENTITY, APP_VARIANT } from "../lib/app-variant";
-import { singleFlight } from "../lib/single-flight";
+import { otaUpdatesEnabled } from "../lib/ota-update-actions";
 
 export type { OtaStatus } from "../lib/ota-update-state";
 
@@ -39,19 +33,10 @@ export interface UseOtaUpdate {
   /** When we last checked for an update this session. */
   lastChecked: Date | null;
   downloadProgress: number | undefined;
-  check: () => Promise<boolean>;
-  download: () => Promise<void>;
-  restart: () => Promise<void>;
 }
 
-/** Minimum gap between automatic foreground checks. */
-const FOREGROUND_RECHECK_MS = 60 * 60 * 1000;
-let lastForegroundCheck = 0;
-const checkOta = singleFlight(() => Updates.checkForUpdateAsync());
-const downloadOta = singleFlight(() => Updates.fetchUpdateAsync());
-
 export function useOtaUpdate(): UseOtaUpdate {
-  const enabled = Updates.isEnabled && APP_VARIANT !== "development" && Updates.channel === APP_IDENTITY.channel;
+  const enabled = otaUpdatesEnabled;
   const {
     currentlyRunning,
     isChecking,
@@ -65,26 +50,6 @@ export function useOtaUpdate(): UseOtaUpdate {
     lastCheckForUpdateTimeSinceRestart,
     downloadProgress,
   } = Updates.useUpdates();
-
-  // Auto-check on first mount and when the app returns to the foreground
-  // (throttled), so updates are picked up without a manual tap.
-  useEffect(() => {
-    if (!enabled) return;
-
-    const runCheck = () => {
-      const now = Date.now();
-      if (now - lastForegroundCheck < FOREGROUND_RECHECK_MS) return;
-      lastForegroundCheck = now;
-      checkOta().catch(() => { lastForegroundCheck = 0; });
-    };
-
-    runCheck();
-
-    const sub = AppState.addEventListener("change", (state) => {
-      if (state === "active") runCheck();
-    });
-    return () => sub.remove();
-  }, [enabled]);
 
   const runningId = currentlyRunning.updateId ?? null;
   const availableId = availableUpdate?.updateId ?? null;
@@ -102,23 +67,6 @@ export function useOtaUpdate(): UseOtaUpdate {
 
   const message =
     checkError?.message ?? downloadError?.message ?? null;
-
-  const check = useCallback(async () => {
-    if (!enabled) return false;
-    const result = await checkOta();
-    return result.isAvailable || result.isRollBackToEmbedded;
-  }, [enabled]);
-
-  const download = useCallback(async () => {
-    if (!enabled) return;
-    await downloadOta();
-  }, [enabled]);
-
-  const restart = useCallback(async () => {
-    if (!enabled) return;
-    // Reloads into the downloaded update after the branded fallback paints.
-    await restartForUpdate();
-  }, [enabled]);
 
   // Web config can expose an unresolved fingerprint policy object despite
   // expo-updates' string type. Only resolved strings are displayable metadata.
@@ -139,8 +87,5 @@ export function useOtaUpdate(): UseOtaUpdate {
     availableUpdateCreatedAt: availableUpdate?.createdAt ?? null,
     lastChecked: lastCheckForUpdateTimeSinceRestart ?? null,
     downloadProgress,
-    check,
-    download,
-    restart,
   };
 }

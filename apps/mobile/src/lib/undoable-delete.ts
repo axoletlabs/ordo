@@ -345,6 +345,9 @@ export interface UndoableDeleteOpts {
   folders?: readonly FolderDto[];
   tags?: readonly TagDto[];
   scopeFolderId?: string | null;
+  /** Bookmark ids (inside the deleted folders) to move to the unfiled root
+   * when the deletion commits, instead of cascading away with the folder. */
+  keepIds?: readonly string[];
   onDeleted?: () => void;
   showToast?: boolean;
 }
@@ -408,6 +411,20 @@ async function replayDeleteIntent(key: string, intent: DeleteIntent) {
   await removeChunks(intent.bookmarks.map((bookmark) => bookmark.id),
     (ids) => bookmarksApi.batch({ action: "delete", ids }),
     (id) => bookmarksApi.remove(id, { folderId: bookmarksById.get(id)?.folderId }));
+  // Kept bookmarks must leave the folder before it cascades away. Grouping by
+  // folder keeps the unlock header pointing at each bookmark's source, and the
+  // move is idempotent when a replay resumes after process death.
+  const keepsByFolder = new Map<string, string[]>();
+  for (const keep of intent.keeps ?? []) {
+    const ids = keepsByFolder.get(keep.folderId) ?? [];
+    if (!ids.includes(keep.id)) ids.push(keep.id);
+    keepsByFolder.set(keep.folderId, ids);
+  }
+  for (const [sourceFolderId, ids] of keepsByFolder) {
+    await removeChunks(ids,
+      (chunk) => bookmarksApi.batch({ action: "move", ids: chunk, folderId: null }, { folderId: sourceFolderId }),
+      (id) => bookmarksApi.update(id, { folderId: null }, { folderId: sourceFolderId }));
+  }
   await removeChunks(intent.folders, (ids) => foldersApi.batch({ action: "delete", ids }), (id) => foldersApi.remove(id));
   for (const id of intent.tags) {
     assertScope();
@@ -488,13 +505,24 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
   const contained = collectBookmarksInFolders(folderIds).filter(
     (bookmark) => !pendingBookmarkIds.has(bookmark.id) && !standalone.some((item) => item.id === bookmark.id),
   );
+  // Ticked bookmarks leave the folder at commit time instead of cascading.
+  // They are never tombstoned: the folder's tombstone already hides them, so
+  // undo restores them in place and commit surfaces them in Bookmarks.
+  const keepIdSet = new Set(opts.keepIds ?? []);
+  const singleFolderId = folders.length === 1 ? folders[0]!.id : null;
+  const keeps = (opts.keepIds ?? [])
+    .map((id) => ({ id, folderId: singleFolderId ?? contained.find((b) => b.id === id)?.folderId ?? null }))
+    .filter((keep): keep is { id: string; folderId: string } =>
+      keep.folderId !== null && folderIds.has(keep.folderId));
+  const deletableContained = contained.filter((bookmark) => !keepIdSet.has(bookmark.id));
 
   let journal: ReturnType<typeof recordDeleteIntent>;
   try {
     journal = recordDeleteIntent({
       bookmarks: standalone.map(({ id, folderId }) => ({ id, folderId })),
       folders: folders.map((folder) => folder.id), tags: tags.map((tag) => tag.id),
-      contained: contained.map((bookmark) => bookmark.id),
+      contained: deletableContained.map((bookmark) => bookmark.id),
+      ...(keeps.length > 0 ? { keeps } : {}),
     });
   } catch (cause) {
     toast.error(errorMessage(cause, "Couldn't save deletion. Nothing was deleted."));
@@ -506,7 +534,7 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
   activeIntents.add(activeKey);
 
   hideFolders(folders);
-  const containedDetails = hideBookmarks(contained, false);
+  const containedDetails = hideBookmarks(deletableContained, false);
   const standaloneDetails = hideBookmarks(standalone, true);
   const tagAssignments = hideTags(tags);
   opts.onDeleted?.();
@@ -516,7 +544,7 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
 
   const restore = () => {
     restoreFolders(folders);
-    restoreBookmarks(contained, containedDetails, false);
+    restoreBookmarks(deletableContained, containedDetails, false);
     restoreBookmarks(standalone, standaloneDetails, true);
     restoreTags(tags, tagAssignments);
   };
