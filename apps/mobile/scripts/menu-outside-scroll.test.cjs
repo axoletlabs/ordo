@@ -15,7 +15,7 @@ function setup() {
   const doc = dom.window.document;
   let dismissals = 0;
   const release = listenForMenuOutsideScroll(() => doc.getElementById("menu"), () => { dismissals++; }, doc);
-  return { doc, dom, count: () => dismissals, close() { release(); dom.window.close(); },
+  return { doc, dom, release, count: () => dismissals, close() { release(); dom.window.close(); },
     dispatch(id, type) {
       const event = new dom.window.Event(type, { bubbles: false, cancelable: type !== "scroll" });
       doc.getElementById(id).dispatchEvent(event);
@@ -35,7 +35,7 @@ test("a delayed caret viewport scroll cannot close the newly opened picker", () 
   } finally { app.close(); }
 });
 
-test("menu body scrolling is contained, background scrolling dismisses once, and teardown removes listeners", () => {
+test("menu body scrolling is contained and background scrolling dismisses once", () => {
   const app = setup();
   try {
     app.dispatch("rows", "scroll");
@@ -44,5 +44,16 @@ test("menu body scrolling is contained, background scrolling dismisses once, and
     app.dispatch("library", "scroll");
     app.dispatch("library", "wheel");
     assert.equal(app.count(), 1);
+  } finally { app.close(); }
+});
+
+test("teardown removes outside scroll and gesture listeners", () => {
+  const app = setup();
+  try {
+    app.release();
+    app.dispatch("library", "scroll");
+    app.dispatch("library", "wheel");
+    app.dispatch("library", "touchmove");
+    assert.equal(app.count(), 0);
   } finally { app.close(); }
 });
