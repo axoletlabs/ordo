@@ -6,6 +6,10 @@ export function listenForMenuOutsideScroll(
 ): () => void {
   let dismissed = false;
   const outsideScroll = (event: Event) => {
+    // Blurring a long single-line field resets its horizontal caret viewport.
+    // That queued scroll can arrive after its picker opens; it is not a scroll
+    // of the background page. Real wheel/touch gestures still dismiss below.
+    if (event.type === "scroll" && /^(INPUT|TEXTAREA)$/.test((event.target as HTMLElement | null)?.tagName ?? "")) return;
     const menu = getMenu();
     if (!menu || dismissed) return;
     const overlays = owner.querySelectorAll('[data-material-overlay="true"]');
