@@ -403,6 +403,21 @@ try {
             await page.keyboard.press("Escape");
             await page.waitForTimeout(400);
             check(await page.getByRole("dialog", { name: "Save bookmark" }).count() === 0, "reduced motion: Escape still closes the save sheet");
+            const libraryField = page.getByRole("textbox", { name: "Search your library", exact: true });
+            await libraryField.fill("Grocery");
+            await page.waitForTimeout(500);
+            const ringOpacity = () => page.getByTestId("library-search-focus-ring").evaluate(node => Number(getComputedStyle(node).opacity));
+            check(await ringOpacity() > 0.99, "library ring appears on actual search focus");
+            await openSaveSheet();
+            await page.getByRole("textbox", { name: "Link", exact: true }).focus();
+            await page.waitForTimeout(250);
+            check(await ringOpacity() < 0.01, "background library ring clears when the save dialog takes focus");
+            check(await libraryField.inputValue() === "Grocery", "opening a save dialog preserves the active library query");
+            await page.keyboard.press("Escape");
+            await page.waitForTimeout(400);
+            await libraryField.focus();
+            check(await libraryField.inputValue() === "Grocery", "resuming library search preserves the query");
+            check(await ringOpacity() > 0.99, "library ring returns on real refocus");
           });
 
           console.log(JSON.stringify({ mode, checks: modeResult.checks, measures: modeResult.measures, notes: modeResult.notes }));
