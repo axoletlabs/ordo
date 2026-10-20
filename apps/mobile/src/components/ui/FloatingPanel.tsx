@@ -12,7 +12,7 @@ import {
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { OverlayPortal } from "./overlay-host";
+import { OverlayPortal, useOverlayBlocked } from "./overlay-host";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { useOverlayFocus } from "../../hooks/use-overlay-focus";
@@ -191,15 +191,6 @@ function FloatingPanelSurface({
     ? <ThemedScrollView key={scrollResetKey} keyboardShouldPersistTaps="handled" nestedScrollEnabled style={{ flexShrink: 1, maxHeight: bodyLimit }}>{scrollNodes}</ThemedScrollView>
     : <View style={{ flexShrink: 1, maxHeight: bodyLimit }}>{scrollNodes}</View>;
 
-  React.useEffect(() => {
-    if (!visible || obscured || !interactive || (Platform.OS !== "web" && !measured)) return;
-    const cleanup = onShowRef.current?.();
-    return () => {
-      if (typeof cleanup === "function") cleanup();
-      else if (cleanup != null) clearTimeout(cleanup);
-    };
-  }, [visible, obscured, interactive, measured]);
-
   React.useLayoutEffect(() => {
     if (!visible) return;
     dragOffset.value = 0;
@@ -288,6 +279,7 @@ function FloatingPanelSurface({
   return (
     <OverlayPortal blocking={rendered} active={visible && interactive && !obscured}>
       <InputFocusScopeContext.Provider value={inputFocusScope}>
+      <PanelOnShow enabled={inputFocusScope.active && inputFocusScope.ready} onShowRef={onShowRef} />
       <View
         accessibilityViewIsModal={visible && interactive && !obscured}
         accessibilityElementsHidden={!visible || obscured}
@@ -372,6 +364,29 @@ function FloatingPanelSurface({
     </OverlayPortal>
   );
 }
+
+/** Run opening callbacks where the portal's real blocking context is known.
+ * A newer surface cancels any pending focus timer; uncovering the old panel
+ * does not resurrect that automatic request. */
+const PanelOnShow = React.memo(function PanelOnShow({ enabled, onShowRef }: {
+  enabled: boolean;
+  onShowRef: React.RefObject<FloatingPanelProps["onShow"]>;
+}) {
+  const blocked = useOverlayBlocked();
+  const consumed = React.useRef(false);
+  React.useEffect(() => {
+    if (!enabled) { consumed.current = false; return; }
+    if (blocked) { consumed.current = true; return; }
+    if (consumed.current) return;
+    consumed.current = true;
+    const cleanup = onShowRef.current?.();
+    return () => {
+      if (typeof cleanup === "function") cleanup();
+      else if (cleanup != null) clearTimeout(cleanup);
+    };
+  }, [enabled, blocked, onShowRef]);
+  return null;
+});
 
 /** Dialogs never allocate/register sheet gesture worklets. Only the handle
  * owns dismissal: dragging or selecting long notes stays with the scroller. */

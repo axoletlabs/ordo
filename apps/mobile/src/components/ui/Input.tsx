@@ -19,7 +19,10 @@ import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
 import { caretAfterKey, shouldCorrectWebCaret } from "../../lib/web-input-caret";
 import { useMaterialMotion } from "../../theme/material-motion";
 import { InputSurfaceContext } from "./input-surface";
+import { InputFocusScopeContext } from "./input-focus-scope";
+import { useOverlayBlocked } from "./overlay-host";
 import { PanelTitleContext } from "./panel-title";
+import { focusTextInput } from "../../lib/focus-text-input";
 import { nativeInputEdit } from "../../lib/native-input-edit";
 import { alphaTint } from "../../theme/state-layer";
 import { isSensitiveInput, privateKeyboardType } from "../../lib/input-privacy";
@@ -130,6 +133,8 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   const messageId = React.useId();
   const fieldSurface = React.useContext(InputSurfaceContext) ?? palette.surface;
   const panelTitle = React.useContext(PanelTitleContext);
+  const focusScope = React.useContext(InputFocusScopeContext);
+  const overlayBlocked = useOverlayBlocked();
   const [focused, setFocused] = useState(false);
   const [hovered, setHovered] = useState(false);
   const inactive = disabled || (!editable && !readOnly);
@@ -144,20 +149,102 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   const inputRef = useRef<TextInput>(null);
   const accessoryRef = useRef<View>(null);
   const pendingCaret = useRef<number | null>(null);
-  const focusedRef = useRef(false);
   const lastAppliedValue = useRef(value);
-  const [androidEpoch, setAndroidEpoch] = useState(0);
   // Android re-applies a controlled `value` on every keystroke and walks the
-  // caret (type/backspace in the middle). Leave the native field uncontrolled
-  // while editing; remount when an external value arrives while blurred.
+  // caret (type/backspace in the middle). Keep one uncontrolled native node
+  // while editing; external edits are written imperatively below.
   const secret = isSensitiveInput({ sensitive, secureTextEntry, ...rest });
   const androidUncontrolled = Platform.OS === "android" && !secret;
+  // Overlay inputs request native focus only after their owning panel has
+  // measured and started opening. Taking focus on mount would run before the
+  // panel's opening keyboard dismissal, which would then blur its own field.
+  const nativeOverlayBlocked = Platform.OS !== "web" && overlayBlocked;
+  const scopedNativeAutoFocus = Platform.OS !== "web" && focusScope != null;
+  const scopeSession = focusScope?.session ?? 0;
+  const scopedSession = useRef(scopeSession);
+  const scopedAutoFocusIntent = useRef(
+    scopedNativeAutoFocus && !nativeOverlayBlocked && !!rest.autoFocus && focusScope?.active === true,
+  );
+  const scopedAutoFocusDone = useRef(false);
+  const scopedFocusFrame = useRef<number | null>(null);
+  const scopedFocusBaseline = useRef<unknown>(null);
+  const scopedBaselineSession = useRef<number | null>(null);
+  const scopeActive = useRef(focusScope?.active === true && !nativeOverlayBlocked);
+  const scopeReady = useRef(focusScope?.ready === true);
+  useLayoutEffect(() => {
+    scopeActive.current = focusScope?.active === true && !nativeOverlayBlocked;
+    scopeReady.current = focusScope?.ready === true;
+  }, [focusScope?.active, focusScope?.ready, nativeOverlayBlocked]);
 
   const setInputRef = (node: TextInput | null) => {
     inputRef.current = node;
     if (typeof ref === "function") ref(node);
     else if (ref) ref.current = node;
   };
+
+  const cancelScopedAutoFocus = () => {
+    if (!scopedNativeAutoFocus) return;
+    scopedAutoFocusDone.current = true;
+    if (scopedFocusFrame.current != null) {
+      cancelAnimationFrame(scopedFocusFrame.current);
+      scopedFocusFrame.current = null;
+    }
+  };
+
+  useEffect(() => {
+    if (!scopedNativeAutoFocus) return;
+    if (scopedSession.current !== scopeSession) {
+      // A retained exiting panel can reopen inside the same React tree. Each
+      // new visible session may take focus once, while picker suspension in
+      // the same session must not replay it.
+      scopedSession.current = scopeSession;
+      scopedAutoFocusDone.current = false;
+      scopedAutoFocusIntent.current = !!rest.autoFocus && scopeActive.current;
+      scopedBaselineSession.current = null;
+    }
+    if (!scopedAutoFocusIntent.current || scopedAutoFocusDone.current) return;
+    if (!rest.autoFocus) {
+      // The parent cancelled this session's intent before it took effect.
+      scopedAutoFocusDone.current = true;
+      return;
+    }
+    if (!scopeActive.current) {
+      // Started suspended/closing: never steal focus if this owner resumes.
+      scopedAutoFocusDone.current = true;
+      return;
+    }
+    if (scopedBaselineSession.current !== scopeSession) {
+      // Remember who owned focus when this session became active. A field
+      // that was already focused (possibly stale from the screen behind the
+      // overlay) must be replaced; one that gains focus afterwards is a
+      // deliberate choice and wins over the delayed take.
+      scopedBaselineSession.current = scopeSession;
+      scopedFocusBaseline.current = TextInput.State?.currentlyFocusedInput?.() ?? null;
+    }
+    if (!scopeReady.current) return;
+    const frame = requestAnimationFrame(() => {
+      scopedFocusFrame.current = null;
+      scopedAutoFocusDone.current = true;
+      if (!scopeActive.current || !scopeReady.current) return;
+      const target = inputRef.current;
+      if (!target) return;
+      const focused = TextInput.State?.currentlyFocusedInput?.() ?? null;
+      const baseline = scopedFocusBaseline.current;
+      // A field focused after this session became active is a deliberate
+      // choice; a field that was already focused is a stale owner to replace.
+      if (focused && focused !== target && focused !== baseline) return;
+      // Owner/session/blocked checks above must pass before the shared policy
+      // reopens a retained Android target whose IME Back left hidden.
+      focusTextInput(target);
+    });
+    scopedFocusFrame.current = frame;
+    return () => {
+      if (scopedFocusFrame.current === frame) {
+        cancelAnimationFrame(frame);
+        scopedFocusFrame.current = null;
+      }
+    };
+  }, [scopedNativeAutoFocus, nativeOverlayBlocked, scopeSession, focusScope?.active, focusScope?.ready, rest.autoFocus]);
 
   useLayoutEffect(() => {
     if (Platform.OS !== "web") return;
@@ -173,16 +260,14 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
 
   useLayoutEffect(() => {
     if (!androidUncontrolled) return;
-    const edit = nativeInputEdit(value, lastAppliedValue.current, focusedRef.current);
-    if (edit === "none") return;
+    if (nativeInputEdit(value, lastAppliedValue.current) === "none") return;
     lastAppliedValue.current = value;
     setHasText(!!value);
-    if (edit === "replace") {
-      // Clipboard/clear actions are external edits, not another controlled echo
-      // of the keystroke. Apply them without remounting or dismissing the IME.
-      const text = value ?? "";
-      inputRef.current?.setNativeProps({ text, selection: { start: text.length, end: text.length } });
-    } else setAndroidEpoch((n) => n + 1);
+    // Clipboard/clear/parent resets are external edits, not another controlled
+    // echo of the keystroke. Replace the text on the stable native node: a
+    // remount would replay autoFocus and could steal focus from a picker.
+    const text = value ?? "";
+    inputRef.current?.setNativeProps({ text, selection: { start: text.length, end: text.length } });
   }, [androidUncontrolled, value]);
 
   const search = variant === "search";
@@ -247,8 +332,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
         {icon ? <View pointerEvents="none" style={[styles.icon, inactive ? { opacity: 0.38 } : null]}>{leadingIcon}</View> : null}
         <TextInput
           ref={setInputRef}
-          key={androidUncontrolled ? `android-field-${androidEpoch}` : undefined}
-           placeholderTextColor={inactive ? foreground : palette.onSurfaceVariant}
+          placeholderTextColor={inactive ? foreground : palette.onSurfaceVariant}
           autoCorrect={false}
           autoCapitalize="none"
           autoComplete="off"
@@ -265,8 +349,9 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
           {...rest}
           // The panel focuses after its portal is attached. Mount-time web
           // autofocus forces layout in the middle of that publication, before
-          // the dialog can establish keyboard ownership.
-          autoFocus={Platform.OS === "web" && panelTitle ? false : rest.autoFocus}
+          // the dialog can establish keyboard ownership. Scoped native fields
+          // wait for their owner's ready state instead (effect above).
+          autoFocus={nativeOverlayBlocked || scopedNativeAutoFocus || (Platform.OS === "web" && panelTitle) ? false : rest.autoFocus}
           // Never let a sensitive field opt into spelling, correction or casing.
           {...(secret ? { autoCorrect: false, spellCheck: false, autoCapitalize: "none" as const, disableFullscreenUI: true } : null)}
           accessibilityState={{ ...rest.accessibilityState, disabled: inactive }}
@@ -280,14 +365,14 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
             ? { defaultValue: typeof value === "string" ? value : undefined }
             : { value })}
           onFocus={(e) => {
-            focusedRef.current = true;
-            lastAppliedValue.current = value;
+            cancelScopedAutoFocus();
             setFocused(true);
             onFocus?.(e);
           }}
           onBlur={(e) => {
-            focusedRef.current = false;
-            lastAppliedValue.current = value;
+            // Keep `lastAppliedValue` as the last native text. The render
+            // closure may still hold the previous value when a batched IME
+            // update lands before this blur.
             setFocused(false);
             onBlur?.(e);
           }}
@@ -323,7 +408,9 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
             restoreWebCaret(webCaretNode(target), pendingCaret.current);
           }}
           onChangeText={canEdit ? (text) => {
-            if (androidUncontrolled) lastAppliedValue.current = text;
+            // The native field is authoritative while typing. A late parent
+            // commit echoing this text must not look like an external edit.
+            lastAppliedValue.current = text;
             setHasText(text.length > 0); onChangeText?.(text);
           } : undefined}
           style={[

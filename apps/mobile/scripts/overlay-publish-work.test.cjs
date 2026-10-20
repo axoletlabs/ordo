@@ -463,3 +463,27 @@ test("native menu inputs become ready only after measurement and inactive on clo
     reactNative.Platform.OS = "web";
   }
 });
+
+test("a covering overlay cancels a panel's opening callback without replay on uncover", async () => {
+  resetWork();
+  const { FloatingPanel } = load(resolve(sourceRoot, "components/ui/FloatingPanel.tsx"));
+  let starts = 0, cancellations = 0;
+  const onShow = () => { starts++; return () => { cancellations++; }; };
+  const tree = mount();
+  const render = (covered, interactive = true) => tree.render(React.createElement(OverlayHost, null,
+    React.createElement(FloatingPanel, { visible: true, interactive, onDismiss() {}, onShow }, React.createElement("span", null, "form")),
+    covered ? React.createElement(ContextMenu, { visible: true, onDismiss() {}, anchor: { x: 20, y: 100, width: 100, height: 48 } }, React.createElement("span", null, "picker")) : null));
+  try {
+    await render(false);
+    assert.equal(starts, 1);
+    await render(true);
+    assert.equal(cancellations, 1, "pending focus work must be cancelled when another layer takes ownership");
+    await render(false);
+    assert.equal(starts, 1, "uncovering must not resurrect an old automatic focus request");
+    await render(false, false);
+    await render(false);
+    assert.equal(starts, 2, "an explicit interactive/onShow lifecycle still works");
+  } finally {
+    await tree.unmount();
+  }
+});
