@@ -69,14 +69,14 @@ function editorHost() {
   return props => { cursor = 0; return mod.exports.EditTagsSheet(props); };
 }
 
-test("editor retention is local to the screen actually opened", () => {
+test("editors retain exit state without keeping hidden dialog trees mounted", () => {
   const first = editorHost(), unopened = editorHost();
   const props = { visible: false, onDismiss() {}, bookmark: { id: "article", tags: [], suggestedTags: [] } };
   const panel = tree => findNode(tree, node => node.type === "FloatingPanel");
-  assert.equal(panel(first(props)).props.keepMounted, false);
-  assert.equal(panel(first({ ...props, visible: true })).props.keepMounted, true);
-  assert.equal(panel(first({ ...props, bookmark: null })).props.keepMounted, true, "retain its own exit/warm surface");
-  assert.equal(panel(unopened(props)).props.keepMounted, false, "never mount a different screen's unopened editor");
+  assert.equal(panel(first(props)).props.keepMounted, undefined);
+  assert.equal(panel(first({ ...props, visible: true })).props.keepMounted, undefined);
+  assert.ok(panel(first({ ...props, bookmark: null })), "retain its own component through the exit fade");
+  assert.equal(unopened({ ...props, bookmark: null }), null, "never activate a different screen's unopened editor");
 });
 
 test("an unused empty editor creates no surface", () => {

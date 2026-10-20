@@ -42,7 +42,7 @@ function isRootDestination(d: Destination): d is typeof ROOT_DESTINATION {
 }
 
 export function MoveSheet(props: MoveSheetProps) {
-  // Retain this surface after its own first use, never prepare other screens.
+  // Retain feature state after first use; the dialog body leaves after exit.
   return <LazyMount active={props.visible}>{() => <MoveSheetContent {...props} />}</LazyMount>;
 }
 
@@ -134,7 +134,6 @@ function MoveSheetContent({
   return (
     <FloatingPanel
       visible={visible}
-      keepMounted
       scrollBody={Boolean(lockedTarget)}
       dismissible={!busy}
       onDismiss={() => {

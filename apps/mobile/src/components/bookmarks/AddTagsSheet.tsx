@@ -77,7 +77,7 @@ function AddTagsContent({
 
   return (
     <>
-      <FloatingPanel visible={visible} keepMounted obscured={createTagOpen} onDismiss={onDismiss} scrollBody={false}>
+      <FloatingPanel visible={visible} obscured={createTagOpen} onDismiss={onDismiss} scrollBody={false}>
         <PanelHeader title="Add tags" />
         <View style={styles.body}>
           <TagSelectList

@@ -30,8 +30,8 @@ export interface EditTagsSheetProps {
 export function EditTagsSheet({ visible, onDismiss, bookmark }: EditTagsSheetProps) {
   const { palette } = useTheme();
   const updateTags = useUpdateBookmarkTags();
-  // Retain only this editor after actual use. A global preparation flag mounted
-  // unopened editors on every retained screen, adding work to reader menus.
+  // Retain this component through exit if its parent clears the bookmark.
+  // Let the panel body unmount afterward: hidden portal trees add menu work.
   const prepared = React.useRef(visible);
   if (visible) prepared.current = true;
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -104,7 +104,7 @@ export function EditTagsSheet({ visible, onDismiss, bookmark }: EditTagsSheetPro
 
   return (
     <>
-      <FloatingPanel visible={visible} keepMounted={prepared.current} obscured={createTagOpen} onDismiss={onDismiss} scrollBody={false}>
+      <FloatingPanel visible={visible} obscured={createTagOpen} onDismiss={onDismiss} scrollBody={false}>
         <PanelHeader title="Edit tags" />
         <TagSelectList selectedIds={selectedIds} onToggle={toggle} extraTags={bookmark?.tags ?? []}
           onRequestCreateTag={() => setCreateTagOpen(true)} header={<View style={styles.body}>
