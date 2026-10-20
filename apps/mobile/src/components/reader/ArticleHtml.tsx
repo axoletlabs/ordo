@@ -30,7 +30,7 @@ import {
 import { ARTICLE_END_CLASS, prepareArticleSections, reuseArticleSections } from "./article-sections";
 import { useTheme } from "../../theme/ThemeProvider";
 import { radius, resolveFont, spacing, type FontFamily } from "../../theme/tokens";
-import type { HighlightDto, ReaderLineSpacing, ReaderPreferences } from "@ordo/shared";
+import type { HighlightDto, ReaderLineSpacing } from "@ordo/shared";
 import { applyHighlightsToHtml, htmlToPlainText } from "@ordo/shared";
 import { readerArticleColors, readerTagColors, READER_IGNORED_INLINE_STYLES } from "./reader-article-colors";
 import { useAnimationActivity } from "../../hooks/use-animation-activity";
@@ -40,6 +40,7 @@ import {
   READER_BODY_SIZE,
   readerLineHeight,
   resolveReaderFontFamily,
+  type ReaderContentPreferences,
 } from "./reader-typography";
 import {
   collectTableRows,
@@ -229,7 +230,8 @@ function buildTagsStyles(
 
 export interface ArticleHtmlProps {
   html: string;
-  preferences: ReaderPreferences;
+  /** Layout-affecting preferences only; palette/ink arrives through context. */
+  preferences: ReaderContentPreferences;
   /** Measured width available to the article; drives responsive images. */
   contentWidth: number;
   highlights?: readonly HighlightDto[];

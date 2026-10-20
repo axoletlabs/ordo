@@ -3,8 +3,13 @@
  * line spacing, theme (system/light/dark) and — when the effective theme is
  * dark — the AMOLED pure-black toggle. Presented as a FloatingPanel so it
  * matches the app's existing menu/sheet language on phones and tablets alike.
+ *
+ * The panel owns its open state and its own preference subscription. Opening
+ * it therefore mounts the controls without re-rendering the reader surface,
+ * and a preference press reaches the panel immediately while the article waits
+ * for the deferred content preference.
  */
-import React, { useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import { StyleSheet, View, useWindowDimensions } from "react-native";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
@@ -16,13 +21,12 @@ import { spacing } from "../../theme/tokens";
 import { resolveReaderFont } from "./reader-typography";
 import { loadReaderFontPreview, READER_FONT_FAMILY_LIST, readerFontPreviewReady, useReaderFontRevision } from "../../theme/fonts";
 import { scheduleIdleWork } from "../../lib/idle-work";
+import { useReaderPreferences } from "../../hooks/use-reader-preferences";
 import type {
   ReaderFontFamily,
   ReaderFontSize,
   ReaderLineSpacing,
-  ReaderPreferences,
   ReaderTheme,
-  UpdateReaderPreferencesInput,
 } from "@ordo/shared";
 
 const sizeOptions: readonly { value: ReaderFontSize; label: string; accessibilityLabel: string }[] = [
@@ -63,11 +67,13 @@ const PREVIEW_DELAY_MS = 240;
 /** Stagger starts so font polling overlaps instead of serializing. */
 const PREVIEW_STAGGER_MS = 160;
 
+export interface ReaderControlsSheetHandle {
+  open(): void;
+}
+
 export interface ReaderControlsSheetProps {
-  visible: boolean;
-  onDismiss: () => void;
-  preferences: ReaderPreferences;
-  onUpdate: (patch: UpdateReaderPreferencesInput) => void;
+  /** The reader dismisses its selection/overflow surfaces when this opens. */
+  onOpen?: () => void;
   /** Whether the effective reader palette is dark (enables AMOLED). */
   effectiveDark: boolean;
 }
@@ -94,26 +100,72 @@ function ControlGroup({
   );
 }
 
-export const ReaderControlsSheet = React.memo(function ReaderControlsSheet(props: ReaderControlsSheetProps) {
-  return <LazyMount active={props.visible}>{() => <ReaderControlsContent {...props} />}</LazyMount>;
+/**
+ * Only this control cares when preview faces arrive. Keeping the revision
+ * subscription here (rather than in the panel) means a background preview
+ * load re-renders the typeface options, not the header or the four other
+ * control groups that did not change.
+ */
+const TypefaceSegmented = React.memo(function TypefaceSegmented({
+  value,
+  onChange,
+}: {
+  value: ReaderFontFamily;
+  onChange: (family: ReaderFontFamily) => void;
+}) {
+  const fontRevision = useReaderFontRevision();
+  const typefaceOptions = useMemo(
+    () => familyOptions.map((option) => readerFontPreviewReady(option.value) ? option : { ...option, labelStyle: undefined }),
+    // Readiness lives outside React; the revision says when it changed.
+    [fontRevision],
+  );
+  return (
+    <Segmented
+      accessibilityLabel="Typeface"
+      // Vertical rows give each reading typeface room to preview itself.
+      orientation="vertical"
+      options={typefaceOptions}
+      value={value}
+      onChange={onChange}
+    />
+  );
 });
+
+export const ReaderControlsSheet = React.memo(React.forwardRef<ReaderControlsSheetHandle, ReaderControlsSheetProps>(
+  function ReaderControlsSheet({ onOpen, effectiveDark }, ref) {
+    const [visible, setVisible] = useState(false);
+    const open = useCallback(() => {
+      setVisible(true);
+      onOpen?.();
+    }, [onOpen]);
+    const close = useCallback(() => setVisible(false), []);
+    useImperativeHandle(ref, () => ({ open }), [open]);
+    return (
+      <LazyMount active={visible}>
+        {() => <ReaderControlsContent visible={visible} onDismiss={close} effectiveDark={effectiveDark} />}
+      </LazyMount>
+    );
+  },
+));
 
 const ReaderControlsContent = React.memo(function ReaderControlsContent({
   visible,
   onDismiss,
-  preferences,
-  onUpdate,
   effectiveDark,
-}: ReaderControlsSheetProps) {
+}: {
+  visible: boolean;
+  onDismiss: () => void;
+  effectiveDark: boolean;
+}) {
   const { width, fontScale } = useWindowDimensions();
   const orientation = width < 360 || fontScale > 1.3 ? "vertical" : "horizontal";
+  const { preferences, setPreferences } = useReaderPreferences();
   // Previews need every reading family's regular face. Loading those is still
   // a batch of font registrations, so never do it on the open path: let the
   // panel paint and finish its entrance, then start one family per idle slice.
   // Starts are staggered rather than chained so several faces observe in
   // parallel; waiting for one before starting the next kept font polling busy
   // for seconds on slow devices. A close cancels anything not started.
-  const fontRevision = useReaderFontRevision();
   useEffect(() => {
     if (!visible) return;
     let cancelled = false;
@@ -135,10 +187,11 @@ const ReaderControlsContent = React.memo(function ReaderControlsContent({
       idleCancels.forEach((cancel) => cancel());
     };
   }, [visible]);
-  const typefaceOptions = useMemo(
-    () => familyOptions.map((option) => readerFontPreviewReady(option.value) ? option : { ...option, labelStyle: undefined }),
-    // Readiness lives outside React; the revision says when it changed.
-    [fontRevision],
+  // Stable for TypefaceSegmented's memo: an unrelated preference change must
+  // not re-render the five typeface options.
+  const updateFontFamily = useCallback(
+    (fontFamily: ReaderFontFamily) => setPreferences({ fontFamily }),
+    [setPreferences],
   );
   return (
     <FloatingPanel visible={visible} onDismiss={onDismiss}>
@@ -153,19 +206,12 @@ const ReaderControlsContent = React.memo(function ReaderControlsContent({
           orientation={orientation}
           options={sizeOptions}
           value={preferences.fontSize}
-          onChange={(fontSize) => onUpdate({ fontSize })}
+          onChange={(fontSize) => setPreferences({ fontSize })}
         />
       </ControlGroup>
 
       <ControlGroup label="Typeface" accessibilityHint="Changes the article typeface.">
-        <Segmented
-          accessibilityLabel="Typeface"
-          // Vertical rows give each reading typeface room to preview itself.
-          orientation="vertical"
-          options={typefaceOptions}
-          value={preferences.fontFamily}
-          onChange={(fontFamily) => onUpdate({ fontFamily })}
-        />
+        <TypefaceSegmented value={preferences.fontFamily} onChange={updateFontFamily} />
       </ControlGroup>
 
       <ControlGroup label="Line spacing" accessibilityHint="Changes the article line spacing.">
@@ -174,7 +220,7 @@ const ReaderControlsContent = React.memo(function ReaderControlsContent({
           orientation={orientation}
           options={lineSpacingOptions}
           value={preferences.lineSpacing ?? "default"}
-          onChange={(lineSpacing) => onUpdate({ lineSpacing })}
+          onChange={(lineSpacing) => setPreferences({ lineSpacing })}
         />
       </ControlGroup>
 
@@ -184,7 +230,7 @@ const ReaderControlsContent = React.memo(function ReaderControlsContent({
           orientation={orientation}
           options={themeOptions}
           value={preferences.theme}
-          onChange={(theme) => onUpdate({ theme })}
+          onChange={(theme) => setPreferences({ theme })}
         />
       </ControlGroup>
 
@@ -198,7 +244,7 @@ const ReaderControlsContent = React.memo(function ReaderControlsContent({
         <Toggle
           accessibilityLabel="Reader AMOLED black"
           value={preferences.amoled && effectiveDark}
-          onValueChange={(amoled) => onUpdate({ amoled })}
+          onValueChange={(amoled) => setPreferences({ amoled })}
           disabled={!effectiveDark}
         />
       </View>

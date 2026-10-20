@@ -41,8 +41,6 @@ import {
 import type {
   HighlightAnchor,
   HighlightDto,
-  ReaderPreferences,
-  UpdateReaderPreferencesInput,
 } from "@ordo/shared";
 import { Header, HeaderActions, HeaderIconButton } from "../ui/Header";
 import { ScreenContent } from "../ui/ScreenContent";
@@ -61,13 +59,13 @@ import { ReaderArticle } from "./ReaderArticle";
 import { ReaderContents, type ReaderContentsHandle } from "./ReaderContents";
 import { createReaderWorkScheduler } from "./reader-work";
 import type { HighlightSelectDraft } from "./article-highlight-ui";
-import { ReaderControlsSheet } from "./ReaderControlsSheet";
+import { ReaderControlsSheet, type ReaderControlsSheetHandle } from "./ReaderControlsSheet";
 import { EditTagsSheet } from "../tags/EditTagsSheet";
 import { LockPrompt } from "../bookmarks/LockPrompt";
 import { ReminderCustomPanel } from "../bookmarks/ReminderCustomPanel";
 import { REMINDER_MENU_WIDTH, ReminderPresetItems, useSaveReminder } from "../bookmarks/ReminderFlow";
 import { formatReminderWhen } from "../../lib/bookmark-reminders";
-import { READER_BODY_SIZE, resolveReaderFont } from "./reader-typography";
+import { READER_BODY_SIZE, resolveReaderFont, type ReaderContentPreferences } from "./reader-typography";
 import { useReaderFontFamily } from "../../theme/fonts";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 import { resolveReaderPalette } from "../../theme/reader-theme";
@@ -197,7 +195,7 @@ function ReaderProgressBar({ animatedValue, labelRef, initialValue }: {
  */
 export function ReaderPane(props: ReaderPaneProps) {
   const systemScheme = useSystemColorScheme();
-  const { preferences, setPreferences } = useReaderPreferences();
+  const { preferences } = useReaderPreferences();
   const materialYouColors = useSettingsStore((s) => s.materialYouColors);
   const deviceColors = useDeviceColors();
   const expressive = useSettingsStore((s) => s.expressive);
@@ -206,8 +204,21 @@ export function ReaderPane(props: ReaderPaneProps) {
     () => resolveReaderPalette(preferences.theme, preferences.amoled, systemScheme, { expressive, contrast, deviceColors: materialYouColors ? deviceColors : null }),
     [preferences.theme, preferences.amoled, systemScheme, deviceColors, materialYouColors, expressive, contrast],
   );
-  // Commit control feedback first; let a long article reflow at interruptible priority.
-  const contentPreferences = useDeferredValue(preferences);
+  // Commit control feedback first; let a long article reflow at interruptible
+  // priority. Only layout fields are deferred and compared: palette/theme and
+  // server acknowledgements with equal values must not hand the article a new
+  // preference object (or reconcile its sections) for unchanged text.
+  const deferredFontFamily = useDeferredValue(preferences.fontFamily);
+  const deferredFontSize = useDeferredValue(preferences.fontSize);
+  const deferredLineSpacing = useDeferredValue(preferences.lineSpacing);
+  const contentPreferences = useMemo<ReaderContentPreferences>(
+    () => ({
+      fontFamily: deferredFontFamily,
+      fontSize: deferredFontSize,
+      lineSpacing: deferredLineSpacing,
+    }),
+    [deferredFontFamily, deferredFontSize, deferredLineSpacing],
+  );
 
   // The reader surface owns the status bar (full-screen stack usage only);
   // on unmount, restore the style the app theme expects.
@@ -221,30 +232,26 @@ export function ReaderPane(props: ReaderPaneProps) {
   return (
     <ReaderPaneInner
       {...props}
-      preferences={preferences}
       contentPreferences={contentPreferences}
-      onUpdatePreferences={setPreferences}
       readerPalette={readerPalette}
     />
   );
 }
 
 interface ReaderPaneInnerProps extends ReaderPaneProps {
-  preferences: ReaderPreferences;
-  contentPreferences: ReaderPreferences;
-  onUpdatePreferences: (patch: UpdateReaderPreferencesInput) => void;
+  /** Article layout preferences trail the controls by one deferred pass;
+   * palette and the controls panel update immediately. */
+  contentPreferences: ReaderContentPreferences;
   readerPalette: Palette;
 }
 
-function ReaderPaneInner({
+const ReaderPaneInner = React.memo(function ReaderPaneInner({
   bookmarkId,
   embedded = false,
   onBack,
   safeBottom = !embedded,
   initialSurface = "auto",
-  preferences,
   contentPreferences,
-  onUpdatePreferences,
   readerPalette,
 }: ReaderPaneInnerProps) {
   const { palette: appPalette } = useTheme();
@@ -288,8 +295,8 @@ function ReaderPaneInner({
     !detail.isLoading &&
     !!detail.error;
 
-  const [controlsOpen, setControlsOpen] = useState(false);
-  const closeControls = useCallback(() => setControlsOpen(false), []);
+  const controlsRef = useRef<ReaderControlsSheetHandle>(null);
+  const openControls = useCallback(() => controlsRef.current?.open(), []);
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [actionPanel, setActionPanel] = useState<
     "actions" | "highlights" | "remind" | "remind-custom" | null
@@ -323,6 +330,10 @@ function ReaderPaneInner({
   } | null>(null);
   const selectionMenuRef = useRef(selectionMenu);
   selectionMenuRef.current = selectionMenu;
+  // Scrolling while the menu is open rewrites only its anchor. Keep the draft
+  // separate so that anchor-only updates neither re-run the article scan for
+  // highlight overlap nor rebuild selection callbacks.
+  const selectionDraft = selectionMenu?.draft ?? null;
   const selectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const menuScrollY = useRef(0);
 
@@ -563,18 +574,18 @@ function ReaderPaneInner({
   );
 
   const highlightChoice = useMemo(() => {
-    if (!selectionMenu) return { overlappingIds: [] as string[], canHighlight: false, canRemove: false };
+    if (!selectionDraft) return { overlappingIds: [] as string[], canHighlight: false, canRemove: false };
     const html = detail.data?.contentHtml;
     if (!html) return { overlappingIds: [], canHighlight: true, canRemove: false };
-    return selectionHighlightState(html, highlights, selectionMenu.draft);
-  }, [detail.data?.contentHtml, highlights, selectionMenu]);
+    return selectionHighlightState(html, highlights, selectionDraft);
+  }, [detail.data?.contentHtml, highlights, selectionDraft]);
 
   const unhighlightSelection = useCallback(async () => {
-    if (!bookmark || !selectionMenu) return;
+    if (!bookmark || !selectionDraft) return;
     const html = detail.data?.contentHtml;
     if (!html) return;
     haptics.light();
-    const plan = planUnhighlight(html, highlights, selectionMenu.draft);
+    const plan = planUnhighlight(html, highlights, selectionDraft);
     if (plan.kind === "none") {
       toast.error("Couldn't update the highlight.");
       return;
@@ -625,13 +636,13 @@ function ReaderPaneInner({
     dismissSelectionMenu,
     highlights,
     removeHighlight,
-    selectionMenu,
+    selectionDraft,
     updateHighlight,
   ]);
 
   useEffect(() => {
-    if (actionPanel || controlsOpen || editTagsOpen) dismissSelectionMenu();
-  }, [actionPanel, controlsOpen, dismissSelectionMenu, editTagsOpen]);
+    if (actionPanel || editTagsOpen) dismissSelectionMenu();
+  }, [actionPanel, dismissSelectionMenu, editTagsOpen]);
 
   useEffect(() => {
     return () => {
@@ -1011,7 +1022,7 @@ function ReaderPaneInner({
         <HeaderIconButton
           name="options-outline"
           color={palette.text}
-          onPress={() => setControlsOpen(true)}
+          onPress={openControls}
           accessibilityLabel="Reader settings"
           accessibilityHint="Adjust text size, typeface, and reading theme."
           measureOnPress={false}
@@ -1289,10 +1300,8 @@ function ReaderPaneInner({
       ) : null}
 
       <ReaderControlsSheet
-        visible={controlsOpen}
-        onDismiss={closeControls}
-        preferences={preferences}
-        onUpdate={onUpdatePreferences}
+        ref={controlsRef}
+        onOpen={dismissSelectionMenu}
         effectiveDark={effectiveDark}
       />
       <EditTagsSheet
@@ -1563,7 +1572,7 @@ function ReaderPaneInner({
     </View>
     </ThemeOverrideProvider>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1 },

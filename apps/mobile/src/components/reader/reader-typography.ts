@@ -1,5 +1,13 @@
 import { resolveFont, type FontFamily } from "../../theme/tokens";
-import type { ReaderFontFamily, ReaderFontSize, ReaderLineSpacing } from "@ordo/shared";
+import type { ReaderFontFamily, ReaderFontSize, ReaderLineSpacing, ReaderPreferences } from "@ordo/shared";
+
+/** The slice of account reader preferences that changes article layout. Ink
+ * and surfaces come from the theme palette at render time, so theme/AMOLED are
+ * deliberately absent from the article's prop identity. */
+export type ReaderContentPreferences = Readonly<Pick<
+  ReaderPreferences,
+  "fontFamily" | "fontSize" | "lineSpacing"
+>>;
 
 /** Reader families map onto dedicated reading typefaces (see assets/fonts). */
 const FAMILY: Record<ReaderFontFamily, FontFamily> = {
