@@ -412,7 +412,7 @@ try {
             await page.getByRole("textbox", { name: "Link", exact: true }).focus();
             await page.waitForTimeout(250);
             check(await ringOpacity() < 0.01, "background library ring clears when the save dialog takes focus");
-            check(await libraryField.inputValue() === "Grocery", "opening a save dialog preserves the active library query");
+            check(await page.getByRole("textbox", { name: "Search your library", exact: true, includeHidden: true }).inputValue() === "Grocery", "opening a save dialog preserves the active library query");
             await page.keyboard.press("Escape");
             await page.waitForTimeout(400);
             await libraryField.focus();
