@@ -1,6 +1,6 @@
 /** Material filter / assist chip. Tag color remains a secondary identity marker. */
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, View, type ViewStyle } from "react-native";
 import type { TagColor } from "@ordo/shared";
 import { Text } from "../ui/Text";
 import { PressableScale } from "../ui/PressableScale";
@@ -22,14 +22,25 @@ export const TagChip = React.memo(function TagChip({ name, color, selected = fal
   </>;
   const style = [styles.chip, { minHeight: compact ? 32 : 40, flexShrink: 1, backgroundColor: selected ? palette.secondaryContainer : palette.surfaceContainerHigh,
     borderWidth: 0, borderRadius: expressive ? radius.full : radius.sm },
-    inline ? { minHeight: 24, paddingHorizontal: 0, backgroundColor: "transparent", maxWidth: 120 } : null];
+    inline ? { minHeight: 32, paddingHorizontal: 0, backgroundColor: "transparent", maxWidth: 120 } : null];
   // A full-radius token is a silhouette, not a 9,999dp spring target. Use
   // the painted half-height so the entire morph is visible, not only its tail.
-  const restCorner = expressive ? (inline ? 12 : compact ? 16 : 20) : radius.sm;
+  const restCorner = expressive ? (inline || compact ? 16 : 20) : radius.sm;
+  // Inline row chips keep the M3 chip container height (32dp) instead of a
+  // real 48dp layout box: a 48dp target per tag stretched bookmark rows and
+  // left each painted chip floating in invisible dead space. The 48dp touch
+  // target is carried by hitSlop bands inside the row's own gap and bottom
+  // padding; react-native-web ignores hitSlop, so the real box stays 32dp
+  // (the M3 web chip target) rather than 24dp. Standalone chips keep full
+  // real 48dp targets.
+  const targetStyle: ViewStyle = inline
+    ? { minHeight: 32, minWidth: 48, maxWidth: 120, alignSelf: "flex-start", justifyContent: "center", flexShrink: 1 }
+    : { minHeight: 48, minWidth: 48, maxWidth: 200, alignSelf: "flex-start", justifyContent: "center", flexShrink: 1 };
    return onPress ? <PressableScale accessibilityRole={selectable ? "checkbox" : "button"} accessibilityLabel={accessibilityLabel ?? name}
      accessibilityState={selectable ? { checked: selected } : undefined} stateLayerColor={fg}
      shape={{ rest: restCorner, pressed: expressive ? Math.min(restCorner, radius.md) : restCorner }}
-     style={{ minHeight: 48, minWidth: 48, maxWidth: inline ? 120 : 200, alignSelf: "flex-start", justifyContent: "center", flexShrink: 1 }}
+     hitSlop={inline ? { top: 8, bottom: 8 } : undefined}
+     style={targetStyle}
      visualStyle={style}
     onPress={(event) => { event.stopPropagation(); onPress(); }}>{contents}</PressableScale> : <View style={style}>{contents}</View>;
 });

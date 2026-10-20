@@ -200,18 +200,25 @@ export const BookmarkRow = React.memo(function BookmarkRow({
     runPressAction(() => openBookmarkInExternalBrowser(bookmark), haptics.light);
   };
 
+  // Fixed geometry must match the FlashList estimate exactly (same source
+  // function); the memoized array keeps style identity stable across list
+  // recycles instead of re-flattening a fresh chrome object every render.
+  const fixedRowHeight = fontScale <= 1 ? estimateBookmarkRowSize(bookmark, omitTagIds) : null;
+  const wrapStyle = React.useMemo(() => [
+    styles.wrap,
+    fixedRowHeight != null ? { height: fixedRowHeight } : null,
+    { borderBottomWidth: 0, marginBottom: expressive ? spacing[2] : 0,
+      overflow: expressive ? ("visible" as const) : ("hidden" as const) },
+  ], [expressive, fixedRowHeight]);
+
   return (
     <ThemeOverrideProvider palette={palette}>
     <View
       ref={setRowRef}
       collapsable={false}
+      testID="bookmark-row"
       onLayout={selectionMode ? () => dragRow.bind(rowRef.current) : undefined}
-      style={[
-        styles.wrap,
-        fontScale <= 1 ? { height: estimateBookmarkRowSize(bookmark, omitTagIds) } : null,
-        { borderBottomWidth: 0, marginBottom: expressive ? spacing[2] : 0,
-          overflow: expressive ? "visible" : "hidden" },
-      ]}
+      style={wrapStyle}
       {...(Platform.OS === "web"
         ? {
             onMouseEnter: (event: { target?: unknown; currentTarget?: unknown }) => setHovered(rowOwnsHover(event)),
@@ -400,7 +407,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
       {opensAsWebsite && !isPending ? <ListPressable
         accessibilityRole="button" accessibilityLabel={`Open ${title} in the browser`}
         accessibilityHint="Opens the original page in your browser app." disabled={selectionMode}
-        onPress={openExternal} style={[styles.trailing, { borderRadius: radius.full }, hasDetails ? styles.trailingTop : null]}>
+        onPress={openExternal} style={[styles.trailing, styles.trailingRound, hasDetails ? styles.trailingTop : null]}>
         <Ionicons name="open-outline" size={20} color={palette.onSurfaceVariant} accessible={false} />
       </ListPressable> : <View pointerEvents="none" style={[styles.trailing, hasDetails ? styles.trailingTop : null]}>
         {isPending ? <Spinner size={20} color={palette.onSurfaceVariant} accessible={false} />
@@ -437,6 +444,11 @@ const styles = StyleSheet.create({
   body: {
     flex: 1,
     flexDirection: "row",
+    // Stretched so the row's primary tap target covers the full fixed height;
+    // the content column below is top-aligned so every row variant (plain,
+    // tagged, reminder) starts its title at the same offset and any slack
+    // lands at the bottom as padding.
+    alignSelf: "stretch",
     alignItems: "center",
       paddingVertical: spacing[12],
      paddingLeft: spacing[16],
@@ -450,7 +462,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   favicon: { width: 24, height: 24, borderRadius: radius.xs },
-  content: { flex: 1, minWidth: 0 },
+  content: { flex: 1, minWidth: 0, alignSelf: "flex-start" },
   leadingBox: { position: "relative" },
   // Launcher-style badge: hangs off the tile's top-end corner. The tile keeps
   // its footprint, so read state never changes row or title geometry.
@@ -475,5 +487,6 @@ const styles = StyleSheet.create({
    reminderRow: { minHeight: 24, flexDirection: "row", alignItems: "center", gap: spacing[4], flexShrink: 1 },
   domain: { flexShrink: 1, minWidth: 0 },
   trailing: { width: 48, height: 48, alignItems: "center", justifyContent: "center", flexShrink: 0 },
+  trailingRound: { borderRadius: radius.full },
   trailingTop: { alignSelf: "flex-start", marginTop: 12 },
 });
