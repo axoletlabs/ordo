@@ -1,15 +1,12 @@
 import { useCallback, useEffect } from "react";
 import { AppState } from "react-native";
-import { useOtaUpdate } from "./use-ota-update";
 import { useNativeUpdateStore } from "../store/native-update";
 import { resolveAppUpdateAction } from "../lib/app-update-action";
-import { checkAppUpdateSources } from "../lib/app-update-check";
 
 const FOREGROUND_RECHECK_MS = 60 * 60 * 1000;
 let lastNativeForegroundCheck = 0;
 
 export function useAppUpdate() {
-  const ota = useOtaUpdate();
   const native = useNativeUpdateStore();
 
   useEffect(() => {
@@ -27,22 +24,21 @@ export function useAppUpdate() {
   }, [native.check, native.hydrate]);
 
   const resolved = resolveAppUpdateAction({
-    otaStatus: ota.status,
-    otaAvailableAt: ota.availableUpdateCreatedAt,
-    otaPendingAt: ota.pendingUpdateCreatedAt,
+    // OTA is intentionally absent from all user-facing update state/actions.
+    otaStatus: "disabled",
+    otaAvailableAt: null,
+    otaPendingAt: null,
     nativeStatus: native.status,
     nativeRelease: native.release,
     nativeDownloaded: !!native.downloadedUri,
   });
 
-  const checkOta = ota.check;
   const checkNative = native.check;
-  const check = useCallback(() => checkAppUpdateSources(checkOta, () => checkNative(true)), [checkNative, checkOta]);
+  const check = useCallback(async () => !!(await checkNative(true)), [checkNative]);
 
-  const error = !!(ota.message || native.error);
+  const error = !!native.error;
 
   return {
-    ota,
     native,
     action: resolved.action,
     kind: resolved.kind,
@@ -50,7 +46,7 @@ export function useAppUpdate() {
     checking: resolved.checking,
     downloading: resolved.downloading,
     error,
-    enabled: ota.enabled || native.status !== "disabled",
+    enabled: native.status !== "disabled",
     check,
   } as const;
 }

@@ -1,4 +1,4 @@
-/** About-page rows for OTA bundles and native app releases. Both stay visible. */
+/** Only full app releases are user-facing. OTA never changes this UI. */
 import React from "react";
 import { StyleSheet } from "react-native";
 import { Button } from "./Button";
@@ -7,17 +7,15 @@ import { toast } from "./toast-store";
 import { useAppUpdate } from "../../hooks/use-app-update";
 import type { AppUpdatePhase } from "../../lib/app-update-action";
 import { useUpdateRestartStore } from "../../store/update-restart";
-import { LinearProgress } from "./LinearProgress";
 
 function phaseLabel(phase: AppUpdatePhase): string {
   if (phase.action === "download") return "Download";
-  if (phase.action === "install") return "Install";
-  return "Restart";
+  return "Install";
 }
 
 export function OtaUpdateCard() {
   const update = useAppUpdate();
-  const { ota, native, phases } = update;
+  const { native, phases } = update;
   const [manualChecking, setManualChecking] = React.useState(false);
   const checkInFlight = React.useRef(false);
   const restarting = useUpdateRestartStore((state) => state.restarting);
@@ -62,15 +60,11 @@ export function OtaUpdateCard() {
       });
       return;
     }
-    if (phase.action === "download") {
-      void ota.download().catch(() => toast.error("Couldn't download the update."));
-      return;
-    }
-    void ota.restart().catch(() => toast.error("Couldn't restart to apply the update."));
   };
 
+  const busy = update.checking || manualChecking;
+
   if (phases.length === 0) {
-    const busy = update.checking || manualChecking;
     return (
       <SettingRow
         icon="cloud-download-outline"
@@ -80,7 +74,7 @@ export function OtaUpdateCard() {
             label={busy ? "Checking…" : "Check"}
             size="md"
             loading={busy}
-            disabled={!update.enabled}
+            disabled={!update.enabled || busy || restarting}
             style={styles.checkButton}
             onPress={() => { void check(); }}
           />
@@ -95,18 +89,16 @@ export function OtaUpdateCard() {
         const nativeBusy =
           phase.kind === "native" &&
           (native.status === "downloading" || native.installing);
-        const otaBusy = phase.kind === "ota" && ota.status === "downloading";
-        const busy = nativeBusy || otaBusy;
         return (
           <SettingRow
             key={phase.kind}
-            icon={phase.kind === "native" ? "phone-portrait-outline" : "cloud-download-outline"}
-            label={phase.kind === "native" ? "Install update" : "App update"}
+            icon="phone-portrait-outline"
+            label="Install update"
             right={
               <Button
                 label={phaseLabel(phase)}
                 size="md"
-                loading={busy}
+                loading={nativeBusy}
                 disabled={!update.enabled || update.checking || manualChecking || update.downloading || native.installing || restarting}
                 style={styles.checkButton}
                 onPress={() => runPhase(phase)}
@@ -115,7 +107,6 @@ export function OtaUpdateCard() {
           />
         );
       })}
-      {ota.status === "downloading" ? <LinearProgress wavy label="Downloading app update" value={ota.downloadProgress} /> : null}
     </>
   );
 }

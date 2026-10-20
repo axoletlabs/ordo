@@ -14,8 +14,6 @@ import { pinSystemChrome } from "../theme/pin-system-chrome";
 import { resolvePalette } from "../theme/theme";
 import { currentDeviceColors } from "../theme/device-colors";
 import { useSettingsStore } from "./settings";
-import { singleFlight } from "../lib/single-flight";
-import { useNativeUpdateStore } from "./native-update";
 
 const SPLASH_PRESENT_TIMEOUT_MS = 1500;
 const COVER_KEY = "restartCover";
@@ -134,10 +132,3 @@ export async function restartRuntime(beforeReload?: () => Promise<void>): Promis
   }
 }
 
-export const restartForUpdate = singleFlight(async () => {
-  const native = useNativeUpdateStore.getState();
-  if (native.status === "downloading" || native.installing) {
-    throw new Error("Finish or cancel the app install before restarting");
-  }
-  await restartRuntime();
-});
