@@ -38,12 +38,17 @@ async function setup(page, theme, expressive) {
   }, { user, theme, expressive });
   page.on("pageerror", error => results.errors.push(error.message));
   let state = { ...article };
+  let currentUser = { ...user, preferences: { ...user.preferences } };
   await page.route("**/*", async route => {
     const request = route.request(), url = new URL(request.url()), path = url.pathname;
     if (url.origin === new URL(base).origin) return route.continue();
     let body = { success: true };
-    if (path === "/api/auth/me") body = user;
-    else if (path === "/api/auth/refresh") body = { user, tokens: { accessToken: "fixture-access", refreshToken: "fixture-refresh", expiresIn: 86400 } };
+    if (path === "/api/auth/me") body = currentUser;
+    else if (path === "/api/auth/refresh") body = { user: currentUser, tokens: { accessToken: "fixture-access", refreshToken: "fixture-refresh", expiresIn: 86400 } };
+    else if (path === "/api/auth/preferences") {
+      currentUser = { ...currentUser, preferences: { ...currentUser.preferences, ...request.postDataJSON() } };
+      body = currentUser;
+    }
     else if (path === "/api/server/info") body = { name: "ordo", version: "0.3.0", reminders: true, folderLockTypes: true };
     else if (path === "/api/folders") body = [];
     else if (path === "/api/tags") body = [tag];
@@ -136,9 +141,17 @@ try {
             await openBookmarkMenu(page);
             samples.push(await measure(page, "Bookmark menu to Edit tags", page.getByRole("menuitem", { name: "Edit tags", exact: true }), { selector: '[role="dialog"]', text: "Edit tags" }));
             await button(page, "Save").waitFor();
+            await page.keyboard.press("Tab");
+            assert.ok(await page.getByRole("dialog").evaluate(node => node.contains(document.activeElement)), "Keyboard focus stays inside Edit tags during the menu handoff");
+            await page.keyboard.press("Escape"); await page.waitForTimeout(500);
+            await openBookmarkMenu(page);
+            samples.push(await measure(page, "Edit tags reopen", page.getByRole("menuitem", { name: "Edit tags", exact: true }), { selector: '[role="dialog"]', text: "Edit tags" }));
             await page.keyboard.press("Escape"); await page.waitForTimeout(500);
             await openBookmarkMenu(page);
             samples.push(await measure(page, "Bookmark menu to Move", page.getByRole("menuitem", { name: "Move to folder", exact: true }), { selector: '[role="dialog"]', text: "Move to folder" }));
+            await page.keyboard.press("Escape"); await page.waitForTimeout(500);
+            await openBookmarkMenu(page);
+            samples.push(await measure(page, "Move reopen", page.getByRole("menuitem", { name: "Move to folder", exact: true }), { selector: '[role="dialog"]', text: "Move to folder" }));
             await page.keyboard.press("Escape"); await page.waitForTimeout(500);
             await openBookmarkMenu(page);
             samples.push(await measure(page, "Delete confirmation", page.getByRole("menuitem", { name: "Delete bookmark", exact: true }), { selector: '[role="dialog"]', text: "Delete this bookmark?" }));
@@ -150,14 +163,20 @@ try {
             await button(page, "Reader settings").waitFor();
             await page.getByText("Section 100", { exact: true }).waitFor();
             await page.waitForTimeout(700);
+            // Measure the overflow before preference edits can reflow the
+            // article or first-use preview fonts can affect the next sample.
+            samples.push(await measure(page, "Reader overflow", button(page, "More article actions"), { selector: '[role="menuitem"]', text: "Open original" }));
+            await page.keyboard.press("Escape"); await page.waitForTimeout(400);
             samples.push(await measure(page, "Reader settings", button(page, "Reader settings"), { selector: '[role="dialog"]', text: "Text size" }));
             await page.waitForTimeout(600);
             await page.keyboard.press("Tab");
             assert.ok(await page.getByRole("dialog").evaluate(node => node.contains(document.activeElement)), "Keyboard focus stays inside reader settings");
             await page.screenshot({ path: `${output}/${mode}-reader-settings.png` });
+            await page.getByRole("radio", { name: "Medium", exact: true }).focus();
+            await page.keyboard.press("ArrowRight");
+            await page.locator('[role="radio"][aria-label="Large"][aria-checked="true"]').waitFor();
+            await page.getByRole("radio", { name: "Medium", exact: true }).click();
             await page.keyboard.press("Escape"); await page.waitForTimeout(500);
-            samples.push(await measure(page, "Reader overflow", button(page, "More article actions"), { selector: '[role="menuitem"]', text: "Open original" }));
-            await page.keyboard.press("Escape"); await page.waitForTimeout(400);
             // Repeat with OS reduced motion; Escape must still release focus.
             await page.emulateMedia({ reducedMotion: "reduce" });
             await button(page, "Reader settings").click();
@@ -166,8 +185,8 @@ try {
             assert.equal(await page.getByRole("dialog").count(), 0);
             console.log(JSON.stringify({ mode, samples }));
           } catch (error) {
-            await page.screenshot({ path: `${output}/${mode}-failure.png` });
-            await writeFile(`${output}/${mode}-failure.txt`, await page.locator("body").innerText());
+            await page.screenshot({ path: `${output}/${mode}-failure.png` }).catch(() => {});
+            await writeFile(`${output}/${mode}-failure.txt`, await page.locator("body").innerText().catch(() => "Page unavailable")).catch(() => {});
             throw error;
           } finally { await context.close(); }
         }
