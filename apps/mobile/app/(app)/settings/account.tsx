@@ -15,20 +15,85 @@ import { UserAvatar } from "../../../src/components/ui/UserAvatar";
 import { ContextMenu, ContextMenuItem } from "../../../src/components/ui/ContextMenu";
 import { toast } from "../../../src/components/ui/toast-store";
 import { useAuthStore } from "../../../src/store/auth";
-import { useServerInfo } from "../../../src/hooks/queries";
+import { useSettingsStore } from "../../../src/store/settings";
 import { authApi } from "../../../src/lib/api/auth";
+import { qk } from "../../../src/lib/api/query-keys";
+import { queryClient } from "../../../src/lib/query-client";
 import { profilePicturePart } from "../../../src/lib/avatar-upload";
 import { errorMessage } from "../../../src/lib/error-message";
 import { formatDate } from "../../../src/lib/format";
 import { haptics } from "../../../src/lib/haptics";
 import { measureAnchor, type MenuAnchorRect } from "../../../src/lib/menu-anchor";
 import { radius, spacing } from "../../../src/theme/tokens";
+import type { ServerInfoDto } from "@ordo/shared";
 
 export default function AccountScreen() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
+
+  return (
+    <SettingsPage title="Account">
+      <SettingsScrollView>
+        <AccountAvatarMenu />
+
+        <SettingsGroup compact>
+          <SettingRow
+            icon="person-outline"
+            label="Display name"
+            value={user?.displayName ?? "—"}
+            onPress={() => router.push("/settings/display-name")}
+            showChevron
+          />
+          <SettingRow
+            icon="mail-outline"
+            label="Email"
+            value={user?.email ?? "—"}
+            onPress={() => router.push("/settings/email")}
+            showChevron
+          />
+          <SettingRow
+            icon="lock-closed-outline"
+            label="Password"
+            value="*****"
+            onPress={() => router.push("/settings/password")}
+            showChevron
+          />
+          <SettingRow
+            icon="shield-checkmark-outline"
+            label="Authenticator"
+            value={user?.mfaEnabled ? "On" : "Off"}
+            onPress={() => router.push("/settings/security")}
+            showChevron
+          />
+          <SettingRow
+            icon="calendar-outline"
+            label="Member since"
+            value={user ? formatDate(user.createdAt) : "—"}
+          />
+        </SettingsGroup>
+
+        <SettingsGroup label="Danger zone">
+          <SettingRow
+            icon="trash-outline"
+            label="Delete account"
+            destructive
+            onPress={() => router.push("/settings/delete-account")}
+            showChevron
+          />
+        </SettingsGroup>
+      </SettingsScrollView>
+    </SettingsPage>
+  );
+}
+
+/**
+ * The avatar menu and its upload state are local to this subtree. Opening the
+ * photo menu, picking a file, or a background server-info refresh must not
+ * rebuild the account rows behind it.
+ */
+function AccountAvatarMenu() {
+  const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
-  const { data: info } = useServerInfo();
   const [busy, setBusy] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchorRect | null>(null);
@@ -40,6 +105,10 @@ export default function AccountScreen() {
   };
 
   const uploadFromUri = async (uri: string) => {
+    // Read the cached limit at upload time: subscribing the page to server-info
+    // polling only to size an occasional avatar upload rebuilt every row.
+    const { serverUrl } = useSettingsStore.getState();
+    const info = queryClient.getQueryData<ServerInfoDto>(qk.serverInfo(serverUrl));
     const maxBytes = info?.profilePictureMaxBytes ?? 2 * 1024 * 1024;
     setBusy(true);
     try {
@@ -118,75 +187,27 @@ export default function AccountScreen() {
   };
 
   return (
-    <SettingsPage title="Account">
-      <SettingsScrollView>
-        <View ref={avatarRef} collapsable={false} style={{ alignSelf: "center", marginBottom: spacing[16] }}>
-          <PressableScale
-            onPress={(event) => {
-              if (busy) return;
-              measureAnchor(avatarRef.current, (anchor) => {
-                setMenuAnchor(anchor);
-                setMenuOpen(true);
-              }, event);
-            }}
-            disabled={busy}
-            accessibilityRole="button"
-            accessibilityLabel="Profile picture"
-            style={{
-              borderRadius: radius.full,
-              opacity: busy ? 0.6 : 1,
-            }}
-          >
-            <UserAvatar user={user} size={72} />
-          </PressableScale>
-        </View>
-
-        <SettingsGroup compact>
-          <SettingRow
-            icon="person-outline"
-            label="Display name"
-            value={user?.displayName ?? "—"}
-            onPress={() => router.push("/settings/display-name")}
-            showChevron
-          />
-          <SettingRow
-            icon="mail-outline"
-            label="Email"
-            value={user?.email ?? "—"}
-            onPress={() => router.push("/settings/email")}
-            showChevron
-          />
-          <SettingRow
-            icon="lock-closed-outline"
-            label="Password"
-            value="*****"
-            onPress={() => router.push("/settings/password")}
-            showChevron
-          />
-          <SettingRow
-            icon="shield-checkmark-outline"
-            label="Authenticator"
-            value={user?.mfaEnabled ? "On" : "Off"}
-            onPress={() => router.push("/settings/security")}
-            showChevron
-          />
-          <SettingRow
-            icon="calendar-outline"
-            label="Member since"
-            value={user ? formatDate(user.createdAt) : "—"}
-          />
-        </SettingsGroup>
-
-        <SettingsGroup label="Danger zone">
-          <SettingRow
-            icon="trash-outline"
-            label="Delete account"
-            destructive
-            onPress={() => router.push("/settings/delete-account")}
-            showChevron
-          />
-        </SettingsGroup>
-      </SettingsScrollView>
+    <>
+      <View ref={avatarRef} collapsable={false} style={{ alignSelf: "center", marginBottom: spacing[16] }}>
+        <PressableScale
+          onPress={(event) => {
+            if (busy) return;
+            measureAnchor(avatarRef.current, (anchor) => {
+              setMenuAnchor(anchor);
+              setMenuOpen(true);
+            }, event);
+          }}
+          disabled={busy}
+          accessibilityRole="button"
+          accessibilityLabel="Profile picture"
+          style={{
+            borderRadius: radius.full,
+            opacity: busy ? 0.6 : 1,
+          }}
+        >
+          <UserAvatar user={user} size={72} />
+        </PressableScale>
+      </View>
 
       <ContextMenu visible={menuOpen} onDismiss={() => setMenuOpen(false)} anchor={menuAnchor}>
         <ContextMenuItem
@@ -208,6 +229,6 @@ export default function AccountScreen() {
           />
         ) : null}
       </ContextMenu>
-    </SettingsPage>
+    </>
   );
 }
