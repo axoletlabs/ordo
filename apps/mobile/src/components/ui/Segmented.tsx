@@ -1,5 +1,5 @@
 /** Baseline segmented buttons / Expressive connected toggle button group. */
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, StyleSheet, View, useWindowDimensions, type TextStyle } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { PressableScale } from "./PressableScale";
@@ -10,8 +10,10 @@ import { radius } from "../../theme/tokens";
 import { haptics } from "../../lib/haptics";
 import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 const AnimatedText = Animated.createAnimatedComponent(Text);
-function SegmentLabel({ label, foreground, selected, labelStyle }: { label: string; foreground: string; selected: boolean; labelStyle?: TextStyle }) {
-  const motion = useMaterialMotion();
+type SegmentMotion = ReturnType<typeof useMaterialMotion>;
+function SegmentLabel({ label, foreground, selected, labelStyle, motion }: { label: string; foreground: string; selected: boolean; labelStyle?: TextStyle; motion: SegmentMotion }) {
+  // `motion` comes from the group, so a many-option group keeps one motion
+  // subscription instead of one store listener pair per label.
   const tint = useSharedValue(foreground);
   const selection = useSharedValue(selected ? 1 : 0);
   const previous = useRef({ foreground, selected, reducedMotion: motion.reducedMotion });
@@ -37,9 +39,13 @@ export interface SegmentedProps<T extends string> {
 }
 export function Segmented<T extends string>({ options, value, onChange, accessibilityLabel, orientation = "auto", disabled = false }: SegmentedProps<T>) {
   const { palette, expressive } = useTheme();
+  const motion = useMaterialMotion();
   const { fontScale } = useWindowDimensions();
   const [width, setWidth] = useState(0);
   const [labelWidths, setLabelWidths] = useState<Record<string, number>>({});
+  const measure = useCallback((option: string, measured: number) => {
+    setLabelWidths((current) => current[option] === measured ? current : { ...current, [option]: measured });
+  }, []);
   // Reserve the selected check for EVERY segment so selecting another option
   // never resizes its neighbors. Narrow windows/large fonts stack, not truncate.
   const minimumWidth = Math.max(0, ...options.map((option) => labelWidths[option.value] ?? 0)) + 22 + 24 + (expressive ? 0 : 2);
@@ -64,14 +70,7 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
     },
   } : {};
   return <View onLayout={(event) => setWidth(event.nativeEvent.layout.width)} style={{ minHeight: 48, justifyContent: "center" }}>
-    {orientation === "auto" ? <View pointerEvents="none" aria-hidden importantForAccessibility="no-hide-descendants"
-      style={{ position: "absolute", left: 0, right: 0, opacity: 0 }}>
-      {options.map((option) => <Text key={option.value} variant="labelLarge" numberOfLines={1}
-        style={[{ alignSelf: "flex-start" }, option.labelStyle]} onLayout={(event) => {
-          const measured = Math.ceil(event.nativeEvent.layout.width) + 1;
-          setLabelWidths((current) => current[option.value] === measured ? current : { ...current, [option.value]: measured });
-        }}>{option.label}</Text>)}
-    </View> : null}
+    {orientation === "auto" ? <SegmentMeasures options={options} onMeasure={measure} /> : null}
     <View {...keyboardProps} accessibilityRole="radiogroup" accessibilityLabel={accessibilityLabel} style={[styles.group, {
     gap: expressive ? 2 : 0, backgroundColor: "transparent",
     borderRadius: radius.full,
@@ -88,10 +87,15 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
       const rest = selected ? outer : corners(radius.sm);
       const pressed = corners(radius.xs);
       const outline = corners(0);
+      // Only the Expressive connected group morphs corners on press. Baseline
+      // buttons keep their outline shape, but still pass a shape: PressableScale
+      // selects its implementation from the shape's presence, so omitting it in
+      // Standard would swap pressables (and remount focus/press) on mode change.
+      const shape = { rest: expressive ? rest : outline, pressed: expressive ? pressed : outline };
       return <PressableScale key={option.value} accessibilityRole="radio" accessibilityLabel={option.accessibilityLabel ?? option.label}
         {...(Platform.OS === "web" ? { tabIndex: selected ? 0 : -1 } : {})}
         disabled={disabled} accessibilityState={{ checked: selected, disabled }} onPress={() => { if (!selected && !disabled) { haptics.selection(); onChange(option.value); } }}
-        stateLayerColor={fg} shape={{ rest: expressive ? rest : outline, pressed: expressive ? pressed : outline }}
+        stateLayerColor={fg} shape={shape}
         style={[styles.option, vertical ? { flex: 0, width: "100%" } : null]}
         visualStyle={[styles.visual, {
           height: visualHeight,
@@ -103,11 +107,27 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
           ...(!expressive ? { borderTopLeftRadius: outline.topLeft, borderBottomLeftRadius: outline.bottomLeft,
             borderTopRightRadius: outline.topRight, borderBottomRightRadius: outline.bottomRight } : {}),
         }]}>
-          <SegmentLabel label={option.label} foreground={fg} selected={selected} labelStyle={option.labelStyle} />
+          <SegmentLabel label={option.label} foreground={fg} selected={selected} labelStyle={option.labelStyle} motion={motion} />
       </PressableScale>;
     })}
   </View></View>;
 }
+
+/** Invisible per-label measuring pass for auto orientation. Memoized so a
+ * selection change re-renders the group without re-rendering every hidden
+ * label when the caller passes a stable options array; inline arrays simply
+ * re-render as they did before. */
+const SegmentMeasures = React.memo(function SegmentMeasures({ options, onMeasure }: {
+  options: readonly { value: string; label: string; labelStyle?: TextStyle }[];
+  onMeasure: (value: string, width: number) => void;
+}) {
+  return <View pointerEvents="none" aria-hidden importantForAccessibility="no-hide-descendants"
+    style={{ position: "absolute", left: 0, right: 0, opacity: 0 }}>
+    {options.map((option) => <Text key={option.value} variant="labelLarge" numberOfLines={1}
+      style={[{ alignSelf: "flex-start" }, option.labelStyle]} onLayout={(event) =>
+        onMeasure(option.value, Math.ceil(event.nativeEvent.layout.width) + 1)}>{option.label}</Text>)}
+  </View>;
+});
 const styles = StyleSheet.create({
    group: { flexDirection: "row", minHeight: 48 },
    option: { flex: 1, minWidth: 48, minHeight: 48, justifyContent: "center" },

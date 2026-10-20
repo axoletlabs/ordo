@@ -35,10 +35,16 @@ export function Button({ label, onPress, variant = "primary", size = "sm", loadi
   const foreground = inactive ? `${palette.onSurface}61` : variant === "primary" ? palette.onPrimary
     : variant === "danger" ? palette.onError : variant === "tonal" || variant === "secondary" ? palette.onSecondaryContainer
     : variant === "outlined" && expressive ? palette.onSurfaceVariant : palette.primary;
+  // The pressed squarer-corner morph is Expressive-only; Standard keeps the
+  // capsule at rest and pressed. Always pass a shape (even when it doesn't
+  // morph): PressableScale picks its implementation from the shape's presence,
+  // and swapping implementations on a mode change would remount a focused or
+  // pressed control mid-gesture.
+  const shape = { rest: tokens.height / 2, pressed: expressive ? tokens.pressed : tokens.height / 2 };
   return <View style={[{ minHeight: 48, minWidth: 48, justifyContent: "center", ...(block ? { width: "100%" as const } : {}) }, style]}>
     <PressableScale testID={testID} disabled={inactive} accessibilityRole="button" accessibilityLabel={label}
       accessibilityState={{ disabled: inactive, busy: loading }} stateLayerColor={foreground}
-      shape={{ rest: tokens.height / 2, pressed: expressive ? tokens.pressed : tokens.height / 2 }}
+      shape={shape}
       onPress={() => { haptics.light(); onPress?.(); }}
       style={{ minWidth: 48, minHeight: Math.max(48, tokens.height), borderRadius: tokens.height / 2, justifyContent: "center" }}
       visualStyle={[styles.base, { height: tokens.height, alignSelf: "stretch", paddingHorizontal: size === "sm" && !expressive ? 24 : tokens.padding,
