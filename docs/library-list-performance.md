@@ -69,9 +69,10 @@ in-flight request with the reader screen.
 
 ## Shared issues (other owners)
 
-- `invalidateQueries({ queryKey: ["bookmarks"] })` (moves/batch moves) also
-  refetches the active catalogue, sequentially replaying every warmed page on
-  the library screen. Consider excluding `library-index` or accepting it.
+- Move/delete settlement now excludes the catalogue when metadata was already
+  reconciled in place. Failed snapshot-based delete rollback and tag/read
+  writes still request canonical rows. That request survives overlapping writes
+  even when a move is the last writer to settle.
 - `prefetchFolderBookmarks` uses `prefetchInfiniteQuery` with default
   `staleTime: 0`, so every warm refetches even fresh folders. A short
   `staleTime` would dedupe repeated taps.

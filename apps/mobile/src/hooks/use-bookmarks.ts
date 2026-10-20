@@ -46,6 +46,28 @@ import { PERSISTED_QUERY_GC_TIME_MS } from "../lib/query-persist";
 
 const BOOKMARK_WRITE_KEY = ["bookmarks", "write"] as const;
 
+/**
+ * The library catalogue is paged through the whole library; invalidating it
+ * refetches every warmed page sequentially. Move/delete callbacks already
+ * reconcile its rows in place.
+ */
+function isLibraryCatalogue(query: { queryKey: readonly unknown[] }) {
+  return query.queryKey[0] === "bookmarks" && query.queryKey[1] === "library-index";
+}
+
+// A tag/read write may finish while a move is still optimistic. The final
+// writer must retain its reconciliation request even if that writer is a move.
+const catalogueReconciliationNeeded = new WeakSet<QueryClient>();
+function invalidateSettledBookmarkWrites(qc: QueryClient, reconcileCatalogue: boolean) {
+  if (reconcileCatalogue) catalogueReconciliationNeeded.add(qc);
+  if (qc.isMutating({ mutationKey: BOOKMARK_WRITE_KEY }) > 1) return;
+  const includeCatalogue = catalogueReconciliationNeeded.delete(qc);
+  void qc.invalidateQueries({
+    queryKey: ["bookmarks"], predicate: (query) => includeCatalogue || !isLibraryCatalogue(query),
+  });
+  void qc.invalidateQueries({ queryKey: qk.folders });
+}
+
 function snapshotLists(qc: QueryClient, folderId: string | null) {
   return qc.getQueriesData({ queryKey: qk.bookmarks(folderId) });
 }
@@ -392,9 +414,9 @@ export function useMoveBookmark(fromFolderId: string | null) {
     onSettled: () => {
       // A different move may still be optimistic. Refetch only after the last
       // write, otherwise its pre-commit server row can overwrite that move.
-      if (qc.isMutating({ mutationKey: BOOKMARK_WRITE_KEY }) > 1) return;
-      void qc.invalidateQueries({ queryKey: ["bookmarks"] });
-      void qc.invalidateQueries({ queryKey: qk.folders });
+      // moveBookmarkInCache already applied the canonical row, including the
+      // catalogue copy. Replay lists/folders, not the whole warmed catalogue.
+      invalidateSettledBookmarkWrites(qc, false);
     },
   });
 }
@@ -530,9 +552,11 @@ export function useBatchBookmarks() {
       if (variables.action === "delete" || variables.action === "addTags") {
         void qc.invalidateQueries({ queryKey: ["tags"] });
       }
-      if (qc.isMutating({ mutationKey: BOOKMARK_WRITE_KEY }) > 1) return;
-      void qc.invalidateQueries({ queryKey: ["bookmarks"] });
-      void qc.invalidateQueries({ queryKey: qk.folders });
+      // Move rollback preserves concurrent edits; delete rollback restores a
+      // whole snapshot, so failed deletes still need canonical reconciliation.
+      // Tag and read actions also require canonical server fields.
+      const reconciledCatalogue = variables.action === "move" || (variables.action === "delete" && !_error);
+      invalidateSettledBookmarkWrites(qc, !reconciledCatalogue);
     },
   });
 }
