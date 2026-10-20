@@ -114,15 +114,18 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
   const [labelWidths, setLabelWidths] = useState<Record<string, number>>({});
   const measuredWidths = useRef<Record<string, number>>({});
   const pendingWidths = useRef<Record<string, number> | null>(null);
-  const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flushQueued = useRef(false);
+  const generation = useRef(0);
   const flushMeasures = useCallback(() => {
-    flushTimer.current = null;
+    flushQueued.current = false;
     const pending = pendingWidths.current;
     pendingWidths.current = null;
     if (!pending) return;
     // Crossing labels report in separate layout callbacks. Commit them as one
     // state update instead of re-rendering the whole group (and every animated
-    // segment) once per label during a heavy first mount.
+    // segment) once per label during a heavy first mount. The microtask
+    // checkpoint lands before the next macrotask, so it adds no timer/frame
+    // boundary beyond the intermediate dispatch commit itself.
     setLabelWidths((current) => {
       let changed = false;
       const next = { ...current };
@@ -137,13 +140,32 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
     if (measuredWidths.current[option] === measured) return;
     measuredWidths.current[option] = measured;
     pendingWidths.current = { ...pendingWidths.current, [option]: measured };
-    if (flushTimer.current == null) flushTimer.current = setTimeout(flushMeasures, 0);
+    if (flushQueued.current) return;
+    flushQueued.current = true;
+    const scheduled = generation.current;
+    queueMicrotask(() => {
+      // The group can unmount (or recycle effects) between the layout event and
+      // the microtask checkpoint; a stale flush must not touch state.
+      if (generation.current !== scheduled) return;
+      flushMeasures();
+    });
   }, [flushMeasures]);
-  useEffect(() => () => { if (flushTimer.current != null) clearTimeout(flushTimer.current); }, []);
+  // Layout cleanup runs synchronously with the unmount commit, before any
+  // pending width microtask can reach a torn-down tree.
+  React.useLayoutEffect(() => () => {
+    generation.current += 1;
+    pendingWidths.current = null;
+    flushQueued.current = false;
+  }, []);
   // The latest selection props stay behind a stable callback so memoized
   // segments don't all invalidate when the caller passes a fresh arrow.
+  // Publish them only after commit: a transition render can be discarded
+  // (interrupted, or a later sibling suspends). Writing the ref during render
+  // would leave the next press using a value/callback that never committed.
   const latestSelection = useRef({ value, disabled, onChange });
-  latestSelection.current = { value, disabled, onChange };
+  React.useLayoutEffect(() => {
+    latestSelection.current = { value, disabled, onChange };
+  }, [value, disabled, onChange]);
   const select = useCallback((next: string) => {
     const current = latestSelection.current;
     if (current.disabled || current.value === next) return;

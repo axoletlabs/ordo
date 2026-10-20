@@ -2,8 +2,11 @@
  *   - stable option/label props bail out of repainting unchanged segments and
  *     the hidden measuring row;
  *   - a selection change repaints only the two options whose state changed;
- *   - the per-label measuring callbacks commit as one state update, so a
- *     five-option group does not render five extra times on first mount.
+ *   - the per-label measuring callbacks commit as one state update at the
+ *     microtask checkpoint, so a five-option group does not render five extra
+ *     times on first mount and adds no timer boundary;
+ *   - a discarded transition/Suspense render cannot publish a speculative
+ *     value or onChange closure to the next press.
  * The components under test are the real source files with only platform
  * primitives mocked. Run with:
  *   node --test apps/mobile/scripts/segmented-render-work.test.cjs */
@@ -59,6 +62,9 @@ function Pressable(props) {
     "aria-checked": props.accessibilityState?.checked,
     "aria-disabled": props.disabled,
     tabIndex: props.tabIndex,
+    // Real Pressables dispatch onPress; concurrent tests click a committed
+    // segment after a discarded render.
+    onClick: props.disabled ? undefined : props.onPress,
   }, children);
 }
 
@@ -171,6 +177,7 @@ function setup() {
   counters.labels = 0; counters.measures = 0; counters.groupRenders = 0;
   layouts.outer = null; layouts.measures.length = 0;
   return {
+    root,
     async render(props) {
       const Segmented = ui("Segmented.tsx").Segmented;
       await React.act(() => root.render(element(Segmented, props)));
@@ -213,7 +220,7 @@ test("Stable segment props skip unchanged segments, labels, and measurements", a
   } finally { await host.unmount(); }
 });
 
-test("Per-label measurements commit as one render instead of one per label", async () => {
+test("Per-label measurements commit as one microtask render instead of one per label", async () => {
   const host = setup();
   try {
     await host.render({ ...options });
@@ -222,26 +229,200 @@ test("Per-label measurements commit as one render instead of one per label", asy
     assert.equal(counters.groupRenders, 2, "the container width commit is one render");
     const measures = layouts.measures.slice();
     assert.equal(measures.length, 5);
-    // Native layout callbacks can arrive outside React's event batching, so
-    // force a synchronous commit attempt after each one. The batched
-    // implementation only records widths; it must not render until the flush.
-    let rendersDuringDispatch = 0;
-    await React.act(() => {
-      for (const measure of measures) {
-        flushSync(() => measure({ nativeEvent: { layout: { width: 80 } } }));
-        rendersDuringDispatch = Math.max(rendersDuringDispatch, counters.groupRenders);
-      }
-    });
-    assert.equal(rendersDuringDispatch, 2, "five layout callbacks do not render the group five times");
-    await React.act(async () => { await new Promise(resolve => setTimeout(resolve, 5)); });
-    assert.equal(counters.groupRenders, 3, "the whole measuring pass commits once");
+    let macrotaskRan = false;
+    const macrotask = setTimeout(() => { macrotaskRan = true; }, 0);
+    const originalQueueMicrotask = globalThis.queueMicrotask;
+    let microtasksQueued = 0;
+    let microtasksRun = 0;
+    globalThis.queueMicrotask = (callback) => {
+      microtasksQueued += 1;
+      originalQueueMicrotask(() => { microtasksRun += 1; callback(); });
+    };
+    try {
+      // Native layout callbacks can arrive outside React's event batching, so
+      // force a synchronous commit attempt after each one. The batched
+      // implementation only records widths; it must not render until the
+      // microtask checkpoint, but it must render before the next macrotask.
+      let rendersDuringDispatch = 0;
+      await React.act(async () => {
+        for (const measure of measures) {
+          flushSync(() => measure({ nativeEvent: { layout: { width: 80 } } }));
+          rendersDuringDispatch = Math.max(rendersDuringDispatch, counters.groupRenders);
+        }
+        assert.equal(microtasksQueued, 1, "five measurements coalesce into one microtask");
+        await Promise.resolve();
+        assert.equal(microtasksRun, 1, "the coalesced flush runs at the microtask checkpoint");
+        assert.equal(macrotaskRan, false, "no timer/macrotask is needed for the width commit");
+      });
+      assert.equal(rendersDuringDispatch, 2, "five layout callbacks do not render the group five times");
+      assert.equal(counters.groupRenders, 3, "the whole measuring pass commits once");
+    } finally {
+      globalThis.queueMicrotask = originalQueueMicrotask;
+      clearTimeout(macrotask);
+    }
     const group = document.querySelector('[role="radiogroup"]');
     assert.equal(group.getAttribute("data-flex"), "column", "the batched widths still stack the narrow group");
-    // Re-reporting the same widths is a no-op.
-    await React.act(() => {
+    // Re-reporting the same widths is a no-op, including the microtask flush.
+    await React.act(async () => {
       for (const measure of measures) measure({ nativeEvent: { layout: { width: 80 } } });
+      await Promise.resolve();
     });
-    await React.act(async () => { await new Promise(resolve => setTimeout(resolve, 5)); });
     assert.equal(counters.groupRenders, 3, "unchanged measurements skip the state commit");
   } finally { await host.unmount(); }
+});
+
+test("A width-driven auto orientation changes before the next macrotask", async () => {
+  const host = setup();
+  try {
+    await host.render({ ...options });
+    // Empty-width heuristic fits five short labels in 300px; measured 80px
+    // labels (plus check and padding) do not.
+    await React.act(() => layouts.outer({ nativeEvent: { layout: { width: 300 } } }));
+    assert.equal(document.querySelector('[role="radiogroup"]').getAttribute("data-flex"), "row");
+    const measures = layouts.measures.slice();
+    let macrotaskRan = false;
+    const macrotask = setTimeout(() => { macrotaskRan = true; }, 0);
+    const originalQueueMicrotask = globalThis.queueMicrotask;
+    let microtasksQueued = 0;
+    let microtasksRun = 0;
+    globalThis.queueMicrotask = (callback) => {
+      microtasksQueued += 1;
+      originalQueueMicrotask(() => { microtasksRun += 1; callback(); });
+    };
+    try {
+      await React.act(async () => {
+        for (const measure of measures) flushSync(() => measure({ nativeEvent: { layout: { width: 80 } } }));
+        assert.equal(document.querySelector('[role="radiogroup"]').getAttribute("data-flex"), "row",
+          "the layout dispatch itself still records widths instead of rendering");
+        assert.equal(microtasksQueued, 1, "the layout callbacks coalesce into one microtask");
+        await Promise.resolve();
+        assert.equal(microtasksRun, 1, "the coalesced flush runs before any macrotask/paint");
+        assert.equal(macrotaskRan, false, "no timer/macrotask was needed for the width commit");
+      });
+      assert.equal(document.querySelector('[role="radiogroup"]').getAttribute("data-flex"), "column",
+        "the measured widths commit in the same microtask checkpoint");
+    } finally {
+      globalThis.queueMicrotask = originalQueueMicrotask;
+      clearTimeout(macrotask);
+    }
+  } finally { await host.unmount(); }
+});
+
+/* ---------------------- concurrent render / Suspense repro ---------------------- */
+
+/**
+ * Both tests let React start a transition that renders Segmented with new
+ * props, then suspend a later sibling so the whole pass is discarded. The
+ * committed tree keeps the previous props. The next press must use those
+ * committed props, not the discarded render's value/onChange.
+ */
+async function discardedRenderHarness(App) {
+  const host = setup();
+  await React.act(() => host.root.render(element(App)));
+  return host;
+}
+
+test("A discarded transition render cannot swallow the next segment press", async () => {
+  const Segmented = ui("Segmented.tsx").Segmented;
+  const suspension = { armed: false, promise: null };
+  function Suspender() {
+    if (!suspension.armed) return null;
+    if (!suspension.promise) {
+      // The boundary is unmounted before this resolves. Keeping it pending
+      // avoids resolving suspended data outside act(), which would only warn.
+      suspension.promise = new Promise(() => {});
+    }
+    throw suspension.promise;
+  }
+  const clicked = [];
+  let startDiscardedPass;
+  function App() {
+    const [value, setValue] = React.useState("a");
+    const [pending, setPending] = React.useState(false);
+    suspension.armed = pending;
+    startDiscardedPass = () => {
+      React.startTransition(() => { setValue("b"); setPending(true); });
+    };
+    return element(React.Suspense, { fallback: element("div", null, "loading") },
+      element(Segmented, {
+        options: OPTIONS,
+        value,
+        onChange: (next) => { clicked.push(next); setValue(next); },
+      }),
+      element(Suspender, null));
+  }
+  const host = await discardedRenderHarness(App);
+  try {
+    assert.equal(document.querySelectorAll('[role="radio"]').length, 5);
+    await React.act(async () => {
+      startDiscardedPass();
+      // Let the transition render run and suspend; React keeps the current
+      // tree because the update is not urgent.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    const checked = [...document.querySelectorAll('[role="radio"]')]
+      .find((node) => node.getAttribute("aria-checked") === "true");
+    assert.match(checked?.textContent ?? "", /Alpha/, "the committed tree still shows the old selection");
+    // Drop the suspension before the press, so the press's urgent render is
+    // observable instead of React showing the boundary fallback.
+    suspension.armed = false;
+    const beta = [...document.querySelectorAll('[role="radio"]')]
+      .find((node) => node.textContent?.includes("Beta"));
+    assert.ok(beta, "Beta is present in the committed tree");
+    await React.act(() => beta.click());
+    assert.deepEqual(clicked, ["b"], "the press must reach onChange, not be swallowed as already-selected");
+  } finally {
+    await host.unmount();
+  }
+});
+
+test("A discarded render cannot install its callback closure", async () => {
+  const Segmented = ui("Segmented.tsx").Segmented;
+  const suspension = { armed: false, promise: null };
+  function Suspender() {
+    if (!suspension.armed) return null;
+    if (!suspension.promise) {
+      // The boundary is unmounted before this resolves. Keeping it pending
+      // avoids resolving suspended data outside act(), which would only warn.
+      suspension.promise = new Promise(() => {});
+    }
+    throw suspension.promise;
+  }
+  const seen = [];
+  let startDiscardedPass;
+  function App() {
+    const [value, setValue] = React.useState("a");
+    const [version, setVersion] = React.useState("committed");
+    const [pending, setPending] = React.useState(false);
+    suspension.armed = pending;
+    startDiscardedPass = () => {
+      // Segmented's value is unchanged; only the callback closure this render
+      // would publish is speculative.
+      React.startTransition(() => { setVersion("speculative"); setPending(true); });
+    };
+    return element(React.Suspense, { fallback: element("div", null, "loading") },
+      element(Segmented, {
+        options: OPTIONS,
+        value,
+        onChange: (next) => { seen.push(version); setValue(next); },
+      }),
+      element(Suspender, null));
+  }
+  const host = await discardedRenderHarness(App);
+  try {
+    await React.act(async () => {
+      startDiscardedPass();
+      // Let the transition render run and suspend; React keeps the current
+      // tree because the update is not urgent.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    suspension.armed = false;
+    const beta = [...document.querySelectorAll('[role="radio"]')]
+      .find((node) => node.textContent?.includes("Beta"));
+    assert.ok(beta, "Beta is present in the committed tree");
+    await React.act(() => beta.click());
+    assert.deepEqual(seen, ["committed"], "the press must use the committed onChange closure");
+  } finally {
+    await host.unmount();
+  }
 });
