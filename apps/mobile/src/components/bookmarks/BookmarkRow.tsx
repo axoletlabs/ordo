@@ -176,11 +176,14 @@ export const BookmarkRow = React.memo(function BookmarkRow({
       onPress(bookmark);
       return;
     }
+    warmBookmark();
     runPressAction(() => onPress(bookmark), haptics.light);
   };
 
-  // Press-in also fires when a scroll starts on the row. Only warm what the
-  // reader will actually request: websites open live and skip the detail.
+  // Warm only real taps. Press-in fires on every row a scroll gesture starts
+  // on, which made flinging a list prefetch each touched row's article HTML;
+  // starting the warm in the same tick as navigation loses only the
+  // press-and-hold duration.
   const warmBookmark = () => {
     if (selectionMode || opensAsWebsite) return;
     void prefetchBookmarkDetail(bookmark.id, bookmark.folderId);
@@ -262,7 +265,6 @@ export const BookmarkRow = React.memo(function BookmarkRow({
         onPressIn={() => {
           setPressed(true);
           hold.pressIn();
-          warmBookmark();
         }}
         onPressOut={() => { setPressed(false); hold.pressOut(); }}
         onPress={() => {
@@ -351,7 +353,6 @@ export const BookmarkRow = React.memo(function BookmarkRow({
         onPressIn={() => {
           setPressed(true);
           hold.pressIn();
-          warmBookmark();
         }}
         onPressOut={() => { setPressed(false); hold.pressOut(); }}
         onPress={() => {

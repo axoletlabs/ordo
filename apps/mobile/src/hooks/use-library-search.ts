@@ -12,7 +12,7 @@ import { useFolderTokenStore } from "../store/folder-tokens";
 import { useInfiniteSearch } from "./use-bookmarks";
 import { useLoadMore } from "./use-list-controls";
 import { collectCachedBookmarks } from "../lib/cache-helpers";
-import { compileSearchResults, EMPTY_SEARCH_FILTERS, reuseSearchResults, sanitizeRouteParam,
+import { compileSearchResults, createCacheWriteCoalescer, EMPTY_SEARCH_FILTERS, reuseSearchResults, sanitizeRouteParam,
    searchFiltersActive, searchScopeActive, useDebouncedValue,
   type SearchFilters } from "../lib/search-bookmarks";
 
@@ -87,16 +87,23 @@ export function useLibrarySearch(localItems: readonly BookmarkDto[], folders: re
   const [cacheRevision, setCacheRevision] = useState(0);
   // Cached matches are only computed while searching; idle, cache traffic
   // (catalogue pages, polls, prefetches) must not re-render the library.
+  // Writes arrive in bursts (an invalidation refetches every active bookmarks
+  // query), so coalesce them into one recompute per burst.
   useEffect(() => {
     if (!active) return;
-    return queryClient.getQueryCache().subscribe((event) => {
+    const coalescer = createCacheWriteCoalescer(() => setCacheRevision((revision) => revision + 1));
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
       if (event.query.queryKey[0] !== "bookmarks") return;
       // Search pages are written by this hook's own query; recomputing the
       // cached-match snapshot on each would be redundant work per page.
       if (event.query.queryKey[1] === "search") return;
       if (event.type === "removed" || (event.type === "updated" && event.action.type === "success"))
-        setCacheRevision((revision) => revision + 1);
+        coalescer.bump();
     });
+    return () => {
+      unsubscribe();
+      coalescer.cancel();
+    };
   }, [queryClient, active]);
   const search = useInfiniteSearch(serverQuery, { tagIds: listFilters.tagIds, folderIds: listFilters.folderIds,
     unfiled: listFilters.unfiled, unread: listFilters.status, fuzzy: listFilters.fuzzy,

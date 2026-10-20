@@ -3,8 +3,8 @@
  * Handles protected folders (unlock sheet → token cached → list loads),
  * optimistic toggle/delete/move, mark-all-read, and folder actions.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { StyleSheet, View, type FlatList, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useAppRouter as useRouter } from "../../../src/hooks/use-app-router";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
@@ -53,6 +53,75 @@ import { useLoadMore, usePullToRefresh } from "../../../src/hooks/use-list-contr
 import { ListLoadingFooter } from "../../../src/components/ui/ListLoadingFooter";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
 import { useBookmarkListLayout } from "../../../src/hooks/use-bookmark-list-layout";
+
+const bookmarkKeyExtractor = (b: BookmarkDto) => b.id;
+
+type FolderBookmarkListProps = {
+  listKey: string;
+  listRef: React.Ref<FlatList<BookmarkDto>>;
+  onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  onContentSizeChange: (width: number, height: number) => void;
+  scrollEventThrottle: number;
+  scrollEnabled: boolean;
+  data: BookmarkDto[];
+  extraData: string;
+  keyExtractor: (b: BookmarkDto) => string;
+  renderItem: (info: { item: BookmarkDto; index: number }) => React.ReactElement;
+  getItemLayout:
+    | ((data: unknown, index: number) => { length: number; offset: number; index: number })
+    | undefined;
+  paddingBottom: number;
+  refreshing: boolean;
+  onRefresh: () => void;
+  onEndReached: () => void;
+  footerVisible: boolean;
+  onSave: () => void;
+};
+
+/** Action sheets and menus re-render the screen; the list subtree only
+ * re-renders when its own inputs change. */
+const FolderBookmarkList = React.memo(function FolderBookmarkList({
+  listKey,
+  listRef,
+  onScroll,
+  onContentSizeChange,
+  scrollEventThrottle,
+  scrollEnabled,
+  data,
+  extraData,
+  keyExtractor,
+  renderItem,
+  getItemLayout,
+  paddingBottom,
+  refreshing,
+  onRefresh,
+  onEndReached,
+  footerVisible,
+  onSave,
+}: FolderBookmarkListProps) {
+  return (
+    <ThemedFlashList
+      ref={listRef}
+      onScroll={onScroll}
+      onContentSizeChange={onContentSizeChange}
+      scrollEventThrottle={scrollEventThrottle}
+      data={data}
+      extraData={extraData}
+      getItemLayout={getItemLayout}
+      key={listKey}
+      keyExtractor={keyExtractor}
+      renderItem={renderItem}
+      contentContainerStyle={{ paddingBottom }}
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+      scrollEnabled={scrollEnabled}
+      onEndReached={onEndReached}
+      ListFooterComponent={footerVisible ? <ListLoadingFooter /> : null}
+      ListEmptyComponent={<View style={styles.empty}><EmptyState icon="bookmark-outline" title="No bookmarks here"
+        message="Save a link to start reading." action={<Button onPress={onSave} label="Save bookmark" />} /></View>}
+    />
+  );
+});
 
 export default function FolderDetailScreen() {
   const { palette } = useTheme();
@@ -193,27 +262,27 @@ export default function FolderDetailScreen() {
   };
 
   const listContentPadding = selection.active ? selectionClearance : listOverlayClearance;
+  const openAddSheet = useCallback(() => setAddOpen(true), []);
   const listPane = (
     <SelectionDragFrame drag={drag} selectionStore={selection.store}>
-    <ThemedFlashList
-      ref={drag.listRef}
+    <FolderBookmarkList
+      listKey={`folder:${folderId ?? "root"}`}
+      listRef={drag.listRef}
       onScroll={drag.onScroll}
       onContentSizeChange={drag.onContentSizeChange}
       scrollEventThrottle={drag.scrollEventThrottle}
       data={items}
       extraData={bookmarkSort}
-      getItemLayout={getItemLayout}
-      key={`folder:${folderId ?? "root"}`}
-      keyExtractor={(b: BookmarkDto) => b.id}
+      keyExtractor={bookmarkKeyExtractor}
       renderItem={renderBookmark}
-      contentContainerStyle={{ paddingBottom: listContentPadding }}
+      getItemLayout={getItemLayout}
+      paddingBottom={listContentPadding}
       refreshing={refreshing}
       onRefresh={onRefresh}
       scrollEnabled={drag.scrollEnabled}
       onEndReached={onEndReached}
-      ListFooterComponent={loadingMore ? <ListLoadingFooter /> : null}
-      ListEmptyComponent={<View style={styles.empty}><EmptyState icon="bookmark-outline" title="No bookmarks here"
-        message="Save a link to start reading." action={<Button onPress={() => setAddOpen(true)} label="Save bookmark" />} /></View>}
+      footerVisible={loadingMore}
+      onSave={openAddSheet}
     />
     </SelectionDragFrame>
   );
