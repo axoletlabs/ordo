@@ -9,7 +9,7 @@ import { haptics } from "../../lib/haptics";
 import { useTheme } from "../../theme/ThemeProvider";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { layout, radius, spacing } from "../../theme/tokens";
-import type { MenuAnchorRect } from "../../lib/menu-anchor";
+import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 
 export interface SettingsSelectOption<T extends string> {
   value: T;
@@ -39,8 +39,8 @@ export function SettingsSelect<T extends string>({
   const show = () => {
     haptics.selection();
     Keyboard.dismiss();
-    anchorRef.current?.measureInWindow((x, y, measuredWidth, measuredHeight) => {
-      setAnchor({ x, y, width: measuredWidth, height: measuredHeight });
+    measureAnchor(anchorRef.current, (rect) => {
+      setAnchor(rect);
       setOpen(true);
     });
   };

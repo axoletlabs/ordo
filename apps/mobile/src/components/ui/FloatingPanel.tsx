@@ -301,7 +301,7 @@ function FloatingPanelSurface({
   return (
     <OverlayPortal blocking={rendered} active={visible && interactive && !obscured}>
       <InputFocusScopeContext.Provider value={inputFocusScope}>
-      <PanelOnShow enabled={inputFocusScope.active && inputFocusScope.ready} onShowRef={onShowRef} />
+      <PanelOnShow visible={visible} enabled={inputFocusScope.active && inputFocusScope.ready} onShowRef={onShowRef} />
       <View
         accessibilityViewIsModal={visible && interactive && !obscured}
         accessibilityElementsHidden={!visible || obscured}
@@ -390,14 +390,16 @@ function FloatingPanelSurface({
 /** Run opening callbacks where the portal's real blocking context is known.
  * A newer surface cancels any pending focus timer; uncovering the old panel
  * does not resurrect that automatic request. */
-const PanelOnShow = React.memo(function PanelOnShow({ enabled, onShowRef }: {
+const PanelOnShow = React.memo(function PanelOnShow({ visible, enabled, onShowRef }: {
+  visible: boolean;
   enabled: boolean;
   onShowRef: React.RefObject<FloatingPanelProps["onShow"]>;
 }) {
   const blocked = useOverlayBlocked();
   const consumed = React.useRef(false);
   React.useEffect(() => {
-    if (!enabled) { consumed.current = false; return; }
+    if (!visible) { consumed.current = false; return; }
+    if (!enabled) return;
     if (blocked) { consumed.current = true; return; }
     if (consumed.current) return;
     consumed.current = true;
@@ -406,7 +408,7 @@ const PanelOnShow = React.memo(function PanelOnShow({ enabled, onShowRef }: {
       if (typeof cleanup === "function") cleanup();
       else if (cleanup != null) clearTimeout(cleanup);
     };
-  }, [enabled, blocked, onShowRef]);
+  }, [visible, enabled, blocked, onShowRef]);
   return null;
 });
 

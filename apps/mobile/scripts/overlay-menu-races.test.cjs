@@ -782,6 +782,27 @@ function scrimOpacity(container) {
   return root ? opacityOf(root.firstElementChild) : undefined;
 }
 
+test("a panel opening callback is consumed once and does not replay after a child picker", async t => {
+  resetAnimations();
+  let shows = 0;
+  let cancellations = 0;
+  const harness = panelHarness({ visible: true, props: { onShow: () => { shows++; return () => cancellations++; } } });
+  t.after(() => harness.tree.unmount());
+  await harness.mountInitial();
+  await settle();
+  assert.equal(shows, 1);
+  await harness.render({ obscured: true });
+  assert.equal(cancellations, 1, "covering the surface cancels any pending opening work");
+  await harness.render({ obscured: false });
+  await settle();
+  assert.equal(shows, 1, "resuming the same opening cannot steal focus again");
+  await harness.render({ visible: false });
+  await settle();
+  await harness.render({ visible: true });
+  await settle();
+  assert.equal(shows, 2, "a fresh opening receives its own callback");
+});
+
 test("a closing obscured panel is not faded back in by its sibling leaving", async t => {
   resetAnimations();
   const harness = panelHarness({ visible: true });
