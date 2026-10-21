@@ -219,6 +219,43 @@ test("opening focuses the editable field and never a disabled, inert, or readonl
 /* Picker close returns to the picker trigger, not the link field      */
 /* ------------------------------------------------------------------ */
 
+test("opening a large menu measures only its first usable focus target", async () => {
+  const app = mount();
+  const original = dom.window.Element.prototype.getClientRects;
+  let reads = 0;
+  dom.window.Element.prototype.getClientRects = function () { reads++; return original.call(this); };
+  try {
+    await app.render(h("div", null, trigger("large-menu-launch"),
+      overlay({ id: "large-menu", kind: "menu", active: true, published: true },
+        h("div", { inert: true }, button("hidden-first")),
+        ...Array.from({ length: 100 }, (_, i) => button(`large-action-${i}`)))));
+    await flush(3);
+    assert.equal(document.activeElement.id, "large-action-0");
+    assert.equal(reads, 1, "opening must not measure all 100 rows");
+  } finally {
+    dom.window.Element.prototype.getClientRects = original;
+    await app.unmount();
+  }
+});
+
+test("dialog opening finds its editable field without measuring preceding action rows", async () => {
+  const app = mount();
+  const original = dom.window.Element.prototype.getClientRects;
+  let reads = 0;
+  dom.window.Element.prototype.getClientRects = function () { reads++; return original.call(this); };
+  try {
+    await app.render(h("div", null, trigger("large-dialog-launch"),
+      overlay({ id: "large-dialog", active: true, published: true },
+        ...Array.from({ length: 100 }, (_, i) => button(`dialog-action-${i}`)), input("large-dialog-field"))));
+    await flush(3);
+    assert.equal(document.activeElement.id, "large-dialog-field");
+    assert.equal(reads, 1, "only the preferred editable field needs a layout check");
+  } finally {
+    dom.window.Element.prototype.getClientRects = original;
+    await app.unmount();
+  }
+});
+
 test("resuming a suspended save sheet does not steal focus from the picker's restored trigger", async () => {
   const app = mount();
   const render = (sheetActive, panelSuspended, menuActive) => app.render(h("div", null,

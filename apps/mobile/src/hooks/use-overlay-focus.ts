@@ -191,8 +191,23 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
   useEffect(() => {
     if (!active || Platform.OS !== "web" || typeof document === "undefined") return;
     const node = () => ref.current as unknown as HTMLElement | null;
-    const items = () => Array.from(node()?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []).filter((item) =>
-      item.getAttribute("aria-disabled") !== "true" && !item.closest('[inert], [aria-hidden="true"]') && item.getClientRects().length > 0);
+    const usable = (item: HTMLElement) => item.getAttribute("aria-disabled") !== "true"
+      && !item.closest('[inert], [aria-hidden="true"]') && item.getClientRects().length > 0;
+    const candidates = () => Array.from(node()?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? []);
+    const items = () => candidates().filter(usable);
+    // Opening/repair only needs one destination. Do not measure every row in
+    // a large picker just to focus its first action. Full enumeration remains
+    // available for Tab trapping and arrow navigation.
+    const firstItem = (editable = false, skipReadonly = false) => {
+      const controls = candidates();
+      if (editable) {
+        const field = controls.find((item) => /INPUT|TEXTAREA/.test(item.tagName)
+          && !item.hasAttribute("readonly") && usable(item));
+        if (field) return field;
+      }
+      return (skipReadonly ? controls.find((item) => !item.hasAttribute("readonly") && usable(item)) : undefined)
+        ?? controls.find(usable);
+    };
 
     // Start or resume a session before any suspended return so a surface
     // opened as a sibling still owns its trigger when it becomes interactive.
@@ -277,15 +292,11 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
         session!.focusPending = false;
         return;
       }
-      const controls = items();
       const previous = session!.lastFocus;
       const reusable = previous && previous.isConnected && previous !== current && current.contains(previous)
         && previous.getClientRects().length > 0 && !previous.closest('[inert], [aria-hidden="true"]')
         && previous.getAttribute("aria-disabled") !== "true" && !previous.matches(":disabled");
-      const preferred = kind === "dialog"
-        ? controls.find((item) => /INPUT|TEXTAREA/.test(item.tagName) && !item.hasAttribute("readonly")) : null;
-      const fallback = kind === "dialog" ? controls.find((item) => !item.hasAttribute("readonly")) : null;
-      (reusable ? previous! : preferred ?? fallback ?? controls[0] ?? current).focus?.({ preventScroll: true });
+      (reusable ? previous! : firstItem(kind === "dialog", kind === "dialog") ?? current).focus?.({ preventScroll: true });
       session!.focusPending = false;
     };
 
@@ -340,8 +351,7 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
           session!.resumeFrame = requestAnimationFrame(step);
           return;
         }
-        const controls = items();
-        const fallback = controls.find((item) => !item.hasAttribute("readonly")) ?? controls[0] ?? current;
+        const fallback = firstItem(false, true) ?? current;
         fallback.focus?.({ preventScroll: true });
       };
       session!.resumeFrame = requestAnimationFrame(step);
@@ -380,7 +390,7 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
           const live = node();
           if (!live || !session!.alive || !session!.active || suspendedRef.current || !activeRef.current
             || !isTop() || live.contains(document.activeElement)) return;
-          (items()[0] ?? live).focus({ preventScroll: true });
+          (firstItem() ?? live).focus({ preventScroll: true });
         });
       });
       observer.observe(current, { childList: true, subtree: true });
@@ -418,7 +428,7 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
     const containFocus = (event: FocusEvent) => {
       const live = node();
       if (live && !suspendedRef.current && activeRef.current && isTop() && !live.contains(event.target as Node)) {
-        (items()[0] ?? live).focus();
+        (firstItem() ?? live).focus();
       }
     };
     document.addEventListener("focusin", containFocus, true);
