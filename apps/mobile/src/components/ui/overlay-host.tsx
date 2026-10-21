@@ -39,7 +39,10 @@ export function OverlayHost({ children }: { children: React.ReactNode }) {
 function OverlayBackground({ api, children }: { api: OverlayApi; children: React.ReactNode }) {
   const blocked = useSyncExternalStore(api.subscribe, api.isBlocked, api.isBlocked);
   return <OverlayBlockedContext.Provider value={blocked}>
-    <View style={styles.background} pointerEvents={blocked ? "none" : "auto"}
+    {/* Web already has inert isolation and a full-viewport blocking scrim.
+        Toggling inherited CSS pointer-events here dirties the entire article
+        subtree before a popup can paint. Native keeps its cheap hit-test gate. */}
+    <View style={styles.background} pointerEvents={Platform.OS === "web" ? undefined : blocked ? "none" : "auto"}
       accessibilityElementsHidden={blocked} importantForAccessibility={blocked ? "no-hide-descendants" : "auto"}>
       <AnimationActivityContext.Provider value={!blocked}>{children}</AnimationActivityContext.Provider>
     </View>

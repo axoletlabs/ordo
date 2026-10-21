@@ -75,6 +75,9 @@ function host(tag) {
       else if (ref) ref.current = node;
     }, [ref]);
     const domProps = { ref: attach, "data-teststyle": JSON.stringify(flattenStyle(style)) };
+    domProps["data-native-pointer-events"] = pointerEvents ?? "unset";
+    domProps["data-native-accessibility-hidden"] = String(rest.accessibilityElementsHidden ?? false);
+    domProps["data-native-accessibility-importance"] = rest.importantForAccessibility ?? "auto";
     if (rest.id) domProps.id = rest.id;
     if (rest.role) domProps.role = rest.role;
     if (rest.accessibilityRole) domProps.role = rest.accessibilityRole;
@@ -90,7 +93,7 @@ function host(tag) {
     if (typeof flat.left === "number" || typeof flat.top === "number") {
       domProps.style = { left: flat.left, top: flat.top, width: flat.width, maxHeight: flat.maxHeight };
     }
-    void onLayout; void pointerEvents;
+    void onLayout;
     return React.createElement(tag, domProps, children);
   });
 }
@@ -286,6 +289,54 @@ function resetWork() {
 }
 
 /* ---------------------------------- tests ------------------------------------ */
+
+test("background isolation never toggles inherited web pointer-events and keeps native hit testing", async t => {
+  for (const platform of ["web", "android"]) {
+    await t.test(platform, async () => {
+      reactNative.Platform.OS = platform;
+      const tree = mount();
+      const render = (parent, child = false) => tree.render(React.createElement(OverlayHost, null,
+        React.createElement("button", { id: "background-action" }, "Library"),
+        parent ? React.createElement(OverlayPortal, null, React.createElement("div", { role: "dialog", id: "parent-surface" }, "Save")) : null,
+        child ? React.createElement(OverlayPortal, null, React.createElement("div", { role: "menu", id: "child-surface" }, "Folders")) : null));
+      try {
+        await render(false);
+        const background = tree.container.querySelector("#background-action").parentElement;
+        const pointer = () => background.getAttribute("data-native-pointer-events");
+        assert.equal(pointer(), platform === "web" ? "unset" : "auto");
+        await render(true);
+        assert.equal(pointer(), platform === "web" ? "unset" : "none");
+        assert.equal(background.getAttribute("data-native-accessibility-hidden"), "true");
+        assert.equal(background.getAttribute("data-native-accessibility-importance"), "no-hide-descendants");
+        if (platform === "web") {
+          assert.equal(background.inert, true, "real modal isolation still blocks background interaction");
+          assert.equal(background.getAttribute("aria-hidden"), "true");
+          assert.equal(document.body.style.overflow, "hidden");
+        }
+        await render(true, true);
+        assert.equal(pointer(), platform === "web" ? "unset" : "none");
+        if (platform === "web") {
+          assert.equal(background.inert, true);
+          assert.equal(tree.container.querySelector("#parent-surface").closest("[data-overlay-layer]").inert, true,
+            "only the child surface is interactive");
+        }
+        await render(true);
+        if (platform === "web") assert.equal(background.inert, true, "child dismissal does not release the background");
+        await render(false);
+        assert.equal(pointer(), platform === "web" ? "unset" : "auto");
+        assert.equal(background.getAttribute("data-native-accessibility-hidden"), "false");
+        if (platform === "web") {
+          assert.ok(!background.inert);
+          assert.equal(background.getAttribute("aria-hidden"), null);
+          assert.equal(document.body.style.overflow, "");
+        }
+      } finally {
+        await tree.unmount();
+        reactNative.Platform.OS = "web";
+      }
+    });
+  }
+});
 
 test("publisher re-render with unchanged portal children does not republish the layer", async t => {
   resetWork();
