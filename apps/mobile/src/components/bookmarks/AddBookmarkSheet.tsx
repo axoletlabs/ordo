@@ -248,9 +248,11 @@ function AddBookmarkContent({
   }, [url, visible]);
 
   /** Dropdowns own the surface: release the link field's focus before the
-   * picker opens so a suspended panel never keeps the caret or the IME. */
+   * picker opens so a suspended panel never keeps the caret or the IME. On
+   * native the field's last-focus record survives, so an outside-tap close
+   * returns the keyboard to Link rather than the library search behind it. */
   const handFocusToDropdown = () => {
-    if (Platform.OS === "web") urlRef.current?.blur();
+    urlRef.current?.blur();
   };
 
   const reset = () => {

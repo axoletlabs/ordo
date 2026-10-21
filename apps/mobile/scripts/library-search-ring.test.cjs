@@ -339,6 +339,20 @@ test("route autofocus requested while blocked is not replayed after unblock", (t
   }
 });
 
+test("raw background focus is refused while an overlay owns the library", () => {
+  const host = headerHost();
+  host.render();
+  host.overlay.blocked = true;
+  host.render();
+
+  // Focus can arrive from a native fallback/consumer without going through the
+  // registered tab handler. It must not start an editing session behind the
+  // overlay or light the ring.
+  host.focus();
+  assert.equal(host.ringOpacity(), 0, "no focus ring behind the overlay");
+  assert.equal(host.input().placeholder, "Library", "the library never enters its editing session");
+});
+
 test("tab focus refuses a blocked take and resumes without losing the session", () => {
   const host = headerHost();
   host.render();

@@ -659,6 +659,34 @@ test("Tab containment, only-top Escape, and typing keep the current caret", asyn
   await app.unmount();
 });
 
+test("programmatic background focus is contained by the top overlay", async () => {
+  const app = mount();
+  const render = (sheetActive, pickerActive) => app.render(h("div", null,
+    input("background-search"),
+    sheetActive ? overlay({ id: "sheet", active: true, suspended: pickerActive, published: !pickerActive },
+      input("link"), button("folder-field", "Folder")) : null,
+    sheetActive ? overlay({ id: "picker", kind: "menu", active: pickerActive, published: pickerActive },
+      input("picker-search")) : null));
+  await render(false, false);
+  document.getElementById("background-search").focus();
+  await render(true, false);
+  await flush(3);
+  assert.equal(document.activeElement?.id, "link");
+
+  // A native-style focus fallback (here an explicit DOM focus) must not start
+  // an editing session on the library field behind the dialog.
+  document.getElementById("background-search").focus();
+  assert.equal(document.activeElement?.id, "link", "the dialog reclaims background focus");
+
+  await render(true, true);
+  await flush(3);
+  assert.equal(document.activeElement?.id, "picker-search");
+  document.getElementById("background-search").focus();
+  assert.equal(document.activeElement?.id, "picker-search",
+    "only the top portal sibling may hold focus");
+  await app.unmount();
+});
+
 /* ------------------------------------------------------------------ */
 /* Modal isolation                                                     */
 /* ------------------------------------------------------------------ */

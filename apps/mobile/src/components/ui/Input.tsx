@@ -21,7 +21,7 @@ import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
 import { caretAfterKey, shouldCorrectWebCaret } from "../../lib/web-input-caret";
 import { useMaterialMotion } from "../../theme/material-motion";
 import { InputSurfaceContext } from "./input-surface";
-import { InputFocusScopeContext } from "./input-focus-scope";
+import { InputFocusScopeContext, markNativeFocus, nativeFocusPermitted, registerNativeFocusField } from "./input-focus-scope";
 import { useOverlayBlocked } from "./overlay-host";
 import { PanelTitleContext } from "./panel-title";
 import { focusTextInput } from "../../lib/focus-text-input";
@@ -154,6 +154,10 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   const [hasText, setHasText] = useState(!!value);
   const [overlayWidth, setOverlayWidth] = useState(0);
   const inputRef = useRef<TextInput>(null);
+  /** Stable identity in the overlay focus registry; the callbacks below read
+   * live refs, so normal re-renders never unregister the field. */
+  const nativeField = useRef<object>({}).current;
+  const nativeFieldEditable = useRef(false);
   const accessoryRef = useRef<View>(null);
   const pendingCaret = useRef<number | null>(null);
   const lastAppliedValue = useRef(value);
@@ -183,6 +187,28 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
     scopeActive.current = focusScope?.active === true && !nativeOverlayBlocked;
     scopeReady.current = focusScope?.ready === true;
   }, [focusScope?.active, focusScope?.ready, nativeOverlayBlocked]);
+
+  // Native focus ownership spans portal siblings: an obscured background field
+  // can still be targeted by Android's focus fallback, so it must refuse the
+  // move itself. A field publishes focus only for the surface that currently
+  // owns the screen; closing/resuming that surface restores its own last field.
+  const scopeOwner = focusScope?.owner ?? null;
+  useLayoutEffect(() => {
+    nativeFieldEditable.current = canEdit;
+  }, [canEdit]);
+  useLayoutEffect(() => {
+    if (Platform.OS === "web" || scopeOwner == null) return;
+    return registerNativeFocusField(scopeOwner, nativeField, {
+      canFocus: () => nativeFieldEditable.current && appCanTakeFocus(AppState.currentState),
+      focus: () => {
+        if (!nativeFieldEditable.current || !appCanTakeFocus(AppState.currentState)) return;
+        if (!nativeFocusPermitted(scopeOwner)) return;
+        // Android Back can hide the IME without clearing TextInputState; this
+        // helper resets only this already-owned field.
+        focusTextInput(inputRef.current);
+      },
+    });
+  }, [nativeField, scopeOwner]);
 
   const setInputRef = (node: TextInput | null) => {
     inputRef.current = node;
@@ -392,6 +418,16 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
             ? { defaultValue: typeof value === "string" ? value : undefined }
             : { value })}
           onFocus={(e) => {
+            // Android's removal fallback can land on any editable field in the
+            // window, including the screen behind an overlay. Reject that move
+            // before the field's editing state, caret, or IME becomes visible.
+            if (Platform.OS !== "web" && !nativeFocusPermitted(scopeOwner)) {
+              cancelScopedAutoFocus();
+              setFocused(false);
+              inputRef.current?.blur();
+              return;
+            }
+            if (Platform.OS !== "web" && scopeOwner != null) markNativeFocus(scopeOwner, nativeField);
             cancelScopedAutoFocus();
             setFocused(true);
             onFocus?.(e);

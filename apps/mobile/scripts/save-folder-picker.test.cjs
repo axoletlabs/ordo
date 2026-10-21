@@ -589,6 +589,27 @@ test("save sheet: opening the folder dropdown releases the link field and suspen
   }
 });
 
+test("save sheet: native folder picker takes the surface and an outside-tap close does not refocus Link", () => {
+  const host = sheetHost({ platform: "android" });
+  host.render({});
+  host.wireRefs();
+  host.urlField.focused = true;
+
+  host.field("Folder").onPress(ANCHOR);
+  host.render({});
+  assert.deepEqual(host.events, ["url-blur"], "native releases Link before the picker owns the IME");
+  assert.equal(host.panel().interactive, false, "the suspended form does not handle focus/back");
+
+  // Outside tap, not a row selection or Escape: only the picker dismisses.
+  host.folderPicker().onDismiss();
+  host.render({});
+  assert.equal(host.folderPicker().visible, false);
+  assert.equal(host.panel().interactive, true, "Save resumes as the interactive surface");
+  assert.equal(host.panel().obscured, false, "an anchored picker does not reset the form");
+  assert.deepEqual(host.events, ["url-blur"],
+    "the sheet itself never replays Link autofocus on resume; the Input scope owns that focus");
+});
+
 test("save sheet: the link draft survives the dropdown session", () => {
   const host = sheetHost();
   host.render({});

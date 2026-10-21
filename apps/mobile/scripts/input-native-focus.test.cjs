@@ -105,7 +105,11 @@ function reactHarness() {
       context.Consumer = { __context: context };
       return context;
     },
-    forwardRef: (render) => (props) => render(props, props.ref ?? null),
+    forwardRef: (render) => (props) => {
+      // React removes `ref` from props before calling a forwardRef renderer.
+      const { ref, ...rest } = props;
+      return render(rest, ref ?? null);
+    },
     memo: (component) => component,
     isValidElement: (element) => !!element && typeof element === "object" && "type" in element && "props" in element,
     cloneElement: (element, props, ...children) => ({
@@ -352,6 +356,9 @@ function reactHarness() {
       const input = load(resolve(sourceRoot, "components/ui/Input.tsx")).Input;
       focusScopeContext = load(resolve(sourceRoot, "components/ui/input-focus-scope.ts")).InputFocusScopeContext;
       return input;
+    },
+    loadScope() {
+      return load(resolve(sourceRoot, "components/ui/input-focus-scope.ts"));
     },
     render,
     runFrames,
@@ -880,4 +887,128 @@ test("a new session after a backgrounded measurement still focuses once", () => 
   assert.equal(host.h.focusCalls, 1, "a fresh session can still take focus once");
   assert.equal(host.h.blurCalls, 0);
   assert.equal(host.h.appStateListenerCount, 0);
+});
+
+test("native background fields refuse focus while a portal sibling owns the screen", () => {
+  const h = reactHarness();
+  const Input = h.loadInput();
+  const scope = h.loadScope();
+  let userFocus = 0;
+  const props = { label: "Search your library", value: "", autoFocus: false, onFocus: () => { userFocus += 1; } };
+  function App() {
+    // Any top-level overlay scope, even one without fields (a dialog/menu).
+    scope.useInputFocusScope(true, true, true);
+    return { type: Input, props };
+  }
+  h.render(() => ({ type: App, props: {} }));
+  const input = h.currentInput;
+
+  // Android's focus-removal fallback can target the library field behind the
+  // overlay. The field must reject it before its editing UI/IME activate.
+  input.focus();
+  assert.equal(h.nativeFocusedInput, null, "background focus is released");
+  assert.equal(h.blurCalls, 1);
+  assert.equal(userFocus, 0, "the background onFocus handler never starts an editing session");
+});
+
+test("native fields in an obscured or non-top surface refuse focus", () => {
+  const h = reactHarness();
+  const Input = h.loadInput();
+  const scope = h.loadScope();
+  let userFocus = 0;
+  const props = { label: "Link", value: "", autoFocus: false, onFocus: () => { userFocus += 1; } };
+  function App() {
+    scope.useInputFocusScope(true, true, true);
+    const obscured = scope.useInputFocusScope(false, true, true);
+    return { type: h.focusScopeContext.Provider, props: { value: obscured, children: { type: Input, props } } };
+  }
+  h.render(() => ({ type: App, props: {} }));
+  h.currentInput.focus();
+  assert.equal(h.nativeFocusedInput, null, "the obscured dialog field does not take the keyboard");
+  assert.equal(h.blurCalls, 1);
+  assert.equal(userFocus, 0);
+});
+
+test("native fields in the top surface keep focus and publish their owner", () => {
+  const h = reactHarness();
+  const Input = h.loadInput();
+  const scope = h.loadScope();
+  let userFocus = 0;
+  const props = { label: "Link", value: "", autoFocus: false, onFocus: () => { userFocus += 1; } };
+  function App() {
+    const top = scope.useInputFocusScope(true, true, true);
+    return { type: h.focusScopeContext.Provider, props: { value: top, children: { type: Input, props } } };
+  }
+  h.render(() => ({ type: App, props: {} }));
+  const input = h.currentInput;
+  input.focus();
+  assert.equal(h.nativeFocusedInput, input, "the top surface keeps native focus");
+  assert.equal(h.blurCalls, 0);
+  assert.equal(userFocus, 1);
+});
+
+test("native outside-tap picker close restores the parent Link field, not the background", async () => {
+  const h = reactHarness();
+  const Input = h.loadInput();
+  const scope = h.loadScope();
+  const parentRef = { current: null };
+  const childRef = { current: null };
+  const backgroundRef = { current: null };
+  let parentFocus = 0;
+  let childFocus = 0;
+  let backgroundFocus = 0;
+  const parentProps = { label: "Link", value: "", autoFocus: false, ref: parentRef, onFocus: () => { parentFocus += 1; } };
+  const childProps = { label: "Find a folder", value: "", autoFocus: false, ref: childRef, onFocus: () => { childFocus += 1; } };
+  const backgroundProps = { label: "Search your library", value: "", autoFocus: false, ref: backgroundRef, onFocus: () => { backgroundFocus += 1; } };
+
+  function Parent({ active, visible }) {
+    const inputScope = scope.useInputFocusScope(active, true, visible);
+    return { type: h.focusScopeContext.Provider, props: { value: inputScope, children: { type: Input, props: parentProps } } };
+  }
+  function Child({ active, visible }) {
+    const inputScope = scope.useInputFocusScope(active, true, visible);
+    return { type: h.focusScopeContext.Provider, props: { value: inputScope, children: { type: Input, props: childProps } } };
+  }
+  function Background() {
+    return { type: Input, props: backgroundProps };
+  }
+  function App({ parentActive, childOpen }) {
+    return [
+      { type: Background, props: {} },
+      { type: Parent, props: { active: parentActive, visible: true } },
+      { type: Child, props: { active: childOpen, visible: childOpen } },
+    ];
+  }
+
+  h.render(() => ({ type: App, props: { parentActive: true, childOpen: false } }));
+  parentRef.current.focus();
+  assert.equal(h.nativeFocusedInput, parentRef.current, "Save opens on Link");
+
+  // Opening the folder picker moves focus to its search field. The parent
+  // keeps Link as its last real field but is not top anymore.
+  h.render(() => ({ type: App, props: { parentActive: false, childOpen: true } }));
+  childRef.current.focus();
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(h.nativeFocusedInput, childRef.current, "Find a folder owns the keyboard");
+  assert.equal(parentFocus, 1, "opening the picker never refocuses Link");
+  assert.equal(childFocus, 1);
+
+  // Outside tap: only the picker closes. No Escape and no row selection.
+  h.render(() => ({ type: App, props: { parentActive: true, childOpen: false } }));
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(h.nativeFocusedInput, parentRef.current, "the immediate parent Link field resumes");
+  assert.equal(parentFocus, 2, "Link receives exactly one resume focus");
+  assert.equal(backgroundFocus, 0, "the library search never starts editing behind Save");
+
+  // A background focus attempt while the picker is top is rejected by the
+  // field itself; it must not open the library's editing state.
+  h.render(() => ({ type: App, props: { parentActive: false, childOpen: true } }));
+  childRef.current.focus();
+  const blursBefore = h.blurCalls;
+  backgroundRef.current.focus();
+  assert.equal(backgroundFocus, 0, "the library field never starts editing behind the picker");
+  assert.equal(h.blurCalls, blursBefore + 1, "the background focus is actively released");
+  assert.notEqual(h.nativeFocusedInput, backgroundRef.current, "the background field does not keep native focus");
 });

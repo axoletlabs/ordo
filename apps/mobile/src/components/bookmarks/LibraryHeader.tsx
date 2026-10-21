@@ -13,6 +13,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { layout, radius, spacing } from "../../theme/tokens";
 import { registerSearchFieldFocus } from "../../lib/search-field-focus";
 import { useOverlayBlocked } from "../ui/overlay-host";
+import { nativeFocusPermitted } from "../ui/input-focus-scope";
 import { MaterialIcon } from "../ui/MaterialIcon";
 import { Input } from "../ui/Input";
 import { IconButton } from "../ui/IconButton";
@@ -74,12 +75,18 @@ const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoF
   useSearchBack(editing, exitSearch, filterOpen);
   useEffect(() => { if (selecting) exitSearch(); }, [selecting, exitSearch]);
   useEffect(() => { if (!focused.current) setText(query); }, [query]);
+  /** A render-time `blocked` snapshot can lag the portal handoff by a commit.
+   * Native also needs the live top-owner registry, not just React state. */
+  const overlayOwnsFocus = useCallback(() => Platform.OS !== "web"
+    ? overlayBlockedRef.current || !nativeFocusPermitted(null)
+    : overlayBlockedRef.current,
+  []);
   useFocusEffect(useCallback(() => registerSearchFieldFocus(() => {
-    // The tab handler can run while an overlay owns the surface. Native has no
-    // focus trap, so the background field must refuse the take itself.
-    if (overlayBlockedRef.current) return;
+    // The tab handler can run while an overlay owns the surface. The
+    // background field must refuse the take itself.
+    if (overlayOwnsFocus()) return;
     inputRef.current?.focus();
-  }), []));
+  }), [overlayOwnsFocus]));
   // Route autofocus is a one-shot intent. If a popup claims the surface before
   // the delayed take fires, the intent is spent: closing the popup must never
   // replay it and pull the keyboard back into the library. A fresh
@@ -89,10 +96,10 @@ const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoF
   useEffect(() => {
     if (!autoFocus) return;
     const intent = ++routeFocusIntent.current;
-    if (overlayBlockedRef.current) return;
+    if (overlayOwnsFocus()) return;
     const timer = setTimeout(() => {
       if (routeFocusTimer.current === timer) routeFocusTimer.current = null;
-      if (routeFocusIntent.current !== intent || overlayBlockedRef.current) return;
+      if (routeFocusIntent.current !== intent || overlayOwnsFocus()) return;
       inputRef.current?.focus();
     }, 200);
     routeFocusTimer.current = timer;
@@ -118,7 +125,18 @@ const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoF
   return <View><Input ref={inputRef} variant="search" showFocusIndicator={false} value={text} onChangeText={change}
     placeholder={editing ? "Search your library" : "Library"} accessibilityLabel="Search your library"
     accessibilityHint="Search saved bookmarks and folders."
-    onFocus={() => { focused.current = true; setEditing(true); onFocusChange(true); onInputFocusChange?.(true); }}
+    onFocus={() => {
+      // Native focus ownership can move to this background field when a child
+      // surface removes its own input, before React publishes a new blocked
+      // prop. The live owner registry (plus the DOM flag on web) decides, so
+      // the library never starts an editing session behind an overlay.
+      if (overlayOwnsFocus() || (Platform.OS === "web" && typeof document !== "undefined"
+        && Boolean(document.querySelector('[data-material-overlay="true"]')))) {
+        inputRef.current?.blur();
+        return;
+      }
+      focused.current = true; setEditing(true); onFocusChange(true); onInputFocusChange?.(true);
+    }}
     onBlur={() => { focused.current = false; onInputFocusChange?.(false); }}
     autoCorrect={false} spellCheck={false} autoCapitalize="none" returnKeyType="search"
     onSubmitEditing={exitSearch}
