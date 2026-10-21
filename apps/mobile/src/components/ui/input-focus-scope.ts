@@ -30,13 +30,16 @@ type NativeScope = {
   owner: number;
   active: boolean;
   ready: boolean;
-  /** This owner held the surface before a child picker/panel covered it. */
-  suspended: boolean;
-  /** The owner has come back and is waiting for the top layer to settle. */
+  /** Publication order of this portal sibling. Layer ids stay stable while a
+   * retained surface is mounted, so a reactivation must not jump above a child
+   * that is still on screen. */
+  order: number;
+  /** This owner has already been the visible top surface. */
+  wasTop: boolean;
+  /** The owner was covered and is waiting for the top layer to settle. */
   resumePending: boolean;
   lastFocused: object | null;
   fields: Map<object, NativeFocusField>;
-  activatedAt: number;
 };
 
 /** Native has one focus system spanning every portal sibling. These records
@@ -44,8 +47,14 @@ type NativeScope = {
  * discarded concurrent render cannot change which surface owns focus. */
 const nativeScopes = new Map<number, NativeScope>();
 let nextOwner = 0;
-let activationClock = 0;
+let nextOrder = 0;
+let currentTopOwner: number | null = null;
 let reconcileQueued = false;
+const focusListeners = new Set<() => void>();
+
+function notifyFocusOwner() {
+  for (const listener of [...focusListeners]) listener();
+}
 
 function nativeOwnedScope(owner: number): NativeScope {
   let scope = nativeScopes.get(owner);
@@ -54,26 +63,45 @@ function nativeOwnedScope(owner: number): NativeScope {
       owner,
       active: false,
       ready: false,
-      suspended: false,
+      order: 0,
+      wasTop: false,
       resumePending: false,
       lastFocused: null,
       fields: new Map(),
-      activatedAt: 0,
     };
     nativeScopes.set(owner, scope);
   }
   return scope;
 }
 
-/** The top interactive overlay. A newer activation always wins, matching the
- * portal layer order without relying on DOM ancestors (native has none). */
+/** The top interactive overlay. Publication order mirrors the portal layer
+ * order without relying on DOM ancestors (native has none). Orders are unique
+ * per mounted hook, so a reactivated parent can never tie with its live child. */
 function topNativeScope(): NativeScope | null {
   let top: NativeScope | null = null;
   for (const scope of nativeScopes.values()) {
     if (!scope.active) continue;
-    if (!top || scope.activatedAt >= top.activatedAt) top = scope;
+    if (!top || scope.order > top.order) top = scope;
   }
   return top;
+}
+
+/** A top change that returns to a previously visible surface is a resume, even
+ * when the parent's `active` prop never changed (two live portal siblings).
+ * A first-time top is a fresh opening and keeps its own autofocus take. */
+function publishNativeTop() {
+  const next = topNativeScope();
+  const nextOwner = next?.owner ?? null;
+  if (nextOwner === currentTopOwner) {
+    if (next) next.wasTop = true;
+    return;
+  }
+  currentTopOwner = nextOwner;
+  if (next) {
+    if (next.wasTop) next.resumePending = true;
+    next.wasTop = true;
+  }
+  notifyFocusOwner();
 }
 
 function resumeField(scope: NativeScope): NativeFocusField | null {
@@ -121,6 +149,19 @@ export function nativeFocusPermitted(owner: number | null): boolean {
   return owner == null;
 }
 
+/** Re-render a field family when the top native owner changes without a
+ * context/state update from its own surface (portal siblings stay mounted). */
+export function useNativeFocusRevision(): number {
+  const [revision, setRevision] = useState(0);
+  useLayoutEffect(() => {
+    if (Platform.OS === "web") return;
+    const listener = () => setRevision((value) => value + 1);
+    focusListeners.add(listener);
+    return () => { focusListeners.delete(listener); };
+  }, []);
+  return revision;
+}
+
 /** Register the native input behind an overlay scope. Stable ownership is keyed
  * by `field` (a token kept for the Input's lifetime), while the callbacks read
  * live refs so re-renders do not disturb the last real focus. */
@@ -146,6 +187,20 @@ export function markNativeFocus(owner: number, field: object) {
   if (scope) scope.lastFocused = field;
 }
 
+/** Unmounting a top surface is not a resume: navigation may remove the whole
+ * flow, so hand top ownership to the survivor without moving keyboard focus. */
+function disposeNativeScope(owner: number) {
+  if (Platform.OS === "web") return;
+  const scope = nativeScopes.get(owner);
+  if (!scope) return;
+  nativeScopes.delete(owner);
+  if (currentTopOwner !== owner) return;
+  const next = topNativeScope();
+  currentTopOwner = next?.owner ?? null;
+  if (next) next.wasTop = true;
+  notifyFocusOwner();
+}
+
 export function useInputFocusScope(active: boolean, ready: boolean, visible: boolean): InputFocusScope {
   // Render-adjusted state, rather than a mutable ref: a discarded concurrent
   // render must not invent a close/reopen and replay autofocus on the live UI.
@@ -168,33 +223,29 @@ export function useInputFocusScope(active: boolean, ready: boolean, visible: boo
   useLayoutEffect(() => {
     if (Platform.OS === "web") return;
     const scope = nativeOwnedScope(owner);
-    const wasActive = scope.active;
+    // A portal layer keeps its insertion order for the whole mount, including
+    // retained close/reopen sessions. Activation alone must never reorder it.
+    if ((visible || active) && scope.order === 0) scope.order = ++nextOrder;
     scope.ready = ready;
     if (!visible) {
       // Closing is a fresh open next time, not a resume; never restore a field
       // from the previous session.
       scope.active = false;
-      scope.suspended = false;
+      scope.wasTop = false;
       scope.resumePending = false;
       scope.lastFocused = null;
     } else {
-      if (active && !wasActive) {
-        scope.activatedAt = ++activationClock;
-        if (scope.suspended) scope.resumePending = true;
-        scope.suspended = false;
-      } else if (!active && wasActive) {
-        // A child picker or obscured sibling owns the surface. Keep the field
-        // the user left so the immediate parent can resume it.
-        scope.suspended = true;
-      }
+      // A parent may stay active behind a live child picker. Top ownership is
+      // derived from layer order, not from this prop transition.
       scope.active = active;
     }
+    publishNativeTop();
     queueNativeReconcile();
   }, [active, owner, ready, visible]);
 
   useLayoutEffect(() => {
     if (Platform.OS === "web") return;
-    return () => { nativeScopes.delete(owner); };
+    return () => disposeNativeScope(owner);
   }, [owner]);
 
   return useMemo(() => ({ active, ready, session, owner }), [active, ready, session, owner]);

@@ -161,6 +161,132 @@ test("native focus ownership follows the top portal sibling and restores only it
   }
 });
 
+test("an active parent behind an active child resumes when the child closes", async () => {
+  const env = withDom();
+  const {
+    useInputFocusScope, registerNativeFocusField, markNativeFocus, nativeFocusPermitted,
+  } = loadScope("android");
+  const focusLog = [];
+  const owners = { parent: null, child: null };
+
+  function Field({ scope, id, focused }) {
+    const field = React.useRef({}).current;
+    React.useLayoutEffect(() => registerNativeFocusField(scope.owner, field, {
+      canFocus: () => true,
+      focus: () => { focusLog.push(id); },
+    }), [field, scope.owner]);
+    React.useLayoutEffect(() => {
+      if (focused) markNativeFocus(scope.owner, field);
+    }, [field, focused, scope.owner]);
+    return null;
+  }
+
+  function Scope({ active, visible, field, focused, onScope }) {
+    const scope = useInputFocusScope(active, true, visible);
+    onScope(scope.owner);
+    return React.createElement(Field, { scope, id: field, focused });
+  }
+
+  // Two live portal siblings: the Save form never sets active=false while the
+  // picker is open. Only the top-owner layer ordering changes.
+  function Tree({ childOpen }) {
+    return React.createElement(React.Fragment, null,
+      React.createElement(Scope, {
+        active: true, visible: true, field: "link", focused: true,
+        onScope: (owner) => { owners.parent = owner; },
+      }),
+      React.createElement(Scope, {
+        active: childOpen, visible: childOpen, field: "find-folder", focused: childOpen,
+        onScope: (owner) => { owners.child = owner; },
+      }));
+  }
+
+  const root = createRoot(env.dom.window.document.getElementById("root"));
+  try {
+    await React.act(() => root.render(React.createElement(Tree, { childOpen: false })));
+    assert.equal(nativeFocusPermitted(owners.parent), true);
+    assert.equal(nativeFocusPermitted(owners.child), false);
+
+    await React.act(() => root.render(React.createElement(Tree, { childOpen: true })));
+    await flushMicrotasks();
+    assert.deepEqual(focusLog, [], "opening the child never refocuses the still-active parent");
+    assert.equal(nativeFocusPermitted(owners.parent), false, "the parent is behind the top sibling");
+    assert.equal(nativeFocusPermitted(owners.child), true);
+
+    await React.act(() => root.render(React.createElement(Tree, { childOpen: false })));
+    await flushMicrotasks();
+    assert.deepEqual(focusLog, ["link"], "closing the top sibling resumes the parent field exactly once");
+    assert.equal(nativeFocusPermitted(owners.parent), true);
+    assert.equal(nativeFocusPermitted(null), false, "the background still never owns focus while Save is open");
+  } finally {
+    await React.act(() => root.unmount());
+    env.restore();
+  }
+});
+
+test("reactivating a parent behind a live child cannot overtake the child layer", async () => {
+  const env = withDom();
+  const {
+    useInputFocusScope, registerNativeFocusField, markNativeFocus, nativeFocusPermitted,
+  } = loadScope("android");
+  const focusLog = [];
+  const owners = { parent: null, child: null };
+
+  function Field({ scope, id, focused }) {
+    const field = React.useRef({}).current;
+    React.useLayoutEffect(() => registerNativeFocusField(scope.owner, field, {
+      canFocus: () => true,
+      focus: () => { focusLog.push(id); },
+    }), [field, scope.owner]);
+    React.useLayoutEffect(() => {
+      if (focused) markNativeFocus(scope.owner, field);
+    }, [field, focused, scope.owner]);
+    return null;
+  }
+
+  function Scope({ active, visible, field, focused, onScope }) {
+    const scope = useInputFocusScope(active, true, visible);
+    onScope(scope.owner);
+    return React.createElement(Field, { scope, id: field, focused });
+  }
+
+  function Tree({ parentActive, childOpen }) {
+    return React.createElement(React.Fragment, null,
+      React.createElement(Scope, {
+        active: parentActive, visible: true, field: "link", focused: true,
+        onScope: (owner) => { owners.parent = owner; },
+      }),
+      React.createElement(Scope, {
+        active: childOpen, visible: childOpen, field: "find-folder", focused: childOpen,
+        onScope: (owner) => { owners.child = owner; },
+      }));
+  }
+
+  const root = createRoot(env.dom.window.document.getElementById("root"));
+  try {
+    await React.act(() => root.render(React.createElement(Tree, { parentActive: true, childOpen: false })));
+    await React.act(() => root.render(React.createElement(Tree, { parentActive: true, childOpen: true })));
+    await flushMicrotasks();
+    assert.equal(nativeFocusPermitted(owners.child), true);
+
+    // A reactivated parent (e.g. an interactive/ready churn) must keep its
+    // original portal position; it cannot tie with or jump above the child.
+    await React.act(() => root.render(React.createElement(Tree, { parentActive: false, childOpen: true })));
+    await React.act(() => root.render(React.createElement(Tree, { parentActive: true, childOpen: true })));
+    await flushMicrotasks();
+    assert.equal(nativeFocusPermitted(owners.child), true, "the child stays top by layer order");
+    assert.equal(nativeFocusPermitted(owners.parent), false);
+    assert.deepEqual(focusLog, [], "no parent focus while the child is still live");
+
+    await React.act(() => root.render(React.createElement(Tree, { parentActive: true, childOpen: false })));
+    await flushMicrotasks();
+    assert.deepEqual(focusLog, ["link"], "the parent resumes only after the child actually closes");
+  } finally {
+    await React.act(() => root.unmount());
+    env.restore();
+  }
+});
+
 test("resume falls back inside the parent when the exact field was removed", async () => {
   const env = withDom();
   const {
