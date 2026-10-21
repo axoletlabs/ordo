@@ -30,6 +30,11 @@ import { alphaTint } from "../../theme/state-layer";
 import { isSensitiveInput, privateKeyboardType } from "../../lib/input-privacy";
 const AnimatedLabel = Animated.createAnimatedComponent(Text);
 
+/** Web backgrounds are already inert under a blocking overlay, so subscribing
+ * there only re-rendered every field when a popup opened. Native still needs
+ * the live hit-test/focus gate. Mirrors the platform-split hook in ScrollBar. */
+const useNativeOverlayBlocked = Platform.OS === "web" ? () => false : useOverlayBlocked;
+
 type WebCaretNode = TextInput & {
   selectionStart?: number | null;
   selectionEnd?: number | null;
@@ -141,7 +146,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   const fieldSurface = React.useContext(InputSurfaceContext) ?? palette.surface;
   const panelTitle = React.useContext(PanelTitleContext);
   const focusScope = React.useContext(InputFocusScopeContext);
-  const overlayBlocked = useOverlayBlocked();
+  const overlayBlocked = useNativeOverlayBlocked();
   const [focused, setFocused] = useState(false);
   const [hovered, setHovered] = useState(false);
   const inactive = disabled || (!editable && !readOnly);

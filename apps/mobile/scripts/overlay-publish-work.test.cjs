@@ -338,6 +338,94 @@ test("background isolation never toggles inherited web pointer-events and keeps 
   }
 });
 
+test("overlay handoffs retain shared background isolation without attribute or scroll-lock churn", async () => {
+  const tree = mount();
+  const render = (parent, child) => tree.render(React.createElement(OverlayHost, null,
+    React.createElement("button", { id: "handoff-background" }, "Library"),
+    parent ? React.createElement(OverlayPortal, null, React.createElement("div", { id: "handoff-parent" }, "Save")) : null,
+    child ? React.createElement(OverlayPortal, null, React.createElement("div", { id: "handoff-child" }, "Folders")) : null));
+  let observer;
+  try {
+    await render(true, false);
+    const background = tree.container.querySelector("#handoff-background").parentElement;
+    const changes = [];
+    observer = new dom.window.MutationObserver(records => changes.push(...records));
+    observer.observe(background, { attributes: true, attributeFilter: ["inert", "aria-hidden"] });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["style"] });
+    observer.observe(document.body, { attributes: true, attributeFilter: ["style"] });
+    await render(true, true);
+    assert.equal(background.inert, true);
+    assert.equal(tree.container.querySelector("#handoff-parent").closest("[data-overlay-layer]").inert, true);
+    await render(true, false);
+    assert.equal(background.inert, true);
+    assert.ok(!tree.container.querySelector("#handoff-parent").closest("[data-overlay-layer]").inert);
+    await render(false, true);
+    assert.equal(background.inert, true, "a replacing sibling also keeps the background locked");
+    assert.equal(changes.length, 0, "shared background and scroll roots must not be rewritten during handoffs");
+    observer.disconnect();
+    await render(false, false);
+    assert.ok(!background.inert);
+    assert.equal(background.getAttribute("aria-hidden"), null);
+    assert.equal(document.body.style.overflow, "");
+  } finally {
+    observer?.disconnect();
+    await tree.unmount();
+    assert.equal(document.documentElement.style.overflow, "", "unmount releases every acquired lock");
+  }
+});
+
+test("strict-effect replay and active unmount restore the original document locks", async () => {
+  const tree = mount();
+  const previousHtml = document.documentElement.style.overflow;
+  const previousBody = document.body.style.overflow;
+  document.documentElement.style.overflow = "clip";
+  document.body.style.overflow = "scroll";
+  try {
+    const render = child => tree.render(React.createElement(React.StrictMode, null,
+      React.createElement(OverlayHost, null,
+        React.createElement("button", null, "Library"),
+        React.createElement(OverlayPortal, null, React.createElement("div", { id: "strict-parent" }, "Save")),
+        child ? React.createElement(OverlayPortal, null, React.createElement("div", { id: "strict-child" }, "Folders")) : null)));
+    await render(false);
+    assert.equal(document.body.style.overflow, "hidden");
+    await render(true);
+    assert.equal(document.body.style.overflow, "hidden");
+    assert.equal(tree.container.querySelector("#strict-parent").closest("[data-overlay-layer]").inert, true);
+    assert.ok(!tree.container.querySelector("#strict-child").closest("[data-overlay-layer]").inert);
+    await tree.unmount();
+    assert.equal(document.documentElement.style.overflow, "clip");
+    assert.equal(document.body.style.overflow, "scroll");
+  } finally {
+    if (tree.container.isConnected) await tree.unmount();
+    document.documentElement.style.overflow = previousHtml;
+    document.body.style.overflow = previousBody;
+  }
+});
+
+test("overlay handoffs retain document locks owned by an independent modal", async () => {
+  const tree = mount();
+  const { isolateModal } = load(resolve(sourceRoot, "lib/modal-isolation.ts"));
+  let release;
+  try {
+    const render = child => tree.render(React.createElement(OverlayHost, null,
+      React.createElement("button", { id: "co-owned-background" }, "Library"),
+      React.createElement(OverlayPortal, null, React.createElement("div", { id: "co-owned-parent" }, "Save")),
+      child ? React.createElement(OverlayPortal, null, React.createElement("div", null, "Folders")) : null));
+    await render(false);
+    release = isolateModal(tree.container.querySelector("#co-owned-parent"));
+    await render(true);
+    await render(false);
+    await tree.unmount();
+    assert.equal(document.body.style.overflow, "hidden", "host unmount must not release the independent owner");
+    release();
+    release = undefined;
+    assert.equal(document.body.style.overflow, "");
+  } finally {
+    release?.();
+    if (tree.container.isConnected) await tree.unmount();
+  }
+});
+
 test("publisher re-render with unchanged portal children does not republish the layer", async t => {
   resetWork();
   const layerRenders = { count: 0 };
@@ -393,6 +481,61 @@ test("changed blocking/active flags and new children still publish", async () =>
   await act(async () => { setVariant("c"); });
   assert.equal(registryWork.publishes, afterMount + 2, "active change and new children republish");
   await tree.unmount();
+});
+
+test("a warm panel opening does not commit its contents twice to arm exit retention", async t => {
+  const { FloatingPanel } = load(resolve(sourceRoot, "components/ui/FloatingPanel.tsx"));
+  const tree = mount();
+  let commits = 0;
+  let childRenders = 0;
+  function Content() { childRenders++; return React.createElement("span", null, "Panel content"); }
+  const render = visible => tree.render(React.createElement(React.Profiler,
+    { id: "warm-panel", onRender: () => commits++ },
+    React.createElement(FloatingPanel, { visible, onDismiss() {} }, React.createElement(Content))));
+  const reduced = motion.reducedMotion;
+  motion.reducedMotion = true;
+  try {
+    await render(true);
+    await render(false);
+    commits = 0;
+    childRenders = 0;
+    await render(true);
+    t.diagnostic(`warm open: commits=${commits}, childRenders=${childRenders}`);
+    assert.equal(commits, 1, "exit retention must be armed before committing the opening tree");
+    assert.equal(childRenders, 1, "opening content is mounted only once");
+  } finally {
+    await tree.unmount();
+    motion.reducedMotion = reduced;
+  }
+});
+
+test("an abandoned warm opening cannot retain an invisible panel or start its animation", async () => {
+  const { FloatingPanel } = load(resolve(sourceRoot, "components/ui/FloatingPanel.tsx"));
+  const tree = mount();
+  const reduced = motion.reducedMotion;
+  motion.reducedMotion = true;
+  const pending = new Promise(() => {});
+  function Suspend({ active }) { if (active) throw pending; return null; }
+  const scene = (visible, suspend = false) => React.createElement(React.Suspense, { fallback: "pending" },
+    React.createElement(FloatingPanel, { visible, onDismiss() {} }, React.createElement("span", null, "Retained content")),
+    React.createElement(Suspend, { active: suspend }));
+  try {
+    await tree.render(scene(true));
+    await tree.render(scene(false));
+    timingCalls.length = 0;
+    await act(async () => { React.startTransition(() => tree.root.render(scene(true, true))); });
+    assert.equal(tree.container.querySelector('[role="dialog"]'), null);
+    assert.equal(timingCalls.length, 0, "a speculative opening cannot start committed effects");
+    await tree.render(scene(false));
+    assert.equal(tree.container.querySelector('[role="dialog"]'), null, "abandoned retention state cannot leak into a closed commit");
+    await tree.render(scene(true));
+    assert.ok(tree.container.querySelector('[role="dialog"]'));
+    await tree.render(scene(false));
+    assert.equal(tree.container.querySelector('[role="dialog"]'), null);
+  } finally {
+    await tree.unmount();
+    motion.reducedMotion = reduced;
+  }
 });
 
 test("web ContextMenu measures from the layout report instead of forcing layout in the commit", async t => {

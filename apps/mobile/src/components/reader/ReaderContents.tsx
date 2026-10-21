@@ -14,7 +14,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { listCorners, listPosition } from "../../theme/list-shape";
 import { layout, radius, spacing } from "../../theme/tokens";
 import type { ReaderWorkScheduler } from "./reader-work";
-import { useAnimationActivity } from "../../hooks/use-animation-activity";
+import { useAnimationActivityEffect } from "../../hooks/use-animation-activity";
 
 export interface ReaderContentsHandle { open: () => void; prepare: () => void }
 interface ReaderContentsProps {
@@ -38,18 +38,18 @@ export const ReaderContents = React.memo(React.forwardRef<ReaderContentsHandle, 
   const [visible, setVisible] = useState(false);
   const [prepared, setPrepared] = useState(false);
   const [articleReady, setArticleReady] = useState(false);
-  const active = useAnimationActivity();
   const pendingSelection = useRef<string | null>(null);
   const triggerRef = useRef<HTMLElement | null>(null);
   const selectRef = useRef(onSelect);
   selectRef.current = onSelect;
-  useEffect(() => {
+  const prepareContents = useCallback((active: boolean) => {
     // Do not mount a second native tree during article startup. Once content
     // settles, prepare only a viewport of rows at interruptible idle priority.
     // An earlier tap still opens immediately and retains that prepared surface.
     if (!active || !articleReady || prepared) return;
     return workScheduler.schedule(() => startTransition(() => setPrepared(true)));
-  }, [active, articleReady, prepared, workScheduler]);
+  }, [articleReady, prepared, workScheduler]);
+  useAnimationActivityEffect(prepareContents);
   const prepare = useCallback(() => setArticleReady(true), []);
   const open = useCallback(() => {
     if (Platform.OS === "web" && typeof document !== "undefined") triggerRef.current = document.activeElement as HTMLElement | null;

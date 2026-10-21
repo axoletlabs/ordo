@@ -33,7 +33,7 @@ import { radius, resolveFont, spacing, type FontFamily } from "../../theme/token
 import type { HighlightDto, ReaderLineSpacing } from "@ordo/shared";
 import { applyHighlightsToHtml, htmlToPlainText } from "@ordo/shared";
 import { readerArticleColors, readerTagColors, READER_IGNORED_INLINE_STYLES } from "./reader-article-colors";
-import { useAnimationActivity } from "../../hooks/use-animation-activity";
+import { useAnimationActivityEffect } from "../../hooks/use-animation-activity";
 import { scheduleIdleWork } from "../../lib/idle-work";
 import type { ReaderWorkScheduler } from "./reader-work";
 import {
@@ -386,14 +386,14 @@ function ArticleSections({ sections, contentWidth, onReady, workScheduler }: {
   workScheduler?: ReaderWorkScheduler;
 }) {
   const [mountedCount, setMountedCount] = useState(1);
-  const active = useAnimationActivity();
   const count = Math.min(mountedCount, Math.max(1, sections.length));
-  useEffect(() => {
+  const prepareNextSection = useCallback((active: boolean) => {
     if (!active || count >= sections.length) return;
     // Keep each native commit small, allow input to interrupt React's render,
     // and stop preparing background content while Contents/another overlay owns it.
     return (workScheduler?.schedule ?? scheduleIdleWork)(() => startTransition(() => setMountedCount(count + 1)));
-  }, [active, count, sections, workScheduler]);
+  }, [count, sections, workScheduler]);
+  useAnimationActivityEffect(prepareNextSection);
   useEffect(() => {
     if (count < sections.length) return;
     const frame = requestAnimationFrame(() => onReady?.());

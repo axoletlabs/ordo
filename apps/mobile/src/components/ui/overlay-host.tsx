@@ -15,7 +15,7 @@ import { Platform, StyleSheet, View } from "react-native";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 import { createOverlayRegistry, topBlockingLayer } from "../../lib/overlay-registry";
 import { isolateModal } from "../../lib/modal-isolation";
-import { AnimationActivityContext } from "../../hooks/use-animation-activity";
+import { AnimationActivityContext, AnimationActivityScopeContext, createAnimationActivityScope } from "../../hooks/use-animation-activity";
 
 type OverlayApi = ReturnType<typeof createOverlayRegistry<React.ReactNode>>;
 
@@ -38,13 +38,20 @@ export function OverlayHost({ children }: { children: React.ReactNode }) {
 
 function OverlayBackground({ api, children }: { api: OverlayApi; children: React.ReactNode }) {
   const blocked = useSyncExternalStore(api.subscribe, api.isBlocked, api.isBlocked);
+  // Publish a stable scope and update it in a committed layout effect. The
+  // legacy boolean stays true so it does not republish through every page
+  // provider; only animation leaf hooks subscribe to the scope.
+  const activity = useMemo(() => createAnimationActivityScope(), []);
+  useLayoutEffect(() => { activity.setActive(!blocked); }, [activity, blocked]);
   return <OverlayBlockedContext.Provider value={blocked}>
     {/* Web already has inert isolation and a full-viewport blocking scrim.
         Toggling inherited CSS pointer-events here dirties the entire article
         subtree before a popup can paint. Native keeps its cheap hit-test gate. */}
     <View style={styles.background} pointerEvents={Platform.OS === "web" ? undefined : blocked ? "none" : "auto"}
       accessibilityElementsHidden={blocked} importantForAccessibility={blocked ? "no-hide-descendants" : "auto"}>
-      <AnimationActivityContext.Provider value={!blocked}>{children}</AnimationActivityContext.Provider>
+      <AnimationActivityScopeContext.Provider value={activity}>
+        <AnimationActivityContext.Provider value={true}>{children}</AnimationActivityContext.Provider>
+      </AnimationActivityScopeContext.Provider>
     </View>
   </OverlayBlockedContext.Provider>;
 }
@@ -52,13 +59,23 @@ function OverlayBackground({ api, children }: { api: OverlayApi; children: React
 function OverlayLayers({ api }: { api: OverlayApi }) {
   const layers = useSyncExternalStore(api.subscribe, api.getLayers, api.getLayers);
   const host = useRef<View>(null);
+  const releaseIsolation = useRef<(() => void) | undefined>(undefined);
   const topId = topBlockingLayer(layers);
   const topIndex = layers.findIndex((layer) => layer.id === topId);
   useLayoutEffect(() => {
-    if (Platform.OS !== "web" || !topId) return;
-    const root = (host.current as unknown as HTMLElement | null)?.querySelector<HTMLElement>(`[data-overlay-layer="${topId}"]`);
-    if (root) return isolateModal(root);
+    if (Platform.OS !== "web") return;
+    const root = topId ? (host.current as unknown as HTMLElement | null)?.querySelector<HTMLElement>(`[data-overlay-layer="${topId}"]`) : null;
+    // Acquire the successor before releasing the old owner. Shared background
+    // locks stay intact across picker/menu handoffs instead of toggling inert,
+    // aria-hidden and document overflow off and straight back on.
+    const next = root ? isolateModal(root) : undefined;
+    releaseIsolation.current?.();
+    releaseIsolation.current = next;
   }, [topId]);
+  useLayoutEffect(() => () => {
+    releaseIsolation.current?.();
+    releaseIsolation.current = undefined;
+  }, []);
 
   return (
     <View

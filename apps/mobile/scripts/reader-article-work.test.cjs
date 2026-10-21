@@ -99,7 +99,10 @@ const stubs = {
     useTheme: () => ({ palette: themeState.palette, expressive: false }),
     ThemeOverrideProvider: ({ children }) => children,
   },
-  "../../hooks/use-animation-activity": { useAnimationActivity: () => true },
+  "../../hooks/use-animation-activity": {
+    useAnimationActivity: () => true,
+    useAnimationActivityEffect: (callback) => React.useEffect(() => callback(true), [callback]),
+  },
   "../../hooks/use-scene-ready": { useSceneReady: () => true },
 };
 

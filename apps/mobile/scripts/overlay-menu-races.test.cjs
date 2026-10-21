@@ -229,7 +229,26 @@ stub("hooks/use-keyboard-visible.ts", {
   useKeyboardViewportHeight: height => height,
 });
 stub("hooks/use-overlay-focus.ts", { useOverlayFocus: () => React.useRef(null) });
-stub("hooks/use-animation-activity.ts", { AnimationActivityContext: React.createContext(true), useAnimationActivity: () => true });
+const AnimationActivityScopeContext = React.createContext(null);
+function createAnimationActivityScope(initial = true) {
+  let active = initial;
+  const listeners = new Set();
+  return {
+    getSnapshot: () => active,
+    subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    setActive(next) {
+      if (next === active) return;
+      active = next;
+      for (const listener of [...listeners]) listener();
+    },
+  };
+}
+stub("hooks/use-animation-activity.ts", {
+  AnimationActivityContext: React.createContext(true),
+  AnimationActivityScopeContext,
+  createAnimationActivityScope,
+  useAnimationActivity: () => true,
+});
 stub("lib/menu-outside-scroll.ts", { listenForMenuOutsideScroll: () => () => {} });
 stub("lib/haptics.ts", { haptics: { light: () => {}, medium: () => {}, heavy: () => {} } });
 stub("lib/panel-keyboard-layout.ts", { panelKeyboardLift: () => 0 });

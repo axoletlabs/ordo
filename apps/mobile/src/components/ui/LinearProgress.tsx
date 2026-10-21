@@ -1,5 +1,5 @@
 /** Material 3 straight/wavy progress, shared by downloads and content progress. */
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, {
   cancelAnimation, Easing, ReduceMotion, useAnimatedProps, useAnimatedStyle, useSharedValue,
@@ -10,7 +10,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { useMaterialMotion } from "../../theme/material-motion";
 import { progressFraction } from "../../lib/progress-fraction";
 import { linearIndeterminateSegments, wavyProgressPath } from "../../lib/material-progress";
-import { useAnimationActivity } from "../../hooks/use-animation-activity";
+import { useAnimationActivityEffect } from "../../hooks/use-animation-activity";
 
 const HEIGHT = 4;
 const GAP = 4;
@@ -49,7 +49,6 @@ export function LinearProgress({ value, animatedValue, label, style, wavy = fals
 }) {
   const { palette } = useTheme();
   const { reducedMotion } = useMaterialMotion();
-  const active = useAnimationActivity();
   const [width, setWidth] = useState(0);
   const phase = useSharedValue(0);
   const fill = useSharedValue(0);
@@ -59,13 +58,13 @@ export function LinearProgress({ value, animatedValue, label, style, wavy = fals
   const indeterminate = progress == null && !animatedValue;
   const complete = progress === 1;
 
-  useEffect(() => {
+  useAnimationActivityEffect(useCallback((active: boolean) => {
     wave.value = 0;
     if (wavy && active && !reducedMotion && !complete) {
       wave.value = withRepeat(withTiming(1, { duration: 1000, easing: Easing.linear, reduceMotion: ReduceMotion.Never }), -1, false, undefined, ReduceMotion.Never);
     }
     return () => cancelAnimation(wave);
-  }, [wave, wavy, reducedMotion, active, complete]);
+  }, [wave, wavy, reducedMotion, complete]));
 
   const waveAmplitude = indeterminate || (progress != null && progress > 0.1 && progress < 0.95) ? 3 : 0;
   useEffect(() => {
@@ -75,14 +74,14 @@ export function LinearProgress({ value, animatedValue, label, style, wavy = fals
     return () => cancelAnimation(amplitude);
   }, [amplitude, waveAmplitude, reducedMotion]);
 
-  useEffect(() => {
+  useAnimationActivityEffect(useCallback((active: boolean) => {
     cancelAnimation(phase);
     phase.value = 0;
     if (indeterminate && active && !reducedMotion) {
       phase.value = withRepeat(withTiming(1, { duration: 1800, easing: Easing.linear, reduceMotion: ReduceMotion.Never }), -1, false, undefined, ReduceMotion.Never);
     }
     return () => cancelAnimation(phase);
-  }, [phase, indeterminate, reducedMotion, active]);
+  }, [phase, indeterminate, reducedMotion]));
 
   useEffect(() => {
     // Don't spring a percentage: overshooting suggests bytes that aren't there.

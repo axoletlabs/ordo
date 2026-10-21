@@ -35,7 +35,10 @@ const stubs = {
   "../../theme/ThemeProvider": { useTheme: () => ({ expressive: false, palette: {} }) },
   "../../theme/list-shape": { listCorners: () => ({}), listPosition: () => "middle" },
   "../../theme/tokens": { layout: { maxReaderWidth: 720 }, radius: { xs: 4 }, spacing: new Proxy({}, { get: (_, key) => Number(key) }) },
-  "../../hooks/use-animation-activity": { useAnimationActivity: () => true },
+  "../../hooks/use-animation-activity": {
+    useAnimationActivity: () => true,
+    useAnimationActivityEffect: (callback) => React.useEffect(() => callback(true), [callback]),
+  },
 };
 const source = readFileSync(resolve(__dirname, "../src/components/reader/ReaderContents.tsx"), "utf8");
 const { outputText } = ts.transpileModule(source, {

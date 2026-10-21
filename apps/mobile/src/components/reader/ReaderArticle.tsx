@@ -1,11 +1,11 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { View } from "react-native";
 import type { ArticleHtmlProps } from "./ArticleHtml";
 import { Skeleton, SkeletonGroup } from "../ui/Skeleton";
 import { spacing } from "../../theme/tokens";
 import { useSceneReady } from "../../hooks/use-scene-ready";
 import { scheduleIdleWork } from "../../lib/idle-work";
-import { useAnimationActivity } from "../../hooks/use-animation-activity";
+import { useAnimationActivityEffect } from "../../hooks/use-animation-activity";
 
 let renderer: React.ComponentType<ArticleHtmlProps> | null = null;
 let loading: Promise<typeof import("./ArticleHtml")> | null = null;
@@ -19,8 +19,7 @@ export const ReaderArticle = React.memo(function ReaderArticle(props: ArticleHtm
   const [failure, setFailure] = useState<Error | null>(null);
   const html = props.html;
   const sceneReady = useSceneReady();
-  const active = useAnimationActivity();
-  useEffect(() => {
+  const loadArticle = useCallback((active: boolean) => {
     if (!sceneReady || !active || paintedHtml === html) return;
     let cancelled = false;
     const cancel = scheduleIdleWork(() => {
@@ -39,7 +38,8 @@ export const ReaderArticle = React.memo(function ReaderArticle(props: ArticleHtm
       });
     });
     return () => { cancelled = true; cancel(); };
-  }, [active, html, paintedHtml, sceneReady]);
+  }, [html, paintedHtml, sceneReady]);
+  useAnimationActivityEffect(loadArticle);
   if (failure) throw failure;
   if (Renderer && paintedHtml === html) return <Renderer {...props} />;
   return <SkeletonGroup><View accessibilityLabel="Loading article" style={{ gap: spacing[12] }}>

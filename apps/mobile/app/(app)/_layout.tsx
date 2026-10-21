@@ -19,7 +19,7 @@ import { ReminderNotificationHost } from "../../src/components/bookmarks/Reminde
 import { PageTransition } from "../../src/components/ui/PageTransition";
 import { ChangelogAnnouncementHost } from "../../src/components/settings/ChangelogAnnouncementHost";
 import { useOverlayFocus } from "../../src/hooks/use-overlay-focus";
-import { AnimationActivityContext, useAnimationActivity } from "../../src/hooks/use-animation-activity";
+import { AnimationActivityContext } from "../../src/hooks/use-animation-activity";
 
 enableFreeze(true);
 
@@ -102,9 +102,21 @@ function renderStackScreen({ children }: { children: React.ReactNode }) {
   return <PageTransition>{children}</PageTransition>;
 }
 
+/** Keep host activity below the navigation shell. Inherit only the legacy
+ * boolean: the host scope and app foreground are combined by each animation
+ * leaf hook, so the Stack never republishes those subscriptions as a context
+ * value across the screen tree. */
+function StackActivity({ paused, children }: { paused: boolean; children: React.ReactNode }) {
+  const inheritedActive = React.useContext(AnimationActivityContext);
+  return (
+    <AnimationActivityContext.Provider value={inheritedActive && !paused}>
+      {children}
+    </AnimationActivityContext.Provider>
+  );
+}
+
 function AuthenticatedAppLayout() {
   const { palette } = useTheme();
-  const animationActive = useAnimationActivity();
   // Reader/account preference saves replace `user`. The navigation shell only
   // needs the enrollment gate, not those unrelated account fields.
   const userNeedsMfa = useAuthStore((s) => Boolean(s.user && !s.user.mfaEnabled));
@@ -167,10 +179,10 @@ function AuthenticatedAppLayout() {
         accessibilityElementsHidden={needsMfaEnrollment}
         importantForAccessibility={needsMfaEnrollment ? "no-hide-descendants" : "auto"}
         {...(Platform.OS === "web" ? { "aria-hidden": needsMfaEnrollment } : {})}>
-        <AnimationActivityContext.Provider value={animationActive && !needsMfaEnrollment}>
+        <StackActivity paused={needsMfaEnrollment}>
           {stack}
           <ReminderNotificationHost />
-        </AnimationActivityContext.Provider>
+        </StackActivity>
       </View>
       <ChangelogAnnouncementHost enabled={status === "authenticated" && Boolean(serverInfo) && !needsMfaEnrollment} />
       {needsMfaEnrollment ? <MfaEnrollmentGate /> : null}

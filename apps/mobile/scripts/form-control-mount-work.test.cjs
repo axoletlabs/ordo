@@ -262,7 +262,8 @@ function load(filename) {
     if (name === "react/jsx-runtime") return { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }), Fragment: "Fragment" };
     if (name === "react-native") return {
       Platform: Object.assign(platformState, { select: choices => choices[platformState.OS] ?? choices.default }),
-      View: "View", Pressable: "Pressable", TextInput: "TextInput", AppState: { currentState: "active" },
+      View: "View", Pressable: "Pressable", TextInput: "TextInput",
+      AppState: { currentState: "active", addEventListener: () => ({ remove() {} }) },
       StyleSheet: {
         create: x => x,
         flatten: style => (Array.isArray(style) ? Object.assign({}, ...style.map(s => s && typeof s === "object" ? s : {})) : style ?? undefined),

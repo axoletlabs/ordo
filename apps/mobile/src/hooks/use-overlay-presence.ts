@@ -31,6 +31,11 @@ export function useOverlayPresence(
   const spatial = useSharedValue(0);
   const motion = useMaterialMotion();
   const [rendered, setRendered] = useState(visible);
+  // A visible render already mounts the surface. Arm its later exit in that
+  // same render pass instead of committing the new tree and immediately
+  // scheduling another layout-effect commit just to retain it. React discards
+  // this state update along with an abandoned concurrent opening.
+  if (visible && !rendered) setRendered(true);
   const generation = useRef(0);
   const wasVisible = useRef(false);
   const wasOpen = useRef(false);
@@ -73,7 +78,6 @@ export function useOverlayPresence(
   useLayoutEffect(() => {
     if (visible) {
       const freshOpen = !wasOpen.current;
-      setRendered(true);
       wasOpen.current = true;
       if (!ready) {
         // Measure/position an invisible surface before starting its entrance.

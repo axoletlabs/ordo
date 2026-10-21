@@ -20,8 +20,24 @@ test("preference saves do not rerender the router; MFA and sign-out still react"
   let stackRenders = 0;
   const screenLayouts = [];
   const enabledHistory = [];
+  const pageActivity = [];
+  const AnimationActivityContext = React.createContext(true);
   const View = ({ children }) => React.createElement("div", null, children);
-  function Stack({ children, screenLayout }) { stackRenders++; screenLayouts.push(screenLayout); return React.createElement(View, null, children); }
+  function ActivityProbe() {
+    pageActivity.push(React.useContext(AnimationActivityContext));
+    return null;
+  }
+  function PageTransition({ children }) {
+    pageActivity.push(React.useContext(AnimationActivityContext));
+    return React.createElement(View, null, children);
+  }
+  function Stack({ children, screenLayout }) {
+    stackRenders += 1;
+    screenLayouts.push(screenLayout);
+    return React.createElement(View, null,
+      screenLayout ? screenLayout({ children: React.createElement(ActivityProbe) }) : null,
+      children);
+  }
   Stack.Screen = () => null;
   const mocks = {
     react: React, "react/jsx-runtime": require("react/jsx-runtime"),
@@ -38,10 +54,15 @@ test("preference saves do not rerender the router; MFA and sign-out still react"
     "../../src/store/settings": { useSettingsStore: selector => selector({ navigationAnimation: "default" }) },
     "../../src/components/auth/MfaEnrollmentScreen": { MfaEnrollmentScreen: () => React.createElement("span", null, "Enroll MFA") },
     "../../src/components/bookmarks/ReminderNotificationHost": { ReminderNotificationHost: () => null },
-    "../../src/components/ui/PageTransition": { PageTransition: View },
+    "../../src/components/ui/PageTransition": { PageTransition },
     "../../src/components/settings/ChangelogAnnouncementHost": { ChangelogAnnouncementHost: ({ enabled }) => { enabledHistory.push(enabled); return null; } },
     "../../src/hooks/use-overlay-focus": { useOverlayFocus: () => React.useRef(null) },
-    "../../src/hooks/use-animation-activity": { AnimationActivityContext: React.createContext(true), useAnimationActivity: () => true },
+    "../../src/hooks/use-animation-activity": {
+      AnimationActivityContext,
+      useAnimationActivity: () => {
+        throw new Error("StackActivity must inherit the legacy boolean; leaf hooks own host/app activity");
+      },
+    },
   };
   const filename = process.env.ORDO_APP_LAYOUT_SOURCE ?? resolve(__dirname, "../app/(app)/_layout.tsx");
   const { outputText } = ts.transpileModule(readFileSync(filename, "utf8"), {
@@ -57,15 +78,18 @@ test("preference saves do not rerender the router; MFA and sign-out still react"
   try {
     await React.act(() => root.render(React.createElement(mod.exports.default)));
     const initialRenders = stackRenders;
+    assert.equal(pageActivity.at(-1), true);
     for (let index = 0; index < 8; index++) await update(state => ({ user: { ...state.user, preferences: { fontSize: index % 2 ? "medium" : "large" } } }));
     assert.equal(stackRenders, initialRenders, "eight preference acknowledgements must not rerender the entire navigation stack");
     await update(state => ({ user: { ...state.user, displayName: "New name" } }));
     assert.equal(stackRenders, initialRenders);
     await update(state => ({ user: { ...state.user, mfaEnabled: false } }));
     assert.ok(dom.window.document.body.textContent.includes("Enroll MFA"));
+    assert.equal(pageActivity.at(-1), false, "the MFA gate still pauses page animations");
     assert.ok(stackRenders > initialRenders);
     await update(state => ({ user: { ...state.user, mfaEnabled: true } }));
     assert.ok(!dom.window.document.body.textContent.includes("Enroll MFA"));
+    assert.equal(pageActivity.at(-1), true);
     await update({ status: "unauthenticated", user: null });
     assert.equal(enabledHistory.at(-1), false, "sign-out disables account announcements");
     assert.equal(new Set(screenLayouts).size, 1, "real gate updates must not replace the screen-layout function");

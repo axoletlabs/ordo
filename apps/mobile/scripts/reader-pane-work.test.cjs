@@ -373,6 +373,10 @@ const stubs = {
       counts.articleHookCalls += 1;
       return true;
     },
+    useAnimationActivityEffect: (callback) => {
+      counts.articleHookCalls += 1;
+      React.useEffect(() => callback(true), [callback]);
+    },
   },
   "../../hooks/use-scene-ready": {
     useSceneReady: () => {

@@ -66,6 +66,14 @@ const nativeScrollBarProps = {
 const webNoContainingTransform: StyleProp<ViewStyle> =
   Platform.OS === "web" ? { transform: "none", overscrollBehavior: "contain" } as ViewStyle : null;
 
+/** Web already blocks the background with inert isolation and a full-viewport
+ * scrim; subscribing there re-rendered every scroller/list when a popup opened.
+ * RN Web's scrollDisabled only sets overflow/touch-action: programmatic scroll
+ * still worked and keyboard scrolling needs focus, which inert removes.
+ * Native keeps scrollEnabled because it has no inherited inert. Mirrors the
+ * platform-split hook in ScrollBar. */
+const useNativeOverlayBlocked = Platform.OS === "web" ? () => false : useOverlayBlocked;
+
 export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewProps>(
   function ThemedScrollView(
     {
@@ -84,7 +92,7 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
     ref,
   ) {
     const bar = useVerticalScrollBar(scrollBarInsets);
-    const blocked = useOverlayBlocked();
+    const blocked = useNativeOverlayBlocked();
     // Plain browser scrollers don't need Reanimated event registration. Keep
     // those hooks below a separate component, off every dialog's mount path.
     const animated = Platform.OS !== "web" || !!animatedScrollHandler;
@@ -258,7 +266,7 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
     ...rest
   } = props;
   const bar = useVerticalScrollBar(scrollBarInsets);
-  const blocked = useOverlayBlocked();
+  const blocked = useNativeOverlayBlocked();
   const { wrapper, inner } = splitScrollLayoutStyle(style);
   const customRefresh = !refreshControl && !!onRefresh;
   const refresh = useMaterialRefresh(!!refreshing, onRefresh, customRefresh && !blocked && rest.scrollEnabled !== false);
