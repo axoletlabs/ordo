@@ -8,9 +8,10 @@
  * Guards two audited costs:
  *  - a publisher re-render with unchanged children must not republish the
  *    layer (which re-rendered OverlayLayers and every sibling wrapper);
- *  - a web ContextMenu must measure its body and lock placement inside the
- *    mount task, before the first paint and before its entrance starts,
- *    instead of waiting for a post-paint layout callback.
+ *  - a web ContextMenu must not read `offsetHeight` inside the commit. That
+ *    forced a synchronous document style/layout flush (dominant cost behind the
+ *    reader); the body measures from the regular layout report instead and the
+ *    entrance stays gated until the corrected placement is committed.
  */
 const assert = require("node:assert/strict");
 const { readFileSync } = require("node:fs");
@@ -58,11 +59,13 @@ const kebab = key => key.replace(/[A-Z]/g, letter => `-${letter.toLowerCase()}`)
 const pendingMeasures = [];
 let nativeMeasureHeight = ELEMENT_HEIGHT;
 let dialogLayout;
+const layoutHandlers = new Map();
 
 function host(tag) {
   return React.forwardRef(function Host({ children, style, dataSet, onLayout, pointerEvents, ...rest }, ref) {
     if (rest.role === "dialog") dialogLayout = onLayout;
     const attach = React.useCallback(node => {
+      if (node && onLayout) layoutHandlers.set(node, onLayout);
       // RN Web puts measure() on every host node; native measure is async and
       // is driven by hand below so the readiness gate can be observed.
       if (node && typeof node.measure !== "function") {
@@ -341,7 +344,7 @@ test("changed blocking/active flags and new children still publish", async () =>
   await tree.unmount();
 });
 
-test("web ContextMenu measures and places its body during the mount task", async t => {
+test("web ContextMenu measures from the layout report instead of forcing layout in the commit", async t => {
   resetWork();
   const events = { commits: 0, entranceStarted: 0 };
   const anchor = { x: 20, y: 700, width: 40, height: 40 };
@@ -356,23 +359,28 @@ test("web ContextMenu measures and places its body during the mount task", async
   await tree.render(React.createElement(React.Profiler, { id: "overlay", onRender: () => { events.commits += 1; } },
     React.createElement(OverlayHost, null, React.createElement(Harness))));
 
-  // The entrance is a withTiming(1) started by useOverlayPresence. It must be
-  // running in the mount task: no ResizeObserver/measure timeout may gate it.
-  events.entranceStarted = timingCalls.filter(call => call.value === 1).length;
   const menu = tree.container.querySelector('[role="menu"]');
   assert.ok(menu, "the menu is mounted in the overlay host");
-  const style = JSON.parse(menu.getAttribute("data-teststyle"));
+  events.entranceStarted = timingCalls.filter(call => call.value === 1).length;
+  const provisional = JSON.parse(menu.getAttribute("data-teststyle"));
+  assert.equal(events.entranceStarted, 0, "nothing may force a synchronous layout read before the entrance");
+  assert.equal(provisional.top, 478, "the provisional placement uses the caller estimate");
+
+  // RN Web's onLayout is a ResizeObserver report: it lands after the commit,
+  // without reading layout inside React's layout-effect task.
+  const body = menu.firstElementChild;
+  const layout = layoutHandlers.get(body);
+  assert.equal(typeof layout, "function", "the menu body has a layout subscription");
+  await act(async () => { layout({ nativeEvent: { layout: { x: 0, y: 0, width: 240, height: nativeMeasureHeight } } }); });
+  events.entranceStarted = timingCalls.filter(call => call.value === 1).length;
+  const style = JSON.parse(tree.container.querySelector('[role="menu"]').getAttribute("data-teststyle"));
   // placeMenu above the trigger: 700 - 6 - (measured 320 + padding 16) = 358.
-  // The 200px estimate would have placed it at 478. The measured height also
-  // republishes the corrected origin, still inside this pre-paint settle.
   assert.deepEqual({
     entranceStarted: events.entranceStarted,
     top: style.top,
-    publishes: registryWork.publishes,
-    commits: events.commits,
-  }, { entranceStarted: 1, top: 358, publishes: 2, commits: 4 },
-  "the web menu must measure, place, and start its entrance in the mount task");
-  t.diagnostic(`mount settle: commits=${events.commits}, entranceStarts=${events.entranceStarted}, menuTop=${style.top}, publishes=${registryWork.publishes}`);
+  }, { entranceStarted: 1, top: 358 },
+  "the layout report settles placement and starts the entrance");
+  t.diagnostic(`layout settle: commits=${events.commits}, entranceStarts=${events.entranceStarted}, menuTop=${style.top}, publishes=${registryWork.publishes}`);
 
   // Exit still retains the surface for the fade.
   await act(async () => { setVisible(false); });
@@ -419,14 +427,14 @@ test("native panel input scope waits for layout and suspends during sibling pick
     React.createElement(FloatingPanel, { visible: true, onDismiss() {}, ...props }, React.createElement(Probe))));
   try {
     await render({});
-    assert.deepEqual(scope, { active: true, ready: false, session: 0 }, "mount autofocus must wait for the native opening/keyboard-dismiss step");
+    assert.deepEqual({ active: scope.active, ready: scope.ready, session: scope.session }, { active: true, ready: false, session: 0 }, "mount autofocus must wait for the native opening/keyboard-dismiss step");
     assert.equal(typeof dialogLayout, "function");
     await act(async () => { dialogLayout({ nativeEvent: { layout: { height: 200 } } }); });
-    assert.deepEqual(scope, { active: true, ready: true, session: 0 });
+    assert.deepEqual({ active: scope.active, ready: scope.ready, session: scope.session }, { active: true, ready: true, session: 0 });
     await render({ interactive: false });
-    assert.deepEqual(scope, { active: false, ready: true, session: 0 });
+    assert.deepEqual({ active: scope.active, ready: scope.ready, session: scope.session }, { active: false, ready: true, session: 0 });
     await render({});
-    assert.deepEqual(scope, { active: true, ready: true, session: 0 });
+    assert.deepEqual({ active: scope.active, ready: scope.ready, session: scope.session }, { active: true, ready: true, session: 0 });
     await render({ obscured: true });
     assert.equal(scope.active, false, "a sibling creation dialog owns focus");
     await render({ visible: false });
@@ -453,9 +461,9 @@ test("native menu inputs become ready only after measurement and inactive on clo
     React.createElement(ContextMenu, { visible, onDismiss() {}, anchor: { x: 20, y: 100, width: 200, height: 48 } }, React.createElement(Probe))));
   try {
     await render(true);
-    assert.deepEqual(scope, { active: true, ready: false, session: 0 });
+    assert.deepEqual({ active: scope.active, ready: scope.ready, session: scope.session }, { active: true, ready: false, session: 0 });
     await act(async () => { pendingMeasures.at(-1).callback(0, 0, 200, 160); });
-    assert.deepEqual(scope, { active: true, ready: true, session: 0 });
+    assert.deepEqual({ active: scope.active, ready: scope.ready, session: scope.session }, { active: true, ready: true, session: 0 });
     await render(false);
     assert.equal(scope.active, false);
   } finally {

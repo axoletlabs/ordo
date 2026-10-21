@@ -34,6 +34,9 @@ function panelChildren(children: React.ReactNode): React.ReactNode[] {
 import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
 import { layout, radius, spacing } from "../../theme/tokens";
 
+/** Native layout should report in the first frame; see the fallback below. */
+const READY_FALLBACK_MS = 200;
+
 export interface FloatingPanelProps {
   visible: boolean;
   onDismiss: () => void;
@@ -96,7 +99,7 @@ function FloatingPanelSurface({
   const panelSurface = sheet ? palette.surfaceContainerLow : palette.surfaceContainerHigh;
   const titleId = React.useId();
   const onShowRef = React.useRef(onShow);
-  onShowRef.current = onShow;
+  React.useLayoutEffect(() => { onShowRef.current = onShow; }, [onShow]);
   const { width, height } = useWindowDimensions();
   const [availableHeight, setAvailableHeight] = React.useState(height);
   const [keyboardTop, setKeyboardTop] = React.useState<number | null>(null);
@@ -123,6 +126,14 @@ function FloatingPanelSurface({
   React.useEffect(() => {
     if (!rendered && !keepMounted) setMeasured(false);
   }, [rendered, keepMounted]);
+  // A native layout report should arrive in the first frame. If it never does,
+  // release the entrance instead of keeping an invisible, blocking dialog on
+  // screen. Web already treats its viewport geometry as ready.
+  React.useEffect(() => {
+    if (Platform.OS === "web" || !visible || measured) return;
+    const timer = setTimeout(() => setMeasured(true), READY_FALLBACK_MS);
+    return () => clearTimeout(timer);
+  }, [visible, measured]);
   const panelRef = useOverlayFocus(visible && rendered, hideAndDismiss, "dialog", dismissible, false, !interactive || obscured);
   // A sibling picker obscures this panel while staying mounted above it.
   // Crossfade this panel and its scrim (same 200ms inOut quad as the
@@ -132,14 +143,25 @@ function FloatingPanelSurface({
   const obscuredFade = useSharedValue(obscured ? 0 : 1);
   const [collapsedObscured, setCollapsedObscured] = React.useState(obscured);
   const lastObscured = React.useRef(obscured);
-  const previousFade = React.useRef({ obscured, reducedMotion: motion.reducedMotion });
+  const previousFade = React.useRef({ obscured, reducedMotion: motion.reducedMotion, visible });
   const finishObscuring = React.useCallback(() => {
     if (lastObscured.current) setCollapsedObscured(true);
   }, []);
   React.useLayoutEffect(() => {
     lastObscured.current = obscured;
-    if (previousFade.current.obscured === obscured && previousFade.current.reducedMotion === motion.reducedMotion) return;
-    previousFade.current = { obscured, reducedMotion: motion.reducedMotion };
+    const previous = previousFade.current;
+    previousFade.current = { obscured, reducedMotion: motion.reducedMotion, visible };
+    if (!visible) {
+      // The surface is exiting. Uncovering it here because a sibling picker
+      // closed in the same commit would fade a hidden panel/scrim back in
+      // underneath the exit; keep it collapsed and let a future open reveal it.
+      if (obscured) {
+        obscuredFade.value = 0;
+        if (!collapsedObscured) setCollapsedObscured(true);
+      }
+      return;
+    }
+    if (previous.visible === visible && previous.obscured === obscured && previous.reducedMotion === motion.reducedMotion) return;
     if (motion.reducedMotion) {
       obscuredFade.value = obscured ? 0 : 1;
       setCollapsedObscured(obscured);
@@ -154,9 +176,9 @@ function FloatingPanelSurface({
     }
     setCollapsedObscured(false);
     obscuredFade.value = withTiming(1, fade);
-  }, [obscured, obscuredFade, finishObscuring, motion.reducedMotion]);
+  }, [obscured, visible, obscuredFade, finishObscuring, motion.reducedMotion, collapsedObscured]);
   const lastChildren = React.useRef(children);
-  if (visible) lastChildren.current = children;
+  React.useLayoutEffect(() => { if (visible) lastChildren.current = children; }, [visible, children]);
   const displayedChildren = visible ? children : lastChildren.current;
   const { headers, actions, body } = React.useMemo(() => {
     const nodes = panelChildren(displayedChildren);

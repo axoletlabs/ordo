@@ -43,6 +43,10 @@ import { layout, radius, spacing } from "../../theme/tokens";
 
 export type { MenuAnchorRect };
 
+/** Layout should land within a frame or two. If it does not, release the
+ * entrance anyway rather than retaining a fully transparent blocking surface. */
+const READY_FALLBACK_MS = 200;
+
 export interface ContextMenuProps {
   visible: boolean;
   onDismiss: () => void;
@@ -102,12 +106,24 @@ function ContextMenuSurface({
   }, [backdrop, dismissible, keyboardDismiss, onDismiss]);
   const [contentHeight, setContentHeight] = React.useState(0);
   const contentHeightRef = React.useRef(0);
+  /** A new session replaced the contents on a visible surface; keep the old
+   * height for the current frame but do not lock a placement from it. */
+  const measurementStale = React.useRef(false);
   const applyBodyHeight = React.useCallback((height: number) => {
+    measurementStale.current = false;
     if (height <= 0 || Math.abs(height - contentHeightRef.current) < 1) return;
     contentHeightRef.current = height;
     setContentHeight(height);
   }, []);
-  const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, {
+  // A missing layout report (detached portal, unsupported ResizeObserver) must
+  // not leave a transparent, input-blocking menu mounted forever. The caller's
+  // estimate is only a last resort; a later real measurement still corrects it.
+  React.useEffect(() => {
+    if (!visible || contentHeight > 0) return;
+    const timer = setTimeout(() => applyBodyHeight(estimatedHeight), READY_FALLBACK_MS);
+    return () => clearTimeout(timer);
+  }, [applyBodyHeight, contentHeight, estimatedHeight, visible]);
+  const { rendered, retained, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, {
     dismissKeyboard: backdrop && keyboardDismiss,
     interactive: backdrop,
     ready: contentHeight > 0,
@@ -126,15 +142,17 @@ function ContextMenuSurface({
   const [displayed, setDisplayed] = React.useState<React.ReactNode>(null);
   const motion = useMaterialMotion();
   const lastPage = React.useRef(pageKey);
+  /** Only the latest transition may settle; a close or reopen invalidates it. */
+  const pageToken = React.useRef(0);
   const visibleRef = React.useRef(visible);
-  visibleRef.current = visible;
+  React.useLayoutEffect(() => { visibleRef.current = visible; }, [visible]);
   const pageWasVisible = React.useRef(false);
   const [pageCommit, setPageCommit] = React.useState(0);
   // Swap the frozen outgoing page for the incoming one only after the
   // surface has fully faded: the shared value is already applied at 0, so
   // neither page can flash mid-frame no matter when styles land.
-  const settlePageSwap = React.useCallback((key: string | undefined) => {
-    if (!visibleRef.current || key !== lastPage.current) return;
+  const settlePageSwap = React.useCallback((key: string | undefined, token: number) => {
+    if (!visibleRef.current || key !== lastPage.current || token !== pageToken.current) return;
     pageLeaving.value = 0;
     setDisplayed(null);
     pageProgress.value = 0;
@@ -147,11 +165,18 @@ function ContextMenuSurface({
   }, [pageCommit, displayed, visible, motion.reducedMotion, pageProgress]);
   React.useLayoutEffect(() => {
     if (!visible) {
+      // A close interrupts any page crossfade. Retained exit contents must stay
+      // visible: leaving the page at the fade-out's opacity 0 would show an
+      // empty surface fading for 200ms. The next open resets this explicitly.
+      pageToken.current += 1;
       cancelAnimation(pageProgress);
       lastPage.current = pageKey;
+      pageLeaving.value = 0;
+      pageProgress.value = 1;
       return;
     }
     if (motion.reducedMotion) {
+      pageToken.current += 1;
       cancelAnimation(pageProgress);
       lastPage.current = pageKey;
       pageLeaving.value = 0;
@@ -161,13 +186,14 @@ function ContextMenuSurface({
     }
     if (pageKey === lastPage.current) return;
     lastPage.current = pageKey;
+    const token = ++pageToken.current;
     // Material fade-through: fade the current page out in place, swap to
     // the next page while the surface is empty, then fade it in with a
     // small settle. Direction-free, so opening a nested page reads the
     // same as coming back.
     pageLeaving.value = 1;
     pageProgress.value = withTiming(0, { duration: 100, easing: Easing.in(Easing.quad) }, (finished) => {
-      if (finished) runOnJS(settlePageSwap)(pageKey);
+      if (finished) runOnJS(settlePageSwap)(pageKey, token);
     });
   }, [visible, pageKey, pageLeaving, pageProgress, settlePageSwap, motion.reducedMotion]);
   const pageStyle = useAnimatedStyle(() => ({
@@ -181,26 +207,34 @@ function ContextMenuSurface({
   const layoutKeyRef = React.useRef("");
   const lastChildren = React.useRef(children);
   const lastPageRender = React.useRef(pageKey);
-  if (visible && wasVisibleRef.current && pageKey !== lastPageRender.current) {
-    // Freeze the outgoing page in place while the fade-through empties the
-    // surface; the swap to the new page happens in `settlePageSwap`.
-    if (lastChildren.current !== children) setDisplayed(lastChildren.current);
+  if (visible && wasVisibleRef.current && pageKey !== lastPageRender.current && displayed === null && lastChildren.current !== children) {
+    // Only a page change on an already-visible surface freezes anything. A
+    // fresh open paints its contents directly. A second change that arrives
+    // mid-fade keeps the page that is actually on screen: the unseen
+    // intermediate page must never be committed just because it was the
+    // previous target.
+    setDisplayed(lastChildren.current);
   }
-  if (visible) lastChildren.current = children;
-  lastPageRender.current = pageKey;
   const sessionKeyRef = React.useRef(sessionKey);
   if (visible && sessionKeyRef.current !== sessionKey) {
     sessionKeyRef.current = sessionKey;
-    contentHeightRef.current = 0;
+    // Keep the committed height while a new session replaces the contents on
+    // an already-visible surface; the next layout re-measures it. Resetting to
+    // zero here would blank/re-place a menu the user is looking at. Do not lock
+    // a placement from that old height before the new report arrives.
+    measurementStale.current = true;
     placementLock.current = null;
     sessionSide.current = null;
-    if (contentHeight !== 0) setContentHeight(0);
   }
   // New open: drop the previous row's measured height so a leftover
   // delete-confirm size cannot flash below, then jump above — unless this
-  // is the same overlay session coming back from a nested page.
+  // is the same overlay session coming back from a nested page, or the exit
+  // tree is still mounted: its committed body height is still valid. Waiting
+  // to re-measure would add a layout-gated invisible frame, and a ResizeObserver
+  // will not re-fire while the retained element keeps its size.
   if (visible && !wasVisibleRef.current) {
-    const continueSession = sessionKey != null && placementLock.current != null;
+    const continueSession = (sessionKey != null && placementLock.current != null) || retained;
+    measurementStale.current = false;
     if (!continueSession) {
       contentHeightRef.current = 0;
       placementLock.current = null;
@@ -209,12 +243,21 @@ function ContextMenuSurface({
     }
     if (displayed !== null) setDisplayed(null);
   }
-  wasVisibleRef.current = visible;
+  React.useLayoutEffect(() => {
+    // Retained page history describes what committed, not what a concurrent
+    // render merely attempted. Publishing an abandoned page here during render
+    // could freeze that unseen page forever on the next normal update.
+    if (visible) lastChildren.current = children;
+    lastPageRender.current = pageKey;
+    wasVisibleRef.current = visible;
+  }, [visible, children, pageKey]);
   React.useLayoutEffect(() => {
     const opening = visible && !pageWasVisible.current;
     pageWasVisible.current = visible;
     if (!opening) return;
     // Shared values are updated at commit, never during a speculative render.
+    // A stale fade/settle from the previous open or close cannot land here.
+    pageToken.current += 1;
     cancelAnimation(pageProgress);
     lastPage.current = pageKey;
     pageLeaving.value = 0;
@@ -252,7 +295,7 @@ function ContextMenuSurface({
         insets,
         preferredPlacement: sessionSide.current ?? preferredPlacement,
       });
-      if (measuredHeight > 0) {
+      if (measuredHeight > 0 && !measurementStale.current) {
         placementLock.current = lastPlacement.current;
         sessionSide.current = lastPlacement.current.placement;
       }
@@ -338,10 +381,13 @@ function ContextMenuSurface({
   );
 }
 
-/** Measures the menu body as soon as the portal mounts it. RN Web's
- * `measure()` defers to a timer and `onLayout` waits for a ResizeObserver, so
- * both landed after the first paint. Reading the border box in this layout
- * effect keeps placement and the entrance in the mount task. */
+/** Measures the menu body after it has been committed. Native's `measure()`
+ * is asynchronous, so it cannot delay the click task; on web the existing
+ * `onLayout` (RN Web's ResizeObserver) reports the border box after normal
+ * layout. Reading `offsetHeight` inside a layout effect forced a synchronous
+ * document style/layout recalculation — the dominant cost when a long article
+ * sat behind the menu — so placement/entrance wait one non-blocking layout
+ * report instead. */
 function MenuBody({ visible, measureKey, onMeasure, onLayout, style, children }: {
   visible: boolean;
   measureKey?: string | number | null;
@@ -352,15 +398,9 @@ function MenuBody({ visible, measureKey, onMeasure, onLayout, style, children }:
 }) {
   const ref = React.useRef<View>(null);
   React.useLayoutEffect(() => {
-    if (!visible) return;
+    if (!visible || Platform.OS === "web") return;
     const node = ref.current;
     if (!node) return;
-    if (Platform.OS === "web") {
-      // Same border-box height RN Web's measure() reports, but read directly.
-      const height = (node as unknown as HTMLElement).offsetHeight ?? 0;
-      if (height > 0) onMeasure(height);
-      return;
-    }
     let cancelled = false;
     node.measure((_x, _y, _width, height) => {
       if (!cancelled && height > 0) onMeasure(height);

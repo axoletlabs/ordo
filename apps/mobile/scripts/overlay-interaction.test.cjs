@@ -251,7 +251,7 @@ test("reduced-motion dismissal releases both hooks immediately", () => {
   assert.equal(h.animations.length, 0);
 });
 
-test("a close before the entrance started still notifies both hooks once", () => {
+test("a close before the entrance started releases both hooks in the close task", () => {
   const h = harness(), { useOverlayPresence } = h.load(PRESENCE);
   const events = [];
   const options = {
@@ -261,11 +261,12 @@ test("a close before the entrance started still notifies both hooks once", () =>
   const gated = h.render(() => useOverlayPresence(true, () => {}, options));
   assert.equal(gated.rendered, true);
   assert.equal(gated.progress.value, 0, "entrance held while not ready");
-  h.render(() => useOverlayPresence(false, () => {}, options));
-  assert.deepEqual(events, ["exiting"]);
-  h.animations.splice(0).forEach(animation => animation.callback?.(true));
-  h.render(() => useOverlayPresence(false, () => {}, options));
+  const closing = h.render(() => useOverlayPresence(false, () => {}, options));
+  // Nothing was ever painted, so there is no exit to watch: a rapid open/close
+  // must not retain an invisible blocking layer for the 200ms fade.
+  assert.equal(closing.rendered, false);
   assert.deepEqual(events, ["exiting", "exited"]);
+  assert.equal(h.animations.length, 0, "no exit animation is allocated");
 });
 
 test("registry: an exiting surface yields top-blocking to an active sibling", () => {
