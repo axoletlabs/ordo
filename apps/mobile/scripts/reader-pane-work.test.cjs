@@ -361,16 +361,6 @@ const stubs = {
   },
   "../../lib/copy-link": { copyLink: () => Promise.resolve(), copyText: () => Promise.resolve() },
   "../../lib/open-website": { ackBookmarkOpened: noop, openExternalBrowser: noop, openLivePage: noop },
-  "../../lib/reading-progress": {
-    reconcileReadingProgress: (bookmark, updated) => ({ ...bookmark, readProgress: updated.readProgress, isRead: updated.isRead }),
-    scrollReadingProgress: (offset, viewport, content) => {
-      if (viewport <= 0 || content <= 0) return 0;
-      const scrollable = content - viewport;
-      if (scrollable <= 0) return 1;
-      return Math.max(0, Math.min(1, offset / scrollable));
-    },
-    shouldFlushReadingProgress: (next, last, delta) => last === null || Math.abs(next - last) >= delta,
-  },
   "../../lib/fab-layout": { fabContentPadding: () => 0 },
   "../../hooks/use-reduced-motion-preference": { useReducedMotionPreference: () => false },
   "../../lib/latest-write-queue": { createLatestWriteQueue: () => () => {} },

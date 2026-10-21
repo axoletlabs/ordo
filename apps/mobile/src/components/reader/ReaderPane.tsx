@@ -93,7 +93,16 @@ import {
 import { copyLink, copyText } from "../../lib/copy-link";
 import { ackBookmarkOpened, openExternalBrowser, openLivePage } from "../../lib/open-website";
 import { reminderClearsOnOpen } from "../../lib/bookmark-reminders";
-import { reconcileReadingProgress, scrollReadingProgress, shouldFlushReadingProgress } from "../../lib/reading-progress";
+import {
+  measureReadingProgress,
+  reconcileReadingProgress,
+  restoreReadingOffset,
+  scrollReadingProgress,
+  shouldFlushReadingProgress,
+  READING_RESTORE_MIN,
+  READING_SHORT_SETTLE_MS,
+  type ReadingProgress,
+} from "../../lib/reading-progress";
 import { fabContentPadding } from "../../lib/fab-layout";
 import { useReducedMotionPreference } from "../../hooks/use-reduced-motion-preference";
 import { createLatestWriteQueue } from "../../lib/latest-write-queue";
@@ -163,7 +172,8 @@ function ReaderProgressBar({ animatedValue, labelRef, initialValue }: {
   labelRef: React.MutableRefObject<(value: number) => void>;
   initialValue: number;
 }) {
-  const [progress, setProgress] = useState(initialValue);
+  const [progress, setProgress] = useState(() =>
+    Number.isFinite(initialValue) ? Math.min(1, Math.max(0, initialValue)) : 0);
   useLayoutEffect(() => {
     labelRef.current = (value) => setProgress((previous) =>
       Math.round(previous * 100) === Math.round(value * 100) ? previous : value);
@@ -698,12 +708,24 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
   // An outgoing reader must never enqueue its article against the next account.
   const progressOwner = useRef({ userId: useAuthStore.getState().user?.id, server: useSettingsStore.getState().serverUrl, scope: captureSessionScope() }).current;
   const initialProgressRef = useRef(0);
+  // Last user-observed position that may be written. Measurements alone do not
+  // update it: late images/font swaps move the bar, not the stored position.
   const latestProgressRef = useRef(0);
+  const displayedProgressRef = useRef(0);
   const persistedProgressRef = useRef<number | null>(null);
   const restoredRef = useRef(false);
+  const userScrolledRef = useRef(false);
+  const restoreTargetRef = useRef<number | null>(null);
+  const restoreFromRef = useRef<number | null>(null);
+  const restoreIssuedAtRef = useRef(0);
+  const restoredContentHeightRef = useRef(0);
+  const restoredViewportRef = useRef(0);
+  const readingStartedRef = useRef(false);
   const htmlReadyRef = useRef(false);
   const viewHeightRef = useRef(0);
   const contentHeightRef = useRef(0);
+  const contentSettledRef = useRef(false);
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const headingRefs = useRef(new Map<string, View>());
   const pendingHeading = useRef<string | null>(null);
@@ -815,6 +837,7 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
     const article = currentArticleRef.current;
     if (!article || !trackProgressRef.current) return;
     const value = latestProgressRef.current;
+    if (!Number.isFinite(value)) return;
     const last = persistedProgressRef.current;
     if (last !== null && Math.abs(value - last) < 0.005) return;
     persistedProgressRef.current = value;
@@ -825,28 +848,87 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
   const progressTrackingSV = useSharedValue(false);
   const progressScrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
-      if (progressTrackingSV.value) progressSV.value = scrollReadingProgress(
-        event.contentOffset.y, event.layoutMeasurement.height, event.contentSize.height,
-      );
+      if (!progressTrackingSV.value) return;
+      const content = event.contentSize.height;
+      const viewport = event.layoutMeasurement.height;
+      // Keep the last bar through transient zero-size resize frames.
+      if (!(content > 0) || !(viewport > 0)) return;
+      progressSV.value = scrollReadingProgress(event.contentOffset.y, viewport, content);
     },
   });
   const readerScrollHandler = useComposedEventHandler([collapsingFab.scrollHandler, progressScrollHandler]);
 
-  const handleFraction = useCallback(
-    (fraction: number) => {
-      if (!trackProgressRef.current) return;
-      progressLabelRef.current(fraction);
-      latestProgressRef.current = fraction;
-      const last = persistedProgressRef.current;
-      if (shouldFlushReadingProgress(fraction, last, PROGRESS_DELTA, READ_COMPLETION_THRESHOLD)) {
-        flushProgress();
-      } else {
-        if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
-        flushTimerRef.current = setTimeout(flushProgress, PROGRESS_DEBOUNCE_MS);
-      }
-    },
-    [flushProgress],
-  );
+  const measureProgress = useCallback(() => measureReadingProgress({
+    offset: offsetRef.current,
+    viewportHeight: viewHeightRef.current,
+    contentHeight: contentHeightRef.current,
+    // Readiness is the article tree finishing its commit, not merely detail
+    // HTML arriving: the placeholder ScrollView is not a reading surface.
+    ready: trackProgressRef.current && htmlReadyRef.current,
+    settled: contentSettledRef.current,
+  }), []);
+
+  const applyReadingProgress = useCallback((reading: ReadingProgress, persist: boolean, paint: boolean) => {
+    if (reading.measured) {
+      displayedProgressRef.current = reading.fraction;
+      // User scrolls are painted on the UI thread by progressScrollHandler;
+      // a sampled JS write would race it backwards. Layout/restore changes
+      // must paint immediately from the measured dimensions.
+      if (paint) progressSV.value = reading.fraction;
+      progressLabelRef.current(reading.fraction);
+      // The UI-thread sampler only reads real overflow offsets. Short content
+      // is completed by the settled JS measurement; leaving tracking armed
+      // would let a bounce or resize frame overwrite it with 0.
+      progressTrackingSV.value = !reading.short;
+    } else {
+      // No dimensions yet (or the article is empty): do not move the bar.
+      progressTrackingSV.value = false;
+    }
+    // A restored position (or any real measured overflow) counts as reading
+    // even when this sample is programmatic/measurement-only. That lets a
+    // later scroll back to the top persist 0 instead of tripping the
+    // completed-row guard below. Short content has no offset and must not mark
+    // the row as started: it can grow into a real article under the top guard.
+    if (reading.measured && !reading.short && reading.fraction > READING_RESTORE_MIN) {
+      readingStartedRef.current = true;
+    }
+    if (!persist || !reading.measured || !trackProgressRef.current) return;
+    // Fully visible content has no scroll position. The bar may show completion
+    // after the settle window, but storage keeps the saved position/states.
+    if (reading.short || reading.position === "empty") return;
+    const last = persistedProgressRef.current;
+    if (last !== null && Math.abs(reading.fraction - last) < 0.005) return;
+    // A completed article opens at the top. A tap/overscroll at the top must
+    // not rewrite its stored completion before the reader moves down.
+    if (reading.atTop && !readingStartedRef.current) return;
+    latestProgressRef.current = reading.fraction;
+    if (shouldFlushReadingProgress(reading.fraction, last, PROGRESS_DELTA, READ_COMPLETION_THRESHOLD, {
+      completionEligible: reading.canComplete,
+    })) {
+      flushProgress();
+      return;
+    }
+    if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+    flushTimerRef.current = setTimeout(flushProgress, PROGRESS_DEBOUNCE_MS);
+  }, [flushProgress, progressSV, progressTrackingSV]);
+
+  const syncProgress = useCallback((persist: boolean, paint = !persist) => {
+    const reading = measureProgress();
+    applyReadingProgress(reading, persist, paint);
+    return reading;
+  }, [applyReadingProgress, measureProgress]);
+
+  const armContentSettle = useCallback(() => {
+    contentSettledRef.current = false;
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    settleTimerRef.current = setTimeout(() => {
+      settleTimerRef.current = null;
+      contentSettledRef.current = true;
+      // Measurement-only: settled short content may show 100%, but a viewport
+      // that could still be a placeholder never writes completion.
+      syncProgress(false);
+    }, READING_SHORT_SETTLE_MS);
+  }, [syncProgress]);
 
   // Per-article baseline from the server; flush best-effort when leaving.
   useEffect(() => {
@@ -856,17 +938,36 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
     currentArticleRef.current = { id, folderId: bookmark.folderId ?? null };
     initialProgressRef.current = baseline;
     latestProgressRef.current = baseline;
+    displayedProgressRef.current = 0;
     persistedProgressRef.current = baseline;
     restoredRef.current = false;
+    userScrolledRef.current = false;
+    restoreTargetRef.current = null;
+    restoreFromRef.current = null;
+    restoreIssuedAtRef.current = 0;
+    restoredContentHeightRef.current = 0;
+    restoredViewportRef.current = 0;
+    readingStartedRef.current = false;
     htmlReadyRef.current = false;
+    contentSettledRef.current = false;
+    viewHeightRef.current = 0;
+    contentHeightRef.current = 0;
+    trackProgressRef.current = false;
+    if (settleTimerRef.current) {
+      clearTimeout(settleTimerRef.current);
+      settleTimerRef.current = null;
+    }
     progressTrackingSV.value = false;
     pendingHeading.current = null;
     cancelAnimationFrame(headingFrame.current);
     offsetRef.current = 0;
     expandChromeRef.current(0);
     chromeHeightSV.value = chromeHeightRef.current;
-    progressSV.value = baseline;
-    progressLabelRef.current(baseline);
+    // The bar represents the current viewport, never the saved row: completed
+    // articles open at the top and partial positions appear only after the
+    // restore scroll has been acknowledged by a real measurement.
+    progressSV.value = 0;
+    progressLabelRef.current(0);
     if (selectTimer.current) {
       clearTimeout(selectTimer.current);
       selectTimer.current = null;
@@ -874,8 +975,12 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
     setSelectionMenu(null);
     return () => {
       flushProgress();
+      if (settleTimerRef.current) {
+        clearTimeout(settleTimerRef.current);
+        settleTimerRef.current = null;
+      }
     };
-  }, [bookmark?.id, chromeHeightSV, progressTrackingSV]);
+  }, [bookmark?.id, chromeHeightSV, flushProgress, progressSV, progressTrackingSV]);
 
   // A persisted list row can be older than the freshly fetched detail. Accept
   // its canonical position until rendering finishes, never after a user jump.
@@ -885,45 +990,62 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
     initialProgressRef.current = baseline;
     latestProgressRef.current = baseline;
     persistedProgressRef.current = baseline;
-    progressSV.value = baseline;
-    progressLabelRef.current(baseline);
-  }, [bookmark?.id, bookmark?.readProgress, progressSV]);
+  }, [bookmark?.id, bookmark?.readProgress]);
 
   // Restore the saved reading position once layout + content size are known.
-  const maybeRestore = useCallback(() => {
-    if (restoredRef.current || !trackProgressRef.current) return;
-    if (hasHtml && !htmlReadyRef.current) return;
+  // Returns true when a scroll command was issued: the caller must then wait
+  // for the scroll acknowledgement instead of painting the old offset.
+  const maybeRestore = useCallback((): boolean => {
+    if (!trackProgressRef.current || !htmlReadyRef.current) return false;
+    if (userScrolledRef.current) return false;
     const viewH = viewHeightRef.current;
     const contentH = contentHeightRef.current;
-    if (viewH <= 0 || contentH <= 0) return;
-    const scrollable = contentH - viewH;
-    // Placeholder/chrome can fit the viewport; wait until the article body
-    // actually overflows before locking the restore.
-    if (scrollable <= 0) return;
-    restoredRef.current = true;
-    if (offsetRef.current > 8) return;
-    const target = initialProgressRef.current;
-    if (target > 0.02 && target < READ_COMPLETION_THRESHOLD) {
-      const y = target * scrollable;
-      scrollRef.current?.scrollTo({ y, animated: false });
-      offsetRef.current = y;
+    const target = restoreReadingOffset(initialProgressRef.current, viewH, contentH);
+    if (target == null) {
+      // Nothing to restore (completed/top saved row) or the article still fits
+      // the viewport. Lock only after a real overflow exists, so a placeholder
+      // that grows can still be restored.
+      if (viewH > 0 && contentH > viewH) restoredRef.current = true;
+      return false;
     }
-  }, [hasHtml]);
+    const scroll = scrollRef.current;
+    if (!scroll) return false;
+    // Keep the saved fraction under the reader while late images/fonts change
+    // the scrollable range, until the reader scrolls for themselves.
+    if (restoredRef.current
+      && Math.abs(contentH - restoredContentHeightRef.current) < 2
+      && Math.abs(viewH - restoredViewportRef.current) < 2) return false;
+    restoredRef.current = true;
+    restoredContentHeightRef.current = contentH;
+    restoredViewportRef.current = viewH;
+    restoreFromRef.current = offsetRef.current;
+    restoreTargetRef.current = target;
+    restoreIssuedAtRef.current = Date.now();
+    // The scroll event is the acknowledgement: it updates offsetRef and paints
+    // the fraction. Do not paint the saved value from the command alone, so a
+    // failed restore still shows the real current viewport.
+    scroll.scrollTo({ y: target, animated: false });
+    return true;
+  }, []);
 
   const handleArticleReady = useCallback(() => {
     htmlReadyRef.current = true;
-    progressTrackingSV.value = true;
-    maybeRestore();
+    armContentSettle();
+    const restoring = maybeRestore();
+    if (!restoring) syncProgress(false);
     contentsRef.current?.prepare();
-  }, [maybeRestore, progressTrackingSV]);
+  }, [armContentSettle, maybeRestore, syncProgress]);
 
   // Start tracking once content exists; retry restore in case the native
   // layout events fired before tracking was armed.
   useEffect(() => {
     trackProgressRef.current = hasContent;
-    progressTrackingSV.value = hasContent && (!hasHtml || htmlReadyRef.current);
-    if (hasContent) maybeRestore();
-  }, [bookmark?.id, hasContent, hasHtml, maybeRestore, progressTrackingSV]);
+    if (!hasContent) {
+      progressTrackingSV.value = false;
+      return;
+    }
+    if (!maybeRestore()) syncProgress(false);
+  }, [bookmark?.id, hasContent, maybeRestore, progressTrackingSV, syncProgress]);
 
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -932,7 +1054,9 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
       else readerWork.resume();
       offsetRef.current = contentOffset.y;
       viewHeightRef.current = layoutMeasurement.height;
+      const contentChanged = Math.abs(contentSize.height - contentHeightRef.current) >= 1;
       contentHeightRef.current = contentSize.height;
+      if (contentChanged) armContentSettle();
       // Chrome follows user drags on native (programmatic scrolls — position
       // restore, TOC jumps — never yank it around). Web wheel scrolling has no
       // drag events, so there the chrome simply follows the scroll.
@@ -949,35 +1073,47 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
           }
         }
       }
-      if (contentSize.height <= 0 || layoutMeasurement.height <= 0) return;
-      if (hasHtml && !htmlReadyRef.current) return;
-      handleFraction(
-        scrollReadingProgress(contentOffset.y, layoutMeasurement.height, contentSize.height),
-      );
+      const target = restoreTargetRef.current;
+      let programmatic = false;
+      if (target != null) {
+        // The target itself is the acknowledgement. A frame at the pre-restore
+        // offset is a stale mount/layout report; anything else is real intent.
+        const staleFrame = restoreFromRef.current != null
+          && Math.abs(contentOffset.y - restoreFromRef.current) <= 2
+          && Date.now() - restoreIssuedAtRef.current < 250;
+        programmatic = Math.abs(contentOffset.y - target) <= 2 || staleFrame;
+        if (!programmatic) {
+          userScrolledRef.current = true;
+          restoreTargetRef.current = null;
+        }
+      }
+      syncProgress(!programmatic, programmatic);
     },
-    [handleFraction, hasHtml, readerWork, windowHeight],
+    [armContentSettle, readerWork, syncProgress, windowHeight],
   );
 
   // Recompute when content settles/grows (images loading, HTML rendering).
   const onContentSizeChange = useCallback(
     (_w: number, h: number) => {
+      const changed = Math.abs(h - contentHeightRef.current) >= 1;
       contentHeightRef.current = h;
-      maybeRestore();
-      if (h <= 0 || viewHeightRef.current <= 0) return;
-      if (hasHtml && !htmlReadyRef.current) return;
-      const fraction = scrollReadingProgress(offsetRef.current, viewHeightRef.current, h);
-      handleFraction(fraction);
-      progressSV.value = fraction;
+      if (changed) armContentSettle();
+      // A new restore command supersedes the old offset; its scroll
+      // acknowledgement paints the saved fraction. Painting the stale offset
+      // here made late images briefly drop the bar.
+      if (!maybeRestore()) syncProgress(false);
     },
-    [handleFraction, hasHtml, maybeRestore, progressSV],
+    [armContentSettle, maybeRestore, syncProgress],
   );
 
   const onScrollViewLayout = useCallback(
     (event: LayoutChangeEvent) => {
       viewHeightRef.current = event.nativeEvent.layout.height;
-      maybeRestore();
+      // Orientation/window changes move the fraction immediately from the
+      // measured viewport instead of waiting for the next scroll event.
+      if (!maybeRestore()) syncProgress(false);
     },
-    [maybeRestore],
+    [maybeRestore, syncProgress],
   );
 
   /* ---------------------------------- render ---------------------------------- */
@@ -1084,8 +1220,8 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
       />
 
       {hasContent && !showWebsiteView ? (
-        <ReaderProgressBar animatedValue={progressSV} labelRef={progressLabelRef}
-          initialValue={latestProgressRef.current} />
+        <ReaderProgressBar key={bookmark?.id ?? "article"} animatedValue={progressSV} labelRef={progressLabelRef}
+          initialValue={bookmark && currentArticleRef.current?.id === bookmark.id ? displayedProgressRef.current : 0} />
       ) : null}
       </Animated.View>
 
