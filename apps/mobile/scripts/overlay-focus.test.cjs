@@ -605,6 +605,26 @@ test("a fresh retained reopen focuses Link rather than the last Paste action", a
   await app.unmount();
 });
 
+test("restoration observes isolation release on the trigger's immediate parent", async () => {
+  const app = mount();
+  const render = active => app.render(h("div", null,
+    h("div", { id: "direct-background" }, button("direct-fab")),
+    overlay({ id: "direct-sheet", active, published: active }, input("direct-link"))));
+  await render(false);
+  document.getElementById("direct-fab").focus();
+  await render(true);
+  await flush(3);
+  const release = isolateModal(document.getElementById("direct-sheet"));
+  await render(false);
+  await flush(3);
+  assert.notEqual(document.activeElement?.id, "direct-fab");
+  release();
+  await settleMutation();
+  await flush(3);
+  assert.equal(document.activeElement?.id, "direct-fab", "child-list observation must not replace the parent's attribute observation");
+  await app.unmount();
+});
+
 test("Tab containment, only-top Escape, and typing keep the current caret", async () => {
   const app = mount();
   let dismissals = 0;

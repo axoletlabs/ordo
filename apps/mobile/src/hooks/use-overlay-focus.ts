@@ -477,9 +477,9 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
       const observer = new MutationObserver(() => schedule());
       closing.restoreObserver = observer;
       for (let element: HTMLElement | null = trigger; element; element = element.parentElement) {
-        observer.observe(element, { attributes: true, attributeFilter: ["inert", "aria-hidden", "data-material-overlay"] });
+        observer.observe(element, { attributes: true, childList: true,
+          attributeFilter: ["inert", "aria-hidden", "data-material-overlay"] });
       }
-      observer.observe(trigger.parentElement ?? document.body, { childList: true });
       const watchSurface = (surface: HTMLElement) => {
         observer.observe(surface, { attributes: true, attributeFilter: ["data-material-overlay", "aria-hidden"] });
         if (surface.parentElement) observer.observe(surface.parentElement, { childList: true });

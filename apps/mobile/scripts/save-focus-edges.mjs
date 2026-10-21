@@ -718,7 +718,10 @@ async function assertDraft(page, expected, label) {
   assert.equal(value, expected, `${label}: URL draft is ${JSON.stringify(expected)}`);
 }
 
-async function capture(page, layout, record, state) {
+async function capture(page, layout, record, state, afterExit) {
+  if (afterExit) {
+    await page.locator(`[role="dialog"][aria-label=${JSON.stringify(afterExit)}]`).waitFor({ state: "detached" });
+  }
   const path = `${output}/${layout.name}-${record.id}-${state}.png`;
   await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
   await page.screenshot({ path });
@@ -1065,7 +1068,7 @@ const cases = [
       await assertNoHiddenFocus(page, "Folder create cancelled");
       await assertDraft(page, "draft.example.test/folder-cancel", "Folder create cancelled");
       await assertLinkIdentity(page, "Folder create cancelled");
-      await capture(page, layout, record, "create-folder-cancelled");
+      await capture(page, layout, record, "create-folder-cancelled", "New folder");
       await closeSave(page);
     },
   },
@@ -1082,7 +1085,7 @@ const cases = [
       await assertDraft(page, "draft.example.test/folder-submit", "Folder created");
       await assertLinkIdentity(page, "Folder created");
       check((await folderTrigger(page).getAttribute("aria-label")) === "Folder, Fresh folder", "new folder becomes the destination");
-      await capture(page, layout, record, "folder-created");
+      await capture(page, layout, record, "folder-created", "New folder");
       await folderTrigger(page).focus();
       await closeSave(page);
     },
@@ -1112,7 +1115,7 @@ const cases = [
       await assertNoHiddenFocus(page, "Tag create cancelled");
       await assertDraft(page, "draft.example.test/tag-cancel", "Tag create cancelled");
       await assertLinkIdentity(page, "Tag create cancelled");
-      await capture(page, layout, record, "create-tag-cancelled");
+      await capture(page, layout, record, "create-tag-cancelled", "New tag");
       await closeSave(page);
     },
   },
@@ -1129,7 +1132,7 @@ const cases = [
       await assertDraft(page, "draft.example.test/tag-submit", "Tag created");
       await assertLinkIdentity(page, "Tag created");
       check(((await tagsTrigger(page).getAttribute("aria-label")) ?? "").startsWith("Tags, Fresh tag"), "new tag becomes the tag selection");
-      await capture(page, layout, record, "tag-created");
+      await capture(page, layout, record, "tag-created", "New tag");
       await tagsTrigger(page).focus();
       await closeSave(page);
     },
