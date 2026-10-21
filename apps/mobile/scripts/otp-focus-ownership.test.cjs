@@ -11,8 +11,9 @@
  *
  * This harness runs the real OtpInput.tsx (plus the real otp-edit/layout/
  * autofill helpers and input-focus-scope context) against a minimal hooks host.
- * TextInput hosts record real focus transitions and blurs; timers are manual so
- * the 280 ms take and 80 ms completion are observable without wall-clock waits.
+ * TextInput hosts record real focus transitions and blurs; timers and frames
+ * are manual so the opening take is observable as one ready frame (never a
+ * fixed 280 ms delay) and the 80 ms completion stays wall-clock-driven.
  */
 const assert = require("node:assert/strict");
 const { readFileSync } = require("node:fs");
@@ -21,7 +22,12 @@ const { test, after } = require("node:test");
 const ts = require("typescript");
 
 const sourceRoot = process.env.ORDO_OTP_SOURCE_ROOT ?? resolve(__dirname, "../src");
-const originalTimers = { setTimeout: globalThis.setTimeout, clearTimeout: globalThis.clearTimeout };
+const originalTimers = {
+  setTimeout: globalThis.setTimeout,
+  clearTimeout: globalThis.clearTimeout,
+  requestAnimationFrame: globalThis.requestAnimationFrame,
+  cancelAnimationFrame: globalThis.cancelAnimationFrame,
+};
 const originalDocument = globalThis.document;
 
 function transpile(filename) {
@@ -53,6 +59,18 @@ function reactHarness() {
     return id;
   };
   globalThis.clearTimeout = (id) => { timers.delete(id); };
+
+  // Frames are separate from wall-clock timers: opening focus must take one
+  // rendered frame, never a fixed delay. Callbacks run in scheduling order.
+  let frameId = 0;
+  let framesRun = 0;
+  const frames = new Map();
+  globalThis.requestAnimationFrame = (callback) => {
+    const id = ++frameId;
+    frames.set(id, callback);
+    return id;
+  };
+  globalThis.cancelAnimationFrame = (id) => { frames.delete(id); };
 
   function frameFor(path, type) {
     let frame = hookFrames.get(path);
@@ -337,6 +355,21 @@ function reactHarness() {
     return tree;
   }
 
+  function runFrames() {
+    let guard = 0;
+    while (frames.size) {
+      const callbacks = [...frames.values()];
+      frames.clear();
+      for (const callback of callbacks) {
+        framesRun += 1;
+        callback();
+      }
+      if (changed && lastFactory) render(lastFactory);
+      assert.ok(++guard < 10, "frame loop did not settle");
+    }
+    if (changed && lastFactory) render(lastFactory);
+  }
+
   function advance(ms) {
     const end = now + ms;
     let guard = 0;
@@ -373,10 +406,13 @@ function reactHarness() {
     },
     get scopeContext() { return scopeContext; },
     render,
+    runFrames,
     advance,
     cell,
     get now() { return now; },
     get pendingTimers() { return timers.size; },
+    get pendingFrames() { return frames.size; },
+    get framesRun() { return framesRun; },
     get focusCalls() { return focusCalls; },
     get focusTransitions() { return focusTransitions; },
     get blurCalls() { return blurCalls; },
@@ -448,6 +484,9 @@ function createOtpHost(options = {}) {
       return instance;
     },
     pendingTimers() { return h.pendingTimers; },
+    pendingFrames() { return h.pendingFrames; },
+    framesRun() { return h.framesRun; },
+    runFrames() { h.runFrames(); return host; },
     advance(ms) { h.advance(ms); return host; },
     setValue(value) { state.value = value; return host.render(); },
     setAutoFocus(value) { state.autoFocus = value; return host.render(); },
@@ -487,13 +526,15 @@ function createOtpHost(options = {}) {
 after(() => {
   globalThis.setTimeout = originalTimers.setTimeout;
   globalThis.clearTimeout = originalTimers.clearTimeout;
+  globalThis.requestAnimationFrame = originalTimers.requestAnimationFrame;
+  globalThis.cancelAnimationFrame = originalTimers.cancelAnimationFrame;
   if (originalDocument === undefined) delete globalThis.document;
   else globalThis.document = originalDocument;
 });
 
 test("active OTP still advances focus to the next cell while typing", () => {
   const host = createOtpHost();
-  host.advance(280);
+  host.runFrames();
   assert.equal(host.transitions, 1, "mount autoFocus takes the first cell once");
   assert.equal(host.focusTargets.at(-1), 0);
 
@@ -508,94 +549,114 @@ test("active OTP still advances focus to the next cell while typing", () => {
   assert.equal(host.blurCalls, 0, "advancing never blurs the IME");
 });
 
-test("a covering overlay before the autoFocus delay cancels it without replay", () => {
+test("opening focus takes one frame and never a wall-clock timer", () => {
+  const host = createOtpHost({ scope: { active: true, ready: true, session: 1 } });
+  assert.equal(host.pendingFrames(), 1, "the ready owner schedules exactly one opening frame");
+  assert.equal(host.pendingTimers(), 0, "no fixed opening delay is pending");
+  assert.equal(host.transitions, 0, "focus stays out of the commit");
+
+  const before = host.now;
+  host.runFrames();
+  assert.equal(host.now, before, "the take does not wait on wall-clock time");
+  assert.equal(host.transitions, 1, "the first ready frame takes focus once");
+  assert.equal(host.framesRun(), 1, "exactly one frame ran");
+
+  host.runFrames();
+  assert.equal(host.transitions, 1, "no later frame replays the opening take");
+});
+
+test("a covering overlay before the opening frame consumes it without replay", () => {
   const host = createOtpHost();
-  host.advance(120);
-  assert.equal(host.transitions, 0);
+  assert.equal(host.pendingFrames(), 1);
 
   host.setBlocked(true);
-  host.advance(500);
+  assert.equal(host.pendingFrames(), 0, "the covering commit cancels the frame");
+  host.runFrames();
   assert.equal(host.transitions, 0, "covered OTP never takes focus");
   assert.equal(host.blurCalls, 0, "covering the field does not blur its IME");
 
   host.setBlocked(false);
-  host.advance(500);
+  host.runFrames();
   assert.equal(host.transitions, 0, "uncovering the same mount does not replay autoFocus");
 });
 
 test("an OTP mounted under a covering overlay never takes focus", () => {
   const host = createOtpHost({ blocked: true });
-  host.advance(500);
+  host.runFrames();
   assert.equal(host.transitions, 0);
   host.setBlocked(false);
-  host.advance(500);
+  host.runFrames();
   assert.equal(host.transitions, 0, "the deferred intent is consumed by the cover");
 });
 
-test("app background cancels the delayed autoFocus and foreground does not replay it", () => {
+test("app background cancels the opening frame and foreground does not replay it", () => {
   const host = createOtpHost({ activity: false });
-  host.advance(500);
+  host.runFrames();
   assert.equal(host.transitions, 0, "a backgrounded owner does not focus");
 
   host.setActivity(true);
-  host.advance(500);
+  host.runFrames();
   assert.equal(host.transitions, 0);
 });
 
 test("an inactive owner (editable false) never focuses after it becomes editable", () => {
   const host = createOtpHost({ editable: false });
-  host.advance(500);
+  host.runFrames();
   assert.equal(host.transitions, 0);
   host.setEditable(true);
-  host.advance(500);
+  host.runFrames();
   assert.equal(host.transitions, 0);
 });
 
 test("scoped autoFocus waits for the owner's ready measurement", () => {
   const host = createOtpHost({ scope: { active: true, ready: false, session: 1 } });
-  host.advance(400);
+  host.runFrames();
   assert.equal(host.transitions, 0, "a not-ready panel cannot take focus yet");
+  assert.equal(host.pendingFrames(), 0, "not-ready measurement schedules nothing");
 
   host.setScope({ active: true, ready: true, session: 1 });
-  host.advance(280);
+  assert.equal(host.pendingFrames(), 1, "the ready commit schedules one frame");
+  host.runFrames();
   assert.equal(host.transitions, 1, "the ready panel takes focus once");
 });
 
 test("a scope that starts inactive never focuses when it resumes in the same session", () => {
   const host = createOtpHost({ scope: { active: false, ready: true, session: 1 } });
-  host.advance(500);
+  host.runFrames();
   assert.equal(host.transitions, 0);
 
   host.setScope({ active: true, ready: true, session: 1 });
-  host.advance(500);
+  host.runFrames();
   assert.equal(host.transitions, 0, "same-session resume is not a new opening");
 });
 
-test("rapid close before the delay cancels the take; a new session takes focus once", () => {
+test("rapid close before the opening frame cancels the take; a new session takes focus once", () => {
   const host = createOtpHost({ scope: { active: true, ready: true, session: 1 } });
-  host.advance(120);
+  assert.equal(host.pendingFrames(), 1);
   host.setScope({ active: false, ready: true, session: 1 });
-  host.advance(400);
+  assert.equal(host.pendingFrames(), 0, "the closing commit cancels the frame");
+  host.runFrames();
   assert.equal(host.transitions, 0, "a closing owner cancels its pending take");
 
   host.setScope({ active: true, ready: true, session: 2 });
-  host.advance(280);
+  assert.equal(host.pendingFrames(), 1, "the next opening schedules one frame");
+  host.runFrames();
   assert.equal(host.transitions, 1, "the next opening may take focus once");
-  host.advance(500);
+  host.runFrames();
   assert.equal(host.transitions, 1, "the new session does not take focus twice");
 });
 
 test("a retained OTP takes focus once per new scoped opening, not on picker resume", () => {
   const host = createOtpHost({ scope: { active: true, ready: true, session: 1 } });
-  host.advance(280);
+  host.runFrames();
   assert.equal(host.transitions, 1);
 
   // A sibling picker suspends the parent; the OTP cell keeps native focus.
   host.setScope({ active: false, ready: true, session: 1 });
-  host.advance(300);
+  host.runFrames();
   assert.equal(host.transitions, 1, "suspension does not move focus");
   host.setScope({ active: true, ready: true, session: 1 });
-  host.advance(500);
+  host.runFrames();
   assert.equal(host.transitions, 1, "picker resume in the same session does not replay focus");
 
   // Closing the panel moves focus back to its trigger, then reopening is a
@@ -603,9 +664,9 @@ test("a retained OTP takes focus once per new scoped opening, not on picker resu
   host.blur(0);
   host.setScope({ active: false, ready: true, session: 1 });
   host.setScope({ active: true, ready: true, session: 2 });
-  host.advance(280);
+  host.runFrames();
   assert.equal(host.transitions, 2, "the retained field focuses once for the new session");
-  host.advance(500);
+  host.runFrames();
   assert.equal(host.transitions, 2);
 });
 
@@ -677,19 +738,44 @@ test("a failed verification still restores its chosen cell for a retry", () => {
 
 test("route lock still starts the first autoFocus once the screen becomes active", () => {
   const host = createOtpHost({ routeLocked: true });
-  host.advance(500);
+  host.runFrames();
   assert.equal(host.transitions, 0, "a retained route cannot focus while inactive");
 
   host.setRouteLocked(false);
-  host.advance(280);
+  assert.equal(host.pendingFrames(), 1, "the active route schedules one frame");
+  host.runFrames();
   assert.equal(host.transitions, 1, "the active route takes focus once");
-  host.advance(500);
+  host.runFrames();
   assert.equal(host.transitions, 1);
+});
+
+test("backgrounding after ready cancels the scheduled opening frame", () => {
+  const host = createOtpHost({ scope: { active: true, ready: true, session: 1 } });
+  assert.equal(host.pendingFrames(), 1);
+  host.setActivity(false);
+  assert.equal(host.pendingFrames(), 0, "the background commit cancels the frame");
+  host.runFrames();
+  assert.equal(host.transitions, 0);
+  host.setActivity(true);
+  host.runFrames();
+  assert.equal(host.transitions, 0, "foregrounding does not replay the consumed opening");
+});
+
+test("route locking after ready consumes the scheduled opening frame", () => {
+  const host = createOtpHost({ scope: { active: true, ready: true, session: 1 } });
+  assert.equal(host.pendingFrames(), 1);
+  host.setRouteLocked(true);
+  assert.equal(host.pendingFrames(), 0, "the route lock commit cancels the frame");
+  host.runFrames();
+  assert.equal(host.transitions, 0);
+  host.setRouteLocked(false);
+  host.runFrames();
+  assert.equal(host.transitions, 0, "unlocking does not replay the consumed opening");
 });
 
 test("web keeps the actively edited cell focused without blurring it", () => {
   const host = createOtpHost({ platform: "web" });
-  host.advance(280);
+  host.runFrames();
   assert.equal(host.transitions, 1);
   host.type(0, "1");
   assert.equal(host.transitions, 2);
@@ -699,17 +785,17 @@ test("web keeps the actively edited cell focused without blurring it", () => {
 
 test("native IME is never blindly blurred when a cover arrives", () => {
   const host = createOtpHost();
-  host.advance(280);
+  host.runFrames();
   assert.equal(host.transitions, 1);
   host.setBlocked(true);
-  host.advance(500);
+  host.runFrames();
   assert.equal(host.transitions, 1);
   assert.equal(host.blurCalls, 0);
 });
 
 test("a new scoped opening reopens the retained Android cell whose IME Back hid", () => {
   const host = createOtpHost({ platform: "android", scope: { active: true, ready: true, session: 1 } });
-  host.advance(280);
+  host.runFrames();
   assert.equal(host.transitions, 1);
   assert.equal(host.blurCalls, 0);
 
@@ -717,7 +803,7 @@ test("a new scoped opening reopens the retained Android cell whose IME Back hid"
   host.setKeyboardVisible(false);
   host.setScope({ active: false, ready: true, session: 1 });
   host.setScope({ active: true, ready: true, session: 2 });
-  host.advance(280);
+  host.runFrames();
 
   assert.equal(host.transitions, 2, "the retained cell reopens the IME");
   assert.deepEqual(host.blurTargets, [0], "only the same OTP cell is reset");
@@ -725,7 +811,7 @@ test("a new scoped opening reopens the retained Android cell whose IME Back hid"
 
 test("routine cell routing never uses the Android hidden-IME reset", () => {
   const host = createOtpHost({ platform: "android" });
-  host.advance(280);
+  host.runFrames();
   host.setKeyboardVisible(false);
 
   host.type(0, "1");
@@ -747,7 +833,7 @@ test("a new scoped opening does not steal focus from a different OTP cell", () =
 
   host.setScope({ active: false, ready: true, session: 1 });
   host.setScope({ active: true, ready: true, session: 2 });
-  host.advance(280);
+  host.runFrames();
 
   assert.equal(host.transitions, 1, "the deliberately focused cell keeps ownership");
   assert.deepEqual(host.blurTargets, [], "no cell is reset");

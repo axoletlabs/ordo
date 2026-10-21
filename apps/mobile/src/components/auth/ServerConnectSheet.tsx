@@ -82,11 +82,12 @@ export function ServerConnectSheet({
   };
 
   return (
+    // Opening focus belongs to the field's shared Input scope on native and to
+    // the panel's web focus session; a separate fixed delay only adds lag.
     <FloatingPanel
       visible={visible}
       onDismiss={onDismiss}
       dismissible={!confirming}
-      onShow={() => setTimeout(() => inputRef.current?.focus(), 100)}
     >
       <ThemedScrollView keyboardShouldPersistTaps="handled">
         <PanelHeader title="Server address" />
@@ -96,6 +97,7 @@ export function ServerConnectSheet({
             ref={inputRef}
             label="Server address"
             required
+            autoFocus
             value={url}
             onChangeText={setUrl}
             placeholder="https://ordo.example.com"

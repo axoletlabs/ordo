@@ -228,21 +228,28 @@ export function OtpInput({
     }
     if (scopedFocus && !scopeReady) return;
     autoFocusArmed.current = true;
-    // Don't steal focus after a failed verification or from another form field.
-    const t = setTimeout(() => {
+    // Opening focus follows the owner's ready state, not a wall-clock delay.
+    // The effect re-runs (and cancels this frame) for every covering overlay,
+    // background, route lock, and scope session change; the frame itself
+    // re-checks live ownership before moving focus.
+    const frame = requestAnimationFrame(() => {
       autoFocusArmed.current = false;
       autoFocusDone.current = true;
       if (!canTakeFocusRef.current || liveScopeSession.current !== scopeSession) return;
+      // Ownership can change between the commit that scheduled this frame and
+      // the frame itself (Android focus fallback, a newer portal sibling).
+      if (Platform.OS !== "web" && !nativeFocusPermitted(scopeOwner)) return;
       const target = inputRefs.current[Math.min(chars.length, length - 1)];
-      // A fresh opening may still own the same cell. Only that explicit take
-      // reopens a retained Android IME; another focused cell keeps its focus.
+      // Don't steal focus after a failed verification or from another form
+      // field. A fresh opening may still own the same cell; only that explicit
+      // take reopens a retained Android IME.
       const anyFocused = inputRefs.current.some((input) => input?.isFocused());
       if (!anyFocused || target?.isFocused?.()) {
         focusTextInput(target);
       }
-    }, 280);
-    return () => clearTimeout(t);
-  }, [autoFocus, scopedFocus, scopeSession, scopeActive, scopeReady, autoFocusBlocked, locked, chars.length, length]);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [autoFocus, scopedFocus, scopeSession, scopeActive, scopeReady, autoFocusBlocked, locked, chars.length, length, scopeOwner]);
 
   // Move only after the controlled value reaches the cells. Focusing during
   // onChangeText sees the old value and can bounce back to the previous end.

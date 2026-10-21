@@ -27,6 +27,8 @@ globalThis.document = dom.window.document;
 globalThis.navigator = dom.window.navigator;
 globalThis.HTMLElement = dom.window.HTMLElement;
 globalThis.Node = dom.window.Node;
+globalThis.requestAnimationFrame = callback => dom.window.requestAnimationFrame(callback);
+globalThis.cancelAnimationFrame = id => dom.window.cancelAnimationFrame(id);
 globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 const React = require("react");
@@ -330,7 +332,7 @@ test("a real scoped owner takes opening autofocus once and never replays it on r
     assert.equal(dom.window.document.activeElement, cell("Pin", 0),
       "the last real cell resumes");
 
-    // The opening take is already consumed. Even after its 280 ms window, a
+    // The opening take is already consumed. Even after later frames, a
     // resume must not replay cell 3 over the user's current cell.
     await act(async () => { await new Promise((resolve) => setTimeout(resolve, 340)); });
     assert.equal(dom.window.document.activeElement, cell("Pin", 0),
