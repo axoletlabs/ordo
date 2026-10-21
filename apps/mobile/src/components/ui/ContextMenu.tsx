@@ -233,7 +233,7 @@ function ContextMenuSurface({
   // to re-measure would add a layout-gated invisible frame, and a ResizeObserver
   // will not re-fire while the retained element keeps its size.
   if (visible && !wasVisibleRef.current) {
-    const continueSession = (sessionKey != null && placementLock.current != null) || retained;
+    const continueSession = !measurementStale.current && ((sessionKey != null && placementLock.current != null) || retained);
     measurementStale.current = false;
     if (!continueSession) {
       contentHeightRef.current = 0;
@@ -383,7 +383,7 @@ function ContextMenuSurface({
 
 /** Measures the menu body after it has been committed. Native's `measure()`
  * is asynchronous, so it cannot delay the click task; on web the existing
- * `onLayout` (RN Web's ResizeObserver) reports the border box after normal
+ * ResizeObserver reports the box after normal
  * layout. Reading `offsetHeight` inside a layout effect forced a synchronous
  * document style/layout recalculation — the dominant cost when a long article
  * sat behind the menu — so placement/entrance wait one non-blocking layout
@@ -398,9 +398,24 @@ function MenuBody({ visible, measureKey, onMeasure, onLayout, style, children }:
 }) {
   const ref = React.useRef<View>(null);
   React.useLayoutEffect(() => {
-    if (!visible || Platform.OS === "web") return;
+    if (!visible) return;
     const node = ref.current;
     if (!node) return;
+    if (Platform.OS === "web") {
+      if (typeof ResizeObserver === "undefined") return;
+      // Re-observe on every opening/session, even when a retained element kept
+      // its size. RN Web's shared onLayout observer need not report an unchanged
+      // box again. This initial async report avoids both a forced layout read
+      // and using a previous row's height while waiting for a size change.
+      let cancelled = false;
+      const observer = new ResizeObserver((entries) => {
+        if (cancelled) return;
+        const entry = entries.find((entry) => entry.target === (node as unknown as Element));
+        if (entry?.contentRect.height) onMeasure(entry.contentRect.height);
+      });
+      observer.observe(node as unknown as Element);
+      return () => { cancelled = true; observer.disconnect(); };
+    }
     let cancelled = false;
     node.measure((_x, _y, _width, height) => {
       if (!cancelled && height > 0) onMeasure(height);

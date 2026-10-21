@@ -683,6 +683,61 @@ test("rapid close and reopen during the exit fade settles fully visible", async 
   await harness.tree.unmount();
 });
 
+test("reopening a retained menu for another session waits for its own measurement", async t => {
+  resetAnimations();
+  const harness = menuHarness({ visible: true, label: "large A", sessionKey: "A" });
+  t.after(() => harness.tree.unmount());
+  await harness.mountInitial();
+  await harness.layout(320);
+  await settle();
+  await harness.rerender();
+  await harness.render({ visible: false });
+  await harness.render({ visible: true, label: "short B", sessionKey: "B" });
+  await harness.rerender();
+  assert.equal(opacityOf(menuElement(harness.tree.container)), 0,
+    "another row's retained height must not reveal this menu on the wrong side");
+  await harness.layout(120);
+  await settle();
+  await harness.rerender();
+  assert.equal(opacityOf(menuElement(harness.tree.container)), 1);
+  assert.equal(stylesOf(menuElement(harness.tree.container)).top, 566);
+});
+
+test("every web menu session gets a fresh async measurement even at an unchanged size", async t => {
+  resetAnimations();
+  const previous = globalThis.ResizeObserver;
+  const observers = [];
+  globalThis.ResizeObserver = class {
+    constructor(callback) { this.callback = callback; observers.push(this); }
+    observe(node) { this.node = node; }
+    disconnect() { this.disconnected = true; }
+    emit(height) { this.callback([{ target: this.node, contentRect: { height } }]); }
+  };
+  t.after(() => { globalThis.ResizeObserver = previous; });
+  const harness = menuHarness({ visible: true, sessionKey: "A" });
+  t.after(() => harness.tree.unmount());
+  await harness.mountInitial();
+  const first = observers.at(-1);
+  assert.ok(first?.node);
+  await act(async () => first.emit(320));
+  await settle();
+  await harness.rerender();
+  await harness.render({ visible: false });
+  await harness.render({ visible: true, sessionKey: "B" });
+  const second = observers.at(-1);
+  assert.notEqual(second, first, "reopening observes again rather than waiting for a size change");
+  assert.equal(first.disconnected, true);
+  await act(async () => first.emit(120));
+  await harness.rerender();
+  assert.equal(opacityOf(menuElement(harness.tree.container)), 0, "stale measurements cannot release a newer opening");
+  await act(async () => second.emit(320));
+  await settle();
+  await harness.rerender();
+  assert.equal(opacityOf(menuElement(harness.tree.container)), 1);
+  assert.equal(stylesOf(menuElement(harness.tree.container)).top, 178);
+  assert.equal(layoutReads.offsetHeight, 0);
+});
+
 /* ------------------------------ floating panels ------------------------------ */
 
 function panelHarness(options = {}) {

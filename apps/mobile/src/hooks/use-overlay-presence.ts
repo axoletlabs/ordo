@@ -72,6 +72,7 @@ export function useOverlayPresence(
 
   useLayoutEffect(() => {
     if (visible) {
+      const freshOpen = !wasOpen.current;
       setRendered(true);
       wasOpen.current = true;
       if (!ready) {
@@ -82,7 +83,8 @@ export function useOverlayPresence(
         // not blank the surface: entering again from 0 is a visible flash and
         // a readiness value that never recovers would leave it stuck invisible
         // behind a blocking scrim.
-        if (entered.current) return;
+        if (entered.current && !freshOpen) return;
+        entered.current = false;
         generation.current += 1;
         wasVisible.current = false;
         cancelAnimation(progress);
