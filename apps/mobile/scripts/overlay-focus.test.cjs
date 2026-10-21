@@ -142,6 +142,32 @@ const h = React.createElement;
 const noop = () => {};
 const button = (id, label = id) => h("button", { id, type: "button" }, label);
 const input = (id, props = {}) => h("input", { id, "aria-label": id, defaultValue: "", ...props });
+
+test("closing a retained overlay releases hidden focus before sibling layout effects", async () => {
+  const app = mount();
+  let hiddenAtLayout;
+  function ClosingProbe() {
+    React.useLayoutEffect(() => {
+      hiddenAtLayout = !!document.activeElement?.closest('[aria-hidden="true"], [inert]');
+    });
+    return null;
+  }
+  const render = active => app.render(h("div", null,
+    trigger("layout-launch"),
+    overlay({ id: "layout-menu", kind: "menu", active, published: active }, input("layout-search")),
+    h(ClosingProbe)));
+  try {
+    await render(false);
+    document.getElementById("layout-launch").focus();
+    await render(true);
+    await flush(3);
+    assert.equal(document.activeElement.id, "layout-search");
+    await render(false);
+    assert.equal(hiddenAtLayout, false, "the closing control cannot stay focused until passive-effect cleanup");
+    await flush(4);
+    assert.equal(document.activeElement.id, "layout-launch");
+  } finally { await app.unmount(); }
+});
 const overlay = (props, ...children) => h(Overlay, { key: props.id, ...props }, ...children);
 
 /** The real hook in the same shape as FloatingPanel/ContextMenu use it. */

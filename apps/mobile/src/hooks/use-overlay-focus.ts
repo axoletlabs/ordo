@@ -401,6 +401,19 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
     };
   }, [active, kind, dismissible, isolateBackground, suspended]);
 
+  // Release a closing surface's focus in the layout commit. A passive cleanup
+  // could leave it on the now aria-hidden exit tree until after a slow paint.
+  useLayoutEffect(() => {
+    if (active || Platform.OS !== "web" || typeof document === "undefined") return;
+    const root = sessionRef.current?.root ?? ref.current as unknown as HTMLElement | null;
+    // A sibling published in this same commit captures the closing control's
+    // launch chain before taking focus. Do not erase that handoff origin.
+    const successor = topOverlay();
+    if (successor && successor !== root && !successor.contains(root)) return;
+    const focused = document.activeElement;
+    if (focused instanceof HTMLElement && root?.contains(focused)) focused.blur();
+  }, [active]);
+
   // Restoration belongs to the session, not to the transient interactive
   // state: a dropdown only suspends focus, it does not close the dialog.
   useEffect(() => {
