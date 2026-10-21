@@ -36,6 +36,9 @@ export interface TagSelectListProps {
   menu?: boolean;
   /** Let a dropdown host take the search field's focus when it opens. */
   searchInputRef?: React.Ref<TextInput>;
+  /** Native opening focus is owned by the hosting overlay's focus scope;
+   * web pickers leave this false and run their own scoped focus take. */
+  searchAutoFocus?: boolean;
 }
 
 export function TagSelectList({
@@ -48,6 +51,7 @@ export function TagSelectList({
   header,
   menu = false,
   searchInputRef,
+  searchAutoFocus,
 }: TagSelectListProps) {
   const { palette } = useTheme();
   const { height } = useResponsiveLayout();
@@ -165,7 +169,7 @@ export function TagSelectList({
   return (
     <View style={{ flexShrink: 1, gap: spacing[8] }}>
       <Input ref={searchInputRef} value={query} onChangeText={setQuery} variant="search" placeholder="Find a tag" accessibilityLabel="Find a tag"
-        containerStyle={{ flexShrink: 0 }} icon={<Ionicons name="search-outline" size={24} color={palette.onSurfaceVariant} />} />
+        autoFocus={searchAutoFocus} containerStyle={{ flexShrink: 0 }} icon={<Ionicons name="search-outline" size={24} color={palette.onSurfaceVariant} />} />
     <ThemedFlatList animateChanges
       data={menu ? tags.all : [...tags.selected, ...tags.unselected]}
       keyExtractor={(t) => t.id}
