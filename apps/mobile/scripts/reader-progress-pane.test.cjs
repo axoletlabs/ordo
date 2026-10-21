@@ -40,6 +40,7 @@ const counts = {
   progress: null,
   progressRenders: 0,
   scrollTo: [],
+  chromeOffsets: [],
 };
 const writes = [];
 
@@ -158,6 +159,7 @@ function reset(overrides = {}) {
   counts.progress = null;
   counts.progressRenders = 0;
   counts.scrollTo = [];
+  counts.chromeOffsets = [];
 }
 
 const ArticleStub = React.memo(function ArticleStub(props) {
@@ -182,7 +184,10 @@ const LinearProgressStub = ({ value, animatedValue, label }) => {
 const ThemedScrollView = React.forwardRef(function ThemedScrollView(props, ref) {
   counts.scrollProps = props;
   React.useImperativeHandle(ref, () => ({
-    scrollTo(options) { counts.scrollTo.push(options); },
+    scrollTo(options) {
+      assert.equal(counts.chromeOffsets.at(-1), options.y, "chrome is rebased before a programmatic restoration scroll");
+      counts.scrollTo.push(options);
+    },
     getInnerViewNode: () => null,
   }), []);
   return React.createElement("div", null, props.children);
@@ -276,7 +281,7 @@ const stubs = {
     useReaderChrome: () => stable({
       expansion: stable({ spatial: {}, effects: {} }),
       hidden: stable({ value: 0 }),
-      expand: noop,
+      expand: (offset) => counts.chromeOffsets.push(offset),
       scrollHandler: {},
     }),
   },

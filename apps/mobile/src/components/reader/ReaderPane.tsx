@@ -1021,6 +1021,10 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
     restoreFromRef.current = offsetRef.current;
     restoreTargetRef.current = target;
     restoreIssuedAtRef.current = Date.now();
+    // Web scroll events include programmatic restoration. Rebase the chrome
+    // before issuing the command so that jump is not interpreted as a drag
+    // which hides the header (and its progress bar) immediately on opening.
+    expandChromeRef.current(target);
     // The scroll event is the acknowledgement: it updates offsetRef and paints
     // the fraction. Do not paint the saved value from the command alone, so a
     // failed restore still shows the real current viewport.
