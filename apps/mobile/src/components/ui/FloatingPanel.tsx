@@ -45,6 +45,8 @@ export interface FloatingPanelProps {
   /** Handoff hook: runs the moment the exit fade starts, while this panel's
    * retained contents finish fading beneath the successor surface. */
   onExiting?: () => void;
+  /** Known launch control captured before a sibling overlay hands off focus. */
+  triggerRef?: { readonly current: unknown };
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   maxWidth?: number;
@@ -81,6 +83,7 @@ function FloatingPanelSurface({
   onDismiss,
   onExited,
   onExiting,
+  triggerRef,
   children,
   style,
   maxWidth = layout.overlayMaxWidth,
@@ -136,7 +139,7 @@ function FloatingPanelSurface({
     const timer = setTimeout(() => setMeasured(true), READY_FALLBACK_MS);
     return () => clearTimeout(timer);
   }, [visible, measured]);
-  const panelRef = useOverlayFocus(visible && rendered, hideAndDismiss, "dialog", dismissible, false, !interactive || obscured);
+  const panelRef = useOverlayFocus(visible && rendered, hideAndDismiss, "dialog", dismissible, false, !interactive || obscured, undefined, undefined, triggerRef);
   // A sibling picker obscures this panel while staying mounted above it.
   // Crossfade this panel and its scrim (same 200ms inOut quad as the
   // picker's own fade, so the stacked scrims keep a constant dim) instead

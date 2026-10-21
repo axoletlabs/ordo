@@ -40,6 +40,7 @@ export const ReaderContents = React.memo(React.forwardRef<ReaderContentsHandle, 
   const [articleReady, setArticleReady] = useState(false);
   const active = useAnimationActivity();
   const pendingSelection = useRef<string | null>(null);
+  const triggerRef = useRef<HTMLElement | null>(null);
   const selectRef = useRef(onSelect);
   selectRef.current = onSelect;
   useEffect(() => {
@@ -50,7 +51,12 @@ export const ReaderContents = React.memo(React.forwardRef<ReaderContentsHandle, 
     return workScheduler.schedule(() => startTransition(() => setPrepared(true)));
   }, [active, articleReady, prepared, workScheduler]);
   const prepare = useCallback(() => setArticleReady(true), []);
-  const open = useCallback(() => { pendingSelection.current = null; setPrepared(true); setVisible(true); }, []);
+  const open = useCallback(() => {
+    if (Platform.OS === "web" && typeof document !== "undefined") triggerRef.current = document.activeElement as HTMLElement | null;
+    pendingSelection.current = null;
+    setPrepared(true);
+    setVisible(true);
+  }, []);
   const close = useCallback(() => setVisible(false), []);
   useImperativeHandle(ref, () => ({ open, prepare }), [open, prepare]);
   const { height } = useWindowDimensions();
@@ -145,7 +151,7 @@ export const ReaderContents = React.memo(React.forwardRef<ReaderContentsHandle, 
         anchored={false} onPress={open} maxContentWidth={layout.maxReaderWidth}
         alignTo={embedded ? "parent" : "scene"} bottom={bottom} />
     </FABLayer>
-    <FloatingPanel visible={visible} onDismiss={close} onExiting={commitSelection} onExited={resetList}
+    <FloatingPanel visible={visible} onDismiss={close} onExiting={commitSelection} onExited={resetList} triggerRef={triggerRef}
       maxWidth={Math.min(416, sceneWidth - spacing[32])} scrollBody={false} keepMounted={prepared}>
       <PanelHeader title="Contents" titleVariant="titleLarge" onClose={close} />
       <View style={{ height: listHeight, maxHeight: listHeight, flexShrink: 1 }}>

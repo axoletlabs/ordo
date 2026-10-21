@@ -171,8 +171,8 @@ test("closing a retained overlay releases hidden focus before sibling layout eff
 const overlay = (props, ...children) => h(Overlay, { key: props.id, ...props }, ...children);
 
 /** The real hook in the same shape as FloatingPanel/ContextMenu use it. */
-function Overlay({ id, active, published, suspended = false, kind = "dialog", dismissible = true, returnFocusRef, children }) {
-  const ref = useOverlayFocus(active, noop, kind, dismissible, false, suspended, undefined, returnFocusRef);
+function Overlay({ id, active, published, suspended = false, kind = "dialog", dismissible = true, returnFocusRef, triggerRef, children }) {
+  const ref = useOverlayFocus(active, noop, kind, dismissible, false, suspended, undefined, returnFocusRef, triggerRef);
   return h("div", {
     ref,
     id,
@@ -474,6 +474,30 @@ test("closing a save dialog opened from a closing menu restores the menu launch 
   assert.equal(document.activeElement?.id, "fab",
     "the closing sheet restores the surviving launch trigger, not a dying menu item");
   await app.unmount();
+});
+
+test("an explicit launch capture survives a sibling handoff's separate portal commit", async () => {
+  const app = mount();
+  const launch = { current: null };
+  const render = (menu, contents) => app.render(h("div", null,
+    trigger("reader-overflow"),
+    overlay({ id: "reader-menu", kind: "menu", active: menu, published: menu }, button("contents-item")),
+    overlay({ id: "contents-panel", active: contents, published: contents, triggerRef: launch }, button("heading-one"))));
+  try {
+    await render(false, false);
+    document.getElementById("reader-overflow").focus();
+    await render(true, false);
+    await flush(3);
+    launch.current = document.getElementById("contents-item");
+    await render(false, false);
+    assert.equal(document.activeElement.tagName, "BODY", "the closing menu evacuates focus in the commit");
+    await render(false, true);
+    await flush(4);
+    assert.equal(document.activeElement.id, "heading-one");
+    await render(false, false);
+    await flush(4);
+    assert.equal(document.activeElement.id, "reader-overflow", "the new panel retains the explicit launch chain");
+  } finally { await app.unmount(); }
 });
 
 test("closing a dialog and its open dropdown together restores the dialog launch trigger", async () => {

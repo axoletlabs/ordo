@@ -110,7 +110,7 @@ function cancelRestore(session: FocusSession) {
   }
 }
 
-export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "dialog" | "menu", dismissible = true, isolateBackground = false, suspended = false, onNavigate?: (key: string) => boolean, returnFocus?: { readonly current: unknown }) {
+export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "dialog" | "menu", dismissible = true, isolateBackground = false, suspended = false, onNavigate?: (key: string) => boolean, returnFocus?: { readonly current: unknown }, triggerRef?: { readonly current: unknown }) {
   const ref = useRef<View>(null);
   const dismissRef = useRef(onDismiss);
   const navigateRef = useRef(onNavigate);
@@ -119,6 +119,7 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
   const activeRef = useRef(active);
   const suspendedRef = useRef(suspended);
   const returnFocusRef = useRef(returnFocus);
+  const explicitTriggerRef = useRef(triggerRef);
 
   // Publish only committed ownership. Writing these during render would let a
   // discarded concurrent render change close/restoration for the live tree.
@@ -130,7 +131,8 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
     activeRef.current = active;
     suspendedRef.current = suspended;
     returnFocusRef.current = returnFocus;
-  }, [onDismiss, onNavigate, active, suspended, returnFocus]);
+    explicitTriggerRef.current = triggerRef;
+  }, [onDismiss, onNavigate, active, suspended, returnFocus, triggerRef]);
 
   // One owner for the whole component lifetime. A close can schedule a
   // restore for a later isolation release; unmount must cancel it, otherwise
@@ -164,7 +166,8 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
     if (!session || (!session.active && !reopening)) {
       restoreGeneration += 1;
       const root = node();
-      const trigger = resolveTrigger(document.activeElement, root);
+      const explicit = explicitTriggerRef.current?.current;
+      const trigger = resolveTrigger(explicit instanceof HTMLElement ? explicit : document.activeElement, root);
       session = {
         alive: true, active: true, root, trigger,
         focusPending: !suspended,
