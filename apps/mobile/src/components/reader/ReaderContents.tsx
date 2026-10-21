@@ -61,6 +61,8 @@ export const ReaderContents = React.memo(React.forwardRef<ReaderContentsHandle, 
   const resetList = useCallback(() => {
     setInitialIndex(0);
     list.current?.scrollToOffset({ offset: 0, animated: false });
+  }, []);
+  const commitSelection = useCallback(() => {
     const id = pendingSelection.current;
     pendingSelection.current = null;
     if (id) selectRef.current(id);
@@ -143,7 +145,7 @@ export const ReaderContents = React.memo(React.forwardRef<ReaderContentsHandle, 
         anchored={false} onPress={open} maxContentWidth={layout.maxReaderWidth}
         alignTo={embedded ? "parent" : "scene"} bottom={bottom} />
     </FABLayer>
-    <FloatingPanel visible={visible} onDismiss={close} onExited={resetList}
+    <FloatingPanel visible={visible} onDismiss={close} onExiting={commitSelection} onExited={resetList}
       maxWidth={Math.min(416, sceneWidth - spacing[32])} scrollBody={false} keepMounted={prepared}>
       <PanelHeader title="Contents" titleVariant="titleLarge" onClose={close} />
       <View style={{ height: listHeight, maxHeight: listHeight, flexShrink: 1 }}>

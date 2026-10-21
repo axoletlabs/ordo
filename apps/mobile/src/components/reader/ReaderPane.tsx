@@ -24,12 +24,10 @@ import { useWindowDimensions } from "react-native";
 import { useSystemColorScheme } from "../../theme/use-system-color-scheme";
 import { useSceneColumnInsets } from "../../hooks/use-scene-column-insets";
 import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useComposedEventHandler, useSharedValue, type SharedValue } from "react-native-reanimated";
-import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { StatusBar, setStatusBarStyle } from "expo-status-bar";
 import { useAppRouter as useRouter } from "../../hooks/use-app-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  APP_NAME,
   HIGHLIGHT_QUOTE_MAX_LENGTH,
   HIGHLIGHTS_PER_BOOKMARK_MAX,
   READ_COMPLETION_THRESHOLD,
@@ -48,23 +46,16 @@ import { Text } from "../ui/Text";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 import { Skeleton } from "../ui/Skeleton";
-import { PressableScale } from "../ui/PressableScale";
 import { ThemedScrollView } from "../ui/ThemedScrollView";
-import { FloatingPanel } from "../ui/FloatingPanel";
-import { PanelHeader } from "../ui/PanelHeader";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
-import { sheetMenuStyles } from "../ui/SheetActionRow";
 import type { ArticleHeading } from "./ArticleHtml";
 import { ReaderArticle } from "./ReaderArticle";
 import { ReaderContents, type ReaderContentsHandle } from "./ReaderContents";
+import { ReaderActions, type ReaderActionsHandle } from "./ReaderActions";
 import { createReaderWorkScheduler } from "./reader-work";
 import type { HighlightSelectDraft } from "./article-highlight-ui";
 import { ReaderControlsSheet, type ReaderControlsSheetHandle } from "./ReaderControlsSheet";
-import { EditTagsSheet } from "../tags/EditTagsSheet";
 import { LockPrompt } from "../bookmarks/LockPrompt";
-import { ReminderCustomPanel } from "../bookmarks/ReminderCustomPanel";
-import { REMINDER_MENU_WIDTH, ReminderPresetItems, useSaveReminder } from "../bookmarks/ReminderFlow";
-import { formatReminderWhen } from "../../lib/bookmark-reminders";
 import { READER_BODY_SIZE, resolveReaderFont, type ReaderContentPreferences } from "./reader-typography";
 import { useReaderFontFamily } from "../../theme/fonts";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
@@ -84,7 +75,7 @@ import {
   useUpdateHighlight,
 } from "../../hooks/use-bookmarks";
 import * as bookmarkHooks from "../../hooks/use-bookmarks";
-import { useFolders, useServerInfo } from "../../hooks/queries";
+import { useFolders } from "../../hooks/queries";
 import { useReaderPreferences } from "../../hooks/use-reader-preferences";
 import { useReaderChrome } from "../../hooks/use-reader-chrome";
 import { useSettingsStore } from "../../store/settings";
@@ -96,8 +87,6 @@ import { toast } from "../ui/toast-store";
 import { isMenuAnchorRect, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { BookmarkBrowser, type BookmarkBrowserHandle } from "../browser/BookmarkBrowser";
 import {
-  bookmarkCanBeArticle,
-  bookmarkIsArticle,
   bookmarkOpensAsWebsite,
   canReadInOrdo,
 } from "../../lib/bookmark-reader";
@@ -275,8 +264,6 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
     cached?.folderId,
   );
   const { data: folders } = useFolders();
-  const { data: serverInfo } = useServerInfo();
-  const remindersSupported = serverInfo?.reminders === true;
   const protectedDetail = isFolderProtected(detail.error);
   const lockedFolderId = folderProtectedId(detail.error) ?? cached?.folderId ?? null;
   const lockedFolder = folders?.find((folder) => folder.id === lockedFolderId);
@@ -298,20 +285,8 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
   const controlsRef = useRef<ReaderControlsSheetHandle>(null);
   const openControls = useCallback(() => controlsRef.current?.open(), []);
   const [unlockOpen, setUnlockOpen] = useState(false);
-  const [actionPanel, setActionPanel] = useState<
-    "actions" | "highlights" | "remind" | "remind-custom" | null
-  >(null);
-  const [actionsAnchor, setActionsAnchor] = useState<MenuAnchorRect | null>(null);
-  const closeActions = useCallback(() => setActionPanel(null), []);
+  const actionsRef = useRef<ReaderActionsHandle>(null);
   const contentsRef = useRef<ReaderContentsHandle>(null);
-  const { save: saveReminder, busy: reminderBusy } = useSaveReminder(
-    bookmark ?? null, closeActions, actionPanel === "remind" || actionPanel === "remind-custom",
-  );
-  const remindNow = useMemo(
-    () => new Date(),
-    [actionPanel, bookmark?.id, bookmark?.remindAt],
-  );
-  const [editTagsOpen, setEditTagsOpen] = useState(false);
   const [headingState, setHeadingState] = useState<{
     bookmarkId: string;
     headings: readonly ArticleHeading[];
@@ -493,7 +468,7 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
         }
       }
       setSelectionMenu({ draft: resolved, anchor: draft.anchor });
-      setActionPanel(null);
+      actionsRef.current?.close();
     };
     if (selectionMenuRef.current) {
       open();
@@ -641,10 +616,6 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
   ]);
 
   useEffect(() => {
-    if (actionPanel || editTagsOpen) dismissSelectionMenu();
-  }, [actionPanel, dismissSelectionMenu, editTagsOpen]);
-
-  useEffect(() => {
     return () => {
       if (selectTimer.current) clearTimeout(selectTimer.current);
     };
@@ -763,7 +734,6 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
     const heading = headingRefs.current.get(id);
     const scroll = scrollRef.current;
     pendingHeading.current = null;
-    setActionPanel(null);
     if (!heading) { pendingHeading.current = id; return; }
     if (!scroll) return;
     haptics.light();
@@ -1028,15 +998,12 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
           measureOnPress={false}
         />
       )}
-      <HeaderIconButton
-        name="ellipsis-horizontal"
-        color={palette.text}
-        onPress={(anchor) => {
-          setActionsAnchor(anchor);
-          setActionPanel("actions");
-        }}
-        accessibilityLabel={showWebsiteView ? "More page actions" : "More article actions"}
-      />
+      <ReaderActions key={bookmark.id} ref={actionsRef} bookmark={bookmark} highlights={highlights}
+        hasHtml={hasHtml} hasContents={hasContents} website={showWebsiteView} canRead={showReadInOrdo}
+        onOpen={dismissSelectionMenu} onContents={() => contentsRef.current?.open()}
+        onShare={handleShare} onCopyLink={handleCopyLink} onOpenOriginal={handleOpenOriginal}
+        onOpenExternal={handleOpenSystemBrowser} onRefresh={() => browserRef.current?.reload()}
+        onRead={() => setSurface("reader")} onClassify={handleClassify} onRemoveHighlight={dropHighlight} />
     </HeaderActions>
   ) : undefined;
 
@@ -1304,154 +1271,6 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
         onOpen={dismissSelectionMenu}
         effectiveDark={effectiveDark}
       />
-      <EditTagsSheet
-        visible={editTagsOpen}
-        bookmark={bookmark ?? null}
-        onDismiss={() => setEditTagsOpen(false)}
-      />
-      <ContextMenu
-        visible={actionPanel === "actions" || actionPanel === "remind"}
-        onDismiss={closeActions}
-        anchor={actionsAnchor}
-        width={remindersSupported ? REMINDER_MENU_WIDTH : undefined}
-        sessionKey={actionPanel ? bookmark?.id : undefined}
-        pageKey={actionPanel === "remind" ? "remind" : "actions"}
-      >
-        {actionPanel === "remind" && bookmark ? (
-          <ReminderPresetItems
-            bookmark={bookmark}
-            now={remindNow}
-            busy={reminderBusy}
-            showBack
-            onBack={() => setActionPanel("actions")}
-            onPick={saveReminder}
-            onCustom={() => setActionPanel("remind-custom")}
-          />
-        ) : (
-          <>
-        {hasHtml && articleHeadings.length >= 3 && !showWebsiteView ? (
-          <ContextMenuItem
-            icon="list-outline"
-            label="Table of contents"
-            onPress={() => {
-              closeActions();
-              contentsRef.current?.open();
-            }}
-          />
-        ) : null}
-        {hasHtml && !showWebsiteView ? (
-          <ContextMenuItem
-            icon="color-fill-outline"
-            label="Highlights"
-            onPress={() => setActionPanel("highlights")}
-          />
-        ) : null}
-        {showWebsiteView ? (
-          <ContextMenuItem
-            icon="refresh-outline"
-            label="Refresh"
-            onPress={() => {
-              setActionPanel(null);
-              browserRef.current?.reload();
-            }}
-          />
-        ) : null}
-        <ContextMenuItem
-          icon="share-social-outline"
-          label={showWebsiteView ? "Share page" : "Share article"}
-          onPress={() => {
-            setActionPanel(null);
-            handleShare();
-          }}
-        />
-        <ContextMenuItem
-          icon="link-outline"
-          label="Copy link"
-          onPress={() => {
-            setActionPanel(null);
-            handleCopyLink();
-          }}
-        />
-        <ContextMenuItem
-          icon="pricetags-outline"
-          label="Edit tags"
-          onPress={() => {
-            setActionPanel(null);
-            setEditTagsOpen(true);
-          }}
-        />
-        {remindersSupported && bookmark ? (
-          <ContextMenuItem
-            icon="alarm-outline"
-            label={bookmark.remindAt != null ? "Edit reminder" : "Remind"}
-            trailing={
-              bookmark.remindAt != null ? (
-                <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
-                  {formatReminderWhen(bookmark.remindAt)}
-                </Text>
-              ) : undefined
-            }
-            onPress={() => setActionPanel("remind")}
-          />
-        ) : null}
-        {showWebsiteView && showReadInOrdo ? (
-          <ContextMenuItem
-            icon="reader-outline"
-            label={`Read in ${APP_NAME}`}
-            onPress={() => {
-              setActionPanel(null);
-              setSurface("reader");
-            }}
-          />
-        ) : null}
-        {bookmark && bookmarkIsArticle(bookmark) ? (
-          <ContextMenuItem
-            icon="globe-outline"
-            label="Mark as website"
-            onPress={() => {
-              setActionPanel(null);
-              handleClassify(false);
-            }}
-          />
-        ) : bookmark && bookmarkCanBeArticle(bookmark) ? (
-          <ContextMenuItem
-            icon="reader-outline"
-            label="Mark as article"
-            onPress={() => {
-              setActionPanel(null);
-              handleClassify(true);
-            }}
-          />
-        ) : null}
-        {showWebsiteView ? (
-          <ContextMenuItem
-            icon="open-outline"
-            label="Open in external browser"
-            onPress={() => {
-              setActionPanel(null);
-              handleOpenSystemBrowser();
-            }}
-          />
-        ) : (
-          <ContextMenuItem
-            icon="globe-outline"
-            label="Open original"
-            onPress={() => {
-              setActionPanel(null);
-              handleOpenOriginal();
-            }}
-          />
-        )}
-          </>
-        )}
-      </ContextMenu>
-      <ReminderCustomPanel
-        visible={actionPanel === "remind-custom"}
-        initialUnix={bookmark?.remindAt ?? null}
-        busy={reminderBusy}
-        onDismiss={() => setActionPanel("remind")}
-        onConfirm={(unix) => saveReminder(unix)}
-      />
       <LockPrompt
         visible={unlockOpen && Boolean(lockedFolderId)}
         folderId={lockedFolderId ?? ""}
@@ -1464,52 +1283,6 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
           void detail.refetch();
         }}
       />
-      <FloatingPanel visible={actionPanel === "highlights"} onDismiss={() => setActionPanel(null)}>
-        <PanelHeader
-          title="Highlights"
-          subtitle={
-            highlights.length === 0 ? "Select a passage in the article to save it." : undefined
-          }
-        />
-        {highlights.length > 0 ? (
-          <ThemedScrollView style={styles.highlightList}>
-            {highlights.map((row) => (
-              <View key={row.id} style={styles.highlightRow}>
-                <PressableScale
-                  style={styles.highlightBody}
-                  onPress={() => void copyText(formatHighlightQuote(row.exact), "Highlight copied")}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Copy highlight: ${formatHighlightQuote(row.exact)}`}
-                >
-                  <Text variant="body" numberOfLines={3}>
-                    {formatHighlightQuote(row.exact)}
-                  </Text>
-                  {row.href ? (
-                    <Text variant="monoSmall" color="secondary" numberOfLines={1} style={styles.highlightMeta}>
-                      {domainFromUrl(row.href)}
-                    </Text>
-                  ) : null}
-                </PressableScale>
-                <PressableScale
-                  style={styles.removeHit}
-                  onPress={() => dropHighlight(row.id)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Remove highlight"
-                >
-                  <Ionicons name="trash-outline" size={18} color={palette.danger} />
-                </PressableScale>
-              </View>
-            ))}
-          </ThemedScrollView>
-        ) : null}
-        <Button
-          label="Article actions"
-          variant="secondary"
-          block
-          onPress={() => setActionPanel("actions")}
-          style={sheetMenuStyles.cancel}
-        />
-      </FloatingPanel>
       <ContextMenu
         visible={selectionMenu !== null && !showWebsiteView}
         onDismiss={dismissSelectionMenu}
@@ -1590,22 +1363,6 @@ const styles = StyleSheet.create({
   description: { marginTop: spacing[8] },
   byline: { marginTop: spacing[6] },
   content: { marginTop: spacing[24] },
-  highlightList: { maxHeight: 420 },
-  highlightRow: {
-    minHeight: 48,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[8],
-    paddingVertical: spacing[8],
-  },
-  highlightBody: { flex: 1, minWidth: 0, minHeight: 48, justifyContent: "center" },
-  highlightMeta: { marginTop: spacing[4] },
-  removeHit: {
-    width: 48,
-    height: 48,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   stateBody: {
     flex: 1,
     width: "100%",

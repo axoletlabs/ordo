@@ -511,6 +511,37 @@ test("opening settings does not re-render the reader surface", async (t) => {
   assert.equal(deltasOf(view.counts, beforeClose).headerRenders, 0, "dismissing the panel does not render the pane");
 });
 
+test("overflow navigation and dismissal leave the reader pane untouched", async (t) => {
+  const view = await mountPane();
+  t.after(() => view.unmount());
+  const before = { ...view.counts };
+  const overflow = [...document.querySelectorAll("button")].find((node) => node.textContent === "ellipsis-horizontal");
+  assert.ok(overflow, "reader overflow trigger is mounted");
+  await React.act(async () => { overflow.click(); });
+  await settle(20);
+  assert.ok([...document.querySelectorAll("button")].some((node) => node.textContent === "Highlights"));
+  assert.deepEqual(deltasOf(view.counts, before), {
+    articleRenders: 0, articleHookCalls: 0, headerRenders: 0, selectionChecks: 0,
+  }, "opening overflow does not render the article, header, or pane");
+  await React.act(async () => {
+    [...document.querySelectorAll("button")].find((node) => node.textContent === "Highlights").click();
+  });
+  await settle(20);
+  assert.ok([...document.querySelectorAll('[role="dialog"]')].some((node) => node.textContent === "HighlightsArticle actions"),
+    "the highlights dialog replaced the overflow");
+  await React.act(async () => {
+    [...document.querySelectorAll("button")].find((node) => node.textContent === "Article actions").click();
+  });
+  await settle(20);
+  await React.act(async () => {
+    [...document.querySelectorAll("button")].find((node) => node.textContent === "Copy link").click();
+  });
+  await settle(20);
+  assert.deepEqual(deltasOf(view.counts, before), {
+    articleRenders: 0, articleHookCalls: 0, headerRenders: 0, selectionChecks: 0,
+  }, "menu/dialog handoff and closing also stay local");
+});
+
 test("a preference press renders the pane once and the panel keeps the optimistic value", async (t) => {
   const view = await mountPane();
   t.after(() => view.unmount());
@@ -625,4 +656,22 @@ test("highlight changes still reach the article", async (t) => {
   const work = deltasOf(view.counts, before);
   assert.equal(work.articleRenders, 1, "a new highlight re-renders the article renderer");
   assert.equal(work.articleHookCalls, 2, "the wrapper renders once for the changed prop");
+});
+
+test("opening overflow never renders a hidden large highlight collection", async (t) => {
+  const previous = detailStore.get();
+  detailStore.set({ ...previous, highlights: Array.from({ length: 500 }, (_, index) => ({
+    id: `large-${index}`, exact: `Saved passage ${index}.`, prefix: "", suffix: "", href: null,
+    createdAt: "2026-10-20T12:00:00Z",
+  })) });
+  const view = await mountPane();
+  t.after(async () => { await view.unmount(); detailStore.set(previous); });
+  const before = { ...view.counts };
+  await React.act(async () => {
+    [...document.querySelectorAll("button")].find((node) => node.textContent === "ellipsis-horizontal").click();
+  });
+  await settle(20);
+  assert.equal(view.counts.textRenders - before.textRenders, 0,
+    "none of the hidden highlights or article text is rendered for overflow");
+  assert.equal(document.body.textContent.includes("Saved passage 499."), false);
 });
