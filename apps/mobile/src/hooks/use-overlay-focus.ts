@@ -204,8 +204,11 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
       const root = node();
       const explicit = explicitTriggerRef.current?.current;
       const activated = activationRoot;
+      // Portal DOM can still say "true" one publication after its session
+      // closed. Committed ownership, not that stale attribute, decides whether
+      // this activation hands its launch chain to the incoming surface.
       const handoff = document.activeElement === document.body && activated && activated !== root
-        && activated.getAttribute("data-material-overlay") === "false" && !openRoots.has(activated)
+        && !openRoots.has(activated)
         ? triggerByRoot.get(activated) : null;
       const trigger = resolveTrigger(explicit instanceof HTMLElement ? explicit : handoff ?? document.activeElement, root);
       activationRoot = null;
@@ -263,6 +266,8 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
       const current = node();
       if (!current) return;
       session!.root = current;
+      // A cold portal may not have existed during the session's setup effect.
+      openRoots.add(current);
       rememberTrigger(current, session!.trigger);
       isolate();
       if (topOverlay() !== current) { session!.focusPending = false; return; }

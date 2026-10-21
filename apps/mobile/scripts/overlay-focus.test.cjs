@@ -500,11 +500,11 @@ test("an explicit launch capture survives a sibling handoff's separate portal co
   } finally { await app.unmount(); }
 });
 
-test("real menu activations retain their launch chain across a later portal commit", async () => {
+test("real menu activations retain their launch chain across stale portal publication", async () => {
   const app = mount();
-  const render = (menu, panel) => app.render(h("div", null,
+  const render = (menu, panel, staleMenu = false) => app.render(h("div", null,
     trigger("activation-launch"),
-    overlay({ id: "activation-menu", kind: "menu", active: menu, published: menu }, button("activation-item")),
+    overlay({ id: "activation-menu", kind: "menu", active: menu, published: menu || staleMenu }, button("activation-item")),
     overlay({ id: "activation-panel", active: panel, published: panel }, input("activation-field"))));
   try {
     for (const type of ["click", "keyboard"]) {
@@ -516,9 +516,9 @@ test("real menu activations retain their launch chain across a later portal comm
       await act(async () => item.dispatchEvent(type === "click"
         ? new dom.window.MouseEvent("click", { bubbles: true, detail: 1 })
         : new dom.window.KeyboardEvent("keydown", { bubbles: true, key: "Enter" })));
-      await render(false, false);
+      await render(false, false, true);
       assert.equal(document.activeElement.tagName, "BODY", "close still evacuates focus before paint");
-      await render(false, true);
+      await render(false, true, true);
       await flush(4);
       assert.equal(document.activeElement.id, "activation-field");
       await render(false, false);
