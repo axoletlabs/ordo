@@ -961,6 +961,7 @@ async function measureOverlay(page, label, trigger, target) {
       longTasks.push(...(observer?.takeRecords?.() ?? []).map((entry) => entry.duration));
       observer?.disconnect();
       window.__overlaySample = {
+        clickEpochMs: performance.timeOrigin + start,
         firstVisibleMs: firstVisibleAt,
         settleMs: settleAt ?? now - start,
         maxFrameMs: Math.max(0, ...frames),
@@ -1329,6 +1330,9 @@ async function readRowSample(page, label, { expectMenuText }) {
 
 async function withScreencast(page, cdp, mode, name, run) {
   if (mode.theme !== "dark") return run();
+  // Keep the normal timing matrix uninstrumented on these paths. An explicit
+  // visual run records the first-open animations with compositor timestamps.
+  if (name.endsWith("-open") && process.env.ORDO_UI_OPENING_FRAMES !== "1") return run();
   const chunks = [];
   const onFrame = (event) => {
     chunks.push({ data: event.data, metadata: event.metadata });
@@ -1355,12 +1359,15 @@ async function withScreencast(page, cdp, mode, name, run) {
   const directory = `${output}/frames`;
   await mkdir(directory, { recursive: true });
   const frames = [];
-  for (let index = 0; index < Math.min(chunks.length, 30); index += 1) {
+  const frameLimit = name.endsWith("-open") ? 90 : 30;
+  for (let index = 0; index < Math.min(chunks.length, frameLimit); index += 1) {
     const path = `${directory}/${mode.id}-${name}-${String(index + 1).padStart(2, "0")}.png`;
     const buffer = Buffer.from(chunks[index].data, "base64");
     await writeFile(path, buffer);
     const health = analyzePng(buffer);
-    frames.push({ index: index + 1, path, health });
+    const epochMs = chunks[index].metadata.timestamp * 1000;
+    frames.push({ index: index + 1, path, health, epochMs,
+      sinceClickMs: result?.clickEpochMs != null ? epochMs - result.clickEpochMs : null });
     assert.ok(health.ok, `${mode.id} ${name} frame ${index + 1}: blank/black frame (${JSON.stringify(health)})`);
   }
   const record = { mode: mode.id, name, frameCount: frames.length, frames };
@@ -1595,9 +1602,9 @@ async function readerPhase(page, mode, cdp, check, note) {
   await capture(page, mode, "reader-settled");
 
   const samples = [];
-  samples.push(await measureOverlay(page, "reader overflow", button(page, "More article actions"), {
+  samples.push(await withScreencast(page, cdp, mode, "reader-overflow-open", () => measureOverlay(page, "reader overflow", button(page, "More article actions"), {
     selector: '[role="menuitem"]', label: "Highlights",
-  }));
+  })));
   await assertOverlayOpen(page, "Reader overflow open", { role: "menu" });
   await assertArticlePresent(page, "Reader overflow open");
   await capture(page, mode, "reader-overflow");
@@ -1654,9 +1661,9 @@ async function readerPhase(page, mode, cdp, check, note) {
 
   // Reader settings: one text-size change only (the smoothness harness owns
   // the full preference matrix).
-  samples.push(await measureOverlay(page, "reader settings", button(page, "Reader settings"), {
+  samples.push(await withScreencast(page, cdp, mode, "reader-settings-open", () => measureOverlay(page, "reader settings", button(page, "Reader settings"), {
     selector: '[role="radio"]', label: "Large",
-  }));
+  })));
   const settings = page.getByRole("dialog", { name: "Reader" });
   await settings.waitFor({ state: "visible" });
   await waitForFocusTop(page, "Reader settings open");
