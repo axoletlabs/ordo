@@ -42,6 +42,36 @@ let restoreGeneration = 0;
 /** Child restores that may still place focus inside a resuming parent. */
 let activeRestores = 0;
 const restoreWaiters = new Set<() => void>();
+/** A real activation can hand off to a portal published in a later commit.
+ * Keep only its owning surface, never an arbitrary body-focused close. */
+let activationRoot: HTMLElement | null = null;
+let activationUsers = 0;
+let releaseActivation: (() => void) | undefined;
+
+function retainActivationTracking() {
+  activationUsers += 1;
+  if (activationUsers === 1) {
+    const owner = document;
+    const record = (event: Event) => {
+      const activating = event.type === "click" || (event.type === "keydown" && ["Enter", " "].includes((event as KeyboardEvent).key));
+      activationRoot = activating && event.target instanceof HTMLElement
+        ? event.target.closest<HTMLElement>('[data-material-overlay="true"]') : null;
+    };
+    for (const type of ["pointerdown", "click", "keydown"]) owner.addEventListener(type, record, true);
+    releaseActivation = () => {
+      for (const type of ["pointerdown", "click", "keydown"]) owner.removeEventListener(type, record, true);
+      activationRoot = null;
+    };
+  }
+  return () => {
+    activationUsers -= 1;
+    if (activationUsers === 0) { releaseActivation?.(); releaseActivation = undefined; }
+  };
+}
+
+function clearActivation(root: HTMLElement | null) {
+  if (activationRoot === root) activationRoot = null;
+}
 
 function notifyRestoreFinished() {
   for (const waiter of [...restoreWaiters]) waiter();
@@ -96,6 +126,7 @@ function clearResumeWake(session: FocusSession) {
 }
 
 function cancelRestore(session: FocusSession) {
+  clearActivation(session.root);
   session.restoreToken += 1;
   if (session.restoreFrame) cancelAnimationFrame(session.restoreFrame);
   session.restoreFrame = 0;
@@ -134,6 +165,11 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
     explicitTriggerRef.current = triggerRef;
   }, [onDismiss, onNavigate, active, suspended, returnFocus, triggerRef]);
 
+  useLayoutEffect(() => {
+    if (Platform.OS !== "web" || typeof document === "undefined") return;
+    return retainActivationTracking();
+  }, []);
+
   // One owner for the whole component lifetime. A close can schedule a
   // restore for a later isolation release; unmount must cancel it, otherwise
   // the old page's trigger can receive focus after navigation.
@@ -167,7 +203,12 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
       restoreGeneration += 1;
       const root = node();
       const explicit = explicitTriggerRef.current?.current;
-      const trigger = resolveTrigger(explicit instanceof HTMLElement ? explicit : document.activeElement, root);
+      const activated = activationRoot;
+      const handoff = document.activeElement === document.body && activated && activated !== root
+        && activated.getAttribute("data-material-overlay") === "false" && !openRoots.has(activated)
+        ? triggerByRoot.get(activated) : null;
+      const trigger = resolveTrigger(explicit instanceof HTMLElement ? explicit : handoff ?? document.activeElement, root);
+      activationRoot = null;
       session = {
         alive: true, active: true, root, trigger,
         focusPending: !suspended,
@@ -465,6 +506,7 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
         && openRoots.has(preferredParent) && (!triggerParent || triggerParent === preferredParent)
         ? preferred : closing.trigger;
       if (!trigger) {
+        clearActivation(root);
         closing.restoreFrame = requestAnimationFrame(() => {
           closing.restoreFrame = 0;
           evacuate();
@@ -479,6 +521,7 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
 
       const finish = () => {
         if (closing.restoreToken !== token) return;
+        clearActivation(root);
         closing.restoreToken += 1;
         if (closing.restoreFrame) cancelAnimationFrame(closing.restoreFrame);
         closing.restoreFrame = 0;

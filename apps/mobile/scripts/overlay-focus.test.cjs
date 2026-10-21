@@ -500,6 +500,56 @@ test("an explicit launch capture survives a sibling handoff's separate portal co
   } finally { await app.unmount(); }
 });
 
+test("real menu activations retain their launch chain across a later portal commit", async () => {
+  const app = mount();
+  const render = (menu, panel) => app.render(h("div", null,
+    trigger("activation-launch"),
+    overlay({ id: "activation-menu", kind: "menu", active: menu, published: menu }, button("activation-item")),
+    overlay({ id: "activation-panel", active: panel, published: panel }, input("activation-field"))));
+  try {
+    for (const type of ["click", "keyboard"]) {
+      await render(false, false);
+      document.getElementById("activation-launch").focus();
+      await render(true, false);
+      await flush(3);
+      const item = document.getElementById("activation-item");
+      await act(async () => item.dispatchEvent(type === "click"
+        ? new dom.window.MouseEvent("click", { bubbles: true, detail: 1 })
+        : new dom.window.KeyboardEvent("keydown", { bubbles: true, key: "Enter" })));
+      await render(false, false);
+      assert.equal(document.activeElement.tagName, "BODY", "close still evacuates focus before paint");
+      await render(false, true);
+      await flush(4);
+      assert.equal(document.activeElement.id, "activation-field");
+      await render(false, false);
+      await flush(4);
+      assert.equal(document.activeElement.id, "activation-launch", `${type}: the sibling restores the real launch trigger`);
+    }
+  } finally { await app.unmount(); }
+});
+
+test("a different user gesture cancels a closing surface's pending activation handoff", async () => {
+  const app = mount();
+  const render = (menu, panel) => app.render(h("div", null,
+    trigger("old-activation-launch"), trigger("other-launch"),
+    overlay({ id: "old-activation-menu", kind: "menu", active: menu, published: menu }, button("old-activation-item")),
+    overlay({ id: "other-panel", active: panel, published: panel }, input("other-field"))));
+  try {
+    await render(false, false);
+    document.getElementById("old-activation-launch").focus();
+    await render(true, false);
+    await flush(3);
+    await act(async () => document.getElementById("old-activation-item").dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
+    await render(false, false);
+    await act(async () => document.getElementById("other-launch").dispatchEvent(new dom.window.Event("pointerdown", { bubbles: true })));
+    await render(false, true);
+    await flush(4);
+    await render(false, false);
+    await flush(4);
+    assert.notEqual(document.activeElement.id, "old-activation-launch", "a separate opening cannot inherit a stale activation");
+  } finally { await app.unmount(); }
+});
+
 test("closing a dialog and its open dropdown together restores the dialog launch trigger", async () => {
   const app = mount();
   const render = (sheetOpen, menuOpen) => app.render(h("div", null,
