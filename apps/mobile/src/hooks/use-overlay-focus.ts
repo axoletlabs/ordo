@@ -110,7 +110,7 @@ function cancelRestore(session: FocusSession) {
   }
 }
 
-export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "dialog" | "menu", dismissible = true, isolateBackground = false, suspended = false, onNavigate?: (key: string) => boolean) {
+export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "dialog" | "menu", dismissible = true, isolateBackground = false, suspended = false, onNavigate?: (key: string) => boolean, returnFocus?: { readonly current: unknown }) {
   const ref = useRef<View>(null);
   const dismissRef = useRef(onDismiss);
   const navigateRef = useRef(onNavigate);
@@ -118,6 +118,7 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
   const mountedRef = useRef(false);
   const activeRef = useRef(active);
   const suspendedRef = useRef(suspended);
+  const returnFocusRef = useRef(returnFocus);
 
   // Publish only committed ownership. Writing these during render would let a
   // discarded concurrent render change close/restoration for the live tree.
@@ -128,7 +129,8 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
     navigateRef.current = onNavigate;
     activeRef.current = active;
     suspendedRef.current = suspended;
-  }, [onDismiss, onNavigate, active, suspended]);
+    returnFocusRef.current = returnFocus;
+  }, [onDismiss, onNavigate, active, suspended, returnFocus]);
 
   // One owner for the whole component lifetime. A close can schedule a
   // restore for a later isolation release; unmount must cancel it, otherwise
@@ -438,14 +440,21 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
       const successor = topOverlay();
       const handingOff = Boolean(successor && successor !== root && !successor.contains(root));
       if ((focusInThisSurface || focusInClosingChild) && !focusInActiveSurface && !handingOff) focused?.blur?.();
-      if (!closing.trigger) {
+      // Forms can explicitly resume their editing field instead of the picker
+      // button. It must belong to a live parent overlay, never the background.
+      const preferred = returnFocusRef.current?.current;
+      const preferredParent = preferred instanceof HTMLElement ? preferred.closest<HTMLElement>("[data-material-overlay]") : null;
+      const triggerParent = closing.trigger?.closest<HTMLElement>("[data-material-overlay]");
+      const trigger = preferred instanceof HTMLElement && preferred.isConnected && preferredParent && preferredParent !== root
+        && openRoots.has(preferredParent) && (!triggerParent || triggerParent === preferredParent)
+        ? preferred : closing.trigger;
+      if (!trigger) {
         closing.restoreFrame = requestAnimationFrame(() => {
           closing.restoreFrame = 0;
           evacuate();
         });
         return;
       }
-      const trigger = closing.trigger;
       const token = ++closing.restoreToken;
       // Session starts advance the generation; sibling closes in the same
       // task share it so the surviving outer trigger can still restore.
@@ -522,7 +531,7 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
         const insideThisSurface = Boolean(root && (focused === root || root.contains(focused)));
         const focusedSurface = focused?.closest<HTMLElement>("[data-material-overlay]");
         const focusInChild = Boolean(focusedSurface && ownsSurface(focusedSurface, root));
-        if (focused && focused !== trigger && focused !== document.body && !insideThisSurface && !focusInChild) { finish(); return; }
+        if (focused && focused !== trigger && focused !== closing.trigger && focused !== document.body && !insideThisSurface && !focusInChild) { finish(); return; }
         if (trigger.getClientRects().length === 0) { finish(); return; }
         trigger.focus({ preventScroll: true });
         finish();

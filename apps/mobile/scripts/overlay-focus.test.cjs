@@ -145,8 +145,8 @@ const input = (id, props = {}) => h("input", { id, "aria-label": id, defaultValu
 const overlay = (props, ...children) => h(Overlay, { key: props.id, ...props }, ...children);
 
 /** The real hook in the same shape as FloatingPanel/ContextMenu use it. */
-function Overlay({ id, active, published, suspended = false, kind = "dialog", dismissible = true, children }) {
-  const ref = useOverlayFocus(active, noop, kind, dismissible, false, suspended);
+function Overlay({ id, active, published, suspended = false, kind = "dialog", dismissible = true, returnFocusRef, children }) {
+  const ref = useOverlayFocus(active, noop, kind, dismissible, false, suspended, undefined, returnFocusRef);
   return h("div", {
     ref,
     id,
@@ -241,6 +241,50 @@ test("resuming a suspended save sheet does not steal focus from the picker's res
   assert.ok(trace.every((entry) => !entry.includes("link") && !entry.includes("background-search")),
     `no transient Link or background search: ${trace.join(", ")}`);
   await app.unmount();
+});
+
+test("a form picker can explicitly return to Link without focusing background search", async () => {
+  const app = mount();
+  const link = React.createRef();
+  const render = (open, picker) => app.render(h("div", null,
+    input("background-search"), trigger("save-launch"),
+    overlay({ id: "save-form", active: open, published: open && !picker, suspended: picker },
+      input("resume-link", { ref: link }), button("folder-trigger")),
+    overlay({ id: "folder-picker", active: picker, published: picker, kind: "menu", returnFocusRef: link }, input("find-folder"))));
+  try {
+    await render(false, false);
+    document.getElementById("save-launch").focus();
+    await render(true, false);
+    await flush(3);
+    document.getElementById("folder-trigger").focus();
+    await render(true, true);
+    await flush(3);
+    assert.equal(document.activeElement.id, "find-folder");
+    await render(true, false);
+    await flush(4);
+    assert.equal(document.activeElement.id, "resume-link", "the form's editing target wins over its picker button");
+    await render(false, false);
+    await flush(4);
+    assert.equal(document.activeElement.id, "save-launch", "closing the entire flow restores its real launch trigger");
+  } finally { await app.unmount(); }
+});
+
+test("an explicit picker return target cannot point into the background", async () => {
+  const app = mount();
+  const background = React.createRef();
+  const render = (picker) => app.render(h("div", null, input("protected-background", { ref: background }),
+    overlay({ id: "parent-form", active: true, published: !picker, suspended: picker }, input("parent-link"), button("parent-picker")),
+    overlay({ id: "child-picker", active: picker, published: picker, kind: "menu", returnFocusRef: background }, input("child-search"))));
+  try {
+    await render(false);
+    await flush(3);
+    document.getElementById("parent-picker").focus();
+    await render(true);
+    await flush(3);
+    await render(false);
+    await flush(4);
+    assert.equal(document.activeElement.id, "parent-picker", "invalid background preference falls back to the real parent trigger");
+  } finally { await app.unmount(); }
 });
 
 test("resuming with a removed picker trigger falls back to the first valid parent field", async () => {

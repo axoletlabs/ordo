@@ -459,10 +459,10 @@ function AddBookmarkContent({
           </>
         )}
       </FloatingPanel>
-      <FolderPickerMenu visible={folderPickerOpen} onDismiss={() => setDestinationOpen(false)} folders={folders ?? []} anchor={destinationAnchor}
+      <FolderPickerMenu visible={folderPickerOpen} onDismiss={() => setDestinationOpen(false)} folders={folders ?? []} anchor={destinationAnchor} returnFocusRef={urlRef}
         value={selectedFolderId} onChange={(id) => setSelectedDestination(id ?? ROOT_DESTINATION)}
         onCreate={() => { setDestinationOpen(false); setCreateFolderOpen(true); }} />
-      <ContextMenu visible={tagPickerOpen} onDismiss={() => setShowTagPicker(false)} anchor={tagAnchor} width={tagAnchor?.width} scrollBody={false} keyboardDismiss={false} estimatedHeight={280}>
+      <ContextMenu visible={tagPickerOpen} onDismiss={() => setShowTagPicker(false)} anchor={tagAnchor} width={tagAnchor?.width} scrollBody={false} keyboardDismiss={false} estimatedHeight={280} returnFocusRef={urlRef}>
         <View ref={tagMenuRef} {...tagOpeningFocus} style={{ paddingHorizontal: spacing[16], flexShrink: 1 }}>
         <TagSelectList selectedIds={selectedTagIds} searchInputRef={tagSearchRef}
           searchAutoFocus={Platform.OS !== "web"}

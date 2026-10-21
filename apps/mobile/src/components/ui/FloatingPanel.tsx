@@ -16,6 +16,7 @@ import { OverlayPortal, useOverlayBlocked } from "./overlay-host";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { useOverlayFocus } from "../../hooks/use-overlay-focus";
+import { useScrimPress } from "../../hooks/use-scrim-press";
 import { PanelTitleContext } from "./panel-title";
 import { PanelHeader } from "./PanelHeader";
 import { PanelActions } from "./SheetActionRow";
@@ -120,6 +121,7 @@ function FloatingPanelSurface({
     dismissKeyboard();
     onDismiss();
   }, [dismissible, onDismiss]);
+  const scrimPress = useScrimPress(visible && interactive && !obscured && dismissOnScrim, hideAndDismiss);
   const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, {
     interactive: interactive && !obscured, onExited, onExiting, ready: Platform.OS === "web" || measured,
   });
@@ -322,7 +324,7 @@ function FloatingPanelSurface({
           accessibilityLabel="Dismiss"
           style={StyleSheet.absoluteFill}
           onPressIn={dismissible && dismissOnScrim ? dismissKeyboard : undefined}
-          onPress={dismissible && dismissOnScrim ? hideAndDismiss : undefined}
+          {...scrimPress}
         />
           <View pointerEvents="box-none" style={[styles.frame, { paddingTop: insets.top + spacing[16], paddingBottom: insets.bottom + spacing[16] },
             sheet ? { justifyContent: "flex-end", paddingBottom: 0, paddingLeft: insets.left, paddingRight: insets.right }

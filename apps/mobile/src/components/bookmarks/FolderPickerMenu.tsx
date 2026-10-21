@@ -9,8 +9,9 @@ import { spacing } from "../../theme/tokens";
 import type { FolderDto } from "@ordo/shared";
 import { useOpeningFocus } from "./use-opening-focus";
 
-export function FolderPickerMenu({ visible, onDismiss, folders, value, onChange, onCreate, anchor }: {
+export function FolderPickerMenu({ visible, onDismiss, folders, value, onChange, onCreate, anchor, returnFocusRef }: {
   visible: boolean; onDismiss: () => void; folders: readonly FolderDto[]; value: string | null;
+  returnFocusRef?: { readonly current: unknown };
   onChange: (folderId: string | null) => void; onCreate: () => void;
   anchor: MenuAnchorRect | null;
 }) {
@@ -29,7 +30,7 @@ export function FolderPickerMenu({ visible, onDismiss, folders, value, onChange,
   });
   const options = useMemo(() => [{ id: null as string | null, name: "Bookmarks", icon: "bookmark-outline" as const, protected: false }, ...folders]
     .filter((folder) => folder.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())), [folders, query]);
-  return <ContextMenu visible={visible} onDismiss={onDismiss} anchor={anchor} width={anchor?.width} scrollBody={false} keyboardDismiss={false} estimatedHeight={320}>
+  return <ContextMenu visible={visible} onDismiss={onDismiss} anchor={anchor} width={anchor?.width} scrollBody={false} keyboardDismiss={false} estimatedHeight={320} returnFocusRef={returnFocusRef}>
     <View ref={contentRef} {...openingFocus} style={{ flexShrink: 1, gap: spacing[8], paddingHorizontal: spacing[16] }}>
       <Input ref={searchRef} variant="search" value={query} onChangeText={setQuery} placeholder="Find a folder" accessibilityLabel="Find a folder"
         autoFocus={Platform.OS !== "web"} containerStyle={{ flexShrink: 0 }} icon={<MaterialIcon name="search" />} />

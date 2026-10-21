@@ -490,7 +490,7 @@ test("a covering overlay cancels a panel's opening callback without replay on un
     assert.equal(starts, 1, "uncovering must not resurrect an old automatic focus request");
     await render(false, false);
     await render(false);
-    assert.equal(starts, 2, "an explicit interactive/onShow lifecycle still works");
+    assert.equal(starts, 1, "reactivating the same opening does not replay automatic focus");
   } finally {
     await tree.unmount();
   }

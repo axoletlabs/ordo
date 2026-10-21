@@ -110,8 +110,8 @@ function StatePressable({ style, visualStyle, children, disabled, stateLayerColo
   const layerActive = useRef(fraction > 0);
   if (fraction > 0) layerActive.current = true;
   const ActionPressable = nativeGesture && Platform.OS !== "web" ? NativeGesturePressable : Pressable;
-  const position = stylePosition(style)
-    ?? (hasRegisteredStyle(style) ? StyleSheet.flatten(style as StyleProp<ViewStyle>)?.position : undefined) ?? "relative";
+  const position = (hasRegisteredStyle(style)
+    ? StyleSheet.flatten(style as StyleProp<ViewStyle>)?.position : stylePosition(style)) ?? "relative";
   return <ActionPressable {...rest} disabled={disabled}
     {...(Platform.OS === "web" ? { dataSet: { ...rest.dataSet, materialHoverSurface: "true" } } : {})}
     {...(Platform.OS === "web" ? webSelectionKeys({ role: rest.role, accessibilityRole: rest.accessibilityRole, disabled, onKeyDown: rest.onKeyDown, onPress: rest.onPress }) : {})}

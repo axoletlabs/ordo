@@ -27,6 +27,7 @@ import { ThemedScrollView } from "./ThemedScrollView";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { useOverlayFocus } from "../../hooks/use-overlay-focus";
+import { useScrimPress } from "../../hooks/use-scrim-press";
 import { dismissKeyboard, useKeyboardViewportHeight } from "../../hooks/use-keyboard-visible";
 import { haptics } from "../../lib/haptics";
 import { listenForMenuOutsideScroll } from "../../lib/menu-outside-scroll";
@@ -69,6 +70,8 @@ export interface ContextMenuProps {
   pageKey?: string;
   /** Optional data-aware keyboard navigation for virtualized menu pages. */
   onNavigate?: (key: string) => boolean;
+  /** Resume an editing field in the still-open parent form after this picker. */
+  returnFocusRef?: { readonly current: unknown };
 }
 
 export function ContextMenu(props: ContextMenuProps) {
@@ -94,6 +97,7 @@ function ContextMenuSurface({
   keyboardDismiss = true,
   pageKey,
   onNavigate,
+  returnFocusRef,
 }: ContextMenuProps) {
   const { palette, shadows, expressive } = useTheme();
   const { width: windowWidth, height } = useWindowDimensions();
@@ -104,6 +108,7 @@ function ContextMenuSurface({
     if (backdrop && keyboardDismiss) dismissKeyboard();
     onDismiss();
   }, [backdrop, dismissible, keyboardDismiss, onDismiss]);
+  const scrimPress = useScrimPress(visible && backdrop, hideAndDismiss);
   const [contentHeight, setContentHeight] = React.useState(0);
   const contentHeightRef = React.useRef(0);
   /** A new session replaced the contents on a visible surface; keep the old
@@ -130,7 +135,7 @@ function ContextMenuSurface({
     onExited,
     onExiting,
   });
-  const menuRef = useOverlayFocus(visible && rendered && backdrop, hideAndDismiss, "menu", dismissible, false, false, onNavigate);
+  const menuRef = useOverlayFocus(visible && rendered && backdrop, hideAndDismiss, "menu", dismissible, false, false, onNavigate, returnFocusRef);
   React.useEffect(() => {
     if (!visible || !rendered || !backdrop || Platform.OS !== "web" || typeof document === "undefined") return;
     return listenForMenuOutsideScroll(() => menuRef.current as unknown as HTMLElement | null, hideAndDismiss);
@@ -333,7 +338,7 @@ function ContextMenuSurface({
             style={StyleSheet.absoluteFill}
             pointerEvents={visible ? "auto" : "none"}
             onPressIn={keyboardDismiss ? dismissKeyboard : undefined}
-            onPress={hideAndDismiss}
+            {...scrimPress}
             onTouchMove={Platform.OS !== "web" ? hideAndDismiss : undefined}
           />
         ) : null}
