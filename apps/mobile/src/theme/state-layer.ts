@@ -14,6 +14,21 @@ export function stateLayerCorners(style?: SurfaceShape) {
   };
 }
 
+/**
+ * Static rest corners for a shape that currently exists only as animated
+ * values. Painted before the animated corner style so a first press/hover
+ * frame can never fall through to a square (`borderRadius: 0`) silhouette.
+ * Order is top-left, top-right, bottom-left, bottom-right.
+ */
+export function cornerRadiusStyle(values: readonly number[]) {
+  return {
+    borderTopLeftRadius: Math.max(0, values[0] ?? 0),
+    borderTopRightRadius: Math.max(0, values[1] ?? 0),
+    borderBottomLeftRadius: Math.max(0, values[2] ?? 0),
+    borderBottomRightRadius: Math.max(0, values[3] ?? 0),
+  };
+}
+
 export function stateLayerOpacity({ disabled, pressed, focused, hovered }: {
   disabled?: boolean | null; pressed?: boolean; focused?: boolean; hovered?: boolean;
 }) {

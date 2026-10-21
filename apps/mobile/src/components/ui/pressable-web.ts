@@ -5,8 +5,15 @@ export type WebPressKeyEvent = {
   preventDefault: () => void;
 };
 
+/** Only the fields the Space handler reads. PressableScale and ListPressable
+ * pass these directly so menu/list rows don't copy every pressable prop on
+ * each render just to wire an unused key handler. */
+export type WebSelectionKeyProps = Pick<PressableProps, "role" | "accessibilityRole" | "disabled" | "onPress"> & {
+  onKeyDown?: (event: WebPressKeyEvent) => void;
+};
+
 /** RN Web implements Space only for button roles, not selection controls. */
-export function webSelectionKeys(props: PressableProps & { onKeyDown?: (event: WebPressKeyEvent) => void }) {
+export function webSelectionKeys(props: WebSelectionKeyProps) {
   return {
     onKeyDown: (event: WebPressKeyEvent) => {
       props.onKeyDown?.(event);

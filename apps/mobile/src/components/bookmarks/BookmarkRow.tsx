@@ -239,7 +239,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
     >
       <RowHighlight rest={expressive ? listCorners(position, false) : undefined} expressive={expressive}
         selectionMode={!!selectionMode}
-        hovered={hovered} pressed={pressed} selected={!!selected || !!highlighted} />
+        hovered={hovered} pressed={pressed} selected={!!selected} highlighted={!!highlighted} />
       <SelectionDragHandle
         selectionKey={bookmarkKey(bookmark.id)}
         selectionMode={!!selectionMode}

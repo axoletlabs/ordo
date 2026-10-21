@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useLayoutEffect, useRef } from "react";
 import { Animated, Platform, type StyleProp, type ViewStyle, StyleSheet } from "react-native";
 import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 import { alphaTint, stateLayerCorners } from "../../theme/state-layer";
@@ -8,12 +8,17 @@ import { alphaTint, stateLayerCorners } from "../../theme/state-layer";
  * element never rests at a sub-1 opacity (which distorts its radius clip).
  * Use a fixed JS driver when the view also has JS-driven animated styles:
  * making any part of its Animated graph native promotes the other values too.
+ *
+ * Layout timing: an immediate state handoff (e.g. a row palette flip when its
+ * context menu opens) must be painted in the same frame. A passive effect
+ * would leave one frame with the new palette and the old opacity — the tiny
+ * color flash this guards against. Animation starts are equally safe here.
  */
 export function useStateVisibility(active: boolean, useNativeDriver = Platform.OS !== "web", initialActive = active, immediate = false) {
   const { reducedMotion } = useMaterialMotion();
   const opacity = useRef(new Animated.Value(initialActive ? 1 : 0)).current;
   const previous = useRef({ active: initialActive, reducedMotion, immediate });
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (previous.current.active === active && previous.current.reducedMotion === reducedMotion && previous.current.immediate === immediate) return;
     previous.current = { active, reducedMotion, immediate };
     if (reducedMotion || immediate) { opacity.stopAnimation(); opacity.setValue(active ? 1 : 0); return; }

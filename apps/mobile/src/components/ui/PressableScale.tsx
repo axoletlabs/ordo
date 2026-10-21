@@ -7,7 +7,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 import { useButtonGroupInteraction } from "./ButtonGroup";
 import { StateLayer } from "./StateLayer";
-import { alphaTint, opaqueComponents, stateLayerCorners, stateLayerOpacity } from "../../theme/state-layer";
+import { alphaTint, cornerRadiusStyle, opaqueComponents, stateLayerCorners, stateLayerOpacity } from "../../theme/state-layer";
 import { webSelectionKeys, type WebPressKeyEvent } from "./pressable-web";
 import { nativeHoverEvents } from "../../lib/pointer-hover";
 
@@ -19,6 +19,24 @@ const AnimatedGesturePressable = Animated.createAnimatedComponent(NativeGestureP
 type CornerShape = number | { topLeft: number; topRight: number; bottomLeft: number; bottomRight: number };
 function cornerValues(shape: CornerShape): number[] {
   return typeof shape === "number" ? [shape, shape, shape, shape] : [shape.topLeft, shape.topRight, shape.bottomLeft, shape.bottomRight];
+}
+/** Read the effective position without flattening (and allocating) the whole
+ * style array on every plain-row render. Later entries win, like flatten.
+ * Registered style IDs (native release builds) cannot be read without the
+ * registry, so only those fall back to a flatten. */
+function stylePosition(style?: unknown): ViewStyle["position"] | undefined {
+  if (Array.isArray(style)) {
+    for (let index = style.length - 1; index >= 0; index -= 1) {
+      const value = stylePosition(style[index]);
+      if (value) return value;
+    }
+    return undefined;
+  }
+  return style && typeof style === "object" ? (style as { position?: ViewStyle["position"] }).position : undefined;
+}
+function hasRegisteredStyle(style: unknown): boolean {
+  if (typeof style === "number") return true;
+  return Array.isArray(style) && style.some(hasRegisteredStyle);
 }
 export type PressableSurfaceState = {
   children: React.ReactNode;
@@ -60,13 +78,14 @@ export type PressableScaleProps = Omit<PressableProps, "style"> & {
 export function PressableScale(props: PressableScaleProps) {
   // Shape-aware controls keep one tree across Standard/Expressive changes.
   // Switching implementations would remount focused/pressed controls mid-gesture.
-  if (props.animated || (props.scaleTo != null && props.scaleTo !== 1) || props.dim) {
+  const scales = (props.scaleTo != null && props.scaleTo !== 1) || props.dim;
+  if (scales) {
     return <AnimatedStatePressable {...props} />;
   }
-  // A shaped control that never scales or dims does not need the transform
-  // progress shared value or its animated style. Standard and Expressive both
-  // resolve to the same wrapper, so a mode switch never remounts the pressable.
-  if (props.shape) return props.motion ? <ProvidedShapePressable {...props} /> : <ShapePressable {...props} />;
+  // `animated` only promises that the caller's style is a Reanimated style;
+  // it is not transform feedback. Route it through the same fixed-transform
+  // surface so the FAB does not allocate a progress graph it never uses.
+  if (props.shape || props.animated) return props.motion ? <ProvidedShapePressable {...props} /> : <ShapePressable {...props} />;
   return <StatePressable {...props} />;
 }
 
@@ -79,14 +98,25 @@ function StatePressable({ style, visualStyle, children, disabled, stateLayerColo
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
   const [focusVisible, setFocusVisible] = useState(false);
-  const flat = StyleSheet.flatten(style as StyleProp<ViewStyle>);
+  // Only a renderSurface needs the flattened paint. The common menu/list row
+  // path used to flatten its style array on every render for a value it never
+  // read; skip that allocation entirely.
+  const flat = renderSurface ? StyleSheet.flatten(style as StyleProp<ViewStyle>) : undefined;
   const tint = stateLayerColor ?? palette.onSurface;
   const focusLayer = focused && (!focusOnlyVisible || focusVisible || Platform.OS !== "web");
+  const fraction = stateLayerOpacity({ disabled, pressed: false, focused: focusLayer, hovered });
+  // Untouched rows need no state-layer fiber (and no second style flatten).
+  // Retain it after the first feedback so release still gets its full fade.
+  const layerActive = useRef(fraction > 0);
+  if (fraction > 0) layerActive.current = true;
   const ActionPressable = nativeGesture && Platform.OS !== "web" ? NativeGesturePressable : Pressable;
+  const position = stylePosition(style)
+    ?? (hasRegisteredStyle(style) ? StyleSheet.flatten(style as StyleProp<ViewStyle>)?.position : undefined) ?? "relative";
   return <ActionPressable {...rest} disabled={disabled}
     {...(Platform.OS === "web" ? { dataSet: { ...rest.dataSet, materialHoverSurface: "true" } } : {})}
-    {...(Platform.OS === "web" ? webSelectionKeys({ ...rest, disabled }) : {})}
-    {...(Platform.OS !== "web" ? nativeHoverEvents({ ...rest, disabled, onHoverIn, onHoverOut }, setHovered) : {})}
+    {...(Platform.OS === "web" ? webSelectionKeys({ role: rest.role, accessibilityRole: rest.accessibilityRole, disabled, onKeyDown: rest.onKeyDown, onPress: rest.onPress }) : {})}
+    {...(Platform.OS !== "web" ? nativeHoverEvents({ disabled,
+      onPointerEnter: rest.onPointerEnter, onPointerLeave: rest.onPointerLeave, onHoverIn, onHoverOut }, setHovered) : {})}
     aria-checked={rest.accessibilityState?.checked} aria-selected={rest.accessibilityState?.selected}
     aria-expanded={rest.accessibilityState?.expanded} aria-busy={rest.accessibilityState?.busy}
     aria-disabled={disabled || rest.accessibilityState?.disabled}
@@ -99,16 +129,21 @@ function StatePressable({ style, visualStyle, children, disabled, stateLayerColo
     onHoverOut={(event) => { setHovered(false); onHoverOut?.(event); }}
     onFocus={(event) => { setFocused(true); setFocusVisible(Platform.OS === "web" && !!(event.currentTarget as unknown as HTMLElement)?.matches?.(":focus-visible")); onFocus?.(event); }}
     onBlur={(event) => { setFocused(false); setFocusVisible(false); group?.(false); onBlur?.(event); }}
-    style={[style as StyleProp<ViewStyle>, renderSurface ? { backgroundColor: "transparent" } : null, { position: flat?.position ?? "relative" },
+    style={[style as StyleProp<ViewStyle>, renderSurface ? { backgroundColor: "transparent" } : null, { position },
       focusVisible && !disabled ? { outlineColor: palette.primary, outlineWidth: 3, outlineOffset: 2, outlineStyle: "solid" } : null]}>
     {(state) => {
       const content = typeof children === "function" ? children(state) : children;
+      // Native touch need not produce hover or keyboard focus. RN can update
+      // this render callback without re-rendering the enclosing component, so
+      // its pressed state must activate the first on-demand layer here too.
+      const feedbackFraction = stateLayerOpacity({ disabled, pressed: state.pressed, focused: focusLayer, hovered });
+      if (feedbackFraction > 0) layerActive.current = true;
       if (renderSurface) return renderSurface({ children: content,
         backgroundStyle: { backgroundColor: flat?.backgroundColor }, cornerStyle: stateLayerCorners(flat),
-        stateLayerColor: alphaTint(tint, stateLayerOpacity({ disabled, pressed: state.pressed, focused: focusLayer, hovered })) });
+        stateLayerColor: alphaTint(tint, feedbackFraction) });
       const contents = <>{content}
-        <StateLayer color={tint} surfaceStyle={visualStyle ?? style as StyleProp<ViewStyle>} inset={stateLayerInset}
-          fraction={stateLayerOpacity({ disabled, pressed: state.pressed, focused: focusLayer, hovered })} /></>;
+        {layerActive.current ? <StateLayer color={tint} surfaceStyle={visualStyle ?? style as StyleProp<ViewStyle>} inset={stateLayerInset}
+          fraction={feedbackFraction} /> : null}</>;
       return visualStyle ? <View pointerEvents="box-none" style={visualStyle}>{contents}</View> : contents;
     }}
   </ActionPressable>;
@@ -224,6 +259,12 @@ function ControlSurface({
   const restCorner = typeof flat?.borderRadius === "number" ? flat.borderRadius : 0;
   const restShape = cornerValues(shape?.rest ?? restCorner);
   const pressedShape = cornerValues(shape?.pressed ?? restCorner);
+  // Shape-only controls (e.g. connected segments) paint corners from the
+  // animated handle alone. Keep the resting silhouette in the static style so
+  // the first press/hover frame cannot render square before the UI thread
+  // applies the live value. VisualStyle is unchanged after the first frame.
+  const restCornerStyle = shape ? cornerRadiusStyle(restShape) : null;
+  const layerCornerStyle = restCornerStyle ?? stateLayerCorners(flat);
   const corners = useSharedValue(restShape);
   const cornerKey = [...restShape, ...pressedShape].join(":");
   // Shared values already contain the resting paint. Starting springs per
@@ -264,7 +305,7 @@ function ControlSurface({
   const contents = renderSurface ? renderSurface({ children: content, backgroundStyle, cornerStyle,
     stateLayerStyle: layerStyle, stateLayerColor: alphaTint(tint, ink.current) }) : <>
     {content}
-    <Animated.View testID="material-state-layer" pointerEvents="none" accessible={false} style={[{ position: "absolute", top: stateLayerInset, bottom: stateLayerInset, left: stateLayerInset, right: stateLayerInset }, stateLayerCorners(flat), {
+    <Animated.View testID="material-state-layer" pointerEvents="none" accessible={false} style={[{ position: "absolute", top: stateLayerInset, bottom: stateLayerInset, left: stateLayerInset, right: stateLayerInset }, layerCornerStyle, {
       overflow: "hidden", backgroundColor: tintRgb ? "transparent" : alphaTint(tint, ink.current),
     }, cornerStyle, layerStyle]} />
   </>;
@@ -273,8 +314,9 @@ function ControlSurface({
     <ActionPressable
       {...rest}
       {...(Platform.OS === "web" ? { dataSet: { ...rest.dataSet, materialHoverSurface: "true" } } : {})}
-      {...(Platform.OS === "web" ? webSelectionKeys({ ...rest, disabled }) : {})}
-      {...(Platform.OS !== "web" ? nativeHoverEvents({ ...rest, disabled, onHoverIn, onHoverOut }, setHovered) : {})}
+      {...(Platform.OS === "web" ? webSelectionKeys({ role: rest.role, accessibilityRole: rest.accessibilityRole, disabled, onKeyDown: rest.onKeyDown, onPress: rest.onPress }) : {})}
+      {...(Platform.OS !== "web" ? nativeHoverEvents({ disabled,
+        onPointerEnter: rest.onPointerEnter, onPointerLeave: rest.onPointerLeave, onHoverIn, onHoverOut }, setHovered) : {})}
       aria-checked={rest.accessibilityState?.checked}
       aria-selected={rest.accessibilityState?.selected}
       aria-expanded={rest.accessibilityState?.expanded}
@@ -300,10 +342,11 @@ function ControlSurface({
       onBlur={(event) => { if (releaseFrame.current != null) cancelAnimationFrame(releaseFrame.current); releaseFrame.current = null;
         setFocused(false); setFocusVisible(false); setDown(false); groupInteraction?.(false); onBlur?.(event); }}
       style={[style, renderSurface ? { backgroundColor: "transparent" } : null, { position: targetStyle?.position ?? "relative" },
-        outerFocusStyle, !visualStyle && !renderSurface ? backgroundStyle : null, !visualStyle ? cornerStyle : null, transformStyle]}
+        outerFocusStyle, !visualStyle && !renderSurface ? backgroundStyle : null,
+        !visualStyle && restCornerStyle ? restCornerStyle : null, !visualStyle ? cornerStyle : null, transformStyle]}
     >
       {visualStyle ? <Animated.View testID="material-visual-surface" pointerEvents="box-none"
-        style={[visualStyle, backgroundStyle, cornerStyle, visualFocusRing]}>
+        style={[visualStyle, backgroundStyle, restCornerStyle, cornerStyle, visualFocusRing]}>
         {contents}
       </Animated.View> : contents}
     </ActionPressable>

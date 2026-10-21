@@ -402,7 +402,7 @@ test("Focus paints an inset ring on painted surfaces and keeps outer outlines el
       assert.equal(surfaceStyle.outlineWidth, 3, "focus paints the 3dp indicator on the painted surface");
       assert.equal(surfaceStyle.outlineOffset, -3, "the indicator is inset so adjacent hitboxes cannot clip it");
       assert.equal(typeof surfaceStyle.outlineColor, "string");
-      assert.equal(surface.props.style.length, 4, "the surface keeps visualStyle, paint, animated corners and the ring");
+      assert.equal(surface.props.style.length, 5, "the surface keeps visualStyle, paint, the static rest corners, animated corners and the ring");
       assert.equal(pressableOutline(focused.tree, role), undefined, "the square 48dp hit outline is not used");
       const focusedHost = findNode(focused.tree, node => typeof node.props?.onFocus === "function" && node.props?.accessibilityRole === role);
       assert.equal(flatNodeStyle(focusedHost).outlineStyle, "none", "the outer hitbox suppresses the browser's square focus outline");
