@@ -131,6 +131,10 @@ export interface ReaderPaneProps {
 const PROGRESS_DELTA = 0.08;
 /** Trailing idle window before a progress write is flushed. */
 const PROGRESS_DEBOUNCE_MS = 1_500;
+/** Movement (dp) before the first restore that counts as the reader's own
+ * position. A tap, bounce, or queued mount report must not cancel the saved
+ * position, but a real scroll while sections are still mounting must. */
+const USER_SCROLL_INTENT_MIN = 4;
 const SELECT_OPEN_MS = 280;const SELECT_CLOSE_MS = 140;
 
 // Survive reader unmount/reopen: a late write from the previous screen must
@@ -896,12 +900,21 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
     // Fully visible content has no scroll position. The bar may show completion
     // after the settle window, but storage keeps the saved position/states.
     if (reading.short || reading.position === "empty") return;
-    const last = persistedProgressRef.current;
-    if (last !== null && Math.abs(reading.fraction - last) < 0.005) return;
     // A completed article opens at the top. A tap/overscroll at the top must
     // not rewrite its stored completion before the reader moves down.
     if (reading.atTop && !readingStartedRef.current) return;
+    // Sample the position before the equality bailout. Scrolling back onto the
+    // stored value must supersede the previous sample and drop its pending idle
+    // write; otherwise that write persisted a position the reader already left.
     latestProgressRef.current = reading.fraction;
+    const last = persistedProgressRef.current;
+    if (last !== null && Math.abs(reading.fraction - last) < 0.005) {
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = null;
+      }
+      return;
+    }
     if (shouldFlushReadingProgress(reading.fraction, last, PROGRESS_DELTA, READ_COMPLETION_THRESHOLD, {
       completionEligible: reading.canComplete,
     })) {
@@ -1079,6 +1092,9 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
           }
         }
       }
+      // Sections and late images mount before the article reports ready. A
+      // reader who scrolls in that window has chosen their own position: the
+      // pending restore must not yank them back when readiness arrives.
       const target = restoreTargetRef.current;
       let programmatic = false;
       if (target != null) {
@@ -1092,6 +1108,8 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
           userScrolledRef.current = true;
           restoreTargetRef.current = null;
         }
+      } else if (!restoredRef.current && contentOffset.y > USER_SCROLL_INTENT_MIN) {
+        userScrolledRef.current = true;
       }
       syncProgress(!programmatic, programmatic);
     },

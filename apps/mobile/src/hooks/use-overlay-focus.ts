@@ -266,6 +266,7 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
 
     let releaseIsolation: (() => void) | undefined;
     let observer: MutationObserver | undefined;
+    let observedRoot: HTMLElement | null = null;
     const isTop = () => {
       const current = node();
       return Boolean(current && topOverlay() === current);
@@ -277,6 +278,34 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
       releaseIsolation = isolateModal(current);
     };
 
+    // Replacing a nested menu page removes its focused row without firing
+    // focusin. Keep keyboard ownership instead of leaving focus on body.
+    // A cold portal publishes its root one host commit after this effect, so
+    // bind repair lazily on the first frame that sees the real element; callers
+    // run on opening focus retries, resume, and immediate publication.
+    const watchRepair = (root: HTMLElement) => {
+      if (observedRoot === root) return;
+      observer?.disconnect();
+      // A repair queued for a previous root must not fire against the new one.
+      if (session!.repairFrame) cancelAnimationFrame(session!.repairFrame);
+      session!.repairFrame = 0;
+      observedRoot = root;
+      observer = new MutationObserver(() => {
+        // Most content updates leave focus intact. Don't wake a repair
+        // frame for every keystroke, loading label or appended list batch.
+        if (root.contains(document.activeElement) || !session!.alive
+          || suspendedRef.current || !activeRef.current || !isTop()) return;
+        cancelAnimationFrame(session!.repairFrame);
+        session!.repairFrame = requestAnimationFrame(() => {
+          const live = node();
+          if (!live || !session!.alive || !session!.active || suspendedRef.current || !activeRef.current
+            || !isTop() || live.contains(document.activeElement)) return;
+          (firstItem() ?? live).focus({ preventScroll: true });
+        });
+      });
+      observer.observe(root, { childList: true, subtree: true });
+    };
+
     const focusFirst = () => {
       const current = node();
       if (!current) return;
@@ -285,6 +314,7 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
       openRoots.add(current);
       rememberTrigger(current, session!.trigger);
       isolate();
+      watchRepair(current);
       if (topOverlay() !== current) { session!.focusPending = false; return; }
       // Returning from a dropdown keeps its restored trigger focus.
       if (current.contains(document.activeElement) && document.activeElement !== current
@@ -317,6 +347,7 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
           if (attempts < MAX_PUBLISH_FRAMES) session!.resumeFrame = requestAnimationFrame(step);
           return;
         }
+        watchRepair(current);
         const focused = document.activeElement as HTMLElement | null;
         const insideField = Boolean(focused && focused !== current && current.contains(focused));
         if (insideField) return;
@@ -377,24 +408,7 @@ export function useOverlayFocus(active: boolean, onDismiss: () => void, kind: "d
     if (resumingFromChild) scheduleResume();
 
     const current = node();
-    if (current) {
-      // Replacing a nested menu page removes its focused row without firing
-      // focusin. Keep keyboard ownership instead of leaving focus on body.
-      observer = new MutationObserver(() => {
-        // Most content updates leave focus intact. Don't wake a repair
-        // frame for every keystroke, loading label or appended list batch.
-        if (current.contains(document.activeElement) || !session!.alive
-          || suspendedRef.current || !activeRef.current || !isTop()) return;
-        cancelAnimationFrame(session!.repairFrame);
-        session!.repairFrame = requestAnimationFrame(() => {
-          const live = node();
-          if (!live || !session!.alive || !session!.active || suspendedRef.current || !activeRef.current
-            || !isTop() || live.contains(document.activeElement)) return;
-          (firstItem() ?? live).focus({ preventScroll: true });
-        });
-      });
-      observer.observe(current, { childList: true, subtree: true });
-    }
+    if (current) watchRepair(current);
 
     const key = (event: KeyboardEvent) => {
       const live = node();

@@ -10,7 +10,7 @@ import {
   type QueryClient,
 } from "@tanstack/react-query";
 import { useSessionMutation as useMutation } from "./use-session-mutation";
-import { assertSessionScope, captureSessionScope, isSessionScopeCurrent } from "../lib/session-scope";
+import { assertSessionScope, captureSessionScope, isSessionScopeCurrent, type SessionScope } from "../lib/session-scope";
 import { bookmarksApi } from "../lib/api/bookmarks";
 import { queryClient } from "../lib/query-client";
 import { useFolderTokenStore } from "../store/folder-tokens";
@@ -58,14 +58,73 @@ function isLibraryCatalogue(query: { queryKey: readonly unknown[] }) {
 // A tag/read write may finish while a move is still optimistic. The final
 // writer must retain its reconciliation request even if that writer is a move.
 const catalogueReconciliationNeeded = new WeakSet<QueryClient>();
-function invalidateSettledBookmarkWrites(qc: QueryClient, reconcileCatalogue: boolean) {
-  if (reconcileCatalogue) catalogueReconciliationNeeded.add(qc);
-  if (qc.isMutating({ mutationKey: BOOKMARK_WRITE_KEY }) > 1) return;
+// A settlement that sees another optimistic write defers its invalidation; the
+// last writer flushes. Query-core dispatches a write's terminal state only
+// after onSettled returns, so two writers finishing in one microtask turn can
+// each still count the other as pending. Keep a marker and recheck on a
+// macrotask so neither the catalogue request nor the list/folder replay is
+// stranded until some unrelated later write.
+const settlementFlushPending = new WeakSet<QueryClient>();
+const settlementRetryScheduled = new WeakSet<QueryClient>();
+// A deferred settlement belongs to the session that queued it. A macrotask
+// from an old session must never clear a newer session's request or its retry
+// dedupe, so all three sets are epoch-owned by this map.
+const settlementEpochOwner = new WeakMap<QueryClient, SessionScope>();
+
+/** Claim the cache for the current session. Switching sessions discards the
+ * old owner's deferred request and lets the new owner schedule its own retry. */
+function bookmarkWriteEpoch(qc: QueryClient): SessionScope {
+  const current = captureSessionScope();
+  const owner = settlementEpochOwner.get(qc);
+  if (owner && isSessionScopeCurrent(owner)) return owner;
+  settlementEpochOwner.set(qc, current);
+  settlementFlushPending.delete(qc);
+  settlementRetryScheduled.delete(qc);
+  catalogueReconciliationNeeded.delete(qc);
+  return current;
+}
+
+/** Flush once no other bookmark write is optimistic. `settlingWritePending` is
+ * true from a write's own onSettled, where query-core has not dispatched that
+ * write's terminal state yet. */
+function flushSettledBookmarkWrites(qc: QueryClient, settlingWritePending: boolean) {
+  const pending = qc.isMutating({ mutationKey: BOOKMARK_WRITE_KEY });
+  if (pending > (settlingWritePending ? 1 : 0)) return false;
+  settlementFlushPending.delete(qc);
   const includeCatalogue = catalogueReconciliationNeeded.delete(qc);
   void qc.invalidateQueries({
     queryKey: ["bookmarks"], predicate: (query) => includeCatalogue || !isLibraryCatalogue(query),
   });
   void qc.invalidateQueries({ queryKey: qk.folders });
+  return true;
+}
+
+function scheduleSettlementFlush(qc: QueryClient, owner: SessionScope) {
+  if (settlementRetryScheduled.has(qc)) return;
+  settlementRetryScheduled.add(qc);
+  setTimeout(() => {
+    // Check ownership before touching ANY set: an obsolete timer must not
+    // cancel the replacement epoch's marker, request, or retry scheduling.
+    if (settlementEpochOwner.get(qc) !== owner) return;
+    settlementRetryScheduled.delete(qc);
+    if (!settlementFlushPending.has(qc)) return;
+    if (!isSessionScopeCurrent(owner)) {
+      // Same epoch, but the session changed before this retry ran; the cache
+      // was cleared, so drop this request instead of replaying the catalogue.
+      settlementFlushPending.delete(qc);
+      catalogueReconciliationNeeded.delete(qc);
+      return;
+    }
+    // A write that is genuinely still running settles later and flushes then.
+    flushSettledBookmarkWrites(qc, false);
+  }, 0);
+}
+
+function invalidateSettledBookmarkWrites(qc: QueryClient, reconcileCatalogue: boolean) {
+  const owner = bookmarkWriteEpoch(qc);
+  if (reconcileCatalogue) catalogueReconciliationNeeded.add(qc);
+  settlementFlushPending.add(qc);
+  if (!flushSettledBookmarkWrites(qc, true)) scheduleSettlementFlush(qc, owner);
 }
 
 function snapshotLists(qc: QueryClient, folderId: string | null) {
@@ -411,12 +470,16 @@ export function useMoveBookmark(fromFolderId: string | null) {
       if (!isSessionScopeCurrent(owner)) return;
       moveBookmarkInCache(qc, updated);
     },
-    onSettled: () => {
+    onSettled: (_data, error) => {
       // A different move may still be optimistic. Refetch only after the last
       // write, otherwise its pre-commit server row can overwrite that move.
-      // moveBookmarkInCache already applied the canonical row, including the
-      // catalogue copy. Replay lists/folders, not the whole warmed catalogue.
-      invalidateSettledBookmarkWrites(qc, false);
+      // A successful move already applied the canonical row, including the
+      // catalogue copy, so replay lists/folders, not the warmed catalogue.
+      // A failed move rolled optimistic membership back to the old folder, but
+      // the request may still have committed (lost response): only a canonical
+      // catalogue replay can restore the destination rows and the index.
+      // query-core passes null as the error only when the write succeeded.
+      invalidateSettledBookmarkWrites(qc, error !== null);
     },
   });
 }
@@ -548,15 +611,22 @@ export function useBatchBookmarks() {
       moveBookmarksInCache(qc, collectCachedBookmarks(qc).filter((bookmark) => ids.has(bookmark.id))
         .map((bookmark) => ({ ...bookmark, folderId: variables.folderId ?? null })));
     },
-    onSettled: (_data, _error, variables) => {
+    onSettled: (_data, error, variables) => {
       if (variables.action === "delete" || variables.action === "addTags") {
         void qc.invalidateQueries({ queryKey: ["tags"] });
       }
-      // Move rollback preserves concurrent edits; delete rollback restores a
-      // whole snapshot, so failed deletes still need canonical reconciliation.
-      // Tag and read actions also require canonical server fields.
-      const reconciledCatalogue = variables.action === "move" || (variables.action === "delete" && !_error);
-      invalidateSettledBookmarkWrites(qc, !reconciledCatalogue);
+      // Successful moves already applied the new membership (single moves also
+      // the canonical row) to every cached copy, and a successful delete's rows
+      // are gone everywhere, so neither needs the warmed catalogue. Failed moves
+      // roll optimistic membership back to the old folder even though an earlier
+      // chunk may have committed server-side (chunk 2 failing leaves chunk 1
+      // applied), so only a canonical catalogue replay restores the destination
+      // rows and the index. Delete rollback restores a whole snapshot, so failed
+      // deletes need that replay too. Tag and read actions also require canonical
+      // server fields.
+      const locallyReconciled =
+        (variables.action === "move" || variables.action === "delete") && error === null;
+      invalidateSettledBookmarkWrites(qc, !locallyReconciled);
     },
   });
 }
