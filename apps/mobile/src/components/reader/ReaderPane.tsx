@@ -900,21 +900,23 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
     // Fully visible content has no scroll position. The bar may show completion
     // after the settle window, but storage keeps the saved position/states.
     if (reading.short || reading.position === "empty") return;
-    // A completed article opens at the top. A tap/overscroll at the top must
-    // not rewrite its stored completion before the reader moves down.
-    if (reading.atTop && !readingStartedRef.current) return;
-    // Sample the position before the equality bailout. Scrolling back onto the
-    // stored value must supersede the previous sample and drop its pending idle
-    // write; otherwise that write persisted a position the reader already left.
-    latestProgressRef.current = reading.fraction;
     const last = persistedProgressRef.current;
+    // A sample equal to the stored value is not a progress change. Adopt it and
+    // drop any pending idle write before the completed-at-top guard: scrolling
+    // back to the top from a sub-restore fraction never set readingStartedRef.
     if (last !== null && Math.abs(reading.fraction - last) < 0.005) {
+      latestProgressRef.current = reading.fraction;
       if (flushTimerRef.current) {
         clearTimeout(flushTimerRef.current);
         flushTimerRef.current = null;
       }
       return;
     }
+    // A completed article opens at the top. A tap/overscroll at the top must
+    // not rewrite its stored completion before the reader moves down.
+    if (reading.atTop && !readingStartedRef.current) return;
+    // Sample non-equal positions before deciding on an eager or idle write.
+    latestProgressRef.current = reading.fraction;
     if (shouldFlushReadingProgress(reading.fraction, last, PROGRESS_DELTA, READ_COMPLETION_THRESHOLD, {
       completionEligible: reading.canComplete,
     })) {
