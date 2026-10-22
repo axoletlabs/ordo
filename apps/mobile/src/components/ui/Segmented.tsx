@@ -1,6 +1,6 @@
 /** Baseline segmented buttons / Expressive connected toggle button group. */
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Platform, StyleSheet, View, useWindowDimensions, type LayoutChangeEvent, type TextStyle } from "react-native";
+import { Platform, StyleSheet, View, useWindowDimensions, type TextStyle } from "react-native";
 import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
@@ -162,22 +162,15 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
   // Publish them only after commit: a transition render can be discarded
   // (interrupted, or a later sibling suspends). Writing the ref during render
   // would leave the next press using a value/callback that never committed.
-  const latestSelection = useRef({ value, disabled, onChange, orientation });
+  const latestSelection = useRef({ value, disabled, onChange });
   React.useLayoutEffect(() => {
-    latestSelection.current = { value, disabled, onChange, orientation };
-  }, [value, disabled, onChange, orientation]);
+    latestSelection.current = { value, disabled, onChange };
+  }, [value, disabled, onChange]);
   const select = useCallback((next: string) => {
     const current = latestSelection.current;
     if (current.disabled || current.value === next) return;
     haptics.selection();
     current.onChange(next as T);
-  }, []);
-  const measureGroup = useCallback((event: LayoutChangeEvent) => {
-    // Native layout notifications can already be queued when the caller
-    // switches to a fixed orientation. Only the committed auto mode uses width.
-    if (latestSelection.current.orientation !== "auto") return;
-    const nextWidth = event.nativeEvent.layout.width;
-    setWidth((current) => (current === nextWidth ? current : nextWidth));
   }, []);
   // Reserve the selected check for EVERY segment so selecting another option
   // never resizes its neighbors. Narrow windows/large fonts stack, not truncate.
@@ -202,9 +195,10 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
       radios[next]?.focus();
     },
   } : {};
-  // Reader groups choose their orientation explicitly. Observing their width
-  // still queued a redundant React commit for every prepared control group.
-  return <View onLayout={orientation === "auto" ? measureGroup : undefined} style={{ minHeight: 48, justifyContent: "center" }}>
+  return <View onLayout={(event) => {
+    const nextWidth = event.nativeEvent.layout.width;
+    setWidth((current) => (current === nextWidth ? current : nextWidth));
+  }} style={{ minHeight: 48, justifyContent: "center" }}>
     {orientation === "auto" ? <SegmentMeasures options={options} onMeasure={measure} /> : null}
     <View {...keyboardProps} accessibilityRole="radiogroup" accessibilityLabel={accessibilityLabel} style={[styles.group, {
     gap: expressive ? 2 : 0, backgroundColor: "transparent",

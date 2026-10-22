@@ -45,7 +45,7 @@ function element(type, props, ...children) {
 const View = React.forwardRef(function View(props, _ref) {
   const flat = flatStyle(props.style);
   if (props.accessibilityRole === "radiogroup") counters.groupRenders++;
-  if (!Array.isArray(props.style) && flat.minHeight === 48) layouts.outer = props.onLayout ?? null;
+  if (props.onLayout && !Array.isArray(props.style) && flat.minHeight === 48) layouts.outer = props.onLayout;
   return element("div", { "data-testid": props.testID, "data-flex": flat.flexDirection, role: props.accessibilityRole }, props.children);
 });
 const Text = React.forwardRef(function Text(props, _ref) {
@@ -193,41 +193,6 @@ function setup() {
 }
 
 const options = { options: OPTIONS, value: "a", onChange: () => {} };
-
-for (const orientation of ["horizontal", "vertical"]) {
-  test(`Explicit ${orientation} segments do not observe unused container widths`, async () => {
-    const host = setup();
-    try {
-      await host.render({ ...options, orientation });
-      assert.equal(layouts.outer, null, "a fixed orientation needs no layout observer or width state update");
-      assert.equal(counters.measures, 0);
-      assert.equal(counters.groupRenders, 1);
-      assert.equal(document.querySelector('[role="radiogroup"]').getAttribute("data-flex"), orientation === "vertical" ? "column" : "row");
-    } finally { await host.unmount(); }
-  });
-}
-
-test("Auto/fixed orientation changes retain controls and ignore queued obsolete measurements", async () => {
-  const host = setup();
-  try {
-    await host.render({ ...options });
-    const previousLayout = layouts.outer;
-    const radios = [...document.querySelectorAll('[role="radio"]')];
-    await host.render({ ...options, orientation: "vertical" });
-    assert.equal(layouts.outer, null);
-    const renders = counters.groupRenders;
-    await React.act(() => previousLayout({ nativeEvent: { layout: { width: 5 } } }));
-    assert.equal(counters.groupRenders, renders, "a queued auto layout cannot update a now-fixed group");
-    assert.deepEqual([...document.querySelectorAll('[role="radio"]')], radios);
-    await host.render({ ...options });
-    assert.ok(layouts.outer, "auto orientation resumes real measurement");
-    await React.act(() => layouts.outer({ nativeEvent: { layout: { width: 100 } } }));
-    assert.equal(document.querySelector('[role="radiogroup"]').getAttribute("data-flex"), "column");
-    await React.act(() => layouts.outer({ nativeEvent: { layout: { width: 800 } } }));
-    assert.equal(document.querySelector('[role="radiogroup"]').getAttribute("data-flex"), "row");
-    assert.deepEqual([...document.querySelectorAll('[role="radio"]')], radios);
-  } finally { await host.unmount(); }
-});
 
 test("Stable segment props skip unchanged segments, labels, and measurements", async () => {
   const host = setup();
