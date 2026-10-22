@@ -145,7 +145,9 @@ function headerHost() {
     "../../theme/ThemeProvider": { useTheme: () => ({ palette: { primary: "teal", onSurfaceVariant: "x", onSecondaryContainer: "y", surfaceContainerHigh: "z", overlay: "o" } }) },
     "../../theme/tokens": { layout: { maxContentWidth: 800 }, radius: { full: 999 }, spacing: { 4: 4, 8: 8, 16: 16 } },
     "../../lib/search-field-focus": { registerSearchFieldFocus: (focus) => { registered.push(focus); return () => {}; } },
-    "../ui/overlay-host": { useOverlayBlocked: () => overlay.blocked },
+    "../ui/overlay-host": { useOverlayBlockingEffect: (callback) => {
+      h.react.useLayoutEffect(() => callback(overlay.blocked), [callback, overlay.blocked]);
+    } },
     "../ui/MaterialIcon": { MaterialIcon: "MaterialIcon" },
     "../ui/Input": {
       Input: (props) => {

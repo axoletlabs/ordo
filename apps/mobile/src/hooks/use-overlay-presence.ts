@@ -21,6 +21,9 @@ export function useOverlayPresence(
     ready?: boolean;
     /** Menus can reveal promptly without changing panel/scrim crossfades. */
     entranceEasing?: WithTimingConfig["easing"];
+    /** Both the effects fade and spatial spring completed for this opening.
+     * Optional content work may begin; cancelled/stale openings never notify. */
+    onEntered?: () => void;
     /** Fired once when a rendered surface's exit actually completes. */
     onExited?: () => void;
     /** Fired once the moment a rendered surface starts exiting, while the
@@ -51,13 +54,17 @@ export function useOverlayPresence(
   const ready = options?.ready !== false;
   const entranceEasing = options?.entranceEasing;
   const onExited = useRef(options?.onExited);
+  const onEntered = useRef(options?.onEntered);
+  const observeEntrance = options?.onEntered != null;
+  const entranceParts = useRef({ token: -1, effects: false, spatial: false, notified: false });
   const onExiting = useRef(options?.onExiting);
   const dismissRef = useRef(onDismiss);
   useLayoutEffect(() => {
     onExited.current = options?.onExited;
+    onEntered.current = options?.onEntered;
     onExiting.current = options?.onExiting;
     dismissRef.current = onDismiss;
-  }, [options?.onExited, options?.onExiting, onDismiss]);
+  }, [options?.onEntered, options?.onExited, options?.onExiting, onDismiss]);
 
   useLayoutEffect(() => {
     mounted.current = true;
@@ -76,6 +83,16 @@ export function useOverlayPresence(
     // opening, which read as a close-then-delay on menu handoffs.
     setRendered(false);
     onExited.current?.();
+  }, []);
+  const finishEntrance = useCallback((token: number, part: "effects" | "spatial") => {
+    if (!mounted.current || generation.current !== token || !wasVisible.current || !entered.current) return;
+    if (entranceParts.current.token !== token) entranceParts.current = { token, effects: false, spatial: false, notified: false };
+    const parts = entranceParts.current;
+    parts[part] = true;
+    if (parts.effects && parts.spatial && !parts.notified) {
+      parts.notified = true;
+      onEntered.current?.();
+    }
   }, []);
 
   useLayoutEffect(() => {
@@ -108,8 +125,19 @@ export function useOverlayPresence(
         if (hideKeyboard) dismissKeyboard();
         cancelAnimation(progress);
         cancelAnimation(spatial);
-        progress.value = motion.reducedMotion ? 1 : withTiming(1, { duration: 200, easing: entranceEasing ?? Easing.inOut(Easing.quad) });
-        spatial.value = motion.reducedMotion ? 1 : withSpring(1, motion.spatial);
+        const token = generation.current;
+        progress.value = motion.reducedMotion ? 1 : withTiming(1, { duration: 200, easing: entranceEasing ?? Easing.inOut(Easing.quad) }, observeEntrance ? (finished) => {
+          "worklet";
+          if (finished) runOnJS(finishEntrance)(token, "effects");
+        } : undefined);
+        spatial.value = motion.reducedMotion ? 1 : withSpring(1, motion.spatial, observeEntrance ? (finished) => {
+          "worklet";
+          if (finished) runOnJS(finishEntrance)(token, "spatial");
+        } : undefined);
+        if (motion.reducedMotion && observeEntrance) {
+          finishEntrance(token, "effects");
+          finishEntrance(token, "spatial");
+        }
       }
       return;
     }
@@ -143,7 +171,7 @@ export function useOverlayPresence(
     });
     const fallback = setTimeout(() => hide(token), CLOSE_FALLBACK_MS);
     return () => clearTimeout(fallback);
-  }, [hide, hideKeyboard, progress, spatial, rendered, visible, ready, entranceEasing, motion.spatial, motion.reducedMotion]);
+  }, [hide, hideKeyboard, progress, spatial, rendered, visible, ready, entranceEasing, motion.spatial, motion.reducedMotion, observeEntrance, finishEntrance]);
 
   useLayoutEffect(() => {
     if (!visible || !ready || !motion.reducedMotion) return;
@@ -152,7 +180,11 @@ export function useOverlayPresence(
     cancelAnimation(spatial);
     progress.value = 1;
     spatial.value = 1;
-  }, [visible, ready, motion.reducedMotion, progress, spatial]);
+    if (observeEntrance) {
+      finishEntrance(generation.current, "effects");
+      finishEntrance(generation.current, "spatial");
+    }
+  }, [visible, ready, motion.reducedMotion, progress, spatial, observeEntrance, finishEntrance]);
 
   useEffect(() => {
     if (visible || !rendered) return;

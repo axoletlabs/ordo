@@ -2,11 +2,11 @@
 import { createContext, useContext, useEffect, useSyncExternalStore } from "react";
 import { AppState, Platform } from "react-native";
 
-/** Legacy boolean scope. Layer owners still publish their covered/active state
- * here, and page trees still inherit it without subscribing to host activity. */
+/** Legacy page/scene boolean scope. Hosts publish changing activity through a
+ * stable external scope, so context does not walk covered or retained trees. */
 export const AnimationActivityContext = createContext(true);
 
-/** Stable host-background activity scope. The provider value never changes, so
+/** Stable host-background/layer activity scope. The provider value never changes, so
  * opening a blocking overlay updates only the leaf hooks that actually animate
  * instead of reconciling the whole background tree through a context value. */
 export type AnimationActivityScope = {

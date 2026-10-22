@@ -4,6 +4,9 @@
  *   node apps/mobile/scripts/interaction-performance.mjs
  * ORDO_UI_MATRIX=1 covers both layouts, color schemes and design modes.
  * ORDO_UI_REPEATS=3 repeats each configuration; CPU throttle defaults to 4x.
+ * ORDO_UI_BASELINE compares medians and rejects regressions exceeding both 15%
+ * and 30 ms (override with ORDO_UI_MAX_REGRESSION_RATIO / _MS). First-visible
+ * response is not a substitute for full-animation/filmstrip checks.
  */
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -216,6 +219,17 @@ try {
       })) };
     });
     console.log(JSON.stringify(results.comparison, null, 2));
+    const maxRatio = Number(process.env.ORDO_UI_MAX_REGRESSION_RATIO ?? 1.15);
+    const maxExtraMs = Number(process.env.ORDO_UI_MAX_REGRESSION_MS ?? 30);
+    assert.ok(Number.isFinite(maxRatio) && maxRatio >= 1, "Regression ratio must be finite and >= 1");
+    assert.ok(Number.isFinite(maxExtraMs) && maxExtraMs >= 0, "Regression allowance must be finite and >= 0 ms");
+    for (const group of results.comparison) {
+      for (const sample of group.medians) {
+        const limit = Math.max(sample.beforeMs * maxRatio, sample.beforeMs + maxExtraMs);
+        assert.ok(sample.afterMs <= limit,
+          `${group.mode} ${sample.label}: ${sample.beforeMs.toFixed(1)} -> ${sample.afterMs.toFixed(1)} ms exceeds ${limit.toFixed(1)} ms non-regression limit`);
+      }
+    }
   }
 } finally {
   await writeFile(`${output}/results.json`, JSON.stringify(results, null, 2));

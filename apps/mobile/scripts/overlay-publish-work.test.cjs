@@ -127,6 +127,7 @@ const reactNative = {
 /* ------------------------------ reanimated stub ------------------------------- */
 
 const timingCalls = [];
+const animationEnds = [];
 const reanimated = {
   useSharedValue(initial) {
     const slot = React.useRef(null);
@@ -136,10 +137,14 @@ const reanimated = {
   useAnimatedStyle: () => ({}),
   withTiming(value, config, callback) {
     timingCalls.push({ value, config });
-    void callback;
+    if (callback) animationEnds.push({ kind: "effects", value, callback });
     return value;
   },
-  withSpring: value => value,
+  withSpring(value, config, callback) {
+    void config;
+    if (callback) animationEnds.push({ kind: "spatial", value, callback });
+    return value;
+  },
   cancelAnimation: () => {},
   runOnJS: callback => callback,
   interpolate: value => value,
@@ -273,7 +278,8 @@ function load(filename) {
 
 const overlayHostPath = resolve(sourceRoot, "components/ui/overlay-host.tsx");
 const contextMenuPath = resolve(sourceRoot, "components/ui/ContextMenu.tsx");
-const { OverlayHost, OverlayPortal } = load(overlayHostPath);
+const { OverlayHost, OverlayPortal, useOverlayBlockingEffect, useOverlayBlocked } = load(overlayHostPath);
+const { AnimationActivityContext, useAnimationActivity, useAnimationActivityEffect } = load(resolve(sourceRoot, "hooks/use-animation-activity.ts"));
 const { ContextMenu } = load(contextMenuPath);
 
 function mount() {
@@ -287,6 +293,7 @@ function resetWork() {
   registryWork.notifications = 0;
   registryWork.publishes = 0;
   timingCalls.length = 0;
+  animationEnds.length = 0;
   pendingMeasures.length = 0;
 }
 
@@ -464,6 +471,84 @@ test("publisher re-render with unchanged portal children does not republish the 
   assert.equal(registryWork.api.getLayers().length, 0, "unmount still withdraws the layer");
 });
 
+test("background focus guards observe committed modal ownership without rendering covered controls", async () => {
+  const tree = mount();
+  let renders = 0;
+  const ownership = [];
+  const notify = blocked => ownership.push(blocked);
+  function Guard() { renders++; useOverlayBlockingEffect(notify); return React.createElement("button", null, "Search"); }
+  const guard = React.createElement(Guard);
+  const render = visible => tree.render(React.createElement(OverlayHost, null, guard,
+    visible ? React.createElement(OverlayPortal, null, React.createElement("div", null, "Menu")) : null));
+  try {
+    await render(false);
+    assert.deepEqual(ownership, [false]);
+    await render(true);
+    assert.deepEqual(ownership, [false, true], "the guard is blocked in the publication commit");
+    await render(false);
+    assert.deepEqual(ownership, [false, true, false]);
+    assert.equal(renders, 1, "opening and closing must not reconcile background header/input animations");
+    await tree.unmount();
+    registryWork.api.upsert("after-unmount", React.createElement("span"), true, true);
+    assert.deepEqual(ownership, [false, true, false], "unmounted guards unsubscribe");
+  } finally { if (tree.container.isConnected) await tree.unmount(); }
+});
+
+test("a background focus guard mounting under an existing modal starts blocked", async () => {
+  const tree = mount();
+  const ownership = [];
+  const notify = blocked => ownership.push(blocked);
+  function Guard() { useOverlayBlockingEffect(notify); return React.createElement("button", null, "Search"); }
+  const portal = React.createElement(OverlayPortal, { key: "modal" }, React.createElement("div", null, "Menu"));
+  try {
+    await tree.render(React.createElement(OverlayHost, null, portal));
+    await tree.render(React.createElement(OverlayHost, null, portal, React.createElement(Guard, { key: "guard" })));
+    assert.deepEqual(ownership, [true], "there is no temporary unblocked notification or autofocus opportunity");
+    await tree.render(React.createElement(OverlayHost, null, null, React.createElement(Guard, { key: "guard" })));
+    assert.deepEqual(ownership, [true, false], "the committed release is still observed");
+  } finally { await tree.unmount(); }
+});
+
+test("retained layer activity wakes only subscribers while live coverage remains immediate", async () => {
+  const tree = mount();
+  const activity = [], blocking = [], renderedActivity = [];
+  let legacyRenders = 0;
+  const observe = active => { activity.push(active); };
+  function ActivityLeaf() { renderedActivity.push(useAnimationActivity()); return null; }
+  function BlockingLeaf() { blocking.push(useOverlayBlocked()); return null; }
+  function LegacyTree() {
+    legacyRenders++;
+    React.useContext(AnimationActivityContext);
+    useAnimationActivityEffect(observe);
+    return React.createElement(React.Fragment, null, React.createElement(ActivityLeaf), React.createElement(BlockingLeaf));
+  }
+  const body = React.createElement(LegacyTree);
+  const render = (active, covered, blocking = active) => tree.render(React.createElement(OverlayHost, null,
+    React.createElement(OverlayPortal, { key: "retained", active, blocking }, body),
+    covered ? React.createElement(OverlayPortal, { key: "cover" }, React.createElement("div", null, "Child")) : null));
+  try {
+    await render(false, false);
+    assert.deepEqual(activity, [false], "a dormant layer starts paused");
+    await render(false, true);
+    assert.equal(blocking.at(-1), true, "even dormant focus guards observe real coverage immediately");
+    assert.equal(legacyRenders, 1);
+    await render(true, false);
+    assert.deepEqual(activity, [false, true]);
+    assert.equal(renderedActivity.at(-1), true, "render subscribers resume normally");
+    await render(true, true);
+    assert.deepEqual(activity, [false, true, false], "covering cancels work in the publication commit");
+    assert.equal(blocking.at(-1), true);
+    await render(true, false);
+    assert.deepEqual(activity, [false, true, false, true]);
+    await render(false, true, true);
+    assert.equal(blocking.at(-1), true, "retained blocking exits still observe coverage");
+    await render(false, false);
+    assert.equal(activity.at(-1), false);
+    assert.equal(renderedActivity.at(-1), false);
+    assert.equal(legacyRenders, 1, "no layer activation, coverage or exit propagates through retained legacy contexts");
+  } finally { await tree.unmount(); }
+});
+
 test("changed blocking/active flags and new children still publish", async () => {
   resetWork();
   let setVariant;
@@ -540,6 +625,52 @@ test("an abandoned warm opening cannot retain an invisible panel or start its an
   }
 });
 
+test("optional entered work waits for both animations and ignores cancelled, stale and unmounted openings", async () => {
+  const { useOverlayPresence } = load(resolve(sourceRoot, "hooks/use-overlay-presence.ts"));
+  const tree = mount();
+  const reduced = motion.reducedMotion;
+  let entries = 0;
+  const entered = () => { entries++; };
+  function Probe({ visible, ready }) {
+    useOverlayPresence(visible, () => {}, { ready, onEntered: entered });
+    return null;
+  }
+  const render = (visible, ready = true) => tree.render(React.createElement(Probe, { visible, ready }));
+  try {
+    motion.reducedMotion = false;
+    resetWork();
+    await render(true, false);
+    assert.equal(animationEnds.length, 0, "a measurement-gated surface cannot start optional work");
+    await render(true);
+    const first = animationEnds.filter(animation => animation.value === 1);
+    assert.deepEqual(first.map(animation => animation.kind).sort(), ["effects", "spatial"]);
+    await act(async () => first.find(animation => animation.kind === "effects").callback(true));
+    assert.equal(entries, 0, "the fade alone is not the complete entrance");
+    await render(false);
+    await act(async () => first.find(animation => animation.kind === "spatial").callback(true));
+    assert.equal(entries, 0, "closing cancels optional opening work immediately");
+    animationEnds.length = 0;
+    await render(true);
+    const next = animationEnds.filter(animation => animation.value === 1);
+    await act(async () => first.forEach(animation => animation.callback(true)));
+    assert.equal(entries, 0, "callbacks from a previous generation cannot complete a reopen");
+    await act(async () => next.forEach(animation => animation.callback(true)));
+    assert.equal(entries, 1);
+    await act(async () => next.forEach(animation => animation.callback(true)));
+    assert.equal(entries, 1, "completion notifies once per opening");
+    motion.reducedMotion = true;
+    await render(false);
+    await render(true);
+    assert.equal(entries, 2, "reduced motion is ready without a timer");
+    await tree.unmount();
+    await act(async () => next.forEach(animation => animation.callback(true)));
+    assert.equal(entries, 2);
+  } finally {
+    if (tree.container.isConnected) await tree.unmount();
+    motion.reducedMotion = reduced;
+  }
+});
+
 test("web ContextMenu measures from the layout report instead of forcing layout in the commit", async t => {
   resetWork();
   const events = { commits: 0, entranceStarted: 0 };
@@ -608,6 +739,166 @@ test("native ContextMenu keeps its entrance gated on the async body measurement"
     await tree.unmount();
   } finally {
     reactNative.Platform.OS = "web";
+  }
+});
+
+test("prepared menus measure offscreen without isolation and open without remounting or remeasuring", async t => {
+  for (const platform of ["web", "android"]) await t.test(platform, async () => {
+    reactNative.Platform.OS = platform;
+    const tree = mount();
+    const reduced = motion.reducedMotion;
+    let mounts = 0;
+    function Content() { React.useEffect(() => { mounts++; }, []); return React.createElement("span", null, "Actions"); }
+    const content = React.createElement(Content);
+    const render = visible => tree.render(React.createElement(OverlayHost, null,
+      React.createElement("button", { id: "prepared-background" }, "Article"),
+      React.createElement(ContextMenu, { visible, keepMounted: true, onDismiss() {}, sessionKey: "article", pageKey: "actions",
+        anchor: visible ? { x: 20, y: 700, width: 40, height: 40 } : null }, content)));
+    try {
+      motion.reducedMotion = false;
+      resetWork();
+      await render(false);
+      const menu = tree.container.querySelector('[role="menu"]');
+      assert.ok(menu, "the dormant controls are actually constructed");
+      const root = menu.parentElement;
+      assert.equal(root.getAttribute("aria-hidden"), "true");
+      assert.equal(root.getAttribute("data-native-pointer-events"), "none");
+      if (platform === "web") {
+        assert.equal(JSON.parse(root.getAttribute("data-teststyle")).visibility, "hidden", "hover/hit testing is impossible");
+        assert.equal(document.body.style.overflow, "");
+      }
+      assert.equal(registryWork.api.isBlocked(), false, "dormant backdrop menus must never isolate the article");
+      assert.equal(timingCalls.filter(call => call.value === 1).length, 0, "preparation cannot start an entrance");
+      if (platform === "android") await act(async () => pendingMeasures.at(-1).callback(0, 0, 240, 320));
+      else await act(async () => layoutHandlers.get(menu.firstElementChild)({ nativeEvent: { layout: { height: 320 } } }));
+      const measured = pendingMeasures.length;
+      timingCalls.length = 0;
+      await render(true);
+      assert.equal(tree.container.querySelector('[role="menu"]'), menu, "the same native/DOM surface opens");
+      assert.equal(mounts, 1);
+      assert.equal(pendingMeasures.length, measured, "the measured dormant body needs no opening round trip");
+      assert.equal(timingCalls.filter(call => call.value === 1).length, 1);
+      assert.equal(JSON.parse(menu.getAttribute("data-teststyle")).top, 358, "the real anchor, not the dormant origin, places the first frame");
+      assert.equal(registryWork.api.isBlocked(), true, "opening isolation is immediate");
+      motion.reducedMotion = true;
+      await render(false);
+      assert.equal(tree.container.querySelector('[role="menu"]'), menu, "exit finishes into the dormant surface");
+      assert.equal(registryWork.api.isBlocked(), false);
+      assert.equal(mounts, 1);
+      if (platform === "web") assert.equal(document.body.style.overflow, "");
+    } finally {
+      await tree.unmount();
+      motion.reducedMotion = reduced;
+      reactNative.Platform.OS = "web";
+    }
+  });
+});
+
+test("prepared menus reject stale article/content/viewport heights and cancel old native reports", async () => {
+  reactNative.Platform.OS = "android";
+  const tree = mount();
+  const dimensions = reactNative.useWindowDimensions;
+  let fontScale = 1;
+  reactNative.useWindowDimensions = () => ({ width: 390, height: 844, fontScale });
+  const contentA = React.createElement("span", null, "Article A");
+  const contentB = React.createElement("span", null, "Article B with different actions");
+  const render = (visible, content = contentA, sessionKey = "a") => tree.render(React.createElement(OverlayHost, null,
+    React.createElement(ContextMenu, { visible, keepMounted: true, onDismiss() {}, sessionKey, pageKey: "actions",
+      anchor: visible ? { x: 20, y: 700, width: 40, height: 40 } : null }, content)));
+  try {
+    resetWork();
+    await render(false);
+    await act(async () => pendingMeasures.at(-1).callback(0, 0, 240, 320));
+    fontScale = 1.5;
+    await render(false, contentB, "b");
+    const stale = pendingMeasures.at(-1);
+    fontScale = 2;
+    await render(true, contentB, "b");
+    assert.equal(timingCalls.filter(call => call.value === 1).length, 0, "an old dormant height cannot start the entrance");
+    await act(async () => stale.callback(0, 0, 240, 600));
+    assert.equal(timingCalls.filter(call => call.value === 1).length, 0, "a cancelled old layout must not release readiness");
+    const superseded = pendingMeasures.at(-1);
+    const body = tree.container.querySelector('[role="menu"]').firstElementChild;
+    await act(async () => layoutHandlers.get(body)({ nativeEvent: { layout: { height: 600 } } }));
+    assert.equal(timingCalls.filter(call => call.value === 1).length, 0, "a queued old onLayout height must not populate the prepared cache");
+    await act(async () => superseded.callback(0, 0, 240, 600));
+    assert.equal(timingCalls.filter(call => call.value === 1).length, 0, "a refreshed measurement supersedes earlier requests in the same page");
+    await act(async () => pendingMeasures.at(-1).callback(0, 0, 240, 400));
+    assert.equal(timingCalls.filter(call => call.value === 1).length, 1);
+    const menu = tree.container.querySelector('[role="menu"]');
+    assert.equal(menu.textContent, "Article B with different actions");
+    assert.equal(JSON.parse(menu.getAttribute("data-teststyle")).top, 278);
+  } finally {
+    await tree.unmount();
+    reactNative.Platform.OS = "web";
+    reactNative.useWindowDimensions = dimensions;
+  }
+});
+
+test("same-height dormant content swaps are re-observed and can still open warm", async () => {
+  reactNative.Platform.OS = "android";
+  const tree = mount();
+  const first = React.createElement("span", null, "Actions");
+  const second = React.createElement("span", null, "Updated actions");
+  const render = (visible, content) => tree.render(React.createElement(ContextMenu, {
+    visible, keepMounted: true, onDismiss() {}, sessionKey: "article", pageKey: "actions",
+    anchor: visible ? { x: 20, y: 700, width: 40, height: 40 } : null,
+  }, content));
+  try {
+    resetWork();
+    await render(false, first);
+    await act(async () => pendingMeasures.at(-1).callback(0, 0, 240, 320));
+    const previous = pendingMeasures.length;
+    await render(false, second);
+    assert.ok(pendingMeasures.length > previous, "same-size content still gets a fresh asynchronous report");
+    await act(async () => pendingMeasures.at(-1).callback(0, 0, 240, 320));
+    timingCalls.length = 0;
+    await render(true, second);
+    assert.equal(timingCalls.filter(call => call.value === 1).length, 1);
+    assert.equal(tree.container.querySelector('[role="menu"]').textContent, "Updated actions");
+  } finally { await tree.unmount(); reactNative.Platform.OS = "web"; }
+});
+
+test("web prepared content swaps refresh ResizeObserver without accepting queued old layout reports", async () => {
+  const original = globalThis.ResizeObserver;
+  const observers = [];
+  globalThis.ResizeObserver = class {
+    constructor(callback) { this.callback = callback; observers.push(this); }
+    observe(node) { this.node = node; }
+    disconnect() { this.disconnected = true; }
+    report(height) { this.callback([{ target: this.node, contentRect: { height } }]); }
+  };
+  const tree = mount();
+  const first = React.createElement("span", null, "Actions");
+  const second = React.createElement("span", null, "Updated actions");
+  const render = (visible, content) => tree.render(React.createElement(ContextMenu, {
+    visible, keepMounted: true, onDismiss() {}, sessionKey: "article", pageKey: "actions",
+    anchor: visible ? { x: 20, y: 700, width: 40, height: 40 } : null,
+  }, content));
+  try {
+    resetWork();
+    await render(false, first);
+    const stale = observers.at(-1);
+    await act(async () => stale.report(320));
+    await render(false, second);
+    assert.equal(stale.disconnected, true);
+    const current = observers.at(-1);
+    assert.notEqual(current, stale, "same-size content still gets a fresh initial async observation");
+    await act(async () => stale.report(600));
+    await act(async () => layoutHandlers.get(current.node)({ nativeEvent: { layout: { height: 600 } } }));
+    await act(async () => current.report(320));
+    const reports = observers.length;
+    timingCalls.length = 0;
+    await render(true, second);
+    assert.equal(observers.length, reports, "the valid dormant measurement avoids an opening round trip");
+    assert.equal(timingCalls.filter(call => call.value === 1).length, 1);
+    const menu = tree.container.querySelector('[role="menu"]');
+    assert.equal(menu.textContent, "Updated actions");
+    assert.equal(JSON.parse(menu.getAttribute("data-teststyle")).top, 358, "neither stale source can poison placement");
+  } finally {
+    await tree.unmount();
+    if (original === undefined) delete globalThis.ResizeObserver;
+    else globalThis.ResizeObserver = original;
   }
 });
 

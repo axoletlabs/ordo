@@ -12,7 +12,8 @@
  *    once eagerly and again when the deferred value lands;
  *  - a theme-only change restyles chrome but hands the article no new props
  *    (the article reads ink from the palette context);
- *  - background preview-font arrivals re-render only the typeface control;
+ *  - preview-font arrivals leave visible controls unchanged and update only
+ *    the dormant typeface control after dismissal;
  *  - scrolling with the selection menu open moves its anchor without
  *    re-scanning the article for highlight overlap;
  *  - a real content/highlight change still reaches the article.
@@ -44,15 +45,23 @@ globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 const counts = {
   articleRenders: 0,
   articleHookCalls: 0,
+  previewBatches: 0,
+  previewPreloads: 0,
   headerRenders: 0,
   textRenders: 0,
   selectionChecks: 0,
   segmented: {},
+  segmentedOptions: {},
+  actionItemRenders: 0,
+  menuContent: null,
+  copiedLink: null,
+  tagEditorRenders: 0,
   sheetVisible: 0,
   scrollProps: null,
   articleProps: null,
   settingsButton: null,
   panelDismiss: null,
+  panelEntered: null,
   menuAnchor: null,
 };
 
@@ -165,9 +174,12 @@ let fontRevision = 0;
 const fonts = {
   READER_FONT_FAMILY_LIST: ["serif", "sans", "garamond", "bitter", "jost"],
   readerFontPreviewReady: (family) => previewReady.has(family),
+  resolveReaderFontPreview: (family) => previewReady.has(family) ? `${family}-400` : undefined,
   readerFontsReady: () => true,
   loadReaderFonts: () => Promise.resolve(),
   loadReaderFontPreview: () => Promise.resolve(),
+  loadReaderFontPreviews: () => { counts.previewBatches += 1; return Promise.resolve(); },
+  preloadReaderFontPreviews: () => { counts.previewPreloads += 1; return Promise.resolve(); },
   useReaderFontFamily: (family) => family,
   useReaderFontRevision: () => React.useSyncExternalStore(
     (notify) => { fontListeners.add(notify); return () => fontListeners.delete(notify); },
@@ -188,6 +200,7 @@ const ArticleHtmlStub = React.memo(function ArticleHtmlStub(props) {
 });
 const Segmented = ({ accessibilityLabel, options, value, onChange }) => {
   counts.segmented[accessibilityLabel] = (counts.segmented[accessibilityLabel] ?? 0) + 1;
+  counts.segmentedOptions[accessibilityLabel] = options;
   return React.createElement("div", { "data-segmented": accessibilityLabel },
     options.map((option) => React.createElement("button", {
       key: option.value,
@@ -197,20 +210,32 @@ const Segmented = ({ accessibilityLabel, options, value, onChange }) => {
     }, option.label)));
 };
 const Toggle = () => React.createElement("div", { "data-toggle": "1" });
-const FloatingPanel = ({ visible, onDismiss, children }) => {
-  if (visible) {
-    counts.sheetVisible += 1;
-    counts.panelDismiss = onDismiss;
-  }
-  return visible ? React.createElement("div", { role: "dialog" }, children) : null;
+const PanelPresenceContext = React.createContext(null);
+const FloatingPanel = ({ visible, keepMounted, onDismiss, onEntered, onExited, children }) => {
+  const previous = React.useRef(false);
+  React.useLayoutEffect(() => {
+    if (visible && !previous.current) {
+      counts.sheetVisible += 1;
+      counts.panelDismiss = onDismiss;
+      counts.panelEntered = onEntered;
+    }
+    if (previous.current && !visible) onExited?.();
+    previous.current = visible;
+  }, [onDismiss, onEntered, onExited, visible]);
+  return visible || keepMounted ? React.createElement(PanelPresenceContext.Provider,
+    { value: { visible, rendered: visible } },
+    React.createElement("div", { role: "dialog", "aria-hidden": !visible }, children)) : null;
 };
 const PanelHeader = ({ title }) => React.createElement("div", null, title);
 const LazyMount = ({ active, children }) => (active ? children() : null);
 const ContextMenu = ({ visible, anchor, children }) => {
-  if (visible) counts.menuAnchor = anchor;
+  if (visible) { counts.menuAnchor = anchor; counts.menuContent = children; }
   return visible ? React.createElement("div", { role: "dialog" }, children) : null;
 };
-const ContextMenuItem = (props) => React.createElement("button", { onClick: props.onPress }, props.label);
+const ContextMenuItem = (props) => {
+  counts.actionItemRenders++;
+  return React.createElement("button", { onClick: props.onPress }, props.label);
+};
 const HeaderIconButton = ({ accessibilityLabel, onPress, name }) => {
   const button = React.createElement("button", {
     "data-icon": name,
@@ -262,13 +287,14 @@ const stubs = {
   "../ui/Segmented": { Segmented },
   "../ui/Toggle": { Toggle },
   "../ui/LazyMount": { LazyMount },
+  "../ui/panel-presence": { PanelPresenceContext },
   "./ReaderContents": {
     ReaderContents: React.forwardRef(function ReaderContents(_props, ref) {
       React.useImperativeHandle(ref, () => ({ prepare: noop, open: noop }), []);
       return null;
     }),
   },
-  "../tags/EditTagsSheet": { EditTagsSheet: () => null },
+  "../tags/EditTagsSheet": { EditTagsSheet: () => { counts.tagEditorRenders++; return null; } },
   "../bookmarks/LockPrompt": { LockPrompt: () => null },
   "../bookmarks/ReminderCustomPanel": { ReminderCustomPanel: () => null },
   "../bookmarks/ReminderFlow": {
@@ -359,7 +385,7 @@ const stubs = {
     bookmarkCanBeArticle: () => false,
     canReadInOrdo: () => false,
   },
-  "../../lib/copy-link": { copyLink: () => Promise.resolve(), copyText: () => Promise.resolve() },
+  "../../lib/copy-link": { copyLink: (url) => { counts.copiedLink = url; return Promise.resolve(); }, copyText: () => Promise.resolve() },
   "../../lib/open-website": { ackBookmarkOpened: noop, openExternalBrowser: noop, openLivePage: noop },
   "../../lib/fab-layout": { fabContentPadding: () => 0 },
   "../../hooks/use-reduced-motion-preference": { useReducedMotionPreference: () => false },
@@ -367,16 +393,6 @@ const stubs = {
   "../../lib/session-scope": {
     captureSessionScope: () => ({ generation: 1 }),
     isSessionScopeCurrent: () => true,
-  },
-  "../../hooks/use-animation-activity": {
-    useAnimationActivity: () => {
-      counts.articleHookCalls += 1;
-      return true;
-    },
-    useAnimationActivityEffect: (callback) => {
-      counts.articleHookCalls += 1;
-      React.useEffect(() => callback(true), [callback]);
-    },
   },
   "../../hooks/use-scene-ready": {
     useSceneReady: () => {
@@ -408,6 +424,7 @@ function load(filename) {
   modules.set(filename, module);
   const source = readFileSync(filename, "utf8");
   const { outputText } = ts.transpileModule(source, {
+    fileName: filename,
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
   });
   const localRequire = (name) => {
@@ -432,6 +449,8 @@ function load(filename) {
 }
 
 const ReaderPane = load(resolve(sourceRoot, "components/reader/ReaderPane.tsx")).ReaderPane;
+const ReaderControlsSheet = load(resolve(sourceRoot, "components/reader/ReaderControlsSheet.tsx")).ReaderControlsSheet;
+const activity = load(resolve(sourceRoot, "hooks/use-animation-activity.ts"));
 const delay = (ms) => new Promise((resolveTimer) => setTimeout(resolveTimer, ms));
 async function settle(ms = 20) {
   await React.act(async () => { await delay(ms); });
@@ -446,6 +465,55 @@ const deltasOf = (after, before) => ({
 const segmentedDeltas = (after, before) => Object.fromEntries(
   Object.keys(after).map((label) => [label, after[label] - (before[label] ?? 0)]),
 );
+function resetSegmentedCounts() {
+  for (const key of Object.keys(counts.segmented)) delete counts.segmented[key];
+}
+function createManualScheduler() {
+  const queued = new Map();
+  let nextId = 0;
+  return {
+    schedule(work) {
+      const id = ++nextId;
+      queued.set(id, work);
+      return () => { queued.delete(id); };
+    },
+    runNext() {
+      const first = queued.entries().next().value;
+      if (!first) return false;
+      queued.delete(first[0]);
+      first[1]();
+      return true;
+    },
+    get size() { return queued.size; },
+  };
+}
+async function mountDormantControls(scheduler, scope = activity.createAnimationActivityScope(true)) {
+  const container = document.createElement("div");
+  document.body.appendChild(container);
+  const root = createRoot(container);
+  const ref = React.createRef();
+  await React.act(async () => {
+    root.render(React.createElement(activity.AnimationActivityScopeContext.Provider, { value: scope },
+      React.createElement(ReaderControlsSheet, {
+        ref, effectiveDark: true, workScheduler: scheduler,
+      })));
+    await delay(0);
+  });
+  return {
+    ref,
+    scope,
+    async runNext() {
+      await React.act(async () => {
+        assert.equal(scheduler.runNext(), true, "a queued preparation slice exists");
+        await delay(0);
+      });
+    },
+    async unmount() {
+      await React.act(async () => { root.unmount(); });
+      container.remove();
+    },
+  };
+}
 
 async function mountPane() {
   const container = document.createElement("div");
@@ -534,6 +602,31 @@ test("overflow navigation and dismissal leave the reader pane untouched", async 
   assert.deepEqual(deltasOf(view.counts, before), {
     articleRenders: 0, articleHookCalls: 0, headerRenders: 0, selectionChecks: 0,
   }, "menu/dialog handoff and closing also stay local");
+  assert.equal(view.counts.tagEditorRenders, before.tagEditorRenders,
+    "overflow/highlights must not reconcile the closed tag editor and its nested creation controls");
+});
+
+test("unrelated reader updates preserve measured action identities but invoke the latest callbacks", async (t) => {
+  const previous = detailStore.get();
+  const view = await mountPane();
+  t.after(async () => { await view.unmount(); detailStore.set(previous); });
+  await React.act(async () => {
+    [...document.querySelectorAll("button")].find(node => node.textContent === "ellipsis-horizontal").click();
+  });
+  await settle(20);
+  const content = view.counts.menuContent;
+  const before = view.counts.actionItemRenders;
+  const keys = React.Children.toArray(content.props.children).filter(React.isValidElement).map(child => child.key);
+  assert.equal(new Set(keys).size, keys.length, "retained rows have unique semantic keys");
+  assert.ok(keys.every(key => !/^\.\d+$/.test(key)), "conditional rows must not inherit index-only identities");
+  await React.act(async () => detailStore.set({ ...detailData, readProgress: 0.28, url: "https://changed.example.test/latest" }));
+  await settle(40);
+  assert.equal(view.counts.menuContent, content, "progress/callback changes cannot invalidate a dormant measurement");
+  assert.equal(view.counts.actionItemRenders, before, "the animated action rows are not reconciled again");
+  await React.act(async () => {
+    [...document.querySelectorAll("button")].find(node => node.textContent === "Copy link").click();
+  });
+  assert.equal(view.counts.copiedLink, "https://changed.example.test/latest", "cached rows use the latest committed article callback");
 });
 
 test("a preference press renders the pane once and the panel keeps the optimistic value", async (t) => {
@@ -552,7 +645,7 @@ test("a preference press renders the pane once and the panel keeps the optimisti
   const work = deltasOf(view.counts, before);
   assert.equal(work.headerRenders, 1, "exactly one pane pass, after the deferred content preference lands");
   assert.equal(work.articleRenders, 1, "the article reflows once for the new content preference");
-  assert.equal(work.articleHookCalls, 2, "the article wrapper renders once");
+  assert.equal(work.articleHookCalls, 1, "the article wrapper's scene hook renders once");
   assert.equal(document.querySelector('[data-segmented="Text size"] button[aria-checked="true"]')?.getAttribute("data-label"), "L",
     "the panel shows the new choice without waiting for the deferred pane");
 });
@@ -587,7 +680,7 @@ test("a theme-only change restyles chrome without re-rendering the article wrapp
   await settle(20);
 });
 
-test("background preview faces re-render only the typeface control", async (t) => {
+test("in-flight previews do not reflow visible controls; only dormant typeface adopts them", async (t) => {
   const view = await mountPane();
   t.after(() => view.unmount());
   await React.act(async () => { view.counts.settingsButton?.props.onClick(); });
@@ -596,9 +689,49 @@ test("background preview faces re-render only the typeface control", async (t) =
   await React.act(async () => { fonts.arrivePreview("serif"); });
   await settle(20);
   assert.deepEqual(segmentedDeltas(view.counts.segmented, before.segmented), {
-    "Text size": 0, Typeface: 1, "Line spacing": 0, "Reader theme": 0,
-  });
+    "Text size": 0, Typeface: 0, "Line spacing": 0, "Reader theme": 0,
+  }, "a font arrival must not swap or reconcile controls during the entrance");
   assert.equal(deltasOf(view.counts, before).headerRenders, 0, "the panel chrome does not render for a font arrival");
+  await React.act(async () => view.counts.panelDismiss());
+  await settle(20);
+  assert.deepEqual(segmentedDeltas(view.counts.segmented, before.segmented), {
+    "Text size": 0, Typeface: 1, "Line spacing": 0, "Reader theme": 0,
+  }, "only the hidden typeface group picks up the newly ready face");
+  const beforeReopen = { ...view.counts.segmented };
+  await React.act(async () => view.counts.settingsButton.props.onClick());
+  await settle(20);
+  assert.deepEqual(segmentedDeltas(view.counts.segmented, beforeReopen), {
+    "Text size": 0, Typeface: 0, "Line spacing": 0, "Reader theme": 0,
+  }, "a retained settings opening must not render any animated control group");
+});
+
+test("an early first opening still adopts previews after the real entrance completes", async (t) => {
+  const view = await mountPane();
+  t.after(() => view.unmount());
+  await React.act(async () => view.counts.settingsButton.props.onClick());
+  await settle(20);
+  const before = { ...view.counts.segmented };
+  const optionsBefore = view.counts.segmentedOptions.Typeface;
+  await React.act(async () => fonts.arrivePreview("garamond"));
+  await settle(20);
+  assert.equal(view.counts.segmented.Typeface - before.Typeface, 0, "opening holds an in-flight font arrival");
+  await React.act(async () => view.counts.panelEntered());
+  await settle(20);
+  assert.deepEqual(segmentedDeltas(view.counts.segmented, before), {
+    "Text size": 0, Typeface: 1, "Line spacing": 0, "Reader theme": 0,
+  }, "early-open fallback labels do not lose their previews permanently");
+  const optionsAfter = view.counts.segmentedOptions.Typeface;
+  for (let index = 0; index < optionsBefore.length; index++) {
+    if (optionsBefore[index].value !== "garamond") assert.equal(optionsAfter[index].labelStyle, optionsBefore[index].labelStyle,
+      "one arriving preview preserves every unchanged segment's style identity");
+  }
+  const enteredCounts = { ...view.counts.segmented };
+  await React.act(async () => view.counts.settingsButton.props.onClick());
+  await React.act(async () => fonts.arrivePreview("bitter"));
+  await settle(20);
+  assert.deepEqual(segmentedDeltas(view.counts.segmented, enteredCounts), {
+    "Text size": 0, Typeface: 1, "Line spacing": 0, "Reader theme": 0,
+  }, "an already-visible open does not clear entered and permanently pause previews");
 });
 
 test("scrolling the open selection menu moves its anchor without re-scanning highlights", async (t) => {
@@ -649,7 +782,112 @@ test("highlight changes still reach the article", async (t) => {
   await settle(40);
   const work = deltasOf(view.counts, before);
   assert.equal(work.articleRenders, 1, "a new highlight re-renders the article renderer");
-  assert.equal(work.articleHookCalls, 2, "the wrapper renders once for the changed prop");
+  assert.equal(work.articleHookCalls, 1, "the wrapper's scene hook renders once for the changed prop");
+});
+
+test("dormant reader settings stage one stable group per idle slice", async (t) => {
+  resetSegmentedCounts();
+  for (const family of fonts.READER_FONT_FAMILY_LIST) previewReady.add(family);
+  const scheduler = createManualScheduler();
+  const controls = await mountDormantControls(scheduler);
+  try {
+    await React.act(async () => { controls.ref.current.prepare(); await delay(0); });
+    assert.equal(scheduler.size, 1, "preparation is scheduled as one idle slice");
+    await controls.runNext();
+    assert.deepEqual(counts.segmented, { "Text size": 1 }, "the first group is the only dormant body");
+    assert.equal(scheduler.size, 1, "the next group waits for its own idle slice");
+
+    await React.act(async () => { controls.scope.setActive(false); await delay(0); });
+    assert.equal(scheduler.size, 0, "the real background scope cancels the next group");
+    await React.act(async () => { controls.scope.setActive(true); await delay(0); });
+    assert.equal(scheduler.size, 1, "uncovering resumes exactly one idle slice");
+
+    await controls.runNext();
+    assert.deepEqual(counts.segmented, { "Text size": 1, Typeface: 1 },
+      "the appended group does not remount the first group");
+    assert.equal(scheduler.size, 1);
+
+    await controls.runNext();
+    assert.deepEqual(counts.segmented, { "Text size": 1, Typeface: 1, "Line spacing": 1 });
+    await controls.runNext();
+    assert.deepEqual(counts.segmented, {
+      "Text size": 1, Typeface: 1, "Line spacing": 1, "Reader theme": 1,
+    });
+    await controls.runNext();
+    assert.equal(scheduler.size, 0, "all five groups are prepared");
+    assert.equal(document.querySelectorAll('[data-toggle="1"]').length, 1,
+      "the AMOLED row is the fifth group");
+  } finally {
+    await controls.unmount();
+  }
+});
+
+test("dormant preview prefetch waits for groups; visible entrance registers later", async (t) => {
+  resetSegmentedCounts();
+  previewReady.clear();
+  counts.previewBatches = 0;
+  counts.previewPreloads = 0;
+  const scheduler = createManualScheduler();
+  const controls = await mountDormantControls(scheduler);
+  try {
+    await React.act(async () => { controls.ref.current.prepare(); await delay(0); });
+    await controls.runNext(); // prepared body, group 1
+    await controls.runNext(); // group 2
+    await controls.runNext(); // group 3
+    await controls.runNext(); // group 4
+    assert.equal(counts.previewPreloads, 0, "no prefetch while groups are still mounting");
+    assert.equal(counts.previewBatches, 0);
+    assert.equal(scheduler.size, 1, "the final group slice is queued");
+    await controls.runNext(); // group 5; schedules the dormant prefetch
+    assert.equal(counts.previewPreloads, 0, "prefetch is not run inside the group slice");
+    assert.equal(counts.previewBatches, 0);
+    assert.equal(scheduler.size, 1, "one prefetch follows the completed group series");
+    await controls.runNext();
+    assert.equal(counts.previewPreloads, 1, "dormant work fetches/decodes only");
+    assert.equal(counts.previewBatches, 0, "dormant work never registers fonts");
+    assert.equal(scheduler.size, 0);
+
+    await React.act(async () => { controls.ref.current.open(); await delay(0); });
+    assert.equal(counts.previewBatches, 0, "opening before entrance does not register");
+    await React.act(async () => { counts.panelEntered?.(); await delay(0); });
+    assert.equal(scheduler.size, 1, "the visible entrance schedules registration");
+    await controls.runNext();
+    assert.equal(counts.previewBatches, 1, "registration runs only after the entrance");
+    assert.equal(counts.previewPreloads, 1, "prefetch is not repeated");
+    assert.equal(scheduler.size, 0);
+  } finally {
+    await controls.unmount();
+  }
+});
+
+test("urgent reader settings open renders all groups, cancels staging, and retains them", async (t) => {
+  resetSegmentedCounts();
+  for (const family of fonts.READER_FONT_FAMILY_LIST) previewReady.add(family);
+  const scheduler = createManualScheduler();
+  const controls = await mountDormantControls(scheduler);
+  try {
+    await React.act(async () => { controls.ref.current.prepare(); await delay(0); });
+    await controls.runNext();
+    await controls.runNext();
+    assert.deepEqual(counts.segmented, { "Text size": 1, Typeface: 1 },
+      "only two groups are prepared before the urgent open");
+    assert.equal(scheduler.size, 1, "a third group is still queued");
+
+    await React.act(async () => { controls.ref.current.open(); await delay(0); });
+    assert.deepEqual(counts.segmented, {
+      "Text size": 1, Typeface: 1, "Line spacing": 1, "Reader theme": 1,
+    }, "the first visible commit appends every remaining group");
+    assert.equal(document.querySelectorAll('[data-toggle="1"]').length, 1);
+    assert.equal(scheduler.size, 0, "opening cancels the dormant staging slice");
+
+    const opened = { ...counts.segmented };
+    await React.act(async () => { counts.panelDismiss(); await delay(0); });
+    await React.act(async () => { controls.ref.current.open(); await delay(0); });
+    assert.deepEqual(counts.segmented, opened, "reopening retains every mounted control");
+    assert.equal(scheduler.size, 0, "a retained panel does not restart staging");
+  } finally {
+    await controls.unmount();
+  }
 });
 
 test("opening overflow never renders a hidden large highlight collection", async (t) => {

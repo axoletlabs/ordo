@@ -1,4 +1,4 @@
-import React, { useCallback, useImperativeHandle, useMemo, useState } from "react";
+import React, { useCallback, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { APP_NAME, formatHighlightQuote, type BookmarkDto, type HighlightDto } from "@ordo/shared";
 import { HeaderIconButton } from "../ui/Header";
@@ -23,9 +23,16 @@ import { formatReminderWhen } from "../../lib/bookmark-reminders";
 import { copyText } from "../../lib/copy-link";
 import { domainFromUrl } from "../../lib/format";
 import type { MenuAnchorRect } from "../../lib/menu-anchor";
+import { usePreparedReaderOverlay } from "./use-prepared-reader-overlay";
+import type { ReaderWorkScheduler } from "./reader-work";
 
-export interface ReaderActionsHandle { close(): void }
+// Keep the editor's existing hook/draft lifetime, but do not reconcile its
+// hidden CreateTagPanel just because another overflow page opens or closes.
+const ReaderTagEditor = React.memo(EditTagsSheet);
+
+export interface ReaderActionsHandle { close(): void; prepare(): void }
 interface ReaderActionsProps {
+  workScheduler: ReaderWorkScheduler;
   bookmark: BookmarkDto;
   highlights: readonly HighlightDto[];
   hasHtml: boolean;
@@ -50,47 +57,59 @@ interface ReaderActionsProps {
 export const ReaderActions = React.memo(React.forwardRef<ReaderActionsHandle, ReaderActionsProps>(function ReaderActions({
   bookmark, highlights, hasHtml, hasContents, website, canRead, onOpen, onContents,
   onShare, onCopyLink, onOpenOriginal, onOpenExternal, onRefresh, onRead, onClassify, onRemoveHighlight,
+  workScheduler,
 }, ref) {
   const { palette } = useTheme();
   const { data: serverInfo } = useServerInfo();
   const reminders = serverInfo?.reminders === true;
   const [page, setPage] = useState<"actions" | "highlights" | "tags" | "remind" | "remind-custom" | null>(null);
   const [anchor, setAnchor] = useState<MenuAnchorRect | null>(null);
+  const { prepared, prepare, retain } = usePreparedReaderOverlay(workScheduler);
   const close = useCallback(() => setPage(null), []);
   const showActions = useCallback(() => setPage("actions"), []);
-  useImperativeHandle(ref, () => ({ close }), [close]);
+  useImperativeHandle(ref, () => ({ close, prepare }), [close, prepare]);
   const { save: saveReminder, busy: reminderBusy } = useSaveReminder(
     bookmark, close, page === "remind" || page === "remind-custom",
   );
   const remindNow = useMemo(() => new Date(), [page, bookmark.id, bookmark.remindAt]);
-  const run = (action: () => void) => { close(); action(); };
+  const run = useCallback((action: () => void) => { close(); action(); }, [close]);
+  const callbacks = useRef({ onContents, onShare, onCopyLink, onOpenOriginal, onOpenExternal, onRefresh, onRead, onClassify });
+  useLayoutEffect(() => {
+    callbacks.current = { onContents, onShare, onCopyLink, onOpenOriginal, onOpenExternal, onRefresh, onRead, onClassify };
+  }, [onClassify, onContents, onCopyLink, onOpenExternal, onOpenOriginal, onRead, onRefresh, onShare]);
+  const isArticle = bookmarkIsArticle(bookmark);
+  const canBeArticle = bookmarkCanBeArticle(bookmark);
+  const remindAt = bookmark.remindAt;
+  // Local page/visibility changes must reuse the prepared controls, not walk
+  // every pressable/Reanimated mapper again. Data/theme changes still update.
+  const actionItems = useMemo(() => <>
+        {hasContents ? <ContextMenuItem key="contents" icon="list-outline" label="Table of contents" onPress={() => run(callbacks.current.onContents)} /> : null}
+        {hasHtml && !website ? <ContextMenuItem key="highlights" icon="color-fill-outline" label="Highlights" onPress={() => setPage("highlights")} /> : null}
+        {website ? <ContextMenuItem key="refresh" icon="refresh-outline" label="Refresh" onPress={() => run(callbacks.current.onRefresh)} /> : null}
+        <ContextMenuItem key="share" icon="share-social-outline" label={website ? "Share page" : "Share article"} onPress={() => run(callbacks.current.onShare)} />
+        <ContextMenuItem key="copy-link" icon="link-outline" label="Copy link" onPress={() => run(callbacks.current.onCopyLink)} />
+        <ContextMenuItem key="tags" icon="pricetags-outline" label="Edit tags" onPress={() => setPage("tags")} />
+        {reminders ? <ContextMenuItem key="remind" icon="alarm-outline" label={remindAt != null ? "Edit reminder" : "Remind"}
+          trailing={remindAt != null ? <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
+            {formatReminderWhen(remindAt)}</Text> : undefined} onPress={() => setPage("remind")} /> : null}
+        {website && canRead ? <ContextMenuItem key="read" icon="reader-outline" label={`Read in ${APP_NAME}`} onPress={() => run(callbacks.current.onRead)} /> : null}
+        {isArticle ? <ContextMenuItem key="classify" icon="globe-outline" label="Mark as website" onPress={() => run(() => callbacks.current.onClassify(false))} />
+          : canBeArticle ? <ContextMenuItem key="classify" icon="reader-outline" label="Mark as article" onPress={() => run(() => callbacks.current.onClassify(true))} /> : null}
+        <ContextMenuItem key="open" icon={website ? "open-outline" : "globe-outline"}
+          label={website ? "Open in external browser" : "Open original"} onPress={() => run(website ? callbacks.current.onOpenExternal : callbacks.current.onOpenOriginal)} />
+      </>, [canBeArticle, canRead, hasContents, hasHtml, isArticle, remindAt, reminders, run, website]);
 
   return <>
     <HeaderIconButton name="ellipsis-horizontal" color={palette.text}
       accessibilityLabel={website ? "More page actions" : "More article actions"}
-      onPress={(rect) => { setAnchor(rect); setPage("actions"); onOpen(); }} />
+      onPress={(rect) => { retain(); setAnchor(rect); setPage("actions"); onOpen(); }} />
     <ContextMenu visible={page === "actions" || page === "remind"} onDismiss={close} anchor={anchor}
-      width={reminders ? REMINDER_MENU_WIDTH : undefined}
-      sessionKey={page ? bookmark.id : undefined} pageKey={page === "remind" ? "remind" : "actions"}>
+      width={reminders ? REMINDER_MENU_WIDTH : undefined} keepMounted={prepared}
+      sessionKey={bookmark.id} pageKey={page === "remind" ? "remind" : "actions"}>
       {page === "remind" ? <ReminderPresetItems bookmark={bookmark} now={remindNow} busy={reminderBusy}
-        showBack onBack={() => setPage("actions")} onPick={saveReminder} onCustom={() => setPage("remind-custom")} /> : <>
-        {hasContents ? <ContextMenuItem icon="list-outline" label="Table of contents" onPress={() => run(onContents)} /> : null}
-        {hasHtml && !website ? <ContextMenuItem icon="color-fill-outline" label="Highlights" onPress={() => setPage("highlights")} /> : null}
-        {website ? <ContextMenuItem icon="refresh-outline" label="Refresh" onPress={() => run(onRefresh)} /> : null}
-        <ContextMenuItem icon="share-social-outline" label={website ? "Share page" : "Share article"} onPress={() => run(onShare)} />
-        <ContextMenuItem icon="link-outline" label="Copy link" onPress={() => run(onCopyLink)} />
-        <ContextMenuItem icon="pricetags-outline" label="Edit tags" onPress={() => setPage("tags")} />
-        {reminders ? <ContextMenuItem icon="alarm-outline" label={bookmark.remindAt != null ? "Edit reminder" : "Remind"}
-          trailing={bookmark.remindAt != null ? <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
-            {formatReminderWhen(bookmark.remindAt)}</Text> : undefined} onPress={() => setPage("remind")} /> : null}
-        {website && canRead ? <ContextMenuItem icon="reader-outline" label={`Read in ${APP_NAME}`} onPress={() => run(onRead)} /> : null}
-        {bookmarkIsArticle(bookmark) ? <ContextMenuItem icon="globe-outline" label="Mark as website" onPress={() => run(() => onClassify(false))} />
-          : bookmarkCanBeArticle(bookmark) ? <ContextMenuItem icon="reader-outline" label="Mark as article" onPress={() => run(() => onClassify(true))} /> : null}
-        <ContextMenuItem icon={website ? "open-outline" : "globe-outline"}
-          label={website ? "Open in external browser" : "Open original"} onPress={() => run(website ? onOpenExternal : onOpenOriginal)} />
-      </>}
+        showBack onBack={() => setPage("actions")} onPick={saveReminder} onCustom={() => setPage("remind-custom")} /> : actionItems}
     </ContextMenu>
-    <EditTagsSheet visible={page === "tags"} bookmark={bookmark} onDismiss={close} />
+    <ReaderTagEditor visible={page === "tags"} bookmark={bookmark} onDismiss={close} />
     <ReminderCustomPanel visible={page === "remind-custom"} initialUnix={bookmark.remindAt ?? null} busy={reminderBusy}
       onDismiss={() => setPage("remind")} onConfirm={(unix) => saveReminder(unix)} />
     <LazyMount active={page === "highlights"}>

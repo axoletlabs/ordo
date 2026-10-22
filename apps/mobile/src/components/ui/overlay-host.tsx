@@ -13,15 +13,46 @@
 import React, { createContext, useContext, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
-import { createOverlayRegistry, topBlockingLayer } from "../../lib/overlay-registry";
+import { createOverlayRegistry, topBlockingLayer, type OverlayLayer } from "../../lib/overlay-registry";
 import { isolateModal } from "../../lib/modal-isolation";
 import { AnimationActivityContext, AnimationActivityScopeContext, createAnimationActivityScope } from "../../hooks/use-animation-activity";
 
 type OverlayApi = ReturnType<typeof createOverlayRegistry<React.ReactNode>>;
+type BlockingApi = Pick<OverlayApi, "subscribe" | "isBlocked">;
 
 const OverlayContext = createContext<OverlayApi | null>(null);
-const OverlayBlockedContext = createContext(false);
-export const useOverlayBlocked = () => useContext(OverlayBlockedContext);
+const OverlayBlockedContext = createContext<BlockingApi | null>(null);
+const BackgroundBlockingContext = createContext<OverlayApi | null>(null);
+const NO_SUBSCRIBE = () => () => {};
+const NOT_BLOCKED = () => false;
+export function useOverlayBlocked() {
+  const background = useContext(BackgroundBlockingContext);
+  const layer = useContext(OverlayBlockedContext);
+  const blocking = background ?? layer;
+  return useSyncExternalStore(blocking?.subscribe ?? NO_SUBSCRIBE,
+    blocking?.isBlocked ?? NOT_BLOCKED, blocking?.isBlocked ?? NOT_BLOCKED);
+}
+
+/** Effect-only global modal ownership for background focus guards. Unlike the
+ * layer-local render hook, this updates committed refs/cancels pending takes
+ * synchronously without re-rendering the covered search/header controls. */
+export function useOverlayBlockingEffect(effect: (blocked: boolean) => void) {
+  const api = useContext(OverlayContext);
+  useLayoutEffect(() => {
+    let disposed = false;
+    let previous: boolean | undefined;
+    const reconcile = () => {
+      if (disposed) return;
+      const blocked = api?.isBlocked() ?? false;
+      if (blocked === previous) return;
+      previous = blocked;
+      effect(blocked);
+    };
+    const unsubscribe = api?.subscribe(reconcile);
+    reconcile();
+    return () => { disposed = true; unsubscribe?.(); };
+  }, [api, effect]);
+}
 
 let nextId = 0;
 
@@ -43,7 +74,11 @@ function OverlayBackground({ api, children }: { api: OverlayApi; children: React
   // provider; only animation leaf hooks subscribe to the scope.
   const activity = useMemo(() => createAnimationActivityScope(), []);
   useLayoutEffect(() => { activity.setActive(!blocked); }, [activity, blocked]);
-  return <OverlayBlockedContext.Provider value={blocked}>
+  // The background's provider identity never flips. Actual blocking consumers
+  // subscribe at their leaves; publishing a menu must not propagate a changed
+  // context through every article/list fiber merely to find those consumers.
+  return <BackgroundBlockingContext.Provider value={api}>
+    <OverlayBlockedContext.Provider value={null}>
     {/* Web already has inert isolation and a full-viewport blocking scrim.
         Toggling inherited CSS pointer-events here dirties the entire article
         subtree before a popup can paint. Native keeps its cheap hit-test gate. */}
@@ -53,7 +88,8 @@ function OverlayBackground({ api, children }: { api: OverlayApi; children: React
         <AnimationActivityContext.Provider value={true}>{children}</AnimationActivityContext.Provider>
       </AnimationActivityScopeContext.Provider>
     </View>
-  </OverlayBlockedContext.Provider>;
+    </OverlayBlockedContext.Provider>
+  </BackgroundBlockingContext.Provider>;
 }
 
 function OverlayLayers({ api }: { api: OverlayApi }) {
@@ -78,27 +114,43 @@ function OverlayLayers({ api }: { api: OverlayApi }) {
   }, []);
 
   return (
+    <BackgroundBlockingContext.Provider value={null}>
     <View
       ref={host}
       pointerEvents={layers.length > 0 ? "box-none" : "none"}
       style={styles.host}
       collapsable={false}
     >
-      {layers.map((layer, index) => (
-        <OverlayBlockedContext.Provider key={layer.id} value={index < topIndex}>
-          <View pointerEvents={index < topIndex ? "none" : "box-none"}
-            importantForAccessibility={index < topIndex ? "no-hide-descendants" : "auto"}
-            accessibilityElementsHidden={index < topIndex}
-            {...(Platform.OS === "web" ? { dataSet: { overlayLayer: layer.id } } : {})}
-            style={StyleSheet.absoluteFill}>
-            <AnimationActivityContext.Provider value={layer.active && index >= topIndex}>
-              {layer.node}
-            </AnimationActivityContext.Provider>
-          </View>
-        </OverlayBlockedContext.Provider>
-      ))}
+      {layers.map((layer, index) => <OverlayLayerSurface key={layer.id} api={api} layer={layer} covered={index < topIndex} />)}
     </View>
+    </BackgroundBlockingContext.Provider>
   );
+}
+
+function OverlayLayerSurface({ api, layer, covered }: { api: OverlayApi; layer: OverlayLayer<React.ReactNode>; covered: boolean }) {
+  const [activity] = React.useState(() => createAnimationActivityScope(layer.active && !covered));
+  useLayoutEffect(() => { activity.setActive(layer.active && !covered); }, [activity, layer.active, covered]);
+  // Derive coverage directly from the registry, not a later effect/ref. Native
+  // focus guards see the published owner immediately, including in dormant and
+  // exiting layers, without a context walk through every retained control.
+  const blocking = useMemo<BlockingApi>(() => ({ subscribe: api.subscribe, isBlocked: () => {
+    const layers = api.getLayers();
+    const index = layers.findIndex(candidate => candidate.id === layer.id);
+    const topId = topBlockingLayer(layers);
+    const top = layers.findIndex(candidate => candidate.id === topId);
+    return index >= 0 && index < top;
+  } }), [api, layer.id]);
+  return <OverlayBlockedContext.Provider value={blocking}>
+    <View pointerEvents={covered ? "none" : "box-none"}
+      importantForAccessibility={covered ? "no-hide-descendants" : "auto"}
+      accessibilityElementsHidden={covered}
+      {...(Platform.OS === "web" ? { dataSet: { overlayLayer: layer.id } } : {})}
+      style={StyleSheet.absoluteFill}>
+      <AnimationActivityScopeContext.Provider value={activity}>
+        <AnimationActivityContext.Provider value={true}>{layer.node}</AnimationActivityContext.Provider>
+      </AnimationActivityScopeContext.Provider>
+    </View>
+  </OverlayBlockedContext.Provider>;
 }
 
 /** Render `children` into the root overlay host. Falls back in-place if none. */

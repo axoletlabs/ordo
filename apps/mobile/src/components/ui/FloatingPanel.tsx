@@ -18,6 +18,7 @@ import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { useOverlayFocus } from "../../hooks/use-overlay-focus";
 import { useScrimPress } from "../../hooks/use-scrim-press";
 import { PanelTitleContext } from "./panel-title";
+import { PanelPresenceContext } from "./panel-presence";
 import { PanelHeader } from "./PanelHeader";
 import { PanelActions } from "./SheetActionRow";
 import { ThemedScrollView } from "./ThemedScrollView";
@@ -42,6 +43,8 @@ export interface FloatingPanelProps {
   visible: boolean;
   onDismiss: () => void;
   onExited?: () => void;
+  /** The opening fade and spatial spring have both settled. */
+  onEntered?: () => void;
   /** Handoff hook: runs the moment the exit fade starts, while this panel's
    * retained contents finish fading beneath the successor surface. */
   onExiting?: () => void;
@@ -82,6 +85,7 @@ function FloatingPanelSurface({
   visible,
   onDismiss,
   onExited,
+  onEntered,
   onExiting,
   triggerRef,
   children,
@@ -126,7 +130,7 @@ function FloatingPanelSurface({
   }, [dismissible, onDismiss]);
   const scrimPress = useScrimPress(visible && interactive && !obscured && dismissOnScrim, hideAndDismiss);
   const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, {
-    interactive: interactive && !obscured, onExited, onExiting, ready: Platform.OS === "web" || measured,
+    interactive: interactive && !obscured, onEntered, onExited, onExiting, ready: Platform.OS === "web" || measured,
   });
   React.useEffect(() => {
     if (!rendered && !keepMounted) setMeasured(false);
@@ -268,6 +272,7 @@ function FloatingPanelSurface({
 
   const inputFocusScope = useInputFocusScope(visible && rendered && interactive && !obscured,
     Platform.OS === "web" || measured, visible);
+  const presenceScope = React.useMemo(() => ({ visible, rendered }), [visible, rendered]);
 
   if (!rendered && !keepMounted) return null;
 
@@ -306,6 +311,7 @@ function FloatingPanelSurface({
   return (
     <OverlayPortal blocking={rendered} active={visible && interactive && !obscured}>
       <InputFocusScopeContext.Provider value={inputFocusScope}>
+      <PanelPresenceContext.Provider value={presenceScope}>
       <PanelOnShow visible={visible} enabled={inputFocusScope.active && inputFocusScope.ready} onShowRef={onShowRef} />
       <View
         accessibilityViewIsModal={visible && interactive && !obscured}
@@ -387,6 +393,7 @@ function FloatingPanelSurface({
           </Animated.View>
           </View>
       </View>
+      </PanelPresenceContext.Provider>
       </InputFocusScopeContext.Provider>
     </OverlayPortal>
   );

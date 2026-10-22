@@ -145,6 +145,10 @@ function loadFonts() {
     const localRequire = (name) => {
       if (name === "react") return react;
       if (name === "expo-font") return fontModule;
+      if (name === "react-native") return { Platform: { OS: "native" } };
+      if (name === "expo-asset") {
+        return { Asset: { fromModule: () => ({ uri: "https://assets.test/preview.ttf" }) } };
+      }
       if (name.startsWith("@expo-google-fonts/")) {
         const [, library, face] = name.split("/");
         const family = library === "jetbrains-mono" ? "JetBrainsMono" : "Roboto";
@@ -274,8 +278,12 @@ test("reader settings defers all preview families off the open path", () => {
   const sheet = readFileSync(resolve(sourceRoot, "components/reader/ReaderControlsSheet.tsx"), "utf8");
   assert.doesNotMatch(sheet, /READER_FONT_FAMILY_LIST\.forEach\(\(family\) => void loadReaderFont/,
     "opening the panel must not start every preview family synchronously");
-  assert.match(sheet, /loadReaderFontPreview\(family\)/, "previews load only their regular face");
-  assert.match(sheet, /scheduleIdleWork\(\(\) => \{/, "each preview family loads on an idle slice");
-  assert.match(sheet, /PREVIEW_DELAY_MS \+ index \* PREVIEW_STAGGER_MS/, "preview loads wait for the entrance and stagger");
+  assert.match(sheet, /loadReaderFontPreview\(family\)/, "native previews load only their regular face");
+  assert.match(sheet, /Platform\.OS === "web"/, "web selects the batch path");
+  assert.match(sheet, /preloadReaderFontPreviews\(families\)/, "dormant web work prefetches without registering");
+  assert.match(sheet, /loadReaderFontPreviews\(families\)/, "web registers previews as one batch");
+  assert.match(sheet, /workScheduler\.schedule\(/, "preview work yields to the reader's idle scheduler");
+  assert.match(sheet, /index \* PREVIEW_STAGGER_MS/, "preview loads stagger instead of serializing");
+  assert.doesNotMatch(sheet, /PREVIEW_DELAY_MS/, "previews use no fixed post-open wait");
   assert.doesNotMatch(sheet, /loadReaderFontPreview\(family\)\.then/, "one slow font must not serialize the rest");
 });

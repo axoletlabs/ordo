@@ -197,11 +197,11 @@ const ReaderContents = React.forwardRef(function ReaderContents(_props, ref) {
   return null;
 });
 const ReaderActions = React.forwardRef(function ReaderActions(_props, ref) {
-  React.useImperativeHandle(ref, () => ({ close() {} }), []);
+  React.useImperativeHandle(ref, () => ({ close() {}, prepare() {} }), []);
   return React.createElement("div", { "data-actions": "1" });
 });
 const ReaderControlsSheet = React.forwardRef(function ReaderControlsSheet(_props, ref) {
-  React.useImperativeHandle(ref, () => ({ open() {} }), []);
+  React.useImperativeHandle(ref, () => ({ open() {}, prepare() {} }), []);
   return null;
 });
 const Header = ({ title, right }) => {

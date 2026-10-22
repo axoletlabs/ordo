@@ -12,7 +12,7 @@ import { useAuthStore } from "../../store/auth";
 import { useTheme } from "../../theme/ThemeProvider";
 import { layout, radius, spacing } from "../../theme/tokens";
 import { registerSearchFieldFocus } from "../../lib/search-field-focus";
-import { useOverlayBlocked } from "../ui/overlay-host";
+import { useOverlayBlockingEffect } from "../ui/overlay-host";
 import { nativeFocusPermitted } from "../ui/input-focus-scope";
 import { MaterialIcon } from "../ui/MaterialIcon";
 import { Input } from "../ui/Input";
@@ -52,9 +52,7 @@ const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoF
   const [text, setText] = useState(query);
   const focused = useRef(false);
   const [editing, setEditing] = useState(false);
-  const overlayBlocked = useOverlayBlocked();
-  const overlayBlockedRef = useRef(overlayBlocked);
-  useLayoutEffect(() => { overlayBlockedRef.current = overlayBlocked; }, [overlayBlocked]);
+  const overlayBlockedRef = useRef(false);
   const clearProgress = useSharedValue(query ? 1 : 0);
   useEffect(() => {
     clearProgress.value = motion.reducedMotion ? (text ? 1 : 0) : withSpring(text ? 1 : 0, materialMotion.effects.fast);
@@ -93,6 +91,16 @@ const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoF
   // autoFocus false -> true request is a new intent.
   const routeFocusIntent = useRef(0);
   const routeFocusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useOverlayBlockingEffect(useCallback((blocked: boolean) => {
+    overlayBlockedRef.current = blocked;
+    // Consume the take when modality commits, not in a later header render.
+    // Unblocking never creates a new intent or refocuses the library.
+    if (!blocked) return;
+    routeFocusIntent.current += 1;
+    if (routeFocusTimer.current == null) return;
+    clearTimeout(routeFocusTimer.current);
+    routeFocusTimer.current = null;
+  }, []));
   useEffect(() => {
     if (!autoFocus) return;
     const intent = ++routeFocusIntent.current;
@@ -108,15 +116,6 @@ const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoF
       clearTimeout(timer);
     };
   }, [autoFocus]);
-  // Blocking consumes the current intent outright. The unblocked render is
-  // deliberately not a new request, so closing the overlay cannot replay it.
-  useEffect(() => {
-    if (!overlayBlocked) return;
-    routeFocusIntent.current += 1;
-    if (routeFocusTimer.current == null) return;
-    clearTimeout(routeFocusTimer.current);
-    routeFocusTimer.current = null;
-  }, [overlayBlocked]);
   const change = (next: string) => {
     setText(next);
     onChange(next);

@@ -1038,6 +1038,8 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
     const restoring = maybeRestore();
     if (!restoring) syncProgress(false);
     contentsRef.current?.prepare();
+    controlsRef.current?.prepare();
+    actionsRef.current?.prepare();
   }, [armContentSettle, maybeRestore, syncProgress]);
 
   // Start tracking once content exists; retry restore in case the native
@@ -1139,6 +1141,7 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
         />
       )}
       <ReaderActions key={bookmark.id} ref={actionsRef} bookmark={bookmark} highlights={highlights}
+        workScheduler={readerWork}
         hasHtml={hasHtml} hasContents={hasContents} website={showWebsiteView} canRead={showReadInOrdo}
         onOpen={dismissSelectionMenu} onContents={() => contentsRef.current?.open()}
         onShare={handleShare} onCopyLink={handleCopyLink} onOpenOriginal={handleOpenOriginal}
@@ -1407,9 +1410,11 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
       ) : null}
 
       <ReaderControlsSheet
+        key={bookmarkId}
         ref={controlsRef}
         onOpen={dismissSelectionMenu}
         effectiveDark={effectiveDark}
+        workScheduler={readerWork}
       />
       <LockPrompt
         visible={unlockOpen && Boolean(lockedFolderId)}
