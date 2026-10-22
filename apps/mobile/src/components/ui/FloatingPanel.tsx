@@ -187,8 +187,11 @@ function FloatingPanelSurface({
     obscuredFade.value = withTiming(1, fade);
   }, [obscured, visible, obscuredFade, finishObscuring, motion.reducedMotion, collapsedObscured]);
   const lastChildren = React.useRef(children);
-  React.useLayoutEffect(() => { if (visible) lastChildren.current = children; }, [visible, children]);
-  const displayedChildren = visible ? children : lastChildren.current;
+  const dormant = keepMounted && !rendered;
+  React.useLayoutEffect(() => { if (visible || dormant) lastChildren.current = children; }, [visible, dormant, children]);
+  // Freeze only an actual exit. Dormant preparation must reach the retained
+  // tree, otherwise staged controls are silently deferred back onto the tap.
+  const displayedChildren = visible || dormant ? children : lastChildren.current;
   const { headers, actions, body } = React.useMemo(() => {
     const nodes = panelChildren(displayedChildren);
     const headers = nodes.filter((node) => React.isValidElement(node) && node.type === PanelHeader);

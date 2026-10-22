@@ -794,6 +794,39 @@ test("prepared menus measure offscreen without isolation and open without remoun
   });
 });
 
+test("dormant panels adopt staged children while real exits retain the visible snapshot", async () => {
+  const { FloatingPanel } = load(resolve(sourceRoot, "components/ui/FloatingPanel.tsx"));
+  const tree = mount();
+  let exits = 0;
+  const dismiss = () => {};
+  const exited = () => { exits++; };
+  const render = (visible, label) => tree.render(React.createElement(OverlayHost, null,
+    React.createElement(FloatingPanel, { visible, keepMounted: true, onDismiss: dismiss, onExited: exited },
+      React.createElement("span", { id: "prepared-group" }, label))));
+  try {
+    resetWork();
+    await render(false, "One prepared group");
+    const dialog = tree.container.querySelector('[role="dialog"]');
+    assert.equal(tree.container.querySelector("#prepared-group").textContent, "One prepared group");
+    await render(false, "All prepared groups");
+    assert.equal(tree.container.querySelector("#prepared-group").textContent, "All prepared groups",
+      "the real retained panel must receive each dormant preparation commit");
+    assert.equal(registryWork.api.isBlocked(), false);
+    await render(true, "All prepared groups");
+    assert.equal(tree.container.querySelector('[role="dialog"]'), dialog);
+    assert.equal(tree.container.querySelector("#prepared-group").textContent, "All prepared groups");
+    await render(false, "Next dormant snapshot");
+    assert.equal(tree.container.querySelector("#prepared-group").textContent, "All prepared groups",
+      "new props cannot replace the contents during a real exit fade");
+    await act(async () => animationEnds.filter(end => end.kind === "effects" && end.value === 0).at(-1).callback(true));
+    assert.equal(exits, 1);
+    assert.equal(tree.container.querySelector('[role="dialog"]'), dialog);
+    assert.equal(tree.container.querySelector("#prepared-group").textContent, "Next dormant snapshot",
+      "completed exits return to live dormant content without remounting");
+    assert.equal(registryWork.api.isBlocked(), false);
+  } finally { await tree.unmount(); }
+});
+
 test("prepared menus reject stale article/content/viewport heights and cancel old native reports", async () => {
   reactNative.Platform.OS = "android";
   const tree = mount();
