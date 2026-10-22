@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AppState, BackHandler, Platform } from "react-native";
-import { cancelAnimation, Easing, runOnJS, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import { cancelAnimation, Easing, runOnJS, useSharedValue, withSpring, withTiming, type WithTimingConfig } from "react-native-reanimated";
 import { useMaterialMotion } from "../theme/material-motion";
 import { dismissKeyboard, keyboardIsOpen } from "./use-keyboard-visible";
 
@@ -19,6 +19,8 @@ export function useOverlayPresence(
     dismissKeyboard?: boolean;
     interactive?: boolean;
     ready?: boolean;
+    /** Menus can reveal promptly without changing panel/scrim crossfades. */
+    entranceEasing?: WithTimingConfig["easing"];
     /** Fired once when a rendered surface's exit actually completes. */
     onExited?: () => void;
     /** Fired once the moment a rendered surface starts exiting, while the
@@ -47,6 +49,7 @@ export function useOverlayPresence(
   const hideKeyboard = options?.dismissKeyboard !== false;
   const interactive = options?.interactive !== false;
   const ready = options?.ready !== false;
+  const entranceEasing = options?.entranceEasing;
   const onExited = useRef(options?.onExited);
   const onExiting = useRef(options?.onExiting);
   const dismissRef = useRef(onDismiss);
@@ -105,7 +108,7 @@ export function useOverlayPresence(
         if (hideKeyboard) dismissKeyboard();
         cancelAnimation(progress);
         cancelAnimation(spatial);
-        progress.value = motion.reducedMotion ? 1 : withTiming(1, { duration: 200, easing: Easing.inOut(Easing.quad) });
+        progress.value = motion.reducedMotion ? 1 : withTiming(1, { duration: 200, easing: entranceEasing ?? Easing.inOut(Easing.quad) });
         spatial.value = motion.reducedMotion ? 1 : withSpring(1, motion.spatial);
       }
       return;
@@ -140,7 +143,7 @@ export function useOverlayPresence(
     });
     const fallback = setTimeout(() => hide(token), CLOSE_FALLBACK_MS);
     return () => clearTimeout(fallback);
-  }, [hide, hideKeyboard, progress, spatial, rendered, visible, ready, motion.spatial, motion.reducedMotion]);
+  }, [hide, hideKeyboard, progress, spatial, rendered, visible, ready, entranceEasing, motion.spatial, motion.reducedMotion]);
 
   useLayoutEffect(() => {
     if (!visible || !ready || !motion.reducedMotion) return;

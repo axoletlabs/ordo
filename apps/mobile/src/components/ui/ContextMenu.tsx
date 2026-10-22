@@ -47,6 +47,10 @@ export type { MenuAnchorRect };
 /** Layout should land within a frame or two. If it does not, release the
  * entrance anyway rather than retaining a fully transparent blocking surface. */
 const READY_FALLBACK_MS = 200;
+// Keep the complete entrance, but reveal in its first useful frame rather than
+// spending the beginning easing in from nearly transparent. Dialog/scrim fades
+// retain their complementary inOut curve for uniformly dimmed handoffs.
+const MENU_ENTRANCE_EASING = Easing.out(Easing.cubic);
 
 export interface ContextMenuProps {
   visible: boolean;
@@ -132,6 +136,7 @@ function ContextMenuSurface({
     dismissKeyboard: backdrop && keyboardDismiss,
     interactive: backdrop,
     ready: contentHeight > 0,
+    entranceEasing: MENU_ENTRANCE_EASING,
     onExited,
     onExiting,
   });

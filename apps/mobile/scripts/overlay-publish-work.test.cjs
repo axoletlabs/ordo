@@ -143,7 +143,9 @@ const reanimated = {
   cancelAnimation: () => {},
   runOnJS: callback => callback,
   interpolate: value => value,
-  Easing: { quad: value => value, inOut: fn => fn, in: fn => fn, out: fn => fn, bezier: () => value => value, linear: value => value },
+  Easing: { quad: value => value * value, cubic: value => value ** 3,
+    inOut: fn => value => value < 0.5 ? fn(value * 2) / 2 : 1 - fn((1 - value) * 2) / 2,
+    in: fn => fn, out: fn => value => 1 - fn(1 - value), bezier: () => value => value, linear: value => value },
 };
 reanimated.default = { View: reactNative.View, createAnimatedComponent: component => component, ...reanimated };
 Object.defineProperty(reanimated, "__esModule", { value: true });
@@ -607,6 +609,35 @@ test("native ContextMenu keeps its entrance gated on the async body measurement"
   } finally {
     reactNative.Platform.OS = "web";
   }
+});
+
+test("menu entrances decelerate while preserving the full fade and existing panel/exit curves", async () => {
+  const tree = mount();
+  const { FloatingPanel } = load(resolve(sourceRoot, "components/ui/FloatingPanel.tsx"));
+  const menu = visible => React.createElement(ContextMenu, { visible, onDismiss() {}, anchor: { x: 20, y: 80, width: 40, height: 40 } },
+    React.createElement("span", null, "Menu content"));
+  try {
+    resetWork();
+    await tree.render(menu(true));
+    assert.equal(timingCalls.filter(call => call.value === 1).length, 0, "no early opacity bypasses measurement");
+    const body = tree.container.querySelector('[role="menu"]').firstElementChild;
+    await act(async () => layoutHandlers.get(body)({ nativeEvent: { layout: { width: 240, height: 160 } } }));
+    const entrance = timingCalls.find(call => call.value === 1);
+    assert.equal(entrance.config.duration, 200);
+    assert.equal(entrance.config.easing(0), 0);
+    assert.equal(entrance.config.easing(1), 1);
+    assert.ok(entrance.config.easing(0.25) > 0.5, "a measured menu reveals promptly then settles");
+    timingCalls.length = 0;
+    await tree.render(menu(false));
+    const exit = timingCalls.find(call => call.value === 0);
+    assert.equal(exit.config.duration, 200);
+    assert.equal(exit.config.easing(0.25), 0.125, "exit keeps the original inOut quad");
+    timingCalls.length = 0;
+    await tree.render(React.createElement(FloatingPanel, { visible: true, onDismiss() {} }, React.createElement("span", null, "Panel content")));
+    const panel = timingCalls.find(call => call.value === 1);
+    assert.equal(panel.config.duration, 200);
+    assert.equal(panel.config.easing(0.25), 0.125, "panel and scrim handoffs keep their original curve");
+  } finally { await tree.unmount(); }
 });
 
 test("native panel input scope waits for layout and suspends during sibling pickers", async () => {
