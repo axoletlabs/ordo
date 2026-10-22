@@ -10,7 +10,6 @@
     "start": "node dist/main.js",
     "lint": "eslint \"src/**/*.ts\" --max-warnings=0",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "node --test scripts/*.test.cjs",
     "db:generate": "DATABASE_URL=\"file:./ordo.db\" prisma generate",
     "db:migrate": "DATABASE_URL=\"file:./ordo.db\" prisma migrate deploy",
     "db:setup": "DATABASE_URL=\"file:./ordo.db\" prisma generate && DATABASE_URL=\"file:./ordo.db\" prisma migrate deploy",

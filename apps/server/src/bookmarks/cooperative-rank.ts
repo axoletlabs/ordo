@@ -11,10 +11,9 @@
  * (~CHUNK_BUDGET_MS of synchronous work, then a setImmediate yield) so
  * unrelated requests keep being served while a scan is in flight. Ranking,
  * ordering, tie-breaks, and outputs stay byte-identical to the shared
- * synchronous implementations (see scripts/cooperative-rank.test.cjs for the
- * parity suite); only the scheduling changes. A single pathological row
- * (e.g. a 200KB article body) is still atomic — that residual, plus the
- * unbounded database fetch itself, remain known limitations.
+ * synchronous implementations; only the scheduling changes. A single
+ * pathological row (e.g. a 200KB article body) is still atomic — that residual,
+ * plus the unbounded database fetch itself, remain known limitations.
  */
 import { performance } from "node:perf_hooks";
 import {

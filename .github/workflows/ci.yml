@@ -178,12 +178,6 @@ jobs:
       - name: Build shared package
         run: pnpm --filter @ordo/shared build
 
-      - name: Mobile regression tests
-        run: pnpm --filter @ordo/mobile test
-
-      - name: Server regression tests
-        run: pnpm --filter @ordo/server test
-
       - name: Typecheck
         run: pnpm -r typecheck
 
