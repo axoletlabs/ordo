@@ -3,7 +3,7 @@
  * dismiss pending suggestions, and create tags inline. Saving applies the
  * full assignment (plus dismissals) atomically.
  */
-import React, { useEffect, useMemo, useState, type ComponentProps } from "react";
+import React, { useMemo, useState, type ComponentProps } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { type BookmarkDto, type TagSummaryDto } from "@ordo/shared";
@@ -34,19 +34,25 @@ export function EditTagsSheet({ visible, onDismiss, bookmark }: EditTagsSheetPro
   // Let the panel body unmount afterward: hidden portal trees add menu work.
   const prepared = React.useRef(visible);
   if (visible) prepared.current = true;
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState<string[]>(visible && bookmark ? bookmark.tags.map((tag) => tag.id) : []);
   const [dismissed, setDismissed] = useState<string[]>([]);
   const [createTagOpen, setCreateTagOpen] = useState(false);
   const [error, setError] = useState("");
 
-  useEffect(() => {
+  const [draftSource, setDraftSource] = useState({ visible, bookmark });
+  // Reset this component's draft before its picker commits. A passive reset
+  // mounted the previous/empty selection first, then reconciled the entire
+  // list again on every opening. Render-adjusted state also stays local to a
+  // discarded render, unlike an opening ref written ahead of the commit.
+  if (draftSource.visible !== visible || draftSource.bookmark !== bookmark) {
+    setDraftSource({ visible, bookmark });
     if (visible && bookmark) {
       setSelectedIds(bookmark.tags.map((t) => t.id));
       setDismissed([]);
       setCreateTagOpen(false);
       setError("");
     }
-  }, [visible, bookmark]);
+  }
 
   const toggle = (tagId: string) => {
     haptics.selection();
