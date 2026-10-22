@@ -10,7 +10,7 @@ const mod = { exports: {} };
 new Function("module", "exports", ts.transpileModule(readFileSync(resolve(__dirname, "../src/lib/menu-anchor.ts"), "utf8"), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText)(mod, mod.exports);
-const { measureAnchor } = mod.exports;
+const { measureAnchor, menuAnchorScrollSnapshot } = mod.exports;
 
 test("web trigger measurement opens the picker in the press task, before Escape can reach its parent", () => {
   const events = [];
@@ -45,4 +45,26 @@ test("an unmeasured DOM box still uses the original window measurement fallback"
   let measured;
   measureAnchor(node, anchor => { measured = anchor; });
   assert.deepEqual(measured, { x: 14, y: 28, width: 200, height: 48 });
+});
+
+test("web anchors remember only their measured ancestor offsets without changing the rect shape", () => {
+  const scroller = dom.window.document.createElement("div");
+  const node = dom.window.document.createElement("div");
+  scroller.append(node);
+  dom.window.document.body.append(scroller);
+  scroller.scrollTop = 106;
+  scroller.scrollLeft = 12;
+  node.getBoundingClientRect = () => ({ x: 20, y: 30, width: 150, height: 48 });
+  let anchor;
+  measureAnchor(node, value => { anchor = value; });
+  assert.deepEqual(anchor, { x: 20, y: 30, width: 150, height: 48 });
+  const snapshot = menuAnchorScrollSnapshot(anchor);
+  assert.deepEqual(snapshot.get(scroller), { left: 12, top: 106 });
+  assert.ok(snapshot.has(dom.window.document.documentElement), "document scrolling is part of the same ancestry");
+  assert.equal(snapshot.has(dom.window.document.createElement("div")), false, "unrelated scrollers are not inspected");
+  scroller.scrollTop = 107;
+  assert.equal(snapshot.get(scroller).top, 106, "the snapshot stays at activation, not notification time");
+  assert.equal(menuAnchorScrollSnapshot({ ...anchor }), undefined, "synthetic/native anchors keep existing dismissal behavior");
+  assert.equal(menuAnchorScrollSnapshot(null), undefined);
+  scroller.remove();
 });

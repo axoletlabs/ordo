@@ -35,6 +35,7 @@ import {
   CONTEXT_MENU_WIDTH,
   CONTEXT_MENU_EDGE,
   isMenuAnchorRect,
+  menuAnchorScrollSnapshot,
   placeMenu,
   type MenuAnchorRect,
   type MenuPlacement,
@@ -143,8 +144,9 @@ function ContextMenuSurface({
   const menuRef = useOverlayFocus(visible && rendered && backdrop, hideAndDismiss, "menu", dismissible, false, false, onNavigate, returnFocusRef);
   React.useEffect(() => {
     if (!visible || !rendered || !backdrop || Platform.OS !== "web" || typeof document === "undefined") return;
-    return listenForMenuOutsideScroll(() => menuRef.current as unknown as HTMLElement | null, hideAndDismiss);
-  }, [visible, rendered, backdrop, menuRef, hideAndDismiss]);
+    return listenForMenuOutsideScroll(() => menuRef.current as unknown as HTMLElement | null,
+      hideAndDismiss, document, menuAnchorScrollSnapshot(anchor));
+  }, [visible, rendered, backdrop, menuRef, hideAndDismiss, anchor]);
   const pageProgress = useSharedValue(1);
   const pageLeaving = useSharedValue(0);
   // Outgoing content held in place while a fade-through hands off to the

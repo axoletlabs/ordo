@@ -1,8 +1,11 @@
+import type { MenuAnchorScrollSnapshot } from "./menu-anchor";
+
 /** Dismiss only the top menu on outside scroll, never on its own scroll body. */
 export function listenForMenuOutsideScroll(
   getMenu: () => HTMLElement | null,
   onDismiss: () => void,
   owner: Document = document,
+  anchorScroll?: MenuAnchorScrollSnapshot,
 ): () => void {
   let dismissed = false;
   const outsideScroll = (event: Event) => {
@@ -10,6 +13,15 @@ export function listenForMenuOutsideScroll(
     // That queued scroll can arrive after its picker opens; it is not a scroll
     // of the background page. Real wheel/touch gestures still dismiss below.
     if (event.type === "scroll" && /^(INPUT|TEXTAREA)$/.test((event.target as HTMLElement | null)?.tagName ?? "")) return;
+    if (event.type === "scroll" && anchorScroll) {
+      const target = (event.target === owner ? owner.scrollingElement : event.target) as HTMLElement | null;
+      const measured = target ? anchorScroll.get(target) : undefined;
+      // A focus/scroll-into-view notification may be delivered after opening
+      // although its offset was already included in the anchor. Ignore only
+      // that echo. Even a one-pixel momentum/scrollbar movement still dismisses;
+      // wheel/touchmove below always dismiss before the background can move.
+      if (target && measured && target.scrollLeft === measured.left && target.scrollTop === measured.top) return;
+    }
     const menu = getMenu();
     if (!menu || dismissed) return;
     const overlays = owner.querySelectorAll('[data-material-overlay="true"]');
