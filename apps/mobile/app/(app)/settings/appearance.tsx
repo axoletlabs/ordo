@@ -60,6 +60,9 @@ export default function AppearanceScreen() {
       </SettingsGroup>
       <SettingsGroup label="Color">
         <SettingRow icon="color-palette-outline" label="Theme" right={<SettingsSelect title="Theme" options={themeOptions} value={settings.themeMode} onChange={settings.setThemeMode} />} />
+        <SettingRow icon="contrast-outline" label="AMOLED black" description="Pure black page background"
+          unavailableReason={dark ? undefined : "Switch to dark mode to use pure black."}
+          rightFit="content" right={<Toggle value={settings.amoled} onValueChange={settings.setAmoled} accessibilityLabel="AMOLED black" />} />
         <SettingRow icon="color-fill-outline" label="Material You colors"
           description="Use your wallpaper colors instead of your app palette."
           unavailableReason={materialYouAvailable ? undefined : "Requires Android 12 or later."}
@@ -72,9 +75,6 @@ export default function AppearanceScreen() {
             {settings.themeContrast === 0 ? "Default contrast for text, icons, and outlines." : settings.themeContrast === 0.5 ? "Stronger text, icons, and outlines for easier reading." : "Maximum contrast for text, icons, and outlines."} Light and dark modes stay the same.
           </Text>
         </View>
-        <SettingRow icon="contrast-outline" label="AMOLED black" description="Pure black page background"
-          unavailableReason={dark ? undefined : "Switch to dark mode to use pure black."}
-          rightFit="content" right={<Toggle value={settings.amoled} onValueChange={settings.setAmoled} accessibilityLabel="AMOLED black" />} />
       </SettingsGroup>
       <SettingsGroup label="Motion and feedback" footer="Animations follow your device’s reduced-motion preference.">
         <SettingRow icon="swap-horizontal-outline" label="Page transitions" right={<SettingsSelect title="Page transitions" options={animationOptions} value={settings.navigationAnimation} onChange={settings.setNavigationAnimation} />} />
