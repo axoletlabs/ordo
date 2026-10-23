@@ -1,7 +1,7 @@
 # Changelog Material guidance
 
 Reviewed Google's published Material 3 guidance on 23 October 2026. The
-changelog combines direct release buttons with a version menu, a prominent
+changelog combines version and release button rows with a prominent
 acknowledgement action, and continuous notes rather than separate cards.
 Use the official website as the reference when revisiting these decisions.
 
@@ -18,18 +18,15 @@ Use the official website as the reference when revisiting these decisions.
   primary button, matching the product preference for generous controls.
 - [Button groups](https://m3.material.io/components/button-groups/guidelines):
   related single-selection choices belong in a connected toggle group. Choose
-  a version family, such as 0.3.0, from the menu, then select its Preview 5,
-  Preview 4, or stable release directly. The shared group fills the available
-  width and scrolls on narrow screens instead of truncating labels; keyboard
-  navigation keeps the selected choice visible.
-- [Menus](https://m3.material.io/components/menus/guidelines) and
-  [accessibility](https://m3.material.io/components/menus/accessibility): use
-  the shared single-selection menu with a checkmark and 48dp targets. Enter,
-  Space, Up, and Down open it; arrows navigate and Escape dismisses it.
+  a version family, such as 0.3.0, from the first button row, then select its
+  Preview 5, Preview 4, or stable release in the second row. Both use the shared
+  connected group with 48dp targets. Each fills the available width and scrolls
+  on narrow screens instead of truncating labels; arrow keys and Home/End
+  select choices and keep them visible. Selecting another family opens its
+  newest release. A family with only a stable release needs no second row.
 - [Color roles](https://m3.material.io/styles/color/roles): use semantic
-  surface/container/foreground pairs. Expressive standard menus and vibrant
-  menus have different color treatments; Expressive mode alone does not mean
-  recoloring the entire menu to tertiary.
+  surface/container/foreground pairs. Selection uses the shared secondary
+  roles; the acknowledgement action uses primary.
 - [Shape](https://m3.material.io/styles/shape/applying-shape) and
   [building with M3 Expressive](https://m3.material.io/blog/building-with-m3-expressive):
   emphasize hierarchy and meaningful interaction. Keep shape morphing on the

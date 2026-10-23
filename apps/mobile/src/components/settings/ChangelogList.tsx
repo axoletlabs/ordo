@@ -1,19 +1,16 @@
 /**
  * A bottom-sheet release reader: tonal release navigation above continuous
- * Markdown notes, with the shared Material sheet and menu treatments.
+ * Markdown notes, with shared Material sheet and connected button treatments.
  */
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Image, Linking, ScrollView, StyleSheet, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { Text, type TextColor } from "../ui/Text";
-import { PressableScale } from "../ui/PressableScale";
 import { Button } from "../ui/Button";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { PanelActions } from "../ui/SheetActionRow";
 import { IconButton } from "../ui/IconButton";
-import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
-import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { Segmented } from "../ui/Segmented";
 import { Spinner } from "../ui/Spinner";
 import { toast } from "../ui/toast-store";
@@ -28,7 +25,6 @@ import {
 import { haptics } from "../../lib/haptics";
 import { releaseName } from "../../lib/release-name";
 import { classifyReleaseVersion } from "../../lib/app-version";
-import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { useChangelog } from "../../hooks/use-changelog";
 import { useTheme } from "../../theme/ThemeProvider";
 import { AppIcon } from "../ui/PinIcon";
@@ -457,17 +453,14 @@ function releaseChoice(version: string) {
 }
 
 function ReleaseSelector({
-  visible,
   releases,
   selected,
   onSelect,
 }: {
-  visible: boolean;
   releases: ChangelogRelease[];
   selected: ChangelogRelease;
   onSelect: (tag: string) => void;
 }) {
-  const { palette, expressive } = useTheme();
   const families = useMemo(() => {
     const groups = new Map<string, ChangelogRelease[]>();
     for (const release of releases) {
@@ -480,60 +473,16 @@ function ReleaseSelector({
   }, [releases]);
   const family = releaseFamily(selected.version);
   const siblings = families.get(family) ?? [selected];
-  const anchorRef = useRef<View>(null);
-  const [open, setOpen] = useState(false);
-  const [anchor, setAnchor] = useState<MenuAnchorRect | null>(null);
-  const opening = useRef(0);
-  useLayoutEffect(() => {
-    if (!visible) setOpen(false);
-    // Invalidate a deferred native measurement when the sheet closes, reopens,
-    // or unmounts so it cannot publish a menu into a different session.
-    return () => { opening.current += 1; };
-  }, [visible]);
-
-  const showHistory = () => {
-    if (!visible || open) return;
-    const request = ++opening.current;
-    measureAnchor(anchorRef.current, (rect) => {
-      if (request !== opening.current) return;
-      haptics.selection();
-      setAnchor(rect);
-      setOpen(true);
-    });
-  };
-
   return (
     <>
-      <View style={styles.versionFamilyRow}>
-        <View ref={anchorRef} collapsable={false} style={styles.releaseAnchor}>
-          {families.size > 1 ? (
-            <PressableScale
-              accessibilityRole="button"
-              accessibilityLabel={`Version, ${family}`}
-              accessibilityState={{ expanded: open && visible }}
-              aria-haspopup="menu"
-              onPress={showHistory}
-              onKeyDown={(event) => {
-                if (event.defaultPrevented || event.target !== event.currentTarget) return;
-                if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
-                event.preventDefault();
-                if (!event.repeat) showHistory();
-              }}
-              stateLayerColor={palette.onSecondaryContainer}
-              shape={{ rest: 24, pressed: expressive ? radius.md : 24 }}
-              style={[styles.releaseTrigger, { backgroundColor: palette.secondaryContainer }]}
-            >
-              <Text variant="labelLarge" numberOfLines={1} style={[styles.releaseLabel, { color: palette.onSecondaryContainer }]}>
-                {family}
-              </Text>
-              <DisclosureChevron expanded={open && visible} size={20} color={palette.onSecondaryContainer} />
-            </PressableScale>
-          ) : <Text variant="titleMedium">{family}</Text>}
-        </View>
-        {siblings.length === 1 && releaseName(selected.version) !== family ? (
-          <Text variant="bodyMedium" color="secondary">{releaseChoice(selected.version)}</Text>
-        ) : null}
-      </View>
+      {families.size > 1 ? (
+        <Segmented accessibilityLabel="Versions" scrollable
+          options={[...families.keys()].map((version) => ({ value: version, label: version }))}
+          value={family} onChange={(version) => {
+            const newest = families.get(version)?.[0];
+            if (newest) onSelect(newest.tagName);
+          }} />
+      ) : <Text variant="titleMedium">{family}</Text>}
       {siblings.length > 1 ? (
         <Segmented key={family} accessibilityLabel={`Releases for version ${family}`} scrollable
           options={siblings.map((release) => ({
@@ -542,21 +491,9 @@ function ReleaseSelector({
             accessibilityLabel: releaseName(release.version),
           }))}
           value={selected.tagName} onChange={onSelect} />
+      ) : releaseName(selected.version) !== family ? (
+        <Text variant="bodyMedium" color="secondary">{releaseChoice(selected.version)}</Text>
       ) : null}
-      <ContextMenu visible={open && visible} onDismiss={() => setOpen(false)} anchor={anchor} width={320}>
-        {[...families].map(([version, entries]) => (
-          <ContextMenuItem
-            key={version}
-            label={version}
-            selected={version === family}
-            selectionRole="menuitemradio"
-            onPress={() => {
-              if (version !== family) onSelect(entries[0].tagName);
-              setOpen(false);
-            }}
-          />
-        ))}
-      </ContextMenu>
     </>
   );
 }
@@ -621,7 +558,7 @@ function ChangelogSheetBody({
         accessory={selected ? (
           <View style={styles.releaseNavigation}>
             {releases && releases.length > 1 ? (
-              <ReleaseSelector visible={visible} releases={releases} selected={selected} onSelect={setTag} />
+              <ReleaseSelector releases={releases} selected={selected} onSelect={setTag} />
             ) : <Text variant="bodyMedium" color="secondary">{releaseName(selected.version)}</Text>}
           </View>
         ) : undefined} />
@@ -683,18 +620,6 @@ const styles = StyleSheet.create({
   bullet: { width: 5, height: 5, borderRadius: radius.full },
   listCopy: { flex: 1, minWidth: 0, gap: spacing[8] },
   releaseNavigation: { marginTop: spacing[12], gap: spacing[8], width: "100%" },
-  versionFamilyRow: { flexDirection: "row", alignItems: "center", gap: spacing[12] },
-  releaseAnchor: { maxWidth: "100%", flexShrink: 1 },
-  releaseTrigger: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[8],
-    minHeight: 48,
-    paddingHorizontal: spacing[16],
-    paddingVertical: spacing[8],
-    borderRadius: radius.full,
-  },
-  releaseLabel: { flexShrink: 1 },
   checkbox: {
     width: 14,
     height: 14,
