@@ -5,7 +5,10 @@ on:
     paths:
       - 'apps/mobile/src/lib/browser-ad-blocking.ts'
       - 'apps/mobile/tests/**'
-      - 'patches/react-native-webview*'
+      - 'patches/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'apps/mobile/package.json'
       - '.github/workflows/browser-webkit.yml'
   workflow_dispatch:
 

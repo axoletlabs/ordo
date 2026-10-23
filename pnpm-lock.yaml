@@ -18,6 +18,7 @@ overrides:
   shell-quote: 1.11.0
 
 patchedDependencies:
+  '@expo/plist@0.8.1': 6cae9efe72362624fa5d1803e806afd391559948a26a63f5dd509d44b8cd5442
   react-native-webview@13.16.1: 0a7ac2d6cd3cfedf517a895ccf0d4da76bc58088594a458c3b69a6c41f2f5050
 
 importers:
@@ -6513,7 +6514,7 @@ snapshots:
       '@expo/metro-file-map': 57.0.3
       '@expo/osascript': 2.7.1
       '@expo/package-manager': 1.13.1
-      '@expo/plist': 0.8.1
+      '@expo/plist': 0.8.1(patch_hash=6cae9efe72362624fa5d1803e806afd391559948a26a63f5dd509d44b8cd5442)
       '@expo/prebuild-config': 57.0.16(typescript@5.9.3)
       '@expo/require-utils': 57.0.5(typescript@5.9.3)
       '@expo/router-server': 57.0.9(@expo/metro-runtime@4.0.1(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3)))(expo-constants@57.0.18)(expo-font@57.0.4)(expo-router@57.0.21)(expo-server@57.0.3)(expo@57.0.22)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -6583,7 +6584,7 @@ snapshots:
     dependencies:
       '@expo/config-types': 57.0.2
       '@expo/json-file': 11.0.1
-      '@expo/plist': 0.8.1
+      '@expo/plist': 0.8.1(patch_hash=6cae9efe72362624fa5d1803e806afd391559948a26a63f5dd509d44b8cd5442)
       '@expo/require-utils': 57.0.5(typescript@5.9.3)
       '@expo/sdk-runtime-versions': 1.0.0
       chalk: 4.1.2
@@ -6786,7 +6787,7 @@ snapshots:
       ora: 3.4.0
       resolve-workspace-root: 2.0.1
 
-  '@expo/plist@0.8.1':
+  '@expo/plist@0.8.1(patch_hash=6cae9efe72362624fa5d1803e806afd391559948a26a63f5dd509d44b8cd5442)':
     dependencies:
       '@xmldom/xmldom': 0.9.12
       base64-js: 1.5.1
@@ -9534,7 +9535,7 @@ snapshots:
   expo-updates@57.0.22(expo@57.0.22)(react-native@0.86.3(@babel/core@7.29.7)(@react-native/metro-config@0.86.3(@babel/core@7.29.7))(@types/react@19.2.18)(react@19.2.3))(react@19.2.3):
     dependencies:
       '@expo/code-signing-certificates': 0.0.6
-      '@expo/plist': 0.8.1
+      '@expo/plist': 0.8.1(patch_hash=6cae9efe72362624fa5d1803e806afd391559948a26a63f5dd509d44b8cd5442)
       '@expo/spawn-async': 1.8.0
       arg: 4.1.3
       chalk: 4.1.2
