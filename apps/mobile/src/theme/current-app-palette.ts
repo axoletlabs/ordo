@@ -5,7 +5,7 @@ import { resolvePalette, type ThemeMode } from "./theme";
 
 /** Native chrome handoffs must preserve the same color inputs as ThemeProvider. */
 export function currentAppPalette(mode?: ThemeMode) {
-  const { themeMode, amoled, expressive, themeContrast, materialYouColors } = useSettingsStore.getState();
-  return resolvePalette(mode ?? themeMode, amoled, Appearance.getColorScheme(), undefined,
+  const { themeMode, amoled, expressive, themeContrast, materialYouColors, appColor } = useSettingsStore.getState();
+  return resolvePalette(mode ?? themeMode, amoled, Appearance.getColorScheme(), appColor,
     expressive, themeContrast, materialYouColors ? currentDeviceColors() : null);
 }

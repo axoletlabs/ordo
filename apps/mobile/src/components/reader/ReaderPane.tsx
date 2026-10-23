@@ -200,12 +200,13 @@ export function ReaderPane(props: ReaderPaneProps) {
   const systemScheme = useSystemColorScheme();
   const { preferences } = useReaderPreferences();
   const materialYouColors = useSettingsStore((s) => s.materialYouColors);
+  const appColor = useSettingsStore((s) => s.appColor);
   const deviceColors = useDeviceColors();
   const expressive = useSettingsStore((s) => s.expressive);
   const contrast = useSettingsStore((s) => s.themeContrast);
   const readerPalette = useMemo(
-    () => resolveReaderPalette(preferences.theme, preferences.amoled, systemScheme, { expressive, contrast, deviceColors: materialYouColors ? deviceColors : null }),
-    [preferences.theme, preferences.amoled, systemScheme, deviceColors, materialYouColors, expressive, contrast],
+    () => resolveReaderPalette(preferences.theme, preferences.amoled, systemScheme, { seed: appColor, expressive, contrast, deviceColors: materialYouColors ? deviceColors : null }),
+    [preferences.theme, preferences.amoled, systemScheme, appColor, deviceColors, materialYouColors, expressive, contrast],
   );
   // Commit control feedback first; let a long article reflow at interruptible
   // priority. Only layout fields are deferred and compared: palette/theme and

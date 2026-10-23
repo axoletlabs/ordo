@@ -9,6 +9,8 @@ import { patchQuickShareSessionServerUrl, syncQuickShareFlags } from "../lib/sha
 import { canonicalizeServerUrl, DEFAULT_SERVER_URL, resolvePersistedServerUrl } from "../lib/hosting";
 import { prefsGet, prefsSet, StorageKeys } from "../lib/storage";
 import type { ThemeMode } from "../theme/theme";
+import { APP_COLOR } from "../theme/material-colors";
+import { normalizeAppColor } from "../theme/app-colors";
 
 export { DEFAULT_SERVER_URL } from "../lib/hosting";
 /** How pages enter and leave. */
@@ -36,6 +38,7 @@ export interface SettingsState {
   amoled: boolean;
   expressive: boolean;
   materialYouColors: boolean;
+  appColor: string;
   themeContrast: 0 | 0.5 | 1;
   navigationAnimation: NavigationAnimation;
   createButtonTapAction: CreateButtonAction;
@@ -58,6 +61,7 @@ export interface SettingsState {
   setAmoled: (on: boolean) => void;
   setExpressive: (on: boolean) => void;
   setMaterialYouColors: (on: boolean) => void;
+  setAppColor: (color: string) => void;
   setThemeContrast: (contrast: 0 | 0.5 | 1) => void;
   setNavigationAnimation: (animation: NavigationAnimation) => void;
   setCreateButtonTapAction: (action: CreateButtonAction) => void;
@@ -70,12 +74,21 @@ export interface SettingsState {
   dismissConsoleOtpTip: () => void;
 }
 
+// Palette taps apply immediately; serialize snapshots so a slower earlier
+// AsyncStorage write cannot replace a newer choice after a restart.
+let settingsWrite: Promise<void> = Promise.resolve();
+function persistSettings(snapshot: Partial<SettingsState>): Promise<void> {
+  settingsWrite = settingsWrite.then(() => prefsSet(StorageKeys.SETTINGS, snapshot));
+  return settingsWrite;
+}
+
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   serverUrl: DEFAULT_SERVER_URL,
   themeMode: "system",
   amoled: false,
   expressive: true,
   materialYouColors: false,
+  appColor: APP_COLOR,
   themeContrast: 0,
   navigationAnimation: "slide",
   createButtonTapAction: "bookmark",
@@ -96,6 +109,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       amoled: saved?.amoled ?? false,
       expressive: saved?.expressive !== false,
       materialYouColors: saved?.materialYouColors === true,
+      appColor: normalizeAppColor(saved?.appColor) ?? APP_COLOR,
       themeContrast: saved?.themeContrast === 0.5 || saved?.themeContrast === 1 ? saved.themeContrast : 0,
       navigationAnimation: isNavigationAnimation(saved?.navigationAnimation)
         ? saved.navigationAnimation
@@ -120,8 +134,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     if (saved && ("navigationStyle" in saved || "showNavigationLabels" in saved)) {
       // One-release cleanup: drop keys from the removed navigation-style
       // settings so the persisted blob reflects the live shape.
-      const { navigationStyle: _s, showNavigationLabels: _l, ...rest } = saved as Record<string, unknown>;
-      void prefsSet(StorageKeys.SETTINGS, { ...get(), ...rest });
+      void persistSettings({ ...get() });
     }
     void syncQuickShareFlags({
       quickBookmark: get().shareQuickBookmark,
@@ -132,59 +145,65 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setServerUrl: async (url) => {
     const next = canonicalizeServerUrl(url) ?? url;
     set({ serverUrl: next });
-    await prefsSet(StorageKeys.SETTINGS, { ...get(), serverUrl: next });
+    await persistSettings({ ...get(), serverUrl: next });
     void patchQuickShareSessionServerUrl(next);
   },
   setThemeMode: (mode) => {
     set({ themeMode: mode });
-    void prefsSet(StorageKeys.SETTINGS, { ...get(), themeMode: mode });
+    void persistSettings({ ...get(), themeMode: mode });
   },
   setAmoled: (on) => {
     set({ amoled: on });
-    void prefsSet(StorageKeys.SETTINGS, { ...get(), amoled: on });
+    void persistSettings({ ...get(), amoled: on });
   },
   setExpressive: (expressive) => {
     set({ expressive });
-    void prefsSet(StorageKeys.SETTINGS, { ...get(), expressive });
+    void persistSettings({ ...get(), expressive });
   },
   setMaterialYouColors: (materialYouColors) => {
     set({ materialYouColors });
-    void prefsSet(StorageKeys.SETTINGS, { ...get(), materialYouColors });
+    void persistSettings({ ...get(), materialYouColors });
+  },
+  setAppColor: (color) => {
+    const appColor = normalizeAppColor(color);
+    if (!appColor || appColor === get().appColor) return;
+    set({ appColor });
+    void persistSettings({ ...get(), appColor });
   },
   setThemeContrast: (themeContrast) => {
     set({ themeContrast });
-    void prefsSet(StorageKeys.SETTINGS, { ...get(), themeContrast });
+    void persistSettings({ ...get(), themeContrast });
   },
   setNavigationAnimation: (navigationAnimation) => {
     set({ navigationAnimation });
-    void prefsSet(StorageKeys.SETTINGS, { ...get(), navigationAnimation });
+    void persistSettings({ ...get(), navigationAnimation });
   },
   setCreateButtonTapAction: (createButtonTapAction) => {
     set({ createButtonTapAction });
-    void prefsSet(StorageKeys.SETTINGS, { ...get(), createButtonTapAction });
+    void persistSettings({ ...get(), createButtonTapAction });
   },
   setCreateButtonHoldAction: (createButtonHoldAction) => {
     set({ createButtonHoldAction });
-    void prefsSet(StorageKeys.SETTINGS, { ...get(), createButtonHoldAction });
+    void persistSettings({ ...get(), createButtonHoldAction });
   },
   setWebsiteBrowser: (websiteBrowser) => {
     set({ websiteBrowser });
-    void prefsSet(StorageKeys.SETTINGS, { ...get(), websiteBrowser });
+    void persistSettings({ ...get(), websiteBrowser });
   },
   setForceWebsiteDark: (forceWebsiteDark) => {
     set({ forceWebsiteDark });
-    void prefsSet(StorageKeys.SETTINGS, { ...get(), forceWebsiteDark });
+    void persistSettings({ ...get(), forceWebsiteDark });
   },
   setShareQuickBookmark: (shareQuickBookmark) => {
     const shareShowQuickAction = shareQuickBookmark ? get().shareShowQuickAction : false;
     set({ shareQuickBookmark, shareShowQuickAction });
-    void prefsSet(StorageKeys.SETTINGS, { ...get(), shareQuickBookmark, shareShowQuickAction });
+    void persistSettings({ ...get(), shareQuickBookmark, shareShowQuickAction });
     void syncQuickShareFlags({ quickBookmark: shareQuickBookmark, showAlongside: shareShowQuickAction });
   },
   setShareShowQuickAction: (on) => {
     const shareShowQuickAction = on && get().shareQuickBookmark;
     set({ shareShowQuickAction });
-    void prefsSet(StorageKeys.SETTINGS, { ...get(), shareShowQuickAction });
+    void persistSettings({ ...get(), shareShowQuickAction });
     void syncQuickShareFlags({
       quickBookmark: get().shareQuickBookmark,
       showAlongside: shareShowQuickAction,
@@ -193,10 +212,10 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setHapticsEnabled: (hapticsEnabled) => {
     set({ hapticsEnabled });
     applyHapticsEnabled(hapticsEnabled);
-    void prefsSet(StorageKeys.SETTINGS, { ...get(), hapticsEnabled });
+    void persistSettings({ ...get(), hapticsEnabled });
   },
   dismissConsoleOtpTip: () => {
     set({ consoleOtpTipDismissed: true });
-    void prefsSet(StorageKeys.SETTINGS, { ...get(), consoleOtpTipDismissed: true });
+    void persistSettings({ ...get(), consoleOtpTipDismissed: true });
   },
 }));
