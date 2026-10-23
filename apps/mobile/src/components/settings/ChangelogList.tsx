@@ -14,6 +14,7 @@ import { PanelActions } from "../ui/SheetActionRow";
 import { IconButton } from "../ui/IconButton";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
 import { DisclosureChevron } from "../ui/DisclosureChevron";
+import { Segmented } from "../ui/Segmented";
 import { Spinner } from "../ui/Spinner";
 import { toast } from "../ui/toast-store";
 import {
@@ -26,6 +27,7 @@ import {
 } from "../../lib/changelog";
 import { haptics } from "../../lib/haptics";
 import { releaseName } from "../../lib/release-name";
+import { classifyReleaseVersion } from "../../lib/app-version";
 import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { useChangelog } from "../../hooks/use-changelog";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -444,6 +446,16 @@ function Notes({ blocks }: { blocks: ChangelogBlock[] }) {
   );
 }
 
+function releaseFamily(version: string) {
+  return classifyReleaseVersion(version)?.version.split("-")[0] ?? releaseName(version);
+}
+
+function releaseChoice(version: string) {
+  const name = releaseName(version);
+  const family = releaseFamily(version);
+  return name === family ? "Stable" : name.slice(family.length + 1);
+}
+
 function ReleaseSelector({
   visible,
   releases,
@@ -456,6 +468,18 @@ function ReleaseSelector({
   onSelect: (tag: string) => void;
 }) {
   const { palette, expressive } = useTheme();
+  const families = useMemo(() => {
+    const groups = new Map<string, ChangelogRelease[]>();
+    for (const release of releases) {
+      const family = releaseFamily(release.version);
+      const entries = groups.get(family);
+      if (entries) entries.push(release);
+      else groups.set(family, [release]);
+    }
+    return groups;
+  }, [releases]);
+  const family = releaseFamily(selected.version);
+  const siblings = families.get(family) ?? [selected];
   const anchorRef = useRef<View>(null);
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<MenuAnchorRect | null>(null);
@@ -480,38 +504,54 @@ function ReleaseSelector({
 
   return (
     <>
-      <View ref={anchorRef} collapsable={false} style={styles.releaseAnchor}>
-        <PressableScale
-          accessibilityRole="button"
-          accessibilityLabel={`Release history, ${releaseName(selected.version)}`}
-          accessibilityState={{ expanded: open && visible }}
-          aria-haspopup="menu"
-          onPress={showHistory}
-          onKeyDown={(event) => {
-            if (event.defaultPrevented || event.target !== event.currentTarget) return;
-            if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
-            event.preventDefault();
-            if (!event.repeat) showHistory();
-          }}
-          stateLayerColor={palette.onSecondaryContainer}
-          shape={{ rest: 24, pressed: expressive ? radius.md : 24 }}
-          style={[styles.releaseTrigger, { backgroundColor: palette.secondaryContainer }]}
-        >
-          <Text variant="labelLarge" numberOfLines={1} style={[styles.releaseLabel, { color: palette.onSecondaryContainer }]}>
-            {releaseName(selected.version)}
-          </Text>
-          <DisclosureChevron expanded={open && visible} size={20} color={palette.onSecondaryContainer} />
-        </PressableScale>
+      <View style={styles.versionFamilyRow}>
+        <View ref={anchorRef} collapsable={false} style={styles.releaseAnchor}>
+          {families.size > 1 ? (
+            <PressableScale
+              accessibilityRole="button"
+              accessibilityLabel={`Version, ${family}`}
+              accessibilityState={{ expanded: open && visible }}
+              aria-haspopup="menu"
+              onPress={showHistory}
+              onKeyDown={(event) => {
+                if (event.defaultPrevented || event.target !== event.currentTarget) return;
+                if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+                event.preventDefault();
+                if (!event.repeat) showHistory();
+              }}
+              stateLayerColor={palette.onSecondaryContainer}
+              shape={{ rest: 24, pressed: expressive ? radius.md : 24 }}
+              style={[styles.releaseTrigger, { backgroundColor: palette.secondaryContainer }]}
+            >
+              <Text variant="labelLarge" numberOfLines={1} style={[styles.releaseLabel, { color: palette.onSecondaryContainer }]}>
+                {family}
+              </Text>
+              <DisclosureChevron expanded={open && visible} size={20} color={palette.onSecondaryContainer} />
+            </PressableScale>
+          ) : <Text variant="titleMedium">{family}</Text>}
+        </View>
+        {siblings.length === 1 && releaseName(selected.version) !== family ? (
+          <Text variant="bodyMedium" color="secondary">{releaseChoice(selected.version)}</Text>
+        ) : null}
       </View>
+      {siblings.length > 1 ? (
+        <Segmented key={family} accessibilityLabel={`Releases for version ${family}`} scrollable
+          options={siblings.map((release) => ({
+            value: release.tagName,
+            label: releaseChoice(release.version),
+            accessibilityLabel: releaseName(release.version),
+          }))}
+          value={selected.tagName} onChange={onSelect} />
+      ) : null}
       <ContextMenu visible={open && visible} onDismiss={() => setOpen(false)} anchor={anchor} width={320}>
-        {releases.map((release) => (
+        {[...families].map(([version, entries]) => (
           <ContextMenuItem
-            key={release.tagName}
-            label={releaseName(release.version)}
-            selected={release.tagName === selected.tagName}
+            key={version}
+            label={version}
+            selected={version === family}
             selectionRole="menuitemradio"
             onPress={() => {
-              onSelect(release.tagName);
+              if (version !== family) onSelect(entries[0].tagName);
               setOpen(false);
             }}
           />
@@ -586,7 +626,7 @@ function ChangelogSheetBody({
           </View>
         ) : undefined} />
       {body}
-      <PanelActions confirmLabel="Got it" confirmVariant="ghost" onConfirm={onDismiss} />
+      <PanelActions confirmLabel="Got it" size="md" fullWidth onConfirm={onDismiss} />
     </FloatingPanel>
   );
 }
@@ -642,8 +682,9 @@ const styles = StyleSheet.create({
   },
   bullet: { width: 5, height: 5, borderRadius: radius.full },
   listCopy: { flex: 1, minWidth: 0, gap: spacing[8] },
-  releaseNavigation: { marginTop: spacing[12], maxWidth: "100%", alignSelf: "flex-start" },
-  releaseAnchor: { maxWidth: "100%" },
+  releaseNavigation: { marginTop: spacing[12], gap: spacing[8], width: "100%" },
+  versionFamilyRow: { flexDirection: "row", alignItems: "center", gap: spacing[12] },
+  releaseAnchor: { maxWidth: "100%", flexShrink: 1 },
   releaseTrigger: {
     flexDirection: "row",
     alignItems: "center",

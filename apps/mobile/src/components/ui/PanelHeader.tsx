@@ -122,6 +122,7 @@ const styles = StyleSheet.create({
   accessory: {
     marginTop: spacing[4],
     alignItems: "center",
+    alignSelf: "stretch",
   },
   subtitle: {
     marginTop: spacing[16],
