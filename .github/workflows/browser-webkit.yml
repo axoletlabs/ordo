@@ -5,6 +5,8 @@ on:
     paths:
       - 'apps/mobile/src/lib/browser-ad-blocking.ts'
       - 'apps/mobile/tests/**'
+      - 'apps/mobile/plugins/**'
+      - 'apps/mobile/app.config.js'
       - 'patches/**'
       - 'pnpm-lock.yaml'
       - 'pnpm-workspace.yaml'
