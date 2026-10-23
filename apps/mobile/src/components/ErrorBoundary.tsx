@@ -36,9 +36,9 @@ interface State {
 
 function Fallback({ error, onReset }: { error: Error; onReset: () => void }) {
   const scheme = useColorScheme();
-  const { themeMode, amoled, materialYouColors, expressive, themeContrast } = useSettingsStore();
+  const { themeMode, amoled, materialYouColors, expressive, themeContrast, appColor } = useSettingsStore();
   const deviceColors = useDeviceColors();
-  const palette = resolvePalette(themeMode, amoled, scheme, undefined, expressive, themeContrast, materialYouColors ? deviceColors : null);
+  const palette = resolvePalette(themeMode, amoled, scheme, appColor, expressive, themeContrast, materialYouColors ? deviceColors : null);
   const updates = Updates.useUpdates();
   const pendingId = updates.downloadedUpdate?.updateId;
   const runningId = updates.currentlyRunning.updateId;

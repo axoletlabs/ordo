@@ -1,4 +1,4 @@
-import { Appearance, Image } from "react-native";
+import { Image } from "react-native";
 import { create } from "zustand";
 import * as Updates from "expo-updates";
 import { createMMKV, type MMKV } from "react-native-mmkv";
@@ -11,9 +11,7 @@ import {
   type RuntimeReloadScreenOptions,
 } from "../lib/runtime-restart";
 import { pinSystemChrome } from "../theme/pin-system-chrome";
-import { resolvePalette } from "../theme/theme";
-import { currentDeviceColors } from "../theme/device-colors";
-import { useSettingsStore } from "./settings";
+import { currentAppPalette } from "../theme/current-app-palette";
 
 const SPLASH_PRESENT_TIMEOUT_MS = 1500;
 const COVER_KEY = "restartCover";
@@ -63,8 +61,7 @@ export function markRestartSplashPresented(): void {
 }
 
 function currentPalette() {
-  const { themeMode, amoled, expressive, themeContrast, materialYouColors } = useSettingsStore.getState();
-  return resolvePalette(themeMode, amoled, Appearance.getColorScheme(), undefined, expressive, themeContrast, materialYouColors ? currentDeviceColors() : null);
+  return currentAppPalette();
 }
 
 function nextFrame(): Promise<void> {

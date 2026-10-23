@@ -1,6 +1,6 @@
 /**
  * ThemeProvider: resolves the active palette from the settings store
- * (theme mode + AMOLED flag) and the device color scheme, then exposes it via
+ * (mode, app color, AMOLED, contrast) and device colors, then exposes it via
  * context. Also keeps the status bar, OS color scheme, and web scrollbars in
  * sync so native chrome is not stuck on a Light activity theme.
  */
@@ -52,12 +52,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const amoled = useSettingsStore((s) => s.amoled);
   const expressive = useSettingsStore((s) => s.expressive);
   const materialYouColors = useSettingsStore((s) => s.materialYouColors);
+  const appColor = useSettingsStore((s) => s.appColor);
   const deviceColors = useDeviceColors();
   const contrast = useSettingsStore((s) => s.themeContrast);
   const systemScheme = useColorScheme();
 
-  const palette = useMemo(() => resolvePalette(themeMode, amoled, systemScheme, undefined, expressive, contrast, materialYouColors ? deviceColors : null),
-    [themeMode, amoled, systemScheme, deviceColors, materialYouColors, expressive, contrast]);
+  const palette = useMemo(() => resolvePalette(themeMode, amoled, systemScheme, appColor, expressive, contrast, materialYouColors ? deviceColors : null),
+    [themeMode, amoled, systemScheme, appColor, deviceColors, materialYouColors, expressive, contrast]);
   // The palette resolver reuses identical schemes. An OS appearance update in
   // forced dark/light mode, or wallpaper colors while Material You is off,
   // must not broadcast a new context to every Text, icon and control.
