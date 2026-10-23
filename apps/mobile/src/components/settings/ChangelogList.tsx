@@ -24,7 +24,6 @@ import {
 } from "../../lib/changelog";
 import { haptics } from "../../lib/haptics";
 import { releaseName } from "../../lib/release-name";
-import { classifyReleaseVersion } from "../../lib/app-version";
 import { useChangelog } from "../../hooks/use-changelog";
 import { useTheme } from "../../theme/ThemeProvider";
 import { AppIcon } from "../ui/PinIcon";
@@ -442,16 +441,6 @@ function Notes({ blocks }: { blocks: ChangelogBlock[] }) {
   );
 }
 
-function releaseFamily(version: string) {
-  return classifyReleaseVersion(version)?.version.split("-")[0] ?? releaseName(version);
-}
-
-function releaseChoice(version: string) {
-  const name = releaseName(version);
-  const family = releaseFamily(version);
-  return name === family ? "Stable" : name.slice(family.length + 1);
-}
-
 function ReleaseSelector({
   releases,
   selected,
@@ -461,40 +450,13 @@ function ReleaseSelector({
   selected: ChangelogRelease;
   onSelect: (tag: string) => void;
 }) {
-  const families = useMemo(() => {
-    const groups = new Map<string, ChangelogRelease[]>();
-    for (const release of releases) {
-      const family = releaseFamily(release.version);
-      const entries = groups.get(family);
-      if (entries) entries.push(release);
-      else groups.set(family, [release]);
-    }
-    return groups;
-  }, [releases]);
-  const family = releaseFamily(selected.version);
-  const siblings = families.get(family) ?? [selected];
   return (
-    <>
-      {families.size > 1 ? (
-        <Segmented accessibilityLabel="Versions" scrollable
-          options={[...families.keys()].map((version) => ({ value: version, label: version }))}
-          value={family} onChange={(version) => {
-            const newest = families.get(version)?.[0];
-            if (newest) onSelect(newest.tagName);
-          }} />
-      ) : <Text variant="titleMedium">{family}</Text>}
-      {siblings.length > 1 ? (
-        <Segmented key={family} accessibilityLabel={`Releases for version ${family}`} scrollable
-          options={siblings.map((release) => ({
-            value: release.tagName,
-            label: releaseChoice(release.version),
-            accessibilityLabel: releaseName(release.version),
-          }))}
-          value={selected.tagName} onChange={onSelect} />
-      ) : releaseName(selected.version) !== family ? (
-        <Text variant="bodyMedium" color="secondary">{releaseChoice(selected.version)}</Text>
-      ) : null}
-    </>
+    <Segmented accessibilityLabel="Releases" scrollable
+      options={releases.map((release) => ({
+        value: release.tagName,
+        label: releaseName(release.version),
+      }))}
+      value={selected.tagName} onChange={onSelect} />
   );
 }
 

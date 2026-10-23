@@ -1,7 +1,7 @@
 # Changelog Material guidance
 
 Reviewed Google's published Material 3 guidance on 23 October 2026. The
-changelog combines version and release button rows with a prominent
+changelog combines one release button row with a prominent
 acknowledgement action, and continuous notes rather than separate cards.
 Use the official website as the reference when revisiting these decisions.
 
@@ -17,13 +17,11 @@ Use the official website as the reference when revisiting these decisions.
   supports larger sizes and filled actions. “Got it” uses a full-width 56dp
   primary button, matching the product preference for generous controls.
 - [Button groups](https://m3.material.io/components/button-groups/guidelines):
-  related single-selection choices belong in a connected toggle group. Choose
-  a version family, such as 0.3.0, from the first button row, then select its
-  Preview 5, Preview 4, or stable release in the second row. Both use the shared
-  connected group with 48dp targets. Each fills the available width and scrolls
-  on narrow screens instead of truncating labels; arrow keys and Home/End
-  select choices and keep them visible. Selecting another family opens its
-  newest release. A family with only a stable release needs no second row.
+  related single-selection choices belong in one connected toggle group. Each
+  button names a complete release, such as “0.3.0 Preview 5” or “0.2.0,” so one
+  selection opens the desired notes. The row uses shared 48dp targets and
+  scrolls horizontally instead of truncating labels or adding another filter
+  row. Arrow keys and Home/End select releases and keep the active one visible.
 - [Color roles](https://m3.material.io/styles/color/roles): use semantic
   surface/container/foreground pairs. Selection uses the shared secondary
   roles; the acknowledgement action uses primary.
