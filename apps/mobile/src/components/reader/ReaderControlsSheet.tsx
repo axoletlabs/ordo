@@ -16,6 +16,7 @@ import { PanelHeader } from "../ui/PanelHeader";
 import { Segmented } from "../ui/Segmented";
 import { Text } from "../ui/Text";
 import { Toggle } from "../ui/Toggle";
+import { UnavailableLabel } from "../ui/UnavailableLabel";
 import { LazyMount } from "../ui/LazyMount";
 import { PanelPresenceContext } from "../ui/panel-presence";
 import { spacing } from "../../theme/tokens";
@@ -326,19 +327,21 @@ const ReaderControlsBody = React.memo(function ReaderControlsBody({
         onChange={(theme) => setPreferences({ theme })}
       />
     </ControlGroup>,
-    <View key="amoled" style={styles.amoledRow}>
+    <View key="amoled" style={styles.amoledRow}
+      accessible={!effectiveDark}
+      accessibilityState={!effectiveDark ? { disabled: true } : undefined}
+      accessibilityLabel={!effectiveDark ? "AMOLED black, unavailable. Switch the reader to dark mode to use pure black." : undefined}>
       <View style={styles.amoledCopy}>
         <Text variant="bodyStrong">AMOLED black</Text>
         {effectiveDark ? null : (
-          <Text variant="footnote" color="tertiary">Available in dark mode</Text>
+          <Text variant="footnote" color="tertiary">Switch the reader to dark mode to use pure black.</Text>
         )}
       </View>
-      <Toggle
+      {effectiveDark ? <Toggle
         accessibilityLabel="Reader AMOLED black"
-        value={preferences.amoled && effectiveDark}
+        value={preferences.amoled}
         onValueChange={(amoled) => setPreferences({ amoled })}
-        disabled={!effectiveDark}
-      />
+      /> : <UnavailableLabel />}
     </View>,
   ], [
     effectiveDark,
