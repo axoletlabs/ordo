@@ -3,7 +3,10 @@ import { createServer } from 'node:http';
 const port = Number(process.env.WEBKIT_TEST_PORT ?? 8739);
 createServer((request, response) => {
   response.setHeader('Cache-Control', 'no-store');
-  if (request.url === '/ad.js') {
+  if (request.url === '/redirect') {
+    response.writeHead(302, { Location: `http://www.publisher.ordo.test:${port}/` });
+    response.end();
+  } else if (request.url === '/ad.js') {
     response.setHeader('Content-Type', 'application/javascript');
     response.end('window.fixtureAdRan = true;');
   } else if (request.url === '/essential.js') {

@@ -42,13 +42,16 @@ final class Delegate: NSObject, WKNavigationDelegate {
 }
 let delegate = Delegate()
 webView.navigationDelegate = delegate
+func finishNavigation(_ label: String) {
+    let deadline = Date().addingTimeInterval(15)
+    while !delegate.done && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
+    if !delegate.done { fail("Load timed out for \(label)") }
+}
 func load(_ host: String, _ path: String = "/", reload: Bool = false) {
     delegate.done = false
     if reload { webView.reload() }
     else { webView.load(URLRequest(url: URL(string: "http://\(host):\(port)\(path)")!)) }
-    let deadline = Date().addingTimeInterval(15)
-    while !delegate.done && Date() < deadline { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
-    if !delegate.done { fail("Load timed out for \(host)") }
+    finishNavigation(host)
 }
 func state() -> [String: Any] {
     return wait { completion in
@@ -84,5 +87,26 @@ verify("re-enabling filters again", ad: false)
 load("publisher.ordo.test", "/next")
 if !webView.canGoBack { fail("History lost") }
 verify("navigation preserves history", ad: false)
+delegate.done = false
+webView.goBack()
+finishNavigation("back navigation")
+if webView.url?.path != "/" { fail("Back returned to the wrong document") }
+verify("back navigation returns to previous page", ad: false)
+
+delegate.done = false
+let submitted: Bool = wait { completion in
+    webView.evaluateJavaScript("document.querySelector('input').value='browser-test';document.querySelector('form').submit();true") { result, error in
+        if let error = error { fail("Form submission: \(error)") }
+        completion(result as? Bool == true)
+    }
+}
+if !submitted { fail("Form did not submit") }
+finishNavigation("form submission")
+if webView.url?.path != "/next" || webView.url?.query != "q=browser-test" { fail("Form target or data lost") }
+verify("form submission sends data and loads its response", ad: false)
+
+load("publisher.ordo.test", "/redirect")
+if webView.url?.host != "www.publisher.ordo.test" { fail("Redirect target lost") }
+verify("site exception follows the actual redirect destination", ad: true)
 print("All native WebKit checks passed")
 exit(0)
