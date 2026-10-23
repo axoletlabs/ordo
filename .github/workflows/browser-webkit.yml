@@ -17,12 +17,12 @@ permissions:
 
 jobs:
   native-webkit:
-    runs-on: macos-15
+    runs-on: macos-26
     timeout-minutes: 45
     env:
-      # ExpoModulesJSI's Swift package requires Swift 6.2. macos-15 still
-      # defaults to Xcode 16.4, even though this supported toolchain is installed.
-      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      # Expo SDK 57 requires Xcode 26.4+ / Swift 6.3, including its JSI
+      # constructor ownership and concurrency support (expo/expo#49214).
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
     concurrency:
       group: browser-webkit-${{ github.event.pull_request.number || github.ref }}
       cancel-in-progress: true
@@ -65,7 +65,7 @@ jobs:
           workspace=$(node -e "process.stdout.write(require('node:fs').readdirSync('ios').find(f=>f.endsWith('.xcworkspace')))")
           scheme="${workspace%.xcworkspace}"
           if ! xcodebuild -workspace "ios/$workspace" -scheme "$scheme" -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build > /tmp/ordo-ios-build.log 2>&1; then
-            rg -n -i -C 5 'error:|fatal|failed|requires.*swift|unsupported' /tmp/ordo-ios-build.log || true
+            grep -n -i -E -C 5 'error:|fatal error|BUILD FAILED|requires.*[Ss]wift|unsupported' /tmp/ordo-ios-build.log || true
             tail -200 /tmp/ordo-ios-build.log
             exit 1
           fi
