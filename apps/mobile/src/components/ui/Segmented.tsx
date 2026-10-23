@@ -1,5 +1,5 @@
 /** Baseline segmented buttons / Expressive connected toggle button group. */
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { Platform, ScrollView, StyleSheet, View, useWindowDimensions, type TextStyle } from "react-native";
 import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { PressableScale } from "./PressableScale";
@@ -22,7 +22,7 @@ const SegmentLabel = React.memo(function SegmentLabel({ label, foreground, idleF
   // shared values only doubled the per-label UI-thread state.
   const progress = useSharedValue(selected ? 1 : 0);
   const previous = useRef({ selected, reducedMotion });
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (previous.current.selected === selected && previous.current.reducedMotion === reducedMotion) return;
     previous.current = { selected, reducedMotion };
     progress.value = reducedMotion ? Number(selected) : withSpring(Number(selected), materialMotion.effects.fast);

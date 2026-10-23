@@ -1,5 +1,5 @@
 /** Shared Material state layer and interruptible Expressive shape morph. */
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Platform, Pressable, StyleSheet, View, type PressableProps, type StyleProp, type ViewStyle } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, type AnimatedStyle } from "react-native-reanimated";
 import { Pressable as GesturePressable } from "react-native-gesture-handler";
@@ -113,7 +113,8 @@ function StatePressable({ style, visualStyle, children, disabled, stateLayerColo
   const position = (hasRegisteredStyle(style)
     ? StyleSheet.flatten(style as StyleProp<ViewStyle>)?.position : stylePosition(style)) ?? "relative";
   return <ActionPressable {...rest} disabled={disabled}
-    {...(Platform.OS === "web" ? { dataSet: { ...rest.dataSet, materialHoverSurface: "true" } } : {})}
+    // RN Web otherwise waits 50ms before starting an action's feedback.
+    {...(Platform.OS === "web" ? { delayPressIn: 0, dataSet: { ...rest.dataSet, materialHoverSurface: "true" } } : {})}
     {...(Platform.OS === "web" ? webSelectionKeys({ role: rest.role, accessibilityRole: rest.accessibilityRole, disabled, onKeyDown: rest.onKeyDown, onPress: rest.onPress }) : {})}
     {...(Platform.OS !== "web" ? nativeHoverEvents({ disabled,
       onPointerEnter: rest.onPointerEnter, onPointerLeave: rest.onPointerLeave, onHoverIn, onHoverOut }, setHovered) : {})}
@@ -169,7 +170,7 @@ function useStaticTransform(_state: TransformState): undefined { return undefine
 function useTransformFeedback({ pressed, reducedMotion, spring, scaleTo, dim, opacity }: TransformState) {
   const progress = useSharedValue(0);
   const previous = useRef({ pressed: false, reducedMotion });
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (previous.current.pressed === pressed && previous.current.reducedMotion === reducedMotion) return;
     previous.current = { pressed, reducedMotion };
     progress.value = reducedMotion ? Number(pressed) : withSpring(Number(pressed), spring);
@@ -213,7 +214,17 @@ function ControlSurface({
   const [focusVisible, setFocusVisible] = useState(false);
   const [down, setDown] = useState(false);
   const releaseFrame = useRef<number | null>(null);
-  useEffect(() => () => { if (releaseFrame.current != null) cancelAnimationFrame(releaseFrame.current); }, []);
+  useEffect(() => () => {
+    if (releaseFrame.current != null) cancelAnimationFrame(releaseFrame.current);
+    groupInteraction?.(false);
+  }, [groupInteraction]);
+  useLayoutEffect(() => {
+    if (!disabled) return;
+    if (releaseFrame.current != null) cancelAnimationFrame(releaseFrame.current);
+    releaseFrame.current = null;
+    setDown(false);
+    groupInteraction?.(false);
+  }, [disabled, groupInteraction]);
   const layer = useSharedValue(0);
   // One flatten feeds both the resting paint and the corners; only a visual
   // inset needs the untouched style too.
@@ -245,11 +256,7 @@ function ControlSurface({
     ? { outlineColor: focusRingColor, outlineWidth: 3, outlineOffset: -3, outlineStyle: "solid" as const } : null;
   const outerFocusStyle = focusRing ? (visualStyle ? { outlineStyle: "none" as const }
     : { outlineColor: palette.primary, outlineWidth: 3, outlineOffset: 2, outlineStyle: "solid" as const }) : null;
-  // Captured per render: useAnimatedStyle refreshes its closure, so fraction
-  // changes (hover -> press) reach the worklet without a shared-value read.
-  // The ref's retained ink keeps a release fade at the last visible fraction.
-  const inkFraction = ink.current;
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (typeof backgroundColor !== "string") return;
     if (previousBackground.current.color === backgroundColor && previousBackground.current.reducedMotion === motion.reducedMotion) return;
     previousBackground.current = { color: backgroundColor, reducedMotion: motion.reducedMotion };
@@ -270,18 +277,19 @@ function ControlSurface({
   // Shared values already contain the resting paint. Starting springs per
   // untouched control on mount stalls dense pickers before their first frame.
   // Compare targets, not .value (a synchronous UI-thread read on native).
-  const previousFeedback = useRef({ active: false, reducedMotion: motion.reducedMotion });
+  const previousFeedback = useRef({ fraction: 0, reducedMotion: motion.reducedMotion });
   const previousCorners = useRef({ target: restShape.join(":"), reducedMotion: motion.reducedMotion });
 
-  useEffect(() => {
-    const active = fraction > 0;
+  useLayoutEffect(() => {
     const previous = previousFeedback.current;
-    if (previous.active !== active || previous.reducedMotion !== motion.reducedMotion) {
-      layer.value = motion.reducedMotion ? Number(active) : withSpring(Number(active), materialMotion.effects.fast);
+    if (previous.fraction !== fraction || previous.reducedMotion !== motion.reducedMotion) {
+      // Animate the actual state intensity, including hover <-> press/focus.
+      // A boolean visibility spring makes those handoffs jump in one frame.
+      layer.value = motion.reducedMotion ? fraction : withSpring(fraction, materialMotion.effects.fast);
     }
-    previousFeedback.current = { active, reducedMotion: motion.reducedMotion };
+    previousFeedback.current = { fraction, reducedMotion: motion.reducedMotion };
   }, [layer, motion, fraction]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const values = cornerKey.split(":").map(Number);
     const target = down && !disabled ? values.slice(4) : values.slice(0, 4);
     const key = target.join(":");
@@ -294,11 +302,11 @@ function ControlSurface({
       borderBottomLeftRadius: Math.max(0, corners.value[2]!), borderBottomRightRadius: Math.max(0, corners.value[3]!) } : {}),
   }));
   const layerStyle = useAnimatedStyle(() => {
-    if (!tintRgb) return { opacity: layer.value };
+    if (!tintRgb) return { opacity: Math.max(0, Math.min(1, layer.value)) };
     // The fade lives in the color: a sub-1 ELEMENT opacity makes the
     // compositor rasterize the layer and its radius clips as a group that
     // stops matching the surface beneath it (squared-off caps, edge slivers).
-    const alpha = Math.max(0, Math.min(1, layer.value * inkFraction));
+    const alpha = Math.max(0, Math.min(1, layer.value));
     return { backgroundColor: `rgba(${tintRgb[0]},${tintRgb[1]},${tintRgb[2]},${alpha})` };
   });
   const content = typeof children === "function" ? children({ pressed: down }) : children;
@@ -313,7 +321,7 @@ function ControlSurface({
   return (
     <ActionPressable
       {...rest}
-      {...(Platform.OS === "web" ? { dataSet: { ...rest.dataSet, materialHoverSurface: "true" } } : {})}
+      {...(Platform.OS === "web" ? { delayPressIn: 0, dataSet: { ...rest.dataSet, materialHoverSurface: "true" } } : {})}
       {...(Platform.OS === "web" ? webSelectionKeys({ role: rest.role, accessibilityRole: rest.accessibilityRole, disabled, onKeyDown: rest.onKeyDown, onPress: rest.onPress }) : {})}
       {...(Platform.OS !== "web" ? nativeHoverEvents({ disabled,
         onPointerEnter: rest.onPointerEnter, onPointerLeave: rest.onPointerLeave, onHoverIn, onHoverOut }, setHovered) : {})}
@@ -329,8 +337,13 @@ function ControlSurface({
         // A toggle's onPress commits selection after press-out. Resolve both
         // together so its corners don't visit the old rest shape in between.
         if (releaseFrame.current != null) cancelAnimationFrame(releaseFrame.current);
-        releaseFrame.current = requestAnimationFrame(() => { releaseFrame.current = null; setDown(false); });
-        groupInteraction?.(false); onPressOut?.(event);
+        releaseFrame.current = requestAnimationFrame(() => {
+          releaseFrame.current = null;
+          setDown(false);
+          // Width and corners release together, including toggle selection.
+          groupInteraction?.(false);
+        });
+        onPressOut?.(event);
       }}
       onHoverIn={(event) => { setHovered(true); onHoverIn?.(event); }}
       onHoverOut={(event) => { setHovered(false); onHoverOut?.(event); }}
