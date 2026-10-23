@@ -3,7 +3,7 @@
  * Markdown notes, with the shared Material sheet and menu treatments.
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Image, Linking, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Image, Linking, ScrollView, StyleSheet, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { Text, type TextColor } from "../ui/Text";
 import { PressableScale } from "../ui/PressableScale";
@@ -147,14 +147,14 @@ function InlinePiece({
   if (part.type === "break") return "\n";
   if (part.type === "code") {
     return (
-      <Text key={index} variant="mono" color="primary">
+      <Text key={index} variant="mono" color={tone}>
         {part.text}
       </Text>
     );
   }
   if (part.type === "image") return part.alt || part.href;
   const children = (
-    <InlineChildren inlines={"inlines" in part ? part.inlines : []} variant={variant} tone={tone} />
+    <InlineChildren inlines={"inlines" in part ? part.inlines : []} variant={variant} tone={part.type === "link" ? "accent" : tone} />
   );
   if (part.type === "strong") {
     return (
@@ -183,6 +183,7 @@ function InlinePiece({
         key={index}
         variant={variant}
         color="accent"
+        style={styles.link}
         suppressHighlighting
         accessibilityRole="link"
         onPress={() => openLink(part.href)}
@@ -466,6 +467,17 @@ function ReleaseSelector({
     return () => { opening.current += 1; };
   }, [visible]);
 
+  const showHistory = () => {
+    if (!visible || open) return;
+    const request = ++opening.current;
+    measureAnchor(anchorRef.current, (rect) => {
+      if (request !== opening.current) return;
+      haptics.selection();
+      setAnchor(rect);
+      setOpen(true);
+    });
+  };
+
   return (
     <>
       <View ref={anchorRef} collapsable={false} style={styles.releaseAnchor}>
@@ -474,15 +486,12 @@ function ReleaseSelector({
           accessibilityLabel={`Release history, ${releaseName(selected.version)}`}
           accessibilityState={{ expanded: open && visible }}
           aria-haspopup="menu"
-          onPress={() => {
-            if (!visible) return;
-            const request = ++opening.current;
-            measureAnchor(anchorRef.current, (rect) => {
-              if (request !== opening.current) return;
-              haptics.selection();
-              setAnchor(rect);
-              setOpen(true);
-            });
+          onPress={showHistory}
+          onKeyDown={(event) => {
+            if (event.defaultPrevented || event.target !== event.currentTarget) return;
+            if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+            event.preventDefault();
+            if (!event.repeat) showHistory();
           }}
           stateLayerColor={palette.onSecondaryContainer}
           shape={{ rest: 24, pressed: expressive ? radius.md : 24 }}
@@ -533,8 +542,6 @@ function ChangelogSheetBody({
   onShow?: () => void;
 }) {
   const { expressive } = useTheme();
-  const { width, height } = useWindowDimensions();
-  const compactActions = width >= 600 && height < 480;
   const changelog = useChangelog();
   const releases = changelog.releases;
   const [tag, setTag] = useState<string | null>(initialTag ?? null);
@@ -579,7 +586,7 @@ function ChangelogSheetBody({
           </View>
         ) : undefined} />
       {body}
-      <PanelActions confirmLabel="Got it" onConfirm={onDismiss} fullWidth={!compactActions} inline={compactActions} />
+      <PanelActions confirmLabel="Got it" confirmVariant="ghost" onConfirm={onDismiss} />
     </FloatingPanel>
   );
 }
@@ -615,6 +622,7 @@ const styles = StyleSheet.create({
   sectionHeading: { marginTop: spacing[16] },
   empty: { gap: spacing[16] },
   prose: { gap: spacing[10] },
+  link: { textDecorationLine: "underline" },
   command: {
     flexDirection: "row",
     alignItems: "center",
