@@ -35,9 +35,11 @@ export function bookmarkListItemType(bookmark: BookmarkDto | null | undefined): 
 export function estimateBookmarkRowSize(bookmark: BookmarkDto | null | undefined, omitTagIds?: readonly string[]): number {
   if (!bookmark) return BOOKMARK_ROW_BASE_SIZE;
   const hasTags = bookmark.tags?.some((tag) => !omitTagIds?.includes(tag.id));
-  // Inline tags are actions with real 48dp targets, not 24dp text metadata.
-  // Title (24) + metadata (18) + gap (4) + tags (48) + padding (24) = 118.
-  if (hasTags) return 120;
+  // Inline tags are M3 chips (32dp container) with 48dp touch targets whose
+  // hitSlop bands live inside the row's own gap and bottom padding, so they
+  // cost no extra layout height. Title (24) + metadata (18) + gap (4) +
+  // chip (32) + padding (24) = 102; 104 keeps the 8dp grid.
+  if (hasTags) return 104;
   return bookmark.remindAt != null || bookmark.suggestedTags?.length ? 96 : BOOKMARK_ROW_BASE_SIZE;
 }
 

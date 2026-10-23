@@ -15,7 +15,15 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
   const parentActive = useContext(AnimationActivityContext);
   useFocusEffect(useCallback(() => {
     setFocused(true);
-    return () => setFocused(false);
+    return () => {
+      setFocused(false);
+      if (Platform.OS !== "web") return;
+      const node = ref.current as unknown as HTMLElement | null;
+      const focused = document.activeElement;
+      // Web stacks retain outgoing screens under aria-hidden. Release only
+      // this screen's focus; never blur a field already chosen on the next one.
+      if (focused instanceof HTMLElement && node?.contains(focused)) focused.blur();
+    };
   }, []));
   const { reducedMotion } = useMaterialMotion();
   const preference = useSettingsStore((state) => state.navigationAnimation);

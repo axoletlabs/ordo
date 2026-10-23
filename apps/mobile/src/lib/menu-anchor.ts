@@ -14,6 +14,14 @@ export interface MenuAnchorRect {
   height: number;
 }
 
+/** Offsets already reflected in a measured web anchor. A later queued scroll
+ * notification at those same offsets must not dismiss the menu it just opened. */
+export type MenuAnchorScrollSnapshot = ReadonlyMap<Element, { left: number; top: number }>;
+const anchorScrollSnapshots = new WeakMap<MenuAnchorRect, MenuAnchorScrollSnapshot>();
+export function menuAnchorScrollSnapshot(anchor: MenuAnchorRect | null): MenuAnchorScrollSnapshot | undefined {
+  return anchor ? anchorScrollSnapshots.get(anchor) : undefined;
+}
+
 export interface MenuInsets {
   top: number;
   right: number;
@@ -51,6 +59,7 @@ export function isMenuAnchorRect(value: MenuAnchorRect | null | undefined): valu
 
 export type MeasureNode = {
   measureInWindow?: (callback: (x: number, y: number, width: number, height: number) => void) => void;
+  getBoundingClientRect?: () => MenuAnchorRect;
 };
 
 type PointEvent = { nativeEvent: { pageX: number; pageY: number } };
@@ -77,6 +86,26 @@ export function measureAnchor(
     }
     if (event) onMeasured(rectFromPoint(event));
   };
+
+  // RN web's measureInWindow defers the callback. Read the existing DOM box
+  // synchronously so a picker owns Escape as soon as its trigger is pressed,
+  // rather than letting that key dismiss the still-interactive parent first.
+  if (typeof HTMLElement !== "undefined" && node instanceof HTMLElement) {
+    const rect = node.getBoundingClientRect();
+    if (isMenuAnchorRect(rect)) {
+      const anchor = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+      // Only walk the trigger's ancestry, never scan/measure the document. The
+      // rect read above already flushed layout; these offsets describe exactly
+      // the position used for placement, including pre-press focus scrolling.
+      const scroll = new Map<Element, { left: number; top: number }>();
+      for (let ancestor: HTMLElement | null = node; ancestor; ancestor = ancestor.parentElement) {
+        scroll.set(ancestor, { left: ancestor.scrollLeft, top: ancestor.scrollTop });
+      }
+      anchorScrollSnapshots.set(anchor, scroll);
+      finish(anchor);
+      return;
+    }
+  }
 
   if (!node || typeof node.measureInWindow !== "function") {
     finish(null);

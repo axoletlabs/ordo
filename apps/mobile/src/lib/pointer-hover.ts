@@ -4,8 +4,12 @@ export function isHoverPointer(event: Pick<PointerEvent, "nativeEvent">) {
   return event.nativeEvent.pointerType === "mouse" || event.nativeEvent.pointerType === "pen";
 }
 
+/** Only the fields the native pointer bridge forwards. Callers pass these
+ * directly instead of copying their rendered props object on every render. */
+export type NativeHoverSource = Pick<PressableProps, "disabled" | "onPointerEnter" | "onPointerLeave" | "onHoverIn" | "onHoverOut">;
+
 /** Pressability's hover flag is off on native; opt in explicitly, not via private JS flags. */
-export function nativeHoverEvents(props: PressableProps, setHovered: (hovered: boolean) => void) {
+export function nativeHoverEvents(props: NativeHoverSource, setHovered: (hovered: boolean) => void) {
   return {
     onPointerEnter: (event: PointerEvent) => {
       props.onPointerEnter?.(event);

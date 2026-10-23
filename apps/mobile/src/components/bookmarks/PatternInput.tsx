@@ -153,7 +153,9 @@ export function PatternInput({
   const finishStrokeRef = useRef(finishStroke);
   finishStrokeRef.current = finishStroke;
 
-  const responder = useRef(
+  // The gesture reads current props through refs. Construct it only once;
+  // useRef(create(...)) still constructs a discarded responder on every move.
+  const [responder] = useState(() =>
     PanResponder.create({
       onStartShouldSetPanResponder: () => !disabledRef.current,
       onStartShouldSetPanResponderCapture: () => !disabledRef.current,
@@ -185,7 +187,7 @@ export function PatternInput({
       onPanResponderRelease: () => finishStrokeRef.current(),
       onPanResponderTerminate: () => finishStrokeRef.current(),
     }),
-  ).current;
+  );
 
   const last = shown.length > 0 ? CENTERS[shown[shown.length - 1]] : null;
 

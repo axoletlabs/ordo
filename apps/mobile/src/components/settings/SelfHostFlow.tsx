@@ -5,7 +5,7 @@
  * verified address. The URL store is only written after the last step.
  */
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Keyboard, StyleSheet, View, type TextInput } from "react-native";
+import { Keyboard, Platform, StyleSheet, View, type TextInput } from "react-native";
 import { APP_NAME } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { ThemedScrollView } from "../ui/ThemedScrollView";
@@ -67,10 +67,12 @@ export function SelfHostFlow({
   }, [visible]);
 
   useEffect(() => {
-    if (visible && !pendingUrl && step === "address") {
-      const timer = setTimeout(() => inputRef.current?.focus(), 100);
-      return () => clearTimeout(timer);
-    }
+    // Native address entry takes focus through the shared Input scope once the
+    // panel is ready. A web step swap is not a new overlay opening, so it keeps
+    // one explicit frame instead of the old fixed 100 ms delay.
+    if (Platform.OS !== "web" || !visible || pendingUrl || step !== "address") return;
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
   }, [pendingUrl, step, visible]);
 
   useEffect(() => {
@@ -174,6 +176,7 @@ export function SelfHostFlow({
                 ref={inputRef}
                 label="Server address"
                 required
+                autoFocus
                 value={url}
                 onChangeText={setUrl}
                 placeholder="https://ordo.example.com"

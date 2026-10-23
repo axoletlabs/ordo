@@ -24,12 +24,10 @@ import { useWindowDimensions } from "react-native";
 import { useSystemColorScheme } from "../../theme/use-system-color-scheme";
 import { useSceneColumnInsets } from "../../hooks/use-scene-column-insets";
 import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useComposedEventHandler, useSharedValue, type SharedValue } from "react-native-reanimated";
-import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { StatusBar, setStatusBarStyle } from "expo-status-bar";
 import { useAppRouter as useRouter } from "../../hooks/use-app-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
-  APP_NAME,
   HIGHLIGHT_QUOTE_MAX_LENGTH,
   HIGHLIGHTS_PER_BOOKMARK_MAX,
   READ_COMPLETION_THRESHOLD,
@@ -41,8 +39,6 @@ import {
 import type {
   HighlightAnchor,
   HighlightDto,
-  ReaderPreferences,
-  UpdateReaderPreferencesInput,
 } from "@ordo/shared";
 import { Header, HeaderActions, HeaderIconButton } from "../ui/Header";
 import { ScreenContent } from "../ui/ScreenContent";
@@ -50,24 +46,17 @@ import { Text } from "../ui/Text";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 import { Skeleton } from "../ui/Skeleton";
-import { PressableScale } from "../ui/PressableScale";
 import { ThemedScrollView } from "../ui/ThemedScrollView";
-import { FloatingPanel } from "../ui/FloatingPanel";
-import { PanelHeader } from "../ui/PanelHeader";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
-import { sheetMenuStyles } from "../ui/SheetActionRow";
 import type { ArticleHeading } from "./ArticleHtml";
 import { ReaderArticle } from "./ReaderArticle";
 import { ReaderContents, type ReaderContentsHandle } from "./ReaderContents";
+import { ReaderActions, type ReaderActionsHandle } from "./ReaderActions";
 import { createReaderWorkScheduler } from "./reader-work";
 import type { HighlightSelectDraft } from "./article-highlight-ui";
-import { ReaderControlsSheet } from "./ReaderControlsSheet";
-import { EditTagsSheet } from "../tags/EditTagsSheet";
+import { ReaderControlsSheet, type ReaderControlsSheetHandle } from "./ReaderControlsSheet";
 import { LockPrompt } from "../bookmarks/LockPrompt";
-import { ReminderCustomPanel } from "../bookmarks/ReminderCustomPanel";
-import { REMINDER_MENU_WIDTH, ReminderPresetItems, useSaveReminder } from "../bookmarks/ReminderFlow";
-import { formatReminderWhen } from "../../lib/bookmark-reminders";
-import { READER_BODY_SIZE, resolveReaderFont } from "./reader-typography";
+import { READER_BODY_SIZE, resolveReaderFont, type ReaderContentPreferences } from "./reader-typography";
 import { useReaderFontFamily } from "../../theme/fonts";
 import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 import { resolveReaderPalette } from "../../theme/reader-theme";
@@ -86,7 +75,7 @@ import {
   useUpdateHighlight,
 } from "../../hooks/use-bookmarks";
 import * as bookmarkHooks from "../../hooks/use-bookmarks";
-import { useFolders, useServerInfo } from "../../hooks/queries";
+import { useFolders } from "../../hooks/queries";
 import { useReaderPreferences } from "../../hooks/use-reader-preferences";
 import { useReaderChrome } from "../../hooks/use-reader-chrome";
 import { useSettingsStore } from "../../store/settings";
@@ -98,15 +87,22 @@ import { toast } from "../ui/toast-store";
 import { isMenuAnchorRect, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { BookmarkBrowser, type BookmarkBrowserHandle } from "../browser/BookmarkBrowser";
 import {
-  bookmarkCanBeArticle,
-  bookmarkIsArticle,
   bookmarkOpensAsWebsite,
   canReadInOrdo,
 } from "../../lib/bookmark-reader";
 import { copyLink, copyText } from "../../lib/copy-link";
 import { ackBookmarkOpened, openExternalBrowser, openLivePage } from "../../lib/open-website";
 import { reminderClearsOnOpen } from "../../lib/bookmark-reminders";
-import { reconcileReadingProgress, scrollReadingProgress, shouldFlushReadingProgress } from "../../lib/reading-progress";
+import {
+  measureReadingProgress,
+  reconcileReadingProgress,
+  restoreReadingOffset,
+  scrollReadingProgress,
+  shouldFlushReadingProgress,
+  READING_RESTORE_MIN,
+  READING_SHORT_SETTLE_MS,
+  type ReadingProgress,
+} from "../../lib/reading-progress";
 import { fabContentPadding } from "../../lib/fab-layout";
 import { useReducedMotionPreference } from "../../hooks/use-reduced-motion-preference";
 import { createLatestWriteQueue } from "../../lib/latest-write-queue";
@@ -135,6 +131,10 @@ export interface ReaderPaneProps {
 const PROGRESS_DELTA = 0.08;
 /** Trailing idle window before a progress write is flushed. */
 const PROGRESS_DEBOUNCE_MS = 1_500;
+/** Movement (dp) before the first restore that counts as the reader's own
+ * position. A tap, bounce, or queued mount report must not cancel the saved
+ * position, but a real scroll while sections are still mounting must. */
+const USER_SCROLL_INTENT_MIN = 4;
 const SELECT_OPEN_MS = 280;const SELECT_CLOSE_MS = 140;
 
 // Survive reader unmount/reopen: a late write from the previous screen must
@@ -176,7 +176,8 @@ function ReaderProgressBar({ animatedValue, labelRef, initialValue }: {
   labelRef: React.MutableRefObject<(value: number) => void>;
   initialValue: number;
 }) {
-  const [progress, setProgress] = useState(initialValue);
+  const [progress, setProgress] = useState(() =>
+    Number.isFinite(initialValue) ? Math.min(1, Math.max(0, initialValue)) : 0);
   useLayoutEffect(() => {
     labelRef.current = (value) => setProgress((previous) =>
       Math.round(previous * 100) === Math.round(value * 100) ? previous : value);
@@ -197,7 +198,7 @@ function ReaderProgressBar({ animatedValue, labelRef, initialValue }: {
  */
 export function ReaderPane(props: ReaderPaneProps) {
   const systemScheme = useSystemColorScheme();
-  const { preferences, setPreferences } = useReaderPreferences();
+  const { preferences } = useReaderPreferences();
   const materialYouColors = useSettingsStore((s) => s.materialYouColors);
   const deviceColors = useDeviceColors();
   const expressive = useSettingsStore((s) => s.expressive);
@@ -206,8 +207,21 @@ export function ReaderPane(props: ReaderPaneProps) {
     () => resolveReaderPalette(preferences.theme, preferences.amoled, systemScheme, { expressive, contrast, deviceColors: materialYouColors ? deviceColors : null }),
     [preferences.theme, preferences.amoled, systemScheme, deviceColors, materialYouColors, expressive, contrast],
   );
-  // Commit control feedback first; let a long article reflow at interruptible priority.
-  const contentPreferences = useDeferredValue(preferences);
+  // Commit control feedback first; let a long article reflow at interruptible
+  // priority. Only layout fields are deferred and compared: palette/theme and
+  // server acknowledgements with equal values must not hand the article a new
+  // preference object (or reconcile its sections) for unchanged text.
+  const deferredFontFamily = useDeferredValue(preferences.fontFamily);
+  const deferredFontSize = useDeferredValue(preferences.fontSize);
+  const deferredLineSpacing = useDeferredValue(preferences.lineSpacing);
+  const contentPreferences = useMemo<ReaderContentPreferences>(
+    () => ({
+      fontFamily: deferredFontFamily,
+      fontSize: deferredFontSize,
+      lineSpacing: deferredLineSpacing,
+    }),
+    [deferredFontFamily, deferredFontSize, deferredLineSpacing],
+  );
 
   // The reader surface owns the status bar (full-screen stack usage only);
   // on unmount, restore the style the app theme expects.
@@ -221,30 +235,26 @@ export function ReaderPane(props: ReaderPaneProps) {
   return (
     <ReaderPaneInner
       {...props}
-      preferences={preferences}
       contentPreferences={contentPreferences}
-      onUpdatePreferences={setPreferences}
       readerPalette={readerPalette}
     />
   );
 }
 
 interface ReaderPaneInnerProps extends ReaderPaneProps {
-  preferences: ReaderPreferences;
-  contentPreferences: ReaderPreferences;
-  onUpdatePreferences: (patch: UpdateReaderPreferencesInput) => void;
+  /** Article layout preferences trail the controls by one deferred pass;
+   * palette and the controls panel update immediately. */
+  contentPreferences: ReaderContentPreferences;
   readerPalette: Palette;
 }
 
-function ReaderPaneInner({
+const ReaderPaneInner = React.memo(function ReaderPaneInner({
   bookmarkId,
   embedded = false,
   onBack,
   safeBottom = !embedded,
   initialSurface = "auto",
-  preferences,
   contentPreferences,
-  onUpdatePreferences,
   readerPalette,
 }: ReaderPaneInnerProps) {
   const { palette: appPalette } = useTheme();
@@ -268,8 +278,6 @@ function ReaderPaneInner({
     cached?.folderId,
   );
   const { data: folders } = useFolders();
-  const { data: serverInfo } = useServerInfo();
-  const remindersSupported = serverInfo?.reminders === true;
   const protectedDetail = isFolderProtected(detail.error);
   const lockedFolderId = folderProtectedId(detail.error) ?? cached?.folderId ?? null;
   const lockedFolder = folders?.find((folder) => folder.id === lockedFolderId);
@@ -288,23 +296,11 @@ function ReaderPaneInner({
     !detail.isLoading &&
     !!detail.error;
 
-  const [controlsOpen, setControlsOpen] = useState(false);
-  const closeControls = useCallback(() => setControlsOpen(false), []);
+  const controlsRef = useRef<ReaderControlsSheetHandle>(null);
+  const openControls = useCallback(() => controlsRef.current?.open(), []);
   const [unlockOpen, setUnlockOpen] = useState(false);
-  const [actionPanel, setActionPanel] = useState<
-    "actions" | "highlights" | "remind" | "remind-custom" | null
-  >(null);
-  const [actionsAnchor, setActionsAnchor] = useState<MenuAnchorRect | null>(null);
-  const closeActions = useCallback(() => setActionPanel(null), []);
+  const actionsRef = useRef<ReaderActionsHandle>(null);
   const contentsRef = useRef<ReaderContentsHandle>(null);
-  const { save: saveReminder, busy: reminderBusy } = useSaveReminder(
-    bookmark ?? null, closeActions, actionPanel === "remind" || actionPanel === "remind-custom",
-  );
-  const remindNow = useMemo(
-    () => new Date(),
-    [actionPanel, bookmark?.id, bookmark?.remindAt],
-  );
-  const [editTagsOpen, setEditTagsOpen] = useState(false);
   const [headingState, setHeadingState] = useState<{
     bookmarkId: string;
     headings: readonly ArticleHeading[];
@@ -323,6 +319,10 @@ function ReaderPaneInner({
   } | null>(null);
   const selectionMenuRef = useRef(selectionMenu);
   selectionMenuRef.current = selectionMenu;
+  // Scrolling while the menu is open rewrites only its anchor. Keep the draft
+  // separate so that anchor-only updates neither re-run the article scan for
+  // highlight overlap nor rebuild selection callbacks.
+  const selectionDraft = selectionMenu?.draft ?? null;
   const selectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const menuScrollY = useRef(0);
 
@@ -482,7 +482,7 @@ function ReaderPaneInner({
         }
       }
       setSelectionMenu({ draft: resolved, anchor: draft.anchor });
-      setActionPanel(null);
+      actionsRef.current?.close();
     };
     if (selectionMenuRef.current) {
       open();
@@ -563,18 +563,18 @@ function ReaderPaneInner({
   );
 
   const highlightChoice = useMemo(() => {
-    if (!selectionMenu) return { overlappingIds: [] as string[], canHighlight: false, canRemove: false };
+    if (!selectionDraft) return { overlappingIds: [] as string[], canHighlight: false, canRemove: false };
     const html = detail.data?.contentHtml;
     if (!html) return { overlappingIds: [], canHighlight: true, canRemove: false };
-    return selectionHighlightState(html, highlights, selectionMenu.draft);
-  }, [detail.data?.contentHtml, highlights, selectionMenu]);
+    return selectionHighlightState(html, highlights, selectionDraft);
+  }, [detail.data?.contentHtml, highlights, selectionDraft]);
 
   const unhighlightSelection = useCallback(async () => {
-    if (!bookmark || !selectionMenu) return;
+    if (!bookmark || !selectionDraft) return;
     const html = detail.data?.contentHtml;
     if (!html) return;
     haptics.light();
-    const plan = planUnhighlight(html, highlights, selectionMenu.draft);
+    const plan = planUnhighlight(html, highlights, selectionDraft);
     if (plan.kind === "none") {
       toast.error("Couldn't update the highlight.");
       return;
@@ -625,13 +625,9 @@ function ReaderPaneInner({
     dismissSelectionMenu,
     highlights,
     removeHighlight,
-    selectionMenu,
+    selectionDraft,
     updateHighlight,
   ]);
-
-  useEffect(() => {
-    if (actionPanel || controlsOpen || editTagsOpen) dismissSelectionMenu();
-  }, [actionPanel, controlsOpen, dismissSelectionMenu, editTagsOpen]);
 
   useEffect(() => {
     return () => {
@@ -716,12 +712,24 @@ function ReaderPaneInner({
   // An outgoing reader must never enqueue its article against the next account.
   const progressOwner = useRef({ userId: useAuthStore.getState().user?.id, server: useSettingsStore.getState().serverUrl, scope: captureSessionScope() }).current;
   const initialProgressRef = useRef(0);
+  // Last user-observed position that may be written. Measurements alone do not
+  // update it: late images/font swaps move the bar, not the stored position.
   const latestProgressRef = useRef(0);
+  const displayedProgressRef = useRef(0);
   const persistedProgressRef = useRef<number | null>(null);
   const restoredRef = useRef(false);
+  const userScrolledRef = useRef(false);
+  const restoreTargetRef = useRef<number | null>(null);
+  const restoreFromRef = useRef<number | null>(null);
+  const restoreIssuedAtRef = useRef(0);
+  const restoredContentHeightRef = useRef(0);
+  const restoredViewportRef = useRef(0);
+  const readingStartedRef = useRef(false);
   const htmlReadyRef = useRef(false);
   const viewHeightRef = useRef(0);
   const contentHeightRef = useRef(0);
+  const contentSettledRef = useRef(false);
+  const settleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const headingRefs = useRef(new Map<string, View>());
   const pendingHeading = useRef<string | null>(null);
@@ -752,7 +760,6 @@ function ReaderPaneInner({
     const heading = headingRefs.current.get(id);
     const scroll = scrollRef.current;
     pendingHeading.current = null;
-    setActionPanel(null);
     if (!heading) { pendingHeading.current = id; return; }
     if (!scroll) return;
     haptics.light();
@@ -834,6 +841,7 @@ function ReaderPaneInner({
     const article = currentArticleRef.current;
     if (!article || !trackProgressRef.current) return;
     const value = latestProgressRef.current;
+    if (!Number.isFinite(value)) return;
     const last = persistedProgressRef.current;
     if (last !== null && Math.abs(value - last) < 0.005) return;
     persistedProgressRef.current = value;
@@ -844,28 +852,98 @@ function ReaderPaneInner({
   const progressTrackingSV = useSharedValue(false);
   const progressScrollHandler = useAnimatedScrollHandler({
     onScroll: (event) => {
-      if (progressTrackingSV.value) progressSV.value = scrollReadingProgress(
-        event.contentOffset.y, event.layoutMeasurement.height, event.contentSize.height,
-      );
+      if (!progressTrackingSV.value) return;
+      const content = event.contentSize.height;
+      const viewport = event.layoutMeasurement.height;
+      // Keep the last bar through transient zero-size resize frames.
+      if (!(content > 0) || !(viewport > 0)) return;
+      progressSV.value = scrollReadingProgress(event.contentOffset.y, viewport, content);
     },
   });
   const readerScrollHandler = useComposedEventHandler([collapsingFab.scrollHandler, progressScrollHandler]);
 
-  const handleFraction = useCallback(
-    (fraction: number) => {
-      if (!trackProgressRef.current) return;
-      progressLabelRef.current(fraction);
-      latestProgressRef.current = fraction;
-      const last = persistedProgressRef.current;
-      if (shouldFlushReadingProgress(fraction, last, PROGRESS_DELTA, READ_COMPLETION_THRESHOLD)) {
-        flushProgress();
-      } else {
-        if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
-        flushTimerRef.current = setTimeout(flushProgress, PROGRESS_DEBOUNCE_MS);
+  const measureProgress = useCallback(() => measureReadingProgress({
+    offset: offsetRef.current,
+    viewportHeight: viewHeightRef.current,
+    contentHeight: contentHeightRef.current,
+    // Readiness is the article tree finishing its commit, not merely detail
+    // HTML arriving: the placeholder ScrollView is not a reading surface.
+    ready: trackProgressRef.current && htmlReadyRef.current,
+    settled: contentSettledRef.current,
+  }), []);
+
+  const applyReadingProgress = useCallback((reading: ReadingProgress, persist: boolean, paint: boolean) => {
+    if (reading.measured) {
+      displayedProgressRef.current = reading.fraction;
+      // User scrolls are painted on the UI thread by progressScrollHandler;
+      // a sampled JS write would race it backwards. Layout/restore changes
+      // must paint immediately from the measured dimensions.
+      if (paint) progressSV.value = reading.fraction;
+      progressLabelRef.current(reading.fraction);
+      // The UI-thread sampler only reads real overflow offsets. Short content
+      // is completed by the settled JS measurement; leaving tracking armed
+      // would let a bounce or resize frame overwrite it with 0.
+      progressTrackingSV.value = !reading.short;
+    } else {
+      // No dimensions yet (or the article is empty): do not move the bar.
+      progressTrackingSV.value = false;
+    }
+    // A restored position (or any real measured overflow) counts as reading
+    // even when this sample is programmatic/measurement-only. That lets a
+    // later scroll back to the top persist 0 instead of tripping the
+    // completed-row guard below. Short content has no offset and must not mark
+    // the row as started: it can grow into a real article under the top guard.
+    if (reading.measured && !reading.short && reading.fraction > READING_RESTORE_MIN) {
+      readingStartedRef.current = true;
+    }
+    if (!persist || !reading.measured || !trackProgressRef.current) return;
+    // Fully visible content has no scroll position. The bar may show completion
+    // after the settle window, but storage keeps the saved position/states.
+    if (reading.short || reading.position === "empty") return;
+    const last = persistedProgressRef.current;
+    // A sample equal to the stored value is not a progress change. Adopt it and
+    // drop any pending idle write before the completed-at-top guard: scrolling
+    // back to the top from a sub-restore fraction never set readingStartedRef.
+    if (last !== null && Math.abs(reading.fraction - last) < 0.005) {
+      latestProgressRef.current = reading.fraction;
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = null;
       }
-    },
-    [flushProgress],
-  );
+      return;
+    }
+    // A completed article opens at the top. A tap/overscroll at the top must
+    // not rewrite its stored completion before the reader moves down.
+    if (reading.atTop && !readingStartedRef.current) return;
+    // Sample non-equal positions before deciding on an eager or idle write.
+    latestProgressRef.current = reading.fraction;
+    if (shouldFlushReadingProgress(reading.fraction, last, PROGRESS_DELTA, READ_COMPLETION_THRESHOLD, {
+      completionEligible: reading.canComplete,
+    })) {
+      flushProgress();
+      return;
+    }
+    if (flushTimerRef.current) clearTimeout(flushTimerRef.current);
+    flushTimerRef.current = setTimeout(flushProgress, PROGRESS_DEBOUNCE_MS);
+  }, [flushProgress, progressSV, progressTrackingSV]);
+
+  const syncProgress = useCallback((persist: boolean, paint = !persist) => {
+    const reading = measureProgress();
+    applyReadingProgress(reading, persist, paint);
+    return reading;
+  }, [applyReadingProgress, measureProgress]);
+
+  const armContentSettle = useCallback(() => {
+    contentSettledRef.current = false;
+    if (settleTimerRef.current) clearTimeout(settleTimerRef.current);
+    settleTimerRef.current = setTimeout(() => {
+      settleTimerRef.current = null;
+      contentSettledRef.current = true;
+      // Measurement-only: settled short content may show 100%, but a viewport
+      // that could still be a placeholder never writes completion.
+      syncProgress(false);
+    }, READING_SHORT_SETTLE_MS);
+  }, [syncProgress]);
 
   // Per-article baseline from the server; flush best-effort when leaving.
   useEffect(() => {
@@ -875,17 +953,36 @@ function ReaderPaneInner({
     currentArticleRef.current = { id, folderId: bookmark.folderId ?? null };
     initialProgressRef.current = baseline;
     latestProgressRef.current = baseline;
+    displayedProgressRef.current = 0;
     persistedProgressRef.current = baseline;
     restoredRef.current = false;
+    userScrolledRef.current = false;
+    restoreTargetRef.current = null;
+    restoreFromRef.current = null;
+    restoreIssuedAtRef.current = 0;
+    restoredContentHeightRef.current = 0;
+    restoredViewportRef.current = 0;
+    readingStartedRef.current = false;
     htmlReadyRef.current = false;
+    contentSettledRef.current = false;
+    viewHeightRef.current = 0;
+    contentHeightRef.current = 0;
+    trackProgressRef.current = false;
+    if (settleTimerRef.current) {
+      clearTimeout(settleTimerRef.current);
+      settleTimerRef.current = null;
+    }
     progressTrackingSV.value = false;
     pendingHeading.current = null;
     cancelAnimationFrame(headingFrame.current);
     offsetRef.current = 0;
     expandChromeRef.current(0);
     chromeHeightSV.value = chromeHeightRef.current;
-    progressSV.value = baseline;
-    progressLabelRef.current(baseline);
+    // The bar represents the current viewport, never the saved row: completed
+    // articles open at the top and partial positions appear only after the
+    // restore scroll has been acknowledged by a real measurement.
+    progressSV.value = 0;
+    progressLabelRef.current(0);
     if (selectTimer.current) {
       clearTimeout(selectTimer.current);
       selectTimer.current = null;
@@ -893,8 +990,12 @@ function ReaderPaneInner({
     setSelectionMenu(null);
     return () => {
       flushProgress();
+      if (settleTimerRef.current) {
+        clearTimeout(settleTimerRef.current);
+        settleTimerRef.current = null;
+      }
     };
-  }, [bookmark?.id, chromeHeightSV, progressTrackingSV]);
+  }, [bookmark?.id, chromeHeightSV, flushProgress, progressSV, progressTrackingSV]);
 
   // A persisted list row can be older than the freshly fetched detail. Accept
   // its canonical position until rendering finishes, never after a user jump.
@@ -904,45 +1005,68 @@ function ReaderPaneInner({
     initialProgressRef.current = baseline;
     latestProgressRef.current = baseline;
     persistedProgressRef.current = baseline;
-    progressSV.value = baseline;
-    progressLabelRef.current(baseline);
-  }, [bookmark?.id, bookmark?.readProgress, progressSV]);
+  }, [bookmark?.id, bookmark?.readProgress]);
 
   // Restore the saved reading position once layout + content size are known.
-  const maybeRestore = useCallback(() => {
-    if (restoredRef.current || !trackProgressRef.current) return;
-    if (hasHtml && !htmlReadyRef.current) return;
+  // Returns true when a scroll command was issued: the caller must then wait
+  // for the scroll acknowledgement instead of painting the old offset.
+  const maybeRestore = useCallback((): boolean => {
+    if (!trackProgressRef.current || !htmlReadyRef.current) return false;
+    if (userScrolledRef.current) return false;
     const viewH = viewHeightRef.current;
     const contentH = contentHeightRef.current;
-    if (viewH <= 0 || contentH <= 0) return;
-    const scrollable = contentH - viewH;
-    // Placeholder/chrome can fit the viewport; wait until the article body
-    // actually overflows before locking the restore.
-    if (scrollable <= 0) return;
-    restoredRef.current = true;
-    if (offsetRef.current > 8) return;
-    const target = initialProgressRef.current;
-    if (target > 0.02 && target < READ_COMPLETION_THRESHOLD) {
-      const y = target * scrollable;
-      scrollRef.current?.scrollTo({ y, animated: false });
-      offsetRef.current = y;
+    const target = restoreReadingOffset(initialProgressRef.current, viewH, contentH);
+    if (target == null) {
+      // Nothing to restore (completed/top saved row) or the article still fits
+      // the viewport. Lock only after a real overflow exists, so a placeholder
+      // that grows can still be restored.
+      if (viewH > 0 && contentH > viewH) restoredRef.current = true;
+      return false;
     }
-  }, [hasHtml]);
+    const scroll = scrollRef.current;
+    if (!scroll) return false;
+    // Keep the saved fraction under the reader while late images/fonts change
+    // the scrollable range, until the reader scrolls for themselves.
+    if (restoredRef.current
+      && Math.abs(contentH - restoredContentHeightRef.current) < 2
+      && Math.abs(viewH - restoredViewportRef.current) < 2) return false;
+    restoredRef.current = true;
+    restoredContentHeightRef.current = contentH;
+    restoredViewportRef.current = viewH;
+    restoreFromRef.current = offsetRef.current;
+    restoreTargetRef.current = target;
+    restoreIssuedAtRef.current = Date.now();
+    // Web scroll events include programmatic restoration. Rebase the chrome
+    // before issuing the command so that jump is not interpreted as a drag
+    // which hides the header (and its progress bar) immediately on opening.
+    expandChromeRef.current(target);
+    // The scroll event is the acknowledgement: it updates offsetRef and paints
+    // the fraction. Do not paint the saved value from the command alone, so a
+    // failed restore still shows the real current viewport.
+    scroll.scrollTo({ y: target, animated: false });
+    return true;
+  }, []);
 
   const handleArticleReady = useCallback(() => {
     htmlReadyRef.current = true;
-    progressTrackingSV.value = true;
-    maybeRestore();
+    armContentSettle();
+    const restoring = maybeRestore();
+    if (!restoring) syncProgress(false);
     contentsRef.current?.prepare();
-  }, [maybeRestore, progressTrackingSV]);
+    controlsRef.current?.prepare();
+    actionsRef.current?.prepare();
+  }, [armContentSettle, maybeRestore, syncProgress]);
 
   // Start tracking once content exists; retry restore in case the native
   // layout events fired before tracking was armed.
   useEffect(() => {
     trackProgressRef.current = hasContent;
-    progressTrackingSV.value = hasContent && (!hasHtml || htmlReadyRef.current);
-    if (hasContent) maybeRestore();
-  }, [bookmark?.id, hasContent, hasHtml, maybeRestore, progressTrackingSV]);
+    if (!hasContent) {
+      progressTrackingSV.value = false;
+      return;
+    }
+    if (!maybeRestore()) syncProgress(false);
+  }, [bookmark?.id, hasContent, maybeRestore, progressTrackingSV, syncProgress]);
 
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
@@ -951,7 +1075,9 @@ function ReaderPaneInner({
       else readerWork.resume();
       offsetRef.current = contentOffset.y;
       viewHeightRef.current = layoutMeasurement.height;
+      const contentChanged = Math.abs(contentSize.height - contentHeightRef.current) >= 1;
       contentHeightRef.current = contentSize.height;
+      if (contentChanged) armContentSettle();
       // Chrome follows user drags on native (programmatic scrolls — position
       // restore, TOC jumps — never yank it around). Web wheel scrolling has no
       // drag events, so there the chrome simply follows the scroll.
@@ -968,35 +1094,52 @@ function ReaderPaneInner({
           }
         }
       }
-      if (contentSize.height <= 0 || layoutMeasurement.height <= 0) return;
-      if (hasHtml && !htmlReadyRef.current) return;
-      handleFraction(
-        scrollReadingProgress(contentOffset.y, layoutMeasurement.height, contentSize.height),
-      );
+      // Sections and late images mount before the article reports ready. A
+      // reader who scrolls in that window has chosen their own position: the
+      // pending restore must not yank them back when readiness arrives.
+      const target = restoreTargetRef.current;
+      let programmatic = false;
+      if (target != null) {
+        // The target itself is the acknowledgement. A frame at the pre-restore
+        // offset is a stale mount/layout report; anything else is real intent.
+        const staleFrame = restoreFromRef.current != null
+          && Math.abs(contentOffset.y - restoreFromRef.current) <= 2
+          && Date.now() - restoreIssuedAtRef.current < 250;
+        programmatic = Math.abs(contentOffset.y - target) <= 2 || staleFrame;
+        if (!programmatic) {
+          userScrolledRef.current = true;
+          restoreTargetRef.current = null;
+        }
+      } else if (!restoredRef.current && contentOffset.y > USER_SCROLL_INTENT_MIN) {
+        userScrolledRef.current = true;
+      }
+      syncProgress(!programmatic, programmatic);
     },
-    [handleFraction, hasHtml, readerWork, windowHeight],
+    [armContentSettle, readerWork, syncProgress, windowHeight],
   );
 
   // Recompute when content settles/grows (images loading, HTML rendering).
   const onContentSizeChange = useCallback(
     (_w: number, h: number) => {
+      const changed = Math.abs(h - contentHeightRef.current) >= 1;
       contentHeightRef.current = h;
-      maybeRestore();
-      if (h <= 0 || viewHeightRef.current <= 0) return;
-      if (hasHtml && !htmlReadyRef.current) return;
-      const fraction = scrollReadingProgress(offsetRef.current, viewHeightRef.current, h);
-      handleFraction(fraction);
-      progressSV.value = fraction;
+      if (changed) armContentSettle();
+      // A new restore command supersedes the old offset; its scroll
+      // acknowledgement paints the saved fraction. Painting the stale offset
+      // here made late images briefly drop the bar.
+      if (!maybeRestore()) syncProgress(false);
     },
-    [handleFraction, hasHtml, maybeRestore, progressSV],
+    [armContentSettle, maybeRestore, syncProgress],
   );
 
   const onScrollViewLayout = useCallback(
     (event: LayoutChangeEvent) => {
       viewHeightRef.current = event.nativeEvent.layout.height;
-      maybeRestore();
+      // Orientation/window changes move the fraction immediately from the
+      // measured viewport instead of waiting for the next scroll event.
+      if (!maybeRestore()) syncProgress(false);
     },
-    [maybeRestore],
+    [maybeRestore, syncProgress],
   );
 
   /* ---------------------------------- render ---------------------------------- */
@@ -1011,21 +1154,19 @@ function ReaderPaneInner({
         <HeaderIconButton
           name="options-outline"
           color={palette.text}
-          onPress={() => setControlsOpen(true)}
+          onPress={openControls}
           accessibilityLabel="Reader settings"
           accessibilityHint="Adjust text size, typeface, and reading theme."
           measureOnPress={false}
         />
       )}
-      <HeaderIconButton
-        name="ellipsis-horizontal"
-        color={palette.text}
-        onPress={(anchor) => {
-          setActionsAnchor(anchor);
-          setActionPanel("actions");
-        }}
-        accessibilityLabel={showWebsiteView ? "More page actions" : "More article actions"}
-      />
+      <ReaderActions key={bookmark.id} ref={actionsRef} bookmark={bookmark} highlights={highlights}
+        workScheduler={readerWork}
+        hasHtml={hasHtml} hasContents={hasContents} website={showWebsiteView} canRead={showReadInOrdo}
+        onOpen={dismissSelectionMenu} onContents={() => contentsRef.current?.open()}
+        onShare={handleShare} onCopyLink={handleCopyLink} onOpenOriginal={handleOpenOriginal}
+        onOpenExternal={handleOpenSystemBrowser} onRefresh={() => browserRef.current?.reload()}
+        onRead={() => setSurface("reader")} onClassify={handleClassify} onRemoveHighlight={dropHighlight} />
     </HeaderActions>
   ) : undefined;
 
@@ -1106,8 +1247,8 @@ function ReaderPaneInner({
       />
 
       {hasContent && !showWebsiteView ? (
-        <ReaderProgressBar animatedValue={progressSV} labelRef={progressLabelRef}
-          initialValue={latestProgressRef.current} />
+        <ReaderProgressBar key={bookmark?.id ?? "article"} animatedValue={progressSV} labelRef={progressLabelRef}
+          initialValue={bookmark && currentArticleRef.current?.id === bookmark.id ? displayedProgressRef.current : 0} />
       ) : null}
       </Animated.View>
 
@@ -1289,159 +1430,11 @@ function ReaderPaneInner({
       ) : null}
 
       <ReaderControlsSheet
-        visible={controlsOpen}
-        onDismiss={closeControls}
-        preferences={preferences}
-        onUpdate={onUpdatePreferences}
+        key={bookmarkId}
+        ref={controlsRef}
+        onOpen={dismissSelectionMenu}
         effectiveDark={effectiveDark}
-      />
-      <EditTagsSheet
-        visible={editTagsOpen}
-        bookmark={bookmark ?? null}
-        onDismiss={() => setEditTagsOpen(false)}
-      />
-      <ContextMenu
-        visible={actionPanel === "actions" || actionPanel === "remind"}
-        onDismiss={closeActions}
-        anchor={actionsAnchor}
-        width={remindersSupported ? REMINDER_MENU_WIDTH : undefined}
-        sessionKey={actionPanel ? bookmark?.id : undefined}
-        pageKey={actionPanel === "remind" ? "remind" : "actions"}
-      >
-        {actionPanel === "remind" && bookmark ? (
-          <ReminderPresetItems
-            bookmark={bookmark}
-            now={remindNow}
-            busy={reminderBusy}
-            showBack
-            onBack={() => setActionPanel("actions")}
-            onPick={saveReminder}
-            onCustom={() => setActionPanel("remind-custom")}
-          />
-        ) : (
-          <>
-        {hasHtml && articleHeadings.length >= 3 && !showWebsiteView ? (
-          <ContextMenuItem
-            icon="list-outline"
-            label="Table of contents"
-            onPress={() => {
-              closeActions();
-              contentsRef.current?.open();
-            }}
-          />
-        ) : null}
-        {hasHtml && !showWebsiteView ? (
-          <ContextMenuItem
-            icon="color-fill-outline"
-            label="Highlights"
-            onPress={() => setActionPanel("highlights")}
-          />
-        ) : null}
-        {showWebsiteView ? (
-          <ContextMenuItem
-            icon="refresh-outline"
-            label="Refresh"
-            onPress={() => {
-              setActionPanel(null);
-              browserRef.current?.reload();
-            }}
-          />
-        ) : null}
-        <ContextMenuItem
-          icon="share-social-outline"
-          label={showWebsiteView ? "Share page" : "Share article"}
-          onPress={() => {
-            setActionPanel(null);
-            handleShare();
-          }}
-        />
-        <ContextMenuItem
-          icon="link-outline"
-          label="Copy link"
-          onPress={() => {
-            setActionPanel(null);
-            handleCopyLink();
-          }}
-        />
-        <ContextMenuItem
-          icon="pricetags-outline"
-          label="Edit tags"
-          onPress={() => {
-            setActionPanel(null);
-            setEditTagsOpen(true);
-          }}
-        />
-        {remindersSupported && bookmark ? (
-          <ContextMenuItem
-            icon="alarm-outline"
-            label={bookmark.remindAt != null ? "Edit reminder" : "Remind"}
-            trailing={
-              bookmark.remindAt != null ? (
-                <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
-                  {formatReminderWhen(bookmark.remindAt)}
-                </Text>
-              ) : undefined
-            }
-            onPress={() => setActionPanel("remind")}
-          />
-        ) : null}
-        {showWebsiteView && showReadInOrdo ? (
-          <ContextMenuItem
-            icon="reader-outline"
-            label={`Read in ${APP_NAME}`}
-            onPress={() => {
-              setActionPanel(null);
-              setSurface("reader");
-            }}
-          />
-        ) : null}
-        {bookmark && bookmarkIsArticle(bookmark) ? (
-          <ContextMenuItem
-            icon="globe-outline"
-            label="Mark as website"
-            onPress={() => {
-              setActionPanel(null);
-              handleClassify(false);
-            }}
-          />
-        ) : bookmark && bookmarkCanBeArticle(bookmark) ? (
-          <ContextMenuItem
-            icon="reader-outline"
-            label="Mark as article"
-            onPress={() => {
-              setActionPanel(null);
-              handleClassify(true);
-            }}
-          />
-        ) : null}
-        {showWebsiteView ? (
-          <ContextMenuItem
-            icon="open-outline"
-            label="Open in external browser"
-            onPress={() => {
-              setActionPanel(null);
-              handleOpenSystemBrowser();
-            }}
-          />
-        ) : (
-          <ContextMenuItem
-            icon="globe-outline"
-            label="Open original"
-            onPress={() => {
-              setActionPanel(null);
-              handleOpenOriginal();
-            }}
-          />
-        )}
-          </>
-        )}
-      </ContextMenu>
-      <ReminderCustomPanel
-        visible={actionPanel === "remind-custom"}
-        initialUnix={bookmark?.remindAt ?? null}
-        busy={reminderBusy}
-        onDismiss={() => setActionPanel("remind")}
-        onConfirm={(unix) => saveReminder(unix)}
+        workScheduler={readerWork}
       />
       <LockPrompt
         visible={unlockOpen && Boolean(lockedFolderId)}
@@ -1455,52 +1448,6 @@ function ReaderPaneInner({
           void detail.refetch();
         }}
       />
-      <FloatingPanel visible={actionPanel === "highlights"} onDismiss={() => setActionPanel(null)}>
-        <PanelHeader
-          title="Highlights"
-          subtitle={
-            highlights.length === 0 ? "Select a passage in the article to save it." : undefined
-          }
-        />
-        {highlights.length > 0 ? (
-          <ThemedScrollView style={styles.highlightList}>
-            {highlights.map((row) => (
-              <View key={row.id} style={styles.highlightRow}>
-                <PressableScale
-                  style={styles.highlightBody}
-                  onPress={() => void copyText(formatHighlightQuote(row.exact), "Highlight copied")}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Copy highlight: ${formatHighlightQuote(row.exact)}`}
-                >
-                  <Text variant="body" numberOfLines={3}>
-                    {formatHighlightQuote(row.exact)}
-                  </Text>
-                  {row.href ? (
-                    <Text variant="monoSmall" color="secondary" numberOfLines={1} style={styles.highlightMeta}>
-                      {domainFromUrl(row.href)}
-                    </Text>
-                  ) : null}
-                </PressableScale>
-                <PressableScale
-                  style={styles.removeHit}
-                  onPress={() => dropHighlight(row.id)}
-                  accessibilityRole="button"
-                  accessibilityLabel="Remove highlight"
-                >
-                  <Ionicons name="trash-outline" size={18} color={palette.danger} />
-                </PressableScale>
-              </View>
-            ))}
-          </ThemedScrollView>
-        ) : null}
-        <Button
-          label="Article actions"
-          variant="secondary"
-          block
-          onPress={() => setActionPanel("actions")}
-          style={sheetMenuStyles.cancel}
-        />
-      </FloatingPanel>
       <ContextMenu
         visible={selectionMenu !== null && !showWebsiteView}
         onDismiss={dismissSelectionMenu}
@@ -1563,7 +1510,7 @@ function ReaderPaneInner({
     </View>
     </ThemeOverrideProvider>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
@@ -1581,22 +1528,6 @@ const styles = StyleSheet.create({
   description: { marginTop: spacing[8] },
   byline: { marginTop: spacing[6] },
   content: { marginTop: spacing[24] },
-  highlightList: { maxHeight: 420 },
-  highlightRow: {
-    minHeight: 48,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[8],
-    paddingVertical: spacing[8],
-  },
-  highlightBody: { flex: 1, minWidth: 0, minHeight: 48, justifyContent: "center" },
-  highlightMeta: { marginTop: spacing[4] },
-  removeHit: {
-    width: 48,
-    height: 48,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   stateBody: {
     flex: 1,
     width: "100%",

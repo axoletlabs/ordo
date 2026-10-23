@@ -82,7 +82,7 @@ export const TagRow = React.memo(function TagRow({
           : nativeHoverEvents({}, setHovered))}
     >
       <RowHighlight rest={expressive ? { borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 } : undefined}
-        expressive={expressive} hovered={hovered} pressed={pressed} selected={!!highlighted} hoverRadius={24} pressRadius={28} />
+        expressive={expressive} hovered={hovered} pressed={pressed} selected={false} highlighted={!!highlighted} hoverRadius={24} pressRadius={28} />
       <ListPressable
         feedback={false}
         accessibilityRole="button"

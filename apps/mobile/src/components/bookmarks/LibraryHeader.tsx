@@ -12,6 +12,8 @@ import { useAuthStore } from "../../store/auth";
 import { useTheme } from "../../theme/ThemeProvider";
 import { layout, radius, spacing } from "../../theme/tokens";
 import { registerSearchFieldFocus } from "../../lib/search-field-focus";
+import { useOverlayBlockingEffect } from "../ui/overlay-host";
+import { nativeFocusPermitted } from "../ui/input-focus-scope";
 import { MaterialIcon } from "../ui/MaterialIcon";
 import { Input } from "../ui/Input";
 import { IconButton } from "../ui/IconButton";
@@ -35,10 +37,12 @@ function SearchBarActions({ active, style, children }: { active: boolean; style:
     style={style}>{children}</Animated.View>;
 }
 
-const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoFocus, onFilter, filtersOn, onFocusChange, filterOpen, selecting, spatialProgress, effectsProgress }: {
+const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoFocus, onFilter, filtersOn, onFocusChange, onInputFocusChange, filterOpen, selecting, spatialProgress, effectsProgress }: {
   query: string; onChange: (query: string) => void; autoFocus?: boolean;
   onFilter: (anchor: MenuAnchorRect) => void; filtersOn: boolean;
   onFocusChange: (focused: boolean) => void;
+  /** Reports the field's real focus only; the editing session outlives blur. */
+  onInputFocusChange?: (focused: boolean) => void;
   filterOpen: boolean; selecting: boolean;
   spatialProgress: SharedValue<number>; effectsProgress: SharedValue<number>;
 }) {
@@ -48,6 +52,7 @@ const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoF
   const [text, setText] = useState(query);
   const focused = useRef(false);
   const [editing, setEditing] = useState(false);
+  const overlayBlockedRef = useRef(false);
   const clearProgress = useSharedValue(query ? 1 : 0);
   useEffect(() => {
     clearProgress.value = motion.reducedMotion ? (text ? 1 : 0) : withSpring(text ? 1 : 0, materialMotion.effects.fast);
@@ -61,17 +66,55 @@ const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoF
   const exitSearch = useCallback(() => {
     setEditing(false);
     onFocusChange(false);
+    onInputFocusChange?.(false);
     inputRef.current?.blur();
     Keyboard.dismiss();
-  }, [onFocusChange]);
+  }, [onFocusChange, onInputFocusChange]);
   useSearchBack(editing, exitSearch, filterOpen);
   useEffect(() => { if (selecting) exitSearch(); }, [selecting, exitSearch]);
   useEffect(() => { if (!focused.current) setText(query); }, [query]);
-  useFocusEffect(useCallback(() => registerSearchFieldFocus(() => inputRef.current?.focus()), []));
+  /** A render-time `blocked` snapshot can lag the portal handoff by a commit.
+   * Native also needs the live top-owner registry, not just React state. */
+  const overlayOwnsFocus = useCallback(() => Platform.OS !== "web"
+    ? overlayBlockedRef.current || !nativeFocusPermitted(null)
+    : overlayBlockedRef.current,
+  []);
+  useFocusEffect(useCallback(() => registerSearchFieldFocus(() => {
+    // The tab handler can run while an overlay owns the surface. The
+    // background field must refuse the take itself.
+    if (overlayOwnsFocus()) return;
+    inputRef.current?.focus();
+  }), [overlayOwnsFocus]));
+  // Route autofocus is a one-shot intent. If a popup claims the surface before
+  // the delayed take fires, the intent is spent: closing the popup must never
+  // replay it and pull the keyboard back into the library. A fresh
+  // autoFocus false -> true request is a new intent.
+  const routeFocusIntent = useRef(0);
+  const routeFocusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useOverlayBlockingEffect(useCallback((blocked: boolean) => {
+    overlayBlockedRef.current = blocked;
+    // Consume the take when modality commits, not in a later header render.
+    // Unblocking never creates a new intent or refocuses the library.
+    if (!blocked) return;
+    routeFocusIntent.current += 1;
+    if (routeFocusTimer.current == null) return;
+    clearTimeout(routeFocusTimer.current);
+    routeFocusTimer.current = null;
+  }, []));
   useEffect(() => {
     if (!autoFocus) return;
-    const timer = setTimeout(() => inputRef.current?.focus(), 200);
-    return () => clearTimeout(timer);
+    const intent = ++routeFocusIntent.current;
+    if (overlayOwnsFocus()) return;
+    const timer = setTimeout(() => {
+      if (routeFocusTimer.current === timer) routeFocusTimer.current = null;
+      if (routeFocusIntent.current !== intent || overlayOwnsFocus()) return;
+      inputRef.current?.focus();
+    }, 200);
+    routeFocusTimer.current = timer;
+    return () => {
+      if (routeFocusTimer.current === timer) routeFocusTimer.current = null;
+      clearTimeout(timer);
+    };
   }, [autoFocus]);
   const change = (next: string) => {
     setText(next);
@@ -81,8 +124,19 @@ const LibrarySearch = React.memo(function LibrarySearch({ query, onChange, autoF
   return <View><Input ref={inputRef} variant="search" showFocusIndicator={false} value={text} onChangeText={change}
     placeholder={editing ? "Search your library" : "Library"} accessibilityLabel="Search your library"
     accessibilityHint="Search saved bookmarks and folders."
-    onFocus={() => { focused.current = true; setEditing(true); onFocusChange(true); }}
-    onBlur={() => { focused.current = false; }}
+    onFocus={() => {
+      // Native focus ownership can move to this background field when a child
+      // surface removes its own input, before React publishes a new blocked
+      // prop. The live owner registry (plus the DOM flag on web) decides, so
+      // the library never starts an editing session behind an overlay.
+      if (overlayOwnsFocus() || (Platform.OS === "web" && typeof document !== "undefined"
+        && Boolean(document.querySelector('[data-material-overlay="true"]')))) {
+        inputRef.current?.blur();
+        return;
+      }
+      focused.current = true; setEditing(true); onFocusChange(true); onInputFocusChange?.(true);
+    }}
+    onBlur={() => { focused.current = false; onInputFocusChange?.(false); }}
     autoCorrect={false} spellCheck={false} autoCapitalize="none" returnKeyType="search"
     onSubmitEditing={exitSearch}
     onKeyPress={(event) => { if (event.nativeEvent.key === "Escape") exitSearch(); }}
@@ -119,14 +173,25 @@ export function LibraryHeader({ tools, query, onQueryChange, onFilter, filtersOn
   const barLayout = appBarLayout({ topInset: insets.top, tonal: true, compact: compactHeight });
   const motion = useMaterialMotion();
   const [focused, setFocused] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
   const spatialProgress = useSharedValue(0);
   const effectsProgress = useSharedValue(0);
+  const ringProgress = useSharedValue(0);
   useEffect(() => {
     const target = focused ? 1 : 0;
     spatialProgress.value = motion.reducedMotion ? target : withSpring(target, { ...motion.spatial, overshootClamping: true });
     effectsProgress.value = motion.reducedMotion ? target : withSpring(target, materialMotion.effects.spatial);
   }, [focused, spatialProgress, effectsProgress, motion.reducedMotion, motion.expressive]);
-  const focusStyle = useAnimatedStyle(() => ({ opacity: effectsProgress.value }));
+  // The ring mirrors the field's real focus, not the editing session: an
+  // overlay that steals focus (save sheet, picker) clears only the ring,
+  // while the search chrome — back, clear, filters — and the query stay
+  // until the user actually exits search. Nothing refocuses on blur.
+  useEffect(() => {
+    ringProgress.value = motion.reducedMotion
+      ? (inputFocused ? 1 : 0)
+      : withSpring(inputFocused ? 1 : 0, materialMotion.effects.fast);
+  }, [inputFocused, ringProgress, motion.reducedMotion, motion.expressive]);
+  const ringStyle = useAnimatedStyle(() => ({ opacity: ringProgress.value }));
   // The input and action slots never resize: fade/translate the two groups in
   // place instead of clipping and squeezing live buttons on every frame.
   const toolsStyle = useAnimatedStyle(() => ({ opacity: 1 - effectsProgress.value,
@@ -138,7 +203,7 @@ export function LibraryHeader({ tools, query, onQueryChange, onFilter, filtersOn
     paddingTop: barLayout.paddingTop, paddingBottom: barLayout.paddingBottom,
     paddingLeft: column.left, paddingRight: column.right }}>
     <View style={[styles.appBar, { backgroundColor: palette.surfaceContainerHigh }, selection ? { display: "none" } : null]}>
-      <View style={styles.search}><LibrarySearch query={query} onChange={onQueryChange} autoFocus={autoFocusSearch} onFilter={onFilter} filtersOn={filtersOn} onFocusChange={setFocused} filterOpen={filterOpen} selecting={!!selection} spatialProgress={spatialProgress} effectsProgress={effectsProgress} /></View>
+      <View style={styles.search}><LibrarySearch query={query} onChange={onQueryChange} autoFocus={autoFocusSearch} onFilter={onFilter} filtersOn={filtersOn} onFocusChange={setFocused} onInputFocusChange={setInputFocused} filterOpen={filterOpen} selecting={!!selection} spatialProgress={spatialProgress} effectsProgress={effectsProgress} /></View>
       <SearchBarActions active={!focused} style={[styles.searchAccessories, toolsStyle]}>{tools}
       <PressableScale accessibilityRole="button" accessibilityLabel="Account and settings"
         onPress={() => router.navigate("/settings")} stateLayerColor={palette.onSurface}
@@ -147,7 +212,7 @@ export function LibraryHeader({ tools, query, onQueryChange, onFilter, filtersOn
         {user ? <UserAvatar user={user} size={40} /> : <MaterialIcon name="person-circle" size={24} color={palette.onSecondaryContainer} />}
        </PressableScale>
        </SearchBarActions>
-       <Animated.View testID="library-search-focus-ring" pointerEvents="none" style={[StyleSheet.absoluteFill, styles.focusRing, { borderColor: palette.primary }, focusStyle]} />
+       <Animated.View testID="library-search-focus-ring" pointerEvents="none" style={[StyleSheet.absoluteFill, styles.focusRing, { borderColor: palette.primary }, ringStyle]} />
     </View>
     {selection ? <SelectionHeader {...selection} embedded /> : null}
     {!selection && resultLabel ?

@@ -8,6 +8,7 @@ import { Toggle } from "../../../src/components/ui/Toggle";
 import { Text } from "../../../src/components/ui/Text";
 import { Segmented } from "../../../src/components/ui/Segmented";
 import { useSettingsStore, type NavigationAnimation } from "../../../src/store/settings";
+import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { type ThemeMode } from "../../../src/theme/theme";
 import { materialYouAvailable } from "../../../src/theme/device-colors";
@@ -29,7 +30,24 @@ const contrasts = [
 
 export default function AppearanceScreen() {
   const { palette, expressive } = useTheme();
-  const settings = useSettingsStore();
+  // Select only the preferences this page shows. A whole-store subscription
+  // re-renders this retained panel when unrelated settings change (server URL,
+  // haptics, share defaults, OTP-tip dismissal) or hydrate.
+  const settings = useSettingsStore(useShallow((state) => ({
+    themeMode: state.themeMode,
+    setThemeMode: state.setThemeMode,
+    materialYouColors: state.materialYouColors,
+    setMaterialYouColors: state.setMaterialYouColors,
+    themeContrast: state.themeContrast,
+    setThemeContrast: state.setThemeContrast,
+    amoled: state.amoled,
+    setAmoled: state.setAmoled,
+    navigationAnimation: state.navigationAnimation,
+    setNavigationAnimation: state.setNavigationAnimation,
+    setExpressive: state.setExpressive,
+    hapticsEnabled: state.hapticsEnabled,
+    setHapticsEnabled: state.setHapticsEnabled,
+  })));
   const dark = palette.mode === "dark";
   return <SettingsPage title="Appearance">
     <SettingsScrollView>

@@ -249,3 +249,33 @@ export function useDebouncedValue<T>(value: T, delay: number): T {
   }, [delay, value]);
   return debounced;
 }
+
+/**
+ * Bursts of cache writes (invalidations refetching every active bookmarks
+ * query, catalogue pages, polls) each trigger a full cached-match recompute
+ * over the whole cache — tens of milliseconds on large libraries. Collapse a
+ * burst into one bounded flush. Continuous writes must not postpone cached
+ * matches indefinitely; subsequent writes share the first write's deadline.
+ */
+export const CACHE_WRITE_COALESCE_MS = 150;
+
+export function createCacheWriteCoalescer(flush: () => void, delayMs = CACHE_WRITE_COALESCE_MS): {
+  bump: () => void;
+  cancel: () => void;
+} {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  return {
+    bump: () => {
+      if (timer !== undefined) return;
+      timer = setTimeout(() => {
+        timer = undefined;
+        flush();
+      }, delayMs);
+    },
+    cancel: () => {
+      if (timer === undefined) return;
+      clearTimeout(timer);
+      timer = undefined;
+    },
+  };
+}

@@ -1,28 +1,79 @@
 import { scheduleIdleWork } from "../../lib/idle-work";
 
 /** JS idle does not mean the native scroller is idle. Keep article expansion
- * and Contents preparation out of active drags/flings without React updates. */
+ * and Contents preparation out of active drags/flings without React updates.
+ *
+ * Only one queued job is armed at a time. Running one job and then scheduling
+ * the next through scheduleIdleWork gives React another frame to paint before
+ * the following idle opportunity, instead of letting every pending job share
+ * one idle deadline. */
 export function createReaderWorkScheduler() {
-  const pending = new Map<() => void, (() => void) | undefined>();
+  interface PendingWork {
+    work: () => void;
+    cancelIdle?: () => void;
+  }
+  const pending = new Map<() => void, PendingWork>();
+  let scheduled: PendingWork | null = null;
+  let running = false;
   let scrollTimer: ReturnType<typeof setTimeout> | undefined;
-  const arm = (work: () => void) => scheduleIdleWork(() => {
-    pending.delete(work);
-    work();
-  });
+
+  const scheduleNext = () => {
+    if (running || scrollTimer || scheduled || pending.size === 0) return;
+    const entry = pending.values().next().value!;
+    scheduled = entry;
+    entry.cancelIdle = scheduleIdleWork(() => {
+      if (scheduled !== entry) return;
+      scheduled = null;
+      entry.cancelIdle = undefined;
+      if (pending.get(entry.work) === entry) pending.delete(entry.work);
+      running = true;
+      try {
+        entry.work();
+      } finally {
+        running = false;
+        scheduleNext();
+      }
+    });
+  };
+
+  const cancel = (entry: PendingWork) => {
+    if (pending.get(entry.work) !== entry) return;
+    pending.delete(entry.work);
+    if (scheduled === entry) {
+      scheduled = null;
+      entry.cancelIdle?.();
+      entry.cancelIdle = undefined;
+    }
+    if (!running) scheduleNext();
+  };
+
   const resume = () => {
     if (!scrollTimer) return;
     clearTimeout(scrollTimer);
     scrollTimer = undefined;
-    pending.forEach((_cancel, work) => pending.set(work, arm(work)));
+    scheduleNext();
   };
+
   return {
     schedule(work: () => void) {
-      pending.set(work, scrollTimer ? undefined : arm(work));
-      return () => { pending.get(work)?.(); pending.delete(work); };
+      // The Map dedupes the same callback while it is queued. A running job is
+      // removed before invocation, so scheduling it again queues a new turn.
+      let entry = pending.get(work);
+      if (!entry) {
+        entry = { work };
+        pending.set(work, entry);
+        if (!running) scheduleNext();
+      }
+      const queued = entry;
+      return () => cancel(queued);
     },
     scrolling() {
       if (!scrollTimer) {
-        pending.forEach((cancel, work) => { cancel?.(); pending.set(work, undefined); });
+        if (scheduled) {
+          scheduled.cancelIdle?.();
+          scheduled.cancelIdle = undefined;
+          scheduled = null;
+        }
       } else clearTimeout(scrollTimer);
       scrollTimer = setTimeout(resume, 180);
     },
@@ -32,7 +83,11 @@ export function createReaderWorkScheduler() {
     dispose() {
       if (scrollTimer) clearTimeout(scrollTimer);
       scrollTimer = undefined;
-      pending.forEach((cancel) => cancel?.());
+      if (scheduled) {
+        scheduled.cancelIdle?.();
+        scheduled.cancelIdle = undefined;
+        scheduled = null;
+      }
       pending.clear();
     },
   };

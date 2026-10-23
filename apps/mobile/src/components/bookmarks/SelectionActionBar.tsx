@@ -6,7 +6,7 @@ import { AppIcon } from "../ui/PinIcon";
 import { StretchablePill } from "../ui/StretchablePill";
 import { Text } from "../ui/Text";
 import { useSelectionBarMotion, type SelectionPillMotion } from "../../hooks/use-selection-bar-motion";
-import { type MeasureNode } from "../../lib/menu-anchor";
+import { measureAnchor, type MeasureNode } from "../../lib/menu-anchor";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
 import { layout, radius, spacing } from "../../theme/tokens";
@@ -78,7 +78,7 @@ export function SelectionActionBar({
           <View ref={railRef} style={styles.actions}>
             {ordered.map(action => <ActionSlot key={action.key} action={action} present={!keys.length || keys.includes(action.key)} exiting={!keys.length}
               pill={motion.values.get(action.key)!} canvasWidth={available} onPressed={setPressedKey}
-              onPress={() => action.onPress({ measureInWindow: callback => railRef.current?.measureInWindow((x, y, _width, height) => {
+               onPress={() => action.onPress({ measureInWindow: callback => measureAnchor(railRef.current, ({ x, y, height }) => {
                 const target = motion.getTarget(action.key);
                 if (target) callback(x + available - target.right - target.width, y, target.width, height);
               }) })} />)}

@@ -84,6 +84,24 @@ export function flattenPages<T>(pages: readonly { items: readonly T[] }[]): T[] 
   return items;
 }
 
+/** Count the same first-id-wins rows without allocating a flattened array.
+ * Keep both paths together so pagination and rendering share id semantics. */
+export function countUniquePageItems(pages: readonly { items: readonly unknown[] }[]): number {
+  const seen = new Set<string>();
+  let count = 0;
+  for (const page of pages) {
+    for (const item of page.items) {
+      const id = itemId(item);
+      if (id != null) {
+        if (seen.has(id)) continue;
+        seen.add(id);
+      }
+      count += 1;
+    }
+  }
+  return count;
+}
+
 /** `undefined` means stop — a null cursor would refetch page one and duplicate rows. */
 export function nextPageCursor(page: {
   hasMore: boolean;

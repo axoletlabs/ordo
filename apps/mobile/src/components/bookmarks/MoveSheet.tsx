@@ -42,6 +42,7 @@ function isRootDestination(d: Destination): d is typeof ROOT_DESTINATION {
 }
 
 export function MoveSheet(props: MoveSheetProps) {
+  // Retain feature state after first use; the dialog body leaves after exit.
   return <LazyMount active={props.visible}>{() => <MoveSheetContent {...props} />}</LazyMount>;
 }
 

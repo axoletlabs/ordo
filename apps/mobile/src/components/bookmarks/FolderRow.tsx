@@ -90,9 +90,12 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
       onPress(folder);
       return;
     }
+    warmFolder();
     runPressAction(() => onPress(folder), haptics.light);
   };
 
+  // Warm only real taps: press-in fires on every folder row a scroll gesture
+  // starts on, and each touch used to refetch that folder's first page.
   const warmFolder = () => {
     if (selectionMode || (folder.protected && !sessionUnlocked)) return;
     void prefetchFolderBookmarks(folder.id);
@@ -130,7 +133,7 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
     >
       <RowHighlight rest={expressive ? listCorners(position, false) : undefined} expressive={expressive}
         selectionMode={!!selectionMode}
-        hovered={hovered} pressed={pressed} selected={!!selected || !!highlighted} />
+        hovered={hovered} pressed={pressed} selected={!!selected} highlighted={!!highlighted} />
       <SelectionDragHandle
         selectionKey={folderKey(folder.id)}
         selectionMode={!!selectionMode}
@@ -163,7 +166,6 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
         onPressIn={() => {
           setPressed(true);
           hold.pressIn();
-          warmFolder();
         }}
         onPressOut={() => { setPressed(false); hold.pressOut(); }}
         onPress={() => {
@@ -218,7 +220,6 @@ export const FolderRow = React.memo(function FolderRow({ folder, onPress, onMore
         onPressIn={() => {
           setPressed(true);
           hold.pressIn();
-          warmFolder();
         }}
         onPressOut={() => { setPressed(false); hold.pressOut(); }}
         onPress={() => {

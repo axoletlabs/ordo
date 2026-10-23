@@ -34,9 +34,18 @@ import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
 import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 import { haptics } from "../../lib/haptics";
 import { InputSurfaceContext } from "./input-surface";
+import {
+  InputFocusScopeContext,
+  markNativeFocus,
+  nativeFocusPermitted,
+  registerNativeFocusField,
+  useNativeFocusRevision,
+} from "./input-focus-scope";
+import { useOverlayBlocked } from "./overlay-host";
 import { alphaTint } from "../../theme/state-layer";
 import { editOtp, normalizeOtp } from "../../lib/otp-edit";
 import { otpAutofillProps } from "../../lib/otp-autofill";
+import { focusTextInput } from "../../lib/focus-text-input";
 import { useCredentialLock } from "../../hooks/use-credential-lock";
 import { useAnimationActivity } from "../../hooks/use-animation-activity";
 import { otpGroups } from "../../lib/otp-layout";
@@ -85,13 +94,20 @@ export function OtpInput({
 }: OtpInputProps) {
   const { palette } = useTheme();
   const fieldSurface = React.useContext(InputSurfaceContext) ?? palette.surface;
+  const inputFocusScope = React.useContext(InputFocusScopeContext);
+  const overlayBlocked = useOverlayBlocked();
   const messageId = React.useId();
   const motion = useMaterialMotion();
   const animationActive = useAnimationActivity();
+  // Portal siblings stay mounted, so a top-owner change elsewhere must still
+  // re-render this group to disable raw focus/autofill/edits.
+  useNativeFocusRevision();
   const inputRefs = useRef<(TextInput | null)[]>([]);
+  const nativeCells = useRef<object[]>([]);
+  const lockedRef = useRef(false);
+  const activityRef = useRef(animationActive);
   const completedRef = useRef<string | null>(null);
   const prevLen = useRef(0);
-  const didFocus = useRef(false);
   const [focusedIndex, setFocusedIndex] = React.useState<number | null>(null);
   const [width, setWidth] = React.useState(0);
   const [, refreshSelection] = React.useReducer((revision: number) => revision + 1, 0);
@@ -107,9 +123,35 @@ export function OtpInput({
   const locked = routeLocked || !editable || status === "loading" || status === "success";
   const inactive = routeLocked || !editable || status === "loading";
   const privateCode = purpose === "pin" || kind === "backup";
+  // A retained route, sibling picker, blocking overlay, or backgrounded app is
+  // not the interactive surface. None of them may move this field's focus.
+  const scopedFocus = inputFocusScope !== null;
+  const scopeActive = inputFocusScope?.active ?? true;
+  const scopeReady = inputFocusScope?.ready ?? true;
+  const scopeSession = inputFocusScope?.session ?? 0;
+  const scopeOwner = inputFocusScope?.owner ?? null;
+  // Native has one focus system across portal siblings. Only the top owner may
+  // keep a cell; an unscoped OTP on a covered screen is background too.
+  const nativeFocusOwned = Platform.OS === "web" || nativeFocusPermitted(scopeOwner);
+  // Never restore a stale cell when the route or a covering surface returns.
+  // A plain editable pause is still gated by `locked` below, but keeps the
+  // chosen cell for a failed-verification retry on the same surface.
+  const focusSuspended = overlayBlocked || !animationActive
+    || (scopedFocus && (!scopeActive || !scopeReady))
+    || routeLocked || !nativeFocusOwned;
+  // Block direct edits, paste, autofill, and arrow routing whenever this group
+  // is not the interactive surface, not just when a verification is pending.
+  const editingBlocked = locked || focusSuspended;
+  // The delayed opening take starts only for an owner that can receive it.
+  // Once covered/suspended/disabled it is consumed, never replayed.
+  const autoFocusBlocked = overlayBlocked || !animationActive
+    || (scopedFocus && !scopeActive) || !editable;
   const focusCell = (index: number) => {
-    if (locked) return;
-    inputRefs.current[Math.min(Math.max(index, 0), chars.length, length - 1)]?.focus();
+    if (editingBlocked || (Platform.OS !== "web" && !nativeFocusPermitted(scopeOwner))) return;
+    const target = inputRefs.current[Math.min(Math.max(index, 0), chars.length, length - 1)];
+    // Layout routing and registry restore can target the same cell; a no-op
+    // focus avoids a second focus transition or IME reset.
+    if (target?.isFocused?.() !== true) target?.focus();
   };
   // A kept-alive screen can remount this field already filled (previous OTP).
   // Don't treat that restored value as a fresh user completion.
@@ -118,29 +160,116 @@ export function OtpInput({
   const shake = useSharedValue(0);
   const pulse = useSharedValue(1);
 
+  // Scope sessions are fresh visible openings. Suspending for a child picker
+  // keeps the same session, so its resume must not replay the opening take.
+  const autoFocusSession = useRef(scopeSession);
+  const autoFocusIntent = useRef(!scopedFocus || (autoFocus && scopeActive));
+  const autoFocusDone = useRef(false);
+  const autoFocusArmed = useRef(false);
+  // Publish ownership at commit, before passive cleanup. A discarded render
+  // must not change the live field's pending focus request.
+  const canTakeFocus = autoFocus && !locked && !autoFocusBlocked && nativeFocusOwned
+    && (!scopedFocus || scopeReady);
+  const canTakeFocusRef = useRef(canTakeFocus);
+  const liveScopeSession = useRef(scopeSession);
+  useLayoutEffect(() => {
+    canTakeFocusRef.current = canTakeFocus;
+    liveScopeSession.current = scopeSession;
+    lockedRef.current = locked;
+    activityRef.current = animationActive;
+  }, [animationActive, canTakeFocus, locked, scopeSession]);
+  // Register every cell as one native field under the group's scope. The exact
+  // token the user last focused is what a resumed parent gets back; the group
+  // and cell identity stay stable across value changes.
+  useLayoutEffect(() => {
+    if (Platform.OS === "web" || scopeOwner == null) return;
+    const unregister = Array.from({ length }, (_, index) => {
+      const cell = nativeCells.current[index] ?? (nativeCells.current[index] = {});
+      return registerNativeFocusField(scopeOwner, cell, {
+        canFocus: () => !lockedRef.current && activityRef.current && nativeFocusPermitted(scopeOwner),
+        focus: () => {
+          if (lockedRef.current || !activityRef.current || !nativeFocusPermitted(scopeOwner)) return;
+          focusTextInput(inputRefs.current[index]);
+        },
+      });
+    });
+    return () => { unregister.forEach((cleanup) => cleanup()); };
+  }, [length, scopeOwner]);
   useEffect(() => {
-    if (!autoFocus || locked || didFocus.current) return;
-    // Don't steal focus after a failed verification or from another form field.
-    const t = setTimeout(() => {
-      if (!inputRefs.current.some((input) => input?.isFocused())) {
-        didFocus.current = true;
-        inputRefs.current[Math.min(chars.length, length - 1)]?.focus();
+    if (!scopedFocus || autoFocusSession.current === scopeSession) return;
+    autoFocusSession.current = scopeSession;
+    autoFocusDone.current = false;
+    autoFocusArmed.current = false;
+    autoFocusIntent.current = autoFocus && scopeActive;
+  }, [scopedFocus, scopeSession, autoFocus, scopeActive]);
+
+  useEffect(() => {
+    if (!autoFocus || autoFocusDone.current) {
+      autoFocusArmed.current = false;
+      return;
+    }
+    if (scopedFocus && !autoFocusIntent.current) {
+      autoFocusArmed.current = false;
+      return;
+    }
+    if (autoFocusBlocked) {
+      autoFocusDone.current = true;
+      autoFocusArmed.current = false;
+      return;
+    }
+    if (locked) {
+      // The route/credential owner is not active yet. If a take was already in
+      // flight when verification or a route change began, consume it.
+      if (autoFocusArmed.current) {
+        autoFocusDone.current = true;
+        autoFocusArmed.current = false;
       }
-    }, 280);
-    return () => clearTimeout(t);
-  }, [autoFocus, locked, chars.length, length]);
+      return;
+    }
+    if (scopedFocus && !scopeReady) return;
+    autoFocusArmed.current = true;
+    // Opening focus follows the owner's ready state, not a wall-clock delay.
+    // The effect re-runs (and cancels this frame) for every covering overlay,
+    // background, route lock, and scope session change; the frame itself
+    // re-checks live ownership before moving focus.
+    const frame = requestAnimationFrame(() => {
+      autoFocusArmed.current = false;
+      autoFocusDone.current = true;
+      if (!canTakeFocusRef.current || liveScopeSession.current !== scopeSession) return;
+      // Ownership can change between the commit that scheduled this frame and
+      // the frame itself (Android focus fallback, a newer portal sibling).
+      if (Platform.OS !== "web" && !nativeFocusPermitted(scopeOwner)) return;
+      const target = inputRefs.current[Math.min(chars.length, length - 1)];
+      // Don't steal focus after a failed verification or from another form
+      // field. A fresh opening may still own the same cell; only that explicit
+      // take reopens a retained Android IME.
+      const anyFocused = inputRefs.current.some((input) => input?.isFocused());
+      if (!anyFocused || target?.isFocused?.()) {
+        focusTextInput(target);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [autoFocus, scopedFocus, scopeSession, scopeActive, scopeReady, autoFocusBlocked, locked, chars.length, length, scopeOwner]);
 
   // Move only after the controlled value reaches the cells. Focusing during
   // onChangeText sees the old value and can bounce back to the previous end.
   useLayoutEffect(() => {
-    if (focusedIndex === null || locked) return;
+    if (focusedIndex === null) return;
+    if (focusSuspended) {
+      // The user already lost this surface; a later resume must start from a
+      // new deliberate focus, not this stale cell index.
+      setFocusedIndex(null);
+      return;
+    }
+    if (locked) return;
     if (Platform.OS === "web" && document.activeElement !== document.body &&
       !inputRefs.current.some((input) => input?.isFocused())) {
       setFocusedIndex(null);
       return;
     }
-    inputRefs.current[Math.min(focusedIndex, chars.length, length - 1)]?.focus();
-  }, [focusedIndex, chars, locked, length, stacked]);
+    const target = inputRefs.current[Math.min(focusedIndex, chars.length, length - 1)];
+    if (target?.isFocused?.() !== true) target?.focus();
+  }, [focusedIndex, chars, locked, length, stacked, focusSuspended]);
 
   useEffect(() => {
     if (chars.length > prevLen.current) haptics.selection();
@@ -201,7 +330,9 @@ export function OtpInput({
   }));
 
   const setCode = (raw: string, index: number) => {
-    if (locked) return;
+    // Autofill/paste can call onChangeText without a focus event. Check the
+    // live owner as well as the rendered surface state.
+    if (editingBlocked || (Platform.OS !== "web" && !nativeFocusPermitted(scopeOwner))) return;
     const next = editOtp(chars, raw, index, kind, length);
     if (next.value !== chars) {
       skipRestoredComplete.current = false;
@@ -229,8 +360,9 @@ export function OtpInput({
     successSoft: palette.primaryContainer,
   };
 
-  const renderBox = (i: number) => (
-    <DigitBox
+  const renderBox = (i: number) => {
+    const nativeCell = nativeCells.current[i] ?? (nativeCells.current[i] = {});
+    return <DigitBox
       key={i}
       index={i}
       digit={chars[i] ? privateCode ? "•" : chars[i] : ""}
@@ -247,7 +379,14 @@ export function OtpInput({
         value={chars[i] ?? ""}
         onChangeText={(raw) => setCode(raw, i)}
         onFocus={() => {
-          didFocus.current = true;
+          // Android's removal fallback can focus any cell, including one in an
+          // obscured PIN/OTP group. Reject before selection, autofill, or IME
+          // state changes; only the live top owner may keep a cell.
+          if (Platform.OS !== "web" && !nativeFocusPermitted(scopeOwner)) {
+            inputRefs.current[i]?.blur();
+            return;
+          }
+          if (Platform.OS !== "web" && scopeOwner != null) markNativeFocus(scopeOwner, nativeCell);
           const target = Math.min(i, chars.length);
           if (target !== i) { focusCell(target); return; }
           setFocusedIndex(i);
@@ -258,13 +397,14 @@ export function OtpInput({
           if (!locked) setFocusedIndex((current) => current === i ? null : current);
         }}
         onSelectionChange={(event) => {
+          if (editingBlocked) return;
           const { start, end } = event.nativeEvent.selection;
           // Tapping an already-focused cell must still replace its digit, not
           // insert beside it. Keep native paste/copy menus and keyboard support.
           if (focusedIndex === i && chars[i] && (start !== 0 || end !== 1)) refreshSelection();
         }}
         onKeyPress={(event) => {
-          if (locked) return;
+          if (editingBlocked || (Platform.OS !== "web" && !nativeFocusPermitted(scopeOwner))) return;
           const key = event.nativeEvent.key;
           if (key === "Backspace" && !chars[i] && i > 0) {
             event.preventDefault();
@@ -275,6 +415,9 @@ export function OtpInput({
           }
         }}
         onSubmitEditing={() => focusCell(i + 1)}
+        // Keep the native cell focusable for the owner's resume; ownership and
+        // edit permission are enforced by the live guard above, not by making
+        // a retained Android field non-focusable.
         editable={!locked}
         selectTextOnFocus
         selection={{ start: 0, end: chars[i] ? 1 : 0 }}
@@ -285,7 +428,7 @@ export function OtpInput({
         autoCapitalize="none"
         spellCheck={false}
         disableFullscreenUI
-        {...otpAutofillProps(purpose, kind, i === (focusedIndex ?? 0), locked)}
+        {...otpAutofillProps(purpose, kind, !editingBlocked && i === (focusedIndex ?? 0), editingBlocked)}
         keyboardType={kind === "backup" ? "default" : "number-pad"}
         inputMode={kind === "backup" ? "text" : "numeric"}
         keyboardAppearance={palette.mode === "dark" ? "dark" : "light"}
@@ -293,8 +436,8 @@ export function OtpInput({
         blurOnSubmit={false}
         accessibilityLabel={`${label ?? (purpose === "pin" ? "PIN" : "Verification code")}, ${kind === "backup" ? "character" : "digit"} ${i + 1} of ${length}`}
         accessibilityHint="Typing replaces this character. Pasting a complete code replaces all characters."
-        accessibilityState={{ disabled: inactive, busy: status === "loading" }}
-        {...(Platform.OS === "web" ? { disabled: inactive, readOnly: locked, tabIndex: i <= chars.length ? 0 : -1, "aria-required": true, "aria-invalid": !!error, "aria-describedby": message ? messageId : undefined } : null)}
+        accessibilityState={{ disabled: editingBlocked, busy: status === "loading" }}
+        {...(Platform.OS === "web" ? { disabled: editingBlocked, readOnly: locked, tabIndex: editingBlocked ? -1 : i <= chars.length ? 0 : -1, "aria-required": true, "aria-invalid": !!error, "aria-describedby": message ? messageId : undefined } : null)}
         style={[
           styles.cellInput,
           Platform.OS === "web"
@@ -302,8 +445,8 @@ export function OtpInput({
             : null,
         ]}
       />
-    </DigitBox>
-  );
+    </DigitBox>;
+  };
 
   return (
     <View style={style}>

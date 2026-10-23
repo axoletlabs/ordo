@@ -20,11 +20,15 @@ export function useReaderChrome(keepExpanded: boolean, height: SharedValue<numbe
   const spring = motion.spatial;
   const effectsSpring = materialMotion.effects.fast;
   const web = Platform.OS === "web";
-  const settle = () => {
+  // Keep the worklet identity stable across ordinary renders. Reanimated
+  // compares captured worklet closures by identity; a new `settle` here would
+  // make useAnimatedScrollHandler unregister and re-register every scroll
+  // event on each reader render. Depend only on values that change the worklet.
+  const settle = useCallback(() => {
     "worklet";
     const target = hidden.value > height.value / 2 ? height.value : 0;
     hidden.value = reducedMotion ? target : withSpring(target, { ...spring, overshootClamping: true });
-  };
+  }, [height, hidden, reducedMotion, spring]);
   const scrollHandler = useAnimatedScrollHandler({
     onBeginDrag: (event) => {
       dragging.value = true;

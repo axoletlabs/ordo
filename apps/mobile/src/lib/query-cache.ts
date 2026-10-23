@@ -4,6 +4,11 @@
  * last library paints immediately and a slow or down host can never hold the
  * launch. Refreshes settle after the UI is up; the offline gate covers a
  * confirmed-down host once the probe answers.
+ *
+ * Snapshot volume is bounded in query-persist.ts (folders + default unfiled
+ * list + a recency-bounded set of other lists). RAM queries are never trimmed;
+ * budgeting only limits what reaches disk, so saves stay small synchronous
+ * writes regardless of how many folders were visited this session.
  */
 import { AppState, Platform } from "react-native";
 import {

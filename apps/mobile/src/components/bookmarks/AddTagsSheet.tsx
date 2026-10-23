@@ -17,7 +17,15 @@ import { toast } from "../ui/toast-store";
 import { spacing } from "../../theme/tokens";
 import { LazyMount } from "../ui/LazyMount";
 
-export function AddTagsSheet(props: Parameters<typeof AddTagsContent>[0]) {
+export interface AddTagsSheetProps {
+  visible: boolean;
+  onDismiss: () => void;
+  bookmarkIds: readonly string[];
+  folderId?: string | null;
+  onAdded?: () => void;
+}
+
+export function AddTagsSheet(props: AddTagsSheetProps) {
   return <LazyMount active={props.visible}>{() => <AddTagsContent {...props} />}</LazyMount>;
 }
 
@@ -27,13 +35,7 @@ function AddTagsContent({
   bookmarkIds,
   folderId,
   onAdded,
-}: {
-  visible: boolean;
-  onDismiss: () => void;
-  bookmarkIds: readonly string[];
-  folderId?: string | null;
-  onAdded?: () => void;
-}) {
+}: AddTagsSheetProps) {
   const batch = useBatchBookmarks();
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [createTagOpen, setCreateTagOpen] = useState(false);

@@ -56,10 +56,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const contrast = useSettingsStore((s) => s.themeContrast);
   const systemScheme = useColorScheme();
 
-  const value = useMemo<ThemeContextValue>(() => {
-    const palette = resolvePalette(themeMode, amoled, systemScheme, undefined, expressive, contrast, materialYouColors ? deviceColors : null);
-    return { palette, shadows: resolveShadows(palette), expressive };
-  }, [themeMode, amoled, systemScheme, deviceColors, materialYouColors, expressive, contrast]);
+  const palette = useMemo(() => resolvePalette(themeMode, amoled, systemScheme, undefined, expressive, contrast, materialYouColors ? deviceColors : null),
+    [themeMode, amoled, systemScheme, deviceColors, materialYouColors, expressive, contrast]);
+  // The palette resolver reuses identical schemes. An OS appearance update in
+  // forced dark/light mode, or wallpaper colors while Material You is off,
+  // must not broadcast a new context to every Text, icon and control.
+  const value = useMemo<ThemeContextValue>(() => ({ palette, shadows: resolveShadows(palette), expressive }),
+    [palette, expressive]);
 
   useEffect(() => {
     if (typeof Appearance.setColorScheme !== "function") return;

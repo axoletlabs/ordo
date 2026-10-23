@@ -10,7 +10,7 @@ import { useCallback, useRef } from "react";
 import { useRefreshFeedback } from "./use-refresh-feedback";
 import { toast } from "../components/ui/toast-store";
 import { errorMessage } from "../lib/error-message";
-import { flattenPages } from "../lib/api/query-keys";
+import { countUniquePageItems } from "../lib/api/query-keys";
 import { pageLoadMadeProgress, shouldFetchNextPage } from "../lib/list-pagination";
 
 type PageChunk = { items: unknown[] };
@@ -59,11 +59,11 @@ export function useLoadMore(query: {
       return;
     }
     lockRef.current = true;
-    const before = flattenPages(data?.pages ?? []);
+    const before = countUniquePageItems(data?.pages ?? []);
     void fetchNextPage()
       .then((result) => {
-        const after = flattenPages(result.data?.pages ?? data?.pages ?? []);
-        if (!pageLoadMadeProgress(before.length, after.length)) {
+        const after = countUniquePageItems(result.data?.pages ?? data?.pages ?? []);
+        if (!pageLoadMadeProgress(before, after)) {
           stalledRef.current = true;
         }
       })

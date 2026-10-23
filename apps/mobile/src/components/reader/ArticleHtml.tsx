@@ -8,7 +8,7 @@
  * is purely presentation: token-driven typography scaled by the reader
  * preferences, responsive images, select-to-highlight text, and external links.
  */
-import React, { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { startTransition, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   Linking,
   StyleSheet,
@@ -29,18 +29,18 @@ import {
 } from "@native-html/render";
 import { ARTICLE_END_CLASS, prepareArticleSections, reuseArticleSections } from "./article-sections";
 import { useTheme } from "../../theme/ThemeProvider";
-import type { Palette } from "../../theme/theme";
 import { radius, resolveFont, spacing, type FontFamily } from "../../theme/tokens";
-import type { HighlightDto, ReaderLineSpacing, ReaderPreferences } from "@ordo/shared";
+import type { HighlightDto, ReaderLineSpacing } from "@ordo/shared";
 import { applyHighlightsToHtml, htmlToPlainText } from "@ordo/shared";
-import { readerArticleColors, READER_IGNORED_INLINE_STYLES } from "./reader-article-colors";
-import { useAnimationActivity } from "../../hooks/use-animation-activity";
+import { readerArticleColors, readerTagColors, READER_IGNORED_INLINE_STYLES } from "./reader-article-colors";
+import { useAnimationActivityEffect } from "../../hooks/use-animation-activity";
 import { scheduleIdleWork } from "../../lib/idle-work";
 import type { ReaderWorkScheduler } from "./reader-work";
 import {
   READER_BODY_SIZE,
   readerLineHeight,
   resolveReaderFontFamily,
+  type ReaderContentPreferences,
 } from "./reader-typography";
 import {
   collectTableRows,
@@ -53,9 +53,13 @@ import {
   SelectablePhrase,
   asHtmlNode,
   anchorRenderer,
+  codeRenderer,
   ignoreTextSelect,
+  imageRenderer,
   markRenderer,
+  ruleRenderer,
   selectableBlockRenderer,
+  strongRenderer,
   type HighlightUiHandlers,
 } from "./article-highlight-ui";
 
@@ -98,20 +102,22 @@ function heading(size: number) {
   return { fontSize: size, lineHeight: Math.round(size * 1.3) };
 }
 
+/** Typography and structure only: everything in here is baked into the
+ * render engine's resolved tree. Ink and surface colors are deliberately
+ * excluded (see readerTagColors) so a palette change restyles the mounted
+ * tree at render time instead of rebuilding the engine and re-parsing every
+ * article section. */
 function buildTagsStyles(
-  palette: Palette,
   family: FontFamily,
   base: number,
   lineSpacing: ReaderLineSpacing,
 ): MixedStyleRecord {
-  const colors = readerArticleColors(palette);
   const bodyFont = (weight = "400") => resolveFont(family, weight);
   const monoSize = Math.max(12, base - 2);
   const bodyLineHeight = readerLineHeight(base, lineSpacing);
   const cell = {
     paddingVertical: spacing[6],
     paddingHorizontal: spacing[10],
-    borderColor: palette.border,
     borderWidth: StyleSheet.hairlineWidth,
   };
 
@@ -119,7 +125,6 @@ function buildTagsStyles(
     fontFamily: bodyFont(),
     fontSize: base,
     lineHeight: bodyLineHeight,
-    color: colors.body,
   };
 
   return {
@@ -131,36 +136,32 @@ function buildTagsStyles(
     },
     h1: {
       fontFamily: bodyFont("700"),
-      color: palette.text,
       marginTop: spacing[28],
       marginBottom: spacing[6],
       ...heading(base * 1.65),
     },
     h2: {
       fontFamily: bodyFont("700"),
-      color: palette.text,
       marginTop: spacing[24],
       marginBottom: spacing[6],
       ...heading(base * 1.45),
     },
     h3: {
       fontFamily: bodyFont("600"),
-      color: palette.text,
       marginTop: spacing[20],
       marginBottom: spacing[4],
       ...heading(base * 1.28),
     },
     h4: {
       fontFamily: bodyFont("600"),
-      color: palette.text,
       marginTop: spacing[20],
       marginBottom: spacing[4],
       ...heading(base * 1.12),
     },
-    h5: { ...heading(base), fontFamily: bodyFont("600"), color: palette.text, marginTop: spacing[16], marginBottom: spacing[4] },
-    h6: { ...heading(base * 0.95), fontFamily: bodyFont("600"), color: palette.textTertiary, marginTop: spacing[16], marginBottom: spacing[4] },
-    strong: { fontFamily: bodyFont("700"), color: palette.text },
-    b: { fontFamily: bodyFont("700"), color: palette.text },
+    h5: { ...heading(base), fontFamily: bodyFont("600"), marginTop: spacing[16], marginBottom: spacing[4] },
+    h6: { ...heading(base * 0.95), fontFamily: bodyFont("600"), marginTop: spacing[16], marginBottom: spacing[4] },
+    strong: { fontFamily: bodyFont("700") },
+    b: { fontFamily: bodyFont("700") },
     em: {
       fontFamily: resolveFont(family, "400", true),
       fontStyle: "italic",
@@ -169,20 +170,17 @@ function buildTagsStyles(
       fontFamily: resolveFont(family, "400", true),
       fontStyle: "italic",
     },
-    a: { color: palette.accent, textDecorationLine: "underline" },
+    a: { textDecorationLine: "underline" },
     ul: { marginTop: spacing[12], marginBottom: spacing[8] },
     ol: { marginTop: spacing[12], marginBottom: spacing[8] },
     li: {
       fontFamily: bodyFont(),
       fontSize: base,
       lineHeight: Math.round(bodyLineHeight * 0.97),
-      color: colors.body,
       marginBottom: spacing[6],
     },
     blockquote: {
       borderLeftWidth: 3,
-      borderLeftColor: palette.accent,
-      backgroundColor: colors.block,
       paddingHorizontal: spacing[16],
       paddingVertical: spacing[12],
       borderRadius: radius.sm,
@@ -192,8 +190,6 @@ function buildTagsStyles(
       fontFamily: resolveFont("mono", "400"),
       fontSize: monoSize,
       lineHeight: Math.round(monoSize * 1.55),
-      color: colors.body,
-      backgroundColor: colors.block,
       paddingHorizontal: spacing[16],
       paddingVertical: spacing[12],
       borderRadius: radius.sm,
@@ -202,15 +198,12 @@ function buildTagsStyles(
     code: {
       fontFamily: resolveFont("mono", "400"),
       fontSize: monoSize,
-      color: palette.text,
-      backgroundColor: colors.block,
     },
     figure: { marginTop: spacing[20], alignItems: "center" },
     figcaption: {
       fontFamily: bodyFont(),
       fontSize: Math.max(11, base - 3),
       lineHeight: Math.round(Math.max(11, base - 3) * 1.45),
-      color: palette.textTertiary,
       textAlign: "center",
       marginTop: spacing[6],
     },
@@ -221,22 +214,15 @@ function buildTagsStyles(
       ...cell,
       fontFamily: bodyFont("600"),
       fontSize: monoSize,
-      color: palette.text,
     },
     td: {
       ...cell,
       fontFamily: bodyFont(),
       fontSize: monoSize,
-      color: palette.textSecondary,
     },
     hr: {
       borderBottomWidth: StyleSheet.hairlineWidth,
-      borderBottomColor: palette.border,
       marginVertical: spacing[20],
-    },
-    mark: {
-      backgroundColor: colors.highlight,
-      color: colors.onHighlight,
     },
     small: { fontSize: Math.max(11, base - 3) },
   };
@@ -244,7 +230,8 @@ function buildTagsStyles(
 
 export interface ArticleHtmlProps {
   html: string;
-  preferences: ReaderPreferences;
+  /** Layout-affecting preferences only; palette/ink arrives through context. */
+  preferences: ReaderContentPreferences;
   /** Measured width available to the article; drives responsive images. */
   contentWidth: number;
   highlights?: readonly HighlightDto[];
@@ -273,6 +260,7 @@ const headingRenderer: CustomBlockRenderer = ({
   ...props
 }) => {
   const { onHeadingRef } = useRendererProps(tnode.tagName as "h1") as HeadingRendererProps;
+  const ui = useContext(HighlightUiContext);
   const setRef = useCallback(
     (view: ViewType | null) => {
       if (tnode.id) onHeadingRef?.(tnode.id, view);
@@ -283,7 +271,7 @@ const headingRenderer: CustomBlockRenderer = ({
   if (tnodeContainsMedia(asHtmlNode(tnode))) {
     return (
       <View ref={setRef} collapsable={false}>
-        <TDefaultRenderer tnode={tnode} TNodeChildrenRenderer={TNodeChildrenRenderer} {...props} />
+        <TDefaultRenderer tnode={tnode} TNodeChildrenRenderer={TNodeChildrenRenderer} {...props} textProps={{ style: ui?.tagTextColors?.[tnode.tagName ?? ""] }} />
       </View>
     );
   }
@@ -379,6 +367,11 @@ const ARTICLE_RENDERERS = {
   table: tableRenderer,
   a: anchorRenderer,
   mark: markRenderer,
+  hr: ruleRenderer,
+  img: imageRenderer,
+  code: codeRenderer,
+  strong: strongRenderer,
+  b: strongRenderer,
 };
 
 const EMPTY_HIGHLIGHTS: HighlightDto[] = [];
@@ -393,14 +386,14 @@ function ArticleSections({ sections, contentWidth, onReady, workScheduler }: {
   workScheduler?: ReaderWorkScheduler;
 }) {
   const [mountedCount, setMountedCount] = useState(1);
-  const active = useAnimationActivity();
   const count = Math.min(mountedCount, Math.max(1, sections.length));
-  useEffect(() => {
+  const prepareNextSection = useCallback((active: boolean) => {
     if (!active || count >= sections.length) return;
     // Keep each native commit small, allow input to interrupt React's render,
     // and stop preparing background content while Contents/another overlay owns it.
     return (workScheduler?.schedule ?? scheduleIdleWork)(() => startTransition(() => setMountedCount(count + 1)));
-  }, [active, count, sections, workScheduler]);
+  }, [count, sections, workScheduler]);
+  useAnimationActivityEffect(prepareNextSection);
   useEffect(() => {
     if (count < sections.length) return;
     const frame = requestAnimationFrame(() => onReady?.());
@@ -446,18 +439,20 @@ export const ArticleHtml = React.memo(function ArticleHtml({
   useEffect(() => { onHeadingsChange?.(headings); }, [headings, onHeadingsChange]);
 
   const tagsStyles = useMemo(
-    () => buildTagsStyles(palette, family, base, lineSpacing),
-    [palette, family, base, lineSpacing],
+    () => buildTagsStyles(family, base, lineSpacing),
+    [family, base, lineSpacing],
   );
+  // Ink/surfaces resolve at render time. Keeping them out of the engine is
+  // what lets theme/AMOLED changes restyle the article without re-parsing it.
+  const tagColors = useMemo(() => readerTagColors(palette), [palette]);
   // Pin untagged text to the reader, not the app/activity appearance.
   const baseStyle = useMemo(
     () => ({
-      color: palette.onSurface,
       fontFamily: resolveFont(family),
       fontSize: base,
       lineHeight: readerLineHeight(base, lineSpacing),
     }),
-    [palette.onSurface, family, base, lineSpacing],
+    [family, base, lineSpacing],
   );
   const defaultTextProps = useMemo(
     () => ({
@@ -477,10 +472,12 @@ export const ArticleHtml = React.memo(function ArticleHtml({
       articlePlain,
       selectionColor: colors.selection,
       highlightStyle: { color: colors.onHighlight, backgroundColor: colors.highlight },
-      textStyle: baseStyle,
+      textStyle: { ...baseStyle, color: palette.onSurface },
+      tagTextColors: tagColors.text,
+      tagViewColors: tagColors.view,
       onTextSelect: (draft) => (onTextSelectRef.current ?? ignoreTextSelect)(draft),
     }) satisfies HighlightUiHandlers,
-    [baseStyle, articlePlain, colors.highlight, colors.onHighlight, colors.selection],
+    [baseStyle, articlePlain, colors.highlight, colors.onHighlight, colors.selection, palette.onSurface, tagColors],
   );
 
   // List markers should match the article's font (and accent color).

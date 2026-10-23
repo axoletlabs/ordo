@@ -12,6 +12,7 @@ export function ConfirmDialog({
   visible,
   onDismiss,
   onExited,
+  onExiting,
   icon,
   tone = "danger",
   title,
@@ -27,6 +28,8 @@ export function ConfirmDialog({
   visible: boolean;
   onDismiss: () => void;
   onExited?: () => void;
+  /** Runs when the exit fade starts; see FloatingPanelProps.onExiting. */
+  onExiting?: () => void;
   icon?: keyof typeof Ionicons.glyphMap;
   tone?: "danger" | "accent";
   title: string;
@@ -48,6 +51,7 @@ export function ConfirmDialog({
       visible={visible}
       onDismiss={onDismiss}
       onExited={onExited}
+      onExiting={onExiting}
       dismissible={canDismiss}
       maxWidth={layout.overlayConfirmWidth}
     >

@@ -4,7 +4,7 @@
  * inline action. Driven by two shared values (enter + swipe offset) so the
  * enter/exit and swipe animations never fight.
  */
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, Platform, StyleSheet } from "react-native";
 import { MaterialIcon } from "./MaterialIcon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -69,7 +69,9 @@ function ToastItem({ toast }: { toast: Toast }) {
     return () => { active = false; if (timer) clearTimeout(timer); };
   }, [toast.id, toast.duration, toast.action, animateOut, hovered, focused]);
 
-  const pan = Gesture.Pan()
+  // Rebuilding the gesture per render (hover/focus/store updates) re-attaches
+  // detectors on the exact frames a delete/undo toast competes with the list.
+  const pan = useMemo(() => Gesture.Pan()
     .enabled(toast.swipeable)
     .onUpdate((e) => {
       offsetX.value = e.translationX;
@@ -83,7 +85,7 @@ function ToastItem({ toast }: { toast: Toast }) {
       } else {
         offsetX.value = motion.reducedMotion ? 0 : withSpring(0, materialMotion.effects.spatial);
       }
-    });
+    }), [toast.swipeable, motion.reducedMotion, animateOut, offsetX]);
 
   const animStyle = useAnimatedStyle(() => ({
     opacity: enter.value,

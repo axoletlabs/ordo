@@ -1,5 +1,7 @@
 # Material and performance audit: follow-up
 
+> Historical report. The automated test and performance runners described below have been removed from the repository; these are not current test commands or CI gates.
+
 Date: 2026-10-05. Branch: `material-3-redesign`.
 
 This continues [the first audit](material-comprehensive-audit.md). It is not a

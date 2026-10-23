@@ -1,6 +1,6 @@
 /** Bookmarks home: folders and unfiled bookmarks in one library list. */
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { StyleSheet, View, type FlatList, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useAppRouter as useRouter } from "../../../src/hooks/use-app-router";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
@@ -33,7 +33,7 @@ import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
 import { useFolders } from "../../../src/hooks/use-folders";
 import { useFolderTokenStore } from "../../../src/store/folder-tokens";
 import { useListSortStore } from "../../../src/store/list-sort";
-import { sortBookmarksBy, sortFoldersBy } from "../../../src/lib/list-sort";
+import { sortBookmarkPagesBy, sortFoldersBy } from "../../../src/lib/list-sort";
 import { useTags } from "../../../src/hooks/use-tags";
 import { useLoadMore, usePullToRefresh } from "../../../src/hooks/use-list-controls";
 import {
@@ -51,7 +51,6 @@ import { haptics } from "../../../src/lib/haptics";
 import { toast } from "../../../src/components/ui/toast-store";
 import { markedAsReadToast } from "../../../src/lib/copy";
 import { errorMessage } from "../../../src/lib/error-message";
-import { flattenPages } from "../../../src/lib/api/query-keys";
 import {
   useSettingsStore,
   type CreateButtonAction,
@@ -70,11 +69,81 @@ type LibraryItem =
   | { type: "folder"; folder: FolderDto }
   | { type: "bookmark"; bookmark: BookmarkDto };
 
+const EMPTY_LIBRARY_ITEMS: LibraryItem[] = [];
+
+type LibraryListProps = {
+  listRef: React.Ref<FlatList<LibraryItem>>;
+  onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  onContentSizeChange: (width: number, height: number) => void;
+  scrollEventThrottle: number;
+  scrollEnabled: boolean;
+  data: LibraryItem[];
+  extraData: string;
+  keyExtractor: (item: LibraryItem) => string;
+  renderItem: (info: { item: LibraryItem; index: number }) => React.ReactElement;
+  getItemLayout:
+    | ((data: unknown, index: number) => { length: number; offset: number; index: number })
+    | undefined;
+  contentContainerStyle: { paddingBottom: number };
+  refreshing: boolean;
+  onRefresh: () => void;
+  onEndReached: (() => void) | undefined;
+  footerVisible: boolean;
+  empty: React.ReactElement;
+};
+
+/**
+ * Menus, sheets and other screen-local state re-render the screen constantly;
+ * the list subtree itself only re-renders when its own inputs change. Rows and
+ * the virtualized list otherwise pay for every menu open/close.
+ */
+const LibraryList = React.memo(function LibraryList({
+  listRef,
+  onScroll,
+  onContentSizeChange,
+  scrollEventThrottle,
+  scrollEnabled,
+  data,
+  extraData,
+  keyExtractor,
+  renderItem,
+  getItemLayout,
+  contentContainerStyle,
+  refreshing,
+  onRefresh,
+  onEndReached,
+  footerVisible,
+  empty,
+}: LibraryListProps) {
+  return (
+    <ThemedFlashList
+      ref={listRef}
+      onScroll={onScroll}
+      onContentSizeChange={onContentSizeChange}
+      scrollEventThrottle={scrollEventThrottle}
+      data={data}
+      extraData={extraData}
+      keyExtractor={keyExtractor}
+      keyboardShouldPersistTaps="handled"
+      keyboardDismissMode="on-drag"
+      renderItem={renderItem}
+      getItemLayout={getItemLayout}
+      ListEmptyComponent={empty}
+      ListFooterComponent={footerVisible ? <ListLoadingFooter /> : null}
+      contentContainerStyle={contentContainerStyle}
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+      scrollEnabled={scrollEnabled}
+      onEndReached={onEndReached}
+    />
+  );
+});
+
 /** Hosts search-index warming so each fetched page re-renders only this leaf. */
-function LibraryCatalogueWarmer({ searching }: { searching: boolean }) {
+const LibraryCatalogueWarmer = React.memo(function LibraryCatalogueWarmer({ searching }: { searching: boolean }) {
   useLibraryCatalogue(searching);
   return null;
-}
+});
 
 export default function BookmarksScreen() {
   const { palette } = useTheme();
@@ -118,12 +187,12 @@ export default function BookmarksScreen() {
   selectionRef.current = selection;
 
   const homeItems = useMemo(
-    () => sortBookmarksBy(flattenPages(bookmarks.data?.pages ?? []), unfiledSort),
+    () => sortBookmarkPagesBy(bookmarks.data?.pages ?? [], unfiledSort),
     [bookmarks.data, unfiledSort],
   );
    const search = useLibrarySearch(homeItems, folders.data ?? []);
   const items = search.active ? search.items : homeItems;
-  const hasUnread = homeItems.some((bookmark) => !bookmark.isRead);
+  const hasUnread = useMemo(() => homeItems.some((bookmark) => !bookmark.isRead), [homeItems]);
   const sortedFolders = useMemo(
     () => sortFoldersBy(folders.data ?? [], folderSort),
     [folders.data, folderSort],
@@ -296,6 +365,36 @@ export default function BookmarksScreen() {
     }),
     [selection.active, selectionClearance, listOverlayClearance],
   );
+  const searchQueryRef = useRef(search.search);
+  searchQueryRef.current = search.search;
+  const retrySearch = useCallback(() => {
+    void searchQueryRef.current.refetch();
+  }, []);
+  const openAddSheet = useCallback(() => setAddOpen(true), []);
+  const searchErrorText = search.searchError ? errorMessage(search.searchError) : null;
+  // The empty state only changes with the search lifecycle; menus opening and
+  // closing must not rebuild it (it flows into the memoized list as a prop).
+  const listEmptyState = useMemo(() => {
+    if (libraryLoading) return <BookmarkListSkeleton />;
+    if (search.active) {
+      return (
+        <View style={styles.emptyBookmarks}><EmptyState icon="search-outline"
+          title={search.searching ? "Searching…" : search.searchError ? "Couldn't search bookmarks" : "No results"}
+          message={search.searching ? "Checking the rest of your library…" : searchErrorText ?? (search.trimmed ? `No saved items match “${search.trimmed}”.` : "No bookmarks match these filters.")}
+          action={search.searchError ? <Button label="Retry" onPress={retrySearch} /> : undefined} /></View>
+      );
+    }
+    return (
+      <View style={styles.emptyBookmarks}>
+        <EmptyState
+          icon="bookmark-outline"
+          title="No bookmarks yet"
+          message="Save a link to start reading."
+          action={<Button label="Save bookmark" onPress={openAddSheet} />}
+        />
+      </View>
+    );
+  }, [libraryLoading, search.active, search.searching, search.searchError, searchErrorText, search.trimmed, retrySearch, openAddSheet]);
 
   const runCreateAction = (action: CreateButtonHoldAction, anchor?: MenuAnchorRect) => {
     if (action === "menu") {
@@ -377,38 +476,18 @@ export default function BookmarksScreen() {
       ) : (
         <ScreenContent maxWidth={contentWidth} style={styles.content}>
           <SelectionDragFrame drag={drag} selectionStore={selection.store}>
-          <ThemedFlashList
-            ref={drag.listRef}
+          <LibraryList
+            listRef={drag.listRef}
             onScroll={onLibraryScroll}
             onContentSizeChange={drag.onContentSizeChange}
             scrollEventThrottle={drag.scrollEventThrottle}
-            data={libraryLoading ? [] : libraryItems}
+            data={libraryLoading ? EMPTY_LIBRARY_ITEMS : libraryItems}
             extraData={`${folderSort}:${unfiledSort}`}
             keyExtractor={libraryKeyExtractor}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode="on-drag"
             renderItem={renderLibraryItem}
             getItemLayout={getItemLayout}
-            ListEmptyComponent={
-              libraryLoading ? (
-                <BookmarkListSkeleton />
-              ) : search.active ? (
-                <View style={styles.emptyBookmarks}><EmptyState icon="search-outline"
-                  title={search.searching ? "Searching…" : search.searchError ? "Couldn't search bookmarks" : "No results"}
-                  message={search.searching ? "Checking the rest of your library…" : search.searchError ? errorMessage(search.searchError) : search.trimmed ? `No saved items match “${search.trimmed}”.` : "No bookmarks match these filters."}
-                  action={search.searchError ? <Button label="Retry" onPress={() => search.search.refetch()} /> : undefined} /></View>
-              ) : (
-                <View style={styles.emptyBookmarks}>
-                  <EmptyState
-                    icon="bookmark-outline"
-                    title="No bookmarks yet"
-                    message="Save a link to start reading."
-                    action={<Button label="Save bookmark" onPress={() => setAddOpen(true)} />}
-                  />
-                </View>
-              )
-            }
-            ListFooterComponent={(search.active ? search.loadingMore : loadingMore) ? <ListLoadingFooter /> : null}
+            empty={listEmptyState}
+            footerVisible={search.active ? search.loadingMore : loadingMore}
             contentContainerStyle={listContentStyle}
             refreshing={refreshing}
             onRefresh={onRefresh}

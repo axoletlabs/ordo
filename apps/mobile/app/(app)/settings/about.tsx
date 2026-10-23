@@ -60,19 +60,14 @@ function formatFingerprint(value: string): string {
 }
 
 export default function AboutScreen() {
-  const { palette } = useTheme();
   const build = useBuildInfo();
-  const ota = useOtaUpdate();
-  const nativeUpdate = useNativeUpdateStore();
-  const [fingerprintOpen, setFingerprintOpen] = React.useState(false);
+  // This page only needs the offered release version for the Changelog row.
+  // Download progress ticks many times per second; subscribing to the whole
+  // native-update store rebuilt every About group on each tick.
+  const nativeRelease = useNativeUpdateStore((state) => state.release);
   const [changelogOpen, setChangelogOpen] = React.useState(false);
   const commit = build.gitHashShort ?? build.gitHash ?? "—";
   const commitRef = build.gitHash ?? build.gitHashShort;
-  const fingerprint = ota.runtimeVersion;
-  const published = !ota.isEmbeddedLaunch ? ota.runningUpdateCreatedAt : null;
-  const publishedLabel = published
-    ? published.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
-    : null;
 
   return (
     <SettingsPage title="About">
@@ -92,27 +87,7 @@ export default function AboutScreen() {
           />
         </SettingsGroup>
 
-        <SettingsGroup label="Running">
-          <SettingRow
-            icon="layers-outline"
-            label="Origin"
-            value={ota.isEmbeddedLaunch ? "Embedded" : "OTA"}
-          />
-          <SettingRow
-            icon="git-branch-outline"
-            label="Channel"
-            value={ota.channel ?? "—"}
-          />
-          {publishedLabel ? (
-            <SettingRow icon="calendar-outline" label="Published" value={publishedLabel} />
-          ) : null}
-          <SettingRow
-            icon="finger-print-outline"
-            label="Build fingerprint"
-            value={fingerprint ?? "—"}
-            onPress={fingerprint ? () => setFingerprintOpen(true) : undefined}
-          />
-        </SettingsGroup>
+        <RunningSettingsGroup />
 
         <SettingsGroup
           label="Updates"
@@ -124,7 +99,7 @@ export default function AboutScreen() {
           <SettingRow
             icon="newspaper-outline"
             label="Changelog"
-            value={nativeUpdate.release ? releaseName(nativeUpdate.release.version) : undefined}
+            value={nativeRelease ? releaseName(nativeRelease.version) : undefined}
             onPress={() => setChangelogOpen(true)}
             showChevron
           />
@@ -177,6 +152,48 @@ export default function AboutScreen() {
       </SettingsScrollView>
 
       <ChangelogSheet visible={changelogOpen} onDismiss={() => setChangelogOpen(false)} />
+    </SettingsPage>
+  );
+}
+
+/**
+ * OTA metadata changes on background checks and download-progress ticks. Keep
+ * that subscription inside the group it paints so the rest of About (links,
+ * legal copy, updates, changelog) stays mounted and untouched.
+ */
+function RunningSettingsGroup() {
+  const { palette } = useTheme();
+  const ota = useOtaUpdate();
+  const [fingerprintOpen, setFingerprintOpen] = React.useState(false);
+  const fingerprint = ota.runtimeVersion;
+  const published = !ota.isEmbeddedLaunch ? ota.runningUpdateCreatedAt : null;
+  const publishedLabel = published
+    ? published.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
+    : null;
+
+  return (
+    <>
+      <SettingsGroup label="Running">
+        <SettingRow
+          icon="layers-outline"
+          label="Origin"
+          value={ota.isEmbeddedLaunch ? "Embedded" : "OTA"}
+        />
+        <SettingRow
+          icon="git-branch-outline"
+          label="Channel"
+          value={ota.channel ?? "—"}
+        />
+        {publishedLabel ? (
+          <SettingRow icon="calendar-outline" label="Published" value={publishedLabel} />
+        ) : null}
+        <SettingRow
+          icon="finger-print-outline"
+          label="Build fingerprint"
+          value={fingerprint ?? "—"}
+          onPress={fingerprint ? () => setFingerprintOpen(true) : undefined}
+        />
+      </SettingsGroup>
 
       <FloatingPanel visible={fingerprintOpen} onDismiss={() => setFingerprintOpen(false)}>
         <PanelHeader
@@ -198,7 +215,7 @@ export default function AboutScreen() {
           }}
         />
       </FloatingPanel>
-    </SettingsPage>
+    </>
   );
 }
 
