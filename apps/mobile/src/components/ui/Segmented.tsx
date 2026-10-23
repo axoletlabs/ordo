@@ -1,5 +1,5 @@
 /** Baseline segmented buttons / Expressive connected toggle button group. */
-import React, { useCallback, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Platform, ScrollView, StyleSheet, View, useWindowDimensions, type TextStyle } from "react-native";
 import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { PressableScale } from "./PressableScale";
