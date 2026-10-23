@@ -32,6 +32,7 @@ import {
   pageHostFromWebViewUrl,
   isCancelledWebViewError,
 } from "../../lib/in-app-browser";
+import { browserAdBlockingRules } from "../../lib/browser-ad-blocking";
 import { haptics } from "../../lib/haptics";
 import { WEBSITE_FORCE_DARK_SCRIPT } from "../../lib/website-force-dark";
 import { useSettingsStore } from "../../store/settings";
@@ -50,6 +51,7 @@ export interface BookmarkBrowserProps {
   /** When false, hardware back and header host updates are idle (parked view). */
   active?: boolean;
   onPageHost?: (host: string | null) => void;
+  onPageUrl?: (url: string) => void;
 }
 
 export interface BookmarkBrowserHandle {
@@ -59,10 +61,16 @@ export interface BookmarkBrowserHandle {
 }
 
 export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowserProps>(
-  function BookmarkBrowser({ url, active = true, onPageHost }, ref) {
+  function BookmarkBrowser({ url, active = true, onPageHost, onPageUrl }, ref) {
     const { palette } = useTheme();
     const blocked = useOverlayBlocked();
     const forceWebsiteDark = useSettingsStore((s) => s.forceWebsiteDark);
+    const blockWebsiteAds = useSettingsStore((s) => s.blockWebsiteAds);
+    const adBlockAllowedHosts = useSettingsStore((s) => s.adBlockAllowedHosts);
+    const adBlockingRules = useMemo(
+      () => browserAdBlockingRules(blockWebsiteAds, adBlockAllowedHosts),
+      [blockWebsiteAds, adBlockAllowedHosts],
+    );
     const webRef = useRef<WebView>(null);
     const canGoBackRef = useRef(false);
     const ptrDyRef = useRef(0);
@@ -179,8 +187,9 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
         canGoBackRef.current = nav.canGoBack;
         if (!active) return;
         onPageHost?.(pageHostFromWebViewUrl(nav.url));
+        onPageUrl?.(nav.url);
       },
-      [active, onPageHost],
+      [active, onPageHost, onPageUrl],
     );
 
     const handleProgress = useCallback(
@@ -253,6 +262,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           ref={webRef}
           key={`${url}:${forceWebsiteDark ? "dark" : "auto"}`}
           source={source}
+          adBlockingRules={adBlockingRules}
           style={[styles.web, { backgroundColor: chromeBackground }]}
           containerStyle={[styles.web, { backgroundColor: chromeBackground }]}
           startInLoadingState={false}
@@ -299,7 +309,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           injectedJavaScriptBeforeContentLoaded={injected}
           injectedJavaScript={injected}
         />
-    ), [url, forceWebsiteDark, source, chromeBackground, beginLoad, finishLoad, handleProgress,
+    ), [url, forceWebsiteDark, adBlockingRules, source, chromeBackground, beginLoad, finishLoad, handleProgress,
       handleError, handleNav, handleShouldStart, handleOpenWindow, handleMessage, recoverProcess, injected, blocked]);
 
     return (
