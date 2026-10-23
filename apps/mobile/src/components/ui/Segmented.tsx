@@ -1,6 +1,6 @@
 /** Baseline segmented buttons / Expressive connected toggle button group. */
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Platform, StyleSheet, View, useWindowDimensions, type TextStyle } from "react-native";
+import { Platform, ScrollView, StyleSheet, View, useWindowDimensions, type TextStyle } from "react-native";
 import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
@@ -42,6 +42,8 @@ export interface SegmentedProps<T extends string> {
   options: readonly { value: T; label: string; accessibilityLabel?: string; labelStyle?: TextStyle }[]; value: T; onChange: (value: T) => void;
   accessibilityLabel?: string;
   orientation?: "auto" | "horizontal" | "vertical";
+  /** Keep related choices in one row, scrolling instead of truncating labels. */
+  scrollable?: boolean;
   disabled?: boolean;
 }
 
@@ -106,11 +108,12 @@ const Segment = React.memo(function Segment({ value, label, accessibilityLabel, 
     && previous.motion === next.motion && previous.onSelect === next.onSelect;
 });
 
-export function Segmented<T extends string>({ options, value, onChange, accessibilityLabel, orientation = "auto", disabled = false }: SegmentedProps<T>) {
+export function Segmented<T extends string>({ options, value, onChange, accessibilityLabel, orientation = "auto", scrollable = false, disabled = false }: SegmentedProps<T>) {
   const { palette, expressive } = useTheme();
   const motion = useMaterialMotion();
   const { fontScale } = useWindowDimensions();
   const [width, setWidth] = useState(0);
+  const scrollRef = useRef<ScrollView>(null);
   const [labelWidths, setLabelWidths] = useState<Record<string, number>>({});
   const measuredWidths = useRef<Record<string, number>>({});
   const pendingWidths = useRef<Record<string, number> | null>(null);
@@ -175,7 +178,15 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
   // Reserve the selected check for EVERY segment so selecting another option
   // never resizes its neighbors. Narrow windows/large fonts stack, not truncate.
   const minimumWidth = Math.max(0, ...options.map((option) => labelWidths[option.value] ?? 0)) + 22 + 24 + (expressive ? 0 : 2);
-  const vertical = orientation === "vertical" || orientation === "auto" && width > 0 && width < minimumWidth * options.length + (expressive ? 2 * (options.length - 1) : 0);
+  const horizontalScroll = scrollable && orientation !== "vertical";
+  const groupGap = expressive ? 2 : 0;
+  const minimumGroupWidth = minimumWidth * options.length + groupGap * Math.max(0, options.length - 1);
+  const vertical = orientation === "vertical" || !horizontalScroll && orientation === "auto" && width > 0 && width < minimumGroupWidth;
+  const selectedIndex = options.findIndex((option) => option.value === value);
+  useEffect(() => {
+    if (!horizontalScroll || width <= 0 || selectedIndex < 0) return;
+    scrollRef.current?.scrollTo({ x: Math.max(0, selectedIndex * (minimumWidth + groupGap) - (width - minimumWidth) / 2), animated: false });
+  }, [horizontalScroll, width, selectedIndex, minimumWidth, groupGap]);
   const visualHeight = Math.max(vertical ? 48 : 40, 20 * fontScale + 16);
   const keyboardProps = Platform.OS === "web" ? {
     onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -195,14 +206,10 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
       radios[next]?.focus();
     },
   } : {};
-  return <View onLayout={(event) => {
-    const nextWidth = event.nativeEvent.layout.width;
-    setWidth((current) => (current === nextWidth ? current : nextWidth));
-  }} style={{ minHeight: 48, justifyContent: "center" }}>
-    {orientation === "auto" ? <SegmentMeasures options={options} onMeasure={measure} /> : null}
-    <View {...keyboardProps} accessibilityRole="radiogroup" accessibilityLabel={accessibilityLabel} style={[styles.group, {
-    gap: expressive ? 2 : 0, backgroundColor: "transparent",
+  const group = <View {...keyboardProps} accessibilityRole="radiogroup" accessibilityLabel={accessibilityLabel} style={[styles.group, {
+    gap: groupGap, backgroundColor: "transparent",
     borderRadius: radius.full,
+    ...(horizontalScroll ? { minWidth: minimumGroupWidth, flexGrow: 1 } : {}),
     ...(vertical ? { flexDirection: "column" as const, height: "auto" as const } : {}),
   }]}>
     {options.map((option, index) => {
@@ -215,7 +222,17 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
         first={index === 0} last={index === options.length - 1} outer={outer}
         palette={palette} motion={motion} onSelect={select} />;
     })}
-  </View></View>;
+  </View>;
+  return <View onLayout={(event) => {
+    const nextWidth = event.nativeEvent.layout.width;
+    setWidth((current) => (current === nextWidth ? current : nextWidth));
+  }} style={{ minHeight: 48, justifyContent: "center" }}>
+    {orientation === "auto" || horizontalScroll ? <SegmentMeasures options={options} onMeasure={measure} /> : null}
+    {horizontalScroll ? <ScrollView ref={scrollRef} horizontal showsHorizontalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled" style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+      {group}
+    </ScrollView> : group}
+  </View>;
 }
 
 /** Invisible per-label measuring pass for auto orientation. Memoized so a
@@ -241,6 +258,8 @@ const SegmentMeasures = React.memo(function SegmentMeasures({ options, onMeasure
   });
 });
 const styles = StyleSheet.create({
+   scroll: { marginHorizontal: -8 },
+   scrollContent: { flexGrow: 1, padding: 8 },
    group: { flexDirection: "row", minHeight: 48 },
    option: { flex: 1, minWidth: 48, minHeight: 48, justifyContent: "center" },
    visual: { alignSelf: "stretch", height: 40, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingHorizontal: 12 },

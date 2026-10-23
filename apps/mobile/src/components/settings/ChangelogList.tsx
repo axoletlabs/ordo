@@ -1,17 +1,17 @@
 /**
- * A bottom-sheet release reader: minimal heading, continuous Markdown notes,
- * and persistent release navigation. No cards or decorative change icons.
+ * A bottom-sheet release reader: tonal release navigation above continuous
+ * Markdown notes, with shared Material sheet and connected button treatments.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Image, Linking, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Image, Linking, ScrollView, StyleSheet, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { Text, type TextColor } from "../ui/Text";
-import { PressableScale } from "../ui/PressableScale";
 import { Button } from "../ui/Button";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { PanelActions } from "../ui/SheetActionRow";
 import { IconButton } from "../ui/IconButton";
+import { Segmented } from "../ui/Segmented";
 import { Spinner } from "../ui/Spinner";
 import { toast } from "../ui/toast-store";
 import {
@@ -144,14 +144,14 @@ function InlinePiece({
   if (part.type === "break") return "\n";
   if (part.type === "code") {
     return (
-      <Text key={index} variant="mono" color="primary">
+      <Text key={index} variant="mono" color={tone}>
         {part.text}
       </Text>
     );
   }
   if (part.type === "image") return part.alt || part.href;
   const children = (
-    <InlineChildren inlines={"inlines" in part ? part.inlines : []} variant={variant} tone={tone} />
+    <InlineChildren inlines={"inlines" in part ? part.inlines : []} variant={variant} tone={part.type === "link" ? "accent" : tone} />
   );
   if (part.type === "strong") {
     return (
@@ -180,6 +180,7 @@ function InlinePiece({
         key={index}
         variant={variant}
         color="accent"
+        style={styles.link}
         suppressHighlighting
         accessibilityRole="link"
         onPress={() => openLink(part.href)}
@@ -440,40 +441,22 @@ function Notes({ blocks }: { blocks: ChangelogBlock[] }) {
   );
 }
 
-function VersionPill({
-  label,
+function ReleaseSelector({
+  releases,
   selected,
-  onPress,
+  onSelect,
 }: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
+  releases: ChangelogRelease[];
+  selected: ChangelogRelease;
+  onSelect: (tag: string) => void;
 }) {
-  const { palette, expressive } = useTheme();
-  const fg = selected ? expressive ? palette.onSecondary : palette.onSecondaryContainer : palette.onSurface;
-  // A full-radius token is a silhouette, not a spring target; morph the pill's
-  // painted half-height so the entire shape change is visible.
-  const corner = expressive ? 24 : radius.sm;
   return (
-    <PressableScale
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      stateLayerColor={fg}
-      shape={{ rest: corner, pressed: expressive ? radius.md : corner }}
-      style={[
-        styles.pill,
-        {
-          backgroundColor: selected ? expressive ? palette.secondary : palette.secondaryContainer : "transparent",
-          borderColor: selected ? "transparent" : palette.outline,
-        },
-      ]}
-    >
-      <Text variant="label" style={{ color: fg }}>
-        {label}
-      </Text>
-    </PressableScale>
+    <Segmented accessibilityLabel="Releases" scrollable
+      options={releases.map((release) => ({
+        value: release.tagName,
+        label: releaseName(release.version),
+      }))}
+      value={selected.tagName} onChange={onSelect} />
   );
 }
 
@@ -498,8 +481,6 @@ function ChangelogSheetBody({
   onShow?: () => void;
 }) {
   const { expressive } = useTheme();
-  const { width, height } = useWindowDimensions();
-  const compactActions = width >= 600 && height < 480;
   const changelog = useChangelog();
   const releases = changelog.releases;
   const [tag, setTag] = useState<string | null>(initialTag ?? null);
@@ -535,36 +516,16 @@ function ChangelogSheetBody({
   return (
     <FloatingPanel visible={visible} onDismiss={onDismiss} onShow={onShow} maxWidth={640}
       presentation="bottom-sheet" scrollResetKey={selected?.tagName}>
-      <PanelHeader title="What's new" titleVariant={expressive ? "headlineSmall" : "titleLarge"} titleColor="accent" align="left"
-        accessory={selected ? <Text variant="bodyMedium" color="secondary">{releaseName(selected.version)}</Text> : undefined} />
-      {body}
-      <PanelActions confirmLabel="Got it" onConfirm={onDismiss} fullWidth={!compactActions} inline={compactActions}>
-        {releases && releases.length > 1 && selected ? (
-          <View style={[styles.versions, compactActions ? { marginTop: 0 } : null]}>
-            {!compactActions ? <Text variant="label" color="accent">Earlier updates</Text> : null}
-            <ScrollView
-              horizontal
-              accessibilityLabel="Release history"
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.pills}
-            >
-              {releases.map((release) => {
-                return (
-                  <VersionPill
-                    key={release.tagName}
-                    label={releaseName(release.version)}
-                    selected={release.tagName === selected.tagName}
-                    onPress={() => {
-                      haptics.selection();
-                      setTag(release.tagName);
-                    }}
-                  />
-                );
-              })}
-            </ScrollView>
+      <PanelHeader title="What's new" titleVariant={expressive ? "headlineMedium" : "headlineSmall"} align="left"
+        accessory={selected ? (
+          <View style={styles.releaseNavigation}>
+            {releases && releases.length > 1 ? (
+              <ReleaseSelector releases={releases} selected={selected} onSelect={setTag} />
+            ) : <Text variant="bodyMedium" color="secondary">{releaseName(selected.version)}</Text>}
           </View>
-        ) : null}
-      </PanelActions>
+        ) : undefined} />
+      {body}
+      <PanelActions confirmLabel="Got it" size="md" fullWidth onConfirm={onDismiss} />
     </FloatingPanel>
   );
 }
@@ -600,6 +561,7 @@ const styles = StyleSheet.create({
   sectionHeading: { marginTop: spacing[16] },
   empty: { gap: spacing[16] },
   prose: { gap: spacing[10] },
+  link: { textDecorationLine: "underline" },
   command: {
     flexDirection: "row",
     alignItems: "center",
@@ -613,24 +575,13 @@ const styles = StyleSheet.create({
   listItem: { flexDirection: "row", alignItems: "flex-start" },
   bulletSlot: {
     width: spacing[16],
-    height: 20,
+    height: 24,
     alignItems: "center",
     justifyContent: "center",
   },
   bullet: { width: 5, height: 5, borderRadius: radius.full },
   listCopy: { flex: 1, minWidth: 0, gap: spacing[8] },
-  versions: { marginTop: spacing[16], gap: spacing[8] },
-  pills: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
-  pill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[6],
-    minHeight: 48,
-    paddingHorizontal: spacing[16],
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "transparent",
-  },
+  releaseNavigation: { marginTop: spacing[12], gap: spacing[8], width: "100%" },
   checkbox: {
     width: 14,
     height: 14,
