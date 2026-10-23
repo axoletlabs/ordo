@@ -14,5 +14,8 @@ test('Expo plist round-trips native configuration with the pinned XML parser', (
     NSAppTransportSecurity: { NSAllowsLocalNetworking: true, NSAllowsArbitraryLoads: false },
     buildNumber: 42,
   };
-  assert.deepEqual(JSON.parse(JSON.stringify(plist.parse(plist.build(nativeConfig)))), nativeConfig);
+  const encoded = plist.build(nativeConfig);
+  assert.deepEqual(JSON.parse(JSON.stringify(plist.parse(encoded))), nativeConfig);
+  // Expo's generated entitlements template begins with a newline before <?xml.
+  assert.deepEqual(JSON.parse(JSON.stringify(plist.parse(`\n \t${encoded}`))), nativeConfig);
 });
