@@ -111,6 +111,13 @@ does not replace Development because each has a different package ID.
 
 ## Ship a version
 
+Release notes are for people using the app. Keep each release to a few short
+bullets describing visible changes, useful improvements, and fixes. Omit build
+numbers, branch merges, audits, test infrastructure, dependency details, and
+unchanged compatibility information. Include installation guidance only when
+the user must take action or could lose local data. Keep `CHANGELOG.md` and the
+published GitHub release body in sync; the app reads the published body.
+
 1. Cut `release/x.y.z` from the intended source and set `version` in
    `apps/mobile/app.config.js` to that exact version (or its prerelease).
 2. Commit and push the release branch before creating the tag.
