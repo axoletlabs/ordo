@@ -1,8 +1,8 @@
 /**
- * A bottom-sheet release reader: minimal heading, continuous Markdown notes,
- * and persistent release navigation. No cards or decorative change icons.
+ * A bottom-sheet release reader: tonal release navigation above continuous
+ * Markdown notes, with the shared Material sheet and menu treatments.
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Image, Linking, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { Text, type TextColor } from "../ui/Text";
@@ -12,6 +12,8 @@ import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { PanelActions } from "../ui/SheetActionRow";
 import { IconButton } from "../ui/IconButton";
+import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
+import { DisclosureChevron } from "../ui/DisclosureChevron";
 import { Spinner } from "../ui/Spinner";
 import { toast } from "../ui/toast-store";
 import {
@@ -24,6 +26,7 @@ import {
 } from "../../lib/changelog";
 import { haptics } from "../../lib/haptics";
 import { releaseName } from "../../lib/release-name";
+import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
 import { useChangelog } from "../../hooks/use-changelog";
 import { useTheme } from "../../theme/ThemeProvider";
 import { AppIcon } from "../ui/PinIcon";
@@ -440,40 +443,72 @@ function Notes({ blocks }: { blocks: ChangelogBlock[] }) {
   );
 }
 
-function VersionPill({
-  label,
+function ReleaseSelector({
+  visible,
+  releases,
   selected,
-  onPress,
+  onSelect,
 }: {
-  label: string;
-  selected: boolean;
-  onPress: () => void;
+  visible: boolean;
+  releases: ChangelogRelease[];
+  selected: ChangelogRelease;
+  onSelect: (tag: string) => void;
 }) {
   const { palette, expressive } = useTheme();
-  const fg = selected ? expressive ? palette.onSecondary : palette.onSecondaryContainer : palette.onSurface;
-  // A full-radius token is a silhouette, not a spring target; morph the pill's
-  // painted half-height so the entire shape change is visible.
-  const corner = expressive ? 24 : radius.sm;
+  const anchorRef = useRef<View>(null);
+  const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState<MenuAnchorRect | null>(null);
+  const opening = useRef(0);
+  useLayoutEffect(() => {
+    if (!visible) setOpen(false);
+    // Invalidate a deferred native measurement when the sheet closes, reopens,
+    // or unmounts so it cannot publish a menu into a different session.
+    return () => { opening.current += 1; };
+  }, [visible]);
+
   return (
-    <PressableScale
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      stateLayerColor={fg}
-      shape={{ rest: corner, pressed: expressive ? radius.md : corner }}
-      style={[
-        styles.pill,
-        {
-          backgroundColor: selected ? expressive ? palette.secondary : palette.secondaryContainer : "transparent",
-          borderColor: selected ? "transparent" : palette.outline,
-        },
-      ]}
-    >
-      <Text variant="label" style={{ color: fg }}>
-        {label}
-      </Text>
-    </PressableScale>
+    <>
+      <View ref={anchorRef} collapsable={false} style={styles.releaseAnchor}>
+        <PressableScale
+          accessibilityRole="button"
+          accessibilityLabel={`Release history, ${releaseName(selected.version)}`}
+          accessibilityState={{ expanded: open && visible }}
+          aria-haspopup="menu"
+          onPress={() => {
+            if (!visible) return;
+            const request = ++opening.current;
+            measureAnchor(anchorRef.current, (rect) => {
+              if (request !== opening.current) return;
+              haptics.selection();
+              setAnchor(rect);
+              setOpen(true);
+            });
+          }}
+          stateLayerColor={palette.onSecondaryContainer}
+          shape={{ rest: 24, pressed: expressive ? radius.md : 24 }}
+          style={[styles.releaseTrigger, { backgroundColor: palette.secondaryContainer }]}
+        >
+          <Text variant="labelLarge" numberOfLines={1} style={[styles.releaseLabel, { color: palette.onSecondaryContainer }]}>
+            {releaseName(selected.version)}
+          </Text>
+          <DisclosureChevron expanded={open && visible} size={20} color={palette.onSecondaryContainer} />
+        </PressableScale>
+      </View>
+      <ContextMenu visible={open && visible} onDismiss={() => setOpen(false)} anchor={anchor} width={320}>
+        {releases.map((release) => (
+          <ContextMenuItem
+            key={release.tagName}
+            label={releaseName(release.version)}
+            selected={release.tagName === selected.tagName}
+            selectionRole="menuitemradio"
+            onPress={() => {
+              onSelect(release.tagName);
+              setOpen(false);
+            }}
+          />
+        ))}
+      </ContextMenu>
+    </>
   );
 }
 
@@ -535,36 +570,16 @@ function ChangelogSheetBody({
   return (
     <FloatingPanel visible={visible} onDismiss={onDismiss} onShow={onShow} maxWidth={640}
       presentation="bottom-sheet" scrollResetKey={selected?.tagName}>
-      <PanelHeader title="What's new" titleVariant={expressive ? "headlineSmall" : "titleLarge"} titleColor="accent" align="left"
-        accessory={selected ? <Text variant="bodyMedium" color="secondary">{releaseName(selected.version)}</Text> : undefined} />
-      {body}
-      <PanelActions confirmLabel="Got it" onConfirm={onDismiss} fullWidth={!compactActions} inline={compactActions}>
-        {releases && releases.length > 1 && selected ? (
-          <View style={[styles.versions, compactActions ? { marginTop: 0 } : null]}>
-            {!compactActions ? <Text variant="label" color="accent">Earlier updates</Text> : null}
-            <ScrollView
-              horizontal
-              accessibilityLabel="Release history"
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.pills}
-            >
-              {releases.map((release) => {
-                return (
-                  <VersionPill
-                    key={release.tagName}
-                    label={releaseName(release.version)}
-                    selected={release.tagName === selected.tagName}
-                    onPress={() => {
-                      haptics.selection();
-                      setTag(release.tagName);
-                    }}
-                  />
-                );
-              })}
-            </ScrollView>
+      <PanelHeader title="What's new" titleVariant={expressive ? "headlineMedium" : "headlineSmall"} align="left"
+        accessory={selected ? (
+          <View style={styles.releaseNavigation}>
+            {releases && releases.length > 1 ? (
+              <ReleaseSelector visible={visible} releases={releases} selected={selected} onSelect={setTag} />
+            ) : <Text variant="bodyMedium" color="secondary">{releaseName(selected.version)}</Text>}
           </View>
-        ) : null}
-      </PanelActions>
+        ) : undefined} />
+      {body}
+      <PanelActions confirmLabel="Got it" onConfirm={onDismiss} fullWidth={!compactActions} inline={compactActions} />
     </FloatingPanel>
   );
 }
@@ -613,24 +628,24 @@ const styles = StyleSheet.create({
   listItem: { flexDirection: "row", alignItems: "flex-start" },
   bulletSlot: {
     width: spacing[16],
-    height: 20,
+    height: 24,
     alignItems: "center",
     justifyContent: "center",
   },
   bullet: { width: 5, height: 5, borderRadius: radius.full },
   listCopy: { flex: 1, minWidth: 0, gap: spacing[8] },
-  versions: { marginTop: spacing[16], gap: spacing[8] },
-  pills: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
-  pill: {
+  releaseNavigation: { marginTop: spacing[12], maxWidth: "100%", alignSelf: "flex-start" },
+  releaseAnchor: { maxWidth: "100%" },
+  releaseTrigger: {
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing[6],
+    gap: spacing[8],
     minHeight: 48,
     paddingHorizontal: spacing[16],
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: "transparent",
+    paddingVertical: spacing[8],
+    borderRadius: radius.full,
   },
+  releaseLabel: { flexShrink: 1 },
   checkbox: {
     width: 14,
     height: 14,
