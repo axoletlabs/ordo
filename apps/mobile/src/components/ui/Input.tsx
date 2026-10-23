@@ -3,11 +3,13 @@ import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { StateLayer } from "./StateLayer";
 import {
+  AppState,
   Platform,
   StyleSheet,
   TextInput,
   View,
   useWindowDimensions,
+  type AppStateStatus,
   type TextInputProps,
   type TextStyle,
   type ViewStyle,
@@ -19,11 +21,19 @@ import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
 import { caretAfterKey, shouldCorrectWebCaret } from "../../lib/web-input-caret";
 import { useMaterialMotion } from "../../theme/material-motion";
 import { InputSurfaceContext } from "./input-surface";
+import { InputFocusScopeContext, markNativeFocus, nativeFocusPermitted, registerNativeFocusField } from "./input-focus-scope";
+import { useOverlayBlocked } from "./overlay-host";
 import { PanelTitleContext } from "./panel-title";
+import { focusTextInput } from "../../lib/focus-text-input";
 import { nativeInputEdit } from "../../lib/native-input-edit";
 import { alphaTint } from "../../theme/state-layer";
 import { isSensitiveInput, privateKeyboardType } from "../../lib/input-privacy";
 const AnimatedLabel = Animated.createAnimatedComponent(Text);
+
+/** Web backgrounds are already inert under a blocking overlay, so subscribing
+ * there only re-rendered every field when a popup opened. Native still needs
+ * the live hit-test/focus gate. Mirrors the platform-split hook in ScrollBar. */
+const useNativeOverlayBlocked = Platform.OS === "web" ? () => false : useOverlayBlocked;
 
 type WebCaretNode = TextInput & {
   selectionStart?: number | null;
@@ -44,6 +54,11 @@ function restoreWebCaret(node: WebCaretNode | null, start: number | null) {
   } catch {
     // Some input types throw if selection isn't supported.
   }
+}
+
+/** A pending native focus frame must not run against a backgrounded app. */
+function appCanTakeFocus(state: AppStateStatus) {
+  return state !== "background" && state !== "inactive";
 }
 
 export interface InputProps extends Omit<TextInputProps, "style"> {
@@ -72,6 +87,28 @@ export interface InputProps extends Omit<TextInputProps, "style"> {
   /** Opt in to an empty supporting row; otherwise only real messages/counters take space. */
   reserveSupportingSpace?: boolean;
 }
+
+/** Floating label owns its animation so unlabeled fields (search bars, inline
+ * pickers) don't allocate a shared value, two animated styles and a motion
+ * subscription that would never paint. */
+const FloatingLabel = React.memo(function FloatingLabel({ label, floating, filled, fontScale, left, backgroundColor, color }: {
+  label: string; floating: boolean; filled: boolean; fontScale: number;
+  left: number; backgroundColor: string; color: string;
+}) {
+  const motion = useMaterialMotion();
+  const floatProgress = useSharedValue(floating ? 1 : 0);
+  const previousFloat = useRef({ floating, reducedMotion: motion.reducedMotion });
+  useEffect(() => {
+    if (previousFloat.current.floating === floating && previousFloat.current.reducedMotion === motion.reducedMotion) return;
+    previousFloat.current = { floating, reducedMotion: motion.reducedMotion };
+    floatProgress.value = withTiming(floating ? 1 : 0, { duration: motion.reducedMotion ? 0 : 150 });
+  }, [floating, floatProgress, motion.reducedMotion]);
+  const labelPosition = useAnimatedStyle(() => ({ top: 16 - (filled ? 8 : 16 + 8 * fontScale) * floatProgress.value }));
+  const labelType = useAnimatedStyle(() => ({ fontSize: 16 - 4 * floatProgress.value, lineHeight: 24 - 8 * floatProgress.value }));
+  return <Animated.View pointerEvents="none" style={[styles.floatingLabel, { left, backgroundColor }, labelPosition]}>
+    <AnimatedLabel variant="bodyLarge" style={[{ color }, labelType]}>{label}</AnimatedLabel>
+  </Animated.View>;
+});
 
 export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   label,
@@ -108,7 +145,8 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   const messageId = React.useId();
   const fieldSurface = React.useContext(InputSurfaceContext) ?? palette.surface;
   const panelTitle = React.useContext(PanelTitleContext);
-  const motion = useMaterialMotion();
+  const focusScope = React.useContext(InputFocusScopeContext);
+  const overlayBlocked = useNativeOverlayBlocked();
   const [focused, setFocused] = useState(false);
   const [hovered, setHovered] = useState(false);
   const inactive = disabled || (!editable && !readOnly);
@@ -121,22 +159,150 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   const [hasText, setHasText] = useState(!!value);
   const [overlayWidth, setOverlayWidth] = useState(0);
   const inputRef = useRef<TextInput>(null);
+  /** Stable identity in the overlay focus registry; the callbacks below read
+   * live refs, so normal re-renders never unregister the field. */
+  const nativeField = useRef<object>({}).current;
+  const nativeFieldEditable = useRef(false);
   const accessoryRef = useRef<View>(null);
   const pendingCaret = useRef<number | null>(null);
-  const focusedRef = useRef(false);
   const lastAppliedValue = useRef(value);
-  const [androidEpoch, setAndroidEpoch] = useState(0);
   // Android re-applies a controlled `value` on every keystroke and walks the
-  // caret (type/backspace in the middle). Leave the native field uncontrolled
-  // while editing; remount when an external value arrives while blurred.
+  // caret (type/backspace in the middle). Keep one uncontrolled native node
+  // while editing; external edits are written imperatively below.
   const secret = isSensitiveInput({ sensitive, secureTextEntry, ...rest });
   const androidUncontrolled = Platform.OS === "android" && !secret;
+  // Overlay inputs request native focus only after their owning panel has
+  // measured and started opening. Taking focus on mount would run before the
+  // panel's opening keyboard dismissal, which would then blur its own field.
+  const nativeOverlayBlocked = Platform.OS !== "web" && overlayBlocked;
+  const scopedNativeAutoFocus = Platform.OS !== "web" && focusScope != null;
+  const scopeSession = focusScope?.session ?? 0;
+  const scopedSession = useRef(scopeSession);
+  const scopedAutoFocusIntent = useRef(
+    scopedNativeAutoFocus && !nativeOverlayBlocked && !!rest.autoFocus && focusScope?.active === true,
+  );
+  const scopedAutoFocusDone = useRef(false);
+  const scopedFocusFrame = useRef<number | null>(null);
+  const scopedAppState = useRef<ReturnType<typeof AppState.addEventListener> | null>(null);
+  const scopedFocusBaseline = useRef<unknown>(null);
+  const scopedBaselineSession = useRef<number | null>(null);
+  const scopeActive = useRef(focusScope?.active === true && !nativeOverlayBlocked);
+  const scopeReady = useRef(focusScope?.ready === true);
+  useLayoutEffect(() => {
+    scopeActive.current = focusScope?.active === true && !nativeOverlayBlocked;
+    scopeReady.current = focusScope?.ready === true;
+  }, [focusScope?.active, focusScope?.ready, nativeOverlayBlocked]);
+
+  // Native focus ownership spans portal siblings: an obscured background field
+  // can still be targeted by Android's focus fallback, so it must refuse the
+  // move itself. A field publishes focus only for the surface that currently
+  // owns the screen; closing/resuming that surface restores its own last field.
+  const scopeOwner = focusScope?.owner ?? null;
+  useLayoutEffect(() => {
+    nativeFieldEditable.current = canEdit;
+  }, [canEdit]);
+  useLayoutEffect(() => {
+    if (Platform.OS === "web" || scopeOwner == null) return;
+    return registerNativeFocusField(scopeOwner, nativeField, {
+      canFocus: () => nativeFieldEditable.current && appCanTakeFocus(AppState.currentState),
+      focus: () => {
+        if (!nativeFieldEditable.current || !appCanTakeFocus(AppState.currentState)) return;
+        if (!nativeFocusPermitted(scopeOwner)) return;
+        // Android Back can hide the IME without clearing TextInputState; this
+        // helper resets only this already-owned field.
+        focusTextInput(inputRef.current);
+      },
+    });
+  }, [nativeField, scopeOwner]);
 
   const setInputRef = (node: TextInput | null) => {
     inputRef.current = node;
     if (typeof ref === "function") ref(node);
     else if (ref) ref.current = node;
   };
+
+  const clearScopedFocusTake = () => {
+    if (scopedFocusFrame.current != null) {
+      cancelAnimationFrame(scopedFocusFrame.current);
+      scopedFocusFrame.current = null;
+    }
+    scopedAppState.current?.remove();
+    scopedAppState.current = null;
+  };
+
+  const cancelScopedAutoFocus = () => {
+    if (!scopedNativeAutoFocus) return;
+    scopedAutoFocusDone.current = true;
+    clearScopedFocusTake();
+  };
+
+  useEffect(() => {
+    if (!scopedNativeAutoFocus) return;
+    if (scopedSession.current !== scopeSession) {
+      // A retained exiting panel can reopen inside the same React tree. Each
+      // new visible session may take focus once, while picker suspension in
+      // the same session must not replay it.
+      scopedSession.current = scopeSession;
+      scopedAutoFocusDone.current = false;
+      scopedAutoFocusIntent.current = !!rest.autoFocus && scopeActive.current;
+      scopedBaselineSession.current = null;
+    }
+    if (!scopedAutoFocusIntent.current || scopedAutoFocusDone.current) return;
+    if (!rest.autoFocus) {
+      // The parent cancelled this session's intent before it took effect.
+      scopedAutoFocusDone.current = true;
+      clearScopedFocusTake();
+      return;
+    }
+    if (!scopeActive.current) {
+      // Started suspended/closing: never steal focus if this owner resumes.
+      scopedAutoFocusDone.current = true;
+      clearScopedFocusTake();
+      return;
+    }
+    if (!appCanTakeFocus(AppState.currentState)) {
+      // Ready or still measuring: a background opening has no focus claim.
+      scopedAutoFocusDone.current = true;
+      clearScopedFocusTake();
+      return;
+    }
+    if (scopedBaselineSession.current !== scopeSession) {
+      // Remember who owned focus when this session became active. A field
+      // that was already focused (possibly stale from the screen behind the
+      // overlay) must be replaced; one that gains focus afterwards is a
+      // deliberate choice and wins over the delayed take.
+      scopedBaselineSession.current = scopeSession;
+      scopedFocusBaseline.current = TextInput.State?.currentlyFocusedInput?.() ?? null;
+    }
+    // The initial intent is pending even before the panel reports ready. Keep
+    // one pending-only observer so backgrounding during measurement cancels it;
+    // normal mounted fields never subscribe.
+    if (scopedAppState.current == null) {
+      scopedAppState.current = AppState.addEventListener("change", (state) => {
+        if (state !== "active") cancelScopedAutoFocus();
+      });
+    }
+    if (!scopeReady.current) return clearScopedFocusTake;
+    const frame = requestAnimationFrame(() => {
+      scopedFocusFrame.current = null;
+      scopedAppState.current?.remove();
+      scopedAppState.current = null;
+      scopedAutoFocusDone.current = true;
+      if (!scopeActive.current || !scopeReady.current || !appCanTakeFocus(AppState.currentState)) return;
+      const target = inputRef.current;
+      if (!target) return;
+      const focused = TextInput.State?.currentlyFocusedInput?.() ?? null;
+      const baseline = scopedFocusBaseline.current;
+      // A field focused after this session became active is a deliberate
+      // choice; a field that was already focused is a stale owner to replace.
+      if (focused && focused !== target && focused !== baseline) return;
+      // Owner/session/blocked checks above must pass before the shared policy
+      // reopens a retained Android target whose IME Back left hidden.
+      focusTextInput(target);
+    });
+    scopedFocusFrame.current = frame;
+    return clearScopedFocusTake;
+  }, [scopedNativeAutoFocus, nativeOverlayBlocked, scopeSession, focusScope?.active, focusScope?.ready, rest.autoFocus]);
 
   useLayoutEffect(() => {
     if (Platform.OS !== "web") return;
@@ -152,16 +318,14 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
 
   useLayoutEffect(() => {
     if (!androidUncontrolled) return;
-    const edit = nativeInputEdit(value, lastAppliedValue.current, focusedRef.current);
-    if (edit === "none") return;
+    if (nativeInputEdit(value, lastAppliedValue.current) === "none") return;
     lastAppliedValue.current = value;
     setHasText(!!value);
-    if (edit === "replace") {
-      // Clipboard/clear actions are external edits, not another controlled echo
-      // of the keystroke. Apply them without remounting or dismissing the IME.
-      const text = value ?? "";
-      inputRef.current?.setNativeProps({ text, selection: { start: text.length, end: text.length } });
-    } else setAndroidEpoch((n) => n + 1);
+    // Clipboard/clear/parent resets are external edits, not another controlled
+    // echo of the keystroke. Replace the text on the stable native node: a
+    // remount would replay autoFocus and could steal focus from a picker.
+    const text = value ?? "";
+    inputRef.current?.setNativeProps({ text, selection: { start: text.length, end: text.length } });
   }, [androidUncontrolled, value]);
 
   const search = variant === "search";
@@ -171,15 +335,6 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   const borderColor = inactive ? alphaTint(palette.onSurface, 0.12) : error ? palette.error : focused ? palette.primary : hovered ? palette.onSurface : palette.outline;
   const borderWidth = search ? 0 : focused && !inactive ? 2 : 1;
   const floating = focused || hasText || !!value;
-  const floatProgress = useSharedValue(floating ? 1 : 0);
-  const previousFloat = useRef({ floating, reducedMotion: motion.reducedMotion });
-  useEffect(() => {
-    if (previousFloat.current.floating === floating && previousFloat.current.reducedMotion === motion.reducedMotion) return;
-    previousFloat.current = { floating, reducedMotion: motion.reducedMotion };
-    floatProgress.value = withTiming(floating ? 1 : 0, { duration: motion.reducedMotion ? 0 : 150 });
-  }, [floating, floatProgress, motion.reducedMotion]);
-  const labelPosition = useAnimatedStyle(() => ({ top: 16 - (filled ? 8 : 16 + 8 * fontScale) * floatProgress.value }));
-  const labelType = useAnimatedStyle(() => ({ fontSize: 16 - 4 * floatProgress.value, lineHeight: 24 - 8 * floatProgress.value }));
   // Keep the system face for secure editing/AutoFill, including across reveal.
   const fontFamily = secret
     ? undefined
@@ -229,17 +384,13 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
         {search && focused && showFocusIndicator ? <View testID="material-search-focus-ring" pointerEvents="none" style={[StyleSheet.absoluteFill, { borderColor, borderWidth: 2, borderRadius: radius.full }]} /> : null}
         {filled ? <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: borderWidth, backgroundColor: borderColor }} />
           : !search ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderColor, borderWidth, borderRadius: radius.sm }]} /> : null}
-        {label ? <Animated.View pointerEvents="none" style={[styles.floatingLabel, {
-          left: icon ? 48 : 12,
-          backgroundColor: filled || search ? "transparent" : fieldSurface,
-        }, labelPosition]}>
-          <AnimatedLabel variant="bodyLarge" style={[{ color: inactive ? foreground : error ? palette.error : focused ? palette.primary : palette.onSurfaceVariant }, labelType]}>{displayLabel}</AnimatedLabel>
-        </Animated.View> : null}
+        {label ? <FloatingLabel label={displayLabel ?? label} floating={floating} filled={filled} fontScale={fontScale}
+          left={icon ? 48 : 12} backgroundColor={filled || search ? "transparent" : fieldSurface}
+          color={inactive ? foreground : error ? palette.error : focused ? palette.primary : palette.onSurfaceVariant} /> : null}
         {icon ? <View pointerEvents="none" style={[styles.icon, inactive ? { opacity: 0.38 } : null]}>{leadingIcon}</View> : null}
         <TextInput
           ref={setInputRef}
-          key={androidUncontrolled ? `android-field-${androidEpoch}` : undefined}
-           placeholderTextColor={inactive ? foreground : palette.onSurfaceVariant}
+          placeholderTextColor={inactive ? foreground : palette.onSurfaceVariant}
           autoCorrect={false}
           autoCapitalize="none"
           autoComplete="off"
@@ -256,8 +407,9 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
           {...rest}
           // The panel focuses after its portal is attached. Mount-time web
           // autofocus forces layout in the middle of that publication, before
-          // the dialog can establish keyboard ownership.
-          autoFocus={Platform.OS === "web" && panelTitle ? false : rest.autoFocus}
+          // the dialog can establish keyboard ownership. Scoped native fields
+          // wait for their owner's ready state instead (effect above).
+          autoFocus={nativeOverlayBlocked || scopedNativeAutoFocus || (Platform.OS === "web" && panelTitle) ? false : rest.autoFocus}
           // Never let a sensitive field opt into spelling, correction or casing.
           {...(secret ? { autoCorrect: false, spellCheck: false, autoCapitalize: "none" as const, disableFullscreenUI: true } : null)}
           accessibilityState={{ ...rest.accessibilityState, disabled: inactive }}
@@ -271,14 +423,24 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
             ? { defaultValue: typeof value === "string" ? value : undefined }
             : { value })}
           onFocus={(e) => {
-            focusedRef.current = true;
-            lastAppliedValue.current = value;
+            // Android's removal fallback can land on any editable field in the
+            // window, including the screen behind an overlay. Reject that move
+            // before the field's editing state, caret, or IME becomes visible.
+            if (Platform.OS !== "web" && !nativeFocusPermitted(scopeOwner)) {
+              cancelScopedAutoFocus();
+              setFocused(false);
+              inputRef.current?.blur();
+              return;
+            }
+            if (Platform.OS !== "web" && scopeOwner != null) markNativeFocus(scopeOwner, nativeField);
+            cancelScopedAutoFocus();
             setFocused(true);
             onFocus?.(e);
           }}
           onBlur={(e) => {
-            focusedRef.current = false;
-            lastAppliedValue.current = value;
+            // Keep `lastAppliedValue` as the last native text. The render
+            // closure may still hold the previous value when a batched IME
+            // update lands before this blur.
             setFocused(false);
             onBlur?.(e);
           }}
@@ -314,7 +476,9 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
             restoreWebCaret(webCaretNode(target), pendingCaret.current);
           }}
           onChangeText={canEdit ? (text) => {
-            if (androidUncontrolled) lastAppliedValue.current = text;
+            // The native field is authoritative while typing. A late parent
+            // commit echoing this text must not look like an external edit.
+            lastAppliedValue.current = text;
             setHasText(text.length > 0); onChangeText?.(text);
           } : undefined}
           style={[

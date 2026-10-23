@@ -42,6 +42,7 @@ import {
 import { findFtsBookmarkIds, ftsBodyQuery, ftsPrefixQuery } from "../prisma/bookmark-fts.js";
 import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
 import { isLibraryCiphertext } from "../crypto/library-crypto.js";
+import { mapCooperative, rankSearchResultsCooperative } from "./cooperative-rank.js";
 
 const LIST_SELECT = {
   id: true,
@@ -824,8 +825,14 @@ export class BookmarksService implements OnApplicationBootstrap {
       where,
       select: includeHiddenFields ? { ...LIST_SELECT, contentHtml: true } : LIST_SELECT,
     });
-    const ranked = rankSearchResults(
-      rows.map((row) => {
+    // Cooperative: decrypt + strip + score in bounded chunks so concurrent
+    // requests are served while the (unbounded) encrypted scan runs. Ranking,
+    // tie-breaks, and pagination are identical to rankSearchResults.
+    const ranked = await rankSearchResultsCooperative(
+      rows,
+      term,
+      { fuzzy: !!opts.fuzzy, omitTagIds: opts.tagIds },
+      (row) => {
         const opened = this.crypto.openBookmark(row);
         return {
           ...toBookmarkDto(opened as ListItem),
@@ -833,9 +840,7 @@ export class BookmarksService implements OnApplicationBootstrap {
             ? htmlToSearchText((opened as { contentHtml?: string | null }).contentHtml ?? null)
             : null,
         };
-      }),
-      term,
-      { fuzzy: !!opts.fuzzy, omitTagIds: opts.tagIds },
+      },
     );
     const limit = clampLimit(opts.limit, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE);
     const offset = decodeSearchOffsetCursor(opts.cursor) ?? 0;
@@ -856,13 +861,14 @@ export class BookmarksService implements OnApplicationBootstrap {
     sort: "title" | "titleDesc",
   ): Promise<CursorPage<T>> {
     const rows = await this.prisma.bookmark.findMany({ where, select: LIST_SELECT });
-    const opened = rows
-      .map((row) => this.crypto.openBookmark(row) as ListItem)
-      .sort((a, b) => {
-        const byTitle = titleCollator.compare(a.title, b.title);
-        if (byTitle !== 0) return sort === "title" ? byTitle : -byTitle;
-        return sort === "title" ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id);
-      });
+    // Cooperative decrypt: bounded chunks keep the event loop responsive while
+    // the whole library is opened for in-memory title sorting.
+    const opened = await mapCooperative(rows, (row) => this.crypto.openBookmark(row) as ListItem);
+    opened.sort((a, b) => {
+      const byTitle = titleCollator.compare(a.title, b.title);
+      if (byTitle !== 0) return sort === "title" ? byTitle : -byTitle;
+      return sort === "title" ? a.id.localeCompare(b.id) : b.id.localeCompare(a.id);
+    });
     const cursor = decodeTitleCursor(rawCursor ?? null);
     let start = 0;
     if (cursor) {

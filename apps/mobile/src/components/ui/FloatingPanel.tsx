@@ -12,15 +12,18 @@ import {
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { OverlayPortal } from "./overlay-host";
+import { OverlayPortal, useOverlayBlocked } from "./overlay-host";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { useOverlayFocus } from "../../hooks/use-overlay-focus";
+import { useScrimPress } from "../../hooks/use-scrim-press";
 import { PanelTitleContext } from "./panel-title";
+import { PanelPresenceContext } from "./panel-presence";
 import { PanelHeader } from "./PanelHeader";
 import { PanelActions } from "./SheetActionRow";
 import { ThemedScrollView } from "./ThemedScrollView";
 import { InputSurfaceContext } from "./input-surface";
+import { InputFocusScopeContext, useInputFocusScope } from "./input-focus-scope";
 import { panelKeyboardLift } from "../../lib/panel-keyboard-layout";
 import { useMaterialMotion } from "../../theme/material-motion";
 import { PressableScale } from "./PressableScale";
@@ -33,10 +36,20 @@ function panelChildren(children: React.ReactNode): React.ReactNode[] {
 import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
 import { layout, radius, spacing } from "../../theme/tokens";
 
+/** Native layout should report in the first frame; see the fallback below. */
+const READY_FALLBACK_MS = 200;
+
 export interface FloatingPanelProps {
   visible: boolean;
   onDismiss: () => void;
   onExited?: () => void;
+  /** The opening fade and spatial spring have both settled. */
+  onEntered?: () => void;
+  /** Handoff hook: runs the moment the exit fade starts, while this panel's
+   * retained contents finish fading beneath the successor surface. */
+  onExiting?: () => void;
+  /** Known launch control captured before a sibling overlay hands off focus. */
+  triggerRef?: { readonly current: unknown };
   children: React.ReactNode;
   style?: StyleProp<ViewStyle>;
   maxWidth?: number;
@@ -72,6 +85,9 @@ function FloatingPanelSurface({
   visible,
   onDismiss,
   onExited,
+  onEntered,
+  onExiting,
+  triggerRef,
   children,
   style,
   maxWidth = layout.overlayMaxWidth,
@@ -91,7 +107,7 @@ function FloatingPanelSurface({
   const panelSurface = sheet ? palette.surfaceContainerLow : palette.surfaceContainerHigh;
   const titleId = React.useId();
   const onShowRef = React.useRef(onShow);
-  onShowRef.current = onShow;
+  React.useLayoutEffect(() => { onShowRef.current = onShow; }, [onShow]);
   const { width, height } = useWindowDimensions();
   const [availableHeight, setAvailableHeight] = React.useState(height);
   const [keyboardTop, setKeyboardTop] = React.useState<number | null>(null);
@@ -112,13 +128,22 @@ function FloatingPanelSurface({
     dismissKeyboard();
     onDismiss();
   }, [dismissible, onDismiss]);
+  const scrimPress = useScrimPress(visible && interactive && !obscured && dismissOnScrim, hideAndDismiss);
   const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, {
-    interactive: interactive && !obscured, onExited, ready: Platform.OS === "web" || measured,
+    interactive: interactive && !obscured, onEntered, onExited, onExiting, ready: Platform.OS === "web" || measured,
   });
   React.useEffect(() => {
     if (!rendered && !keepMounted) setMeasured(false);
   }, [rendered, keepMounted]);
-  const panelRef = useOverlayFocus(visible && rendered, hideAndDismiss, "dialog", dismissible, false, !interactive || obscured);
+  // A native layout report should arrive in the first frame. If it never does,
+  // release the entrance instead of keeping an invisible, blocking dialog on
+  // screen. Web already treats its viewport geometry as ready.
+  React.useEffect(() => {
+    if (Platform.OS === "web" || !visible || measured) return;
+    const timer = setTimeout(() => setMeasured(true), READY_FALLBACK_MS);
+    return () => clearTimeout(timer);
+  }, [visible, measured]);
+  const panelRef = useOverlayFocus(visible && rendered, hideAndDismiss, "dialog", dismissible, false, !interactive || obscured, undefined, undefined, triggerRef);
   // A sibling picker obscures this panel while staying mounted above it.
   // Crossfade this panel and its scrim (same 200ms inOut quad as the
   // picker's own fade, so the stacked scrims keep a constant dim) instead
@@ -127,14 +152,25 @@ function FloatingPanelSurface({
   const obscuredFade = useSharedValue(obscured ? 0 : 1);
   const [collapsedObscured, setCollapsedObscured] = React.useState(obscured);
   const lastObscured = React.useRef(obscured);
-  const previousFade = React.useRef({ obscured, reducedMotion: motion.reducedMotion });
+  const previousFade = React.useRef({ obscured, reducedMotion: motion.reducedMotion, visible });
   const finishObscuring = React.useCallback(() => {
     if (lastObscured.current) setCollapsedObscured(true);
   }, []);
   React.useLayoutEffect(() => {
     lastObscured.current = obscured;
-    if (previousFade.current.obscured === obscured && previousFade.current.reducedMotion === motion.reducedMotion) return;
-    previousFade.current = { obscured, reducedMotion: motion.reducedMotion };
+    const previous = previousFade.current;
+    previousFade.current = { obscured, reducedMotion: motion.reducedMotion, visible };
+    if (!visible) {
+      // The surface is exiting. Uncovering it here because a sibling picker
+      // closed in the same commit would fade a hidden panel/scrim back in
+      // underneath the exit; keep it collapsed and let a future open reveal it.
+      if (obscured) {
+        obscuredFade.value = 0;
+        if (!collapsedObscured) setCollapsedObscured(true);
+      }
+      return;
+    }
+    if (previous.visible === visible && previous.obscured === obscured && previous.reducedMotion === motion.reducedMotion) return;
     if (motion.reducedMotion) {
       obscuredFade.value = obscured ? 0 : 1;
       setCollapsedObscured(obscured);
@@ -149,10 +185,13 @@ function FloatingPanelSurface({
     }
     setCollapsedObscured(false);
     obscuredFade.value = withTiming(1, fade);
-  }, [obscured, obscuredFade, finishObscuring, motion.reducedMotion]);
+  }, [obscured, visible, obscuredFade, finishObscuring, motion.reducedMotion, collapsedObscured]);
   const lastChildren = React.useRef(children);
-  if (visible) lastChildren.current = children;
-  const displayedChildren = visible ? children : lastChildren.current;
+  const dormant = keepMounted && !rendered;
+  React.useLayoutEffect(() => { if (visible || dormant) lastChildren.current = children; }, [visible, dormant, children]);
+  // Freeze only an actual exit. Dormant preparation must reach the retained
+  // tree, otherwise staged controls are silently deferred back onto the tap.
+  const displayedChildren = visible || dormant ? children : lastChildren.current;
   const { headers, actions, body } = React.useMemo(() => {
     const nodes = panelChildren(displayedChildren);
     const headers = nodes.filter((node) => React.isValidElement(node) && node.type === PanelHeader);
@@ -185,15 +224,6 @@ function FloatingPanelSurface({
   const scrollingBody = !scrollNodes.length ? null : scrollBody
     ? <ThemedScrollView key={scrollResetKey} keyboardShouldPersistTaps="handled" nestedScrollEnabled style={{ flexShrink: 1, maxHeight: bodyLimit }}>{scrollNodes}</ThemedScrollView>
     : <View style={{ flexShrink: 1, maxHeight: bodyLimit }}>{scrollNodes}</View>;
-
-  React.useEffect(() => {
-    if (!visible || obscured || !interactive || (Platform.OS !== "web" && !measured)) return;
-    const cleanup = onShowRef.current?.();
-    return () => {
-      if (typeof cleanup === "function") cleanup();
-      else if (cleanup != null) clearTimeout(cleanup);
-    };
-  }, [visible, obscured, interactive, measured]);
 
   React.useLayoutEffect(() => {
     if (!visible) return;
@@ -243,6 +273,10 @@ function FloatingPanelSurface({
     transform: [{ translateY: keyboardShift.value + (1 - spatial.value) * 24 }, ...(Platform.OS === "ios" ? [{ scale: 0.94 + spatial.value * 0.06 }] : [])],
   }));
 
+  const inputFocusScope = useInputFocusScope(visible && rendered && interactive && !obscured,
+    Platform.OS === "web" || measured, visible);
+  const presenceScope = React.useMemo(() => ({ visible, rendered }), [visible, rendered]);
+
   if (!rendered && !keepMounted) return null;
 
   const sheetHeader = <View testID="material-sheet-header" onLayout={(event) => setSheetHeaderHeight(event.nativeEvent.layout.height)}
@@ -279,6 +313,9 @@ function FloatingPanelSurface({
 
   return (
     <OverlayPortal blocking={rendered} active={visible && interactive && !obscured}>
+      <InputFocusScopeContext.Provider value={inputFocusScope}>
+      <PanelPresenceContext.Provider value={presenceScope}>
+      <PanelOnShow visible={visible} enabled={inputFocusScope.active && inputFocusScope.ready} onShowRef={onShowRef} />
       <View
         accessibilityViewIsModal={visible && interactive && !obscured}
         accessibilityElementsHidden={!visible || obscured}
@@ -299,7 +336,7 @@ function FloatingPanelSurface({
           accessibilityLabel="Dismiss"
           style={StyleSheet.absoluteFill}
           onPressIn={dismissible && dismissOnScrim ? dismissKeyboard : undefined}
-          onPress={dismissible && dismissOnScrim ? hideAndDismiss : undefined}
+          {...scrimPress}
         />
           <View pointerEvents="box-none" style={[styles.frame, { paddingTop: insets.top + spacing[16], paddingBottom: insets.bottom + spacing[16] },
             sheet ? { justifyContent: "flex-end", paddingBottom: 0, paddingLeft: insets.left, paddingRight: insets.right }
@@ -359,9 +396,36 @@ function FloatingPanelSurface({
           </Animated.View>
           </View>
       </View>
+      </PanelPresenceContext.Provider>
+      </InputFocusScopeContext.Provider>
     </OverlayPortal>
   );
 }
+
+/** Run opening callbacks where the portal's real blocking context is known.
+ * A newer surface cancels any pending focus timer; uncovering the old panel
+ * does not resurrect that automatic request. */
+const PanelOnShow = React.memo(function PanelOnShow({ visible, enabled, onShowRef }: {
+  visible: boolean;
+  enabled: boolean;
+  onShowRef: React.RefObject<FloatingPanelProps["onShow"]>;
+}) {
+  const blocked = useOverlayBlocked();
+  const consumed = React.useRef(false);
+  React.useEffect(() => {
+    if (!visible) { consumed.current = false; return; }
+    if (!enabled) return;
+    if (blocked) { consumed.current = true; return; }
+    if (consumed.current) return;
+    consumed.current = true;
+    const cleanup = onShowRef.current?.();
+    return () => {
+      if (typeof cleanup === "function") cleanup();
+      else if (cleanup != null) clearTimeout(cleanup);
+    };
+  }, [visible, enabled, blocked, onShowRef]);
+  return null;
+});
 
 /** Dialogs never allocate/register sheet gesture worklets. Only the handle
  * owns dismissal: dragging or selecting long notes stays with the scroller. */

@@ -3,7 +3,7 @@
  * inline "New tag" affordance. Shared by the save sheet and edit-tags sheet.
  */
 import React, { useMemo, useState } from "react";
-import { Keyboard, StyleSheet, View } from "react-native";
+import { Keyboard, StyleSheet, View, type TextInput } from "react-native";
 import { ThemedFlatList } from "../ui/ThemedScrollView";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { type TagColor } from "@ordo/shared";
@@ -34,6 +34,11 @@ export interface TagSelectListProps {
   onRequestCreateTag?: () => void;
   header?: React.ReactNode;
   menu?: boolean;
+  /** Let a dropdown host take the search field's focus when it opens. */
+  searchInputRef?: React.Ref<TextInput>;
+  /** Native opening focus is owned by the hosting overlay's focus scope;
+   * web pickers leave this false and run their own scoped focus take. */
+  searchAutoFocus?: boolean;
 }
 
 export function TagSelectList({
@@ -45,6 +50,8 @@ export function TagSelectList({
   onRequestCreateTag,
   header,
   menu = false,
+  searchInputRef,
+  searchAutoFocus,
 }: TagSelectListProps) {
   const { palette } = useTheme();
   const { height } = useResponsiveLayout();
@@ -161,8 +168,8 @@ export function TagSelectList({
 
   return (
     <View style={{ flexShrink: 1, gap: spacing[8] }}>
-      <Input value={query} onChangeText={setQuery} variant="search" placeholder="Find a tag" accessibilityLabel="Find a tag"
-        containerStyle={{ flexShrink: 0 }} icon={<Ionicons name="search-outline" size={24} color={palette.onSurfaceVariant} />} />
+      <Input ref={searchInputRef} value={query} onChangeText={setQuery} variant="search" placeholder="Find a tag" accessibilityLabel="Find a tag"
+        autoFocus={searchAutoFocus} containerStyle={{ flexShrink: 0 }} icon={<Ionicons name="search-outline" size={24} color={palette.onSurfaceVariant} />} />
     <ThemedFlatList animateChanges
       data={menu ? tags.all : [...tags.selected, ...tags.unselected]}
       keyExtractor={(t) => t.id}

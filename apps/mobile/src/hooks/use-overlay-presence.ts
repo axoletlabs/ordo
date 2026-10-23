@@ -5,7 +5,7 @@
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AppState, BackHandler, Platform } from "react-native";
-import { cancelAnimation, Easing, runOnJS, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
+import { cancelAnimation, Easing, runOnJS, useSharedValue, withSpring, withTiming, type WithTimingConfig } from "react-native-reanimated";
 import { useMaterialMotion } from "../theme/material-motion";
 import { dismissKeyboard, keyboardIsOpen } from "./use-keyboard-visible";
 
@@ -15,41 +15,100 @@ const CLOSE_FALLBACK_MS = CLOSE_MS + 70;
 export function useOverlayPresence(
   visible: boolean,
   onDismiss: () => void,
-  options?: { dismissKeyboard?: boolean; interactive?: boolean; ready?: boolean; onExited?: () => void },
+  options?: {
+    dismissKeyboard?: boolean;
+    interactive?: boolean;
+    ready?: boolean;
+    /** Menus can reveal promptly without changing panel/scrim crossfades. */
+    entranceEasing?: WithTimingConfig["easing"];
+    /** Both the effects fade and spatial spring completed for this opening.
+     * Optional content work may begin; cancelled/stale openings never notify. */
+    onEntered?: () => void;
+    /** Fired once when a rendered surface's exit actually completes. */
+    onExited?: () => void;
+    /** Fired once the moment a rendered surface starts exiting, while the
+     * retained tree is still fading: a sibling handoff can begin now and
+     * overlap its entrance with this surface's exit. */
+    onExiting?: () => void;
+  },
 ) {
   const progress = useSharedValue(0);
   const spatial = useSharedValue(0);
   const motion = useMaterialMotion();
   const [rendered, setRendered] = useState(visible);
+  // A visible render already mounts the surface. Arm its later exit in that
+  // same render pass instead of committing the new tree and immediately
+  // scheduling another layout-effect commit just to retain it. React discards
+  // this state update along with an abandoned concurrent opening.
+  if (visible && !rendered) setRendered(true);
   const generation = useRef(0);
   const wasVisible = useRef(false);
+  const wasOpen = useRef(false);
+  /** True once an entrance actually started; a measurement-gated surface that
+   * is closed before that has nothing to fade out. */
+  const entered = useRef(false);
+  const settled = useRef(-1);
+  const mounted = useRef(true);
   const hideKeyboard = options?.dismissKeyboard !== false;
   const interactive = options?.interactive !== false;
   const ready = options?.ready !== false;
+  const entranceEasing = options?.entranceEasing;
   const onExited = useRef(options?.onExited);
-  onExited.current = options?.onExited;
+  const onEntered = useRef(options?.onEntered);
+  const observeEntrance = options?.onEntered != null;
+  const entranceParts = useRef({ token: -1, effects: false, spatial: false, notified: false });
+  const onExiting = useRef(options?.onExiting);
   const dismissRef = useRef(onDismiss);
-  dismissRef.current = onDismiss;
-  const hadSurface = useRef(visible);
-  useEffect(() => {
-    if (visible) hadSurface.current = true;
-    if (visible || rendered || !hadSurface.current) return;
-    hadSurface.current = false;
-    onExited.current?.();
-  }, [visible, rendered]);
+  useLayoutEffect(() => {
+    onExited.current = options?.onExited;
+    onEntered.current = options?.onEntered;
+    onExiting.current = options?.onExiting;
+    dismissRef.current = onDismiss;
+  }, [options?.onEntered, options?.onExited, options?.onExiting, onDismiss]);
+
+  useLayoutEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   const hide = useCallback((token: number) => {
-    if (generation.current !== token) return;
+    // The animation callback and the fallback timer can both land this call;
+    // a reopen stales the token. Either way the exit notifies exactly once.
+    if (!mounted.current || generation.current !== token || settled.current === token) return;
+    settled.current = token;
+    entered.current = false;
+    // Unmount and release the handoff in the same batch. Firing onExited from
+    // an effect after the unmount commit inserted a full render of the screen
+    // behind the overlay between the fade finishing and the next surface
+    // opening, which read as a close-then-delay on menu handoffs.
     setRendered(false);
+    onExited.current?.();
+  }, []);
+  const finishEntrance = useCallback((token: number, part: "effects" | "spatial") => {
+    if (!mounted.current || generation.current !== token || !wasVisible.current || !entered.current) return;
+    if (entranceParts.current.token !== token) entranceParts.current = { token, effects: false, spatial: false, notified: false };
+    const parts = entranceParts.current;
+    parts[part] = true;
+    if (parts.effects && parts.spatial && !parts.notified) {
+      parts.notified = true;
+      onEntered.current?.();
+    }
   }, []);
 
   useLayoutEffect(() => {
     if (visible) {
-      setRendered(true);
+      const freshOpen = !wasOpen.current;
+      wasOpen.current = true;
       if (!ready) {
         // Measure/position an invisible surface before starting its entrance.
         // Otherwise a slow first layout consumes the fade while hidden and
         // reveals a fully opaque menu, or a stale frame from the previous open.
+        // Once shown, a late readiness change (content swap, re-measure) must
+        // not blank the surface: entering again from 0 is a visible flash and
+        // a readiness value that never recovers would leave it stuck invisible
+        // behind a blocking scrim.
+        if (entered.current && !freshOpen) return;
+        entered.current = false;
         generation.current += 1;
         wasVisible.current = false;
         cancelAnimation(progress);
@@ -62,21 +121,43 @@ export function useOverlayPresence(
       wasVisible.current = true;
       if (opening) {
         generation.current += 1;
+        entered.current = true;
         if (hideKeyboard) dismissKeyboard();
         cancelAnimation(progress);
         cancelAnimation(spatial);
-        progress.value = motion.reducedMotion ? 1 : withTiming(1, { duration: 200, easing: Easing.inOut(Easing.quad) });
-        spatial.value = motion.reducedMotion ? 1 : withSpring(1, motion.spatial);
+        const token = generation.current;
+        progress.value = motion.reducedMotion ? 1 : withTiming(1, { duration: 200, easing: entranceEasing ?? Easing.inOut(Easing.quad) }, observeEntrance ? (finished) => {
+          "worklet";
+          if (finished) runOnJS(finishEntrance)(token, "effects");
+        } : undefined);
+        spatial.value = motion.reducedMotion ? 1 : withSpring(1, motion.spatial, observeEntrance ? (finished) => {
+          "worklet";
+          if (finished) runOnJS(finishEntrance)(token, "spatial");
+        } : undefined);
+        if (motion.reducedMotion && observeEntrance) {
+          finishEntrance(token, "effects");
+          finishEntrance(token, "spatial");
+        }
       }
       return;
     }
     wasVisible.current = false;
+    const closing = wasOpen.current;
+    wasOpen.current = false;
     if (!rendered) return;
     // Hide IME while the overlay tree is still mounted. Android leaves the
     // keyboard up if a focused TextInput is removed without a blur.
     if (hideKeyboard) dismissKeyboard();
+    // Once per close: the retained tree is still mounted and fading, Back and
+    // focus are already released, and the overlay host yields top position to
+    // an active sibling — safe to hand off while this surface exits.
+    if (closing) onExiting.current?.();
     const token = generation.current;
-    if (motion.reducedMotion) {
+    // Reduced motion removes the surface synchronously. So does closing a
+    // surface whose entrance never became visible: retaining it through a
+    // 200ms fade only keeps an invisible, input-blocking layer around after a
+    // fast open/close, and delays a sibling handoff for no visual benefit.
+    if (motion.reducedMotion || !entered.current) {
       cancelAnimation(progress);
       cancelAnimation(spatial);
       progress.value = 0;
@@ -90,7 +171,7 @@ export function useOverlayPresence(
     });
     const fallback = setTimeout(() => hide(token), CLOSE_FALLBACK_MS);
     return () => clearTimeout(fallback);
-  }, [hide, hideKeyboard, progress, spatial, rendered, visible, ready, motion.spatial, motion.reducedMotion]);
+  }, [hide, hideKeyboard, progress, spatial, rendered, visible, ready, entranceEasing, motion.spatial, motion.reducedMotion, observeEntrance, finishEntrance]);
 
   useLayoutEffect(() => {
     if (!visible || !ready || !motion.reducedMotion) return;
@@ -99,7 +180,11 @@ export function useOverlayPresence(
     cancelAnimation(spatial);
     progress.value = 1;
     spatial.value = 1;
-  }, [visible, ready, motion.reducedMotion, progress, spatial]);
+    if (observeEntrance) {
+      finishEntrance(generation.current, "effects");
+      finishEntrance(generation.current, "spatial");
+    }
+  }, [visible, ready, motion.reducedMotion, progress, spatial, observeEntrance, finishEntrance]);
 
   useEffect(() => {
     if (visible || !rendered) return;
@@ -123,5 +208,12 @@ export function useOverlayPresence(
     return () => sub.remove();
   }, [rendered, visible, interactive]);
 
-  return { rendered: visible || rendered, progress, spatial };
+  return {
+    /** `true` while the committed surface is still mounted (including the
+     * retained exit tree). Callers can reuse its measurements on a reopen. */
+    retained: rendered,
+    rendered: visible || rendered,
+    progress,
+    spatial,
+  };
 }

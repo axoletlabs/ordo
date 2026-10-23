@@ -19,14 +19,13 @@ export function ButtonGroup({ children, itemWidth = 48, visualInset = 4, gap = 4
       const neighbors = pressedIndex === 0 || pressedIndex === items.length - 1 ? 1 : 2;
        const change = motion.reducedMotion || pressedIndex == null || items.length < 2 ? 0
         : index === pressedIndex ? growth : Math.abs(index - pressedIndex) === 1 ? -growth / neighbors : 0;
-      return <GroupItem key={React.isValidElement(child) ? child.key ?? index : index} width={itemWidth + change}
+      return <GroupItem key={React.isValidElement(child) ? child.key ?? index : index} width={itemWidth + change} motion={motion}
         onInteraction={(pressed) => setPressedIndex((current) => pressed ? index : current === index ? null : current)}>{child}</GroupItem>;
     })}
   </View>;
 }
 
-function GroupItem({ width, children, onInteraction }: { width: number; children: React.ReactNode; onInteraction: (pressed: boolean) => void }) {
-  const motion = useMaterialMotion();
+function GroupItem({ width, motion, children, onInteraction }: { width: number; motion: ReturnType<typeof useMaterialMotion>; children: React.ReactNode; onInteraction: (pressed: boolean) => void }) {
   const size = useSharedValue(width);
   const previous = useRef({ width, spring: motion.fast, reducedMotion: motion.reducedMotion });
   React.useEffect(() => {

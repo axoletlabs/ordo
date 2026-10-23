@@ -12,7 +12,7 @@ import { useFolderTokenStore } from "../store/folder-tokens";
 import { useInfiniteSearch } from "./use-bookmarks";
 import { useLoadMore } from "./use-list-controls";
 import { collectCachedBookmarks } from "../lib/cache-helpers";
-import { compileSearchResults, EMPTY_SEARCH_FILTERS, reuseSearchResults, sanitizeRouteParam,
+import { compileSearchResults, createCacheWriteCoalescer, EMPTY_SEARCH_FILTERS, reuseSearchResults, sanitizeRouteParam,
    searchFiltersActive, searchScopeActive, useDebouncedValue,
   type SearchFilters } from "../lib/search-bookmarks";
 
@@ -87,16 +87,23 @@ export function useLibrarySearch(localItems: readonly BookmarkDto[], folders: re
   const [cacheRevision, setCacheRevision] = useState(0);
   // Cached matches are only computed while searching; idle, cache traffic
   // (catalogue pages, polls, prefetches) must not re-render the library.
+  // Writes arrive in bursts (an invalidation refetches every active bookmarks
+  // query), so coalesce them into one recompute per burst.
   useEffect(() => {
     if (!active) return;
-    return queryClient.getQueryCache().subscribe((event) => {
+    const coalescer = createCacheWriteCoalescer(() => setCacheRevision((revision) => revision + 1));
+    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
       if (event.query.queryKey[0] !== "bookmarks") return;
       // Search pages are written by this hook's own query; recomputing the
       // cached-match snapshot on each would be redundant work per page.
       if (event.query.queryKey[1] === "search") return;
       if (event.type === "removed" || (event.type === "updated" && event.action.type === "success"))
-        setCacheRevision((revision) => revision + 1);
+        coalescer.bump();
     });
+    return () => {
+      unsubscribe();
+      coalescer.cancel();
+    };
   }, [queryClient, active]);
   const search = useInfiniteSearch(serverQuery, { tagIds: listFilters.tagIds, folderIds: listFilters.folderIds,
     unfiled: listFilters.unfiled, unread: listFilters.status, fuzzy: listFilters.fuzzy,
@@ -105,9 +112,17 @@ export function useLibrarySearch(localItems: readonly BookmarkDto[], folders: re
   const publicFolderIds = useMemo(() => new Set(folders.filter((folder) => !folder.protected).map((folder) => folder.id)), [folders]);
   const visible = useCallback((bookmark: BookmarkDto) => !bookmark.folderId || publicFolderIds.has(bookmark.folderId) ||
     !!useFolderTokenStore.getState().get(bookmark.folderId), [publicFolderIds, accessRevision]);
-  const cachedItems = useMemo(() => active ? [...localItems, ...collectCachedBookmarks(queryClient)].filter(visible) : EMPTY,
+  // The visible list is itself a bookmarks query (useInfiniteBookmarks), so
+  // collectCachedBookmarks already includes every local row. Merging
+  // localItems here re-collected and re-compiled on each optimistic write,
+  // then repeated the same work ~150ms later when the coalesced
+  // cacheRevision landed — two recomputes per burst for one result. The
+  // coalesced path is the single recompute: bounded by CACHE_WRITE_COALESCE_MS
+  // (new local rows are searchable within it), while `visible` below still
+  // drops/injects locked-folder rows immediately on access changes.
+  const cachedItems = useMemo(() => active ? collectCachedBookmarks(queryClient).filter(visible) : EMPTY,
     // Access changes invalidate old cached rows immediately, not after a refetch.
-    [active, localItems, queryClient, cacheRevision, visible]);
+    [active, queryClient, cacheRevision, visible]);
   const compiled = useMemo(() => active ? compileSearchResults({ query: trimmed, filters: listFilters, serverItems,
     cachedItems, serverMatchesQuery: trimmed === serverQuery }).filter(visible) : EMPTY,
     [active, trimmed, listFilters, serverItems, cachedItems, serverQuery, visible]);

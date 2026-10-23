@@ -1,5 +1,7 @@
 # Performance audit (October 2026)
 
+> Historical report. The automated test and performance runners described below have been removed from the repository; these are not current test commands or CI gates.
+
 Original release baseline: `release/0.2.0` (`faa9bed`). Branch:
 `perf/app-optimization`. The large-library/long-reader follow-up below uses
 `20e15ad` as its baseline; do not combine the two sets of measurements.

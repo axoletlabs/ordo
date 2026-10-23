@@ -16,9 +16,13 @@ export function IconButton({ name, variant = "tonal", color, style, ...props }: 
     : variant === "tonal" ? palette.onSecondaryContainer : color ?? palette.onSurfaceVariant;
   const background = props.disabled && (variant === "filled" || variant === "tonal") ? `${palette.onSurface}1f` : variant === "filled" ? palette.primary
     : variant === "tonal" ? palette.secondaryContainer : "transparent";
+  // The pressed corner morph is Expressive-only; Standard keeps 20dp at rest
+  // and pressed. Always pass a shape so a mode switch keeps the same pressable
+  // implementation (and therefore focus/press state) instead of remounting.
+  const shape = { rest: 20, pressed: expressive ? 8 : 20 };
    return <View style={[{ width: grouped ? "100%" : 48, height: 48, flexShrink: 0 }, style]}>
     <PressableScale {...props} accessibilityRole={props.accessibilityRole ?? "button"}
-    stateLayerColor={foreground} shape={{ rest: 20, pressed: expressive ? 8 : 20 }}
+    stateLayerColor={foreground} shape={shape}
     style={{ width: "100%", height: 48, borderRadius: 24, justifyContent: "center" }}
     visualStyle={{ alignSelf: "stretch", marginHorizontal: 4, height: 40, borderRadius: 20,
       backgroundColor: background, borderWidth: variant === "outlined" ? 1 : 0, borderColor: props.disabled ? `${palette.onSurface}1f` : expressive ? palette.outlineVariant : palette.outline,

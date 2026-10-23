@@ -65,6 +65,7 @@ export function BookmarkActionsSheet({
   const nextAction = React.useRef<(() => void) | null>(null);
   useLayoutEffect(() => { if (visible) nextAction.current = null; }, [visible]);
   const handoff = (action: () => void) => {
+    // Overlap the receiving surface's entrance with this menu's retained exit.
     nextAction.current = action;
     onDismiss();
   };
@@ -83,7 +84,7 @@ export function BookmarkActionsSheet({
       <ContextMenu
         visible={visible && (mode === "menu" || (mode === "remind" && remindPage === "presets"))}
         onDismiss={onDismiss}
-        onExited={() => {
+        onExiting={() => {
           const action = nextAction.current;
           nextAction.current = null;
           action?.();

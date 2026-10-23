@@ -2,8 +2,8 @@
  * Tag browse: whole-library bookmark list for one tag. Other tags stay on
  * each row (except the one you are already viewing) and open that tag.
  */
-import { useCallback, useMemo, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { StyleSheet, View, type FlatList, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useAppRouter as useRouter } from "../../../src/hooks/use-app-router";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
@@ -43,6 +43,67 @@ import type { BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
 import { useBookmarkListLayout } from "../../../src/hooks/use-bookmark-list-layout";
+
+const bookmarkKeyExtractor = (b: BookmarkDto) => b.id;
+
+type TagBookmarkListProps = {
+  listRef: React.Ref<FlatList<BookmarkDto>>;
+  onScroll: (event: NativeSyntheticEvent<NativeScrollEvent>) => void;
+  onContentSizeChange: (width: number, height: number) => void;
+  scrollEventThrottle: number;
+  scrollEnabled: boolean;
+  data: BookmarkDto[];
+  keyExtractor: (b: BookmarkDto) => string;
+  renderItem: (info: { item: BookmarkDto; index: number }) => React.ReactElement;
+  getItemLayout:
+    | ((data: unknown, index: number) => { length: number; offset: number; index: number })
+    | undefined;
+  paddingBottom: number;
+  refreshing: boolean;
+  onRefresh: () => void;
+  onEndReached: () => void;
+  footerVisible: boolean;
+};
+
+/** Action sheets and menus re-render the screen; the list subtree only
+ * re-renders when its own inputs change. */
+const TagBookmarkList = React.memo(function TagBookmarkList({
+  listRef,
+  onScroll,
+  onContentSizeChange,
+  scrollEventThrottle,
+  scrollEnabled,
+  data,
+  keyExtractor,
+  renderItem,
+  getItemLayout,
+  paddingBottom,
+  refreshing,
+  onRefresh,
+  onEndReached,
+  footerVisible,
+}: TagBookmarkListProps) {
+  return (
+    <ThemedFlashList
+      ref={listRef}
+      onScroll={onScroll}
+      onContentSizeChange={onContentSizeChange}
+      scrollEventThrottle={scrollEventThrottle}
+      data={data}
+      getItemLayout={getItemLayout}
+      keyExtractor={keyExtractor}
+      renderItem={renderItem}
+      contentContainerStyle={{ paddingBottom }}
+      refreshing={refreshing}
+      onRefresh={onRefresh}
+      scrollEnabled={scrollEnabled}
+      onEndReached={onEndReached}
+      ListFooterComponent={footerVisible ? <ListLoadingFooter /> : null}
+      ListEmptyComponent={<View style={styles.empty}><EmptyState icon="pricetag-outline" title="No bookmarks with this tag"
+        message="Save a bookmark with this tag, or pick another." /></View>}
+    />
+  );
+});
 
 export default function TagDetailScreen() {
   const { palette } = useTheme();
@@ -154,25 +215,21 @@ export default function TagDetailScreen() {
 
   const listPane = (
     <SelectionDragFrame drag={drag} selectionStore={selection.store}>
-    <ThemedFlashList
-      ref={drag.listRef}
+    <TagBookmarkList
+      listRef={drag.listRef}
       onScroll={drag.onScroll}
       onContentSizeChange={drag.onContentSizeChange}
       scrollEventThrottle={drag.scrollEventThrottle}
       data={items}
-      getItemLayout={getItemLayout}
-      keyExtractor={(b: BookmarkDto) => b.id}
+      keyExtractor={bookmarkKeyExtractor}
       renderItem={renderBookmark}
-      contentContainerStyle={{
-        paddingBottom: selection.active ? selectionClearance : listOverlayClearance,
-      }}
+      getItemLayout={getItemLayout}
+      paddingBottom={selection.active ? selectionClearance : listOverlayClearance}
       refreshing={refreshing}
       onRefresh={onRefresh}
       scrollEnabled={drag.scrollEnabled}
       onEndReached={onEndReached}
-      ListFooterComponent={loadingMore ? <ListLoadingFooter /> : null}
-      ListEmptyComponent={<View style={styles.empty}><EmptyState icon="pricetag-outline" title="No bookmarks with this tag"
-        message="Save a bookmark with this tag, or pick another." /></View>}
+      footerVisible={loadingMore}
     />
     </SelectionDragFrame>
   );

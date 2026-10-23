@@ -22,6 +22,7 @@ import { sortFoldersDefault, sortTagsDefault } from "./list-sort";
 import { qk, tagsAnyAccess } from "./api/query-keys";
 import {
   moveFolderCounts,
+  moveBookmarksInCache,
   collectCachedBookmarks,
   insertBookmarksIfAbsent,
   mapCachedBookmarks,
@@ -83,6 +84,10 @@ function ensurePendingStripper() {
   stripperStarted = true;
   queryClient.getQueryCache().subscribe((event) => {
     if (event.type !== "updated") return;
+    // Nothing is awaiting Undo: the filters below would be no-ops, but each
+    // would still walk every page of the updated query. Catalogue warm-up and
+    // reader progress flushes must not pay for a delete that already settled.
+    if (pendingBookmarkIds.size === 0 && pendingFolderIds.size === 0 && pendingTagIds.size === 0) return;
     const key = event.query.queryKey;
     const data = event.query.state.data;
 
@@ -119,7 +124,8 @@ function ensurePendingStripper() {
     }
 
     if (!isPagedBookmarks(data)) return;
-    const needsHide = data.pages.some(
+    const rowsPending = pendingBookmarkIds.size > 0 || pendingFolderIds.size > 0;
+    const needsHide = rowsPending && data.pages.some(
       (page) =>
         Array.isArray(page?.items) &&
         page.items.some(
@@ -160,6 +166,28 @@ function bookmarkHasPendingTag(bookmark: BookmarkDto) {
   );
 }
 
+/** Does this cached payload still hold a row the journal says is being
+ * deleted (and therefore needs the stripper run on it)? */
+function cachedDataHidesPending(queryKey: readonly unknown[], data: unknown): boolean {
+  if (queryKey[1] === "detail") {
+    return isBookmarkRecord(data) && (pendingBookmarkIds.has(data.id) ||
+      (!!data.folderId && pendingFolderIds.has(data.folderId)) ||
+      (pendingTagIds.size > 0 && bookmarkHasPendingTag(data)));
+  }
+  if (!isPagedBookmarks(data)) return false;
+  const rowsPending = pendingBookmarkIds.size > 0 || pendingFolderIds.size > 0;
+  const tagsPending = pendingTagIds.size > 0;
+  if (!rowsPending && !tagsPending) return false;
+  for (const page of data.pages) {
+    if (!page || !Array.isArray(page.items)) continue;
+    for (const item of page.items) {
+      if (rowsPending && (pendingBookmarkIds.has(item.id) || (item.folderId != null && pendingFolderIds.has(item.folderId)))) return true;
+      if (tagsPending && bookmarkHasPendingTag(item)) return true;
+    }
+  }
+  return false;
+}
+
 function stripPendingTags(bookmark: BookmarkDto): BookmarkDto {
   if (!Array.isArray(bookmark.tags) || !Array.isArray(bookmark.suggestedTags)) return bookmark;
   const tags = bookmark.tags.filter((tag) => !pendingTagIds.has(tag.id));
@@ -177,6 +205,55 @@ function listKeyAllowsRestore(queryKey: readonly unknown[], folderId: string | n
   return scope === folderId && (queryKey.length === 2 || queryKey.length === 3);
 }
 
+interface WindowWatch {
+  /** Bookmark list/detail queries present when the undo window opened, keyed by
+   * query hash. `updates` is the state's dataUpdateCount at that moment, so
+   * queries created or refetched behind the tombstones are detectable. */
+  bookmarks: Map<string, { updates: number; catalogue: boolean }>;
+  tags: Map<string, number>;
+}
+
+/** Recorded after the optimistic hide: our own writes are part of the
+ * baseline, and anything that changes afterwards happened inside the window. */
+function watchBookmarkWindow(): WindowWatch {
+  const bookmarks = new Map<string, { updates: number; catalogue: boolean }>();
+  for (const query of queryClient.getQueryCache().findAll({ queryKey: ["bookmarks"] })) {
+    // Details fetched during a tag-deletion window can also be stripped and
+    // are not covered by the hide-time assignment snapshot.
+    if (!isPagedBookmarks(query.state.data) && query.queryKey[1] !== "detail") continue;
+    bookmarks.set(query.queryHash, { updates: query.state.dataUpdateCount, catalogue: query.queryKey[1] === "library-index" });
+  }
+  const tags = new Map<string, number>();
+  for (const query of queryClient.getQueryCache().findAll({ queryKey: tagsAnyAccess })) {
+    tags.set(query.queryHash, query.state.dataUpdateCount);
+  }
+  return { bookmarks, tags };
+}
+
+/** Queries created/refetched during the undo window can sit outside the hide
+ * membership snapshot (a search started mid-window) or hold rows the stripper
+ * stripped. Diff them BEFORE restoring: the restore's own writes would
+ * otherwise mask the change. Catalogue changes are staled, never replayed —
+ * refetching them would page through the whole library again. */
+function diffWindowBookmarkQueries(watch: WindowWatch): { refetch: Set<string>; staleOnly: Set<string>; tags: Set<string> } {
+  const refetch = new Set<string>();
+  const staleOnly = new Set<string>();
+  for (const query of queryClient.getQueryCache().findAll({ queryKey: ["bookmarks"] })) {
+    if (!isPagedBookmarks(query.state.data) && query.queryKey[1] !== "detail") continue;
+    const before = watch.bookmarks.get(query.queryHash);
+    if (before && before.updates === query.state.dataUpdateCount && !query.state.isInvalidated) continue;
+    if ((before?.catalogue ?? false) || query.queryKey[1] === "library-index") staleOnly.add(query.queryHash);
+    else refetch.add(query.queryHash);
+  }
+  const tags = new Set<string>();
+  for (const query of queryClient.getQueryCache().findAll({ queryKey: tagsAnyAccess })) {
+    const before = watch.tags.get(query.queryHash);
+    if (before !== undefined && before === query.state.dataUpdateCount && !query.state.isInvalidated) continue;
+    tags.add(query.queryHash);
+  }
+  return { refetch, staleOnly, tags };
+}
+
 function collectBookmarksInFolders(folderIds: ReadonlySet<string>): BookmarkDto[] {
   if (folderIds.size === 0) return [];
   // Resolve the newest copy BEFORE filtering by folder. An obsolete reader or
@@ -189,49 +266,80 @@ interface BookmarkRestore {
   lists: Map<string, (readonly unknown[])[]>;
 }
 
-function hideBookmarks(bookmarks: BookmarkDto[], bumpCounts: boolean) {
+interface HideGroup {
+  bookmarks: readonly BookmarkDto[];
+  bumpCounts: boolean;
+  /** Kept bookmarks ride along for membership/restore only: the folder's
+   * tombstone hides them, but they are never journal-tombstoned or counted. */
+  tombstone?: boolean;
+}
+
+/** Hide several bookmark groups with ONE membership walk and ONE cache sweep.
+ * Two passes (contained + standalone) rewrote every paged query — including
+ * the whole library catalogue — twice per delete, and the dispatch cascade
+ * (replaceEqualDeep + subscribers) dominated the confirm-press latency. */
+function hideBookmarks(groups: readonly HideGroup[]): BookmarkRestore {
   const details = new Map<string, BookmarkDetailDto | BookmarkDto>();
   const lists = new Map<string, (readonly unknown[])[]>();
-  if (bookmarks.length === 0) return { details, lists };
-  const ids = new Set(bookmarks.map((bookmark) => bookmark.id));
+  const ids = new Set<string>();
+  for (const group of groups) {
+    if (group.tombstone === false) continue;
+    for (const bookmark of group.bookmarks) ids.add(bookmark.id);
+  }
+  const tracked = new Set<string>();
+  for (const group of groups) for (const bookmark of group.bookmarks) tracked.add(bookmark.id);
+  if (tracked.size === 0) return { details, lists };
   for (const query of queryClient.getQueryCache().findAll({ queryKey: ["bookmarks"] })) {
     const data = query.state.data;
     if (!isPagedBookmarks(data)) continue;
-    for (const item of data.pages.flatMap((page) => page.items)) {
-      if (!ids.has(item.id)) continue;
-      lists.set(item.id, [...(lists.get(item.id) ?? []), query.queryKey]);
+    for (const page of data.pages) {
+      if (!page || !Array.isArray(page.items)) continue;
+      for (const item of page.items) {
+        if (!tracked.has(item.id)) continue;
+        lists.set(item.id, [...(lists.get(item.id) ?? []), query.queryKey]);
+      }
     }
   }
-  for (const bookmark of bookmarks) {
-    pendingBookmarkIds.add(bookmark.id);
-    const detail = queryClient.getQueryData<BookmarkDetailDto | BookmarkDto>(qk.bookmark(bookmark.id));
-    if (detail) details.set(bookmark.id, detail);
-    if (bookmark.remindAt != null) {
-      void import("./reminder-notifications").then(({ cancelBookmarkReminder }) =>
-        cancelBookmarkReminder(bookmark.id),
-      );
+  const cancelReminderIds: string[] = [];
+  for (const group of groups) {
+    for (const bookmark of group.bookmarks) {
+      const detail = queryClient.getQueryData<BookmarkDetailDto | BookmarkDto>(qk.bookmark(bookmark.id));
+      if (detail) details.set(bookmark.id, detail);
+      if (group.tombstone === false) continue;
+      pendingBookmarkIds.add(bookmark.id);
+      if (bookmark.remindAt != null) cancelReminderIds.push(bookmark.id);
     }
   }
-  removeBookmarksEverywhere(queryClient, ids);
+  if (cancelReminderIds.length > 0) {
+    void import("./reminder-notifications").then(({ cancelBookmarkReminder }) => {
+      for (const id of cancelReminderIds) cancelBookmarkReminder(id);
+    });
+  }
+  // Kept rows also leave their old folder during the window. They have no
+  // bookmark tombstone, but the pending folder suppresses refetched copies.
+  removeBookmarksEverywhere(queryClient, tracked);
   removeRemindersFromCache(queryClient, ids);
   queryClient.removeQueries({ queryKey: ["bookmarks", "detail"], predicate: (query) => ids.has(String(query.queryKey[2])) });
-  if (bumpCounts) moveFolderCounts(queryClient, bookmarks, null);
+  for (const group of groups) {
+    if (group.bumpCounts) moveFolderCounts(queryClient, group.bookmarks, null);
+  }
   return { details, lists };
 }
 
 function restoreBookmarks(
-  bookmarks: BookmarkDto[],
-  snapshot: BookmarkRestore,
-  bumpCounts: boolean,
+  groups: readonly { bookmarks: readonly BookmarkDto[]; snapshot: BookmarkRestore; bumpCounts: boolean }[],
 ) {
-  if (bookmarks.length === 0) return;
+  const bookmarks = groups.flatMap((group) => group.bookmarks);
+  if (bookmarks.length === 0) return new Set<string>();
   for (const bookmark of bookmarks) pendingBookmarkIds.delete(bookmark.id);
   const memberships = new Map<string, Set<string>>();
-  for (const [id, keys] of snapshot.lists) {
-    for (const key of keys) {
-      const hash = JSON.stringify(key);
-      const ids = memberships.get(hash) ?? new Set<string>();
-      ids.add(id); memberships.set(hash, ids);
+  for (const group of groups) {
+    for (const [id, keys] of group.snapshot.lists) {
+      for (const key of keys) {
+        const hash = JSON.stringify(key);
+        const ids = memberships.get(hash) ?? new Set<string>();
+        ids.add(id); memberships.set(hash, ids);
+      }
     }
   }
   for (const query of queryClient.getQueryCache().findAll({ queryKey: ["bookmarks"] })) {
@@ -240,17 +348,27 @@ function restoreBookmarks(
     const incoming = bookmarks.filter((bookmark) => previouslyPresent?.has(bookmark.id) || listKeyAllowsRestore(query.queryKey, bookmark.folderId));
     if (incoming.length) insertBookmarksIfAbsent(queryClient, query.queryKey, incoming);
   }
-  if (bumpCounts) moveFolderCounts(queryClient, bookmarks, null, -1);
+  for (const group of groups) {
+    if (group.bumpCounts) moveFolderCounts(queryClient, group.bookmarks, null, -1);
+  }
   syncRemindersInCache(queryClient, bookmarks.filter((bookmark) => bookmark.remindAt != null));
-  for (const bookmark of bookmarks) {
-    const detail = snapshot.details.get(bookmark.id);
-    if (detail) queryClient.setQueryData(qk.bookmark(bookmark.id), detail);
-    if (bookmark.remindAt != null) {
-      void import("./reminder-notifications").then(({ syncBookmarkReminder }) =>
-        syncBookmarkReminder(bookmark),
-      );
+  const restoredDetails = new Set<string>();
+  for (const group of groups) {
+    for (const bookmark of group.bookmarks) {
+      const detail = group.snapshot.details.get(bookmark.id);
+      if (detail) {
+        queryClient.setQueryData(qk.bookmark(bookmark.id), detail);
+        restoredDetails.add(bookmark.id);
+      }
     }
   }
+  const reminders = bookmarks.filter((bookmark) => bookmark.remindAt != null);
+  if (reminders.length > 0) {
+    void import("./reminder-notifications").then(({ syncBookmarkReminder }) => {
+      for (const bookmark of reminders) syncBookmarkReminder(bookmark);
+    });
+  }
+  return restoredDetails;
 }
 
 function hideFolders(folders: FolderDto[]) {
@@ -359,8 +477,15 @@ function releaseIntent(intent: DeleteIntent) {
   for (const id of intent.tags) pendingTagIds.delete(id);
 }
 
-function invalidateDeletedLists() {
-  void queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
+function invalidateDeletedLists(includeCatalogue = false) {
+  void queryClient.invalidateQueries({
+    queryKey: ["bookmarks"],
+    // The catalogue is paged through the whole library; invalidating it
+    // refetches every loaded page sequentially after each delete. Deleted
+    // rows were already tombstoned out of it, and search recompiles from the
+    // refreshed list/detail copies (same policy as extraction polls).
+    predicate: (query) => includeCatalogue || query.queryKey[1] !== "library-index",
+  });
   void queryClient.invalidateQueries({ queryKey: qk.folders });
   void queryClient.invalidateQueries({ queryKey: tagsAnyAccess });
 }
@@ -385,8 +510,12 @@ async function deleteIfPresent(run: () => Promise<unknown>) {
   }
 }
 
-async function replayDeleteIntent(key: string, intent: DeleteIntent) {
+async function replayDeleteIntent(key: string, intent: DeleteIntent, keptRows: readonly BookmarkDto[] = []) {
   const owner = captureSessionScope();
+  const keepIds = new Set((intent.keeps ?? []).map((row) => row.id));
+  const knownKeeps = new Map([...keptRows, ...(keepIds.size ? collectCachedBookmarks(queryClient) : [])]
+    .filter((row) => keepIds.has(row.id)).map((row) => [row.id, row]));
+  const missingKeeps = new Set<string>();
   const assertScope = () => {
     assertSessionScope(owner);
     if (deleteJournalKey() !== key) throw new Error("Deletion paused after account or server changed.");
@@ -422,8 +551,25 @@ async function replayDeleteIntent(key: string, intent: DeleteIntent) {
   }
   for (const [sourceFolderId, ids] of keepsByFolder) {
     await removeChunks(ids,
-      (chunk) => bookmarksApi.batch({ action: "move", ids: chunk, folderId: null }, { folderId: sourceFolderId }),
-      (id) => bookmarksApi.update(id, { folderId: null }, { folderId: sourceFolderId }));
+      async (chunk) => {
+        const result = await bookmarksApi.batch({ action: "move", ids: chunk, folderId: null }, { folderId: sourceFolderId });
+        if (result.updated < chunk.length) {
+          // Reuse the idempotent single-row fallback before allowing a folder
+          // cascade: a count alone cannot tell us which keeps actually moved.
+          throw Object.assign(new Error("Some kept bookmarks need reconciliation."), { status: 404 });
+        }
+      },
+      async (id) => {
+        try {
+          const updated = await bookmarksApi.update(id, { folderId: null }, { folderId: sourceFolderId });
+          if (isBookmarkRecord(updated)) knownKeeps.set(id, updated);
+        } catch (cause) {
+          if ((cause as { status?: number }).status === 404) {
+            knownKeeps.delete(id); missingKeeps.add(id);
+          }
+          throw cause;
+        }
+      });
   }
   await removeChunks(intent.folders, (ids) => foldersApi.batch({ action: "delete", ids }), (id) => foldersApi.remove(id));
   for (const id of intent.tags) {
@@ -431,11 +577,37 @@ async function replayDeleteIntent(key: string, intent: DeleteIntent) {
     await deleteIfPresent(() => tagsApi.remove(id));
   }
   assertScope();
+  // A response captured before DELETE must not resurrect rows/tags after their
+  // tombstones are released. Cancellation also handles queryFns ignoring abort.
+  const initialCatalogueFetches = new Set(queryClient.getQueryCache().findAll({ queryKey: ["bookmarks", "library-index"] })
+    .filter((query) => query.state.data === undefined && query.state.fetchStatus === "fetching").map((query) => query.queryHash));
+  await queryClient.cancelQueries({ queryKey: ["bookmarks", "library-index"] });
+  assertScope();
   forgetDeleteIntent(key, intent.id);
   if (deleteJournalKey() !== key) return;
   releaseIntent(intent);
+  if (missingKeeps.size > 0) {
+    removeBookmarksEverywhere(queryClient, missingKeeps);
+    removeRemindersFromCache(queryClient, missingKeeps);
+    queryClient.removeQueries({ queryKey: ["bookmarks", "detail"], predicate: (query) => missingKeeps.has(String(query.queryKey[2])) });
+  }
+  const movedKeeps = [...knownKeeps.values()].map((row) => ({ ...row, folderId: null }));
+  moveBookmarksInCache(queryClient, movedKeeps);
+  if (movedKeeps.length > 0) {
+    for (const query of queryClient.getQueryCache().findAll({ queryKey: ["bookmarks", "library-index"] })) {
+      if (isPagedBookmarks(query.state.data)) insertBookmarksIfAbsent(queryClient, query.queryKey, movedKeeps);
+    }
+  }
   for (const id of intent.folders) useFolderTokenStore.getState().clear(id);
-  invalidateDeletedLists();
+  // A resumed ID-only journal may lack metadata for an uncached kept row.
+  // Only that exceptional case needs a full catalogue reconciliation.
+  invalidateDeletedLists(knownKeeps.size < keepIds.size);
+  // Cancelling a first warm fetch has no cached pages for the paced loop to
+  // resume. Restart only that first page, not any already-warmed catalogue.
+  if (initialCatalogueFetches.size > 0) void queryClient.refetchQueries({
+    queryKey: ["bookmarks", "library-index"], type: "active",
+    predicate: (query) => initialCatalogueFetches.has(query.queryHash),
+  });
 }
 
 /** Restore ID-only tombstones before launch/foreground queries paint. A new
@@ -467,7 +639,7 @@ export function resumePendingDeletes() {
             return;
           }
           releaseIntent(intent);
-          invalidateDeletedLists();
+          invalidateDeletedLists(true);
         }
         toast.error(status && status >= 400 && status < 500 ? errorMessage(cause)
           : `${errorMessage(cause)} Deletion will retry when you return online.`);
@@ -475,9 +647,23 @@ export function resumePendingDeletes() {
     }
     // The disk cache may already contain these rows. Apply tombstones now,
     // rather than waiting for a network/cache event to trigger the subscriber.
+    // Rewriting every query republished the whole cache (catalogue included)
+    // and scheduled a full disk snapshot; only dirty queries need the write.
     for (const query of queryClient.getQueryCache().getAll()) {
-      if (["bookmarks", "folders", "tags"].includes(String(query.queryKey[0]))) {
-        queryClient.setQueryData(query.queryKey, query.state.data);
+      const queryKey = query.queryKey;
+      const data = query.state.data;
+      if (data === undefined) continue;
+      const scope = String(queryKey[0]);
+      if (scope === "folders") {
+        if (pendingFolderIds.size > 0 && Array.isArray(data) && data.some((row) => pendingFolderIds.has(row.id))) {
+          queryClient.setQueryData(queryKey, data);
+        }
+      } else if (scope === "tags") {
+        if (pendingTagIds.size > 0 && Array.isArray(data) && data.some((row) => pendingTagIds.has(row.id))) {
+          queryClient.setQueryData(queryKey, data);
+        }
+      } else if (scope === "bookmarks" && queryKey[1] !== "extraction-progress") {
+        if (cachedDataHidesPending(queryKey, data)) queryClient.setQueryData(queryKey, data);
       }
     }
   } catch (cause) {
@@ -502,8 +688,9 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
   const standalone = selectedBookmarks.filter(
     (bookmark) => !bookmark.folderId || !folderIds.has(bookmark.folderId),
   );
+  const standaloneIds = new Set(standalone.map((bookmark) => bookmark.id));
   const contained = collectBookmarksInFolders(folderIds).filter(
-    (bookmark) => !pendingBookmarkIds.has(bookmark.id) && !standalone.some((item) => item.id === bookmark.id),
+    (bookmark) => !pendingBookmarkIds.has(bookmark.id) && !standaloneIds.has(bookmark.id),
   );
   // Ticked bookmarks leave the folder at commit time instead of cascading.
   // They are never tombstoned: the folder's tombstone already hides them, so
@@ -534,9 +721,21 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
   activeIntents.add(activeKey);
 
   hideFolders(folders);
-  const containedDetails = hideBookmarks(deletableContained, false);
-  const standaloneDetails = hideBookmarks(standalone, true);
+  // One membership walk + one cache sweep for contained and standalone rows.
+  // Kept bookmarks ride along so Undo can put them back without a refetch.
+  const keepRows = contained.filter((bookmark) => keepIdSet.has(bookmark.id));
+  const restoreGroups: { bookmarks: readonly BookmarkDto[]; snapshot: BookmarkRestore; bumpCounts: boolean }[] = [];
+  const hideGroups: HideGroup[] = [
+    { bookmarks: deletableContained as readonly BookmarkDto[], bumpCounts: false },
+    { bookmarks: standalone as readonly BookmarkDto[], bumpCounts: true },
+    ...(keepRows.length > 0 ? [{ bookmarks: keepRows as readonly BookmarkDto[], bumpCounts: false, tombstone: false as const }] : []),
+  ].filter((group) => group.bookmarks.length > 0);
+  const combined = hideBookmarks(hideGroups);
+  for (const group of hideGroups) {
+    restoreGroups.push({ bookmarks: group.bookmarks, snapshot: { details: combined.details, lists: combined.lists }, bumpCounts: group.bumpCounts });
+  }
   const tagAssignments = hideTags(tags);
+  const windowWatch = watchBookmarkWindow();
   opts.onDeleted?.();
 
   let settled = false;
@@ -544,9 +743,16 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
 
   const restore = () => {
     restoreFolders(folders);
-    restoreBookmarks(deletableContained, containedDetails, false);
-    restoreBookmarks(standalone, standaloneDetails, true);
+    // Release tag tombstones before re-inserting hidden bookmarks; otherwise
+    // the stripper would immediately erase tags from the restored snapshots.
     restoreTags(tags, tagAssignments);
+    const restoredDetails = restoreBookmarks(restoreGroups);
+    // Mark snapshots stale after all restore sweeps: tag restoration can also
+    // write these details, clearing a stale flag set earlier in the batch.
+    if (restoredDetails.size > 0) void queryClient.invalidateQueries({
+      queryKey: ["bookmarks", "detail"],
+      predicate: (query) => restoredDetails.has(String(query.queryKey[2])), refetchType: "none",
+    });
   };
 
   const settle = (undo: boolean): boolean => {
@@ -562,11 +768,24 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
     if (undo) {
       activeIntents.delete(activeKey);
       haptics.success();
+      const changed = diffWindowBookmarkQueries(windowWatch);
       restore();
-      invalidateDeletedLists();
+      // Untouched lists are restored locally. A query created/refetched during
+      // the window may have lost rows/tags outside that snapshot, so reconcile
+      // only those queries. Never replay the whole catalogue on the Undo tap.
+      if (changed.refetch.size > 0) void queryClient.invalidateQueries({
+        queryKey: ["bookmarks"], predicate: (query) => changed.refetch.has(query.queryHash),
+      });
+      if (changed.staleOnly.size > 0) void queryClient.invalidateQueries({
+        queryKey: ["bookmarks"], predicate: (query) => changed.staleOnly.has(query.queryHash), refetchType: "none",
+      });
+      if (tags.length > 0 && changed.tags.size > 0) void queryClient.invalidateQueries({
+        queryKey: tagsAnyAccess, predicate: (query) => changed.tags.has(query.queryHash),
+      });
+      void queryClient.invalidateQueries({ queryKey: qk.folders });
       return true;
     }
-    void replayDeleteIntent(journal.key, journal.intent).catch((cause) => {
+    void replayDeleteIntent(journal.key, journal.intent, keepRows).catch((cause) => {
       if (!isSessionScopeCurrent(owner) || deleteJournalKey() !== journal.key || generation !== scopeGeneration) return;
       const status = (cause as { status?: number }).status;
       if (status && status >= 400 && status < 500) {
@@ -575,7 +794,7 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
           return;
         }
         restore();
-        invalidateDeletedLists();
+        invalidateDeletedLists(true);
       }
       // Network failures retain the durable intent and tombstones for replay.
       toast.error(status && status >= 400 && status < 500 ? errorMessage(cause)

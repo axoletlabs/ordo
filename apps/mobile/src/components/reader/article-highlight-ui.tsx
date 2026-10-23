@@ -17,10 +17,13 @@ import {
   View,
   type StyleProp,
   type TextStyle,
+  type ViewStyle,
 } from "react-native";
 import { UITextView } from "@bsky.app/react-native-uitextview";
 import {
   useRendererProps,
+  IMGElement,
+  useIMGElementProps,
   type CustomBlockRenderer,
   type CustomTextualRenderer,
   type TNode,
@@ -140,6 +143,8 @@ function InlineSpan({
 
 interface InlineCtx {
   highlightStyle?: TextStyle;
+  /** Render-time ink per tag: the engine bakes typography only. */
+  tagTextColors?: Record<string, TextStyle>;
   /** Tapping a saved highlight opens its menu; offsets map to the block text. */
   onHighlightPress?: (start: number, end: number, point?: PressPoint) => void;
 }
@@ -164,7 +169,7 @@ function selectableInline(
     // TRE collapses <mark> into a text-type node that keeps tagName/id.
     // It is one tap target for the tap-to-manage-highlight menu.
     if (marked && node.tagName === "mark" && ctx.onHighlightPress && len > 0) {
-      const style = { ...pickTextStyle(node.getNativeStyles() as Record<string, unknown>), ...(ctx.highlightStyle ?? {}) };
+      const style = { ...pickTextStyle(node.getNativeStyles() as Record<string, unknown>), ...(ctx.tagTextColors?.[node.tagName ?? ""] ?? {}), ...(ctx.highlightStyle ?? {}) };
       return (
         <InlineSpan
           style={style}
@@ -174,7 +179,7 @@ function selectableInline(
         </InlineSpan>
       );
     }
-    const style = { ...pickTextStyle(node.getNativeStyles() as Record<string, unknown>), ...(marked ? ctx.highlightStyle : {}) };
+    const style = { ...pickTextStyle(node.getNativeStyles() as Record<string, unknown>), ...(marked ? ctx.highlightStyle : ctx.tagTextColors?.[node.tagName ?? ""] ?? {}) };
     const press = pressPropsFor(node);
     if (!press && Object.keys(style).length === 0) return node.data;
     return (
@@ -189,7 +194,7 @@ function selectableInline(
       <React.Fragment key={index}>{selectableInline(child, ctx, marked, offset)}</React.Fragment>
     ));
   }
-  const style = { ...pickTextStyle(node.getNativeStyles() as Record<string, unknown>), ...(marked ? ctx.highlightStyle : {}) };
+  const style = { ...pickTextStyle(node.getNativeStyles() as Record<string, unknown>), ...ctx.tagTextColors?.[node.tagName], ...(marked ? ctx.highlightStyle : {}) };
   const press = pressPropsFor(node);
   // A mark is one tap target: inner links still win (innermost onPress).
   if (node.tagName === "mark" && ctx.onHighlightPress) {
@@ -236,6 +241,10 @@ export interface HighlightUiHandlers {
   selectionColor: string;
   textStyle?: StyleProp<TextStyle>;
   highlightStyle?: TextStyle;
+  /** Ink per tag, applied at render time (engine styles carry typography). */
+  tagTextColors?: Record<string, TextStyle>;
+  /** Block host surface/border colors per tag, applied at render time. */
+  tagViewColors?: Record<string, ViewStyle>;
   onTextSelect: (draft: HighlightSelectDraft | null) => void;
 }
 
@@ -323,13 +332,14 @@ export function SelectablePhrase({
   const spans = useMemo(() => {
     const ctx: InlineCtx = {
       highlightStyle: ui?.highlightStyle,
+      tagTextColors: ui?.tagTextColors,
       onHighlightPress: publishHighlightTap,
     };
     if (tnode.type === "text") return selectableInline(tnode, ctx);
     return tnode.children.map((child, index) => (
       <React.Fragment key={index}>{selectableInline(child, ctx, tnode.tagName === "mark")}</React.Fragment>
     ));
-  }, [tnode, ui?.highlightStyle, publishHighlightTap]);
+  }, [tnode, ui?.highlightStyle, ui?.tagTextColors, publishHighlightTap]);
 
   const publishRange = useCallback(
     (start: number, end: number, nativeRect?: MenuAnchorRect) => {
@@ -413,8 +423,10 @@ export function SelectablePhrase({
   }, [publish, publishRange, text]);
 
   // A heading/code block must keep its own computed font and ink rather than
-  // having the generic paragraph fallback override its semantic styles.
-  const phraseStyle = [styles.phrase, ui?.textStyle, pickTextStyle(tnode.getNativeStyles() as Record<string, unknown>)];
+  // having the generic paragraph fallback override its semantic styles. The
+  // engine resolves typography into tnode styles; ink arrives by tag at
+  // render time so palette changes never re-parse the article.
+  const phraseStyle = [styles.phrase, ui?.textStyle, pickTextStyle(tnode.getNativeStyles() as Record<string, unknown>), ui?.tagTextColors?.[tnode.tagName ?? ""]];
   const phrase =
     Platform.OS === "ios" ? (
       <UITextView
@@ -462,29 +474,124 @@ export const selectableBlockRenderer: CustomBlockRenderer = ({
   TNodeChildrenRenderer,
   ...props
 }) => {
+  const ui = useContext(HighlightUiContext);
   // Images cannot live inside the selectable Text tree; keep the default
-  // renderer so <p><a><img></a></p> lead media actually paints.
+  // renderer so <p><a><img></a></p> lead media actually paints. Block
+  // surfaces (quote bar, code fills) still follow the palette here: the
+  // engine bakes typography only, so media blocks must not lose their ink.
   if (tnodeContainsMedia(asHtmlNode(tnode))) {
-    return <TDefaultRenderer tnode={tnode} TNodeChildrenRenderer={TNodeChildrenRenderer} {...props} />;
+    const mediaViewStyle = ui?.tagViewColors?.[tnode.tagName ?? ""];
+    return (
+      <TDefaultRenderer
+        tnode={tnode}
+        TNodeChildrenRenderer={TNodeChildrenRenderer}
+        {...props}
+        {...(mediaViewStyle ? { viewProps: { style: mediaViewStyle } } : {})}
+      />
+    );
   }
+  const viewStyle = ui?.tagViewColors?.[tnode.tagName ?? ""];
   return (
-    <TDefaultRenderer tnode={tnode} TNodeChildrenRenderer={TNodeChildrenRenderer} {...props}>
+    <TDefaultRenderer
+      tnode={tnode}
+      TNodeChildrenRenderer={TNodeChildrenRenderer}
+      {...props}
+      {...(viewStyle ? { viewProps: { style: viewStyle } } : {})}
+    >
       <SelectablePhrase tnode={tnode} TNodeChildrenRenderer={TNodeChildrenRenderer} />
     </TDefaultRenderer>
   );
 };
 
-export const markRenderer: CustomTextualRenderer = (props) => <props.TDefaultRenderer {...props} />;
+export const markRenderer: CustomTextualRenderer = (props) => {
+  const ui = useContext(HighlightUiContext);
+  return (
+    <props.TDefaultRenderer
+      {...props}
+      {...(ui?.highlightStyle ? { textProps: { style: ui.highlightStyle } } : {})}
+    />
+  );
+};
 
 export const anchorRenderer: CustomTextualRenderer = (props) => {
   const { onPress } = useRendererProps("a");
+  const ui = useContext(HighlightUiContext);
   const href = props.tnode.attributes.href ?? "";
   return (
     <props.TDefaultRenderer
       {...props}
+      {...(ui?.tagTextColors?.a ? { textProps: { style: ui.tagTextColors.a } } : {})}
       onPress={(event) => {
         if (isExternalHref(href)) onPress?.(event, href, props.tnode.attributes, "_self");
       }}
+    />
+  );
+};
+
+/** Horizontal rules keep their hairline geometry in the engine; the divider
+ * ink is applied to the block host at render time. */
+export const ruleRenderer: CustomBlockRenderer = ({ tnode, TDefaultRenderer, TNodeChildrenRenderer, ...props }) => {
+  const ui = useContext(HighlightUiContext);
+  const viewStyle = ui?.tagViewColors?.hr;
+  return (
+    <TDefaultRenderer
+      tnode={tnode}
+      TNodeChildrenRenderer={TNodeChildrenRenderer}
+      {...props}
+      {...(viewStyle ? { viewProps: { style: viewStyle } } : {})}
+    />
+  );
+};
+
+/** Inline tags that reach the default tree (media paragraphs/captions, which
+ * bypass the selectable phrase) keep their declared ink at render time; the
+ * engine bakes typography only. `strong`/`b` share one renderer. */
+export const strongRenderer: CustomTextualRenderer = (props) => {
+  const ui = useContext(HighlightUiContext);
+  const style = ui?.tagTextColors?.[props.tnode.tagName ?? "strong"];
+  return (
+    <props.TDefaultRenderer
+      {...props}
+      {...(style ? { textProps: { style } } : {})}
+    />
+  );
+};
+
+/** Inline code that renders through the default tree keeps its declared ink
+ * and tonal surface at render time; the engine carries only the mono
+ * typography. */
+export const codeRenderer: CustomTextualRenderer = (props) => {
+  const ui = useContext(HighlightUiContext);
+  const style = ui?.tagTextColors?.code;
+  return (
+    <props.TDefaultRenderer
+      {...props}
+      {...(style ? { textProps: { style } } : {})}
+    />
+  );
+};
+
+/** The ink an image's alt/error text would have inherited had colors been
+ * baked into the engine: the nearest ink-carrying ancestor tag. */
+function nearestAncestorInk(node: TNode, tagTextColors?: Record<string, TextStyle>): string | undefined {
+  for (let ancestor = node.parent; ancestor; ancestor = ancestor.parent) {
+    const ink = ancestor.tagName ? tagTextColors?.[ancestor.tagName]?.color : undefined;
+    if (ink) return typeof ink === "string" ? ink : undefined;
+  }
+  const fallback = tagTextColors?.body?.color;
+  return typeof fallback === "string" ? fallback : undefined;
+}
+
+/** Images delegate to the library's own IMG machinery; only the alt/error ink
+ * is supplied at render time, since the palette-free engine no longer bakes
+ * an inherited color into the img tnode. */
+export const imageRenderer: CustomBlockRenderer = (props) => {
+  const ui = useContext(HighlightUiContext);
+  const imageProps = useIMGElementProps(props as Parameters<typeof useIMGElementProps>[0]);
+  return (
+    <IMGElement
+      {...imageProps}
+      altColor={imageProps.altColor ?? nearestAncestorInk(props.tnode, ui?.tagTextColors)}
     />
   );
 };

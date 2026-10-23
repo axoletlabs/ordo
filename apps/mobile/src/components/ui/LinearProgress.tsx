@@ -1,5 +1,5 @@
 /** Material 3 straight/wavy progress, shared by downloads and content progress. */
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { View, type StyleProp, type ViewStyle } from "react-native";
 import Animated, {
   cancelAnimation, Easing, ReduceMotion, useAnimatedProps, useAnimatedStyle, useSharedValue,
@@ -10,7 +10,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { useMaterialMotion } from "../../theme/material-motion";
 import { progressFraction } from "../../lib/progress-fraction";
 import { linearIndeterminateSegments, wavyProgressPath } from "../../lib/material-progress";
-import { useAnimationActivity } from "../../hooks/use-animation-activity";
+import { useAnimationActivityEffect } from "../../hooks/use-animation-activity";
 
 const HEIGHT = 4;
 const GAP = 4;
@@ -25,6 +25,19 @@ function segmentTransform(start: number, end: number, width: number) {
   return { transform: [{ translateX: start + length / 2 - width / 2 }, { scaleX: width > 0 ? length / width : 0 }] };
 }
 
+/** Module-scope so the animated-style updaters below capture stable values:
+ * a worklet rebuilt in render scope would re-register on the UI thread on
+ * every progress re-render (e.g. every download tick). */
+function progressGeometry(phase: SharedValue<number>, fill: SharedValue<number>, animatedValue: SharedValue<number> | undefined, width: number, indeterminate: boolean, reducedMotion: boolean): Array<{ start: number; end: number }> {
+  "worklet";
+  if (!indeterminate) {
+    const end = Math.max(0, Math.min(1, animatedValue?.value ?? fill.value)) * width;
+    return [{ start: 0, end }, { start: 0, end: 0 }];
+  }
+  if (reducedMotion) return [{ start: width * 0.3, end: width * 0.7 }, { start: 0, end: 0 }];
+  return linearIndeterminateSegments(phase.value).map(({ start, end }) => ({ start: start * width, end: end * width }));
+}
+
 export function LinearProgress({ value, animatedValue, label, style, wavy = false }: {
   value?: number;
   /** Reader scroll progress stays on the UI thread rather than rerendering. */
@@ -36,7 +49,6 @@ export function LinearProgress({ value, animatedValue, label, style, wavy = fals
 }) {
   const { palette } = useTheme();
   const { reducedMotion } = useMaterialMotion();
-  const active = useAnimationActivity();
   const [width, setWidth] = useState(0);
   const phase = useSharedValue(0);
   const fill = useSharedValue(0);
@@ -46,13 +58,13 @@ export function LinearProgress({ value, animatedValue, label, style, wavy = fals
   const indeterminate = progress == null && !animatedValue;
   const complete = progress === 1;
 
-  useEffect(() => {
+  useAnimationActivityEffect(useCallback((active: boolean) => {
     wave.value = 0;
     if (wavy && active && !reducedMotion && !complete) {
       wave.value = withRepeat(withTiming(1, { duration: 1000, easing: Easing.linear, reduceMotion: ReduceMotion.Never }), -1, false, undefined, ReduceMotion.Never);
     }
     return () => cancelAnimation(wave);
-  }, [wave, wavy, reducedMotion, active, complete]);
+  }, [wave, wavy, reducedMotion, complete]));
 
   const waveAmplitude = indeterminate || (progress != null && progress > 0.1 && progress < 0.95) ? 3 : 0;
   useEffect(() => {
@@ -62,14 +74,14 @@ export function LinearProgress({ value, animatedValue, label, style, wavy = fals
     return () => cancelAnimation(amplitude);
   }, [amplitude, waveAmplitude, reducedMotion]);
 
-  useEffect(() => {
+  useAnimationActivityEffect(useCallback((active: boolean) => {
     cancelAnimation(phase);
     phase.value = 0;
     if (indeterminate && active && !reducedMotion) {
       phase.value = withRepeat(withTiming(1, { duration: 1800, easing: Easing.linear, reduceMotion: ReduceMotion.Never }), -1, false, undefined, ReduceMotion.Never);
     }
     return () => cancelAnimation(phase);
-  }, [phase, indeterminate, reducedMotion, active]);
+  }, [phase, indeterminate, reducedMotion]));
 
   useEffect(() => {
     // Don't spring a percentage: overshooting suggests bytes that aren't there.
@@ -79,46 +91,37 @@ export function LinearProgress({ value, animatedValue, label, style, wavy = fals
     return () => cancelAnimation(fill);
   }, [fill, progress, reducedMotion, animatedValue]);
 
-  const geometry = () => {
-    "worklet";
-    if (!indeterminate) {
-      const end = Math.max(0, Math.min(1, animatedValue?.value ?? fill.value)) * width;
-      return [{ start: 0, end }, { start: 0, end: 0 }];
-    }
-    if (reducedMotion) return [{ start: width * 0.3, end: width * 0.7 }, { start: 0, end: 0 }];
-    return linearIndeterminateSegments(phase.value).map(({ start, end }) => ({ start: start * width, end: end * width }));
-  };
   const leading = useAnimatedStyle(() => {
-    const segment = geometry()[0];
+    const segment = progressGeometry(phase, fill, animatedValue, width, indeterminate, reducedMotion)[0];
     return segmentTransform(segment.start, segment.end, width);
   });
   const trailing = useAnimatedStyle(() => {
-    const segment = geometry()[1];
+    const segment = progressGeometry(phase, fill, animatedValue, width, indeterminate, reducedMotion)[1];
     return segmentTransform(segment.start, segment.end, width);
   });
   const before = useAnimatedStyle(() => {
-    const [first, second] = geometry();
+    const [first, second] = progressGeometry(phase, fill, animatedValue, width, indeterminate, reducedMotion);
     const end = second.end > second.start ? second.start : first.start;
     return segmentTransform(0, Math.max(0, end - GAP), width);
   });
   const between = useAnimatedStyle(() => {
-    const [first, second] = geometry();
+    const [first, second] = progressGeometry(phase, fill, animatedValue, width, indeterminate, reducedMotion);
     const visible = second.end > second.start;
     return segmentTransform(second.end + GAP, visible ? Math.max(second.end + GAP, first.start - GAP) : second.end + GAP, width);
   });
   const after = useAnimatedStyle(() => {
-    const first = geometry()[0];
+    const first = progressGeometry(phase, fill, animatedValue, width, indeterminate, reducedMotion)[0];
     const gap = first.end > first.start ? GAP : 0;
     return segmentTransform(first.end + gap, width, width);
   });
   const firstWave = useAnimatedProps(() => {
     if (!wavy) return { d: "" };
-    const segment = geometry()[0];
+    const segment = progressGeometry(phase, fill, animatedValue, width, indeterminate, reducedMotion)[0];
     return { d: wavyProgressPath(segment.start, segment.end, width, wave.value, amplitude.value, indeterminate ? 20 : 40) };
   });
   const secondWave = useAnimatedProps(() => {
     if (!wavy) return { d: "" };
-    const segment = geometry()[1];
+    const segment = progressGeometry(phase, fill, animatedValue, width, indeterminate, reducedMotion)[1];
     return { d: wavyProgressPath(segment.start, segment.end, width, wave.value, amplitude.value, indeterminate ? 20 : 40) };
   });
   const fixedSegmentStyle = { ...segmentStyle, left: 0, width };
