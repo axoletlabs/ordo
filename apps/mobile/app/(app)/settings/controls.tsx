@@ -42,6 +42,10 @@ export default function ControlsScreen() {
   const holdAction = useSettingsStore((s) => s.createButtonHoldAction);
   const websiteBrowser = useSettingsStore((s) => s.websiteBrowser);
   const forceWebsiteDark = useSettingsStore((s) => s.forceWebsiteDark);
+  const blockWebsiteAds = useSettingsStore((s) => s.blockWebsiteAds);
+  const allowedSiteCount = useSettingsStore((s) => s.adBlockAllowedHosts.length);
+  const setBlockWebsiteAds = useSettingsStore((s) => s.setBlockWebsiteAds);
+  const clearAdBlockAllowedHosts = useSettingsStore((s) => s.clearAdBlockAllowedHosts);
   const shareQuickBookmark = useSettingsStore((s) => s.shareQuickBookmark);
   const shareShowQuickAction = useSettingsStore((s) => s.shareShowQuickAction);
   const setTapAction = useSettingsStore((s) => s.setCreateButtonTapAction);
@@ -115,6 +119,19 @@ export default function ControlsScreen() {
               />
             }
           />
+          <SettingRow
+            icon="shield-checkmark-outline"
+            label="Block ads"
+            description="In ordo's browser. Allow ads for a site from its page menu."
+            unavailableReason={Platform.OS === "web" ? "Ad blocking is available in the Android and iOS apps." : undefined}
+            right={<Toggle value={blockWebsiteAds} onValueChange={setBlockWebsiteAds} />}
+            rightFit="content"
+          />
+          {Platform.OS !== "web" && allowedSiteCount > 0 ? (
+            <SettingRow icon="shield-outline" label="Reset site exceptions"
+              description={`Ads are allowed on ${allowedSiteCount} ${allowedSiteCount === 1 ? "site" : "sites"}.`}
+              onPress={clearAdBlockAllowedHosts} />
+          ) : null}
           <SettingRow
             icon="moon-outline"
             label="Force dark mode"

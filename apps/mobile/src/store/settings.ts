@@ -4,6 +4,7 @@
  * Persisted to AsyncStorage (non-secret). Hydrated explicitly on app start.
  */
 import { create } from "zustand";
+import { normalizeAdBlockAllowedHosts } from "../lib/browser-ad-blocking";
 import { setHapticsEnabled as applyHapticsEnabled } from "../lib/haptics";
 import { patchQuickShareSessionServerUrl, syncQuickShareFlags } from "../lib/share-targets";
 import { canonicalizeServerUrl, DEFAULT_SERVER_URL, resolvePersistedServerUrl } from "../lib/hosting";
@@ -46,6 +47,8 @@ export interface SettingsState {
   websiteBrowser: WebsiteBrowser;
   /** Darken live pages in ordo's WebView (BookmarkBrowser). */
   forceWebsiteDark: boolean;
+  blockWebsiteAds: boolean;
+  adBlockAllowedHosts: string[];
   /** Save a shared link as unfiled without opening the save form. Off by default. */
   shareQuickBookmark: boolean;
   /** When Quick Bookmark is on, also keep the normal Save share target. */
@@ -68,6 +71,9 @@ export interface SettingsState {
   setCreateButtonHoldAction: (action: CreateButtonHoldAction) => void;
   setWebsiteBrowser: (browser: WebsiteBrowser) => void;
   setForceWebsiteDark: (on: boolean) => void;
+  setBlockWebsiteAds: (on: boolean) => void;
+  setSiteAdsAllowed: (host: string, allowed: boolean) => void;
+  clearAdBlockAllowedHosts: () => void;
   setShareQuickBookmark: (on: boolean) => void;
   setShareShowQuickAction: (on: boolean) => void;
   setHapticsEnabled: (on: boolean) => void;
@@ -95,6 +101,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   createButtonHoldAction: "menu",
   websiteBrowser: "ordo",
   forceWebsiteDark: false,
+  blockWebsiteAds: true,
+  adBlockAllowedHosts: [],
   shareQuickBookmark: false,
   shareShowQuickAction: false,
   hapticsEnabled: true,
@@ -123,6 +131,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           : "menu",
       websiteBrowser: isWebsiteBrowser(saved?.websiteBrowser) ? saved.websiteBrowser : "ordo",
       forceWebsiteDark: saved?.forceWebsiteDark === true,
+      blockWebsiteAds: saved?.blockWebsiteAds !== false,
+      adBlockAllowedHosts: normalizeAdBlockAllowedHosts(saved?.adBlockAllowedHosts),
       shareQuickBookmark: saved?.shareQuickBookmark === true,
       shareShowQuickAction:
         saved?.shareQuickBookmark === true && saved?.shareShowQuickAction === true,
@@ -193,6 +203,22 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   setForceWebsiteDark: (forceWebsiteDark) => {
     set({ forceWebsiteDark });
     void persistSettings({ ...get(), forceWebsiteDark });
+  },
+  setBlockWebsiteAds: (blockWebsiteAds) => {
+    set({ blockWebsiteAds });
+    void persistSettings({ ...get(), blockWebsiteAds });
+  },
+  setSiteAdsAllowed: (host, allowed) => {
+    const normalized = normalizeAdBlockAllowedHosts([host])[0];
+    if (!normalized) return;
+    const remaining = get().adBlockAllowedHosts.filter((site) => site !== normalized);
+    const adBlockAllowedHosts = allowed ? [...remaining, normalized] : remaining;
+    set({ adBlockAllowedHosts });
+    void persistSettings({ ...get(), adBlockAllowedHosts });
+  },
+  clearAdBlockAllowedHosts: () => {
+    set({ adBlockAllowedHosts: [] });
+    void persistSettings({ ...get(), adBlockAllowedHosts: [] });
   },
   setShareQuickBookmark: (shareQuickBookmark) => {
     const shareShowQuickAction = shareQuickBookmark ? get().shareShowQuickAction : false;
