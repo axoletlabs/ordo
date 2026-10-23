@@ -45,7 +45,9 @@ has compatibility regression cases. No remote filter updates occur at runtime.
 prop to the WebView codegen schema, Android managers/client and Apple view.
 No configuration means the upstream WebView behavior. pnpm applies the patch
 at install time and verifies its hash. Preserve/review this patch when updating
-WebView; a new native binary is required. Expo's native-module fingerprint must
+WebView; a new native binary is required. The small `@expo/plist` patch supplies
+the XML MIME type required by the security-pinned XML parser during iOS
+prebuild; retain it until Expo supplies the same fix. Expo's native-module fingerprint must
 include the patched module before distributing an OTA.
 
 ## Validation
