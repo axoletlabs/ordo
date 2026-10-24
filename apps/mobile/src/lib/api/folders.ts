@@ -7,6 +7,7 @@ import {
   normalizeFolderIcon,
   type BatchFoldersInput,
   type CreateFolderInput,
+  type DeleteFolderWithKeepsInput,
   type RemoveFolderPasswordInput,
   type SetFolderPasswordInput,
   type UpdateFolderInput,
@@ -36,6 +37,21 @@ export const foldersApi = {
     api.delete<typeof FolderRoutes.remove.response>(buildPath(FolderRoutes.remove.path, { id }), {
       folderId: id,
     }),
+
+  /**
+   * Delete a folder while atomically moving the listed bookmarks to the
+   * unfiled root. `keptIds` in the response is the exact preserved set: a
+   * keep that another client already moved elsewhere is untouched and absent.
+   * OLD SERVERS have no route here — they answer 404 without the app error
+   * envelope, which callers must treat as "endpoint missing", never as
+   * "folder already deleted".
+   */
+  deleteWithKeeps: (id: string, keepIds: readonly string[]) =>
+    api.post<typeof FolderRoutes.deleteWithKeeps.response>(
+      buildPath(FolderRoutes.deleteWithKeeps.path, { id }),
+      { keepIds: [...keepIds] } satisfies DeleteFolderWithKeepsInput,
+      { folderId: id },
+    ),
 
   setPassword: (id: string, input: SetFolderPasswordInput) =>
     api.post<typeof FolderRoutes.setPassword.response>(

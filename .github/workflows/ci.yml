@@ -184,6 +184,13 @@ jobs:
       - name: Lint
         run: pnpm -r lint
 
+      - name: Verify folder bookmark preservation
+        run: |
+          pnpm --filter @ordo/server build
+          node scripts/test-folder-preservation-api.mjs
+          node apps/server/scripts/folder-delete-keeps.test.mjs
+          node apps/mobile/scripts/test-folder-deletion-state.mjs
+
   supply-chain:
     if: '!github.event.deleted'
     runs-on: ubuntu-24.04

@@ -120,6 +120,19 @@ export interface FolderDto {
   updatedAt: string;
 }
 
+/** Result of delete-folder-with-keeps: what was preserved vs. cascaded. */
+export interface FolderDeleteResult {
+  success: true;
+  /** IDs of bookmarks that were still in the folder and moved to unfiled.
+   *  A selected keep that had already moved to another folder is absent —
+   *  clients must not assume every keepId landed in unfiled. */
+  keptIds: string[];
+  /** Bookmarks still in the folder that were moved to unfiled (= keptIds.length). */
+  keptBookmarks: number;
+  /** Bookmarks deleted with the folder (everything not kept). */
+  deletedBookmarks: number;
+}
+
 export interface TagSummaryDto {
   id: string;
   name: string;

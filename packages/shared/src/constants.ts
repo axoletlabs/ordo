@@ -100,6 +100,14 @@ export const MAX_PAGE_SIZE = 100;
 export const BATCH_ITEM_LIMIT = 200;
 
 /**
+ * Max bookmark IDs one folder-delete-with-keeps request may carry. Deliberately
+ * far above BATCH_ITEM_LIMIT: preserving a whole imported folder must not be
+ * capped by the batch-selection budget. 20k IDs stay under the 1 MB body cap
+ * even for UUID-length IDs; the server moves them in parameter-safe chunks.
+ */
+export const FOLDER_DELETE_KEEP_LIMIT = 20_000;
+
+/**
  * Version of the server's article-extraction pipeline. Bumped whenever the
  * pipeline changes enough that stored content should be re-extracted; rows
  * with an older (or missing) version are refreshed in the background.

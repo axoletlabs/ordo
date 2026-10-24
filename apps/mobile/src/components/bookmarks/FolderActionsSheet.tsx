@@ -43,6 +43,7 @@ import {
   invalidateBookmarks,
   patchFolderLock,
   useDeleteFolder,
+  useFolderUnlocked,
   useRenameFolder,
   useUpdateFolder,
 } from "../../hooks/use-folders";
@@ -104,12 +105,35 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
   const folderRef = React.useRef(folder);
   if (folder) folderRef.current = folder;
   const displayFolder = folder ?? folderRef.current;
+  const folderUnlocked = useFolderUnlocked(displayFolder?.id);
+  const deleteAccessBlocked = Boolean(displayFolder?.protected && !folderUnlocked);
   const { height } = useResponsiveLayout();
+  const deleteOpen = visible && mode === "delete";
+  const verifyEmptyFolder = (displayFolder?.bookmarkCount ?? 0) === 0;
 
-  // Folder contents for the keep-on-delete picker; fetched only while expanded.
-  const keepOptions = useFolderBookmarkOptions(displayFolder?.id ?? null, visible && keepOpen);
+  // Folder contents for the keep-on-delete picker. Fetched while expanded, and
+  // once per delete confirmation for folders whose cached count claims zero:
+  // a stale count must never hide the keep option for a folder with bookmarks.
+  const keepOptions = useFolderBookmarkOptions(
+    displayFolder?.id ?? null,
+    deleteOpen && !deleteAccessBlocked && (keepOpen || verifyEmptyFolder),
+  );
   const keepCount = keepIds.length;
   const keepTotal = keepOptions.data ? keepOptions.data.length : displayFolder?.bookmarkCount ?? 0;
+  // The subtitle describes the pending outcome, not the picker's expansion:
+  // collapsed-with-ticks is still a keep-some delete.
+  const deleteSubtitle =
+    keepCount > 0
+      ? "Kept bookmarks move to Bookmarks. The rest are deleted. You can undo this."
+      : keepOpen
+        ? "Ticked bookmarks move to Bookmarks. The rest are deleted. You can undo this."
+        : keepTotal > 0 || keepOptions.isPending
+          ? "This folder and every bookmark inside it will be deleted. You can undo this."
+          : "You can undo this.";
+  // Verify a cached empty count before allowing deletion. A failed check must
+  // leave the picker available so the user can retry rather than blindly delete.
+  const keepChoiceBlocked = (keepOpen || verifyEmptyFolder) && (keepOptions.isPending || keepOptions.isError);
+  const showKeepRow = keepTotal > 0 || keepCount > 0 || (verifyEmptyFolder && keepChoiceBlocked);
 
   // Nested pages share ownership; final dismissal starts the row's fade now.
   useMenuHighlight(visible, displayFolder ? folderKey(displayFolder.id) : null);
@@ -132,19 +156,27 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
     setIcon(currentFolder?.icon ?? DEFAULT_FOLDER_ICON);
     setError("");
     setRemoving(false);
+    void isDeviceLockAvailable().then(setDeviceLockAvailable);
+  }, [visible, folder?.id]);
+
+  // Keep choices belong to the folder being deleted, not to this sheet session:
+  // reopening the same folder restores the ticks, a different folder starts clean.
+  // Comparing only while visible keeps a retained exit panel from flashing its
+  // collapsed state while the host clears the folder during dismissal.
+  const keepTargetRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!visible) return;
+    const id = folder?.id ?? null;
+    if (keepTargetRef.current === id) return;
+    keepTargetRef.current = id;
     setKeepOpen(false);
     setKeepIds([]);
-    void isDeviceLockAvailable().then(setDeviceLockAvailable);
   }, [visible, folder?.id]);
 
   const showMode = (nextMode: Mode) => {
     if (busy || lockingRef.current) return;
     dismissKeyboard();
     setError("");
-    if (nextMode !== "delete") {
-      setKeepOpen(false);
-      setKeepIds([]);
-    }
     if (nextMode !== "lockCredential" && nextMode !== "removePassword") {
       setPassword("");
       setConfirmPassword("");
@@ -397,7 +429,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
   };
 
   const doDelete = () => {
-    if (!folder) return;
+    if (!folder || busy || keepChoiceBlocked || deleteAccessBlocked) return;
     haptics.medium();
     del.mutate(folder, {
       keepIds,
@@ -790,26 +822,20 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
               iconColor={palette.danger}
               iconBackground={palette.dangerSoft}
               title={`Delete ${displayFolder.name}?`}
-              subtitle={
-                keepOpen
-                  ? "Ticked bookmarks move to Bookmarks. The rest are deleted. You can undo this."
-                  : displayFolder.bookmarkCount > 0
-                    ? "This folder and every bookmark inside it will be deleted. You can undo this."
-                    : "You can undo this."
-              }
+              subtitle={deleteAccessBlocked ? "Unlock this folder before deleting it." : deleteSubtitle}
             />
-            {displayFolder.bookmarkCount > 0 ? (
+            {showKeepRow ? (
               <>
                 <SettingRow
                   icon="bookmark-outline"
                   label="Keep bookmarks"
-                  value={keepCount > 0 ? `${keepCount} of ${keepTotal}` : "None"}
+                  value={keepCount > 0 ? `${keepCount} of ${keepTotal}` : verifyEmptyFolder && keepOptions.isPending ? "Checking…" : keepOptions.isError ? "Try again" : "None"}
                   onPress={() => setKeepOpen((open) => !open)}
                   showChevron
                   chevronUp={keepOpen}
-                  disabled={busy}
+                  disabled={busy || deleteAccessBlocked}
                 />
-                {keepOpen ? (
+                {keepOpen && !deleteAccessBlocked ? (
                   <ThemedFlatList
                     data={keepOptions.data ?? []}
                     keyExtractor={(item) => item.id}
@@ -821,15 +847,36 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
                         onToggle={toggleKeep}
                       />
                     )}
-                    style={{ maxHeight: Math.min(320, height * 0.45), marginTop: spacing[4] }}
+                    style={[styles.keepList, { maxHeight: Math.min(320, height * 0.45) }]}
                     contentContainerStyle={{ gap: spacing[2], padding: spacing[2] }}
+                    ListHeaderComponent={keepOptions.isError && (keepOptions.data?.length ?? 0) > 0 ? (
+                      <View style={styles.keepStatus}>
+                        <Text variant="footnote" color="danger" align="center">
+                          {errorMessage(keepOptions.error)}
+                        </Text>
+                        <Button
+                          label="Try again"
+                          variant="secondary"
+                          disabled={keepOptions.isFetching}
+                          onPress={() => void keepOptions.refetch()}
+                        />
+                      </View>
+                    ) : null}
                     ListEmptyComponent={
                       keepOptions.isPending ? (
                         <View style={styles.keepStatus}><Spinner /></View>
                       ) : keepOptions.isError ? (
-                        <Text variant="footnote" color="danger" align="center" style={styles.keepStatus}>
-                          {errorMessage(keepOptions.error)}
-                        </Text>
+                        <View style={styles.keepStatus}>
+                          <Text variant="footnote" color="danger" align="center">
+                            {errorMessage(keepOptions.error)}
+                          </Text>
+                          <Button
+                            label="Try again"
+                            variant="secondary"
+                            disabled={keepOptions.isFetching}
+                            onPress={() => void keepOptions.refetch()}
+                          />
+                        </View>
                       ) : (
                         <Text variant="footnote" color="tertiary" align="center" style={styles.keepStatus}>
                           No bookmarks in this folder.
@@ -846,6 +893,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
               onConfirm={doDelete}
               onCancel={() => showMode("menu")}
               cancelDisabled={busy}
+              confirmDisabled={keepChoiceBlocked || deleteAccessBlocked}
             />
           </>
         ) : null}
@@ -922,7 +970,10 @@ const styles = StyleSheet.create({
   forgot: { alignSelf: "center", minHeight: 48, justifyContent: "center", paddingHorizontal: spacing[16], borderRadius: 24, marginTop: spacing[8] },
   confirmInput: { marginTop: spacing[12] },
   pinBoxes: { marginTop: spacing[12] },
-  keepStatus: { paddingVertical: spacing[24], paddingHorizontal: spacing[16] },
+  // The picker owns the panel's virtualized list (scrollBody={false}): let it
+  // shrink inside the panel's bounded body instead of overflowing short dialogs.
+  keepList: { flexShrink: 1, marginTop: spacing[4] },
+  keepStatus: { paddingVertical: spacing[24], paddingHorizontal: spacing[16], gap: spacing[12], alignItems: "center" },
   keepRow: {
     flexDirection: "row",
     alignItems: "center",

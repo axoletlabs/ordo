@@ -6,6 +6,9 @@
 import type { InfiniteData } from "@tanstack/react-query";
 import {
   BATCH_ITEM_LIMIT,
+  ErrorCode,
+  FOLDER_DELETE_KEEP_LIMIT,
+  FolderRoutes,
   type BookmarkDetailDto,
   type BookmarkDto,
   type CursorPage,
@@ -15,6 +18,7 @@ import {
 } from "@ordo/shared";
 import { toast } from "../components/ui/toast-store";
 import { bookmarksApi } from "./api/bookmarks";
+import { ApiClientError } from "./api/client";
 import { assertSessionScope, captureSessionScope, isSessionScopeCurrent } from "./session-scope";
 import { foldersApi } from "./api/folders";
 import { tagsApi } from "./api/tags";
@@ -374,7 +378,10 @@ function restoreBookmarks(
 function hideFolders(folders: FolderDto[]) {
   if (folders.length === 0) return;
   const ids = new Set(folders.map((folder) => folder.id));
-  for (const id of ids) pendingFolderIds.add(id);
+  for (const folder of folders) {
+    if (folder.protected) pendingProtectedFolders.add(folder.id);
+    pendingFolderIds.add(folder.id);
+  }
   queryClient.setQueryData<FolderDto[]>(qk.folders, (old) =>
     (old ?? []).filter((folder) => !ids.has(folder.id)),
   );
@@ -382,7 +389,10 @@ function hideFolders(folders: FolderDto[]) {
 
 function restoreFolders(folders: FolderDto[]) {
   if (folders.length === 0) return;
-  for (const folder of folders) pendingFolderIds.delete(folder.id);
+  for (const folder of folders) {
+    pendingFolderIds.delete(folder.id);
+    pendingProtectedFolders.delete(folder.id);
+  }
   queryClient.setQueryData<FolderDto[]>(qk.folders, (old) => {
     const existing = new Set((old ?? []).map((folder) => folder.id));
     return sortFolders([...(old ?? []), ...folders.filter((folder) => !existing.has(folder.id))]);
@@ -473,7 +483,10 @@ export interface UndoableDeleteOpts {
 function releaseIntent(intent: DeleteIntent) {
   for (const bookmark of intent.bookmarks) pendingBookmarkIds.delete(bookmark.id);
   for (const id of intent.contained) pendingBookmarkIds.delete(id);
-  for (const id of intent.folders) pendingFolderIds.delete(id);
+  for (const id of intent.folders) {
+    pendingFolderIds.delete(id);
+    pendingProtectedFolders.delete(id);
+  }
   for (const id of intent.tags) pendingTagIds.delete(id);
 }
 
@@ -496,6 +509,7 @@ function syncJournalScope() {
     for (const id of pendingToastIds) toast.dismiss(id);
     pendingToastIds.clear();
     pendingBookmarkIds.clear(); pendingFolderIds.clear(); pendingTagIds.clear();
+    pendingProtectedFolders.clear();
     activeIntents.clear();
     journalScope = key;
     scopeGeneration += 1;
@@ -510,29 +524,113 @@ async function deleteIfPresent(run: () => Promise<unknown>) {
   }
 }
 
-async function replayDeleteIntent(key: string, intent: DeleteIntent, keptRows: readonly BookmarkDto[] = []) {
+/** 404 carrying the app envelope's folder_not_found code: the folder itself is
+ * gone (deleted elsewhere, or a retry after a lost response). */
+function isFolderGone(cause: unknown): boolean {
+  return (cause as { status?: number }).status === 404 &&
+    (cause as { code?: string }).code === ErrorCode.FOLDER_NOT_FOUND;
+}
+
+/** 404 WITHOUT the app envelope: the route itself is missing — an older
+ * server. Never equate this with "already deleted". */
+function isRouteMissing(cause: unknown): boolean {
+  return (cause as { status?: number }).status === 404 &&
+    (cause as { code?: string }).code !== ErrorCode.FOLDER_NOT_FOUND;
+}
+
+/** Folder protection snapshot taken when rows are optimistically hidden:
+ * hideFolders removes pending folders from qk.folders, so the cache alone
+ * cannot answer lock questions during an undo window or replay. */
+const pendingProtectedFolders = new Set<string>();
+
+/** Locked folder with no live unlock token: every server mutation touching it
+ * would fail with 403 after the rows are already hidden. Consults the
+ * hide-time snapshot first, then the server folder metadata still cached. */
+function folderLockedWithoutToken(id: string | null | undefined): boolean {
+  if (!id) return false;
+  if (useFolderTokenStore.getState().get(id)) return false;
+  if (pendingProtectedFolders.has(id)) return true;
+  return queryClient.getQueryData<FolderDto[]>(qk.folders)?.some((folder) => folder.id === id && folder.protected) ?? false;
+}
+
+function folderLockedError(): ApiClientError {
+  return new ApiClientError(403, { code: ErrorCode.FOLDER_PROTECTED, message: "This folder is locked." });
+}
+
+/** The atomic preserve+delete endpoint is required for keeps: emulating it on
+ * old servers (membership read + unconditional moves) is exactly the
+ * cross-device race the endpoint removes, so fail loudly instead. */
+function serverTooOldForKeepsError(): ApiClientError {
+  return new ApiClientError(409, {
+    code: "server_update_required",
+    message: "Update your server before keeping bookmarks when deleting a folder.",
+  });
+}
+
+/** Preflight before journaling: refuse deletions whose folder access is
+ * predictably missing, so nothing is hidden or journaled that can only fail.
+ * Intent folders use their own server DTO (protected flag); the qk.folders
+ * cache only covers the remaining lookups. */
+function assertDeletionsUnlockable(folders: readonly FolderDto[], bookmarks: readonly BookmarkDto[]): void {
+  for (const folder of folders) {
+    if (folder.protected && !useFolderTokenStore.getState().get(folder.id)) throw folderLockedError();
+  }
+  for (const bookmark of bookmarks) {
+    if (folderLockedWithoutToken(bookmark.folderId)) throw folderLockedError();
+  }
+}
+
+/** Recheck at replay start (the token may have expired since the intent was
+ * journaled): fail before ANY server mutation, not after earlier chunks of a
+ * mixed intent have already committed. */
+function assertIntentUnlockable(intent: DeleteIntent): void {
+  for (const id of intent.folders) {
+    if (folderLockedWithoutToken(id)) throw folderLockedError();
+  }
+  for (const bookmark of intent.bookmarks) {
+    if (folderLockedWithoutToken(bookmark.folderId)) throw folderLockedError();
+  }
+}
+
+/** Server truth for one intent's keeps. Only the server confirms membership:
+ * a keep another client already moved (or that was deleted) is never painted
+ * into the unfiled root. */
+interface KeepSettlement {
+  /** Confirmed preserved (now unfiled). The row is null when no cached copy
+   * exists — membership is still truth, only the row object is missing. */
+  verified: Map<string, BookmarkDto | null>;
+  /** Not in the folder anymore (moved elsewhere or deleted by another
+   * client). Left untouched; caches reconcile by refetch. */
+  elsewhere: Set<string>;
+}
+
+type RemoveChunks = (
+  ids: readonly string[],
+  batch: (chunk: string[]) => Promise<unknown>,
+  single: (id: string) => Promise<unknown>,
+) => Promise<void>;
+
+async function replayDeleteIntent(key: string, intent: DeleteIntent, cachedRows: readonly BookmarkDto[] = []) {
   const owner = captureSessionScope();
-  const keepIds = new Set((intent.keeps ?? []).map((row) => row.id));
-  const knownKeeps = new Map([...keptRows, ...(keepIds.size ? collectCachedBookmarks(queryClient) : [])]
-    .filter((row) => keepIds.has(row.id)).map((row) => [row.id, row]));
-  const missingKeeps = new Set<string>();
   const assertScope = () => {
     assertSessionScope(owner);
     if (deleteJournalKey() !== key) throw new Error("Deletion paused after account or server changed.");
   };
-  const removeChunks = async (ids: string[], batch: (ids: string[]) => Promise<unknown>, single: (id: string) => Promise<unknown>) => {
-    for (let offset = 0; offset < ids.length; offset += BATCH_ITEM_LIMIT) {
+  assertIntentUnlockable(intent);
+  const removeChunks: RemoveChunks = async (ids, batch, single) => {
+    const items = [...ids];
+    for (let offset = 0; offset < items.length; offset += BATCH_ITEM_LIMIT) {
       assertScope();
-      const chunk = ids.slice(offset, offset + BATCH_ITEM_LIMIT);
+      const chunk = items.slice(offset, offset + BATCH_ITEM_LIMIT);
       if (chunk.length > 1) {
         try { await batch(chunk); continue; } catch (cause) {
           // Partially completed replays can contain an already-deleted ID.
           if ((cause as { status?: number }).status !== 404) throw cause;
         }
       }
-      for (const id of chunk) {
+      for (const item of chunk) {
         assertScope();
-        await deleteIfPresent(() => single(id));
+        await deleteIfPresent(() => single(item));
       }
     }
   };
@@ -541,37 +639,48 @@ async function replayDeleteIntent(key: string, intent: DeleteIntent, keptRows: r
     (ids) => bookmarksApi.batch({ action: "delete", ids }),
     (id) => bookmarksApi.remove(id, { folderId: bookmarksById.get(id)?.folderId }));
   // Kept bookmarks must leave the folder before it cascades away. Grouping by
-  // folder keeps the unlock header pointing at each bookmark's source, and the
-  // move is idempotent when a replay resumes after process death.
+  // folder keeps the unlock header pointing at each bookmark's source.
   const keepsByFolder = new Map<string, string[]>();
   for (const keep of intent.keeps ?? []) {
     const ids = keepsByFolder.get(keep.folderId) ?? [];
     if (!ids.includes(keep.id)) ids.push(keep.id);
     keepsByFolder.set(keep.folderId, ids);
   }
+  const settlement: KeepSettlement = { verified: new Map(), elsewhere: new Set() };
+  // Row objects for painting caches; cache copies win over the hide-time
+  // snapshot. Rows NEVER confer verification — only server responses do.
+  const rowsById = new Map([
+    ...cachedRows,
+    ...(keepsByFolder.size > 0 ? collectCachedBookmarks(queryClient) : []),
+  ].map((row) => [row.id, row]));
+  const cascadedFolders = new Set<string>(intent.folders);
   for (const [sourceFolderId, ids] of keepsByFolder) {
-    await removeChunks(ids,
-      async (chunk) => {
-        const result = await bookmarksApi.batch({ action: "move", ids: chunk, folderId: null }, { folderId: sourceFolderId });
-        if (result.updated < chunk.length) {
-          // Reuse the idempotent single-row fallback before allowing a folder
-          // cascade: a count alone cannot tell us which keeps actually moved.
-          throw Object.assign(new Error("Some kept bookmarks need reconciliation."), { status: 404 });
-        }
-      },
-      async (id) => {
-        try {
-          const updated = await bookmarksApi.update(id, { folderId: null }, { folderId: sourceFolderId });
-          if (isBookmarkRecord(updated)) knownKeeps.set(id, updated);
-        } catch (cause) {
-          if ((cause as { status?: number }).status === 404) {
-            knownKeeps.delete(id); missingKeeps.add(id);
-          }
-          throw cause;
-        }
-      });
+    assertScope();
+    let result: typeof FolderRoutes.deleteWithKeeps.response;
+    try {
+      result = await foldersApi.deleteWithKeeps(sourceFolderId, ids);
+    } catch (cause) {
+      if (isFolderGone(cause)) {
+        // Folder already deleted (retry after a lost response): which keeps
+        // survived is unknowable without the response — reconcile by refetch.
+        for (const id of ids) settlement.elsewhere.add(id);
+        cascadedFolders.delete(sourceFolderId);
+        continue;
+      }
+      if (isRouteMissing(cause)) throw serverTooOldForKeepsError();
+      throw cause;
+    }
+    assertScope();
+    // keptIds is the exact preserved set. A keep that already moved (or was
+    // deleted) is absent and must not be treated as unfiled.
+    const kept = Array.isArray(result?.keptIds) ? new Set(result.keptIds) : null;
+    for (const id of ids) {
+      if (kept?.has(id)) settlement.verified.set(id, rowsById.get(id) ?? null);
+      else settlement.elsewhere.add(id);
+    }
+    cascadedFolders.delete(sourceFolderId);
   }
-  await removeChunks(intent.folders, (ids) => foldersApi.batch({ action: "delete", ids }), (id) => foldersApi.remove(id));
+  await removeChunks([...cascadedFolders], (ids) => foldersApi.batch({ action: "delete", ids }), (id) => foldersApi.remove(id));
   for (const id of intent.tags) {
     assertScope();
     await deleteIfPresent(() => tagsApi.remove(id));
@@ -586,12 +695,16 @@ async function replayDeleteIntent(key: string, intent: DeleteIntent, keptRows: r
   forgetDeleteIntent(key, intent.id);
   if (deleteJournalKey() !== key) return;
   releaseIntent(intent);
-  if (missingKeeps.size > 0) {
-    removeBookmarksEverywhere(queryClient, missingKeeps);
-    removeRemindersFromCache(queryClient, missingKeeps);
-    queryClient.removeQueries({ queryKey: ["bookmarks", "detail"], predicate: (query) => missingKeeps.has(String(query.queryKey[2])) });
+  // Keeps that are unaccountably elsewhere must not linger as stale folder
+  // rows; refetch restores wherever they really live.
+  if (settlement.elsewhere.size > 0) {
+    removeBookmarksEverywhere(queryClient, settlement.elsewhere);
+    removeRemindersFromCache(queryClient, settlement.elsewhere);
+    queryClient.removeQueries({ queryKey: ["bookmarks", "detail"], predicate: (query) => settlement.elsewhere.has(String(query.queryKey[2])) });
   }
-  const movedKeeps = [...knownKeeps.values()].map((row) => ({ ...row, folderId: null }));
+  const movedKeeps = [...settlement.verified.entries()]
+    .filter((entry): entry is [string, BookmarkDto] => entry[1] !== null)
+    .map(([, row]) => ({ ...row, folderId: null }));
   moveBookmarksInCache(queryClient, movedKeeps);
   if (movedKeeps.length > 0) {
     for (const query of queryClient.getQueryCache().findAll({ queryKey: ["bookmarks", "library-index"] })) {
@@ -599,9 +712,11 @@ async function replayDeleteIntent(key: string, intent: DeleteIntent, keptRows: r
     }
   }
   for (const id of intent.folders) useFolderTokenStore.getState().clear(id);
-  // A resumed ID-only journal may lack metadata for an uncached kept row.
-  // Only that exceptional case needs a full catalogue reconciliation.
-  invalidateDeletedLists(knownKeeps.size < keepIds.size);
+  // Verified keeps without a cached row, or keeps left elsewhere, cannot be
+  // painted locally — only a full catalogue replay reconciles them.
+  invalidateDeletedLists(
+    settlement.elsewhere.size > 0 ||
+    [...settlement.verified.values()].some((row) => row === null));
   // Cancelling a first warm fetch has no cached pages for the paced loop to
   // resume. Restart only that first page, not any already-warmed catalogue.
   if (initialCatalogueFetches.size > 0) void queryClient.refetchQueries({
@@ -682,6 +797,15 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
   );
   if (folders.length === 0 && tags.length === 0 && selectedBookmarks.length === 0) return noop;
 
+  try {
+    // Refuse before journaling or hiding anything: a locked folder without a
+    // live token can only fail server-side, after the UI already hid rows.
+    assertDeletionsUnlockable(folders, selectedBookmarks);
+  } catch (cause) {
+    toast.error(errorMessage(cause));
+    return noop;
+  }
+
   ensurePendingStripper();
 
   const folderIds = new Set(folders.map((folder) => folder.id));
@@ -695,6 +819,10 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
   // Ticked bookmarks leave the folder at commit time instead of cascading.
   // They are never tombstoned: the folder's tombstone already hides them, so
   // undo restores them in place and commit surfaces them in Bookmarks.
+  // Every explicit tick is preserved verbatim — even one whose own delete is
+  // still undoable: if that delete later commits, the atomic endpoint treats
+  // the vanished keep as a no-op; if it is undone, the keep saves the row.
+  // Filtering here would silently cascade a tick the user just re-approved.
   const keepIdSet = new Set(opts.keepIds ?? []);
   const singleFolderId = folders.length === 1 ? folders[0]!.id : null;
   const keeps = (opts.keepIds ?? [])
@@ -702,6 +830,13 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
     .filter((keep): keep is { id: string; folderId: string } =>
       keep.folderId !== null && folderIds.has(keep.folderId));
   const deletableContained = contained.filter((bookmark) => !keepIdSet.has(bookmark.id));
+
+  // Oversized keep selections are rejected verbatim — never truncated: a
+  // silent trim would cascade exactly the ticks the user meant to save.
+  if (keeps.length > FOLDER_DELETE_KEEP_LIMIT) {
+    toast.error(`Select at most ${FOLDER_DELETE_KEEP_LIMIT} bookmarks to keep.`);
+    return noop;
+  }
 
   let journal: ReturnType<typeof recordDeleteIntent>;
   try {
@@ -793,7 +928,12 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
           toast.error(errorMessage(storageError, "Couldn't save deletion status."));
           return;
         }
-        restore();
+        // The replay is sequential: chunks before the 4xx may already have
+        // committed (mixed delete: standalone rows gone, then a locked folder
+        // refused). Restoring hide-time snapshots would resurrect those
+        // server-deleted rows as if the whole intent rolled back. Release the
+        // tombstones instead and let the full invalidate converge to truth.
+        releaseIntent(journal.intent);
         invalidateDeletedLists(true);
       }
       // Network failures retain the durable intent and tombstones for replay.
