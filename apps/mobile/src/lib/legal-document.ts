@@ -20,31 +20,40 @@ export function legalDocumentForUrl(url: string): LegalDocument | undefined {
 /** Keep the published policy intact, replacing only the website presentation. */
 export function legalDocumentStyle(p: Palette): string {
   return `
-html:has(body.legal-page){scroll-behavior:auto!important}
-body.legal-page{margin:0!important;background:${p.background}!important;color:${p.onSurface}!important;
+html:has(body.legal-page){scroll-behavior:auto!important;background:${p.background}!important;color-scheme:${p.mode}!important}
+body.legal-page{display:block!important;min-width:0!important;margin:0!important;background:${p.background}!important;color:${p.onSurface}!important;
   font:400 16px/24px Roboto,"Roboto Flex",system-ui,sans-serif!important;letter-spacing:.5px!important}
-body.legal-page *,body.legal-page *::before,body.legal-page *::after{box-sizing:border-box;animation:none!important;transition:none!important}
+body.legal-page *,body.legal-page *::before,body.legal-page *::after{box-sizing:border-box;min-width:0;animation:none!important;transition:none!important}
 body.legal-page>header,body.legal-page>footer,body.legal-page .legal-nav,
 body.legal-page .legal-toc,body.legal-page .legal-jump{display:none!important}
 body.legal-page .legal-main,body.legal-page .legal-details{display:block!important;margin:0!important;padding:0!important;width:100%!important;max-width:none!important}
 body.legal-page article.legal{display:block!important;width:100%!important;max-width:${layout.maxReaderWidth}px!important;
-  margin:0 auto!important;padding:${spacing[16]}px ${spacing[16]}px ${spacing[48]}px!important}
+  margin:0 auto!important;padding:${spacing[16]}px ${spacing[16]}px ${spacing[48]}px!important;overflow-wrap:anywhere}
 body.legal-page h1{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip-path:inset(50%);margin:0!important}
 body.legal-page :is(p,li,dd,dt){font:inherit!important;color:inherit!important;max-width:none!important}
 body.legal-page p{margin:${spacing[16]}px 0!important}
 body.legal-page .legal-lede{margin-top:0!important}
 body.legal-page .legal-updated,body.legal-page .legal-identity{color:${p.onSurfaceVariant}!important;font-size:14px!important;line-height:20px!important}
 body.legal-page :is(h2,h3){font-family:inherit!important;font-style:normal!important;font-weight:500!important;color:${p.onSurface}!important;letter-spacing:0!important}
-body.legal-page h2{font-size:22px!important;line-height:28px!important;margin:0 0 ${spacing[16]}px!important}
+body.legal-page h2{display:block!important;font-size:22px!important;line-height:28px!important;margin:0 0 ${spacing[16]}px!important}
 body.legal-page h3{font-size:16px!important;line-height:24px!important}
-body.legal-page section{margin:${spacing[32]}px 0 0!important;padding:0!important;border:0!important}
-body.legal-page .legal-num{color:inherit!important;font:inherit!important}
+body.legal-page section{margin:${spacing[32]}px 0 0!important;padding:0!important;border:0!important;scroll-margin-top:${spacing[16]}px!important}
+body.legal-page .legal-num{display:inline!important;min-width:0!important;color:inherit!important;font:inherit!important}
 body.legal-page .legal-note{display:block!important;background:${p.surfaceContainerLow}!important;color:${p.onSurface}!important;
   border:0!important;border-radius:${radius.lg}px!important;margin:${spacing[24]}px 0!important;padding:${spacing[16]}px!important}
 body.legal-page .legal-note p:last-child{margin-bottom:0!important}
 body.legal-page .legal-note strong{font:500 16px/24px Roboto,"Roboto Flex",system-ui,sans-serif!important}
 body.legal-page a{color:${p.primary}!important;text-decoration:underline!important;text-underline-offset:3px}
 body.legal-page a:focus-visible{outline:2px solid ${p.primary};outline-offset:3px}
+/* Button links need their own container/ink pair, rather than inline-link ink. */
+body.legal-page a.btn{display:inline-flex!important;align-items:center;justify-content:center;max-width:100%!important;min-height:${layout.touchTargetMin}px!important;
+  padding:${spacing[12]}px ${spacing[24]}px!important;border-radius:${radius.full}px!important;
+  font:500 14px/20px Roboto,"Roboto Flex",system-ui,sans-serif!important;letter-spacing:.1px!important;
+  white-space:normal!important;text-align:center;text-decoration:none!important}
+body.legal-page a.btn-filled{background:${p.primary}!important;color:${p.onPrimary}!important}
+body.legal-page a.btn-tonal{background:${p.secondaryContainer}!important;color:${p.onSecondaryContainer}!important}
+body.legal-page a.btn-outlined{background:transparent!important;color:${p.primary}!important;border-color:${p.outline}!important}
+body.legal-page a.btn>span{color:inherit!important;overflow-wrap:anywhere}
 body.legal-page code{color:inherit!important;background:${p.surfaceContainerHigh}!important;overflow-wrap:anywhere}
 body.legal-page :is(ul,ol){padding-left:${spacing[24]}px!important}
 body.legal-page li{margin:${spacing[8]}px 0!important}
