@@ -31,12 +31,22 @@ auditConfig:
     # saved URLs and article content are never passed to this parser.
     # expires: 2026-11-01 — remove when an upstream patch is published.
     - GHSA-vfj7-8cjw-p6xm
+    # decode-uri-component out-of-bounds decode (GHSA-vcc3-ghjq-m6fr).
+    # The advisory's patched floor 0.4.3 was never published; 0.4.1 is
+    # still inside the vulnerable range, and every release since (0.4.x,
+    # 0.5.x) is ESM-only without the CJS default export that
+    # query-string@7 — its only dependent, via expo-router tooling —
+    # requires. Overriding would crash the tooling at require time.
+    # Inputs are the developer's own router query strings, never saved
+    # article content or URLs.
+    # expires: 2026-11-01 — remove when expo-router ships query-string 9.
+    - GHSA-vcc3-ghjq-m6fr
 
 overrides:
   js-yaml: 4.3.2
   "@xmldom/xmldom": 0.9.12
-  fast-uri: 3.1.8
-  mysql2: 3.22.0
+  fast-uri: 3.1.9
+  mysql2: 3.23.1
   nanoid@3: 3.3.18
   brace-expansion@5: 5.0.12
   deepmerge-ts: 8.0.1
@@ -51,6 +61,11 @@ overrides:
   zod: 4.6.6
   body-parser: 2.4.0
   multer: 2.5.0
+  # qs bracket-key array-limit bypass and isBuffer DoS (>=6.16.0; express
+  # pins an exact qs), uuid v3/v5/v6 buffer bounds (>=11.1.1; the xcode
+  # parser under @expo/config-plugins only calls uuid.v4()).
+  qs: 6.16.1
+  uuid@7: 11.1.1
   compression: 1.8.2
   source-map-js: 1.2.2
   proxy-addr: 2.0.8
