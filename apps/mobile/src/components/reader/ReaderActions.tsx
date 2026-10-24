@@ -17,6 +17,7 @@ import { ReminderCustomPanel } from "../bookmarks/ReminderCustomPanel";
 import { REMINDER_MENU_WIDTH, ReminderPresetItems, useSaveReminder } from "../bookmarks/ReminderFlow";
 import { useServerInfo } from "../../hooks/queries";
 import { adBlockSiteHost } from "../../lib/browser-ad-blocking";
+import { BrowserAdBlockingMenu } from "../browser/BrowserAdBlockingMenu";
 import { useSettingsStore } from "../../store/settings";
 import { useTheme } from "../../theme/ThemeProvider";
 import { spacing } from "../../theme/tokens";
@@ -66,10 +67,9 @@ export const ReaderActions = React.memo(React.forwardRef<ReaderActionsHandle, Re
   const blockWebsiteAds = useSettingsStore((s) => s.blockWebsiteAds);
   const siteHost = adBlockSiteHost(websiteUrl);
   const siteAdsAllowed = useSettingsStore((s) => !!siteHost && s.adBlockAllowedHosts.includes(siteHost));
-  const setSiteAdsAllowed = useSettingsStore((s) => s.setSiteAdsAllowed);
   const { data: serverInfo } = useServerInfo();
   const reminders = serverInfo?.reminders === true;
-  const [page, setPage] = useState<"actions" | "highlights" | "tags" | "remind" | "remind-custom" | null>(null);
+  const [page, setPage] = useState<"actions" | "ads" | "highlights" | "tags" | "remind" | "remind-custom" | null>(null);
   const [anchor, setAnchor] = useState<MenuAnchorRect | null>(null);
   const { prepared, prepare, retain } = usePreparedReaderOverlay(workScheduler);
   const close = useCallback(() => setPage(null), []);
@@ -93,9 +93,10 @@ export const ReaderActions = React.memo(React.forwardRef<ReaderActionsHandle, Re
         {hasContents ? <ContextMenuItem key="contents" icon="list-outline" label="Table of contents" onPress={() => run(callbacks.current.onContents)} /> : null}
         {hasHtml && !website ? <ContextMenuItem key="highlights" icon="color-fill-outline" label="Highlights" onPress={() => setPage("highlights")} /> : null}
         {website ? <ContextMenuItem key="refresh" icon="refresh-outline" label="Refresh" onPress={() => run(callbacks.current.onRefresh)} /> : null}
-        {website && Platform.OS !== "web" && blockWebsiteAds && siteHost ? <ContextMenuItem key="ads"
-          icon="shield-checkmark-outline" label={siteAdsAllowed ? `Block ads on ${siteHost}` : `Allow ads on ${siteHost}`}
-          onPress={() => run(() => setSiteAdsAllowed(siteHost, !siteAdsAllowed))} /> : null}
+        {website && Platform.OS !== "web" && siteHost ? <ContextMenuItem key="ads"
+          icon={blockWebsiteAds && !siteAdsAllowed ? "shield-checkmark-outline" : "shield-outline"}
+          label="Ad blocking" detail={!blockWebsiteAds ? "Off" : siteAdsAllowed ? "Off for site" : "On"}
+          onPress={() => setPage("ads")} /> : null}
         <ContextMenuItem key="share" icon="share-social-outline" label={website ? "Share page" : "Share article"} onPress={() => run(callbacks.current.onShare)} />
         <ContextMenuItem key="copy-link" icon="link-outline" label="Copy link" onPress={() => run(callbacks.current.onCopyLink)} />
         <ContextMenuItem key="tags" icon="pricetags-outline" label="Edit tags" onPress={() => setPage("tags")} />
@@ -107,16 +108,17 @@ export const ReaderActions = React.memo(React.forwardRef<ReaderActionsHandle, Re
           : canBeArticle ? <ContextMenuItem key="classify" icon="reader-outline" label="Mark as article" onPress={() => run(() => callbacks.current.onClassify(true))} /> : null}
         <ContextMenuItem key="open" icon={website ? "open-outline" : "globe-outline"}
           label={website ? "Open in external browser" : "Open original"} onPress={() => run(website ? callbacks.current.onOpenExternal : callbacks.current.onOpenOriginal)} />
-      </>, [blockWebsiteAds, siteHost, siteAdsAllowed, setSiteAdsAllowed, canBeArticle, canRead, hasContents, hasHtml, isArticle, remindAt, reminders, run, website]);
+      </>, [blockWebsiteAds, siteHost, siteAdsAllowed, canBeArticle, canRead, hasContents, hasHtml, isArticle, remindAt, reminders, run, website]);
 
   return <>
     <HeaderIconButton name="ellipsis-horizontal" color={palette.text}
       accessibilityLabel={website ? "More page actions" : "More article actions"}
       onPress={(rect) => { retain(); setAnchor(rect); setPage("actions"); onOpen(); }} />
-    <ContextMenu visible={page === "actions" || page === "remind"} onDismiss={close} anchor={anchor}
+    <ContextMenu visible={page === "actions" || page === "remind" || page === "ads"} onDismiss={close} anchor={anchor}
       width={reminders ? REMINDER_MENU_WIDTH : undefined} keepMounted={prepared}
-      sessionKey={bookmark.id} pageKey={page === "remind" ? "remind" : "actions"}>
-      {page === "remind" ? <ReminderPresetItems bookmark={bookmark} now={remindNow} busy={reminderBusy}
+      sessionKey={bookmark.id} pageKey={page === "remind" ? "remind" : page === "ads" ? "ads" : "actions"}>
+      {page === "ads" ? <BrowserAdBlockingMenu siteHost={siteHost} onBack={showActions} onDone={close} />
+        : page === "remind" ? <ReminderPresetItems bookmark={bookmark} now={remindNow} busy={reminderBusy}
         showBack onBack={() => setPage("actions")} onPick={saveReminder} onCustom={() => setPage("remind-custom")} /> : actionItems}
     </ContextMenu>
     <ReaderTagEditor visible={page === "tags"} bookmark={bookmark} onDismiss={close} />

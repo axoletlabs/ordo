@@ -1,6 +1,16 @@
 name: Browser WebKit
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/src/lib/browser-ad-blocking.ts'
+      - 'apps/mobile/plugins/**'
+      - 'apps/mobile/app.config.js'
+      - 'patches/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/browser-webkit.yml'
   pull_request:
     paths:
       - 'apps/mobile/src/lib/browser-ad-blocking.ts'

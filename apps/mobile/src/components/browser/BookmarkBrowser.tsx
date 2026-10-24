@@ -32,7 +32,7 @@ import {
   pageHostFromWebViewUrl,
   isCancelledWebViewError,
 } from "../../lib/in-app-browser";
-import { browserAdBlockingRules } from "../../lib/browser-ad-blocking";
+import { adBlockSiteHost, browserAdBlockingRules } from "../../lib/browser-ad-blocking";
 import { haptics } from "../../lib/haptics";
 import { WEBSITE_FORCE_DARK_SCRIPT } from "../../lib/website-force-dark";
 import { useSettingsStore } from "../../store/settings";
@@ -67,6 +67,8 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     const forceWebsiteDark = useSettingsStore((s) => s.forceWebsiteDark);
     const blockWebsiteAds = useSettingsStore((s) => s.blockWebsiteAds);
     const adBlockAllowedHosts = useSettingsStore((s) => s.adBlockAllowedHosts);
+    const setSiteAdsAllowed = useSettingsStore((s) => s.setSiteAdsAllowed);
+    const [currentSiteHost, setCurrentSiteHost] = useState(() => adBlockSiteHost(url));
     const adBlockingRules = useMemo(
       () => browserAdBlockingRules(blockWebsiteAds, adBlockAllowedHosts),
       [blockWebsiteAds, adBlockAllowedHosts],
@@ -144,6 +146,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
 
     useEffect(() => {
       beginLoad();
+      setCurrentSiteHost(adBlockSiteHost(url));
     }, [url, forceWebsiteDark, beginLoad]);
 
     useEffect(() => {
@@ -185,6 +188,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     const handleNav = useCallback(
       (nav: WebViewNavigation) => {
         canGoBackRef.current = nav.canGoBack;
+        setCurrentSiteHost(adBlockSiteHost(nav.url));
         if (!active) return;
         onPageHost?.(pageHostFromWebViewUrl(nav.url));
         onPageUrl?.(nav.url);
@@ -336,7 +340,13 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
               icon="cloud-offline-outline"
               title="Couldn't load this page"
               message={error}
-              action={<Button label="Retry" variant="secondary" onPress={handleRefresh} />}
+              action={<View style={{ gap: spacing[8] }}>
+                <Button label="Retry" variant="secondary" onPress={handleRefresh} />
+                {Platform.OS !== "web" && blockWebsiteAds && currentSiteHost && !adBlockAllowedHosts.includes(currentSiteHost) ? (
+                  <Button label="Allow ads for this site" variant="ghost"
+                    onPress={() => setSiteAdsAllowed(currentSiteHost, true)} />
+                ) : null}
+              </View>}
             />
           </View>
         ) : null}

@@ -205,18 +205,21 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     void persistSettings({ ...get(), forceWebsiteDark });
   },
   setBlockWebsiteAds: (blockWebsiteAds) => {
+    if (get().blockWebsiteAds === blockWebsiteAds) return;
     set({ blockWebsiteAds });
     void persistSettings({ ...get(), blockWebsiteAds });
   },
   setSiteAdsAllowed: (host, allowed) => {
     const normalized = normalizeAdBlockAllowedHosts([host])[0];
     if (!normalized) return;
+    if (get().adBlockAllowedHosts.includes(normalized) === allowed) return;
     const remaining = get().adBlockAllowedHosts.filter((site) => site !== normalized);
     const adBlockAllowedHosts = allowed ? [...remaining, normalized] : remaining;
     set({ adBlockAllowedHosts });
     void persistSettings({ ...get(), adBlockAllowedHosts });
   },
   clearAdBlockAllowedHosts: () => {
+    if (get().adBlockAllowedHosts.length === 0) return;
     set({ adBlockAllowedHosts: [] });
     void persistSettings({ ...get(), adBlockAllowedHosts: [] });
   },

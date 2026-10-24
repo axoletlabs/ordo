@@ -12,6 +12,7 @@ import {
 } from "../../../src/components/settings/SettingsSelect";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
 import { Toggle } from "../../../src/components/ui/Toggle";
+import { AdBlockExceptions } from "../../../src/components/settings/AdBlockExceptions";
 import { APP_NAME } from "@ordo/shared";
 import {
   useSettingsStore,
@@ -45,7 +46,7 @@ export default function ControlsScreen() {
   const blockWebsiteAds = useSettingsStore((s) => s.blockWebsiteAds);
   const allowedSiteCount = useSettingsStore((s) => s.adBlockAllowedHosts.length);
   const setBlockWebsiteAds = useSettingsStore((s) => s.setBlockWebsiteAds);
-  const clearAdBlockAllowedHosts = useSettingsStore((s) => s.clearAdBlockAllowedHosts);
+  const [exceptionsOpen, setExceptionsOpen] = React.useState(false);
   const shareQuickBookmark = useSettingsStore((s) => s.shareQuickBookmark);
   const shareShowQuickAction = useSettingsStore((s) => s.shareShowQuickAction);
   const setTapAction = useSettingsStore((s) => s.setCreateButtonTapAction);
@@ -122,15 +123,17 @@ export default function ControlsScreen() {
           <SettingRow
             icon="shield-checkmark-outline"
             label="Block ads"
-            description="In ordo's browser. Allow ads for a site from its page menu."
+            description={blockWebsiteAds ? "In ordo's browser. If a page doesn't work as expected, allow ads from its page menu."
+              : "Off for all websites. Your saved site exceptions are kept."}
             unavailableReason={Platform.OS === "web" ? "Ad blocking is available in the Android and iOS apps." : undefined}
             right={<Toggle value={blockWebsiteAds} onValueChange={setBlockWebsiteAds} />}
             rightFit="content"
           />
-          {Platform.OS !== "web" && allowedSiteCount > 0 ? (
-            <SettingRow icon="shield-outline" label="Reset site exceptions"
-              description={`Ads are allowed on ${allowedSiteCount} ${allowedSiteCount === 1 ? "site" : "sites"}.`}
-              onPress={clearAdBlockAllowedHosts} />
+          {Platform.OS !== "web" ? (
+            <SettingRow icon="shield-outline" label="Site exceptions" showChevron
+              description={allowedSiteCount > 0 ? `${allowedSiteCount} ${allowedSiteCount === 1 ? "site allows" : "sites allow"} ads. Review or remove exceptions.`
+                : "Allow ads on individual websites from their page menu."}
+              onPress={() => setExceptionsOpen(true)} />
           ) : null}
           <SettingRow
             icon="moon-outline"
@@ -142,6 +145,7 @@ export default function ControlsScreen() {
           />
         </SettingsGroup>
       </SettingsScrollView>
+      <AdBlockExceptions visible={exceptionsOpen} onDismiss={() => setExceptionsOpen(false)} />
     </SettingsPage>
   );
 }

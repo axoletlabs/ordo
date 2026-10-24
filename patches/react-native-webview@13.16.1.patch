@@ -1,9 +1,9 @@
 diff --git a/android/src/main/java/com/reactnativecommunity/webview/OrdoAdBlocker.java b/android/src/main/java/com/reactnativecommunity/webview/OrdoAdBlocker.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..046631b5693b36f4c37a397bea5726579606d07e
+index 0000000000000000000000000000000000000000..d99aa55160e2a15223739f1e2e421f2b9d9b88a5
 --- /dev/null
 +++ b/android/src/main/java/com/reactnativecommunity/webview/OrdoAdBlocker.java
-@@ -0,0 +1,65 @@
+@@ -0,0 +1,90 @@
 +package com.reactnativecommunity.webview;
 +
 +import java.net.URI;
@@ -68,12 +68,37 @@ index 0000000000000000000000000000000000000000..046631b5693b36f4c37a397bea572657
 +            candidate = candidate.substring(dot + 1);
 +        }
 +    }
++
++    public boolean shouldBlockResource(String requestUrl, String topUrl, boolean mainFrame, String method, String accept) {
++        // Never synthesize responses for submissions, CORS preflights or frame
++        // documents. Android does not expose WebKit's resource-type classifier.
++        if (!"GET".equalsIgnoreCase(method)) return false;
++        if (accept != null) {
++            String types = accept.toLowerCase(Locale.ROOT);
++            if (types.contains("text/html") || types.contains("application/xhtml+xml")) return false;
++        }
++        return shouldBlock(requestUrl, topUrl, mainFrame);
++    }
++
++    private Set<String> pageRules(String topUrl) {
++        String top = webHost(topUrl);
++        if (top == null || allowedHosts.contains(top)) return Collections.emptySet();
++        Set<String> result = new HashSet<>();
++        for (String host : blockedHosts) {
++            if (!top.equals(host) && !top.endsWith("." + host)) result.add(host);
++        }
++        return result;
++    }
++
++    public boolean changesPageRules(OrdoAdBlocker previous, String topUrl) {
++        return !pageRules(topUrl).equals(previous.pageRules(topUrl));
++    }
 +}
 diff --git a/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java b/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
-index 80c68034b193a47bedb56ca527352de9548e8ac6..a446b1afc0c60bc3f9fe55a4ad6f32c3e4878eb6 100644
+index 80c68034b193a47bedb56ca527352de9548e8ac6..35a2e73f8b1118954aea95a7409b60d46e851e8c 100644
 --- a/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
 +++ b/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
-@@ -66,6 +66,35 @@ public class RNCWebView extends WebView implements LifecycleEventListener {
+@@ -66,6 +66,38 @@ public class RNCWebView extends WebView implements LifecycleEventListener {
      protected boolean injectedJavaScriptForMainFrameOnly = true;
      protected boolean injectedJavaScriptBeforeContentLoadedForMainFrameOnly = true;
  
@@ -101,19 +126,22 @@ index 80c68034b193a47bedb56ca527352de9548e8ac6..a446b1afc0c60bc3f9fe55a4ad6f32c3
 +        } catch (JSONException ignored) {
 +            // Invalid configuration must never prevent a page loading.
 +        }
++        OrdoAdBlocker previous = adBlocker;
 +        adBlocker = config;
 +        String current = getUrl();
-+        if (current != null && (current.startsWith("https://") || current.startsWith("http://"))) reload();
++        // Updating another site's preference must not interrupt this page.
++        // Let in-flight navigations finish; new requests already see the rules.
++        if (getProgress() == 100 && config.changesPageRules(previous, current)) reload();
 +    }
 +
      protected boolean messagingEnabled = false;
      protected @Nullable
      String messagingModuleName;
 diff --git a/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java b/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
-index 0287e1c56b07b6c23b4049f3992d88b86fdc5c79..3f08aa25d2c3e3e3d6e7c3d006be6215cc9b211e 100644
+index 0287e1c56b07b6c23b4049f3992d88b86fdc5c79..6462a3f9c5bfc63e5ea616c8a918a29b06d43051 100644
 --- a/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
 +++ b/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
-@@ -45,6 +45,18 @@ public class RNCWebViewClient extends WebViewClient {
+@@ -45,6 +45,23 @@ public class RNCWebViewClient extends WebViewClient {
      protected RNCWebView.ProgressChangedFilter progressChangedFilter = null;
      protected @Nullable RNCBasicAuthCredential basicAuthCredential = null;
  
@@ -121,7 +149,12 @@ index 0287e1c56b07b6c23b4049f3992d88b86fdc5c79..3f08aa25d2c3e3e3d6e7c3d006be6215
 +    public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
 +        RNCWebView webView = (RNCWebView) view;
 +        if (request.isForMainFrame()) webView.adBlockTopUrl = request.getUrl().toString();
-+        if (webView.adBlocker.shouldBlock(request.getUrl().toString(), webView.adBlockTopUrl, request.isForMainFrame())) {
++        String accept = null;
++        for (java.util.Map.Entry<String, String> header : request.getRequestHeaders().entrySet()) {
++            if ("Accept".equalsIgnoreCase(header.getKey())) { accept = header.getValue(); break; }
++        }
++        if (webView.adBlocker.shouldBlockResource(request.getUrl().toString(), webView.adBlockTopUrl,
++                request.isForMainFrame(), request.getMethod(), accept)) {
 +            return new WebResourceResponse("text/plain", "UTF-8", 200, "OK",
 +                java.util.Collections.singletonMap("Cache-Control", "no-store"),
 +                new java.io.ByteArrayInputStream(new byte[0]));
@@ -132,7 +165,7 @@ index 0287e1c56b07b6c23b4049f3992d88b86fdc5c79..3f08aa25d2c3e3e3d6e7c3d006be6215
      public void setBasicAuthCredential(@Nullable RNCBasicAuthCredential credential) {
          basicAuthCredential = credential;
      }
-@@ -73,6 +85,7 @@ public class RNCWebViewClient extends WebViewClient {
+@@ -73,6 +90,7 @@ public class RNCWebViewClient extends WebViewClient {
      @Override
      public void doUpdateVisitedHistory (WebView webView, String url, boolean isReload) {
        super.doUpdateVisitedHistory(webView, url, isReload);
@@ -140,7 +173,7 @@ index 0287e1c56b07b6c23b4049f3992d88b86fdc5c79..3f08aa25d2c3e3e3d6e7c3d006be6215
  
        ((RNCWebView) webView).dispatchEvent(
          webView,
-@@ -84,6 +97,7 @@ public class RNCWebViewClient extends WebViewClient {
+@@ -84,6 +102,7 @@ public class RNCWebViewClient extends WebViewClient {
      @Override
      public void onPageStarted(WebView webView, String url, Bitmap favicon) {
        super.onPageStarted(webView, url, favicon);
@@ -181,6 +214,28 @@ index 974337f41ce01a5102eeafa6e54fbb3b949c48d7..3004b4cab6d1541482bcf2be466f763d
      @ReactProp(name = "incognito")
      public void setIncognito(RNCWebViewWrapper view, boolean value) {
          mRNCWebViewManagerImpl.setIncognito(view, value);
+diff --git a/apple/OrdoAdBlocking.h b/apple/OrdoAdBlocking.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..5b54e01d31b32e7c53fbd83575bbdf184b762780
+--- /dev/null
++++ b/apple/OrdoAdBlocking.h
+@@ -0,0 +1,16 @@
++#import <Foundation/Foundation.h>
++
++// Compare the effective policy for this page, independently of other sites'
++// exceptions or JSON ordering. Used only on the main thread during updates.
++static inline NSSet<NSString *> *OrdoPageAdRules(NSDictionary *config, NSURL *url)
++{
++  NSString *scheme = url.scheme.lowercaseString;
++  if (!([scheme isEqualToString:@"https"] || [scheme isEqualToString:@"http"])) return [NSSet set];
++  NSString *top = [url.host.lowercaseString stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"."]];
++  if (!top.length || [config[@"allowedHosts"] containsObject:top]) return [NSSet set];
++  NSMutableSet *hosts = [NSMutableSet set];
++  for (NSString *host in config[@"blockedHosts"]) {
++    if (![top isEqualToString:host] && ![top hasSuffix:[@"." stringByAppendingString:host]]) [hosts addObject:host];
++  }
++  return hosts;
++}
 diff --git a/apple/RNCWebView.mm b/apple/RNCWebView.mm
 index c0816b6320820a8586f3735b7971790cac8704fa..09c65af39cb2f8a056f9e3709b932d04def7e25c 100644
 --- a/apple/RNCWebView.mm
@@ -206,21 +261,32 @@ index 1f6bbfd697a4e0b0aef2db344386b786839a1969..9549210d56f18520f2bcbc7dcee9b4aa
  @property (nonatomic, copy) NSString * _Nullable injectedJavaScript;
  @property (nonatomic, copy) NSString * _Nullable injectedJavaScriptBeforeContentLoaded;
 diff --git a/apple/RNCWebViewImpl.m b/apple/RNCWebViewImpl.m
-index 7f5c24d6e2cfb26eddbc513bf17a81c24a7273e2..02d6b05ee9d86091da695179ae1a8ecfa1c68be1 100644
+index 7f5c24d6e2cfb26eddbc513bf17a81c24a7273e2..b9f83cedbcbdd1781603954492b8361b6aab062d 100644
 --- a/apple/RNCWebViewImpl.m
 +++ b/apple/RNCWebViewImpl.m
-@@ -122,6 +122,10 @@ UIGestureRecognizerDelegate,
+@@ -6,6 +6,7 @@
+  */
+ 
+ #import "RNCWebViewImpl.h"
++#import "OrdoAdBlocking.h"
+ #import <React/RCTConvert.h>
+ #import <React/RCTAutoInsetsProtocol.h>
+ #import "RNCWKProcessPoolManager.h"
+@@ -122,6 +123,13 @@ UIGestureRecognizerDelegate,
  RCTAutoInsetsProtocol>
  
  @property (nonatomic, copy) RNCWKWebView *webView;
 +@property (nonatomic, strong) WKContentRuleList *ordoContentRuleList;
++@property (nonatomic, copy) NSDictionary *ordoActiveRuleConfig;
++@property (nonatomic, assign) BOOL ordoTopNavigationCanReload;
++@property (nonatomic, assign) BOOL ordoReloadWaiting;
 +@property (nonatomic, assign) NSUInteger ordoRuleGeneration;
 +@property (nonatomic, assign) BOOL ordoRulesPending;
 +@property (nonatomic, assign) BOOL ordoSourceWaiting;
  @property (nonatomic, strong) WKUserScript *postMessageScript;
  @property (nonatomic, strong) WKUserScript *injectedObjectJsonScript;
  @property (nonatomic, strong) WKUserScript *atStartScript;
-@@ -468,6 +472,9 @@ RCTAutoInsetsProtocol>
+@@ -468,6 +476,9 @@ RCTAutoInsetsProtocol>
      wkWebViewConfig.processPool = [[RNCWKProcessPoolManager sharedManager] sharedProcessPool];
    }
    wkWebViewConfig.userContentController = [WKUserContentController new];
@@ -230,7 +296,7 @@ index 7f5c24d6e2cfb26eddbc513bf17a81c24a7273e2..02d6b05ee9d86091da695179ae1a8ecf
  
  #if defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && __IPHONE_OS_VERSION_MAX_ALLOWED >= 130000 /* iOS 13 */
    if (@available(iOS 13.0, *)) {
-@@ -791,6 +798,60 @@ RCTAutoInsetsProtocol>
+@@ -791,6 +802,58 @@ RCTAutoInsetsProtocol>
    }
  }
  
@@ -241,44 +307,42 @@ index 7f5c24d6e2cfb26eddbc513bf17a81c24a7273e2..02d6b05ee9d86091da695179ae1a8ecf
 +  if ([_adBlockingRules isEqualToString:rules]) return;
 +  _adBlockingRules = [rules copy];
 +  NSUInteger generation = ++self.ordoRuleGeneration;
-+  self.ordoRulesPending = NO;
-+  self.ordoContentRuleList = nil;
-+  [_webView.configuration.userContentController removeAllContentRuleLists];
-+  if (rules.length == 0) {
-+    if (self.ordoSourceWaiting) {
-+      self.ordoSourceWaiting = NO;
-+      [self visitSource];
-+    } else {
-+      [_webView reload];
-+    }
-+    return;
-+  }
-+  NSDictionary *config = [NSJSONSerialization JSONObjectWithData:[rules dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
-+  NSString *encoded = [config isKindOfClass:NSDictionary.class] ? config[@"webKitRules"] : nil;
-+  if (![encoded isKindOfClass:NSString.class]) {
-+    if (self.ordoSourceWaiting) {
-+      self.ordoSourceWaiting = NO;
-+      [self visitSource];
-+    } else {
-+      [_webView reload];
-+    }
-+    return;
-+  }
 +  self.ordoRulesPending = YES;
++  NSDictionary *config = rules.length ? [NSJSONSerialization JSONObjectWithData:[rules dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil] : nil;
++  if (![config isKindOfClass:NSDictionary.class] || ![config[@"blockedHosts"] isKindOfClass:NSArray.class] || ![config[@"allowedHosts"] isKindOfClass:NSArray.class]) config = nil;
++  for (id host in [config[@"blockedHosts"] arrayByAddingObjectsFromArray:config[@"allowedHosts"]]) {
++    if (![host isKindOfClass:NSString.class]) { config = nil; break; }
++  }
++  NSString *encoded = config[@"webKitRules"];
 +  __weak RNCWebViewImpl *weakSelf = self;
 +  void (^finish)(WKContentRuleList *) = ^(WKContentRuleList *list) {
 +    RNCWebViewImpl *strongSelf = weakSelf;
 +    if (!strongSelf || strongSelf.ordoRuleGeneration != generation || !strongSelf.ordoRulesPending) return;
 +    strongSelf.ordoRulesPending = NO;
++    NSDictionary *next = list ? config : nil;
++    NSURL *pageURL = strongSelf.webView.URL ?: [NSURL URLWithString:strongSelf.source[@"uri"]];
++    BOOL changed = ![OrdoPageAdRules(strongSelf.ordoActiveRuleConfig, pageURL)
++      isEqualToSet:OrdoPageAdRules(next, pageURL)];
++    // Keep the previous policy until the replacement is ready. Other owners'
++    // content rules must survive disabling or changing Ordo's blocker.
++    if (strongSelf.ordoContentRuleList) [strongSelf.webView.configuration.userContentController removeContentRuleList:strongSelf.ordoContentRuleList];
 +    strongSelf.ordoContentRuleList = list;
++    strongSelf.ordoActiveRuleConfig = next;
 +    if (list) [strongSelf.webView.configuration.userContentController addContentRuleList:list];
++    BOOL refreshRequested = strongSelf.ordoReloadWaiting;
++    strongSelf.ordoReloadWaiting = NO;
 +    if (strongSelf.ordoSourceWaiting) {
 +      strongSelf.ordoSourceWaiting = NO;
 +      [strongSelf visitSource];
-+    } else {
-+      [strongSelf.webView reload];
++    } else if (refreshRequested || (changed && !strongSelf.webView.loading && strongSelf.ordoTopNavigationCanReload)) {
++      // Never interrupt a navigation or replay a submitted form automatically.
++      [strongSelf reload];
 +    }
 +  };
++  if (![encoded isKindOfClass:NSString.class] || encoded.length == 0) {
++    finish(nil);
++    return;
++  }
 +  // A fixed identifier replaces this app-owned entry instead of accumulating
 +  // compiled lists every time a user changes a site exception.
 +  [[WKContentRuleListStore defaultStore] compileContentRuleListForIdentifier:@"ordo-ads-v1"
@@ -291,7 +355,7 @@ index 7f5c24d6e2cfb26eddbc513bf17a81c24a7273e2..02d6b05ee9d86091da695179ae1a8ecf
  - (void)setSource:(NSDictionary *)source
  {
    if (![_source isEqualToDictionary:source]) {
-@@ -835,6 +896,10 @@ RCTAutoInsetsProtocol>
+@@ -835,6 +898,10 @@ RCTAutoInsetsProtocol>
  
  - (void)visitSource
  {
@@ -302,6 +366,38 @@ index 7f5c24d6e2cfb26eddbc513bf17a81c24a7273e2..02d6b05ee9d86091da695179ae1a8ecf
    // Check for a static html source first
    NSString *html = [RCTConvert NSString:_source[@"html"]];
    if (html) {
+@@ -1381,6 +1448,9 @@ RCTAutoInsetsProtocol>
+                     }
+                 }
+ 
++                if (navigationAction.targetFrame.isMainFrame) {
++                    self.ordoTopNavigationCanReload = [request.HTTPMethod isEqualToString:@"GET"] && navigationType != WKNavigationTypeFormSubmitted && navigationType != WKNavigationTypeFormResubmitted && navigationType != WKNavigationTypeBackForward;
++                }
+                 // Allow all navigation by default
+                 decisionHandler(WKNavigationActionPolicyAllow);
+             });
+@@ -1416,6 +1486,9 @@ RCTAutoInsetsProtocol>
+         }
+     }
+ 
++    if (navigationAction.targetFrame.isMainFrame) {
++        self.ordoTopNavigationCanReload = [request.HTTPMethod isEqualToString:@"GET"] && navigationType != WKNavigationTypeFormSubmitted && navigationType != WKNavigationTypeFormResubmitted && navigationType != WKNavigationTypeBackForward;
++    }
+     // Allow all navigation by default
+     decisionHandler(WKNavigationActionPolicyAllow);
+ }
+@@ -1608,6 +1681,11 @@ didFinishNavigation:(WKNavigation *)navigation
+ 
+ - (void)reload
+ {
++  // An explicit refresh during a rule update must use the new preference.
++  if (self.ordoRulesPending) {
++    self.ordoReloadWaiting = YES;
++    return;
++  }
+   /**
+    * When the initial load fails due to network connectivity issues,
+    * [_webView reload] doesn't reload the webpage. Therefore, we must
 diff --git a/apple/RNCWebViewManager.mm b/apple/RNCWebViewManager.mm
 index f8f375f23b12039b64b7900034c8978e0235a8e7..306f212a0c6e4854fb5898d0225ca4253e7203e5 100644
 --- a/apple/RNCWebViewManager.mm

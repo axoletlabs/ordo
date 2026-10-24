@@ -6,6 +6,10 @@ browsing data to a filtering service. Settings → Controls → Browser → Bloc
 turns it off. The page menu can allow ads on the current hostname; changing a
 rule reloads the current page without replacing its navigation history.
 Exceptions persist on the device and can be cleared from Controls.
+The page menu's Ad blocking submenu shows the current state and offers both
+the global switch and a checkbox for the current website. Controls → Browser →
+Site exceptions lists saved exceptions individually; switching one off restores
+blocking there. Turning blocking off globally preserves these preferences.
 
 The system browser and Chrome/Safari sheets are outside Ordo's control. The web
 app marks this setting unavailable. Reader articles use the existing sanitized
@@ -22,10 +26,18 @@ native rendering and do not load through this blocker.
   returns an empty, non-cacheable response for matches. Matching uses an
   immutable per-view snapshot, with no JS bridge, network or disk on the
   request thread. Missing page context or invalid configuration allows loads.
+  Non-GET requests and requests accepting HTML/XHTML are always passed through,
+  including embedded documents, submissions and CORS preflights.
 - iOS uses WKContentRuleList with third-party resource rules; document loads
   (including frames) are excluded. Initial loading waits for compilation, with
   a three-second fail-open timeout. Stale asynchronous results are ignored.
-  Native rule changes reload the current URL, including after a redirect.
+  An update retains the previous rules until its replacement is ready and
+  removes only Ordo's own rule list. A refresh requested during compilation
+  waits for the new preference.
+- Changing an unrelated site's exception leaves the current page alone.
+  Automatic refreshes only occur when the page's effective policy changes and
+  it is idle. iOS never automatically replays submitted forms or history
+  entries. Existing form entries can be refreshed explicitly by the user.
 - Site exceptions apply to an exact hostname, across ports and HTTP/HTTPS.
   `www.example.com` and `example.com` remain separate. The page menu uses the
   current navigation URL, not the original bookmark URL or shortened title.
