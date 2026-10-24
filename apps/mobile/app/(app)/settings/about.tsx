@@ -1,6 +1,6 @@
 /** About, build provenance, updates, and project links. */
 import React from "react";
-import { Linking, StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { ChangelogSheet } from "../../../src/components/settings/ChangelogList";
 import * as Clipboard from "expo-clipboard";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
@@ -16,12 +16,14 @@ import {
   SettingsScrollView,
 } from "../../../src/components/settings/SettingsPage";
 import { useBuildInfo } from "../../../src/hooks/use-build-info";
+import { useAppRouter } from "../../../src/hooks/use-app-router";
 import { useOtaUpdate } from "../../../src/hooks/use-ota-update";
 import { useNativeUpdateStore } from "../../../src/store/native-update";
 import { APP_VARIANT } from "../../../src/lib/app-variant";
 import { releaseName } from "../../../src/lib/release-name";
 import { haptics } from "../../../src/lib/haptics";
 import { CLOUD_WEBSITE_URL } from "../../../src/lib/hosting";
+import { openInAppBrowser } from "../../../src/lib/open-website";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { radius, spacing } from "../../../src/theme/tokens";
 
@@ -36,10 +38,6 @@ const LEGAL_LINKS = [
 const PUBLISHED_YEAR = 2026;
 const TELEMETRY_FOOTER =
   "The app sends anonymous counts to ordo Cloud: installs, opens, sign-ins, registrations, and coarse health (timeouts, server errors, sign-in failures, startup speed). Platform, version, and Cloud or self-host are included. Your account, server URL, and library are not.";
-
-function openURL(url: string): void {
-  void Linking.openURL(url).catch(() => {});
-}
 
 async function copyFingerprint(value: string): Promise<boolean> {
   haptics.light();
@@ -60,6 +58,15 @@ function formatFingerprint(value: string): string {
 }
 
 export default function AboutScreen() {
+  const router = useAppRouter();
+  const openURL = (url: string, title: string) => {
+    // GitHub forbids iframes on web; native WebViews can load it normally.
+    if (Platform.OS === "web" && new URL(url).hostname === "github.com") {
+      void openInAppBrowser(url);
+      return;
+    }
+    router.push({ pathname: "/settings/browser", params: { url, title } });
+  };
   const build = useBuildInfo();
   // This page only needs the offered release version for the Changelog row.
   // Download progress ticks many times per second; subscribing to the whole
@@ -83,7 +90,7 @@ export default function AboutScreen() {
             icon="git-commit-outline"
             label="Commit"
             value={commit}
-            onPress={commitRef ? () => openURL(`${REPO_URL}/commit/${commitRef}`) : undefined}
+            onPress={commitRef ? () => openURL(`${REPO_URL}/commit/${commitRef}`, "Commit") : undefined}
           />
         </SettingsGroup>
 
@@ -110,13 +117,13 @@ export default function AboutScreen() {
             icon="logo-github"
             label="Source"
             value="GitHub"
-            onPress={() => openURL(REPO_URL)}
+            onPress={() => openURL(REPO_URL, "Source")}
           />
           <SettingRow
             icon="globe-outline"
             label="Website"
             value="Ordo"
-            onPress={() => openURL(CLOUD_WEBSITE_URL)}
+            onPress={() => openURL(CLOUD_WEBSITE_URL, "Website")}
           />
           <SettingRow
             icon="ribbon-outline"
@@ -131,7 +138,7 @@ export default function AboutScreen() {
               key={link.path}
               icon={link.icon}
               label={link.label}
-              onPress={() => openURL(`${LEGAL_URL}${link.path}`)}
+              onPress={() => openURL(`${LEGAL_URL}${link.path}`, link.label)}
               showChevron
             />
           ))}
@@ -141,7 +148,7 @@ export default function AboutScreen() {
           <Text
             variant="footnote"
             color="tertiary"
-            onPress={() => openURL(AXOLET_URL)}
+            onPress={() => openURL(AXOLET_URL, "Axolet")}
             suppressHighlighting
             accessibilityRole="link"
             accessibilityLabel="© Axolet"
