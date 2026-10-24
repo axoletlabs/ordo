@@ -8,7 +8,6 @@ minimumReleaseAgeExclude:
   - '@nestjs/core@12.0.2'
   - '@nestjs/platform-express@12.0.2'
   - '@nestjs/schematics@12.0.2'
-  - zod@4.6.5
 
 nodeLinker: hoisted
 
@@ -45,6 +44,13 @@ overrides:
   # compression DoS (>=1.8.2), source-map-js event-loop DoS (>=1.2.2),
   # proxy-addr IPv4-mapped IP spoofing (>=2.0.8), shell-quote quote()
   # command injection (>=1.11.0).
+  # zod memory exhaustion via oversized unconstrained arrays (>=4.6.6;
+  # also lifts @expo/cli's frozen zod-3.25 pin — its schema usage is
+  # zod-4-compatible), body-parser compressed-body DoS (>=2.4.0),
+  # multer async fileFilter DoS (>=2.5.0).
+  zod: 4.6.6
+  body-parser: 2.4.0
+  multer: 2.5.0
   compression: 1.8.2
   source-map-js: 1.2.2
   proxy-addr: 2.0.8
