@@ -54,9 +54,9 @@ update request headers entirely for Development.
 
 ## CI gates and native compatibility
 
-Pushes, pull requests, dispatches and published releases run typecheck, lint,
-workspace tests, updater tests, script/installer tests and the production
-dependency audit. APKs, server archives and OTA all depend on those gates.
+Pushes, pull requests, dispatches and published releases run typecheck, lint
+and the production dependency audit. APKs, server archives and OTA all depend
+on those gates.
 Forks and pull requests do not distribute artifacts or receive publish secrets.
 Branch deletion events do not run builds.
 

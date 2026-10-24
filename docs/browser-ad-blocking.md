@@ -52,18 +52,12 @@ include the patched module before distributing an OTA.
 
 ## Validation
 
-Run `pnpm --filter @ordo/mobile test` with Node 22+ and a JDK. The suite compiles
-and executes the actual Android Java matcher against the same compatibility
-corpus as the generated WebKit rules. It also tests upgrades, persistence,
-rapid setting changes and exact-host exceptions. Workspace typecheck and lint
-remain required.
-
-The Browser WebKit workflow runs the rules in a real WKWebView on macOS against
-a local publisher/ad fixture: resource blocking, site exceptions, direct
-visits, cookies, forms, embedded frames, toggling/reload and navigation history.
-The Android APK build validates Fabric codegen and native integration.
+Workspace typecheck and lint remain required. The Browser WebKit workflow
+generates the iOS project and compiles the patched WebView against the pinned
+Xcode toolchain on macOS. The Android APK build validates Fabric codegen and
+native integration.
 A desktop web preview cannot validate native request interception. Before a
-release, also smoke-test the APK on a device with redirects, back navigation,
+release, smoke-test the APK on a device with redirects, back navigation,
 pull-to-refresh, force-dark, video, sign-in and an ad-heavy publisher; compare
 the same pages with blocking disabled. No finite test suite can guarantee
 compatibility with every website.

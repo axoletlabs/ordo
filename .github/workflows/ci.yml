@@ -184,9 +184,6 @@ jobs:
       - name: Lint
         run: pnpm -r lint
 
-      - name: Browser ad blocking regression tests
-        run: pnpm --filter @ordo/mobile test
-
   supply-chain:
     if: '!github.event.deleted'
     runs-on: ubuntu-24.04

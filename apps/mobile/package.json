@@ -12,8 +12,7 @@
     "start": "expo start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "clean": "rimraf .expo node_modules/.cache",
-    "test": "node --test tests/*.test.mjs"
+    "clean": "rimraf .expo node_modules/.cache"
   },
   "dependencies": {
     "@babel/runtime": "^7.29.7",

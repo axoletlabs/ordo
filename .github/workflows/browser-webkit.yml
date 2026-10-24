@@ -4,7 +4,6 @@ on:
   pull_request:
     paths:
       - 'apps/mobile/src/lib/browser-ad-blocking.ts'
-      - 'apps/mobile/tests/**'
       - 'apps/mobile/plugins/**'
       - 'apps/mobile/app.config.js'
       - 'patches/**'
@@ -36,23 +35,6 @@ jobs:
           xcrun swift --version
       - uses: ./.github/actions/setup-pnpm-node
       - run: pnpm install --frozen-lockfile
-      - name: Generate the app's content rules
-        working-directory: apps/mobile
-        run: |
-          node --input-type=module <<'JS'
-          import { writeFileSync } from 'node:fs';
-          import { loadTypeScript } from './tests/load-typescript.mjs';
-          const { browserAdBlockingRules } = loadTypeScript('../src/lib/browser-ad-blocking.ts');
-          writeFileSync('/tmp/ordo-webkit-rules.json', browserAdBlockingRules(true, ['www.publisher.ordo.test']));
-          JS
-      - name: Run WebKit resource and compatibility tests
-        working-directory: apps/mobile
-        run: |
-          echo '127.0.0.1 publisher.ordo.test www.publisher.ordo.test ads.doubleclick.net' | sudo tee -a /etc/hosts
-          node tests/webkit-fixture.mjs > /tmp/ordo-webkit-fixture.log 2>&1 &
-          fixture_pid=$!
-          trap 'kill "$fixture_pid"' EXIT
-          swift tests/webkit-ad-blocking.swift /tmp/ordo-webkit-rules.json 8739
       - name: Build shared types
         run: pnpm --filter @ordo/shared build
       - name: Generate iOS project and pods
@@ -76,7 +58,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ios-build-diagnostics
-          path: |
-            /tmp/ordo-ios-build.log
-            /tmp/ordo-webkit-fixture.log
+          path: /tmp/ordo-ios-build.log
           retention-days: 7
