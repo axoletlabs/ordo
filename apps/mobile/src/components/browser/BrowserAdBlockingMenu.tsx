@@ -18,7 +18,9 @@ export function BrowserAdBlockingMenu({ siteHost, onBack, onDone }: {
     {siteHost ? <ContextMenuItem icon="globe-outline" label={`Allow ads on ${siteHost}`}
       selected={allowed} selectionRole="menuitemcheckbox" onPress={() => { onDone(); setAllowed(siteHost, !allowed); }} /> : null}
     <Text variant="footnote" color="secondary" style={{ paddingHorizontal: spacing[16], paddingVertical: spacing[8] }}>
-      {enabled ? "If a page doesn't work as expected, allow ads for this site. Your choice is saved on this device."
+      {enabled ? allowed
+        ? "Ads are allowed on this website. Refresh the page if needed. Your choice is saved on this device."
+        : "If a page doesn't work as expected, allow ads for this site. Your choice is saved on this device."
         : "Ad blocking is off for all websites. Site exceptions are saved for when you turn it on again."}
     </Text>
   </>;

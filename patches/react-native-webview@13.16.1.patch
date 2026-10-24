@@ -1,9 +1,9 @@
 diff --git a/android/src/main/java/com/reactnativecommunity/webview/OrdoAdBlocker.java b/android/src/main/java/com/reactnativecommunity/webview/OrdoAdBlocker.java
 new file mode 100644
-index 0000000000000000000000000000000000000000..d99aa55160e2a15223739f1e2e421f2b9d9b88a5
+index 0000000000000000000000000000000000000000..532d1ff11d66e063d2f5a958b6feaff006d86724
 --- /dev/null
 +++ b/android/src/main/java/com/reactnativecommunity/webview/OrdoAdBlocker.java
-@@ -0,0 +1,90 @@
+@@ -0,0 +1,107 @@
 +package com.reactnativecommunity.webview;
 +
 +import java.net.URI;
@@ -51,6 +51,23 @@ index 0000000000000000000000000000000000000000..d99aa55160e2a15223739f1e2e421f2b
 +        }
 +    }
 +
++    /** Immutable request observation shared by the request and UI threads. */
++    public static final class PageRequest {
++        public static final PageRequest UNKNOWN = new PageRequest("", "");
++        private final String url;
++        private final String method;
++
++        public PageRequest(String url, String method) {
++            this.url = url;
++            this.method = method;
++        }
++
++        public boolean canReload(String currentUrl) {
++            return currentUrl != null && !currentUrl.isEmpty() && currentUrl.equals(url)
++                && "GET".equalsIgnoreCase(method) && webHost(currentUrl) != null;
++        }
++    }
++
 +    public boolean shouldBlock(String requestUrl, String topUrl, boolean mainFrame) {
 +        if (mainFrame || blockedHosts.isEmpty()) return false;
 +        String top = webHost(topUrl);
@@ -95,16 +112,17 @@ index 0000000000000000000000000000000000000000..d99aa55160e2a15223739f1e2e421f2b
 +    }
 +}
 diff --git a/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java b/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
-index 80c68034b193a47bedb56ca527352de9548e8ac6..35a2e73f8b1118954aea95a7409b60d46e851e8c 100644
+index 80c68034b193a47bedb56ca527352de9548e8ac6..4b27908b16fa1a06a22a4cabc83a409c8f4f6905 100644
 --- a/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
 +++ b/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
-@@ -66,6 +66,38 @@ public class RNCWebView extends WebView implements LifecycleEventListener {
+@@ -66,6 +66,60 @@ public class RNCWebView extends WebView implements LifecycleEventListener {
      protected boolean injectedJavaScriptForMainFrameOnly = true;
      protected boolean injectedJavaScriptBeforeContentLoadedForMainFrameOnly = true;
  
 +    // Immutable configuration published to WebView's request thread.
 +    protected volatile OrdoAdBlocker adBlocker = OrdoAdBlocker.DISABLED;
 +    protected volatile String adBlockTopUrl = "";
++    protected volatile OrdoAdBlocker.PageRequest adBlockPageRequest = OrdoAdBlocker.PageRequest.UNKNOWN;
 +    private String adBlockingRules = "";
 +
 +    public void setAdBlockingRules(@Nullable String value) {
@@ -131,24 +149,48 @@ index 80c68034b193a47bedb56ca527352de9548e8ac6..35a2e73f8b1118954aea95a7409b60d4
 +        String current = getUrl();
 +        // Updating another site's preference must not interrupt this page.
 +        // Let in-flight navigations finish; new requests already see the rules.
-+        if (getProgress() == 100 && config.changesPageRules(previous, current)) reload();
++        if (getProgress() == 100 && adBlockPageRequest.canReload(current)
++                && config.changesPageRules(previous, current)) reload();
++    }
++
++    // Cached history entries may not issue a new request. Do not assume that
++    // the previous page's method describes a restored form response.
++    @Override
++    public void goBack() {
++        adBlockPageRequest = OrdoAdBlocker.PageRequest.UNKNOWN;
++        super.goBack();
++    }
++
++    @Override
++    public void goForward() {
++        adBlockPageRequest = OrdoAdBlocker.PageRequest.UNKNOWN;
++        super.goForward();
++    }
++
++    @Override
++    public void goBackOrForward(int steps) {
++        adBlockPageRequest = OrdoAdBlocker.PageRequest.UNKNOWN;
++        super.goBackOrForward(steps);
 +    }
 +
      protected boolean messagingEnabled = false;
      protected @Nullable
      String messagingModuleName;
 diff --git a/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java b/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
-index 0287e1c56b07b6c23b4049f3992d88b86fdc5c79..6462a3f9c5bfc63e5ea616c8a918a29b06d43051 100644
+index 0287e1c56b07b6c23b4049f3992d88b86fdc5c79..7edb0be70a4294c81b0079ec075dad95297895b5 100644
 --- a/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
 +++ b/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
-@@ -45,6 +45,23 @@ public class RNCWebViewClient extends WebViewClient {
+@@ -45,6 +45,26 @@ public class RNCWebViewClient extends WebViewClient {
      protected RNCWebView.ProgressChangedFilter progressChangedFilter = null;
      protected @Nullable RNCBasicAuthCredential basicAuthCredential = null;
  
 +    @Override
 +    public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
 +        RNCWebView webView = (RNCWebView) view;
-+        if (request.isForMainFrame()) webView.adBlockTopUrl = request.getUrl().toString();
++        if (request.isForMainFrame()) {
++            webView.adBlockTopUrl = request.getUrl().toString();
++            webView.adBlockPageRequest = new OrdoAdBlocker.PageRequest(webView.adBlockTopUrl, request.getMethod());
++        }
 +        String accept = null;
 +        for (java.util.Map.Entry<String, String> header : request.getRequestHeaders().entrySet()) {
 +            if ("Accept".equalsIgnoreCase(header.getKey())) { accept = header.getValue(); break; }
@@ -165,7 +207,7 @@ index 0287e1c56b07b6c23b4049f3992d88b86fdc5c79..6462a3f9c5bfc63e5ea616c8a918a29b
      public void setBasicAuthCredential(@Nullable RNCBasicAuthCredential credential) {
          basicAuthCredential = credential;
      }
-@@ -73,6 +90,7 @@ public class RNCWebViewClient extends WebViewClient {
+@@ -73,6 +93,7 @@ public class RNCWebViewClient extends WebViewClient {
      @Override
      public void doUpdateVisitedHistory (WebView webView, String url, boolean isReload) {
        super.doUpdateVisitedHistory(webView, url, isReload);
@@ -173,7 +215,7 @@ index 0287e1c56b07b6c23b4049f3992d88b86fdc5c79..6462a3f9c5bfc63e5ea616c8a918a29b
  
        ((RNCWebView) webView).dispatchEvent(
          webView,
-@@ -84,6 +102,7 @@ public class RNCWebViewClient extends WebViewClient {
+@@ -84,6 +105,7 @@ public class RNCWebViewClient extends WebViewClient {
      @Override
      public void onPageStarted(WebView webView, String url, Bitmap favicon) {
        super.onPageStarted(webView, url, favicon);

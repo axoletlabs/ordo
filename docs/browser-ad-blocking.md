@@ -4,7 +4,7 @@ Ordo's Android and iOS browser blocks resources from a small bundled list of
 advertising hosts. It is enabled by default, works offline, and sends no
 browsing data to a filtering service. Settings → Controls → Browser → Block ads
 turns it off. The page menu can allow ads on the current hostname; changing a
-rule reloads the current page without replacing its navigation history.
+rule reloads the current page when safe, without replacing its navigation history.
 Exceptions persist on the device and can be cleared from Controls.
 The page menu's Ad blocking submenu shows the current state and offers both
 the global switch and a checkbox for the current website. Controls → Browser →
@@ -36,8 +36,10 @@ native rendering and do not load through this blocker.
   waits for the new preference.
 - Changing an unrelated site's exception leaves the current page alone.
   Automatic refreshes only occur when the page's effective policy changes and
-  it is idle. iOS never automatically replays submitted forms or history
-  entries. Existing form entries can be refreshed explicitly by the user.
+  it is idle and a safe GET request is known. Android leaves observed POST
+  responses and restored history entries with unknown request methods alone.
+  iOS never automatically replays submitted forms or history entries.
+  Existing form entries can be refreshed explicitly by the user.
 - Site exceptions apply to an exact hostname, across ports and HTTP/HTTPS.
   `www.example.com` and `example.com` remain separate. The page menu uses the
   current navigation URL, not the original bookmark URL or shortened title.
