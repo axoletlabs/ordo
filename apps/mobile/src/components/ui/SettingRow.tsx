@@ -14,6 +14,8 @@ import { layout, radius, spacing } from "../../theme/tokens";
 export interface SettingRowProps {
   icon?: keyof typeof Ionicons.glyphMap;
   label: string;
+  /** Use 0 when the complete value must stay readable, such as a website address. */
+  labelLines?: number;
   description?: string;
   /** Replaces the control with a status label and keeps its reason readable. */
   unavailableReason?: string;
@@ -38,6 +40,7 @@ export interface SettingRowProps {
 export function SettingRow({
   icon,
   label,
+  labelLines = 2,
   description,
   unavailableReason,
   value,
@@ -79,7 +82,7 @@ export function SettingRow({
         </View>
       ) : null}
       <View style={styles.body}>
-        <Text variant="bodyLarge" numberOfLines={2} color={destructive ? "danger" : "primary"}>
+        <Text variant="bodyLarge" numberOfLines={labelLines} color={destructive ? "danger" : "primary"}>
           {label}
         </Text>
         {supportingText ? (

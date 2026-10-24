@@ -21,7 +21,8 @@ export function AdBlockExceptions({ visible, onDismiss }: { visible: boolean; on
         : "Ad blocking is off for all websites. These exceptions will apply when you turn it on again."} />
     <FlatList data={sorted} keyExtractor={(host) => host} keyboardShouldPersistTaps="handled"
       style={{ flexShrink: 1, minHeight: 0 }} contentContainerStyle={{ paddingBottom: spacing[8] }}
-      renderItem={({ item }) => <SettingRow icon="globe-outline" label={`Allow ads on ${item}`}
+      renderItem={({ item, index }) => <SettingRow icon="globe-outline" label={`Allow ads on ${item}`} labelLines={0}
+        position={sorted.length === 1 ? "only" : index === 0 ? "first" : index === sorted.length - 1 ? "last" : "middle"}
         rightFit="content" right={<Toggle value onValueChange={() => setAllowed(item, false)} />} />}
       ListEmptyComponent={<Text variant="bodyMedium" color="secondary" style={{ paddingVertical: spacing[16] }}>
         No site exceptions. To allow ads on a website, open its page menu and choose Ad blocking.
