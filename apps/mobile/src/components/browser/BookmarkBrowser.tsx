@@ -38,6 +38,7 @@ import { WEBSITE_FORCE_DARK_SCRIPT } from "../../lib/website-force-dark";
 import { useSettingsStore } from "../../store/settings";
 import { useTheme } from "../../theme/ThemeProvider";
 import { currentAppPalette } from "../../theme/current-app-palette";
+import { browserPageStyleScript } from "../../lib/browser-page-style";
 import { spacing } from "../../theme/tokens";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
@@ -48,6 +49,8 @@ import { useOverlayBlocked } from "../ui/overlay-host";
 
 export interface BookmarkBrowserProps {
   url: string;
+  /** Optional app-owned document styling; ordinary websites keep their own theme. */
+  pageStyle?: string;
   /** When false, hardware back and header host updates are idle (parked view). */
   active?: boolean;
   onPageHost?: (host: string | null) => void;
@@ -61,10 +64,10 @@ export interface BookmarkBrowserHandle {
 }
 
 export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowserProps>(
-  function BookmarkBrowser({ url, active = true, onPageHost, onPageUrl }, ref) {
+  function BookmarkBrowser({ url, pageStyle, active = true, onPageHost, onPageUrl }, ref) {
     const { palette } = useTheme();
     const blocked = useOverlayBlocked();
-    const forceWebsiteDark = useSettingsStore((s) => s.forceWebsiteDark);
+    const forceWebsiteDark = useSettingsStore((s) => s.forceWebsiteDark) && !pageStyle;
     const blockWebsiteAds = useSettingsStore((s) => s.blockWebsiteAds);
     const adBlockAllowedHosts = useSettingsStore((s) => s.adBlockAllowedHosts);
     const setSiteAdsAllowed = useSettingsStore((s) => s.setSiteAdsAllowed);
@@ -90,12 +93,16 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     const injected = useMemo(
       () =>
         browserInjectedJavaScript(
-          forceWebsiteDark ? WEBSITE_FORCE_DARK_SCRIPT : "true;",
+          `${forceWebsiteDark ? WEBSITE_FORCE_DARK_SCRIPT : "true;"}\n${pageStyle ? browserPageStyleScript(pageStyle) : ""}`,
           chromeBackground,
         ),
-      [forceWebsiteDark, chromeBackground],
+      [forceWebsiteDark, chromeBackground, pageStyle],
     );
     const coverBlank = browserBlankCoverVisible(loading, progress, !!error);
+
+    useEffect(() => {
+      if (pageStyle) webRef.current?.injectJavaScript(browserPageStyleScript(pageStyle));
+    }, [pageStyle]);
 
     const finishLoad = useCallback(() => {
       refreshingRef.current = false;
