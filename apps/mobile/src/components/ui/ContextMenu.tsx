@@ -520,6 +520,7 @@ export function ContextMenuItem({
   selectionRole,
   role = "menuitem",
   labelLines = 2,
+  showSelectionIndicator = true,
 }: {
   icon?: keyof typeof Ionicons.glyphMap;
   leading?: React.ReactNode;
@@ -535,6 +536,8 @@ export function ContextMenuItem({
   selectionRole?: "menuitemradio" | "menuitemcheckbox";
   role?: "menuitem" | "button";
   labelLines?: 1 | 2;
+  /** A trailing control can paint the selection instead of the checkmark. */
+  showSelectionIndicator?: boolean;
 }) {
   const { palette, expressive } = useTheme();
   // Expressive menus deliberately use the complementary tertiary pair. With
@@ -579,7 +582,7 @@ export function ContextMenuItem({
       </Text>
       {busy ? (
         <Spinner size="sm" color={color} style={styles.itemSide} />
-      ) : selected ? (
+      ) : selected && showSelectionIndicator ? (
         <Ionicons
           name="checkmark"
           size={16}

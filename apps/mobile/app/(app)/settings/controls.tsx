@@ -123,16 +123,13 @@ export default function ControlsScreen() {
           <SettingRow
             icon="shield-checkmark-outline"
             label="Block ads"
-            description={blockWebsiteAds ? "In ordo's browser. If a page doesn't work as expected, allow ads from its page menu."
-              : "Off for all websites. Your saved site exceptions are kept."}
-            unavailableReason={Platform.OS === "web" ? "Ad blocking is available in the Android and iOS apps." : undefined}
+            unavailableReason={Platform.OS === "web" ? "Available on Android and iOS." : undefined}
             right={<Toggle value={blockWebsiteAds} onValueChange={setBlockWebsiteAds} />}
             rightFit="content"
           />
           {Platform.OS !== "web" ? (
             <SettingRow icon="shield-outline" label="Site exceptions" showChevron
-              description={allowedSiteCount > 0 ? `${allowedSiteCount} ${allowedSiteCount === 1 ? "site allows" : "sites allow"} ads. Review or remove exceptions.`
-                : "Allow ads on individual websites from their page menu."}
+              value={String(allowedSiteCount)}
               onPress={() => setExceptionsOpen(true)} />
           ) : null}
           <SettingRow

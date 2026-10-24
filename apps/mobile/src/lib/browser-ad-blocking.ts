@@ -62,6 +62,51 @@ export function normalizeAdBlockAllowedHosts(value: unknown): string[] {
   }))];
 }
 
+/** Controls accepts a hostname or pasted HTTP(S) URL, and saves only its host. */
+export function adBlockExceptionHost(input: string): string | null {
+  const value = input.trim();
+  if (!value) return null;
+  if (value.includes("://") && !/^https?:\/\//i.test(value)) return null;
+  try {
+    const parsed = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`);
+    if ((parsed.protocol !== "https:" && parsed.protocol !== "http:") || parsed.username || parsed.password) return null;
+    return normalizeAdBlockAllowedHosts([parsed.hostname])[0] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Stop ad navigations without blocking ordinary redirects or direct visits. */
+export function shouldBlockAdNavigation(url: string, pageUrl: string, enabled: boolean, allowedHosts: readonly string[]): boolean {
+  if (!enabled) return false;
+  const page = adBlockSiteHost(pageUrl);
+  const target = adBlockSiteHost(url);
+  if (!page || !target || normalizeAdBlockAllowedHosts(allowedHosts).includes(page)) return false;
+  return AD_HOSTS.some((host) => (target === host || target.endsWith(`.${host}`))
+    && page !== host && !page.endsWith(`.${host}`));
+}
+
+/** MangaFire places an invisible ad link above the page. Scope this cosmetic
+ * rule to its reported popup overlay; regular links and popup APIs stay native.
+ * See uBlockOrigin/uAssets#33585 and docs/browser-ad-blocking.md. */
+export function browserAdBlockingPageScript(enabled: boolean, allowedHosts: readonly string[]): string {
+  return `(function(){
+    var host = window.location.hostname.toLowerCase().replace(/\\.+$/, '');
+    var active = ${enabled} && (host === 'mangafire.to' || host === 'www.mangafire.to')
+      && ${JSON.stringify(normalizeAdBlockAllowedHosts(allowedHosts))}.indexOf(host) < 0;
+    var id = '__ordo_ad_popup_overlay_rule';
+    var style = document.getElementById(id);
+    if (!active) { if (style) style.remove(); return; }
+    if (style) return;
+    var root = document.head || document.documentElement;
+    if (!root) return;
+    style = document.createElement('style');
+    style.id = id;
+    style.textContent = 'a[href][target="_blank"][style*="z-index: 99999" i], a[href][target="_blank"][style*="z-index:99999" i] { display: none !important; }';
+    root.appendChild(style);
+  })(); true;`;
+}
+
 function escapeRuleHost(host: string): string {
   return host.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -75,8 +120,8 @@ function hostUrlPattern(host: string, includeSubdomains: boolean): string {
 export function browserAdBlockingRules(enabled: boolean, allowedHosts: readonly string[]): string {
   if (!enabled) return "";
   const allowed = normalizeAdBlockAllowedHosts(allowedHosts);
-  // No document rules: top-level navigation, forms, downloads and frame
-  // documents always load. Ad scripts/images inside frames are still filtered.
+  // Content rules exclude documents so forms, downloads and frames retain
+  // native behavior. A separate navigation policy stops known ad redirects.
   const webKitRules = AD_HOSTS.map((host) => ({
     trigger: {
       "url-filter": hostUrlPattern(host, true),

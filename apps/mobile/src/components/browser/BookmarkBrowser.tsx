@@ -32,7 +32,7 @@ import {
   pageHostFromWebViewUrl,
   isCancelledWebViewError,
 } from "../../lib/in-app-browser";
-import { adBlockSiteHost, browserAdBlockingRules } from "../../lib/browser-ad-blocking";
+import { browserAdBlockingPageScript, browserAdBlockingRules, shouldBlockAdNavigation } from "../../lib/browser-ad-blocking";
 import { haptics } from "../../lib/haptics";
 import { WEBSITE_FORCE_DARK_SCRIPT } from "../../lib/website-force-dark";
 import { useSettingsStore } from "../../store/settings";
@@ -70,10 +70,13 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     const forceWebsiteDark = useSettingsStore((s) => s.forceWebsiteDark) && !pageStyle;
     const blockWebsiteAds = useSettingsStore((s) => s.blockWebsiteAds);
     const adBlockAllowedHosts = useSettingsStore((s) => s.adBlockAllowedHosts);
-    const setSiteAdsAllowed = useSettingsStore((s) => s.setSiteAdsAllowed);
-    const [currentSiteHost, setCurrentSiteHost] = useState(() => adBlockSiteHost(url));
+    const currentPageUrl = useRef(url);
     const adBlockingRules = useMemo(
       () => browserAdBlockingRules(blockWebsiteAds, adBlockAllowedHosts),
+      [blockWebsiteAds, adBlockAllowedHosts],
+    );
+    const adBlockingPageScript = useMemo(
+      () => browserAdBlockingPageScript(blockWebsiteAds, adBlockAllowedHosts),
       [blockWebsiteAds, adBlockAllowedHosts],
     );
     const webRef = useRef<WebView>(null);
@@ -93,16 +96,20 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     const injected = useMemo(
       () =>
         browserInjectedJavaScript(
-          `${forceWebsiteDark ? WEBSITE_FORCE_DARK_SCRIPT : "true;"}\n${pageStyle ? browserPageStyleScript(pageStyle) : ""}`,
+          `${forceWebsiteDark ? WEBSITE_FORCE_DARK_SCRIPT : "true;"}\n${adBlockingPageScript}\n${pageStyle ? browserPageStyleScript(pageStyle) : ""}`,
           chromeBackground,
         ),
-      [forceWebsiteDark, chromeBackground, pageStyle],
+      [forceWebsiteDark, chromeBackground, pageStyle, adBlockingPageScript],
     );
     const coverBlank = browserBlankCoverVisible(loading, progress, !!error);
 
     useEffect(() => {
       if (pageStyle) webRef.current?.injectJavaScript(browserPageStyleScript(pageStyle));
     }, [pageStyle]);
+
+    useEffect(() => {
+      webRef.current?.injectJavaScript(adBlockingPageScript);
+    }, [adBlockingPageScript]);
 
     const finishLoad = useCallback(() => {
       refreshingRef.current = false;
@@ -153,7 +160,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
 
     useEffect(() => {
       beginLoad();
-      setCurrentSiteHost(adBlockSiteHost(url));
+      currentPageUrl.current = url;
     }, [url, forceWebsiteDark, beginLoad]);
 
     useEffect(() => {
@@ -168,6 +175,9 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
 
     const handleShouldStart = useCallback(
       (request: { url: string; isTopFrame?: boolean }) => {
+        const settings = useSettingsStore.getState();
+        if (request.isTopFrame !== false && shouldBlockAdNavigation(request.url, currentPageUrl.current,
+          settings.blockWebsiteAds, settings.adBlockAllowedHosts)) return false;
         const action = webViewRequestAction(request.url, request.isTopFrame !== false);
         if (action === "allow") return true;
         if (action === "external") {
@@ -180,6 +190,8 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
 
     const handleOpenWindow = useCallback((event: { nativeEvent: { targetUrl: string } }) => {
       const next = event.nativeEvent.targetUrl;
+      const settings = useSettingsStore.getState();
+      if (shouldBlockAdNavigation(next, currentPageUrl.current, settings.blockWebsiteAds, settings.adBlockAllowedHosts)) return;
       const action = webViewRequestAction(next, true);
       if (action === "allow") {
         webRef.current?.injectJavaScript(
@@ -195,7 +207,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     const handleNav = useCallback(
       (nav: WebViewNavigation) => {
         canGoBackRef.current = nav.canGoBack;
-        setCurrentSiteHost(adBlockSiteHost(nav.url));
+        if (!nav.loading) currentPageUrl.current = nav.url;
         if (!active) return;
         onPageHost?.(pageHostFromWebViewUrl(nav.url));
         onPageUrl?.(nav.url);
@@ -347,13 +359,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
               icon="cloud-offline-outline"
               title="Couldn't load this page"
               message={error}
-              action={<View style={{ gap: spacing[8] }}>
-                <Button label="Retry" variant="secondary" onPress={handleRefresh} />
-                {Platform.OS !== "web" && blockWebsiteAds && currentSiteHost && !adBlockAllowedHosts.includes(currentSiteHost) ? (
-                  <Button label="Allow ads for this site" variant="ghost"
-                    onPress={() => setSiteAdsAllowed(currentSiteHost, true)} />
-                ) : null}
-              </View>}
+              action={<Button label="Retry" variant="secondary" onPress={handleRefresh} />}
             />
           </View>
         ) : null}

@@ -98,7 +98,8 @@ export function SettingRow({
       ) : null}
       {unavailable ? <UnavailableLabel /> : right ? (
         <View style={rightFit === "content" ? styles.trailingHug : [styles.trailing, { width: width < 380 ? 112 : layout.settingsControlWidth }]}>
-          {React.isValidElement(right) ? React.cloneElement(right as React.ReactElement<{ accessibilityLabel?: string }>, { accessibilityLabel: label }) : right}
+          {React.isValidElement<{ accessibilityLabel?: string }>(right)
+            ? React.cloneElement(right, { accessibilityLabel: right.props.accessibilityLabel ?? label }) : right}
         </View>
       ) : null}
       {showChevron && !unavailable ? (

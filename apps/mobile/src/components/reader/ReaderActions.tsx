@@ -16,9 +16,7 @@ import { EditTagsSheet } from "../tags/EditTagsSheet";
 import { ReminderCustomPanel } from "../bookmarks/ReminderCustomPanel";
 import { REMINDER_MENU_WIDTH, ReminderPresetItems, useSaveReminder } from "../bookmarks/ReminderFlow";
 import { useServerInfo } from "../../hooks/queries";
-import { adBlockSiteHost } from "../../lib/browser-ad-blocking";
-import { BrowserAdBlockingMenu } from "../browser/BrowserAdBlockingMenu";
-import { useSettingsStore } from "../../store/settings";
+import { BrowserAdBlockingToggle } from "../browser/BrowserAdBlockingToggle";
 import { useTheme } from "../../theme/ThemeProvider";
 import { spacing } from "../../theme/tokens";
 import { bookmarkCanBeArticle, bookmarkIsArticle } from "../../lib/bookmark-reader";
@@ -41,7 +39,6 @@ interface ReaderActionsProps {
   hasHtml: boolean;
   hasContents: boolean;
   website: boolean;
-  websiteUrl: string;
   canRead: boolean;
   onOpen: () => void;
   onContents: () => void;
@@ -59,17 +56,14 @@ interface ReaderActionsProps {
  * navigating a page or closing a dialog must not reconcile the article pane,
  * its header, or the other already-used reader panels. */
 export const ReaderActions = React.memo(React.forwardRef<ReaderActionsHandle, ReaderActionsProps>(function ReaderActions({
-  bookmark, highlights, hasHtml, hasContents, website, websiteUrl, canRead, onOpen, onContents,
+  bookmark, highlights, hasHtml, hasContents, website, canRead, onOpen, onContents,
   onShare, onCopyLink, onOpenOriginal, onOpenExternal, onRefresh, onRead, onClassify, onRemoveHighlight,
   workScheduler,
 }, ref) {
   const { palette } = useTheme();
-  const blockWebsiteAds = useSettingsStore((s) => s.blockWebsiteAds);
-  const siteHost = adBlockSiteHost(websiteUrl);
-  const siteAdsAllowed = useSettingsStore((s) => !!siteHost && s.adBlockAllowedHosts.includes(siteHost));
   const { data: serverInfo } = useServerInfo();
   const reminders = serverInfo?.reminders === true;
-  const [page, setPage] = useState<"actions" | "ads" | "highlights" | "tags" | "remind" | "remind-custom" | null>(null);
+  const [page, setPage] = useState<"actions" | "highlights" | "tags" | "remind" | "remind-custom" | null>(null);
   const [anchor, setAnchor] = useState<MenuAnchorRect | null>(null);
   const { prepared, prepare, retain } = usePreparedReaderOverlay(workScheduler);
   const close = useCallback(() => setPage(null), []);
@@ -93,10 +87,7 @@ export const ReaderActions = React.memo(React.forwardRef<ReaderActionsHandle, Re
         {hasContents ? <ContextMenuItem key="contents" icon="list-outline" label="Table of contents" onPress={() => run(callbacks.current.onContents)} /> : null}
         {hasHtml && !website ? <ContextMenuItem key="highlights" icon="color-fill-outline" label="Highlights" onPress={() => setPage("highlights")} /> : null}
         {website ? <ContextMenuItem key="refresh" icon="refresh-outline" label="Refresh" onPress={() => run(callbacks.current.onRefresh)} /> : null}
-        {website && Platform.OS !== "web" && siteHost ? <ContextMenuItem key="ads"
-          icon={blockWebsiteAds && !siteAdsAllowed ? "shield-checkmark-outline" : "shield-outline"}
-          label="Ad blocking" detail={!blockWebsiteAds ? "Off" : siteAdsAllowed ? "Off for site" : "On"}
-          onPress={() => setPage("ads")} /> : null}
+        {website && Platform.OS !== "web" ? <BrowserAdBlockingToggle key="ads" /> : null}
         <ContextMenuItem key="share" icon="share-social-outline" label={website ? "Share page" : "Share article"} onPress={() => run(callbacks.current.onShare)} />
         <ContextMenuItem key="copy-link" icon="link-outline" label="Copy link" onPress={() => run(callbacks.current.onCopyLink)} />
         <ContextMenuItem key="tags" icon="pricetags-outline" label="Edit tags" onPress={() => setPage("tags")} />
@@ -108,17 +99,16 @@ export const ReaderActions = React.memo(React.forwardRef<ReaderActionsHandle, Re
           : canBeArticle ? <ContextMenuItem key="classify" icon="reader-outline" label="Mark as article" onPress={() => run(() => callbacks.current.onClassify(true))} /> : null}
         <ContextMenuItem key="open" icon={website ? "open-outline" : "globe-outline"}
           label={website ? "Open in external browser" : "Open original"} onPress={() => run(website ? callbacks.current.onOpenExternal : callbacks.current.onOpenOriginal)} />
-      </>, [blockWebsiteAds, siteHost, siteAdsAllowed, canBeArticle, canRead, hasContents, hasHtml, isArticle, remindAt, reminders, run, website]);
+      </>, [canBeArticle, canRead, hasContents, hasHtml, isArticle, remindAt, reminders, run, website]);
 
   return <>
     <HeaderIconButton name="ellipsis-horizontal" color={palette.text}
       accessibilityLabel={website ? "More page actions" : "More article actions"}
       onPress={(rect) => { retain(); setAnchor(rect); setPage("actions"); onOpen(); }} />
-    <ContextMenu visible={page === "actions" || page === "remind" || page === "ads"} onDismiss={close} anchor={anchor}
+    <ContextMenu visible={page === "actions" || page === "remind"} onDismiss={close} anchor={anchor}
       width={reminders ? REMINDER_MENU_WIDTH : undefined} keepMounted={prepared}
-      sessionKey={bookmark.id} pageKey={page === "remind" ? "remind" : page === "ads" ? "ads" : "actions"}>
-      {page === "ads" ? <BrowserAdBlockingMenu siteHost={siteHost} onBack={showActions} onDone={close} />
-        : page === "remind" ? <ReminderPresetItems bookmark={bookmark} now={remindNow} busy={reminderBusy}
+      sessionKey={bookmark.id} pageKey={page === "remind" ? "remind" : "actions"}>
+      {page === "remind" ? <ReminderPresetItems bookmark={bookmark} now={remindNow} busy={reminderBusy}
         showBack onBack={() => setPage("actions")} onPick={saveReminder} onCustom={() => setPage("remind-custom")} /> : actionItems}
     </ContextMenu>
     <ReaderTagEditor visible={page === "tags"} bookmark={bookmark} onDismiss={close} />

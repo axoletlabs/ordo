@@ -355,7 +355,6 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
   const websiteViewRef = useRef(false);
   const [keptBrowserId, setKeptBrowserId] = useState<string | null>(null);
   const [pageHost, setPageHost] = useState<string | null>(null);
-  const [pageUrl, setPageUrl] = useState<string | null>(null);
 
   // Auto-mark read on open — filed and unfiled (folderId null) alike.
   // Completion is driven by reading progress, never by opening.
@@ -695,7 +694,6 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
   useEffect(() => {
     setSurface(initialSurface === "browser" ? "browser" : "auto");
     setPageHost(null);
-    setPageUrl(null);
   }, [bookmarkId, initialSurface]);
 
   // The website view sits below the app header: never leave it half-hidden.
@@ -1165,7 +1163,6 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
       )}
       <ReaderActions key={bookmark.id} ref={actionsRef} bookmark={bookmark} highlights={highlights}
         workScheduler={readerWork}
-        websiteUrl={pageUrl ?? bookmark.url}
         hasHtml={hasHtml} hasContents={hasContents} website={showWebsiteView} canRead={showReadInOrdo}
         onOpen={dismissSelectionMenu} onContents={() => contentsRef.current?.open()}
         onShare={handleShare} onCopyLink={handleCopyLink} onOpenOriginal={handleOpenOriginal}
@@ -1310,7 +1307,6 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
             url={bookmark.url}
             active={showWebsiteView}
             onPageHost={setPageHost}
-            onPageUrl={setPageUrl}
           />
         </View>
         ) : null}
