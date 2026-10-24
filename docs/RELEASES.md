@@ -111,8 +111,12 @@ does not replace Development because each has a different package ID.
 
 ## Ship a version
 
-Release notes are for people using the app. Keep each release to a few short
-bullets describing visible changes, useful improvements, and fixes. Omit build
+Release notes are for people using the app. Start each release body with a short
+headline (`###`), then a plain-language introduction explaining what changed.
+Follow with a few named highlights: a bold title and one short explanation per
+list item. Use small sections for remaining fixes or necessary installation
+guidance. Don't repeat highlights in a second list. Describe visible changes
+and useful improvements in terms of what the person can do or notice. Omit build
 numbers, branch merges, audits, test infrastructure, dependency details, and
 unchanged compatibility information. Include installation guidance only when
 the user must take action or could lose local data. Keep `CHANGELOG.md` and the

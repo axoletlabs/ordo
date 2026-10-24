@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { OverlayPortal, useOverlayBlocked } from "./overlay-host";
 import { useTheme } from "../../theme/ThemeProvider";
@@ -55,6 +56,8 @@ export interface FloatingPanelProps {
   maxWidth?: number;
   /** Bottom sheets reuse the dialog's focus, Back, and retained exit lifecycle. */
   presentation?: "dialog" | "bottom-sheet";
+  /** Keep a release reader's sheet height stable as its content changes. */
+  sheetSizing?: "content" | "expanded";
   onShow?: () => void | ReturnType<typeof setTimeout> | (() => void);
   /** Size the card to its children instead of stretching toward `maxWidth`. */
   fitContent?: boolean;
@@ -92,6 +95,7 @@ function FloatingPanelSurface({
   style,
   maxWidth = layout.overlayMaxWidth,
   presentation = "dialog",
+  sheetSizing = "content",
   onShow,
   fitContent = false,
   dismissible = true,
@@ -104,6 +108,7 @@ function FloatingPanelSurface({
 }: FloatingPanelProps) {
   const { palette } = useTheme();
   const sheet = presentation === "bottom-sheet";
+  const expandedSheet = sheet && sheetSizing === "expanded";
   const panelSurface = sheet ? palette.surfaceContainerLow : palette.surfaceContainerHigh;
   const titleId = React.useId();
   const onShowRef = React.useRef(onShow);
@@ -295,17 +300,23 @@ function FloatingPanelSurface({
       ? React.cloneElement(action, { topSpacing: 16 }) : action)}
   </View>;
   const sheetBodyPadding = { paddingHorizontal: sheetInset, paddingVertical: spacing[24] };
-  const sheetBodyStyle = { flexShrink: 1, maxHeight: Math.max(0, heightLimit - sheetHeaderHeight - sheetActionsHeight), backgroundColor: panelSurface };
+  const sheetBodyStyle = { flex: expandedSheet ? 1 : undefined, flexShrink: 1,
+    maxHeight: Math.max(0, heightLimit - sheetHeaderHeight - sheetActionsHeight), backgroundColor: panelSurface };
   // In extremely short windows/above a keyboard, scroll the whole sheet
   // rather than letting its fixed chrome hide the notes or dismissal action.
-  const sheetScrollAll = scrollBody && heightLimit < 280;
+  const sheetScrollAll = scrollBody && (heightLimit < 280
+    || expandedSheet && heightLimit - sheetHeaderHeight - sheetActionsHeight < spacing[96]);
   const sheetContent = sheetScrollAll
     ? <ThemedScrollView key={scrollResetKey} testID="material-sheet-body" keyboardShouldPersistTaps="handled" nestedScrollEnabled
-        style={{ flexShrink: 1, maxHeight: heightLimit, backgroundColor: panelSurface }}>
+        style={{ flex: expandedSheet ? 1 : undefined, flexShrink: 1, maxHeight: heightLimit, backgroundColor: panelSurface }}>
         {sheetHeader}<View style={sheetBodyPadding}>{body}</View>{sheetActions}
       </ThemedScrollView>
     : <>{sheetHeader}
-        {scrollBody ? <ThemedScrollView key={scrollResetKey} testID="material-sheet-body" keyboardShouldPersistTaps="handled" nestedScrollEnabled
+        {scrollBody ? expandedSheet ? <View style={sheetBodyStyle}>
+          <ThemedScrollView key={scrollResetKey} testID="material-sheet-body" keyboardShouldPersistTaps="handled" nestedScrollEnabled
+            style={{ flex: 1 }} contentContainerStyle={sheetBodyPadding}>{body}</ThemedScrollView>
+          <SheetScrollFades color={panelSurface} />
+        </View> : <ThemedScrollView key={scrollResetKey} testID="material-sheet-body" keyboardShouldPersistTaps="handled" nestedScrollEnabled
           style={sheetBodyStyle} contentContainerStyle={sheetBodyPadding}>{body}</ThemedScrollView>
           : <View testID="material-sheet-body" style={[sheetBodyStyle, sheetBodyPadding]}>{body}</View>}
         {sheetActions}
@@ -365,6 +376,7 @@ function FloatingPanelSurface({
                 padding: sheet ? 0 : panelPadding,
                 minWidth: fitContent ? Math.min(280, dialogWidth) : undefined,
                 maxHeight: heightLimit,
+                height: expandedSheet ? heightLimit : undefined,
                 backgroundColor: Platform.OS === "web" ? "transparent" : panelSurface,
                 ...corners,
                 ...(sheet ? { overflow: "hidden" as const } : {}),
@@ -382,7 +394,7 @@ function FloatingPanelSurface({
               isolation: "auto",
               overflow: "hidden",
             } as unknown as ViewStyle, scrimStyle]} /> : null}
-            <Animated.View style={[{ flexShrink: 1 }, Platform.OS === "web" ? scrimStyle : null]}>
+            <Animated.View style={[{ flexShrink: 1 }, expandedSheet ? { flex: 1 } : null, Platform.OS === "web" ? scrimStyle : null]}>
             <PanelTitleContext.Provider value={titleId}>
             <InputSurfaceContext.Provider value={panelSurface}>
               {sheet ? sheetContent : <>
@@ -400,6 +412,22 @@ function FloatingPanelSurface({
       </InputFocusScopeContext.Provider>
     </OverlayPortal>
   );
+}
+
+/** Keep partially scrolled lines from colliding with the sheet's fixed chrome.
+ * Body padding leaves the first and last lines clear of these 24dp fades. */
+function SheetScrollFades({ color }: { color: string }) {
+  const id = React.useId().replace(/:/g, "");
+  return <View pointerEvents="none" aria-hidden importantForAccessibility="no-hide-descendants" style={StyleSheet.absoluteFill}>
+    {(["top", "bottom"] as const).map((edge) => <Svg key={edge} width="100%" height={spacing[24]}
+      style={{ position: "absolute", [edge]: 0 }}>
+      <Defs><LinearGradient id={`${id}-${edge}`} x1="0" y1="0" x2="0" y2="1">
+        <Stop offset="0" stopColor={color} stopOpacity={edge === "top" ? 1 : 0} />
+        <Stop offset="1" stopColor={color} stopOpacity={edge === "top" ? 0 : 1} />
+      </LinearGradient></Defs>
+      <Rect width="100%" height="100%" fill={`url(#${id}-${edge})`} />
+    </Svg>)}
+  </View>;
 }
 
 /** Run opening callbacks where the portal's real blocking context is known.

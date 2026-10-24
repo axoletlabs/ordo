@@ -117,7 +117,7 @@ function CommandLine({ text }: { text: string }) {
   );
 }
 
-type InlineVariant = "callout" | "body" | "title3" | "headline";
+type InlineVariant = "callout" | "body" | "title3" | "headline" | "bodyMedium";
 
 const STRONG_FACE = {
   fontFamily: resolveFont("sans", "700"),
@@ -266,6 +266,25 @@ function Paragraph({ inlines, variant }: { inlines: ChangelogInline[]; variant: 
 
 function NoteList({ items, nested }: { items: ChangelogListItem[]; nested?: boolean }) {
   const { palette } = useTheme();
+  // Named highlights use ordinary Markdown, so the same notes remain readable
+  // on GitHub. Keep them together on one tonal surface, not a card per point.
+  const highlights = !nested && items.length > 0 && items.every((item) =>
+    item.kind === "bullet" && item.blocks[0]?.type === "paragraph" && item.blocks[0].inlines[0]?.type === "strong");
+  if (highlights) {
+    return <View testID="changelog-highlights" style={[styles.highlights, { backgroundColor: palette.surfaceContainerHigh }]}>
+      {items.map((item, index) => {
+        const first = item.blocks[0];
+        if (first.type !== "paragraph" || first.inlines[0]?.type !== "strong") return null;
+        const description = first.inlines.slice(1).map((part, partIndex) => partIndex === 0 && part.type === "text"
+          ? { ...part, text: part.text.replace(/^\s*[—–:-]?\s*/, "") } : part);
+        return <View key={index} style={styles.highlight}>
+          <InlineRun inlines={first.inlines[0].inlines} variant="headline" />
+          {description.length ? <InlineRun inlines={description} variant="bodyMedium" color="secondary" /> : null}
+          {item.blocks.slice(1).map((block, blockIndex) => <BlockView key={blockIndex} block={block} nested />)}
+        </View>;
+      })}
+    </View>;
+  }
   return (
     <View testID="changelog-list" style={[styles.list, nested ? styles.nestedList : null]}>
       {items.map((item, index) => (
@@ -460,13 +479,13 @@ function ReleaseSelector({
   );
 }
 
-function ReleaseBody({ release }: { release: ChangelogRelease }) {
-  const blocks = useMemo(() => parseChangelogBody(release.body), [release.body]);
-  return (
-    <View style={styles.notesContent}>
-      <Notes blocks={blocks} />
-    </View>
-  );
+function inlineText(inlines: ChangelogInline[]): string {
+  return inlines.map((part) => {
+    if (part.type === "text" || part.type === "code") return part.text;
+    if (part.type === "break") return " ";
+    if (part.type === "image") return part.alt;
+    return inlineText(part.inlines);
+  }).join("");
 }
 
 function ChangelogSheetBody({
@@ -480,7 +499,6 @@ function ChangelogSheetBody({
   initialTag?: string;
   onShow?: () => void;
 }) {
-  const { expressive } = useTheme();
   const changelog = useChangelog();
   const releases = changelog.releases;
   const [tag, setTag] = useState<string | null>(initialTag ?? null);
@@ -491,6 +509,15 @@ function ChangelogSheetBody({
 
   const selected =
     releases?.find((release) => release.tagName === tag) ?? releases?.[0] ?? null;
+  const { headline, blocks } = useMemo(() => {
+    const parsed = parseChangelogBody(selected?.body ?? "");
+    const first = parsed[0];
+    const hasHeadline = first?.type === "heading" && first.level <= 3;
+    return { headline: hasHeadline ? inlineText(first.inlines) : null, blocks: hasHeadline ? parsed.slice(1) : parsed };
+  }, [selected?.body]);
+  const date = selected && !Number.isNaN(Date.parse(selected.publishedAt))
+    ? new Date(selected.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : null;
+  const releaseDetails = [headline && selected ? releaseName(selected.version) : null, date].filter(Boolean).join(" · ");
   let body: ReactNode;
   if (releases == null) {
     body = changelog.errorStatus == null ? (
@@ -510,22 +537,26 @@ function ChangelogSheetBody({
       <Text variant="body" color="secondary">Published updates will show up here.</Text>
     );
   } else {
-    body = <ReleaseBody release={selected} />;
+    body = <View style={styles.notesContent}><Notes blocks={blocks} /></View>;
   }
 
   return (
     <FloatingPanel visible={visible} onDismiss={onDismiss} onShow={onShow} maxWidth={640}
-      presentation="bottom-sheet" scrollResetKey={selected?.tagName}>
-      <PanelHeader title="What's new" titleVariant={expressive ? "headlineMedium" : "headlineSmall"} align="left"
+      presentation="bottom-sheet" sheetSizing="expanded" scrollResetKey={selected?.tagName}>
+      <PanelHeader title="What's new" titleVariant="labelLarge" titleColor="accent" align="left"
         accessory={selected ? (
-          <View style={styles.releaseNavigation}>
-            {releases && releases.length > 1 ? (
-              <ReleaseSelector releases={releases} selected={selected} onSelect={setTag} />
-            ) : <Text variant="bodyMedium" color="secondary">{releaseName(selected.version)}</Text>}
+          <View style={styles.releaseHeading}>
+            <Text variant="headlineSmall" accessibilityRole="header" numberOfLines={2}>{headline || releaseName(selected.version)}</Text>
+            {releaseDetails ? <Text variant="bodyMedium" color="secondary" numberOfLines={1}>{releaseDetails}</Text> : null}
           </View>
         ) : undefined} />
       {body}
-      <PanelActions confirmLabel="Got it" size="md" fullWidth onConfirm={onDismiss} />
+      <PanelActions confirmLabel="Got it" size="md" fullWidth onConfirm={onDismiss}>
+        {selected && releases && releases.length > 1 ? <View style={styles.releaseNavigation}>
+          <Text variant="titleSmall" color="secondary">Earlier updates</Text>
+          <ReleaseSelector releases={releases} selected={selected} onSelect={setTag} />
+        </View> : null}
+      </PanelActions>
     </FloatingPanel>
   );
 }
@@ -558,6 +589,9 @@ const styles = StyleSheet.create({
   },
   notesContent: { paddingBottom: spacing[8] },
   notes: { gap: spacing[16] },
+  highlights: { padding: spacing[16], borderRadius: radius["2xl"], gap: spacing[24] },
+  highlight: { gap: spacing[4] },
+  releaseHeading: { marginTop: spacing[8], width: "100%", gap: spacing[4] },
   sectionHeading: { marginTop: spacing[16] },
   empty: { gap: spacing[16] },
   prose: { gap: spacing[10] },
@@ -581,7 +615,7 @@ const styles = StyleSheet.create({
   },
   bullet: { width: 5, height: 5, borderRadius: radius.full },
   listCopy: { flex: 1, minWidth: 0, gap: spacing[8] },
-  releaseNavigation: { marginTop: spacing[12], gap: spacing[8], width: "100%" },
+  releaseNavigation: { paddingTop: spacing[8], width: "100%" },
   checkbox: {
     width: 14,
     height: 14,
