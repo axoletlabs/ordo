@@ -101,7 +101,10 @@ export default function ServerScreen() {
                     <Text variant="bodySmall" color={serverInfo.error ? "danger" : "secondary"}>
                       {statusLabel}{serverInfo.data ? ` · ${releaseName(serverInfo.data.version)}` : ""}
                     </Text>
-                    {serverInfo.isFetching ? <Spinner size={16} color={palette.onSurfaceVariant} /> : null}
+                    {/* Fixed slot: a background refresh spinner must not nudge the status text. */}
+                    <View style={styles.statusSpinner}>
+                      {serverInfo.isFetching ? <Spinner size={16} color={palette.onSurfaceVariant} /> : null}
+                    </View>
                   </View>
                 </View>
               </View>
@@ -403,6 +406,7 @@ const styles = StyleSheet.create({
     gap: spacing[8],
     flexShrink: 0,
   },
+  statusSpinner: { width: 16, height: 16, alignItems: "center", justifyContent: "center" },
   fields: { gap: spacing[16] },
   hostChange: { width: "100%", gap: spacing[6], alignItems: "center" },
 });

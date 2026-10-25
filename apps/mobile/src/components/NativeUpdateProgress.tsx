@@ -53,6 +53,7 @@ export function NativeUpdateProgress() {
   return (
     <FloatingPanel
       visible={visible}
+      pageKey={downloading ? "downloading" : downloadFailed ? "failed" : installUnfinished ? "install-error" : "ready"}
       onDismiss={close}
       dismissible
       maxWidth={layout.overlayConfirmWidth}

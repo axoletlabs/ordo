@@ -130,8 +130,14 @@ export function SelfHostFlow({
 
   return (
     <>
-      {!pendingUrl ? (
-      <FloatingPanel visible={visible} onDismiss={close} dismissible={!switching}>
+      {/* Stay mounted while the signed-in switch confirm is up so the flow's
+        exit keeps its contents and the draft address survives a cancel. */}
+      <FloatingPanel
+        visible={visible && !pendingUrl}
+        onDismiss={close}
+        dismissible={!switching}
+        pageKey={step}
+      >
         <ThemedScrollView keyboardShouldPersistTaps="handled">
           <PanelHeader
             title={step === "intro" ? "Use your own server" : "Server address"}
@@ -203,7 +209,6 @@ export function SelfHostFlow({
             loading={step === "address" && (confirming || busy)} cancelDisabled={switching} />
         </ThemedScrollView>
       </FloatingPanel>
-      ) : null}
 
       <ConfirmDialog
         visible={Boolean(pendingUrl)}

@@ -23,7 +23,7 @@ import {
 import { useWindowDimensions } from "react-native";
 import { useSystemColorScheme } from "../../theme/use-system-color-scheme";
 import { useSceneColumnInsets } from "../../hooks/use-scene-column-insets";
-import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useComposedEventHandler, useSharedValue, type SharedValue } from "react-native-reanimated";
+import Animated, { useAnimatedScrollHandler, useAnimatedStyle, useComposedEventHandler, useSharedValue, withSpring, type SharedValue } from "react-native-reanimated";
 import { StatusBar, setStatusBarStyle } from "expo-status-bar";
 import { useAppRouter as useRouter } from "../../hooks/use-app-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -104,6 +104,9 @@ import {
   type ReadingProgress,
 } from "../../lib/reading-progress";
 import { fabContentPadding } from "../../lib/fab-layout";
+import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
+import { useSurfaceSize } from "../../hooks/use-surface-size";
+import { useOverlayPage } from "../../hooks/use-overlay-page";
 import { useReducedMotionPreference } from "../../hooks/use-reduced-motion-preference";
 import { createLatestWriteQueue } from "../../lib/latest-write-queue";
 import { captureSessionScope, isSessionScopeCurrent, type SessionScope } from "../../lib/session-scope";
@@ -189,6 +192,37 @@ function ReaderProgressBar({ animatedValue, labelRef, initialValue }: {
     <LinearProgress wavy={false} label="Reading progress" value={progress} animatedValue={animatedValue}
       style={{ maxWidth: layout.maxReaderWidth, alignSelf: "center" }} />
   );
+}
+
+/** Fades the reading-progress track without unmounting it: the chrome
+ * overlay's measured height — and with it the article's top padding — stays
+ * stable across browser/reader toggles, and hidden frames leave the
+ * accessibility tree immediately. */
+function ChromeTrackFade({ visible, children }: { visible: boolean; children: React.ReactNode }) {
+  const motion = useMaterialMotion();
+  const opacity = useSharedValue(0);
+  const [activated, setActivated] = useState(visible);
+  if (visible && !activated) setActivated(true);
+  useLayoutEffect(() => {
+    opacity.value = motion.reducedMotion ? Number(visible) : withSpring(Number(visible), materialMotion.effects.fast);
+  }, [visible, motion.reducedMotion, opacity]);
+  const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return activated ? (
+    <Animated.View pointerEvents="none" aria-hidden={!visible} accessibilityElementsHidden={!visible}
+      importantForAccessibility={visible ? "auto" : "no-hide-descendants"} style={style}>
+      {children}
+    </Animated.View>
+  ) : null;
+}
+
+/** Trailing scroll space under the article. Springs between the plain bottom
+ * padding and the contents-FAB clearance so the scroll range grows smoothly
+ * when the contents trigger appears, instead of a content-padding jump. */
+function ReadingEndSpacer({ height }: { height: number }) {
+  const size = useSurfaceSize(Math.max(0, height), { initialHeight: 0 });
+  return <Animated.View aria-hidden accessibilityElementsHidden
+    importantForAccessibility="no-hide-descendants"
+    style={[{ flexShrink: 0 }, size]} />;
 }
 
 /**
@@ -662,14 +696,26 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
   const showReadInOrdo = !!bookmark && canReadInOrdo(bookmark);
   const browserMounted = showWebsiteView || (!!bookmarkId && keptBrowserId === bookmarkId);
   websiteViewRef.current = showWebsiteView;
+  // Fade through the existing surface switch. Only the committed mode is
+  // retained, so browser parking and article viewport/restore ownership keep
+  // their original mount semantics instead of layering two live scrollers.
+  const surfacePage = useOverlayPage(true, showWebsiteView ? "website" : "article", showWebsiteView);
+  const displayedWebsiteView = surfacePage.content;
+  const surfaceRef = useRef<View>(null);
+  useLayoutEffect(() => {
+    if (Platform.OS === "web" && surfaceRef.current) (surfaceRef.current as unknown as HTMLElement).inert = surfacePage.leaving;
+  }, [surfacePage.leaving, loading, bookmark?.id]);
   const palette = showWebsiteView ? appPalette : readerPalette;
   const hasContents = articleHeadings.length >= 3 && hasContent && !showWebsiteView;
   const contentsFabBottom = spacing[20] + (safeBottom ? insets.bottom : 0);
-  // Reserve clearance even while selection or the contents panel hides the FAB,
-  // so opening/dismissing overlays never changes the article's scroll range.
-  const readerBottomPadding = hasContents
-    ? fabContentPadding(insets.bottom, contentsFabBottom, spacing[8])
-    : spacing[16] + (safeBottom ? insets.bottom : 0);
+  // Base scroll padding stays constant; the contents-FAB clearance animates
+  // in a trailing spacer (ReadingEndSpacer) so the scroll range never jumps
+  // when headings arrive. Clearance is reserved even while selection or the
+  // contents panel hides the FAB, so overlays never change the scroll range.
+  const readerBasePadding = spacing[16] + (safeBottom ? insets.bottom : 0);
+  const readerFabClearance = hasContents
+    ? Math.max(0, fabContentPadding(insets.bottom, contentsFabBottom, spacing[8]) - readerBasePadding)
+    : 0;
   const websiteChrome = forceWebsiteDark
     ? currentAppPalette("dark").background
     : palette.background;
@@ -740,8 +786,8 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
 
   const handleContentsRef = useCallback((handle: ReaderContentsHandle | null) => {
     contentsRef.current = handle;
-    // Selection temporarily removes the Contents trigger. A remounted trigger
-    // can prepare immediately if the article's one-time ready event already ran.
+    // Newly available headings can prepare the trigger after the article's
+    // one-time ready event; transient selections keep its tree mounted.
     if (htmlReadyRef.current) handle?.prepare();
   }, []);
 
@@ -1247,10 +1293,10 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
         titleAccessibilityHint={bookmark ? "Copies the link." : undefined}
       />
 
-      {hasContent && !showWebsiteView ? (
+      <ChromeTrackFade visible={hasContent && !showWebsiteView}>
         <ReaderProgressBar key={bookmark?.id ?? "article"} animatedValue={progressSV} labelRef={progressLabelRef}
           initialValue={bookmark && currentArticleRef.current?.id === bookmark.id ? displayedProgressRef.current : 0} />
-      ) : null}
+      </ChromeTrackFade>
       </Animated.View>
 
       {loading ? (
@@ -1289,28 +1335,31 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
           />
         </ScreenContent>
       ) : (
-        <>
+        <Animated.View ref={surfaceRef} style={[{ flex: 1 }, surfacePage.style]} pointerEvents={surfacePage.leaving ? "none" : "auto"}
+          aria-hidden={surfacePage.leaving} accessibilityElementsHidden={surfacePage.leaving}
+          importantForAccessibility={surfacePage.leaving ? "no-hide-descendants" : "auto"}>
         {browserMounted ? (
         <View
           collapsable={false}
           style={[
             styles.browserPane,
             { backgroundColor: websiteChrome, paddingLeft: insets.left, paddingRight: insets.right, paddingTop: chromeHeight },
-            !showWebsiteView && styles.browserParked,
+            !displayedWebsiteView && styles.browserParked,
           ]}
-          pointerEvents={showWebsiteView ? "auto" : "none"}
-          accessibilityElementsHidden={!showWebsiteView}
-          importantForAccessibility={showWebsiteView ? "yes" : "no-hide-descendants"}
+          pointerEvents={displayedWebsiteView && !surfacePage.leaving ? "auto" : "none"}
+          aria-hidden={!displayedWebsiteView || surfacePage.leaving}
+          accessibilityElementsHidden={!displayedWebsiteView || surfacePage.leaving}
+          importantForAccessibility={displayedWebsiteView && !surfacePage.leaving ? "yes" : "no-hide-descendants"}
         >
           <BookmarkBrowser
             ref={browserRef}
             url={bookmark.url}
-            active={showWebsiteView}
+            active={displayedWebsiteView}
             onPageHost={setPageHost}
           />
         </View>
         ) : null}
-        {!showWebsiteView ? (
+        {!displayedWebsiteView ? (
         <View style={styles.scrollViewport}>
           <ThemedScrollView
             key={bookmark.id}
@@ -1328,7 +1377,7 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
               // The chrome is an overlay: pad the content so it starts below
               // the bar and scrolls underneath it once the bar slides away.
               paddingTop: chromeHeight + spacing[12],
-              paddingBottom: readerBottomPadding,
+              paddingBottom: readerBasePadding,
             }}
           >
             <ScreenContent maxWidth={layout.maxReaderWidth} alignTo={embedded ? "parent" : "scene"} style={styles.body}>
@@ -1418,15 +1467,16 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
                 </>}
               </View>
             </ScreenContent>
+            <ReadingEndSpacer height={readerFabClearance} />
           </ThemedScrollView>
         </View>
         ) : null}
-        </>
+        </Animated.View>
       )}
 
-      {hasContents && !selectionMenu ? (
+      {articleHeadings.length >= 3 && hasContent ? (
         <ReaderContents key={bookmark?.id} ref={handleContentsRef} headings={articleHeadings}
-          onSelect={handleHeadingSelect} expansion={collapsingFab.expansion}
+          onSelect={handleHeadingSelect} expansion={collapsingFab.expansion} triggerVisible={hasContents && !selectionMenu}
           embedded={embedded} bottom={contentsFabBottom} sceneWidth={sceneWidth} workScheduler={readerWork} />
       ) : null}
 

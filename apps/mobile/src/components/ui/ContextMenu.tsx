@@ -27,6 +27,7 @@ import { ThemedScrollView } from "./ThemedScrollView";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { useOverlayFocus } from "../../hooks/use-overlay-focus";
+import { useSurfaceSize } from "../../hooks/use-surface-size";
 import { useScrimPress } from "../../hooks/use-scrim-press";
 import { dismissKeyboard, useKeyboardViewportHeight } from "../../hooks/use-keyboard-visible";
 import { haptics } from "../../lib/haptics";
@@ -362,6 +363,11 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
     ? Math.min(placed.maxHeight, windowHeight - insets.bottom - CONTEXT_MENU_EDGE - placed.top)
     : placed.maxHeight : 0;
   const bodyHeightLimit = Math.max(0, heightLimit - menuPadding * 2);
+  const surfaceSize = useSurfaceSize(contentHeight > 0 ? Math.min(heightLimit, contentHeight + menuPadding * 2) : null, {
+    active: visible && !dormant,
+    geometryKey: `${windowWidth}:${windowHeight}:${fontScale}:${insets.top}:${insets.bottom}`,
+    width: menuWidth,
+  });
   const fromY = placed?.placement === "above" ? 6 : -6;
   const menuStyle = useAnimatedStyle(() => ({
     opacity: progress.value,
@@ -411,6 +417,7 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
               ...shadows.level2,
             },
             menuStyle,
+            surfaceSize,
           ]}
         >
             <MenuBody
@@ -420,7 +427,7 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
               refreshOnLayout={keepMounted}
               measureKey={keepMounted ? measureKey : sessionKey}
               onMeasure={measureBody}
-              style={{ maxHeight: bodyHeightLimit, flexShrink: 1 }}
+              style={{ maxHeight: bodyHeightLimit, flexShrink: 0 }}
               onLayout={(event) => {
                 if (!visible && !keepMounted) return;
                 measureBody(event.nativeEvent.layout.height);

@@ -3,7 +3,7 @@ import { FlatList, Platform, StyleSheet, View, useWindowDimensions, type ListRen
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { SharedValue } from "react-native-reanimated";
 import type { ArticleHeading } from "./ArticleHtml";
-import { FAB, FABLayer } from "../ui/FAB";
+import { FAB, FABDock } from "../ui/FAB";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { ListPressable } from "../ui/ListPressable";
@@ -25,6 +25,7 @@ interface ReaderContentsProps {
   bottom: number;
   sceneWidth: number;
   workScheduler: ReaderWorkScheduler;
+  triggerVisible: boolean;
 }
 
 const keyExtractor = (heading: ArticleHeading) => heading.id;
@@ -33,9 +34,10 @@ const renderScrollComponent = (props: ScrollViewProps) => <ThemedScrollView {...
 /** Contents is navigation chrome, not article state. Opening/closing must not
  * reconcile the reader or mount a whole article's worth of heading controls. */
 export const ReaderContents = React.memo(React.forwardRef<ReaderContentsHandle, ReaderContentsProps>(function ReaderContents({
-  headings, onSelect, expansion, embedded, bottom, sceneWidth, workScheduler,
+  headings, onSelect, expansion, embedded, bottom, sceneWidth, workScheduler, triggerVisible,
 }, ref) {
   const [visible, setVisible] = useState(false);
+  useEffect(() => { if (!triggerVisible) setVisible(false); }, [triggerVisible]);
   const [prepared, setPrepared] = useState(false);
   const [articleReady, setArticleReady] = useState(false);
   const pendingSelection = useRef<string | null>(null);
@@ -145,12 +147,12 @@ export const ReaderContents = React.memo(React.forwardRef<ReaderContentsHandle, 
 
   return <>
     {/* Keep the trigger mounted for focus restoration and stable scroll clearance. */}
-    <FABLayer maxWidth={layout.maxReaderWidth}>
+    <FABDock maxWidth={layout.maxReaderWidth} visible={triggerVisible}>
       <FAB icon="list-outline" label="Contents" expansion={expansion}
         accessibilityLabel="Table of contents" accessibilityHint="Jump to a section in this article."
         anchored={false} onPress={open} maxContentWidth={layout.maxReaderWidth}
         alignTo={embedded ? "parent" : "scene"} bottom={bottom} />
-    </FABLayer>
+    </FABDock>
     <FloatingPanel visible={visible} onDismiss={close} onExiting={commitSelection} onExited={resetList} triggerRef={triggerRef}
       maxWidth={Math.min(416, sceneWidth - spacing[32])} scrollBody={false} keepMounted={prepared}>
       <PanelHeader title="Contents" titleVariant="titleLarge" onClose={close} />

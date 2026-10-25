@@ -55,6 +55,7 @@ import { useOverlaySessionMode } from "../../lib/overlay-session-mode";
 import { localPasswordAutofillProps, passwordAutofillProps } from "../../lib/password-autofill";
 import { AccountAutofillIdentity } from "../auth/AccountAutofillIdentity";
 import { LazyMount } from "../ui/LazyMount";
+import { AnimatedDisclosure } from "../ui/AnimatedDisclosure";
 
 type Mode = "menu" | "rename" | "lockChoice" | "lockCredential" | "icon" | "delete" | "removePassword" | "removePasswordAccount";
 
@@ -840,7 +841,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
                   chevronUp={keepOpen}
                   disabled={busy || deleteAccessBlocked}
                 />
-                {keepOpen && !deleteAccessBlocked ? (
+                <AnimatedDisclosure expanded={keepOpen && !deleteAccessBlocked}>
                   <ThemedFlatList
                     data={keepOptions.data ?? []}
                     initialNumToRender={6}
@@ -892,7 +893,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
                       )
                     }
                   />
-                ) : null}
+                </AnimatedDisclosure>
               </>
             ) : null}
             <PanelActions

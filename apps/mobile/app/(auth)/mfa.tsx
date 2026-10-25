@@ -5,6 +5,7 @@ import React, { useRef, useState } from "react";
 import { View } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { AuthShell } from "../../src/components/auth/AuthShell";
+import { AnimatedSwap } from "../../src/components/ui/AnimatedSwap";
 import { Button } from "../../src/components/ui/Button";
 import { Text } from "../../src/components/ui/Text";
 import { OtpInput, type OtpStatus } from "../../src/components/ui/OtpInput";
@@ -125,106 +126,104 @@ export default function LoginMfaScreen() {
   return (
     <AuthShell title={mode === "backup" ? "Use a backup code" : mode === "email" ? "Check your email" : "Check your authenticator"}
       footer={<Button label="Back to sign in" variant="ghost" block onPress={backToSignIn} disabled={busy} />}>
-      {mode === "totp" ? (
-        <>
-          <OtpInput
-            key="totp"
-            editable={!sending}
-            value={totp}
-            onChange={(next) => {
-              setTotp(next);
-              if (error) setError("");
-              if (otpStatus === "error") setOtpStatus("idle");
-            }}
-            onComplete={submitCode}
-            status={otpStatus}
-            error={error || undefined}
-            label="Authenticator code"
-          />
-          {verifyButton}
-          <View style={{ height: spacing[16] }} />
-          <Button
-            label="Use a backup code"
-            variant="ghost"
-            disabled={busy}
-            onPress={() => {
-              setError("");
-              setOtpStatus("idle");
-              setMode("backup");
-            }}
-          />
-          {emailRecovery ? (
+      <AnimatedSwap transitionKey={mode}>
+        {mode === "totp" ? (
+          <>
+            <OtpInput
+              key="totp"
+              editable={!sending}
+              value={totp}
+              onChange={(next) => {
+                setTotp(next);
+                if (error) setError("");
+                if (otpStatus === "error") setOtpStatus("idle");
+              }}
+              onComplete={submitCode}
+              status={otpStatus}
+              error={error || undefined}
+              label="Authenticator code"
+            />
+            {verifyButton}
+            <View style={{ height: spacing[16] }} />
             <Button
-              label="Email me a sign-in code"
+              label="Use a backup code"
               variant="ghost"
               disabled={busy}
-              loading={sending}
-              onPress={requestEmail}
+              onPress={() => {
+                setError("");
+                setOtpStatus("idle");
+                setMode("backup");
+              }}
             />
-          ) : null}
-        </>
-      ) : null}
-
-      {mode === "backup" ? (
-        <>
-          <OtpInput
-            key="backup"
-            kind="backup"
-            value={backup}
-            onChange={(next) => {
-              setBackup(next);
-              if (error) setError("");
-              if (otpStatus === "error") setOtpStatus("idle");
-            }}
-            onComplete={submitCode}
-            status={otpStatus}
-            error={error || undefined}
-            label="Backup code"
-          />
-          {verifyButton}
-          <View style={{ height: spacing[16] }} />
-          <Button
-            label="Use an authenticator code"
-            variant="ghost"
-            disabled={busy}
-            onPress={() => {
-              setError("");
-              setOtpStatus("idle");
-              setMode("totp");
-            }}
-          />
-        </>
-      ) : null}
-
-      {mode === "email" ? (
-        <>
-          <OtpDeliveryHint smtpConfigured={info?.smtpConfigured} />
-          <OtpInput
-            key="email"
-            value={emailCode}
-            onChange={(next) => { setEmailCode(next); setError(""); if (otpStatus === "error") setOtpStatus("idle"); }}
-            onComplete={submitEmail}
-            status={otpStatus}
-            error={error || undefined}
-            label="Email sign-in code"
-          />
-          {verifyButton}
-          <View style={{ height: spacing[16] }} />
-          <Text variant="footnote" color="secondary">
-            This signs you in once. Your authenticator stays on.
-          </Text>
-          <Button
-            label="Use an authenticator code"
-            variant="ghost"
-            disabled={busy}
-            onPress={() => {
-              setError("");
-              setOtpStatus("idle");
-              setMode("totp");
-            }}
-          />
-        </>
-      ) : null}
+            {emailRecovery ? (
+              <Button
+                label="Email me a sign-in code"
+                variant="ghost"
+                disabled={busy}
+                loading={sending}
+                onPress={requestEmail}
+              />
+            ) : null}
+          </>
+        ) : mode === "backup" ? (
+          <>
+            <OtpInput
+              key="backup"
+              kind="backup"
+              value={backup}
+              onChange={(next) => {
+                setBackup(next);
+                if (error) setError("");
+                if (otpStatus === "error") setOtpStatus("idle");
+              }}
+              onComplete={submitCode}
+              status={otpStatus}
+              error={error || undefined}
+              label="Backup code"
+            />
+            {verifyButton}
+            <View style={{ height: spacing[16] }} />
+            <Button
+              label="Use an authenticator code"
+              variant="ghost"
+              disabled={busy}
+              onPress={() => {
+                setError("");
+                setOtpStatus("idle");
+                setMode("totp");
+              }}
+            />
+          </>
+        ) : (
+          <>
+            <OtpDeliveryHint smtpConfigured={info?.smtpConfigured} />
+            <OtpInput
+              key="email"
+              value={emailCode}
+              onChange={(next) => { setEmailCode(next); setError(""); if (otpStatus === "error") setOtpStatus("idle"); }}
+              onComplete={submitEmail}
+              status={otpStatus}
+              error={error || undefined}
+              label="Email sign-in code"
+            />
+            {verifyButton}
+            <View style={{ height: spacing[16] }} />
+            <Text variant="footnote" color="secondary">
+              This signs you in once. Your authenticator stays on.
+            </Text>
+            <Button
+              label="Use an authenticator code"
+              variant="ghost"
+              disabled={busy}
+              onPress={() => {
+                setError("");
+                setOtpStatus("idle");
+                setMode("totp");
+              }}
+            />
+          </>
+        )}
+      </AnimatedSwap>
     </AuthShell>
   );
 }
