@@ -27,14 +27,14 @@ export function Button({ label, onPress, variant = "primary", size = "sm", loadi
   disabled = false, icon, block = false, style, testID }: ButtonProps) {
   const { palette, expressive, shadows } = useTheme();
   const inactive = disabled || loading;
-  // Pending actions keep their color pairing while interaction is locked.
-  const disabledAppearance = disabled && !loading;
+  // Keep the action's color pair while busy so its progress stays legible.
+  const dimmed = disabled && !loading;
   const tokens = sizes[size];
   const filled = variant === "primary" || variant === "danger" || variant === "tonal" || variant === "secondary" || variant === "elevated";
-  const surface = disabledAppearance ? filled ? `${palette.onSurface}1f` : "transparent"
+  const surface = dimmed ? filled ? `${palette.onSurface}1f` : "transparent"
     : variant === "primary" ? palette.primary : variant === "danger" ? palette.error
     : variant === "tonal" || variant === "secondary" ? palette.secondaryContainer : variant === "elevated" ? palette.surfaceContainerLow : "transparent";
-  const foreground = disabledAppearance ? `${palette.onSurface}61` : variant === "primary" ? palette.onPrimary
+  const foreground = dimmed ? `${palette.onSurface}61` : variant === "primary" ? palette.onPrimary
     : variant === "danger" ? palette.onError : variant === "tonal" || variant === "secondary" ? palette.onSecondaryContainer
     : variant === "outlined" && expressive ? palette.onSurfaceVariant : palette.primary;
   // The pressed squarer-corner morph is Expressive-only; Standard keeps the
@@ -52,8 +52,8 @@ export function Button({ label, onPress, variant = "primary", size = "sm", loadi
       visualStyle={[styles.base, { height: tokens.height, alignSelf: "stretch", paddingHorizontal: size === "sm" && !expressive ? 24 : tokens.padding,
         backgroundColor: surface, borderRadius: tokens.height / 2,
         borderWidth: variant === "outlined" ? 1 : 0,
-        borderColor: disabledAppearance ? `${palette.onSurface}1f` : expressive ? palette.outlineVariant : palette.outline },
-        variant === "elevated" && !disabledAppearance ? shadows.level1 : null]}>
+        borderColor: dimmed ? `${palette.onSurface}1f` : expressive ? palette.outlineVariant : palette.outline },
+        variant === "elevated" && !dimmed ? shadows.level1 : null]}>
       <View style={styles.content}>
         <View pointerEvents="none" aria-hidden={loading} importantForAccessibility={loading ? "no-hide-descendants" : "auto"}
           style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", minWidth: 0, maxWidth: "100%", opacity: loading ? 0 : 1 }}>
