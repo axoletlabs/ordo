@@ -20,19 +20,6 @@ export function linearIndeterminateSegments(phase: number) {
   ];
 }
 
-/** Four expand/contract cycles close at exactly four full turns (no jump). */
-export function circularIndeterminateArc(phase: number) {
-  "worklet";
-  const cycle = boundedProgress(phase) * 4;
-  const step = Math.floor(cycle);
-  const t = cycle - step;
-  const expand = t < 0.5;
-  const ease = (1 - Math.cos(Math.PI * (expand ? t * 2 : (t - 0.5) * 2))) / 2;
-  const sweep = expand ? 24 + 252 * ease : 276 - 252 * ease;
-  const start = step * 252 + (expand ? 0 : 252 * ease) + cycle * 108;
-  return { start, sweep };
-}
-
 /** Cubic Hermite sine wave: 4dp stroke, 3dp amplitude, 40/20dp wavelength. */
 export function wavyProgressPath(start: number, end: number, width: number, phase: number, amplitude: number, wavelength: number): string {
   "worklet";

@@ -1,5 +1,5 @@
 /**
- * Shared Material pull-to-refresh chip for lists and the in-app website.
+ * Shared contained Material loading indicator for lists and the in-app website.
  */
 import React, { useEffect, useState } from "react";
 import { StyleSheet } from "react-native";
@@ -12,7 +12,6 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { PTR_MAX_FOLLOW, PTR_THRESHOLD } from "../../lib/pull-refresh";
-import { useTheme } from "../../theme/ThemeProvider";
 import { spacing, timing } from "../../theme/tokens";
 import { useMaterialMotion } from "../../theme/material-motion";
 import { ReloadSpinner } from "./Spinner";
@@ -24,7 +23,6 @@ export function RefreshHud({
   dy: number;
   refreshing: boolean;
 }) {
-  const { palette } = useTheme();
   const motion = useMaterialMotion();
   const pull = useSharedValue(0);
   const refreshingSv = useSharedValue(refreshing);
@@ -72,13 +70,9 @@ export function RefreshHud({
       style={[styles.ptrHud, hudStyle]}
       accessibilityRole={refreshing ? "progressbar" : undefined}
       accessibilityLabel={refreshing ? "Refreshing" : undefined}
+      accessibilityState={refreshing ? { busy: true } : undefined}
     >
-      <ReloadSpinner
-        spinning={refreshing}
-        color={palette.primary}
-        backgroundColor={palette.surfaceContainerHigh}
-        borderColor={palette.outlineVariant}
-      />
+      <ReloadSpinner spinning={refreshing} />
     </Animated.View>
   );
 }
