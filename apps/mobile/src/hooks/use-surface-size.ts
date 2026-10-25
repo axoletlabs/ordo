@@ -32,10 +32,9 @@ export function useSurfaceSize(height: number | null, {
       return;
     }
     const animate = before.active && before.measured && before.geometryKey === geometryKey && !motion.reducedMotion;
-    // Resizing must not bounce content against fixed actions or a clipped edge.
-    // The fast spatial token also avoids a long tail on small menu page changes.
-    const spring = { ...motion.fast, damping: Math.max(motion.fast.damping,
-      2 * Math.sqrt(motion.fast.stiffness * motion.fast.mass)), overshootClamping: true };
+    // Use the shared spatial scheme for continuous, interruptible geometry.
+    // Clamp the edge so a shrinking viewport never bounces into its actions.
+    const spring = { ...motion.spatial, overshootClamping: true };
     if (width != null) breadth.value = animate ? withSpring(width, spring) : width;
     if (height == null) { cancelAnimation(extent); return; }
     const notify = () => settledRef.current?.();

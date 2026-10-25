@@ -512,6 +512,7 @@ export default function BookmarksScreen() {
           <ContextMenuItem icon="pricetags-outline" label="Manage tags" onPress={() => { setToolsOpen(false); router.push("/tags"); }} />
         </> : <SortMenu embedded visible={toolsOpen} onDismiss={() => setToolsOpen(false)} anchor={toolsAnchor} variant="home"
           folderSort={folderSort} bookmarkSort={unfiledSort} onFolderSort={setFolderSort} onBookmarkSort={setUnfiledSort}
+          page={toolsPage === "sort:folders" ? "folders" : toolsPage === "sort:bookmarks" ? "bookmarks" : "root"}
           onBack={() => setToolsPage("actions")} onPageChange={(page) => setToolsPage(page === "root" ? "sort" : `sort:${page}`)} />}
       </ContextMenu>
       <SearchFilterMenu visible={filterOpen} onDismiss={() => setFilterOpen(false)} anchor={filterAnchor}

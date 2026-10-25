@@ -181,6 +181,9 @@ jobs:
       - name: Typecheck
         run: pnpm -r typecheck
 
+      - name: Verify native popup bootstrap layout
+        run: pnpm --filter @ordo/mobile check:overlay-layout
+
       - name: Verify bundled open source notices
         run: pnpm --filter @ordo/mobile licenses:check
 

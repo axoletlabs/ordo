@@ -18,6 +18,7 @@ import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { AppIcon } from "./PinIcon";
 import { Spinner } from "./Spinner";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { OverlayPageContent } from "./OverlayPageContent";
 import { ResizeOwnerContext } from "./resize-owner";
 import { Text } from "./Text";
 import { PressableScale } from "./PressableScale";
@@ -116,11 +117,12 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
   const insets = useSafeAreaInsets();
   const menuWidth = Math.min(width, Math.max(0, windowWidth - insets.left - insets.right - spacing[32]));
   const menuPadding = spacing[8];
+  const page = useOverlayPage(visible, pageKey ?? "", { children, scrollBody });
   // Anchor movement does not change the natural body size. Content, viewport,
   // font scale and design mode do: a stale dormant report must never place an
   // opening from the previous article/page/width.
-  const measureKey = JSON.stringify([sessionKey, pageKey, menuWidth, windowWidth, windowHeight,
-    fontScale, expressive, insets.top, insets.right, insets.bottom, insets.left, scrollBody]);
+  const measureKey = JSON.stringify([sessionKey, page.contentKey, menuWidth, windowWidth, windowHeight,
+    fontScale, expressive, insets.top, insets.right, insets.bottom, insets.left, page.content.scrollBody]);
   const hideAndDismiss = React.useCallback(() => {
     if (!dismissible) return;
     if (backdrop && keyboardDismiss) dismissKeyboard();
@@ -171,14 +173,12 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
     return listenForMenuOutsideScroll(() => menuRef.current as unknown as HTMLElement | null,
       hideAndDismiss, document, menuAnchorScrollSnapshot(anchor));
   }, [visible, rendered, backdrop, menuRef, hideAndDismiss, anchor]);
-  const [measuredPage, setMeasuredPage] = React.useState<string | null>(null);
-  const page = useOverlayPage(visible, pageKey ?? "", children, measuredPage === measureKey);
   const lastPlacement = React.useRef<MenuPlacement | null>(null);
   const placementLock = React.useRef<MenuPlacement | null>(null);
   const sessionSide = React.useRef<MenuPlacement["placement"] | null>(null);
   const wasVisibleRef = React.useRef(visible);
   const layoutKeyRef = React.useRef("");
-  const lastChildren = React.useRef(children);
+  const lastChildren = React.useRef(page.content);
   const sessionKeyRef = React.useRef(sessionKey);
   if (visible && sessionKeyRef.current !== sessionKey) {
     sessionKeyRef.current = sessionKey;
@@ -257,11 +257,11 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
     placement: preferredPlacement ?? "below",
     maxHeight: Math.max(0, windowHeight - insets.top - insets.bottom - CONTEXT_MENU_EDGE * 2),
   } : lastPlacement.current;
-  const content = dormant ? children : visible ? page.content : lastChildren.current;
+  const content = dormant ? children : visible ? page.content.children : lastChildren.current.children;
+  const displayScrollBody = dormant ? scrollBody : visible ? page.content.scrollBody : lastChildren.current.scrollBody;
   const recordBodyHeight = React.useCallback((height: number) => {
     if (height <= 0) return;
     measuredBody.current = { key: measureKey, content };
-    setMeasuredPage(measureKey);
     applyBodyHeight(height);
   }, [applyBodyHeight, content, measureKey]);
   // A taller nested page may scroll, but must not grow below the viewport
@@ -309,7 +309,7 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
           ref={menuRef}
           accessibilityRole="menu"
           aria-hidden={!visible}
-          {...(Platform.OS === "web" ? { tabIndex: -1, dataSet: { materialOverlay: visible && backdrop ? "true" : "false", menuPage: pageKey ?? "" } } : {})}
+          {...(Platform.OS === "web" ? { tabIndex: -1, dataSet: { materialOverlay: visible && backdrop ? "true" : "false", menuPage: page.contentKey } } : {})}
           pointerEvents={visible ? "auto" : "none"}
           style={[
             styles.menu,
@@ -344,11 +344,11 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
                   recordBodyHeight(event.nativeEvent.layout.height);
                 }}
               >
-                <Animated.View style={[{ flexShrink: 1 }, page.style]}>
-                {scrollBody ? <ThemedScrollView bounces={false} keyboardShouldPersistTaps="handled" style={{ maxHeight: bodyHeightLimit, flexShrink: 1 }}>
+                <OverlayPageContent leaving={page.leaving} style={[{ flexShrink: 1 }, page.style]}>
+                {displayScrollBody ? <ThemedScrollView bounces={false} keyboardShouldPersistTaps="handled" style={{ maxHeight: bodyHeightLimit, flexShrink: 1 }}>
                   {content}
                 </ThemedScrollView> : content}
-                </Animated.View>
+                </OverlayPageContent>
               </MenuBody>
             </View>
             </ResizeOwnerContext.Provider>

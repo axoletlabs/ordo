@@ -20,6 +20,7 @@ import { useOverlayFocus } from "../../hooks/use-overlay-focus";
 import { useOverlayPage } from "../../hooks/use-overlay-page";
 import { useSurfaceSize } from "../../hooks/use-surface-size";
 import { useScrimPress } from "../../hooks/use-scrim-press";
+import { OverlayPageContent } from "./OverlayPageContent";
 import { ResizeOwnerContext } from "./resize-owner";
 import { PanelTitleContext } from "./panel-title";
 import { PanelPresenceContext } from "./panel-presence";
@@ -92,10 +93,10 @@ export function FloatingPanel(props: FloatingPanelProps) {
 }
 
 function PagedFloatingPanelSurface(props: FloatingPanelProps & { pageKey: string }) {
-  // Measure the incoming page as soon as its content and scroll ownership commit.
+  // Retain content and scroll ownership together during the outgoing fade.
   const page = useOverlayPage(props.visible, props.pageKey, { children: props.children, scrollBody: props.scrollBody });
   return <FloatingPanelSurface {...props} scrollBody={page.content.scrollBody}
-    pageStyle={page.style}>{page.content.children}</FloatingPanelSurface>;
+    pageLeaving={page.leaving} pageStyle={page.style}>{page.content.children}</FloatingPanelSurface>;
 }
 
 function FloatingPanelSurface({
@@ -120,7 +121,8 @@ function FloatingPanelSurface({
   obscured = false,
   interactive = true,
   pageStyle,
-}: FloatingPanelProps & { pageStyle?: ReturnType<typeof useOverlayPage>["style"] }) {
+  pageLeaving = false,
+}: FloatingPanelProps & { pageLeaving?: boolean; pageStyle?: ReturnType<typeof useOverlayPage>["style"] }) {
   const { palette } = useTheme();
   const sheet = presentation === "bottom-sheet";
   const expandedSheet = sheet && sheetSizing === "expanded";
@@ -139,6 +141,7 @@ function FloatingPanelSurface({
   const [sheetBodyHeight, setSheetBodyHeight] = React.useState<number | null>(null);
   const adaptiveReady = !adaptiveSheet || (sheetBodyHeight != null && sheetHeaderHeight > 0 && sheetActionsHeight > 0);
   const [measured, setMeasured] = React.useState(false);
+  const [layoutFallback, setLayoutFallback] = React.useState(false);
   const dragOffset = useSharedValue(0);
   const resting = React.useRef({ width, height });
   if (width !== resting.current.width || Platform.OS === "web") resting.current = { width, height };
@@ -153,22 +156,26 @@ function FloatingPanelSurface({
     onDismiss();
   }, [dismissible, onDismiss]);
   const scrimPress = useScrimPress(visible && interactive && !obscured && dismissOnScrim, hideAndDismiss);
+  const layoutReady = (Platform.OS === "web" || measured) && adaptiveReady && (fillSheet || naturalContentHeight != null);
   const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, {
-    interactive: interactive && !obscured, onEntered, onExited, onExiting, ready: (Platform.OS === "web" || measured) && adaptiveReady && (fillSheet || naturalContentHeight != null),
+    interactive: interactive && !obscured, onEntered, onExited, onExiting, ready: layoutReady || layoutFallback,
   });
   React.useEffect(() => {
-    if (!rendered && !keepMounted) { setMeasured(false); setNaturalContentHeight(null); }
+    if (!rendered && !keepMounted) { setMeasured(false); setNaturalContentHeight(null); setLayoutFallback(false); }
   }, [rendered, keepMounted]);
   // A layout report should arrive in the first frame. If it never does,
   // release the entrance instead of keeping an invisible, blocking dialog.
   React.useEffect(() => {
-    if (!visible || (Platform.OS === "web" || measured) && (fillSheet || naturalContentHeight != null)) return;
+    if (!visible || layoutReady || layoutFallback) return;
     const timer = setTimeout(() => {
       setMeasured(true);
-      setNaturalContentHeight(current => current ?? 0);
+      // A timeout is not a zero-height measurement. Keep the provisional
+      // viewport until real content geometry arrives instead of collapsing
+      // the entire dialog to its padding and clipping all controls.
+      setLayoutFallback(true);
     }, READY_FALLBACK_MS);
     return () => clearTimeout(timer);
-  }, [visible, measured, fillSheet, naturalContentHeight]);
+  }, [visible, layoutReady, layoutFallback]);
   const panelRef = useOverlayFocus(visible && rendered, hideAndDismiss, "dialog", dismissible, false, !interactive || obscured, undefined, undefined, triggerRef);
   // A sibling picker obscures this panel while staying mounted above it.
   // Crossfade this panel and its scrim (same 200ms inOut quad as the
@@ -312,7 +319,7 @@ function FloatingPanelSurface({
   }));
 
   const inputFocusScope = useInputFocusScope(visible && rendered && interactive && !obscured,
-    (Platform.OS === "web" || measured) && (fillSheet || naturalContentHeight != null), visible);
+    layoutReady || layoutFallback, visible);
   const presenceScope = React.useMemo(() => ({ visible, rendered }), [visible, rendered]);
 
   if (!rendered && !keepMounted) return null;
@@ -414,7 +421,10 @@ function FloatingPanelSurface({
                 padding: sheet ? 0 : panelPadding,
                 minWidth: fitContent ? Math.min(280, dialogWidth) : undefined,
                 maxHeight: heightLimit,
-                height: fillSheet ? heightLimit : undefined,
+                // Native flex:1 children need a definite first viewport to
+                // produce header/body/action measurements. Without it Yoga
+                // collapses the unmeasured dialog before those callbacks run.
+                height: fillSheet || naturalContentHeight == null ? heightLimit : undefined,
                 backgroundColor: Platform.OS === "web" ? "transparent" : panelSurface,
                 ...corners,
                 ...(sheet ? { overflow: "hidden" as const } : {}),
@@ -437,12 +447,12 @@ function FloatingPanelSurface({
             <ResizeOwnerContext.Provider value>
             <PanelTitleContext.Provider value={titleId}>
             <InputSurfaceContext.Provider value={panelSurface}>
-            {sheet ? <Animated.View style={[{ flex: 1 }, Platform.OS === "web" ? scrimStyle : null]}>
-              <PanelPageContent style={pageStyle}>{sheetContent}</PanelPageContent>
-            </Animated.View> : <DialogContent headers={headers} actions={actions} body={body}
+            {sheet ? <OverlayPageContent leaving={pageLeaving} style={[{ flex: 1, minHeight: 0 }, Platform.OS === "web" ? scrimStyle : null, pageStyle]}>
+              {sheetContent}
+            </OverlayPageContent> : <DialogContent headers={headers} actions={actions} body={body}
               scrollHeader={scrollHeader} scrollAll={scrollAll} scrollBody={scrollBody}
               scrollResetKey={scrollResetKey} heightLimit={Math.max(0, heightLimit - Number(topPadding) - Number(bottomPadding))}
-              onMeasure={recordNaturalHeight} style={pageStyle} fade={Platform.OS === "web" ? scrimStyle : undefined} />}
+              onMeasure={recordNaturalHeight} leaving={pageLeaving} style={pageStyle} fade={Platform.OS === "web" ? scrimStyle : undefined} />}
             </InputSurfaceContext.Provider>
             </PanelTitleContext.Provider>
             </ResizeOwnerContext.Provider>
@@ -459,12 +469,13 @@ function FloatingPanelSurface({
  * Header and actions participate in the CURRENT animated height, so actions
  * never land outside the card while its target size is still being reached. */
 function DialogContent({ headers, actions, body, scrollHeader, scrollAll, scrollBody,
-  scrollResetKey, heightLimit, onMeasure, style, fade }: {
+  scrollResetKey, heightLimit, onMeasure, style, fade, leaving }: {
   headers: React.ReactNode[]; actions: React.ReactNode[]; body: React.ReactNode[];
   scrollHeader: boolean; scrollAll: boolean; scrollBody: boolean;
   scrollResetKey?: string; heightLimit: number; onMeasure: (height: number) => void;
   style?: ReturnType<typeof useOverlayPage>["style"];
   fade?: ReturnType<typeof useOverlayPage>["style"];
+  leaving: boolean;
 }) {
   const [headerHeight, setHeaderHeight] = React.useState(0);
   const [actionsHeight, setActionsHeight] = React.useState(0);
@@ -487,7 +498,7 @@ function DialogContent({ headers, actions, body, scrollHeader, scrollAll, scroll
   const recordBody = React.useCallback((next: number) => {
     setBodyHeight(current => current != null && Math.abs(current - next) < 0.5 ? current : next);
   }, []);
-  return <Animated.View testID="material-dialog-content" style={[{ flex: 1, minHeight: 0 }, fade, style]}>
+  return <OverlayPageContent leaving={leaving} testID="material-dialog-content" style={[{ flex: 1, minHeight: 0 }, fade, style]}>
     {fixedHeader ? <View style={{ flexShrink: 0 }} onLayout={event => setHeaderHeight(event.nativeEvent.layout.height)}>
       {headers.map(header => React.isValidElement<{ style?: StyleProp<ViewStyle> }>(header)
         ? React.cloneElement(header, { style: [header.props.style, { marginBottom: 0 }] }) : header)}
@@ -500,7 +511,7 @@ function DialogContent({ headers, actions, body, scrollHeader, scrollAll, scroll
     {fixedActions ? <View testID="material-dialog-actions" style={{ flexShrink: 0 }}>
       <View onLayout={event => setActionsHeight(event.nativeEvent.layout.height)}>{actions}</View>
     </View> : null}
-  </Animated.View>;
+  </OverlayPageContent>;
 }
 
 /** Keep partially scrolled lines from colliding with the sheet's fixed chrome.
@@ -517,16 +528,6 @@ function SheetScrollFades({ color }: { color: string }) {
       <Rect width="100%" height="100%" fill={`url(#${id}-${edge})`} />
     </Svg>)}
   </View>;
-}
-
-/** Ordinary panels keep their original layout tree. Only paged dialogs need
- * a content fade independent of the persistent surface and backdrop. */
-function PanelPageContent({ style, children }: {
-  style?: ReturnType<typeof useOverlayPage>["style"];
-  children: React.ReactNode;
-}) {
-  return style ? <Animated.View
-    style={[{ flex: 1, minHeight: 0 }, style]}>{children}</Animated.View> : children;
 }
 
 /** Run opening callbacks where the portal's real blocking context is known.
