@@ -856,7 +856,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
                   chevronUp={keepOpen}
                   disabled={busy || deleteAccessBlocked}
                 />
-                <AnimatedDisclosure expanded={keepOpen && !deleteAccessBlocked}>
+                <AnimatedDisclosure expanded={keepOpen && !deleteAccessBlocked} contentHeight={keepListHeight + spacing[4]}>
                   <ThemedFlatList
                     data={keepOptions.data ?? []}
                     initialNumToRender={6}
