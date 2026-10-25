@@ -64,8 +64,8 @@ function LoadTrackFade({ visible, children }: { visible: boolean; children: Reac
   }, [visible, motion.reducedMotion, opacity]);
   const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
   return activated ? (
-    <Animated.View aria-hidden={!visible} accessibilityElementsHidden={!visible}
-      importantForAccessibility={visible ? "auto" : "no-hide-descendants"} style={style}>
+    <Animated.View pointerEvents="none" aria-hidden={!visible} accessibilityElementsHidden={!visible}
+      importantForAccessibility={visible ? "auto" : "no-hide-descendants"} style={[styles.progressTrack, style]}>
       {children}
     </Animated.View>
   ) : null;
@@ -382,12 +382,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
         ) : null}
         <RefreshHud dy={ptrDy} refreshing={refreshing} />
         <LoadTrackFade visible={loading && !error}>
-          <View
-            pointerEvents="none"
-            style={styles.progressTrack}
-          >
-            <LinearProgress label="Page load" value={progress > 0 ? progress : undefined} />
-          </View>
+          <LinearProgress label="Page load" value={progress > 0 ? progress : undefined} />
         </LoadTrackFade>
         {error ? (
           <View style={[styles.error, { backgroundColor: chromeBackground }]}>
@@ -409,8 +404,9 @@ const styles = StyleSheet.create({
   web: { flex: 1, margin: 0, padding: 0, ...(Platform.OS === "web" ? ({ height: "100%" } as const) : null) },
   webFallback: { alignItems: "center", justifyContent: "center" },
   blankCover: { ...StyleSheet.absoluteFill },
-  // No fixed height here: LinearProgress owns its geometry (4dp straight,
-  // 10dp wavy in Expressive) and clipping would shear the wave into slivers.
+  // Position the fading wrapper itself: an in-flow wrapper lands below the
+  // flexing WebView and clips the bar. Let LinearProgress own the height
+  // (4dp straight, 10dp wavy) so the full wave stays visible.
   progressTrack: {
     position: "absolute",
     top: 0,
