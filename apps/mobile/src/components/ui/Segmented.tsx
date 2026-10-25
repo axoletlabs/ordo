@@ -12,9 +12,9 @@ import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 type SegmentMotion = ReturnType<typeof useMaterialMotion>;
 type SegmentPalette = ReturnType<typeof useTheme>["palette"];
 const SegmentLabel = React.memo(function SegmentLabel({ label, foreground,
-  selected, labelStyle, reducedMotion }: {
+  selected, labelStyle, reducedMotion, compact }: {
   label: string; foreground: string;
-  selected: boolean; labelStyle?: TextStyle; reducedMotion: boolean;
+  selected: boolean; labelStyle?: TextStyle; reducedMotion: boolean; compact: boolean;
 }) {
   // The label uses its container's committed on-color. Only the check's
   // appearance fades; fading both foreground and fill loses contrast midway.
@@ -25,12 +25,13 @@ const SegmentLabel = React.memo(function SegmentLabel({ label, foreground,
     previous.current = { selected, reducedMotion };
     progress.value = reducedMotion ? Number(selected) : withSpring(Number(selected), materialMotion.effects.fast);
   }, [selected, reducedMotion, progress]);
-  const checkStyle = useAnimatedStyle(() => ({ opacity: progress.value, width: 22 * progress.value }));
+  const checkStyle = useAnimatedStyle(() => ({ opacity: progress.value, width: (compact ? 18 : 22) * progress.value }));
   // Retain the check through deselection; animate its slot with the fade so
   // labels don't jump sideways when the selection changes.
   return <><Animated.View testID="material-segment-check" pointerEvents="none" accessible={false}
-    style={[{ overflow: "hidden", flexShrink: 0 }, checkStyle]}><MaterialIcon name="checkmark" size={18} color={foreground} /></Animated.View>
-    <Text testID="material-segment-label" variant="labelLarge" numberOfLines={1} style={[{ flexShrink: 1 }, labelStyle, { color: foreground }]}>{label}</Text></>;
+    style={[{ overflow: "hidden", flexShrink: 0 }, checkStyle]}><MaterialIcon name="checkmark" size={compact ? 16 : 18} color={foreground} /></Animated.View>
+    <Text testID="material-segment-label" variant={compact ? "labelMedium" : "labelLarge"} numberOfLines={compact ? 2 : 1}
+      style={[{ flexShrink: 1 }, compact ? { textAlign: "center" } : null, labelStyle, { color: foreground }]}>{label}</Text></>;
 });
 
 export interface SegmentedProps<T extends string> {
@@ -39,21 +40,26 @@ export interface SegmentedProps<T extends string> {
   orientation?: "auto" | "horizontal" | "vertical";
   /** Keep related choices in one row, scrolling instead of truncating labels. */
   scrollable?: boolean;
+  /** Compact equal-width choices with a 24dp peek at the next choice.
+   * Large text can grow the items to keep labels readable. */
+  visibleOptions?: number;
+  /** Reveal only on interaction; leave manual scrolling and initial position alone. */
+  selectionScroll?: "center" | "reveal";
   disabled?: boolean;
 }
 
 /** One option. Memoized so selecting another segment doesn't repaint every
  * unchanged pressable and label in a long (e.g. typeface) group. */
 const Segment = React.memo(function Segment({ value, label, accessibilityLabel, labelStyle, selected, disabled,
-  expressive, vertical, height, first, last, outer, palette, motion, onSelect }: {
+  expressive, vertical, height, first, last, outer, palette, motion, onSelect, compact }: {
   value: string; label: string; accessibilityLabel?: string; labelStyle?: TextStyle;
   selected: boolean; disabled: boolean; expressive: boolean; vertical: boolean;
   height: number; first: boolean; last: boolean; outer: number; palette: SegmentPalette;
-  motion: SegmentMotion; onSelect: (value: string) => void;
+  motion: SegmentMotion; onSelect: (value: string) => void; compact: boolean;
 }) {
   const muted = `${palette.onSurface}61`;
   const idleForeground = disabled ? muted : palette.onSurface;
-  const selectedForeground = disabled ? muted : expressive ? palette.onSecondary : palette.onSecondaryContainer;
+  const selectedForeground = disabled ? muted : expressive ? compact ? palette.onPrimary : palette.onSecondary : palette.onSecondaryContainer;
   const foreground = selected ? selectedForeground : idleForeground;
   const ends = { topLeft: first, bottomLeft: vertical ? last : first, topRight: vertical ? first : last, bottomRight: last };
   const corners = (inner: number) => ({ topLeft: ends.topLeft ? outer : inner, bottomLeft: ends.bottomLeft ? outer : inner,
@@ -79,8 +85,11 @@ const Segment = React.memo(function Segment({ value, label, accessibilityLabel, 
     style={[styles.option, vertical ? { flex: 0, width: "100%" } : null]}
     visualStyle={[styles.visual, {
       height,
+      ...(compact ? { paddingHorizontal: 8 } : {}),
       ...(vertical ? { flex: 0, flexShrink: 0, minHeight: 48, width: "100%" as const } : {}),
-      backgroundColor: disabled ? selected ? `${palette.onSurface}1f` : "transparent" : selected ? expressive ? palette.secondary : palette.secondaryContainer : expressive ? palette.surfaceContainerLow : "transparent",
+      backgroundColor: disabled ? selected ? `${palette.onSurface}1f` : "transparent" : selected
+        ? expressive ? compact ? palette.primary : palette.secondary : palette.secondaryContainer
+        : expressive ? compact ? palette.surfaceContainerHigh : palette.surfaceContainerLow : "transparent",
       borderColor: disabled ? `${palette.onSurface}1f` : palette.outline,
       borderTopWidth: expressive || vertical && !first ? 0 : 1, borderBottomWidth: expressive ? 0 : 1,
       borderLeftWidth: expressive || !vertical && !first ? 0 : 1, borderRightWidth: expressive ? 0 : 1,
@@ -88,7 +97,7 @@ const Segment = React.memo(function Segment({ value, label, accessibilityLabel, 
         borderTopRightRadius: outline.topRight, borderBottomRightRadius: outline.bottomRight } : {}),
     }]}>
     <SegmentLabel label={label} foreground={foreground} selected={selected} labelStyle={labelStyle}
-      reducedMotion={motion.reducedMotion} />
+      reducedMotion={motion.reducedMotion} compact={compact} />
   </PressableScale>;
 }, function segmentPropsEqual(previous, next) {
   // Compare the option's fields, not the caller's object identity: inline
@@ -99,15 +108,19 @@ const Segment = React.memo(function Segment({ value, label, accessibilityLabel, 
     && previous.expressive === next.expressive && previous.vertical === next.vertical
     && previous.height === next.height && previous.first === next.first && previous.last === next.last
     && previous.outer === next.outer && previous.palette === next.palette
+    && previous.compact === next.compact
     && previous.motion === next.motion && previous.onSelect === next.onSelect;
 });
 
-export function Segmented<T extends string>({ options, value, onChange, accessibilityLabel, orientation = "auto", scrollable = false, disabled = false }: SegmentedProps<T>) {
+export function Segmented<T extends string>({ options, value, onChange, accessibilityLabel, orientation = "auto", scrollable = false,
+  visibleOptions, selectionScroll = "center", disabled = false }: SegmentedProps<T>) {
   const { palette, expressive } = useTheme();
   const motion = useMaterialMotion();
   const { fontScale } = useWindowDimensions();
   const [width, setWidth] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
+  const scrollOffset = useRef(0);
+  const compact = scrollable && visibleOptions != null && visibleOptions > 0;
   const [labelWidths, setLabelWidths] = useState<Record<string, number>>({});
   const measuredWidths = useRef<Record<string, number>>({});
   const pendingWidths = useRef<Record<string, number> | null>(null);
@@ -160,27 +173,52 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
   // (interrupted, or a later sibling suspends). Writing the ref during render
   // would leave the next press using a value/callback that never committed.
   const latestSelection = useRef({ value, disabled, onChange });
+  const revealSelection = useRef<(next: string) => void>(() => {});
   React.useLayoutEffect(() => {
     latestSelection.current = { value, disabled, onChange };
   }, [value, disabled, onChange]);
   const select = useCallback((next: string) => {
     const current = latestSelection.current;
-    if (current.disabled || current.value === next) return;
+    if (current.disabled) return;
+    revealSelection.current(next);
+    if (current.value === next) return;
     haptics.selection();
     current.onChange(next as T);
   }, []);
   // Reserve the selected check for EVERY segment so selecting another option
   // never resizes its neighbors. Narrow windows/large fonts stack, not truncate.
-  const minimumWidth = Math.max(0, ...options.map((option) => labelWidths[option.value] ?? 0)) + 22 + 24 + (expressive ? 0 : 2);
+  const minimumWidth = Math.max(48, Math.max(0, ...options.map((option) => labelWidths[option.value] ?? 0))
+    + (compact ? 18 + 16 : 22 + 24) + (expressive ? 0 : 2));
   const horizontalScroll = scrollable && orientation !== "vertical";
   const groupGap = expressive ? 2 : 0;
-  const minimumGroupWidth = minimumWidth * options.length + groupGap * Math.max(0, options.length - 1);
+  const itemWidth = compact ? Math.max(minimumWidth, (width - 24 - groupGap * visibleOptions) / visibleOptions) : minimumWidth;
+  const minimumGroupWidth = itemWidth * options.length + groupGap * Math.max(0, options.length - 1);
   const vertical = orientation === "vertical" || !horizontalScroll && orientation === "auto" && width > 0 && width < minimumGroupWidth;
   const selectedIndex = options.findIndex((option) => option.value === value);
   useEffect(() => {
-    if (!horizontalScroll || width <= 0 || selectedIndex < 0) return;
-    scrollRef.current?.scrollTo({ x: Math.max(0, selectedIndex * (minimumWidth + groupGap) - (width - minimumWidth) / 2), animated: false });
-  }, [horizontalScroll, width, selectedIndex, minimumWidth, groupGap]);
+    if (selectionScroll !== "center" || !horizontalScroll || width <= 0 || selectedIndex < 0) return;
+    scrollRef.current?.scrollTo({ x: Math.max(0, selectedIndex * (itemWidth + groupGap) - (width - itemWidth) / 2), animated: false });
+  }, [selectionScroll, horizontalScroll, width, selectedIndex, itemWidth, groupGap]);
+  useLayoutEffect(() => {
+    revealSelection.current = (next) => {
+      if (selectionScroll !== "reveal" || !horizontalScroll || width <= 0) return;
+      const index = options.findIndex((option) => option.value === next);
+      if (index < 0) return;
+      const step = itemWidth + groupGap;
+      const left = index * step;
+      const right = left + itemWidth;
+      const offset = scrollOffset.current;
+      let target = offset;
+      if (left < offset) target = left;
+      else if (right > offset + width) {
+        // Advance a whole choice: three remain fully visible and the next
+        // still peeks in. Never center a release or move an already visible one.
+        target = compact ? Math.max(left - (visibleOptions - 1) * step, right - width) : right - width;
+      }
+      target = Math.max(0, Math.min(target, minimumGroupWidth - width));
+      if (Math.abs(target - offset) > 1) scrollRef.current?.scrollTo({ x: target, animated: !motion.reducedMotion });
+    };
+  }, [selectionScroll, horizontalScroll, width, options, itemWidth, groupGap, compact, visibleOptions, minimumGroupWidth, motion.reducedMotion]);
   const visualHeight = Math.max(vertical ? 48 : 40, 20 * fontScale + 16);
   const keyboardProps = Platform.OS === "web" ? {
     onKeyDown: (event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -196,8 +234,8 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
       else return;
       event.preventDefault();
       const option = options[next];
-      if (option && option.value !== value) { haptics.selection(); onChange(option.value); }
-      radios[next]?.focus();
+      if (option) select(option.value);
+      radios[next]?.focus({ preventScroll: selectionScroll === "reveal" });
     },
   } : {};
   const group = <View {...keyboardProps} accessibilityRole="radiogroup" accessibilityLabel={accessibilityLabel} style={[styles.group, {
@@ -214,16 +252,18 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
         selected={selected} disabled={disabled}
         expressive={expressive} vertical={vertical} height={visualHeight}
         first={index === 0} last={index === options.length - 1} outer={outer}
-        palette={palette} motion={motion} onSelect={select} />;
+        palette={palette} motion={motion} onSelect={select} compact={compact} />;
     })}
   </View>;
   return <View onLayout={(event) => {
     const nextWidth = event.nativeEvent.layout.width;
     setWidth((current) => (current === nextWidth ? current : nextWidth));
   }} style={{ minHeight: 48, justifyContent: "center" }}>
-    {orientation === "auto" || horizontalScroll ? <SegmentMeasures options={options} onMeasure={measure} /> : null}
+    {orientation === "auto" || horizontalScroll ? <SegmentMeasures options={options} onMeasure={measure} compact={compact} /> : null}
     {horizontalScroll ? <ScrollView ref={scrollRef} horizontal showsHorizontalScrollIndicator={false}
-      keyboardShouldPersistTaps="handled" style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+      onScroll={(event) => { scrollOffset.current = event.nativeEvent.contentOffset.x; }} scrollEventThrottle={16}
+      keyboardShouldPersistTaps="handled" style={compact ? styles.compactScroll : styles.scroll}
+      contentContainerStyle={compact ? styles.compactScrollContent : styles.scrollContent}>
       {group}
     </ScrollView> : group}
   </View>;
@@ -233,18 +273,19 @@ export function Segmented<T extends string>({ options, value, onChange, accessib
  * selection change re-renders the group without re-rendering every hidden
  * label. Options are compared by content, so callers that rebuild an inline
  * array still skip the pass when the labels and styles are unchanged. */
-const SegmentMeasures = React.memo(function SegmentMeasures({ options, onMeasure }: {
+const SegmentMeasures = React.memo(function SegmentMeasures({ options, onMeasure, compact }: {
   options: readonly { value: string; label: string; labelStyle?: TextStyle }[];
   onMeasure: (value: string, width: number) => void;
+  compact: boolean;
 }) {
   return <View pointerEvents="none" aria-hidden importantForAccessibility="no-hide-descendants"
     style={{ position: "absolute", left: 0, right: 0, opacity: 0 }}>
-    {options.map((option) => <Text key={option.value} variant="labelLarge" numberOfLines={1}
+    {options.map((option) => <Text key={option.value} variant={compact ? "labelMedium" : "labelLarge"} numberOfLines={compact ? 2 : 1}
       style={[{ alignSelf: "flex-start" }, option.labelStyle]} onLayout={(event) =>
         onMeasure(option.value, Math.ceil(event.nativeEvent.layout.width) + 1)}>{option.label}</Text>)}
   </View>;
 }, function measureOptionsEqual(previous, next) {
-  if (previous.onMeasure !== next.onMeasure || previous.options.length !== next.options.length) return false;
+  if (previous.onMeasure !== next.onMeasure || previous.compact !== next.compact || previous.options.length !== next.options.length) return false;
   return previous.options.every((option, index) => {
     const other = next.options[index];
     return other != null && option.value === other.value && option.label === other.label
@@ -254,6 +295,8 @@ const SegmentMeasures = React.memo(function SegmentMeasures({ options, onMeasure
 const styles = StyleSheet.create({
    scroll: { marginHorizontal: -8 },
    scrollContent: { flexGrow: 1, padding: 8 },
+   compactScroll: { flexGrow: 0 },
+   compactScrollContent: { flexGrow: 1, paddingVertical: 4 },
    group: { flexDirection: "row", minHeight: 48 },
    option: { flex: 1, minWidth: 48, minHeight: 48, justifyContent: "center" },
    visual: { alignSelf: "stretch", height: 40, flexDirection: "row", alignItems: "center", justifyContent: "center", paddingHorizontal: 12 },

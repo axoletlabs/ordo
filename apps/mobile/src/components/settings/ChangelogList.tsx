@@ -119,7 +119,7 @@ function CommandLine({ text }: { text: string }) {
   );
 }
 
-type InlineVariant = "callout" | "body" | "title3" | "headline" | "bodyMedium";
+type InlineVariant = "callout" | "body" | "title3" | "headline" | "bodyMedium" | "titleSmall";
 
 const STRONG_FACE = {
   fontFamily: resolveFont("sans", "700"),
@@ -215,7 +215,7 @@ function InlineRun({ inlines, variant, color }: {
 }) {
   const tone: TextColor = color ?? (variant === "callout" ? "secondary" : "primary");
   return (
-    <Text variant={variant} color={tone} selectable accessibilityRole={variant === "title3" || variant === "headline" ? "header" : undefined}>
+    <Text variant={variant} color={tone} selectable accessibilityRole={variant === "title3" || variant === "headline" || variant === "titleSmall" ? "header" : undefined}>
       <InlineChildren inlines={inlines} variant={variant} tone={tone} />
     </Text>
   );
@@ -419,8 +419,7 @@ function BlockView({
 }) {
   const { palette } = useTheme();
   if (block.type === "heading") {
-    const variant = block.level <= 2 ? "title3" : "headline";
-    return <InlineRun inlines={block.inlines} variant={variant} color="accent" />;
+    return <InlineRun inlines={block.inlines} variant="titleSmall" color="accent" />;
   }
   if (block.type === "list") return <NoteList items={block.items} nested={nested} />;
   if (block.type === "quote") {
@@ -439,7 +438,7 @@ function BlockView({
   if (block.type === "table") {
     return <NoteTable header={block.header} rows={block.rows} align={block.align} />;
   }
-  return <Paragraph inlines={block.inlines} variant={lead ? "callout" : "body"} />;
+  return <Paragraph inlines={block.inlines} variant={lead ? "callout" : "bodyMedium"} />;
 }
 
 function Notes({ blocks }: { blocks: ChangelogBlock[] }) {
@@ -452,9 +451,10 @@ function Notes({ blocks }: { blocks: ChangelogBlock[] }) {
   }
   const leadIndex = blocks.findIndex((block) => block.type === "paragraph");
   return (
-    <View style={styles.notes}>
+    <View>
       {blocks.map((block, index) => {
-        return <View key={index} style={block.type === "heading" && index > 0 ? styles.sectionHeading : undefined}>
+        return <View key={index} style={index === 0 ? undefined : block.type === "heading" ? styles.sectionHeading
+          : blocks[index - 1]?.type === "heading" ? styles.sectionBody : styles.noteBlock}>
           <BlockView block={block} lead={index === leadIndex} />
         </View>;
       })}
@@ -471,11 +471,15 @@ function ReleaseSelector({
   selected: ChangelogRelease;
   onSelect: (tag: string) => void;
 }) {
+  // Repeating the same version on every preview makes the history needlessly
+  // wide. Keep full release names for accessibility and across version lines.
+  const sameVersion = releases.every((release) => release.version.split("-")[0] === releases[0].version.split("-")[0]);
   return (
-    <Segmented accessibilityLabel="Releases" scrollable
+    <Segmented accessibilityLabel="Releases" scrollable visibleOptions={3} selectionScroll="reveal"
       options={releases.map((release) => ({
         value: release.tagName,
-        label: releaseName(release.version),
+        label: releaseName(release.version).replace(/^(\S+) (Preview)/, sameVersion ? "$2" : "$1\n$2"),
+        accessibilityLabel: releaseName(release.version),
       }))}
       value={selected.tagName} onChange={onSelect} />
   );
@@ -553,7 +557,7 @@ function ChangelogSheetBody({
       <Text variant="body" color="secondary">Published updates will show up here.</Text>
     );
   } else {
-    body = <Animated.View style={[styles.notesContent, contentStyle]}><Notes blocks={blocks} /></Animated.View>;
+    body = <Animated.View style={contentStyle}><Notes blocks={blocks} /></Animated.View>;
   }
 
   return (
@@ -602,12 +606,12 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  notesContent: { paddingBottom: spacing[8] },
-  notes: { gap: spacing[16] },
-  highlights: { padding: spacing[16], borderRadius: radius["2xl"], gap: spacing[24] },
+  noteBlock: { marginTop: spacing[16] },
+  highlights: { padding: spacing[16], borderRadius: radius.xl, gap: spacing[16] },
   highlight: { gap: spacing[4] },
-  releaseHeading: { marginTop: spacing[8], width: "100%", gap: spacing[4] },
-  sectionHeading: { marginTop: spacing[16] },
+  releaseHeading: { marginTop: spacing[4], width: "100%", gap: spacing[4] },
+  sectionHeading: { marginTop: spacing[24] },
+  sectionBody: { marginTop: spacing[8] },
   empty: { gap: spacing[16] },
   prose: { gap: spacing[10] },
   link: { textDecorationLine: "underline" },
@@ -620,17 +624,17 @@ const styles = StyleSheet.create({
     paddingVertical: spacing[4],
   },
   codeText: { fontFamily: resolveFont("mono", "400"), lineHeight: 20, letterSpacing: 0 },
-  list: { gap: spacing[16] },
+  list: { gap: spacing[8] },
   listItem: { flexDirection: "row", alignItems: "flex-start" },
   bulletSlot: {
     width: spacing[16],
-    height: 24,
+    height: 20,
     alignItems: "center",
     justifyContent: "center",
   },
   bullet: { width: 5, height: 5, borderRadius: radius.full },
   listCopy: { flex: 1, minWidth: 0, gap: spacing[8] },
-  releaseNavigation: { paddingTop: spacing[8], width: "100%" },
+  releaseNavigation: { paddingTop: spacing[8], gap: spacing[8], width: "100%" },
   checkbox: {
     width: 14,
     height: 14,
