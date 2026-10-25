@@ -11,8 +11,10 @@
     "web": "expo start --web",
     "start": "expo start",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
-    "clean": "rimraf .expo node_modules/.cache"
+    "typecheck": "node scripts/generate-licenses.cjs && tsc --noEmit",
+    "clean": "rimraf .expo node_modules/.cache",
+    "licenses:generate": "node scripts/generate-licenses.cjs",
+    "licenses:check": "node scripts/generate-licenses.cjs && node --test scripts/test-license-generation.cjs"
   },
   "dependencies": {
     "@babel/runtime": "^7.29.7",

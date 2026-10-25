@@ -1,0 +1,98 @@
+{
+  "expo-expo": {
+    "url": "https://github.com/expo/expo/blob/main/LICENSE",
+    "sha": "30b20e3b5f0f470947ba9480d90587ba07c137b4",
+    "file": "upstream/expo-expo.txt"
+  },
+  "jsamr-react-native-li": {
+    "url": "https://github.com/jsamr/react-native-li/blob/master/LICENSE",
+    "sha": "38ebf2e8b2b7280a63a2846acad70ef643197ce5",
+    "file": "upstream/jsamr-react-native-li.txt"
+  },
+  "radix-ui-primitives": {
+    "url": "https://github.com/radix-ui/primitives/blob/main/LICENSE",
+    "sha": "a18858fb7b014098cba85703e66609be66a26ef5",
+    "file": "upstream/radix-ui-primitives.txt"
+  },
+  "facebook-react": {
+    "url": "https://github.com/react/react/blob/main/LICENSE",
+    "sha": "b93be90515ccd0b9daedaa589e42bf5929693f1f",
+    "file": "upstream/facebook-react.txt"
+  },
+  "fb55-boolbase": {
+    "url": "https://github.com/fb55/boolbase/blob/master/LICENSE",
+    "sha": "a689aae96e8957e4ab7a3a7449fe5271a6516e4b",
+    "file": "upstream/fb55-boolbase.txt"
+  },
+  "facebook-hermes": {
+    "url": "https://github.com/facebook/hermes/blob/static_h/LICENSE",
+    "sha": "b93be90515ccd0b9daedaa589e42bf5929693f1f",
+    "file": "upstream/facebook-hermes.txt"
+  },
+  "react-metro": {
+    "url": "https://github.com/react/metro/blob/main/LICENSE",
+    "sha": "b93be90515ccd0b9daedaa589e42bf5929693f1f",
+    "file": "upstream/react-metro.txt"
+  },
+  "mrousavy-react-native-mmkv": {
+    "url": "https://github.com/margelo/react-native-mmkv/blob/main/LICENSE",
+    "sha": "f8af7f546c69b0bbc8d6c02a7b52ee6a1600ecb9",
+    "file": "upstream/mrousavy-react-native-mmkv.txt"
+  },
+  "mrousavy-nitro": {
+    "url": "https://github.com/margelo/nitro/blob/main/LICENSE",
+    "sha": "f8af7f546c69b0bbc8d6c02a7b52ee6a1600ecb9",
+    "file": "upstream/mrousavy-nitro.txt"
+  },
+  "react-navigation-standard-navigation": {
+    "url": "https://github.com/react-navigation/standard-navigation/blob/main/LICENSE",
+    "sha": "887f80b0b9ca1ec0fb56a435eaf25ca1a009a0f7",
+    "file": "upstream/react-navigation-standard-navigation.txt"
+  },
+  "evert-structured-header": {
+    "url": "https://github.com/evert/structured-headers/blob/main/LICENSE",
+    "sha": "b10db45d3a62cb51570820378c9381996fc0cb40",
+    "file": "upstream/evert-structured-header.txt"
+  },
+  "Sebmaster-tr46.js": {
+    "url": "https://github.com/jsdom/tr46/blob/main/LICENSE.md",
+    "sha": "62c0de28a830d3ae3a006c9e1e7df19067e409a7",
+    "file": "upstream/Sebmaster-tr46.js.txt"
+  },
+  "watchman-apache": {
+    "url": "https://github.com/facebook/watchman/blob/v4.9.0/LICENSE",
+    "sha": "f433b1a53f5b830a205fd2df78e2b34974656c7b",
+    "file": "upstream/watchman-apache.txt"
+  },
+  "react-native": {
+    "file": "upstream/react-native.txt",
+    "url": "https://github.com/facebook/react-native/blob/main/LICENSE",
+    "sha": "b93be90515ccd0b9daedaa589e42bf5929693f1f",
+    "package": "react-native@0.86.3"
+  },
+  "expo-devcert": {
+    "url": "https://github.com/expo/devcert/blob/master/LICENSE",
+    "sha": "8e155affd41ba4cf9b32e740f58e421600818b92",
+    "file": "upstream/expo-devcert.txt"
+  },
+  "jaulz-badgin": {
+    "url": "https://github.com/jaulz/badgin/blob/master/LICENSE",
+    "sha": "bb02b4ba8ca6a4350fdffd025f24b07c8f962f68",
+    "file": "upstream/jaulz-badgin.txt"
+  },
+  "theKashey-react-remove-scroll-bar": {
+    "url": "https://github.com/theKashey/react-remove-scroll-bar/blob/master/LICENSE",
+    "sha": "7c08c3990396ecefd90f99ff5d9a34f26f5b5616",
+    "file": "upstream/theKashey-react-remove-scroll-bar.txt"
+  },
+  "facebook-dotslash": {
+    "url": "https://github.com/facebook/dotslash/blob/main/LICENSE-APACHE",
+    "sha": "b09cd7856d58590578ee1a4f3ad45d1310a97f87",
+    "file": "upstream/facebook-dotslash.txt"
+  },
+  "jimp": {
+    "url": "https://github.com/jimp-dev/jimp/blob/main/LICENSE",
+    "sha": "baa5d48509a18b9ab4f6c39289362690ea68e688",
+    "file": "upstream/jimp.txt"
+  }
+}

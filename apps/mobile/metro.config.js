@@ -6,6 +6,9 @@
 const path = require("node:path");
 const { getDefaultConfig } = require("expo/metro-config");
 
+// Runs for development, native bundles, web exports and OTA updates.
+require("./scripts/generate-licenses.cjs").generateLicenses();
+
 const config = getDefaultConfig(__dirname);
 const STUBS = path.join(__dirname, "metro-stubs");
 
