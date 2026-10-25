@@ -27,12 +27,14 @@ export function Button({ label, onPress, variant = "primary", size = "sm", loadi
   disabled = false, icon, block = false, style, testID }: ButtonProps) {
   const { palette, expressive, shadows } = useTheme();
   const inactive = disabled || loading;
+  // Pending actions keep their color pairing while interaction is locked.
+  const disabledAppearance = disabled && !loading;
   const tokens = sizes[size];
   const filled = variant === "primary" || variant === "danger" || variant === "tonal" || variant === "secondary" || variant === "elevated";
-  const surface = inactive ? filled ? `${palette.onSurface}1f` : "transparent"
+  const surface = disabledAppearance ? filled ? `${palette.onSurface}1f` : "transparent"
     : variant === "primary" ? palette.primary : variant === "danger" ? palette.error
     : variant === "tonal" || variant === "secondary" ? palette.secondaryContainer : variant === "elevated" ? palette.surfaceContainerLow : "transparent";
-  const foreground = inactive ? `${palette.onSurface}61` : variant === "primary" ? palette.onPrimary
+  const foreground = disabledAppearance ? `${palette.onSurface}61` : variant === "primary" ? palette.onPrimary
     : variant === "danger" ? palette.onError : variant === "tonal" || variant === "secondary" ? palette.onSecondaryContainer
     : variant === "outlined" && expressive ? palette.onSurfaceVariant : palette.primary;
   // The pressed squarer-corner morph is Expressive-only; Standard keeps the
@@ -50,8 +52,8 @@ export function Button({ label, onPress, variant = "primary", size = "sm", loadi
       visualStyle={[styles.base, { height: tokens.height, alignSelf: "stretch", paddingHorizontal: size === "sm" && !expressive ? 24 : tokens.padding,
         backgroundColor: surface, borderRadius: tokens.height / 2,
         borderWidth: variant === "outlined" ? 1 : 0,
-        borderColor: inactive ? `${palette.onSurface}1f` : expressive ? palette.outlineVariant : palette.outline },
-        variant === "elevated" && !inactive ? shadows.level1 : null]}>
+        borderColor: disabledAppearance ? `${palette.onSurface}1f` : expressive ? palette.outlineVariant : palette.outline },
+        variant === "elevated" && !disabledAppearance ? shadows.level1 : null]}>
       <View style={styles.content}>
         <View pointerEvents="none" aria-hidden={loading} importantForAccessibility={loading ? "no-hide-descendants" : "auto"}
           style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", minWidth: 0, maxWidth: "100%", opacity: loading ? 0 : 1 }}>
@@ -61,7 +63,7 @@ export function Button({ label, onPress, variant = "primary", size = "sm", loadi
             color: foreground, fontSize: tokens.font, lineHeight: tokens.font + 6,
           }]}>{label}</Text>
         </View>
-        {loading ? <View pointerEvents="none" style={StyleSheet.absoluteFill}><View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><Spinner size="sm" color={foreground} /></View></View> : null}
+        {loading ? <View pointerEvents="none" style={StyleSheet.absoluteFill}><View style={{ flex: 1, alignItems: "center", justifyContent: "center" }}><Spinner size={tokens.icon} color={foreground} accessible={false} /></View></View> : null}
       </View>
     </PressableScale>
   </View>;
