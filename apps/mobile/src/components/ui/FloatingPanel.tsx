@@ -20,6 +20,7 @@ import { useOverlayFocus } from "../../hooks/use-overlay-focus";
 import { useOverlayPage } from "../../hooks/use-overlay-page";
 import { useSurfaceSize } from "../../hooks/use-surface-size";
 import { useScrimPress } from "../../hooks/use-scrim-press";
+import { ResizeOwnerContext } from "./resize-owner";
 import { PanelTitleContext } from "./panel-title";
 import { PanelPresenceContext } from "./panel-presence";
 import { PanelHeader } from "./PanelHeader";
@@ -123,7 +124,7 @@ function FloatingPanelSurface({
   const { palette } = useTheme();
   const sheet = presentation === "bottom-sheet";
   const expandedSheet = sheet && sheetSizing === "expanded";
-  const adaptiveSheet = sheet && sheetSizing === "adaptive";
+  const adaptiveSheet = sheet && sheetSizing !== "expanded";
   const fillSheet = expandedSheet || adaptiveSheet;
   const panelSurface = sheet ? palette.surfaceContainerLow : palette.surfaceContainerHigh;
   const titleId = React.useId();
@@ -257,12 +258,10 @@ function FloatingPanelSurface({
   // long confirmations cannot push their actions out of the visible panel.
   const scrollHeader = heightLimit < 360;
   const scrollAll = scrollBody && heightLimit < 220;
-  const bodyLimit = Math.max(0, heightLimit - panelPadding * 2 - (!scrollHeader && headers.length ? 56 : 0) - (!scrollAll && actions.length ? 72 : 0));
-  const scrollNodes = scrollHeader ? [...headers.map((header) => React.isValidElement<{ style?: StyleProp<ViewStyle> }>(header)
-     ? React.cloneElement(header, { style: [header.props.style, { marginBottom: body.length ? spacing[24] : 0 }] }) : header), ...body, ...(scrollAll ? actions : [])] : body;
-  const scrollingBody = !scrollNodes.length ? null : scrollBody
-    ? <ThemedScrollView key={scrollResetKey} keyboardShouldPersistTaps="handled" nestedScrollEnabled style={{ flexShrink: 1, maxHeight: bodyLimit }}>{scrollNodes}</ThemedScrollView>
-    : <View style={{ flexShrink: 1, maxHeight: bodyLimit }}>{scrollNodes}</View>;
+  const recordNaturalHeight = React.useCallback((next: number) => {
+    if (next <= 0 || obscured) return;
+    setNaturalContentHeight(current => current != null && Math.abs(current - next) < 0.5 ? current : next);
+  }, [obscured]);
 
   React.useLayoutEffect(() => {
     if (!visible) return;
@@ -435,30 +434,18 @@ function FloatingPanelSurface({
               isolation: "auto",
               overflow: "hidden",
             } as unknown as ViewStyle, scrimStyle]} /> : null}
-            {/* Measure against the available viewport, never this surface's
-                animated height. Native scroll views otherwise keep the shorter
-                page's constraint when a taller page replaces it. */}
-            <View pointerEvents="box-none" style={fillSheet ? { flex: 1 } : {
-              height: Math.max(0, heightLimit - Number(topPadding) - Number(bottomPadding)), flexShrink: 0,
-            }}>
-            <Animated.View onLayout={!fillSheet ? (event) => {
-              const next = event.nativeEvent.layout.height;
-              if (next <= 0 || obscured) return;
-              setNaturalContentHeight(current => current != null && Math.abs(current - next) < 0.5 ? current : next);
-            } : undefined} style={[{ flexShrink: fillSheet ? 1 : 0 }, fillSheet ? { flex: 1 } : null, Platform.OS === "web" ? scrimStyle : null]}>
-            <PanelPageContent style={pageStyle}>
+            <ResizeOwnerContext.Provider value>
             <PanelTitleContext.Provider value={titleId}>
             <InputSurfaceContext.Provider value={panelSurface}>
-              {sheet ? sheetContent : <>
-              {!scrollHeader ? headers.map((header) => React.isValidElement<{ style?: StyleProp<ViewStyle> }>(header)
-                ? React.cloneElement(header, { style: [header.props.style, { marginBottom: 0 }] }) : header) : null}
-              {scrollingBody ? <View style={{ flexShrink: 1, marginTop: !scrollHeader && headers.length ? spacing[16] : 0 }}>{scrollingBody}</View> : null}{!scrollAll ? actions : null}
-              </>}
+            {sheet ? <Animated.View style={[{ flex: 1 }, Platform.OS === "web" ? scrimStyle : null]}>
+              <PanelPageContent style={pageStyle}>{sheetContent}</PanelPageContent>
+            </Animated.View> : <DialogContent headers={headers} actions={actions} body={body}
+              scrollHeader={scrollHeader} scrollAll={scrollAll} scrollBody={scrollBody}
+              scrollResetKey={scrollResetKey} heightLimit={Math.max(0, heightLimit - Number(topPadding) - Number(bottomPadding))}
+              onMeasure={recordNaturalHeight} style={pageStyle} fade={Platform.OS === "web" ? scrimStyle : undefined} />}
             </InputSurfaceContext.Provider>
             </PanelTitleContext.Provider>
-            </PanelPageContent>
-            </Animated.View>
-            </View>
+            </ResizeOwnerContext.Provider>
           </Animated.View>
           </View>
       </View>
@@ -466,6 +453,54 @@ function FloatingPanelSurface({
       </InputFocusScopeContext.Provider>
     </OverlayPortal>
   );
+}
+
+/** The body reports its intrinsic content size independently of its viewport.
+ * Header and actions participate in the CURRENT animated height, so actions
+ * never land outside the card while its target size is still being reached. */
+function DialogContent({ headers, actions, body, scrollHeader, scrollAll, scrollBody,
+  scrollResetKey, heightLimit, onMeasure, style, fade }: {
+  headers: React.ReactNode[]; actions: React.ReactNode[]; body: React.ReactNode[];
+  scrollHeader: boolean; scrollAll: boolean; scrollBody: boolean;
+  scrollResetKey?: string; heightLimit: number; onMeasure: (height: number) => void;
+  style?: ReturnType<typeof useOverlayPage>["style"];
+  fade?: ReturnType<typeof useOverlayPage>["style"];
+}) {
+  const [headerHeight, setHeaderHeight] = React.useState(0);
+  const [actionsHeight, setActionsHeight] = React.useState(0);
+  const [bodyHeight, setBodyHeight] = React.useState<number | null>(null);
+  const gap = !scrollHeader && headers.length && body.length ? spacing[16] : 0;
+  const fixedHeader = !scrollHeader && headers.length > 0;
+  const fixedActions = !scrollAll && actions.length > 0;
+  const content = scrollHeader ? [...headers.map(header => React.isValidElement<{ style?: StyleProp<ViewStyle> }>(header)
+    ? React.cloneElement(header, { style: [header.props.style, { marginBottom: body.length ? spacing[24] : 0 }] }) : header),
+    ...body, ...(scrollAll ? actions : [])] : body;
+  // Bound list-owned pickers against the AVAILABLE space, never the current
+  // animated body. Their virtualized viewport must shrink on short windows
+  // so its last row remains scrollable rather than clipped below the actions.
+  const bodyLimit = Math.max(0, heightLimit - (fixedHeader ? headerHeight : 0) - (fixedActions ? actionsHeight : 0) - gap);
+  const naturalBodyHeight = content.length ? bodyHeight : 0;
+  React.useLayoutEffect(() => {
+    if (naturalBodyHeight == null || fixedHeader && headerHeight === 0 || fixedActions && actionsHeight === 0) return;
+    onMeasure(Math.min(heightLimit, (fixedHeader ? headerHeight : 0) + (fixedActions ? actionsHeight : 0) + naturalBodyHeight + gap));
+  }, [naturalBodyHeight, headerHeight, actionsHeight, fixedHeader, fixedActions, gap, heightLimit, onMeasure]);
+  const recordBody = React.useCallback((next: number) => {
+    setBodyHeight(current => current != null && Math.abs(current - next) < 0.5 ? current : next);
+  }, []);
+  return <Animated.View testID="material-dialog-content" style={[{ flex: 1, minHeight: 0 }, fade, style]}>
+    {fixedHeader ? <View style={{ flexShrink: 0 }} onLayout={event => setHeaderHeight(event.nativeEvent.layout.height)}>
+      {headers.map(header => React.isValidElement<{ style?: StyleProp<ViewStyle> }>(header)
+        ? React.cloneElement(header, { style: [header.props.style, { marginBottom: 0 }] }) : header)}
+    </View> : null}
+    <View testID="material-dialog-body" style={{ flex: 1, minHeight: 0, marginTop: gap, overflow: "hidden" }}>
+      {scrollBody ? <ThemedScrollView key={scrollResetKey} keyboardShouldPersistTaps="handled" nestedScrollEnabled
+        style={{ flex: 1 }} onContentSizeChange={(_width, next) => recordBody(next)}>{content}</ThemedScrollView>
+        : <View style={{ flexShrink: 0, maxHeight: bodyLimit }} onLayout={event => recordBody(event.nativeEvent.layout.height)}>{content}</View>}
+    </View>
+    {fixedActions ? <View testID="material-dialog-actions" style={{ flexShrink: 0 }}>
+      <View onLayout={event => setActionsHeight(event.nativeEvent.layout.height)}>{actions}</View>
+    </View> : null}
+  </Animated.View>;
 }
 
 /** Keep partially scrolled lines from colliding with the sheet's fixed chrome.
@@ -491,7 +526,7 @@ function PanelPageContent({ style, children }: {
   children: React.ReactNode;
 }) {
   return style ? <Animated.View
-    style={[{ flexShrink: 0 }, style]}>{children}</Animated.View> : children;
+    style={[{ flex: 1, minHeight: 0 }, style]}>{children}</Animated.View> : children;
 }
 
 /** Run opening callbacks where the portal's real blocking context is known.
