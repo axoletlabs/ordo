@@ -79,12 +79,15 @@ export function measureAnchor(
   onMeasured: (anchor: MenuAnchorRect) => void,
   event?: PointEvent | null,
 ): void {
+  // Native measurement may finish after the press-in event is recycled.
+  // Snapshot the fallback point while the event is still owned by the caller.
+  const fallback = event ? rectFromPoint(event) : null;
   const finish = (anchor: MenuAnchorRect | null) => {
     if (anchor) {
       onMeasured(anchor);
       return;
     }
-    if (event) onMeasured(rectFromPoint(event));
+    if (fallback) onMeasured(fallback);
   };
 
   // RN web's measureInWindow defers the callback. Read the existing DOM box

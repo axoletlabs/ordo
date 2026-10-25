@@ -126,6 +126,15 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
   }, [backdrop, dismissible, keyboardDismiss, onDismiss]);
   const scrimPress = useScrimPress(visible && backdrop, hideAndDismiss);
   const [contentHeight, setContentHeight] = React.useState(0);
+  const inputFocusScope = useInputFocusScope(visible,
+    Platform.OS === "web" || contentHeight > 0, visible);
+  // A prepared body is measured at its dormant origin. Its entrance must wait
+  // for the portal HOST to commit today's anchor/placement, not merely for the
+  // publisher to enqueue that update. Otherwise a busy native commit consumes
+  // the fade while the surface is still hidden, revealing an opaque jump.
+  const presentationKey = JSON.stringify([inputFocusScope.session, measureKey,
+    anchor?.x, anchor?.y, anchor?.width, anchor?.height, contentHeight]);
+  const [presented, setPresented] = React.useState<string | null>(null);
   const contentHeightRef = React.useRef(0);
   const measuredBody = React.useRef<{ key: string; content: React.ReactNode } | null>(null);
   /** A new session replaced the contents on a visible surface; keep the old
@@ -148,7 +157,7 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
   const { rendered, retained, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, {
     dismissKeyboard: backdrop && keyboardDismiss,
     interactive: backdrop,
-    ready: contentHeight > 0,
+    ready: contentHeight > 0 && presented === presentationKey,
     entranceEasing: MENU_ENTRANCE_EASING,
     onExited,
     onExiting,
@@ -358,9 +367,6 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
     opacity: progress.value,
     transform: [{ translateY: interpolate(spatial.value, [0, 1], [fromY * 2, 0]) }],
   }));
-  const inputFocusScope = useInputFocusScope(visible && rendered,
-    Platform.OS === "web" || contentHeight > 0, visible);
-
   if ((!rendered && !keepMounted) || !placed) return null;
 
   return (
@@ -409,6 +415,8 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
         >
             <MenuBody
               visible={visible || keepMounted}
+              presentationKey={visible && contentHeight > 0 ? presentationKey : null}
+              onPresented={setPresented}
               refreshOnLayout={keepMounted}
               measureKey={keepMounted ? measureKey : sessionKey}
               onMeasure={measureBody}
@@ -438,10 +446,12 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
  * document style/layout recalculation — the dominant cost when a long article
  * sat behind the menu — so placement/entrance wait one non-blocking layout
  * report instead. */
-function MenuBody({ visible, measureKey, refreshOnLayout, onMeasure, onLayout, style, children }: {
+function MenuBody({ visible, measureKey, presentationKey, onPresented, refreshOnLayout, onMeasure, onLayout, style, children }: {
   visible: boolean;
   refreshOnLayout: boolean;
   measureKey?: string | number | null;
+  presentationKey: string | null;
+  onPresented: (key: string) => void;
   onMeasure: (height: number) => void;
   onLayout: (event: LayoutChangeEvent) => void;
   style: ViewStyle;
@@ -449,6 +459,9 @@ function MenuBody({ visible, measureKey, refreshOnLayout, onMeasure, onLayout, s
 }) {
   const ref = React.useRef<View>(null);
   const measureNative = React.useRef<(() => void) | null>(null);
+  React.useLayoutEffect(() => {
+    if (presentationKey !== null) onPresented(presentationKey);
+  }, [onPresented, presentationKey]);
   React.useLayoutEffect(() => {
     if (!visible) return;
     const node = ref.current;

@@ -1,12 +1,13 @@
 /** Material small / large top app bars with shared 48dp action targets. */
 import React from "react";
-import { Platform, StyleSheet, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
+import { Platform, StyleSheet, View, type GestureResponderEvent, type StyleProp, type TextStyle, type ViewStyle } from "react-native";
 import { useAppRouter as useRouter } from "../../hooks/use-app-router";
 import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColumnPadding, type ColumnAlign } from "../../hooks/use-scene-column-insets";
 import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
 import { measureAnchor, type MenuAnchorRect } from "../../lib/menu-anchor";
+import { createMenuAnchorPress } from "../../lib/menu-anchor-press";
 import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
 import { haptics } from "../../lib/haptics";
 import { runPressAction } from "../../lib/press-action";
@@ -78,6 +79,10 @@ export function HeaderIconButton({ name, color, variant = "standard", onPress, a
 }) {
   const grouped = useButtonGroupInteraction() != null;
   const ref = React.useRef<View>(null);
+  const anchorPress = React.useMemo(() => createMenuAnchorPress<GestureResponderEvent>(
+    (done, event) => measureAnchor(ref.current, done, event),
+  ), []);
+  React.useLayoutEffect(() => () => anchorPress.cancel(), [anchorPress]);
   const [tooltip, setTooltip] = React.useState<MenuAnchorRect | null>(null);
   const tooltipId = React.useId();
   const hovered = React.useRef(false);
@@ -118,13 +123,15 @@ export function HeaderIconButton({ name, color, variant = "standard", onPress, a
     <IconButton name={name} variant={variant} color={color} accessibilityLabel={accessibilityLabel}
       aria-describedby={tooltip ? tooltipId : undefined}
       accessibilityHint={accessibilityHint}
+      onPressIn={measureOnPress ? (event) => { dismissTooltip(); anchorPress.prepare(event); } : undefined}
+      onPressOut={measureOnPress ? () => anchorPress.release() : undefined}
       onHoverIn={() => { hovered.current = true; scheduleTooltip(); }} onFocus={() => { focused.current = true; scheduleTooltip(); }}
       onHoverOut={() => { hovered.current = false; hideIfInactive(); }} onBlur={() => { focused.current = false; hideIfInactive(); }}
-      onLongPress={() => showTooltip(Platform.OS !== "web")}
+      onLongPress={() => { anchorPress.cancel(); showTooltip(Platform.OS !== "web"); }}
       onPress={(event) => {
         dismissTooltip();
         const invoke = (anchor: MenuAnchorRect) => runPressAction(() => onPress(anchor), haptics.light);
-        if (measureOnPress) measureAnchor(ref.current, invoke, event);
+        if (measureOnPress) anchorPress.activate(event, invoke);
         else invoke({ x: 0, y: 0, width: 1, height: 1 });
       }} />
    </View><PlainTooltip id={tooltipId} visible={!!tooltip} anchor={tooltip} label={accessibilityLabel} onDismiss={dismissTooltip}

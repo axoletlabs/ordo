@@ -184,6 +184,9 @@ jobs:
       - name: Lint
         run: pnpm -r lint
 
+      - name: Verify menu interactions
+        run: node --test apps/mobile/scripts/test-menu-interaction.mjs
+
       - name: Verify folder bookmark preservation
         run: |
           pnpm --filter @ordo/server build
