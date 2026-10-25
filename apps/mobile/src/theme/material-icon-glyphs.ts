@@ -5,6 +5,7 @@ export const MATERIAL_ICON_GLYPHS: Record<string, number> = {
   "account-tree": 59770,
   "add": 57669,
   "alarm": 59477,
+  "analytics": 61246,
   "apps": 58819,
   "arrow-back": 58820,
   "arrow-downward": 58843,

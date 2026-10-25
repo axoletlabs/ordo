@@ -1,0 +1,235 @@
+{
+  "@expo/metro-runtime@4.0.1": {
+    "source": "expo-expo",
+    "license": "MIT"
+  },
+  "@expo/sdk-runtime-versions@1.0.0": {
+    "source": "expo-expo",
+    "license": "MIT"
+  },
+  "@expo/ui@57.0.18": {
+    "source": "expo-expo",
+    "license": "MIT"
+  },
+  "@expo/ws-tunnel@2.0.0": {
+    "source": "expo-expo",
+    "license": "MIT"
+  },
+  "@jsamr/counter-style@2.0.2": {
+    "source": "jsamr-react-native-li",
+    "license": "MIT"
+  },
+  "@jsamr/react-native-li@2.3.1": {
+    "source": "jsamr-react-native-li",
+    "license": "MIT"
+  },
+  "@radix-ui/react-compose-refs@1.1.2": {
+    "source": "radix-ui-primitives",
+    "license": "MIT"
+  },
+  "@react-native/assets-registry@0.86.3": {
+    "source": "react-native",
+    "license": "MIT"
+  },
+  "@react-native/babel-plugin-codegen@0.86.3": {
+    "source": "react-native",
+    "license": "MIT"
+  },
+  "@react-native/babel-preset@0.86.3": {
+    "source": "react-native",
+    "license": "MIT"
+  },
+  "@react-native/codegen@0.86.3": {
+    "source": "react-native",
+    "license": "MIT"
+  },
+  "@react-native/community-cli-plugin@0.86.3": {
+    "source": "react-native",
+    "license": "MIT"
+  },
+  "@react-native/debugger-shell@0.86.3": {
+    "source": "react-native",
+    "license": "MIT"
+  },
+  "@react-native/dev-middleware@0.86.3": {
+    "source": "react-native",
+    "license": "MIT"
+  },
+  "@react-native/gradle-plugin@0.86.3": {
+    "source": "react-native",
+    "license": "MIT"
+  },
+  "@react-native/js-polyfills@0.86.3": {
+    "source": "react-native",
+    "license": "MIT"
+  },
+  "@react-native/metro-babel-transformer@0.86.3": {
+    "source": "react-native",
+    "license": "MIT"
+  },
+  "@react-native/metro-config@0.86.3": {
+    "source": "react-native",
+    "license": "MIT"
+  },
+  "@react-native/normalize-colors@0.74.89": {
+    "source": "react-native",
+    "license": "MIT"
+  },
+  "@react-native/normalize-colors@0.86.3": {
+    "source": "react-native",
+    "license": "MIT"
+  },
+  "@react-native/virtualized-lists@0.86.3": {
+    "source": "react-native",
+    "license": "MIT"
+  },
+  "babel-plugin-react-compiler@1.0.0": {
+    "source": "facebook-react",
+    "license": "MIT"
+  },
+  "boolbase@1.0.0": {
+    "source": "fb55-boolbase",
+    "license": "ISC"
+  },
+  "bser@2.1.1": {
+    "source": "watchman-apache",
+    "license": "Apache-2.0",
+    "copyright": "Copyright 2015-present Facebook, Inc."
+  },
+  "client-only@0.0.1": {
+    "source": "facebook-react",
+    "license": "MIT"
+  },
+  "expo-router@57.0.21": {
+    "source": "expo-expo",
+    "license": "MIT"
+  },
+  "expo-structured-headers@57.0.1": {
+    "source": "expo-expo",
+    "license": "MIT"
+  },
+  "expo-updates@57.0.22": {
+    "source": "expo-expo",
+    "license": "MIT"
+  },
+  "fb-watchman@2.0.2": {
+    "source": "watchman-apache",
+    "license": "Apache-2.0",
+    "copyright": "Copyright (c) Meta Platforms, Inc. and affiliates.",
+    "additionalSources": [
+      "facebook-react"
+    ]
+  },
+  "hermes-compiler@250829098.0.17": {
+    "source": "facebook-hermes",
+    "license": "MIT"
+  },
+  "metro-babel-transformer@0.84.5": {
+    "source": "react-metro",
+    "license": "MIT"
+  },
+  "metro-cache-key@0.84.5": {
+    "source": "react-metro",
+    "license": "MIT"
+  },
+  "metro-cache@0.84.5": {
+    "source": "react-metro",
+    "license": "MIT"
+  },
+  "metro-config@0.84.5": {
+    "source": "react-metro",
+    "license": "MIT"
+  },
+  "metro-core@0.84.5": {
+    "source": "react-metro",
+    "license": "MIT"
+  },
+  "metro-file-map@0.84.5": {
+    "source": "react-metro",
+    "license": "MIT"
+  },
+  "metro-minify-terser@0.84.5": {
+    "source": "react-metro",
+    "license": "MIT"
+  },
+  "metro-resolver@0.84.5": {
+    "source": "react-metro",
+    "license": "MIT"
+  },
+  "metro-runtime@0.84.5": {
+    "source": "react-metro",
+    "license": "MIT"
+  },
+  "metro-source-map@0.84.5": {
+    "source": "react-metro",
+    "license": "MIT"
+  },
+  "metro-symbolicate@0.84.5": {
+    "source": "react-metro",
+    "license": "MIT"
+  },
+  "metro-transform-plugins@0.84.5": {
+    "source": "react-metro",
+    "license": "MIT"
+  },
+  "metro-transform-worker@0.84.5": {
+    "source": "react-metro",
+    "license": "MIT"
+  },
+  "metro@0.84.5": {
+    "source": "react-metro",
+    "license": "MIT"
+  },
+  "ob1@0.84.5": {
+    "source": "react-metro",
+    "license": "MIT"
+  },
+  "react-devtools-core@6.1.5": {
+    "source": "facebook-react",
+    "license": "MIT"
+  },
+  "react-native-mmkv@4.3.2": {
+    "source": "mrousavy-react-native-mmkv",
+    "license": "MIT"
+  },
+  "react-native-nitro-modules@0.37.1": {
+    "source": "mrousavy-nitro",
+    "license": "MIT"
+  },
+  "server-only@0.0.1": {
+    "source": "facebook-react",
+    "license": "MIT"
+  },
+  "standard-navigation@0.0.5": {
+    "source": "react-navigation-standard-navigation",
+    "license": "MIT"
+  },
+  "structured-headers@0.4.1": {
+    "source": "evert-structured-header",
+    "license": "MIT"
+  },
+  "tr46@0.0.3": {
+    "source": "Sebmaster-tr46.js",
+    "license": "MIT"
+  },
+  "@expo/devcert@1.2.1": {
+    "source": "expo-devcert",
+    "license": "MIT"
+  },
+  "badgin@1.2.3": {
+    "source": "jaulz-badgin",
+    "license": "MIT"
+  },
+  "react-remove-scroll-bar@2.3.8": {
+    "source": "theKashey-react-remove-scroll-bar",
+    "license": "MIT"
+  },
+  "fb-dotslash@0.5.8": {
+    "source": "facebook-dotslash",
+    "license": "(MIT OR Apache-2.0)"
+  },
+  "jimp-compact@0.16.1": {
+    "source": "jimp",
+    "license": "MIT"
+  }
+}

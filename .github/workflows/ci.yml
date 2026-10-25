@@ -181,6 +181,9 @@ jobs:
       - name: Typecheck
         run: pnpm -r typecheck
 
+      - name: Verify bundled open source notices
+        run: pnpm --filter @ordo/mobile licenses:check
+
       - name: Lint
         run: pnpm -r lint
 
