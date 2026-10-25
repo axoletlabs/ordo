@@ -6,8 +6,6 @@ import { SettingsGroup, SettingsPage, SettingsScrollView } from "../../../src/co
 import { SettingRow } from "../../../src/components/ui/SettingRow";
 import { Text } from "../../../src/components/ui/Text";
 import { Logo } from "../../../src/components/ui/Logo";
-import { FloatingPanel } from "../../../src/components/ui/FloatingPanel";
-import { PanelHeader } from "../../../src/components/ui/PanelHeader";
 import { OtaUpdateCard } from "../../../src/components/ui/OtaUpdater";
 import { PressableScale } from "../../../src/components/ui/PressableScale";
 import { toast } from "../../../src/components/ui/toast-store";
@@ -38,7 +36,6 @@ export default function AboutScreen() {
   // Download progress must not rebuild the entire About screen.
   const nativeRelease = useNativeUpdateStore((state) => state.release);
   const [changelogOpen, setChangelogOpen] = React.useState(false);
-  const [usageOpen, setUsageOpen] = React.useState(false);
   const variant = APP_VARIANT === "stable" ? null : APP_VARIANT === "preview" ? "Preview" : "Development";
 
   return (
@@ -55,33 +52,29 @@ export default function AboutScreen() {
           </View>
         </View>
 
-        <SettingsGroup label="Updates" compact footer={APP_VARIANT === "development"
-          ? "Development builds are installed manually. Automatic updates are disabled." : undefined}>
+        <SettingsGroup label="Updates" compact>
           {APP_VARIANT !== "development" ? <OtaUpdateCard /> : null}
-          <SettingRow icon="newspaper-outline" label="What's new" description="Release notes and improvements"
+          <SettingRow icon="newspaper-outline" label="What's new"
             value={nativeRelease ? releaseName(nativeRelease.version) : undefined}
             onPress={() => setChangelogOpen(true)} showChevron />
-          <SettingRow icon="information-circle-outline" label="Build details" description="Version and technical information"
+          <SettingRow icon="information-circle-outline" label="Build details"
             onPress={() => router.push("/settings/build-details")} showChevron />
         </SettingsGroup>
 
         <SettingsGroup label="The project">
           <SettingRow icon="globe-outline" label="Ordo website" onPress={() => openURL(CLOUD_WEBSITE_URL)} showChevron />
-          <SettingRow icon="logo-github" label="Source code" description="Explore the project and contribute"
-            onPress={() => openURL(REPO_URL)} showChevron />
+          <SettingRow icon="logo-github" label="Source code" onPress={() => openURL(REPO_URL)} showChevron />
         </SettingsGroup>
 
         <SettingsGroup label="Legal & privacy">
           <SettingRow icon="ribbon-outline" label="Ordo license" value="AGPL-3.0"
             onPress={() => router.push({ pathname: "/settings/license", params: { id: "ordo" } })} showChevron />
-          <SettingRow icon="code-slash-outline" label="Open source licenses" description="Libraries, fonts, and acknowledgments"
+          <SettingRow icon="code-slash-outline" label="Open source licenses"
             onPress={() => router.push("/settings/licenses")} showChevron />
           {LEGAL_LINKS.map((link) => (
             <SettingRow key={link.path} icon={link.icon} label={link.label}
               onPress={() => router.push({ pathname: "/settings/browser", params: { document: link.path } })} showChevron />
           ))}
-          <SettingRow icon="analytics-outline" label="Anonymous usage" description="What Ordo sends and why"
-            onPress={() => setUsageOpen(true)} showChevron />
         </SettingsGroup>
 
         <View style={styles.footer}>
@@ -94,14 +87,6 @@ export default function AboutScreen() {
       </SettingsScrollView>
 
       <ChangelogSheet visible={changelogOpen} onDismiss={() => setChangelogOpen(false)} />
-      <FloatingPanel visible={usageOpen} onDismiss={() => setUsageOpen(false)}>
-        <PanelHeader title="Anonymous usage" icon="analytics-outline" onClose={() => setUsageOpen(false)} />
-        <View style={styles.usage}>
-          <Text variant="bodyLarge">Ordo sends anonymous counts to ordo Cloud to understand usage and app reliability.</Text>
-          <Text variant="bodyMedium" color="secondary">These cover installs, opens, sign-ins, registrations, and coarse health: timeouts, server errors, sign-in failures, and startup speed. Platform, version, and whether you use Cloud or self-hosting are included.</Text>
-          <Text variant="bodyMedium" color="secondary">Your account, server URL, and library are not included.</Text>
-        </View>
-      </FloatingPanel>
     </SettingsPage>
   );
 }
@@ -111,5 +96,4 @@ const styles = StyleSheet.create({
   version: { borderRadius: radius.full, paddingHorizontal: spacing[12], paddingVertical: spacing[6], marginTop: spacing[8] },
   footer: { alignItems: "center", paddingTop: spacing[32], paddingHorizontal: layout.rowInset },
   copyright: { minHeight: 48, justifyContent: "center", paddingHorizontal: spacing[16] },
-  usage: { gap: spacing[16], paddingBottom: spacing[16] },
 });

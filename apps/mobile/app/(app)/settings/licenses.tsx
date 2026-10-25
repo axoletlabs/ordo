@@ -34,14 +34,10 @@ export default function LicensesScreen() {
           { paddingLeft: column.left, paddingRight: column.right }]}
         ListHeaderComponent={
           <View style={styles.intro}>
-            <Text variant="bodyLarge" color="secondary">Ordo is built with the work of open source communities. Explore their licenses and acknowledgments below.</Text>
             <Input variant="search" placeholder="Search libraries or licenses" accessibilityLabel="Search libraries or licenses"
               value={query} onChangeText={setQuery} autoCapitalize="none" autoCorrect={false}
               icon={<MaterialIcon name="search" size={24} />}
               rightAccessory={query ? <IconButton name="close" variant="standard" accessibilityLabel="Clear search" onPress={() => setQuery("")} /> : undefined} />
-            <Text variant="bodySmall" color="secondary" accessibilityLiveRegion="polite">
-              {search ? `${filtered.length} of ${entries.length} components` : `${entries.length} components · Available offline`}
-            </Text>
           </View>
         }
         renderItem={({ item, index }) => (
