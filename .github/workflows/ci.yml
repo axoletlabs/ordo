@@ -184,8 +184,8 @@ jobs:
       - name: Lint
         run: pnpm -r lint
 
-      - name: Verify menu interactions
-        run: node --test apps/mobile/scripts/test-menu-interaction.mjs
+      - name: Verify menu interactions and progress indicators
+        run: node --test apps/mobile/scripts/test-menu-interaction.mjs apps/mobile/scripts/test-material-progress.mjs
 
       - name: Verify folder bookmark preservation
         run: |

@@ -186,7 +186,7 @@ function ReaderProgressBar({ animatedValue, labelRef, initialValue }: {
     };
   }, [labelRef]);
   return (
-    <LinearProgress label="Reading progress" value={progress} animatedValue={animatedValue}
+    <LinearProgress wavy={false} label="Reading progress" value={progress} animatedValue={animatedValue}
       style={{ maxWidth: layout.maxReaderWidth, alignSelf: "center" }} />
   );
 }
