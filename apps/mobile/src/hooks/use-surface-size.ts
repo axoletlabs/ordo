@@ -17,18 +17,30 @@ export function useSurfaceSize(height: number | null, {
   const extent = useSharedValue(initialHeight ?? height ?? 0);
   const breadth = useSharedValue(width ?? 0);
   const previous = useRef({ active, geometryKey, measured: height != null || initialHeight != null });
+  const settledRef = useRef(onSettled);
+  useLayoutEffect(() => { settledRef.current = onSettled; }, [onSettled]);
   useLayoutEffect(() => {
     const before = previous.current;
-    previous.current = { active, geometryKey, measured: height != null || before.measured };
-    if (!active || height == null) return;
+    // A missing measurement invalidates the baseline, including when it
+    // arrives a commit after activation. Never spring from a former opening.
+    previous.current = { active, geometryKey, measured: active && height != null };
+    if (!active) {
+      // Retain the exact committed exit geometry instead of letting an old
+      // size spring run behind a dismiss/reopen or an obscuring sibling.
+      cancelAnimation(extent);
+      cancelAnimation(breadth);
+      return;
+    }
     const animate = before.active && before.measured && before.geometryKey === geometryKey && !motion.reducedMotion;
     const spring = { ...motion.spatial, overshootClamping: true };
-    extent.value = animate ? withSpring(height, spring, finished => {
-      if (finished && onSettled) runOnJS(onSettled)();
-    }) : height;
-    if (!animate) onSettled?.();
     if (width != null) breadth.value = animate ? withSpring(width, spring) : width;
-  }, [active, geometryKey, height, width, motion, extent, breadth, onSettled]);
+    if (height == null) { cancelAnimation(extent); return; }
+    const notify = () => settledRef.current?.();
+    extent.value = animate ? withSpring(height, spring, settledRef.current ? finished => {
+      if (finished) runOnJS(notify)();
+    } : undefined) : height;
+    if (!animate) notify();
+  }, [active, geometryKey, height, width, motion, extent, breadth]);
   useLayoutEffect(() => () => { cancelAnimation(extent); cancelAnimation(breadth); }, [extent, breadth]);
   return useAnimatedStyle(() => ({
     ...(height != null ? { height: Math.max(0, extent.value) } : {}),

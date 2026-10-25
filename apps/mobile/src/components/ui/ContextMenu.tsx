@@ -13,8 +13,7 @@ import {
   type ViewStyle,
   type PressableProps,
 } from "react-native";
-import Animated, { cancelAnimation, Easing, interpolate, runOnJS, useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
-import { useMaterialMotion } from "../../theme/material-motion";
+import Animated, { Easing, interpolate, useAnimatedStyle } from "react-native-reanimated";
 import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { AppIcon } from "./PinIcon";
 import { Spinner } from "./Spinner";
@@ -27,6 +26,7 @@ import { ThemedScrollView } from "./ThemedScrollView";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { useOverlayFocus } from "../../hooks/use-overlay-focus";
+import { useOverlayPage } from "../../hooks/use-overlay-page";
 import { useSurfaceSize } from "../../hooks/use-surface-size";
 import { useScrimPress } from "../../hooks/use-scrim-press";
 import { dismissKeyboard, useKeyboardViewportHeight } from "../../hooks/use-keyboard-visible";
@@ -72,7 +72,7 @@ export interface ContextMenuProps {
   sessionKey?: string | number | null;
   scrollBody?: boolean;
   keyboardDismiss?: boolean;
-  /** Nested pages share an origin and transition in place, sizing to their contents. */
+  /** Nested pages share an origin, revealing and sizing their incoming contents together. */
   pageKey?: string;
   /** Optional data-aware keyboard navigation for virtualized menu pages. */
   onNavigate?: (key: string) => boolean;
@@ -113,13 +113,13 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
   const { width: windowWidth, height, fontScale } = useWindowDimensions();
   const windowHeight = useKeyboardViewportHeight(height, visible);
   const insets = useSafeAreaInsets();
-  const menuWidth = Math.min(width, Math.max(160, windowWidth - spacing[32]));
+  const menuWidth = Math.min(width, Math.max(0, windowWidth - insets.left - insets.right - spacing[32]));
   const menuPadding = spacing[8];
   // Anchor movement does not change the natural body size. Content, viewport,
   // font scale and design mode do: a stale dormant report must never place an
   // opening from the previous article/page/width.
   const measureKey = JSON.stringify([sessionKey, pageKey, menuWidth, windowWidth, windowHeight,
-    fontScale, expressive, insets.top, insets.bottom, scrollBody]);
+    fontScale, expressive, insets.top, insets.right, insets.bottom, insets.left, scrollBody]);
   const hideAndDismiss = React.useCallback(() => {
     if (!dismissible) return;
     if (backdrop && keyboardDismiss) dismissKeyboard();
@@ -170,86 +170,13 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
     return listenForMenuOutsideScroll(() => menuRef.current as unknown as HTMLElement | null,
       hideAndDismiss, document, menuAnchorScrollSnapshot(anchor));
   }, [visible, rendered, backdrop, menuRef, hideAndDismiss, anchor]);
-  const pageProgress = useSharedValue(1);
-  const pageLeaving = useSharedValue(0);
-  // Outgoing content held in place while a fade-through hands off to the
-  // next page. The origin stays fixed; size follows the displayed page.
-  const [displayed, setDisplayed] = React.useState<React.ReactNode>(null);
-  const motion = useMaterialMotion();
-  const lastPage = React.useRef(pageKey);
-  /** Only the latest transition may settle; a close or reopen invalidates it. */
-  const pageToken = React.useRef(0);
-  const visibleRef = React.useRef(visible);
-  React.useLayoutEffect(() => { visibleRef.current = visible; }, [visible]);
-  const pageWasVisible = React.useRef(false);
-  const [pageCommit, setPageCommit] = React.useState(0);
-  // Swap the frozen outgoing page for the incoming one only after the
-  // surface has fully faded: the shared value is already applied at 0, so
-  // neither page can flash mid-frame no matter when styles land.
-  const settlePageSwap = React.useCallback((key: string | undefined, token: number) => {
-    if (!visibleRef.current || key !== lastPage.current || token !== pageToken.current) return;
-    pageLeaving.value = 0;
-    setDisplayed(null);
-    pageProgress.value = 0;
-    setPageCommit((value) => value + 1);
-  }, [pageLeaving, pageProgress]);
-  React.useLayoutEffect(() => {
-    if (!pageCommit || !visible || displayed !== null) return;
-    // Begin the incoming fade only once React has committed the new contents.
-    pageProgress.value = motion.reducedMotion ? 1 : withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) });
-  }, [pageCommit, displayed, visible, motion.reducedMotion, pageProgress]);
-  React.useLayoutEffect(() => {
-    if (!visible) {
-      // A close interrupts any page crossfade. Retained exit contents must stay
-      // visible: leaving the page at the fade-out's opacity 0 would show an
-      // empty surface fading for 200ms. The next open resets this explicitly.
-      pageToken.current += 1;
-      cancelAnimation(pageProgress);
-      lastPage.current = pageKey;
-      pageLeaving.value = 0;
-      pageProgress.value = 1;
-      return;
-    }
-    if (motion.reducedMotion) {
-      pageToken.current += 1;
-      cancelAnimation(pageProgress);
-      lastPage.current = pageKey;
-      pageLeaving.value = 0;
-      pageProgress.value = 1;
-      setDisplayed(null);
-      return;
-    }
-    if (pageKey === lastPage.current) return;
-    lastPage.current = pageKey;
-    const token = ++pageToken.current;
-    // Material fade-through: fade the current page out in place, swap to
-    // the next page while the surface is empty, then fade it in with a
-    // small settle. Direction-free, so opening a nested page reads the
-    // same as coming back.
-    pageLeaving.value = 1;
-    pageProgress.value = withTiming(0, { duration: 100, easing: Easing.in(Easing.quad) }, (finished) => {
-      if (finished) runOnJS(settlePageSwap)(pageKey, token);
-    });
-  }, [visible, pageKey, pageLeaving, pageProgress, settlePageSwap, motion.reducedMotion]);
-  const pageStyle = useAnimatedStyle(() => ({
-    opacity: pageProgress.value,
-    ...(Platform.OS !== "web" ? { transform: [{ translateX: (pageLeaving.value ? -8 : 8) * (1 - pageProgress.value) }] } : {}),
-  }));
+  const page = useOverlayPage(visible, pageKey ?? "", children);
   const lastPlacement = React.useRef<MenuPlacement | null>(null);
   const placementLock = React.useRef<MenuPlacement | null>(null);
   const sessionSide = React.useRef<MenuPlacement["placement"] | null>(null);
   const wasVisibleRef = React.useRef(visible);
   const layoutKeyRef = React.useRef("");
   const lastChildren = React.useRef(children);
-  const lastPageRender = React.useRef(pageKey);
-  if (visible && wasVisibleRef.current && pageKey !== lastPageRender.current && displayed === null && lastChildren.current !== children) {
-    // Only a page change on an already-visible surface freezes anything. A
-    // fresh open paints its contents directly. A second change that arrives
-    // mid-fade keeps the page that is actually on screen: the unseen
-    // intermediate page must never be committed just because it was the
-    // previous target.
-    setDisplayed(lastChildren.current);
-  }
   const sessionKeyRef = React.useRef(sessionKey);
   if (visible && sessionKeyRef.current !== sessionKey) {
     sessionKeyRef.current = sessionKey;
@@ -261,56 +188,34 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
     placementLock.current = null;
     sessionSide.current = null;
   }
-  // New open: drop the previous row's measured height so a leftover
-  // delete-confirm size cannot flash below, then jump above — unless this
-  // is the same overlay session coming back from a nested page, or the exit
-  // tree is still mounted: its committed body height is still valid. Waiting
-  // to re-measure would add a layout-gated invisible frame, and a ResizeObserver
-  // will not re-fire while the retained element keeps its size.
+  // Only reuse a measurement of these exact contents and geometry. An exit
+  // tree being mounted does not mean its previous (possibly shorter) page is
+  // valid for the next opening.
   if (visible && !wasVisibleRef.current) {
-    const preparedHeight = keepMounted && measuredBody.current?.key === measureKey && measuredBody.current.content === children;
-    const continueSession = !measurementStale.current && ((!keepMounted && sessionKey != null && placementLock.current != null) || retained || preparedHeight);
-    measurementStale.current = false;
-    if (!continueSession) {
+    const preparedHeight = measuredBody.current?.key === measureKey && measuredBody.current.content === children;
+    if (measurementStale.current || !preparedHeight) {
       contentHeightRef.current = 0;
       placementLock.current = null;
       sessionSide.current = null;
       if (contentHeight !== 0) setContentHeight(0);
     }
+    measurementStale.current = false;
     if (keepMounted && !retained) {
-      // A new tap uses today's real anchor, never the synthetic dormant origin
-      // or the previous open's preferred side. Rapid exit/reopen stays locked.
       placementLock.current = null;
       sessionSide.current = null;
     }
-    if (displayed !== null) setDisplayed(null);
   }
   React.useLayoutEffect(() => {
-    // Retained page history describes what committed, not what a concurrent
-    // render merely attempted. Publishing an abandoned page here during render
-    // could freeze that unseen page forever on the next normal update.
-    if (visible) lastChildren.current = children;
+    if (visible) lastChildren.current = page.content;
     if (dormant) sessionKeyRef.current = sessionKey;
-    lastPageRender.current = pageKey;
     wasVisibleRef.current = visible;
-  }, [visible, children, pageKey, dormant, sessionKey]);
-  React.useLayoutEffect(() => {
-    const opening = visible && !pageWasVisible.current;
-    pageWasVisible.current = visible;
-    if (!opening) return;
-    // Shared values are updated at commit, never during a speculative render.
-    // A stale fade/settle from the previous open or close cannot land here.
-    pageToken.current += 1;
-    cancelAnimation(pageProgress);
-    lastPage.current = pageKey;
-    pageLeaving.value = 0;
-    pageProgress.value = 1;
-  }, [visible, pageKey, pageLeaving, pageProgress]);
+  }, [visible, page.content, dormant, sessionKey]);
 
   const layoutKey = [
     windowWidth,
     windowHeight,
     menuWidth,
+    insets.top, insets.right, insets.bottom, insets.left,
     isMenuAnchorRect(anchor) ? `${anchor.x}:${anchor.y}:${anchor.width}:${anchor.height}` : "",
   ].join("|");
   if (layoutKeyRef.current !== layoutKey) {
@@ -350,13 +255,12 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
     placement: preferredPlacement ?? "below",
     maxHeight: Math.max(0, windowHeight - insets.top - insets.bottom - CONTEXT_MENU_EDGE * 2),
   } : lastPlacement.current;
-  const content = dormant ? children : displayed ?? (visible ? children : lastChildren.current);
+  const content = dormant ? children : visible ? page.content : lastChildren.current;
   const recordBodyHeight = React.useCallback((height: number) => {
     if (height <= 0) return;
     measuredBody.current = { key: measureKey, content };
     applyBodyHeight(height);
   }, [applyBodyHeight, content, measureKey]);
-  const measureBody = keepMounted ? recordBodyHeight : applyBodyHeight;
   // A taller nested page may scroll, but must not grow below the viewport
   // while the session's origin stays locked.
   const heightLimit = placed ? !dormant && placementLock.current
@@ -365,7 +269,7 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
   const bodyHeightLimit = Math.max(0, heightLimit - menuPadding * 2);
   const surfaceSize = useSurfaceSize(contentHeight > 0 ? Math.min(heightLimit, contentHeight + menuPadding * 2) : null, {
     active: visible && !dormant,
-    geometryKey: `${windowWidth}:${windowHeight}:${fontScale}:${insets.top}:${insets.bottom}`,
+    geometryKey: `${windowWidth}:${windowHeight}:${fontScale}:${insets.top}:${insets.right}:${insets.bottom}:${insets.left}`,
     width: menuWidth,
   });
   const fromY = placed?.placement === "above" ? 6 : -6;
@@ -420,25 +324,29 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
             surfaceSize,
           ]}
         >
-            <MenuBody
-              visible={visible || keepMounted}
-              presentationKey={visible && contentHeight > 0 ? presentationKey : null}
-              onPresented={setPresented}
-              refreshOnLayout={keepMounted}
-              measureKey={keepMounted ? measureKey : sessionKey}
-              onMeasure={measureBody}
-              style={{ maxHeight: bodyHeightLimit, flexShrink: 0 }}
-              onLayout={(event) => {
-                if (!visible && !keepMounted) return;
-                measureBody(event.nativeEvent.layout.height);
-              }}
-            >
-              <Animated.View style={[{ flexShrink: 1 }, pageStyle]}>
-              {scrollBody ? <ThemedScrollView bounces={false} keyboardShouldPersistTaps="handled" style={{ maxHeight: bodyHeightLimit }}>
-                {content}
-              </ThemedScrollView> : content}
-              </Animated.View>
-            </MenuBody>
+            {/* This fixed measurement frame is independent of the animated
+                surface height. In Yoga a shrinking ScrollView otherwise reports
+                the old viewport as the next page's natural height. */}
+            <View pointerEvents="box-none" style={{ position: "absolute", top: menuPadding, width: menuWidth, height: bodyHeightLimit }}>
+              <MenuBody
+                visible={visible || keepMounted}
+                presentationKey={visible && contentHeight > 0 ? presentationKey : null}
+                onPresented={setPresented}
+                measureKey={measureKey}
+                onMeasure={recordBodyHeight}
+                style={{ maxHeight: bodyHeightLimit, flexShrink: 0 }}
+                onLayout={(event) => {
+                  if (!visible && !keepMounted) return;
+                  recordBodyHeight(event.nativeEvent.layout.height);
+                }}
+              >
+                <Animated.View style={[{ flexShrink: 1 }, page.style]}>
+                {scrollBody ? <ThemedScrollView bounces={false} keyboardShouldPersistTaps="handled" style={{ maxHeight: bodyHeightLimit, flexShrink: 1 }}>
+                  {content}
+                </ThemedScrollView> : content}
+                </Animated.View>
+              </MenuBody>
+            </View>
         </Animated.View>
       </View>
       </InputFocusScopeContext.Provider>
@@ -453,9 +361,8 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
  * document style/layout recalculation — the dominant cost when a long article
  * sat behind the menu — so placement/entrance wait one non-blocking layout
  * report instead. */
-function MenuBody({ visible, measureKey, presentationKey, onPresented, refreshOnLayout, onMeasure, onLayout, style, children }: {
+function MenuBody({ visible, measureKey, presentationKey, onPresented, onMeasure, onLayout, style, children }: {
   visible: boolean;
-  refreshOnLayout: boolean;
   measureKey?: string | number | null;
   presentationKey: string | null;
   onPresented: (key: string) => void;
@@ -501,12 +408,10 @@ function MenuBody({ visible, measureKey, presentationKey, onPresented, refreshOn
     return () => { cancelled = true; if (measureNative.current === measure) measureNative.current = null; };
   }, [measureKey, onMeasure, visible]);
   return <View ref={ref} collapsable={false} style={style} onLayout={(event) => {
-    if (refreshOnLayout) {
-      // A queued layout event may describe the previous page. Prepared cache
-      // entries must come from the current, cancellable measurement instead.
-      if (Platform.OS !== "web") { measureNative.current?.(); return; }
-      if (typeof ResizeObserver !== "undefined") return;
-    }
+    // A queued event may describe the previous page or an intermediate size.
+    // Always sample the current committed body, never cache that event's box.
+    if (Platform.OS !== "web") { measureNative.current?.(); return; }
+    if (typeof ResizeObserver !== "undefined") return;
     onLayout(event);
   }}>{children}</View>;
 }

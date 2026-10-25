@@ -80,7 +80,7 @@ export function ReminderCalendar({ at, disabled = false, active, onChange }: {
             <View style={styles.dayHit}>
               {/* Explicit geometry retains rounded selection on Android, even
                   when an ordinary layout-only date becomes selected. */}
-              {cell.selected || cell.isToday ? <Svg width={40} height={40} style={StyleSheet.absoluteFill} pointerEvents="none" accessible={false}>
+              {cell.selected || cell.isToday ? <Svg width={40} height={40} style={StyleSheet.absoluteFill} pointerEvents="none" accessible={Platform.OS === "web" ? undefined : false} aria-hidden>
                 <Circle cx={20} cy={20} r={cell.isToday && !cell.selected ? 19.5 : 20} fill={cell.selected ? palette.primary : "none"}
                   stroke={cell.isToday && !cell.selected ? palette.primary : "none"} strokeWidth={1} />
               </Svg> : null}

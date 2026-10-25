@@ -10,6 +10,7 @@ import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
 import { ThemedScrollView } from "./ThemedScrollView";
 import { useTheme } from "../../theme/ThemeProvider";
+import { useSurfaceSize } from "../../hooks/use-surface-size";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { useScrimPress } from "../../hooks/use-scrim-press";
 import { haptics } from "../../lib/haptics";
@@ -49,6 +50,11 @@ function NativeFABMenu({ visible, anchor, onDismiss, actions }: FABMenuProps) {
   const closeTop = Math.max(insets.top + 8, Math.min(origin?.y ?? height - insets.bottom - 72, height - insets.bottom - 64));
   const trailing = Math.max(insets.right + 16, width - ((origin?.x ?? width - 72) + (origin?.width ?? 56)));
   const menuHeight = Math.max(0, closeTop - insets.top - 24);
+  const [contentHeight, setContentHeight] = React.useState<number | null>(null);
+  const size = useSurfaceSize(contentHeight == null ? null : Math.min(menuHeight, contentHeight), {
+    active: visible,
+    geometryKey: `${width}:${height}:${insets.top}:${insets.bottom}`,
+  });
   const fade = useAnimatedStyle(() => ({ opacity: progress.value }));
   const movement = useAnimatedStyle(() => ({ opacity: progress.value,
     transform: [{ translateY: (1 - spatial.value) * 48 }] }));
@@ -65,8 +71,9 @@ function NativeFABMenu({ visible, anchor, onDismiss, actions }: FABMenuProps) {
         // edges align with the close button, with a 16dp gap above it.
         right: trailing - spacing[4], bottom: height - closeTop + spacing[12], maxHeight: menuHeight,
         maxWidth: Math.max(0, width - trailing - insets.left - spacing[12]),
-      }, movement]}>
-        <ThemedScrollView bounces={false} contentContainerStyle={styles.itemContent}>
+      }, movement, size]}>
+        <ThemedScrollView bounces={false} contentContainerStyle={styles.itemContent}
+          onContentSizeChange={(_width, next) => setContentHeight(current => current != null && Math.abs(current - next) < 0.5 ? current : next)}>
           {retained.current.actions.map(action => <PressableScale key={action.label}
             accessibilityRole="button" accessibilityLabel={action.label}
             stateLayerColor={palette.onPrimaryContainer}
