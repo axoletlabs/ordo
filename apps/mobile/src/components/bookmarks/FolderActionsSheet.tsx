@@ -126,16 +126,13 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
   // producing a second jump when the request finishes. Keep long lists virtual.
   const keepListHeight = Math.min(320, height * 0.45,
     Math.max(120, keepTotal * (64 + spacing[2]) + spacing[2]));
-  // The subtitle describes the pending outcome, not the picker's expansion:
-  // collapsed-with-ticks is still a keep-some delete.
+  // Describe the outcome here so the delete action can keep a stable label.
   const deleteSubtitle =
     keepCount > 0
-      ? "Kept bookmarks move to Bookmarks. The rest are deleted. You can undo this."
-      : keepOpen
-        ? "Ticked bookmarks move to Bookmarks. The rest are deleted. You can undo this."
-        : keepTotal > 0 || keepOptions.isPending
-          ? "This folder and every bookmark inside it will be deleted. You can undo this."
-          : "You can undo this.";
+      ? "Selected bookmarks will move to Bookmarks. This folder and any unselected bookmarks will be deleted. You can undo this."
+      : keepTotal > 0 || keepOptions.isPending
+        ? "This folder and its bookmarks will be deleted. Select any bookmarks you want to keep. You can undo this."
+        : "This empty folder will be deleted. You can undo this.";
   // Verify a cached empty count before allowing deletion. A failed check must
   // leave the picker available so the user can retry rather than blindly delete.
   const keepChoiceBlocked = (keepOpen || verifyEmptyFolder) && (keepOptions.isPending || keepOptions.isError);
@@ -897,7 +894,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
               </>
             ) : null}
             <PanelActions
-              confirmLabel={keepCount > 0 ? `Keep ${keepCount} · delete folder` : "Delete"}
+              confirmLabel="Delete"
               confirmVariant="danger"
               onConfirm={doDelete}
               onCancel={() => showMode("menu")}
