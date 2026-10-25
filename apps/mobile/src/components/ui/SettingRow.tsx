@@ -5,6 +5,7 @@ import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
 import { UnavailableLabel } from "./UnavailableLabel";
+import { Toggle, type ToggleProps } from "./Toggle";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
 import { runPressAction } from "../../lib/press-action";
@@ -17,7 +18,7 @@ export interface SettingRowProps {
   /** Use 0 when the complete value must stay readable, such as a website address. */
   labelLines?: number;
   description?: string;
-  /** Replaces the control with a status label and keeps its reason readable. */
+  /** Disables a switch (or replaces other controls with a status) and explains why. */
   unavailableReason?: string;
   value?: string;
   onPress?: () => void | boolean | Promise<unknown>;
@@ -62,6 +63,7 @@ export function SettingRow({
   const tint = destructive ? palette.error : iconColor ?? palette.onSurfaceVariant;
   const valueColor = destructive ? palette.danger : palette.textTertiary;
   const unavailable = !!unavailableReason;
+  const isToggle = React.isValidElement<ToggleProps>(right) && right.type === Toggle;
   const supportingText = unavailableReason || description;
   const rowStyle = [styles.row, { borderBottomColor: palette.outlineVariant,
     backgroundColor: palette.surfaceContainerLow,
@@ -72,7 +74,7 @@ export function SettingRow({
     borderBottomRightRadius: position === "last" || position === "only" ? expressive ? radius.xl : radius.lg : undefined,
     marginBottom: expressive ? spacing[2] : 0,
     borderBottomWidth: expressive || !divider ? 0 : StyleSheet.hairlineWidth,
-    opacity: disabled && !unavailable ? 0.38 : 1 }];
+    opacity: disabled && !unavailable && !isToggle ? 0.38 : 1 }];
 
   const content = (
     <>
@@ -96,10 +98,12 @@ export function SettingRow({
           {value}
         </Text>
       ) : null}
-      {unavailable ? <UnavailableLabel /> : right ? (
+      {unavailable && !isToggle ? <UnavailableLabel /> : right ? (
         <View style={rightFit === "content" ? styles.trailingHug : [styles.trailing, { width: width < 380 ? 112 : layout.settingsControlWidth }]}>
-          {React.isValidElement<{ accessibilityLabel?: string }>(right)
-            ? React.cloneElement(right, { accessibilityLabel: right.props.accessibilityLabel ?? label }) : right}
+          {React.isValidElement<ToggleProps>(right)
+            ? React.cloneElement(right, { accessibilityLabel: right.props.accessibilityLabel ?? label,
+              ...(isToggle ? { disabled: disabled || unavailable || right.props.disabled,
+                accessibilityHint: unavailableReason ?? right.props.accessibilityHint } : {}) }) : right}
         </View>
       ) : null}
       {showChevron && !unavailable ? (
@@ -108,9 +112,9 @@ export function SettingRow({
     </>
   );
 
-  if (unavailable) return <View accessible accessibilityState={{ disabled: true }}
+  if (unavailable && !isToggle) return <View accessible accessibilityState={{ disabled: true }}
     accessibilityLabel={`${label}, unavailable. ${unavailableReason}`} style={rowStyle}>{content}</View>;
-  if (!onPress) return <View style={rowStyle}>{content}</View>;
+  if (!onPress || unavailable) return <View style={rowStyle}>{content}</View>;
   return (
     <PressableScale
       accessibilityRole={selectionRole ?? "button"}

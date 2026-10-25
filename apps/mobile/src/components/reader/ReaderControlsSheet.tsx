@@ -1,7 +1,7 @@
 /**
  * Reader appearance controls: text size, typeface,
- * line spacing, theme (system/light/dark) and — when the effective theme is
- * dark — the AMOLED pure-black toggle. Presented as a FloatingPanel so it
+ * line spacing, theme (system/light/dark) and the AMOLED pure-black toggle
+ * (disabled in light mode). Presented as a FloatingPanel so it
  * matches the app's existing menu/sheet language on phones and tablets alike.
  *
  * The panel owns its open state and its own preference subscription. Opening
@@ -16,7 +16,6 @@ import { PanelHeader } from "../ui/PanelHeader";
 import { Segmented } from "../ui/Segmented";
 import { Text } from "../ui/Text";
 import { Toggle } from "../ui/Toggle";
-import { UnavailableLabel } from "../ui/UnavailableLabel";
 import { LazyMount } from "../ui/LazyMount";
 import { PanelPresenceContext } from "../ui/panel-presence";
 import { spacing } from "../../theme/tokens";
@@ -327,21 +326,20 @@ const ReaderControlsBody = React.memo(function ReaderControlsBody({
         onChange={(theme) => setPreferences({ theme })}
       />
     </ControlGroup>,
-    <View key="amoled" style={styles.amoledRow}
-      accessible={!effectiveDark}
-      accessibilityState={!effectiveDark ? { disabled: true } : undefined}
-      accessibilityLabel={!effectiveDark ? "AMOLED black, unavailable. Switch the reader to dark mode to use pure black." : undefined}>
+    <View key="amoled" style={styles.amoledRow}>
       <View style={styles.amoledCopy}>
         <Text variant="bodyStrong">AMOLED black</Text>
         {effectiveDark ? null : (
           <Text variant="footnote" color="tertiary">Switch the reader to dark mode to use pure black.</Text>
         )}
       </View>
-      {effectiveDark ? <Toggle
+      <Toggle
         accessibilityLabel="Reader AMOLED black"
+        accessibilityHint={!effectiveDark ? "Switch the reader to dark mode to use pure black." : undefined}
+        disabled={!effectiveDark}
         value={preferences.amoled}
         onValueChange={(amoled) => setPreferences({ amoled })}
-      /> : <UnavailableLabel />}
+      />
     </View>,
   ], [
     effectiveDark,
