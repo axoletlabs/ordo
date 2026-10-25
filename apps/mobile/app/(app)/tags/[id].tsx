@@ -8,6 +8,7 @@ import { useLocalSearchParams } from "expo-router";
 import { useAppRouter as useRouter } from "../../../src/hooks/use-app-router";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
 import { Header, HeaderActions, HeaderIconButton } from "../../../src/components/ui/Header";
+import { AnimatedSwap } from "../../../src/components/ui/AnimatedSwap";
 import { ListLoadingFooter } from "../../../src/components/ui/ListLoadingFooter";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
@@ -24,6 +25,7 @@ import { BookmarkActionsSheet } from "../../../src/components/bookmarks/Bookmark
 import { MoveSheet } from "../../../src/components/bookmarks/MoveSheet";
 import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
 import { TagActionsSheet } from "../../../src/components/tags/TagActionsSheet";
+import { ListClearanceSpacer } from "../../../src/components/bookmarks/ListClearanceSpacer";
 import { useTags, useTaggedBookmarks } from "../../../src/hooks/use-tags";
 import {
   useToggleRead,
@@ -38,7 +40,7 @@ import { haptics } from "../../../src/lib/haptics";
 import { errorMessage } from "../../../src/lib/error-message";
 import { flattenPages } from "../../../src/lib/api/query-keys";
 import { useLoadMore, usePullToRefresh } from "../../../src/hooks/use-list-controls";
-import { layout } from "../../../src/theme/tokens";
+import { layout, spacing } from "../../../src/theme/tokens";
 import type { BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 import type { MenuAnchorRect } from "../../../src/lib/menu-anchor";
@@ -59,6 +61,7 @@ type TagBookmarkListProps = {
     | ((data: unknown, index: number) => { length: number; offset: number; index: number })
     | undefined;
   paddingBottom: number;
+  bottomClearance: number;
   refreshing: boolean;
   onRefresh: () => void;
   onEndReached: () => void;
@@ -78,6 +81,7 @@ const TagBookmarkList = React.memo(function TagBookmarkList({
   renderItem,
   getItemLayout,
   paddingBottom,
+  bottomClearance,
   refreshing,
   onRefresh,
   onEndReached,
@@ -98,7 +102,8 @@ const TagBookmarkList = React.memo(function TagBookmarkList({
       onRefresh={onRefresh}
       scrollEnabled={scrollEnabled}
       onEndReached={onEndReached}
-      ListFooterComponent={footerVisible ? <ListLoadingFooter /> : null}
+      ListFooterComponent={<>{footerVisible ? <ListLoadingFooter /> : null}
+        <ListClearanceSpacer height={bottomClearance} /></>}
       ListEmptyComponent={<View style={styles.empty}><EmptyState icon="pricetag-outline" title="No bookmarks with this tag"
         message="Save a bookmark with this tag, or pick another." /></View>}
     />
@@ -224,7 +229,8 @@ export default function TagDetailScreen() {
       keyExtractor={bookmarkKeyExtractor}
       renderItem={renderBookmark}
       getItemLayout={getItemLayout}
-      paddingBottom={selection.active ? selectionClearance : listOverlayClearance}
+      paddingBottom={spacing[16]}
+      bottomClearance={selection.active ? selectionClearance : listOverlayClearance}
       refreshing={refreshing}
       onRefresh={onRefresh}
       scrollEnabled={drag.scrollEnabled}
@@ -234,50 +240,56 @@ export default function TagDetailScreen() {
     </SelectionDragFrame>
   );
 
-  const saveFab = !selection.active ? <FABDock maxWidth={pageMax}>
+  // Always mounted; the dock fades out and goes inert while hidden, so the
+  // FAB does not remount when selection mode toggles.
+  const saveFab = <FABDock maxWidth={pageMax} visible={!selection.active}>
     <FAB onPress={() => setAddOpen(true)} accessibilityLabel="Save bookmark" accessibilityHint="Tap to save a bookmark."
       maxContentWidth={pageMax} />
-  </FABDock> : null;
+  </FABDock>;
 
   if (!routeId) return null;
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.background }}>
-      {selection.active ? (
-        <SelectionHeader
-          store={selection.store}
-          selectableCount={selectableKeys.length}
-          onCancel={selection.exit}
-          onToggleSelectAll={() => selection.toggleAll(selectableKeys)}
+      {/* Both headers share the same 64dp bar; the swap crossfades between
+          them and keeps the exiting bar inert while it fades. */}
+      <AnimatedSwap transitionKey={selection.active ? "selection" : "header"}>
+        {selection.active ? (
+          <SelectionHeader
+            store={selection.store}
+            selectableCount={selectableKeys.length}
+            onCancel={selection.exit}
+            onToggleSelectAll={() => selection.toggleAll(selectableKeys)}
+            maxWidth={pageMax}
+          />
+        ) : (
+        <Header
+          title={anchor?.name ?? "Tag"}
+          subtitle={
+            anchor
+              ? `${anchor.bookmarkCount} ${anchor.bookmarkCount === 1 ? "bookmark" : "bookmarks"}`
+              : undefined
+          }
+          showBack
           maxWidth={pageMax}
+          right={
+            anchor ? (
+              <HeaderActions>
+                <HeaderIconButton
+                  name="ellipsis-horizontal"
+                  color={palette.text}
+                  onPress={(menuAnchor) => {
+                    setTagAnchor(menuAnchor);
+                    setTagActionsOpen(true);
+                  }}
+                  accessibilityLabel="Tag actions"
+                />
+              </HeaderActions>
+            ) : undefined
+          }
         />
-      ) : (
-      <Header
-        title={anchor?.name ?? "Tag"}
-        subtitle={
-          anchor
-            ? `${anchor.bookmarkCount} ${anchor.bookmarkCount === 1 ? "bookmark" : "bookmarks"}`
-            : undefined
-        }
-        showBack
-        maxWidth={pageMax}
-        right={
-          anchor ? (
-            <HeaderActions>
-              <HeaderIconButton
-                name="ellipsis-horizontal"
-                color={palette.text}
-                onPress={(menuAnchor) => {
-                  setTagAnchor(menuAnchor);
-                  setTagActionsOpen(true);
-                }}
-                accessibilityLabel="Tag actions"
-              />
-            </HeaderActions>
-          ) : undefined
-        }
-      />
-      )}
+        )}
+      </AnimatedSwap>
 
       <ExtractionProgressLine maxWidth={pageMax} />
 

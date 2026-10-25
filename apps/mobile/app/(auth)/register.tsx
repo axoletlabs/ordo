@@ -254,9 +254,7 @@ export default function RegisterScreen() {
                 .
               </CheckLine>
               {formError === AGE_CONFIRM_ERROR ? (
-                <Text variant="bodySmall" color="danger" accessibilityLiveRegion="polite" style={{ marginTop: spacing[8] }}>
-                  {formError}
-                </Text>
+                <FormError message={formError} />
               ) : null}
             </>
           ) : null}

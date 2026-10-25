@@ -29,6 +29,7 @@ import { LockPrompt } from "../../../src/components/bookmarks/LockPrompt";
 import { MoveSheet } from "../../../src/components/bookmarks/MoveSheet";
 import { BookmarkRow } from "../../../src/components/bookmarks/BookmarkRow";
 import { ExtractionProgressLine } from "../../../src/components/bookmarks/ExtractionProgressLine";
+import { ListClearanceSpacer } from "../../../src/components/bookmarks/ListClearanceSpacer";
 import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
 import { useFolders } from "../../../src/hooks/use-folders";
 import { useFolderTokenStore } from "../../../src/store/folder-tokens";
@@ -85,6 +86,7 @@ type LibraryListProps = {
     | ((data: unknown, index: number) => { length: number; offset: number; index: number })
     | undefined;
   contentContainerStyle: { paddingBottom: number };
+  bottomClearance: number;
   refreshing: boolean;
   onRefresh: () => void;
   onEndReached: (() => void) | undefined;
@@ -109,6 +111,7 @@ const LibraryList = React.memo(function LibraryList({
   renderItem,
   getItemLayout,
   contentContainerStyle,
+  bottomClearance,
   refreshing,
   onRefresh,
   onEndReached,
@@ -129,7 +132,8 @@ const LibraryList = React.memo(function LibraryList({
       renderItem={renderItem}
       getItemLayout={getItemLayout}
       ListEmptyComponent={empty}
-      ListFooterComponent={footerVisible ? <ListLoadingFooter /> : null}
+      ListFooterComponent={<>{footerVisible ? <ListLoadingFooter /> : null}
+        <ListClearanceSpacer height={bottomClearance} /></>}
       contentContainerStyle={contentContainerStyle}
       refreshing={refreshing}
       onRefresh={onRefresh}
@@ -358,13 +362,9 @@ export default function BookmarksScreen() {
     [],
   );
   // No paddingTop — the header gap is `layout.headerContentGap`, and the
-  // first row's own padding sits inside that.
-  const listContentStyle = useMemo(
-    () => ({
-      paddingBottom: selection.active ? selectionClearance : listOverlayClearance,
-    }),
-    [selection.active, selectionClearance, listOverlayClearance],
-  );
+  // first row's own padding sits inside that. The selection/browsing
+  // clearance animates in the list footer instead of this static padding.
+  const listContentStyle = useMemo(() => ({ paddingBottom: spacing[16] }), []);
   const searchQueryRef = useRef(search.search);
   searchQueryRef.current = search.search;
   const retrySearch = useCallback(() => {
@@ -417,8 +417,10 @@ export default function BookmarksScreen() {
     return "create a folder";
   };
 
-  const createFab = !selection.active ? (
-    <FABDock maxWidth={contentWidth}>
+  // Always mounted: FABDock fades the whole dock out (and marks it inert)
+  // while hidden, so the FAB keeps its registration and does not remount.
+  const createFab = (
+    <FABDock maxWidth={contentWidth} visible={!selection.active}>
       <FAB
         onPress={(anchor) => runCreateAction(createButtonTapAction, anchor)}
         onLongPress={(anchor) => {
@@ -438,7 +440,7 @@ export default function BookmarksScreen() {
         maxContentWidth={contentWidth}
       />
     </FABDock>
-  ) : null;
+  );
 
   const headerRight = (
     <HeaderActions>
@@ -489,6 +491,7 @@ export default function BookmarksScreen() {
             empty={listEmptyState}
             footerVisible={search.active ? search.loadingMore : loadingMore}
             contentContainerStyle={listContentStyle}
+            bottomClearance={selection.active ? selectionClearance : listOverlayClearance}
             refreshing={refreshing}
             onRefresh={onRefresh}
             scrollEnabled={drag.scrollEnabled}

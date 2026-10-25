@@ -10,6 +10,7 @@ import {
   SettingsSelect,
   type SettingsSelectOption,
 } from "../../../src/components/settings/SettingsSelect";
+import { AnimatedDisclosure } from "../../../src/components/ui/AnimatedDisclosure";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
 import { Toggle } from "../../../src/components/ui/Toggle";
 import { AdBlockExceptions } from "../../../src/components/settings/AdBlockExceptions";
@@ -94,8 +95,11 @@ export default function ControlsScreen() {
                 <Toggle value={shareQuickBookmark} onValueChange={setShareQuickBookmark} />
               }
               rightFit="content"
+              position={shareQuickBookmark ? "first" : "only"}
             />
-            {shareQuickBookmark ? (
+            {/* SettingsGroup shapes only direct SettingRow children; the
+              revealed row keeps its group position explicitly. */}
+            <AnimatedDisclosure expanded={shareQuickBookmark}>
               <SettingRow
                 icon="share-outline"
                 label="Show alongside Save"
@@ -103,8 +107,9 @@ export default function ControlsScreen() {
                   <Toggle value={shareShowQuickAction} onValueChange={setShareShowQuickAction} />
                 }
                 rightFit="content"
+                position="last"
               />
-            ) : null}
+            </AnimatedDisclosure>
           </SettingsGroup>
         ) : null}
         <SettingsGroup label="Browser">

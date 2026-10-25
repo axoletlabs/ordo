@@ -16,11 +16,13 @@ import React, {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { BackHandler, Linking, Platform, StyleSheet, View } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { WebView, type WebViewNavigation } from "react-native-webview";
 import {
   BROWSER_PTR_THRESHOLD,
@@ -46,6 +48,28 @@ import { RefreshHud } from "../ui/RefreshHud";
 import { LinearProgress } from "../ui/LinearProgress";
 import { useRefreshFeedback } from "../../hooks/use-refresh-feedback";
 import { useOverlayBlocked } from "../ui/overlay-host";
+import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
+
+/** Keeps the page-load track mounted after its first appearance so later
+ * loads fade in and out instead of popping; hidden frames leave the
+ * accessibility tree immediately. The track is absolutely positioned, so its
+ * fade has no layout effect on the page. */
+function LoadTrackFade({ visible, children }: { visible: boolean; children: React.ReactNode }) {
+  const motion = useMaterialMotion();
+  const opacity = useSharedValue(0);
+  const [activated, setActivated] = useState(visible);
+  if (visible && !activated) setActivated(true);
+  useLayoutEffect(() => {
+    opacity.value = motion.reducedMotion ? Number(visible) : withSpring(Number(visible), materialMotion.effects.fast);
+  }, [visible, motion.reducedMotion, opacity]);
+  const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return activated ? (
+    <Animated.View aria-hidden={!visible} accessibilityElementsHidden={!visible}
+      importantForAccessibility={visible ? "auto" : "no-hide-descendants"} style={style}>
+      {children}
+    </Animated.View>
+  ) : null;
+}
 
 export interface BookmarkBrowserProps {
   url: string;
@@ -84,7 +108,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     const ptrDyRef = useRef(0);
     const refreshingRef = useRef(false);
     const armedHapticRef = useRef(false);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(Platform.OS !== "web");
     const [progress, setProgress] = useState(0);
     const [error, setError] = useState<string | null>(null);
     const { refreshing, start: startRefresh, finish: finishRefresh } = useRefreshFeedback();
@@ -159,7 +183,9 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     );
 
     useEffect(() => {
-      beginLoad();
+      // The web preview has no WebView backing the page, so there is no load
+      // lifecycle to track — starting one would leave the blank cover up.
+      if (Platform.OS !== "web") beginLoad();
       currentPageUrl.current = url;
     }, [url, forceWebsiteDark, beginLoad]);
 
@@ -280,7 +306,17 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     // Loading progress and the refresh HUD can update dozens of times per
     // second. Reuse the page element rather than reconciling the native WebView
     // (and all its freshly allocated style/config props) on every HUD frame.
-    const page = useMemo(() => (
+    const page = useMemo(() => Platform.OS === "web" ? (
+        // react-native-webview has no web implementation; show the shared
+        // empty state instead of its raw unsupported-platform message.
+        <View style={[styles.webFallback, { flex: 1, backgroundColor: chromeBackground }]}>
+          <EmptyState
+            icon="compass-outline"
+            title="Live pages need the ordo app"
+            message={pageHostFromWebViewUrl(url) ? `${pageHostFromWebViewUrl(url)} opens in the app on your device.` : undefined}
+          />
+        </View>
+      ) : (
         <WebView
           ref={webRef}
           key={`${url}:${forceWebsiteDark ? "dark" : "auto"}`}
@@ -345,14 +381,14 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           />
         ) : null}
         <RefreshHud dy={ptrDy} refreshing={refreshing} />
-        {loading && !error ? (
+        <LoadTrackFade visible={loading && !error}>
           <View
             pointerEvents="none"
             style={styles.progressTrack}
           >
             <LinearProgress label="Page load" value={progress > 0 ? progress : undefined} />
           </View>
-        ) : null}
+        </LoadTrackFade>
         {error ? (
           <View style={[styles.error, { backgroundColor: chromeBackground }]}>
             <EmptyState
@@ -371,6 +407,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
 const styles = StyleSheet.create({
   wrap: { flex: 1, minHeight: 0, overflow: "hidden" },
   web: { flex: 1, margin: 0, padding: 0, ...(Platform.OS === "web" ? ({ height: "100%" } as const) : null) },
+  webFallback: { alignItems: "center", justifyContent: "center" },
   blankCover: { ...StyleSheet.absoluteFill },
   progressTrack: {
     position: "absolute",

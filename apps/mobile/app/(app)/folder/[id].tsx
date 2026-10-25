@@ -9,6 +9,7 @@ import { useLocalSearchParams } from "expo-router";
 import { useAppRouter as useRouter } from "../../../src/hooks/use-app-router";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
 import { Header, HeaderActions, HeaderIconButton } from "../../../src/components/ui/Header";
+import { AnimatedSwap } from "../../../src/components/ui/AnimatedSwap";
 import { SelectionHeader } from "../../../src/components/bookmarks/SelectionHeader";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
 import { FAB, FABDock } from "../../../src/components/ui/FAB";
@@ -24,6 +25,7 @@ import { MoveSheet } from "../../../src/components/bookmarks/MoveSheet";
 import { LockPrompt } from "../../../src/components/bookmarks/LockPrompt";
 import { BookmarkActionsSheet } from "../../../src/components/bookmarks/BookmarkActionsSheet";
 import { FolderActionsSheet } from "../../../src/components/bookmarks/FolderActionsSheet";
+import { ListClearanceSpacer } from "../../../src/components/bookmarks/ListClearanceSpacer";
 import { SortMenu } from "../../../src/components/bookmarks/SortMenu";
 import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
 import { useFolders } from "../../../src/hooks/queries";
@@ -45,7 +47,7 @@ import { toast } from "../../../src/components/ui/toast-store";
 import { markedAsReadToast } from "../../../src/lib/copy";
 import { errorMessage, isFolderProtected } from "../../../src/lib/error-message";
 import { sortBookmarkPagesBy } from "../../../src/lib/list-sort";
-import { layout } from "../../../src/theme/tokens";
+import { layout, spacing } from "../../../src/theme/tokens";
 import { DEFAULT_BOOKMARK_LIST_SORT, type BookmarkDto } from "@ordo/shared";
 import { openListBookmark } from "../../../src/lib/open-website";
 import { useLoadMore, usePullToRefresh } from "../../../src/hooks/use-list-controls";
@@ -70,6 +72,7 @@ type FolderBookmarkListProps = {
     | ((data: unknown, index: number) => { length: number; offset: number; index: number })
     | undefined;
   paddingBottom: number;
+  bottomClearance: number;
   refreshing: boolean;
   onRefresh: () => void;
   onEndReached: () => void;
@@ -92,6 +95,7 @@ const FolderBookmarkList = React.memo(function FolderBookmarkList({
   renderItem,
   getItemLayout,
   paddingBottom,
+  bottomClearance,
   refreshing,
   onRefresh,
   onEndReached,
@@ -115,7 +119,8 @@ const FolderBookmarkList = React.memo(function FolderBookmarkList({
       onRefresh={onRefresh}
       scrollEnabled={scrollEnabled}
       onEndReached={onEndReached}
-      ListFooterComponent={footerVisible ? <ListLoadingFooter /> : null}
+      ListFooterComponent={<>{footerVisible ? <ListLoadingFooter /> : null}
+        <ListClearanceSpacer height={bottomClearance} /></>}
       ListEmptyComponent={<View style={styles.empty}><EmptyState icon="bookmark-outline" title="No bookmarks here"
         message="Save a link to start reading." action={<Button onPress={onSave} label="Save bookmark" />} /></View>}
     />
@@ -275,7 +280,8 @@ export default function FolderDetailScreen() {
       keyExtractor={bookmarkKeyExtractor}
       renderItem={renderBookmark}
       getItemLayout={getItemLayout}
-      paddingBottom={listContentPadding}
+      paddingBottom={spacing[16]}
+      bottomClearance={listContentPadding}
       refreshing={refreshing}
       onRefresh={onRefresh}
       scrollEnabled={drag.scrollEnabled}
@@ -288,57 +294,61 @@ export default function FolderDetailScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: palette.background }}>
-      {selection.active ? (
-        <SelectionHeader
-          store={selection.store}
-          selectableCount={selectableKeys.length}
-          onCancel={selection.exit}
-          onToggleSelectAll={() => selection.toggleAll(selectableKeys)}
+      {/* Both headers share the same 64dp bar; the swap crossfades between
+          them and keeps the exiting bar inert while it fades. */}
+      <AnimatedSwap transitionKey={selection.active ? "selection" : "header"}>
+        {selection.active ? (
+          <SelectionHeader
+            store={selection.store}
+            selectableCount={selectableKeys.length}
+            onCancel={selection.exit}
+            onToggleSelectAll={() => selection.toggleAll(selectableKeys)}
+            maxWidth={pageMax}
+          />
+        ) : (
+        <Header
+          title={folder?.name ?? (isRoot ? "Bookmarks" : "Folder")}
+          subtitle={folder ? `${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}` : undefined}
+          showBack
           maxWidth={pageMax}
+          right={
+            <HeaderActions>
+              {hasUnread && !showLocked && !loadFailed ? (
+                <HeaderIconButton
+                  name="checkmark-done"
+                  color={palette.accent}
+                  onPress={onMarkAllRead}
+                  accessibilityLabel="Mark all as read"
+                />
+              ) : null}
+              {!showLocked && !loadFailed ? (
+                <HeaderIconButton
+                  name="swap-vertical-outline"
+                  color={palette.text}
+                  onPress={(anchor) => {
+                    setSortAnchor(anchor);
+                    setSortOpen(true);
+                  }}
+                  accessibilityLabel="Sort"
+                  accessibilityHint="Change how bookmarks are ordered."
+                />
+              ) : null}
+              {folder ? (
+                <HeaderIconButton
+                  name="ellipsis-horizontal"
+                  color={palette.text}
+                  onPress={(anchor) => {
+                    setFolderAnchor(anchor);
+                    setFolderActions(true);
+                  }}
+                  accessibilityLabel="Folder actions"
+                />
+              ) : null}
+            </HeaderActions>
+          }
         />
-      ) : (
-      <Header
-        title={folder?.name ?? (isRoot ? "Bookmarks" : "Folder")}
-        subtitle={folder ? `${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}` : undefined}
-        showBack
-        maxWidth={pageMax}
-        right={
-          <HeaderActions>
-            {hasUnread && !showLocked && !loadFailed ? (
-              <HeaderIconButton
-                name="checkmark-done"
-                color={palette.accent}
-                onPress={onMarkAllRead}
-                accessibilityLabel="Mark all as read"
-              />
-            ) : null}
-            {!showLocked && !loadFailed ? (
-              <HeaderIconButton
-                name="swap-vertical-outline"
-                color={palette.text}
-                onPress={(anchor) => {
-                  setSortAnchor(anchor);
-                  setSortOpen(true);
-                }}
-                accessibilityLabel="Sort"
-                accessibilityHint="Change how bookmarks are ordered."
-              />
-            ) : null}
-            {folder ? (
-              <HeaderIconButton
-                name="ellipsis-horizontal"
-                color={palette.text}
-                onPress={(anchor) => {
-                  setFolderAnchor(anchor);
-                  setFolderActions(true);
-                }}
-                accessibilityLabel="Folder actions"
-              />
-            ) : null}
-          </HeaderActions>
-        }
-      />
-      )}
+        )}
+      </AnimatedSwap>
 
       <ExtractionProgressLine maxWidth={pageMax} />
 
@@ -373,17 +383,17 @@ export default function FolderDetailScreen() {
         </ScreenContent>
       )}
 
-      {!showLocked && !loadFailed && !selection.active ? (
-        <FABDock maxWidth={pageMax}>
-          <FAB
-            onPress={() => setAddOpen(true)}
-            accessibilityLabel="Save bookmark"
-            accessibilityHint="Tap to save a bookmark."
-            testID="add-bookmark-fab"
-            maxContentWidth={pageMax}
-          />
-        </FABDock>
-      ) : null}
+      {/* Always mounted; the dock fades out and goes inert while hidden, so
+          the FAB keeps its registration and does not remount. */}
+      <FABDock maxWidth={pageMax} visible={!showLocked && !loadFailed && !selection.active}>
+        <FAB
+          onPress={() => setAddOpen(true)}
+          accessibilityLabel="Save bookmark"
+          accessibilityHint="Tap to save a bookmark."
+          testID="add-bookmark-fab"
+          maxContentWidth={pageMax}
+        />
+      </FABDock>
 
       <AddBookmarkSheet
         visible={addOpen}

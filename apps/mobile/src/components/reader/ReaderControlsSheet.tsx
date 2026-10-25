@@ -12,6 +12,7 @@
 import React, { useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Platform, StyleSheet, View, useWindowDimensions } from "react-native";
 import { FloatingPanel } from "../ui/FloatingPanel";
+import { AnimatedDisclosure } from "../ui/AnimatedDisclosure";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Segmented } from "../ui/Segmented";
 import { Text } from "../ui/Text";
@@ -329,9 +330,9 @@ const ReaderControlsBody = React.memo(function ReaderControlsBody({
     <View key="amoled" style={styles.amoledRow}>
       <View style={styles.amoledCopy}>
         <Text variant="bodyStrong">AMOLED black</Text>
-        {effectiveDark ? null : (
+        <AnimatedDisclosure expanded={!effectiveDark}>
           <Text variant="footnote" color="tertiary">Switch the reader to dark mode to use pure black.</Text>
-        )}
+        </AnimatedDisclosure>
       </View>
       <Toggle
         accessibilityLabel="Reader AMOLED black"

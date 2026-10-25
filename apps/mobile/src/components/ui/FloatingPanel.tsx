@@ -18,6 +18,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { useOverlayFocus } from "../../hooks/use-overlay-focus";
 import { useOverlayPage } from "../../hooks/use-overlay-page";
+import { useSurfaceSize } from "../../hooks/use-surface-size";
 import { useScrimPress } from "../../hooks/use-scrim-press";
 import { PanelTitleContext } from "./panel-title";
 import { PanelPresenceContext } from "./panel-presence";
@@ -133,6 +134,7 @@ function FloatingPanelSurface({
   const [availableHeight, setAvailableHeight] = React.useState(height);
   const [keyboardTop, setKeyboardTop] = React.useState<number | null>(null);
   const [panelHeight, setPanelHeight] = React.useState(0);
+  const [naturalContentHeight, setNaturalContentHeight] = React.useState<number | null>(null);
   const [sheetHeaderHeight, setSheetHeaderHeight] = React.useState(0);
   const [sheetActionsHeight, setSheetActionsHeight] = React.useState(0);
   const [sheetBodyHeight, setSheetBodyHeight] = React.useState<number | null>(null);
@@ -251,6 +253,14 @@ function FloatingPanelSurface({
   } : { borderRadius: radius["2xl"] };
   // Opening the keyboard must not also change the form's horizontal padding.
   const panelPadding = restHeight - insets.top - insets.bottom - spacing[32] < 480 ? spacing[16] : layout.overlayPadding;
+  const customStyle = StyleSheet.flatten(style);
+  const topPadding = customStyle?.paddingTop ?? customStyle?.paddingVertical ?? customStyle?.padding ?? (sheet ? 0 : panelPadding);
+  const bottomPadding = customStyle?.paddingBottom ?? customStyle?.paddingVertical ?? customStyle?.padding ?? (sheet ? 0 : panelPadding);
+  const contentSizeStyle = useSurfaceSize(!fillSheet && naturalContentHeight != null
+    ? Math.min(heightLimit, naturalContentHeight + Number(topPadding) + Number(bottomPadding)) : null, {
+    active: visible && !obscured,
+    geometryKey: `${width}:${height}:${keyboardTop}:${heightLimit}:${panelPadding}`,
+  });
   // In short windows/above the IME, let the title scroll with the content so
   // long confirmations cannot push their actions out of the visible panel.
   const scrollHeader = heightLimit < 360;
@@ -420,6 +430,7 @@ function FloatingPanelSurface({
               panelStyle,
               adaptiveSizeStyle,
               style,
+              contentSizeStyle,
             ]}
           >
             {/* A separate web surface avoids the square compositing fringe on
@@ -431,7 +442,10 @@ function FloatingPanelSurface({
               isolation: "auto",
               overflow: "hidden",
             } as unknown as ViewStyle, scrimStyle]} /> : null}
-            <Animated.View style={[{ flexShrink: 1 }, fillSheet ? { flex: 1 } : null, Platform.OS === "web" ? scrimStyle : null]}>
+            <Animated.View onLayout={!fillSheet ? (event) => {
+              const next = event.nativeEvent.layout.height;
+              setNaturalContentHeight(current => current != null && Math.abs(current - next) < 0.5 ? current : next);
+            } : undefined} style={[{ flexShrink: fillSheet ? 1 : 0 }, fillSheet ? { flex: 1 } : null, Platform.OS === "web" ? scrimStyle : null]}>
             <PanelPageContent style={pageStyle} leaving={pageLeaving}>
             <PanelTitleContext.Provider value={titleId}>
             <InputSurfaceContext.Provider value={panelSurface}>

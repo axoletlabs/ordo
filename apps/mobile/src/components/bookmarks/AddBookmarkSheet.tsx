@@ -7,6 +7,8 @@ import * as Clipboard from "expo-clipboard";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { FloatingPanel } from "../ui/FloatingPanel";
+import { AnimatedSwap } from "../ui/AnimatedSwap";
+import { AnimatedDisclosure } from "../ui/AnimatedDisclosure";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
 import { IconButton } from "../ui/IconButton";
@@ -364,6 +366,7 @@ function AddBookmarkContent({
     <>
       <FloatingPanel
         visible={visible}
+        pageKey={lockedFolderId ? "unlock" : "save"}
         obscured={panelObscured}
         interactive={panelInteractive}
         dismissible={!create.isPending}
@@ -391,6 +394,7 @@ function AddBookmarkContent({
           <>
             <PanelHeader title="Save bookmark" onClose={!shareIntake && !create.isPending ? close : undefined} />
             <View style={styles.body}>
+            <AnimatedSwap transitionKey={showUrlPreview ? "preview" : "edit"}>
             {showUrlPreview ? (
               <PressableScale
                 accessibilityRole="button"
@@ -437,11 +441,12 @@ function AddBookmarkContent({
                 rightAccessory={<IconButton name="clipboard-outline" variant="standard" accessibilityLabel="Paste link from clipboard" onPress={() => void pasteLink()} />}
               />
             )}
-            {showUrlPreview && error ? (
+            </AnimatedSwap>
+            <AnimatedDisclosure expanded={Boolean(showUrlPreview && error)}>
               <Text variant="footnote" color="danger" style={styles.urlPreviewError}>
                 {error}
               </Text>
-            ) : null}
+            </AnimatedDisclosure>
 
             {allowFolderSelection ? <PickerField label="Folder" value={destination ?? "Bookmarks"} dropdown expanded={destinationOpen} disabled={create.isPending}
               icon={selectedFolder?.icon ?? "bookmark-outline"} onPress={(anchor) => { handFocusToDropdown(); setDestinationAnchor(anchor); setDestinationOpen(true); }} />
