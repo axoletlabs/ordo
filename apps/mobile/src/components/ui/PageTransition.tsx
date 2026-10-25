@@ -2,7 +2,7 @@
 import React, { startTransition, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Platform, View } from "react-native";
 import { useFocusEffect, useNavigation, useRoute } from "expo-router";
-import { useMaterialMotion } from "../../theme/material-motion";
+import { materialWebMotion, useMaterialMotion } from "../../theme/material-motion";
 import { useSettingsStore } from "../../store/settings";
 import { AnimationActivityContext } from "../../hooks/use-animation-activity";
 import { SceneReadyContext } from "../../hooks/use-scene-ready";
@@ -25,7 +25,7 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
       if (focused instanceof HTMLElement && node?.contains(focused)) focused.blur();
     };
   }, []));
-  const { reducedMotion } = useMaterialMotion();
+  const { reducedMotion, expressive } = useMaterialMotion();
   const preference = useSettingsStore((state) => state.navigationAnimation);
   const navigation = useNavigation();
   const route = useRoute();
@@ -48,23 +48,23 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
     const fallback = setTimeout(finish, screenAnimationDuration(preference) + 150);
     return () => { unsubscribe(); clearTimeout(fallback); cancelWork?.(); };
   }, [immediate, navigation, preference, ready]);
-  const settings = useRef({ reducedMotion, preference });
-  settings.current = { reducedMotion, preference };
-  const active = useRef<Animation | undefined>(undefined);
+  const settings = useRef({ reducedMotion, preference, expressive });
+  settings.current = { reducedMotion, preference, expressive };
+  const active = useRef<Animation[]>([]);
   useEffect(() => {
-    if (reducedMotion || preference === "instant") active.current?.cancel();
+    if (reducedMotion || preference === "instant") active.current.forEach(animation => animation.cancel());
   }, [reducedMotion, preference]);
   useFocusEffect(useCallback(() => {
-    const { reducedMotion, preference } = settings.current;
+    const { reducedMotion, preference, expressive } = settings.current;
     if (Platform.OS !== "web" || reducedMotion || preference === "instant") return;
     const node = ref.current as unknown as HTMLElement | null;
     // No filled transform remains on the input ancestors after the transition.
-    const animation = node?.animate?.([
-      { opacity: 0.6, transform: preference === "slide" ? "translateX(24px)" : "none" },
-      { opacity: 1, transform: "none" },
-    ], { duration: 250, easing: "cubic-bezier(0.2, 0, 0, 1)" });
-    active.current = animation;
-    return () => { animation?.cancel(); active.current = undefined; };
+    const animations = [node?.animate?.([{ opacity: 0.6 }, { opacity: 1 }], materialWebMotion.effects)];
+    if (preference === "slide") animations.push(node?.animate?.([
+      { transform: "translateX(24px)" }, { transform: "translateX(0)" },
+    ], materialWebMotion[expressive ? "expressive" : "standard"]));
+    active.current = animations.filter((animation): animation is Animation => animation != null);
+    return () => { active.current.forEach(animation => animation.cancel()); active.current = []; };
     // Preferences affect the NEXT navigation, not an already-focused settings
     // page. Otherwise choosing a transition replays that page's entrance.
   }, []));

@@ -14,7 +14,7 @@ import {
 import { Text } from "../../../src/components/ui/Text";
 import { Badge } from "../../../src/components/ui/Badge";
 import { Button } from "../../../src/components/ui/Button";
-import { Skeleton } from "../../../src/components/ui/Skeleton";
+import { BookmarkListSkeleton } from "../../../src/components/ui/BookmarkListSkeleton";
 import { EmptyState } from "../../../src/components/ui/EmptyState";
 import { RowIconWell } from "../../../src/components/ui/RowIconWell";
 import { ConfirmDialog } from "../../../src/components/ui/ConfirmDialog";
@@ -24,13 +24,14 @@ import { useRevokeSession } from "../../../src/hooks/use-auth-actions";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { materialMotion, useMaterialMotion } from "../../../src/theme/material-motion";
 import { useSurfaceSize } from "../../../src/hooks/use-surface-size";
+import { listCorners, listPosition, type ListPosition } from "../../../src/theme/list-shape";
 import { useReducedMotionPreference } from "../../../src/hooks/use-reduced-motion-preference";
 import { timeAgo } from "../../../src/lib/format";
 import { errorMessage } from "../../../src/lib/error-message";
 import { haptics } from "../../../src/lib/haptics";
 import { toast } from "../../../src/components/ui/toast-store";
-import { ROW_ICON_FRAME, ROW_ICON_GLYPH } from "../../../src/theme/alignment";
-import { layout, radius, spacing } from "../../../src/theme/tokens";
+import { ROW_ICON_GLYPH } from "../../../src/theme/alignment";
+import { layout, spacing } from "../../../src/theme/tokens";
 import type { SessionDto } from "@ordo/shared";
 
 function deviceLabel(s: SessionDto): string {
@@ -54,7 +55,6 @@ function deviceIcon(s: SessionDto): keyof typeof Ionicons.glyphMap {
 }
 
 export default function SessionsScreen() {
-  const { palette } = useTheme();
   const column = useColumnPadding(layout.maxSettingsWidth);
   const { data: sessions, isLoading, error, refetch } = useSessions();
   const revoke = useRevokeSession();
@@ -112,15 +112,7 @@ export default function SessionsScreen() {
       ) : isLoading ? (
         <SettingsContent>
           <SettingsSectionLabel compact>Signed-in devices</SettingsSectionLabel>
-          {Array.from({ length: 3 }).map((_, i) => (
-            <View key={i} style={[styles.row, { borderBottomColor: palette.border }]}>
-              <Skeleton width={ROW_ICON_FRAME} height={ROW_ICON_FRAME} radiusKey="sm" />
-              <View style={styles.skeletonCopy}>
-                <Skeleton width="56%" height={15} />
-                <Skeleton width="36%" height={11} />
-              </View>
-            </View>
-          ))}
+          <BookmarkListSkeleton count={3} />
         </SettingsContent>
       ) : (
         <ThemedFlatList
@@ -136,9 +128,10 @@ export default function SessionsScreen() {
             rows.length === 0 && styles.listContentEmpty,
           ]}
           ListHeaderComponent={<SettingsSectionLabel compact>Signed-in devices</SettingsSectionLabel>}
-          renderItem={({ item }) => (
+          renderItem={({ item, index }) => (
             <SessionRow
               session={item}
+              position={listPosition(index, rows.length)}
               exiting={exitingIds.has(item.id)}
               onExited={finishExit}
               onRevoke={setPendingRevoke}
@@ -184,8 +177,9 @@ export default function SessionsScreen() {
 /** A session row that stays painted while a revoke collapses it away. The
  * measured height springs shut (never a scaled snapshot), and a rolled-back
  * revoke reverses the exit in place. Reduced motion drops rows at once. */
-function SessionRow({ session, exiting, onExited, onRevoke, revoking }: {
+function SessionRow({ session, position, exiting, onExited, onRevoke, revoking }: {
   session: SessionDto;
+  position: ListPosition;
   exiting: boolean;
   onExited: (id: string) => void;
   onRevoke: (session: SessionDto) => void;
@@ -225,7 +219,8 @@ function SessionRow({ session, exiting, onExited, onRevoke, revoking }: {
           setHeight((current) => (current != null && Math.abs(current - next) < 0.5 ? current : next));
         }}
         style={[styles.row, { flexShrink: 0, borderBottomColor: palette.outlineVariant, borderBottomWidth: expressive ? 0 : StyleSheet.hairlineWidth,
-          borderRadius: expressive ? radius.xl : 0, marginBottom: expressive ? spacing[4] : 0,
+          ...(expressive ? listCorners(position, false) : { borderRadius: 0 }),
+          marginBottom: expressive && position !== "last" && position !== "only" ? spacing[2] : 0,
           backgroundColor: expressive ? palette.surfaceContainerLow : "transparent" }]}
       >
         <RowIconWell>
@@ -268,7 +263,6 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   body: { flex: 1, minWidth: 0 },
-  skeletonCopy: { flex: 1, minWidth: 0, gap: spacing[6] },
   titleRow: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
   title: { flexShrink: 1 },
   meta: { marginTop: spacing[2] },

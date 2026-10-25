@@ -29,7 +29,12 @@ export function Button({ label, onPress, variant = "primary", size = "sm", loadi
   const inactive = disabled || loading;
   // Keep the action's color pair while busy so its progress stays legible.
   const dimmed = disabled && !loading;
-  const tokens = sizes[size];
+  // Baseline M3 has a 40dp visual button. The five-size scale belongs to
+  // Expressive; the wrapper still supplies a real 48dp target in either mode.
+  const tokens = expressive ? sizes[size] : { height: 40, padding: 24, pressed: 20, font: 14, icon: 18 };
+  const baselinePadding = variant === "ghost"
+    ? { paddingLeft: 12, paddingRight: icon ? 16 : 12 }
+    : { paddingLeft: icon ? 16 : 24, paddingRight: 24 };
   const filled = variant === "primary" || variant === "danger" || variant === "tonal" || variant === "secondary" || variant === "elevated";
   const surface = dimmed ? filled ? `${palette.onSurface}1f` : "transparent"
     : variant === "primary" ? palette.primary : variant === "danger" ? palette.error
@@ -49,7 +54,8 @@ export function Button({ label, onPress, variant = "primary", size = "sm", loadi
       shape={shape}
       onPress={() => { haptics.light(); onPress?.(); }}
       style={{ minWidth: 48, minHeight: Math.max(48, tokens.height), borderRadius: tokens.height / 2, justifyContent: "center" }}
-      visualStyle={[styles.base, { height: tokens.height, alignSelf: "stretch", paddingHorizontal: size === "sm" && !expressive ? 24 : tokens.padding,
+      visualStyle={[styles.base, { height: tokens.height, alignSelf: "stretch", paddingHorizontal: tokens.padding,
+        ...(!expressive ? baselinePadding : {}),
         backgroundColor: surface, borderRadius: tokens.height / 2,
         borderWidth: variant === "outlined" ? 1 : 0,
         borderColor: dimmed ? `${palette.onSurface}1f` : expressive ? palette.outlineVariant : palette.outline },

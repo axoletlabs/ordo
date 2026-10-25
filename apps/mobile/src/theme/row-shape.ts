@@ -1,31 +1,32 @@
 /**
- * Expressive rows lift their corners: rest → hover → press/selection.
+ * Expressive rows morph their corners on press/selection; hover uses ink.
  * A single spring drives every corner; each corner clamps at its group-silhouette
  * radius, so segment edges stay aligned while the inner corners round. Standard
- * mode never lifts (state layers only).
+ * mode retains its baseline geometry (state layers only).
  */
 import { useEffect, useMemo, useRef } from "react";
 import { Animated } from "react-native";
-import { materialMotion } from "./material-motion";
+import { useMaterialMotion } from "./material-motion";
 
 export type CornerRadii = { borderTopLeftRadius: number; borderTopRightRadius: number; borderBottomLeftRadius: number; borderBottomRightRadius: number };
 
-export function useRowLift({ expressive, hovered, pressed, selected = false, hoverRadius = 16, pressRadius = 20, reducedMotion, immediate = false }: {
+export function useRowLift({ expressive, hovered, pressed, selected = false, hoverRadius = 0, pressRadius = 16, reducedMotion, immediate = false }: {
   expressive: boolean; hovered: boolean; pressed?: boolean; selected?: boolean; hoverRadius?: number; pressRadius?: number; reducedMotion: boolean; immediate?: boolean;
 }) {
+  const motion = useMaterialMotion();
   const target = !expressive ? 0 : pressed || selected ? pressRadius : hovered ? hoverRadius : 0;
   // Recycled/already-selected rows must paint the right shape on their first frame.
   const lift = useRef(new Animated.Value(target)).current;
-  const previous = useRef({ target, reducedMotion, immediate });
+  const previous = useRef({ target, reducedMotion, immediate, spring: motion.fast });
   useEffect(() => {
-    if (previous.current.target === target && previous.current.reducedMotion === reducedMotion && previous.current.immediate === immediate) return;
-    previous.current = { target, reducedMotion, immediate };
+    if (previous.current.target === target && previous.current.reducedMotion === reducedMotion && previous.current.immediate === immediate && previous.current.spring === motion.fast) return;
+    previous.current = { target, reducedMotion, immediate, spring: motion.fast };
     if (reducedMotion || immediate) { lift.stopAnimation(); lift.setValue(target); return; }
     // borderRadius is not native-drivable; one hovered/pressed row at a time keeps this off the hot path.
-    const animation = Animated.spring(lift, { toValue: target, ...materialMotion.effects.fast, useNativeDriver: false, isInteraction: false });
+    const animation = Animated.spring(lift, { toValue: target, ...motion.fast, useNativeDriver: false, isInteraction: false });
     animation.start();
     return () => animation.stop();
-  }, [lift, reducedMotion, target, immediate]);
+  }, [lift, reducedMotion, target, immediate, motion.fast]);
   return lift;
 }
 

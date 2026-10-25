@@ -10,7 +10,8 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
 import { runPressAction } from "../../lib/press-action";
 import { ROW_ICON_GLYPH } from "../../theme/alignment";
-import { layout, radius, spacing } from "../../theme/tokens";
+import { layout, spacing } from "../../theme/tokens";
+import { listCorners } from "../../theme/list-shape";
 
 export interface SettingRowProps {
   icon?: keyof typeof Ionicons.glyphMap;
@@ -60,19 +61,18 @@ export function SettingRow({
 }: SettingRowProps) {
   const { palette, expressive } = useTheme();
   const { width } = useWindowDimensions();
-  const tint = destructive ? palette.error : iconColor ?? palette.onSurfaceVariant;
-  const valueColor = destructive ? palette.danger : palette.textTertiary;
+  const selected = expressive && !!checked;
+  const foreground = selected ? palette.onSecondaryContainer : palette.onSurface;
+  const supportingColor = selected ? palette.onSecondaryContainer : palette.onSurfaceVariant;
+  const tint = destructive ? palette.error : iconColor ?? supportingColor;
+  const valueColor = destructive ? palette.danger : supportingColor;
   const unavailable = !!unavailableReason;
   const isToggle = React.isValidElement<ToggleProps>(right) && right.type === Toggle;
   const supportingText = unavailableReason || description;
   const rowStyle = [styles.row, { borderBottomColor: palette.outlineVariant,
-    backgroundColor: palette.surfaceContainerLow,
-    borderRadius: expressive ? radius.xs : 0,
-    borderTopLeftRadius: position === "first" || position === "only" ? expressive ? radius.xl : radius.lg : undefined,
-    borderTopRightRadius: position === "first" || position === "only" ? expressive ? radius.xl : radius.lg : undefined,
-    borderBottomLeftRadius: position === "last" || position === "only" ? expressive ? radius.xl : radius.lg : undefined,
-    borderBottomRightRadius: position === "last" || position === "only" ? expressive ? radius.xl : radius.lg : undefined,
-    marginBottom: expressive ? spacing[2] : 0,
+    backgroundColor: expressive ? checked ? palette.secondaryContainer : palette.surfaceContainerLow : "transparent",
+    ...(expressive ? listCorners(position, !!checked) : { borderRadius: 0 }),
+    marginBottom: expressive && position !== "last" && position !== "only" ? spacing[2] : 0,
     borderBottomWidth: expressive || !divider ? 0 : StyleSheet.hairlineWidth,
     opacity: disabled && !unavailable && !isToggle ? 0.38 : 1 }];
 
@@ -84,11 +84,11 @@ export function SettingRow({
         </View>
       ) : null}
       <View style={styles.body}>
-        <Text variant="bodyLarge" numberOfLines={labelLines} color={destructive ? "danger" : "primary"}>
+        <Text variant="bodyLarge" numberOfLines={labelLines} style={{ color: destructive ? palette.error : foreground }}>
           {label}
         </Text>
         {supportingText ? (
-          <Text variant="footnote" color="tertiary" style={styles.description}>
+          <Text variant="footnote" style={[styles.description, { color: supportingColor }]}>
             {supportingText}
           </Text>
         ) : null}
