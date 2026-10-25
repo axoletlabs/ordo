@@ -29,6 +29,9 @@ export function OfflineGate() {
   const authStatus = useAuthStore((s) => s.status);
   const serverUrl = useSettingsStore((s) => s.serverUrl);
   const serverInfo = useServerInfo();
+  // Bundled legal notices and app information remain readable without a server.
+  const offlineReadable = ["settings/about", "settings/licenses", "settings/license", "settings/build-details"]
+    .some((path) => segments.join("/").endsWith(path));
   const onServerSettings = segments.join("/").includes("settings/server");
   const confirmedDown = useRef(false);
   const probedUrl = useRef(serverUrl);
@@ -49,7 +52,9 @@ export function OfflineGate() {
 
    const serverDown = authStatus === "authenticated" && !onServerSettings &&
      (isServerUnreachable(serverInfo.error) || confirmedDown.current);
-   const focusRef = useOverlayFocus(!online || serverDown, () => {}, "dialog", false, true);
+   const focusRef = useOverlayFocus(!offlineReadable && (!online || serverDown), () => {}, "dialog", false, true);
+
+   if (offlineReadable) return null;
 
    if (!online) {
     return (
@@ -66,6 +71,9 @@ export function OfflineGate() {
           icon="cloud-offline-outline"
           title="You're offline"
           message="ordo needs a network connection. Connect to a network to continue."
+          action={authStatus === "authenticated" ? (
+            <Button label="About Ordo" variant="ghost" onPress={() => router.push("/settings/about")} />
+          ) : undefined}
         />
       </View>
     );
@@ -111,6 +119,7 @@ export function OfflineGate() {
               variant="ghost"
               onPress={() => router.push("/settings/server")}
             />
+            <Button block label="About Ordo" variant="ghost" onPress={() => router.push("/settings/about")} />
           </View>
         }
       />

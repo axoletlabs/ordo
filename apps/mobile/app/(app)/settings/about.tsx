@@ -1,235 +1,115 @@
-/** About, build provenance, updates, and project links. */
+/** App identity, updates, project links, and readable legal information. */
 import React from "react";
 import { Linking, StyleSheet, View } from "react-native";
 import { ChangelogSheet } from "../../../src/components/settings/ChangelogList";
-import * as Clipboard from "expo-clipboard";
+import { SettingsGroup, SettingsPage, SettingsScrollView } from "../../../src/components/settings/SettingsPage";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
 import { Text } from "../../../src/components/ui/Text";
-import { PanelActions } from "../../../src/components/ui/SheetActionRow";
+import { Logo } from "../../../src/components/ui/Logo";
 import { FloatingPanel } from "../../../src/components/ui/FloatingPanel";
 import { PanelHeader } from "../../../src/components/ui/PanelHeader";
 import { OtaUpdateCard } from "../../../src/components/ui/OtaUpdater";
+import { PressableScale } from "../../../src/components/ui/PressableScale";
 import { toast } from "../../../src/components/ui/toast-store";
-import {
-  SettingsGroup,
-  SettingsPage,
-  SettingsScrollView,
-} from "../../../src/components/settings/SettingsPage";
 import { useBuildInfo } from "../../../src/hooks/use-build-info";
 import { useAppRouter } from "../../../src/hooks/use-app-router";
-import { useOtaUpdate } from "../../../src/hooks/use-ota-update";
 import { useNativeUpdateStore } from "../../../src/store/native-update";
 import { APP_VARIANT } from "../../../src/lib/app-variant";
 import { releaseName } from "../../../src/lib/release-name";
-import { haptics } from "../../../src/lib/haptics";
 import { CLOUD_WEBSITE_URL } from "../../../src/lib/hosting";
 import { useTheme } from "../../../src/theme/ThemeProvider";
-import { radius, spacing } from "../../../src/theme/tokens";
+import { layout, radius, spacing } from "../../../src/theme/tokens";
 
 const REPO_URL = "https://github.com/axoletlabs/ordo";
-const AXOLET_URL = "https://axolet.com";
 const LEGAL_LINKS = [
-  { label: "Terms", path: "/terms", icon: "document-text-outline" as const },
-  { label: "Privacy", path: "/privacy", icon: "shield-checkmark-outline" as const },
-  { label: "Security", path: "/security", icon: "lock-closed-outline" as const },
+  { label: "Terms of service", path: "terms", icon: "document-text-outline" as const },
+  { label: "Privacy policy", path: "privacy", icon: "shield-checkmark-outline" as const },
+  { label: "Security", path: "security", icon: "lock-closed-outline" as const },
 ];
-const PUBLISHED_YEAR = 2026;
-const TELEMETRY_FOOTER =
-  "The app sends anonymous counts to ordo Cloud: installs, opens, sign-ins, registrations, and coarse health (timeouts, server errors, sign-in failures, startup speed). Platform, version, and Cloud or self-host are included. Your account, server URL, and library are not.";
 
 function openURL(url: string): void {
-  void Linking.openURL(url).catch(() => {});
-}
-
-async function copyFingerprint(value: string): Promise<boolean> {
-  haptics.light();
-  try {
-    await Clipboard.setStringAsync(value);
-    toast.success("Fingerprint copied");
-    return true;
-  } catch {
-    toast.error("Couldn't copy the fingerprint.");
-    return false;
-  }
-}
-
-/** Group compact hashes so the full value can wrap on a panel. */
-function formatFingerprint(value: string): string {
-  if (/[^A-Za-z0-9]/.test(value)) return value;
-  return value.replace(/(.{8})/g, "$1 ").trim();
+  void Linking.openURL(url).catch(() => toast.error("Couldn't open the link."));
 }
 
 export default function AboutScreen() {
   const router = useAppRouter();
   const build = useBuildInfo();
-  // This page only needs the offered release version for the Changelog row.
-  // Download progress ticks many times per second; subscribing to the whole
-  // native-update store rebuilt every About group on each tick.
+  const { palette } = useTheme();
+  // Download progress must not rebuild the entire About screen.
   const nativeRelease = useNativeUpdateStore((state) => state.release);
   const [changelogOpen, setChangelogOpen] = React.useState(false);
-  const commit = build.gitHashShort ?? build.gitHash ?? "—";
-  const commitRef = build.gitHash ?? build.gitHashShort;
+  const [usageOpen, setUsageOpen] = React.useState(false);
+  const variant = APP_VARIANT === "stable" ? null : APP_VARIANT === "preview" ? "Preview" : "Development";
 
   return (
     <SettingsPage title="About">
       <SettingsScrollView>
-        <SettingsGroup
-          label="Version"
-          compact
-          footer={build.gitDirty ? "Built from a working copy with uncommitted changes." : undefined}
-        >
-          <SettingRow icon="pricetag-outline" label="Version" value={releaseName(build.version)} />
-          <SettingRow icon="flask-outline" label="Variant" value={APP_VARIANT === "stable" ? "Stable" : APP_VARIANT === "preview" ? "Preview" : "Development"} />
-          <SettingRow
-            icon="git-commit-outline"
-            label="Commit"
-            value={commit}
-            onPress={commitRef ? () => openURL(`${REPO_URL}/commit/${commitRef}`) : undefined}
-          />
-        </SettingsGroup>
+        <View style={styles.identity}>
+          <Logo width={48} />
+          <Text variant="headlineLarge" accessibilityRole="header">ordo</Text>
+          <Text variant="bodyLarge" color="secondary" align="center">A home for everything you want to read.</Text>
+          <View style={[styles.version, { backgroundColor: palette.secondaryContainer }]}>
+            <Text variant="labelLarge" style={{ color: palette.onSecondaryContainer }}>
+              {releaseName(build.version)}{variant ? ` · ${variant}` : ""}
+            </Text>
+          </View>
+        </View>
 
-        <RunningSettingsGroup />
-
-        <SettingsGroup
-          label="Updates"
-          footer={APP_VARIANT === "development"
-            ? "Development builds are installed manually from GitHub Actions. OTA and in-app updates are disabled."
-            : undefined}
-        >
+        <SettingsGroup label="Updates" compact footer={APP_VARIANT === "development"
+          ? "Development builds are installed manually. Automatic updates are disabled." : undefined}>
           {APP_VARIANT !== "development" ? <OtaUpdateCard /> : null}
-          <SettingRow
-            icon="newspaper-outline"
-            label="Changelog"
+          <SettingRow icon="newspaper-outline" label="What's new" description="Release notes and improvements"
             value={nativeRelease ? releaseName(nativeRelease.version) : undefined}
-            onPress={() => setChangelogOpen(true)}
-            showChevron
-          />
+            onPress={() => setChangelogOpen(true)} showChevron />
+          <SettingRow icon="information-circle-outline" label="Build details" description="Version and technical information"
+            onPress={() => router.push("/settings/build-details")} showChevron />
         </SettingsGroup>
 
-        <SettingsGroup label="Links">
-          <SettingRow
-            icon="logo-github"
-            label="Source"
-            value="GitHub"
-            onPress={() => openURL(REPO_URL)}
-          />
-          <SettingRow
-            icon="globe-outline"
-            label="Website"
-            value="Ordo"
-            onPress={() => openURL(CLOUD_WEBSITE_URL)}
-          />
-          <SettingRow
-            icon="ribbon-outline"
-            label="License"
-            value="AGPL-3.0"
-          />
+        <SettingsGroup label="The project">
+          <SettingRow icon="globe-outline" label="Ordo website" onPress={() => openURL(CLOUD_WEBSITE_URL)} showChevron />
+          <SettingRow icon="logo-github" label="Source code" description="Explore the project and contribute"
+            onPress={() => openURL(REPO_URL)} showChevron />
         </SettingsGroup>
 
-        <SettingsGroup label="Legal" footer={TELEMETRY_FOOTER}>
+        <SettingsGroup label="Legal & privacy">
+          <SettingRow icon="ribbon-outline" label="Ordo license" value="AGPL-3.0"
+            onPress={() => router.push({ pathname: "/settings/license", params: { id: "ordo" } })} showChevron />
+          <SettingRow icon="code-slash-outline" label="Open source licenses" description="Libraries, fonts, and acknowledgments"
+            onPress={() => router.push("/settings/licenses")} showChevron />
           {LEGAL_LINKS.map((link) => (
-            <SettingRow
-              key={link.path}
-              icon={link.icon}
-              label={link.label}
-              onPress={() => router.push({ pathname: "/settings/browser", params: { document: link.path.slice(1) } })}
-              showChevron
-            />
+            <SettingRow key={link.path} icon={link.icon} label={link.label}
+              onPress={() => router.push({ pathname: "/settings/browser", params: { document: link.path } })} showChevron />
           ))}
+          <SettingRow icon="analytics-outline" label="Anonymous usage" description="What Ordo sends and why"
+            onPress={() => setUsageOpen(true)} showChevron />
         </SettingsGroup>
 
-        <View style={styles.copyrightRow}>
-          <Text
-            variant="footnote"
-            color="tertiary"
-            onPress={() => openURL(AXOLET_URL)}
-            suppressHighlighting
-            accessibilityRole="link"
-            accessibilityLabel="© Axolet"
-          >
-            © {PUBLISHED_YEAR} Axolet
-          </Text>
+        <View style={styles.footer}>
+          <Text variant="bodyMedium" color="secondary" align="center">Made by Axolet. Built with open source.</Text>
+          <PressableScale accessibilityRole="link" accessibilityLabel="Axolet website" onPress={() => openURL("https://axolet.com")}
+            style={styles.copyright}>
+            <Text variant="bodySmall" color="secondary">© 2026 Axolet</Text>
+          </PressableScale>
         </View>
       </SettingsScrollView>
 
       <ChangelogSheet visible={changelogOpen} onDismiss={() => setChangelogOpen(false)} />
+      <FloatingPanel visible={usageOpen} onDismiss={() => setUsageOpen(false)}>
+        <PanelHeader title="Anonymous usage" icon="analytics-outline" onClose={() => setUsageOpen(false)} />
+        <View style={styles.usage}>
+          <Text variant="bodyLarge">Ordo sends anonymous counts to ordo Cloud to understand usage and app reliability.</Text>
+          <Text variant="bodyMedium" color="secondary">These cover installs, opens, sign-ins, registrations, and coarse health: timeouts, server errors, sign-in failures, and startup speed. Platform, version, and whether you use Cloud or self-hosting are included.</Text>
+          <Text variant="bodyMedium" color="secondary">Your account, server URL, and library are not included.</Text>
+        </View>
+      </FloatingPanel>
     </SettingsPage>
   );
 }
 
-/**
- * OTA metadata changes on background checks and download-progress ticks. Keep
- * that subscription inside the group it paints so the rest of About (links,
- * legal copy, updates, changelog) stays mounted and untouched.
- */
-function RunningSettingsGroup() {
-  const { palette } = useTheme();
-  const ota = useOtaUpdate();
-  const [fingerprintOpen, setFingerprintOpen] = React.useState(false);
-  const fingerprint = ota.runtimeVersion;
-  const published = !ota.isEmbeddedLaunch ? ota.runningUpdateCreatedAt : null;
-  const publishedLabel = published
-    ? published.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
-    : null;
-
-  return (
-    <>
-      <SettingsGroup label="Running">
-        <SettingRow
-          icon="layers-outline"
-          label="Origin"
-          value={ota.isEmbeddedLaunch ? "Embedded" : "OTA"}
-        />
-        <SettingRow
-          icon="git-branch-outline"
-          label="Channel"
-          value={ota.channel ?? "—"}
-        />
-        {publishedLabel ? (
-          <SettingRow icon="calendar-outline" label="Published" value={publishedLabel} />
-        ) : null}
-        <SettingRow
-          icon="finger-print-outline"
-          label="Build fingerprint"
-          value={fingerprint ?? "—"}
-          onPress={fingerprint ? () => setFingerprintOpen(true) : undefined}
-        />
-      </SettingsGroup>
-
-      <FloatingPanel visible={fingerprintOpen} onDismiss={() => setFingerprintOpen(false)}>
-        <PanelHeader
-          icon="finger-print-outline"
-          iconColor={palette.accent}
-          iconBackground={palette.accentSoft}
-          title="Build fingerprint"
-          onClose={() => setFingerprintOpen(false)}
-        />
-        <View style={[styles.fingerprintBox, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-          <Text variant="mono" selectable>
-            {fingerprint ? formatFingerprint(fingerprint) : "—"}
-          </Text>
-        </View>
-        <PanelActions
-          confirmLabel="Copy"
-          onConfirm={() => {
-            if (fingerprint) void copyFingerprint(fingerprint).then((copied) => { if (copied) setFingerprintOpen(false); });
-          }}
-        />
-      </FloatingPanel>
-    </>
-  );
-}
-
 const styles = StyleSheet.create({
-  copyrightRow: {
-    alignItems: "center",
-    paddingTop: spacing[16],
-    paddingBottom: spacing[8],
-  },
-  fingerprintBox: {
-    marginTop: spacing[4],
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: radius.lg,
-    padding: spacing[12],
-  },
+  identity: { alignItems: "center", gap: spacing[8], paddingHorizontal: layout.rowInset, paddingTop: spacing[16], paddingBottom: spacing[32] },
+  version: { borderRadius: radius.full, paddingHorizontal: spacing[12], paddingVertical: spacing[6], marginTop: spacing[8] },
+  footer: { alignItems: "center", paddingTop: spacing[32], paddingHorizontal: layout.rowInset },
+  copyright: { minHeight: 48, justifyContent: "center", paddingHorizontal: spacing[16] },
+  usage: { gap: spacing[16], paddingBottom: spacing[16] },
 });
