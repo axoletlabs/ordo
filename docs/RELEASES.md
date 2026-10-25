@@ -119,8 +119,8 @@ guidance. Don't repeat highlights in a second list. Describe visible changes
 and useful improvements in terms of what the person can do or notice. Omit build
 numbers, branch merges, audits, test infrastructure, dependency details, and
 unchanged compatibility information. Include installation guidance only when
-the user must take action or could lose local data. Keep `CHANGELOG.md` and the
-published GitHub release body in sync; the app reads the published body.
+the user must take action or could lose local data. The app reads the
+published GitHub release body, not a file in this repository.
 
 1. Cut `release/x.y.z` from the intended source and set `version` in
    `apps/mobile/app.config.js` to that exact version (or its prerelease).
