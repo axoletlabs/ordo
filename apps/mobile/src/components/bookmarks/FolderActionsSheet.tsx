@@ -133,6 +133,24 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
       : keepTotal > 0 || keepOptions.isPending
         ? "This folder and its bookmarks will be deleted. Select any bookmarks you want to keep. You can undo this."
         : "This empty folder will be deleted. You can undo this.";
+  // The collapsed summary must carry the folder's real count: a bare "None"
+  // reads as "no bookmarks to keep" even when the folder is full. Ticked and
+  // unticked states share the same "n of total" format; "None" remains only
+  // for a verified-empty folder, whose row is hidden anyway. A locked folder
+  // never checks (the picker stays disabled), so it must not claim to be
+  // checking either.
+  const keepValue =
+    deleteAccessBlocked
+      ? "Locked"
+      : keepCount > 0
+        ? `${keepCount} of ${keepTotal}`
+        : keepOptions.isPending
+          ? "Checking…"
+          : keepOptions.isError
+            ? "Try again"
+            : keepTotal > 0
+              ? `0 of ${keepTotal}`
+              : "None";
   // Verify a cached empty count before allowing deletion. A failed check must
   // leave the picker available so the user can retry rather than blindly delete.
   const keepChoiceBlocked = (keepOpen || verifyEmptyFolder) && (keepOptions.isPending || keepOptions.isError);
@@ -832,7 +850,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
                 <SettingRow
                   icon="bookmark-outline"
                   label="Keep bookmarks"
-                  value={keepCount > 0 ? `${keepCount} of ${keepTotal}` : verifyEmptyFolder && keepOptions.isPending ? "Checking…" : keepOptions.isError ? "Try again" : "None"}
+                  value={keepValue}
                   onPress={() => setKeepOpen((open) => !open)}
                   showChevron
                   chevronUp={keepOpen}
