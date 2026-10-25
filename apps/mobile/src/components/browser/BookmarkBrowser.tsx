@@ -372,13 +372,13 @@ const styles = StyleSheet.create({
   wrap: { flex: 1, minHeight: 0, overflow: "hidden" },
   web: { flex: 1, margin: 0, padding: 0, ...(Platform.OS === "web" ? ({ height: "100%" } as const) : null) },
   blankCover: { ...StyleSheet.absoluteFill },
+  // No fixed height here: LinearProgress owns its geometry (4dp straight,
+  // 10dp wavy in Expressive) and clipping would shear the wave into slivers.
   progressTrack: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    height: 4,
-    overflow: "hidden",
   },
   error: {
     ...StyleSheet.absoluteFill,
