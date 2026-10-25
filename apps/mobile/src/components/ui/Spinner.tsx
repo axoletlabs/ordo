@@ -96,7 +96,9 @@ export function Spinner({
   );
 }
 
-/** Contained variant shared by list and website pull-to-refresh. */
+/** Contained variant shared by list and website pull-to-refresh. The 40dp
+ * container matches Material's pull-to-refresh indicator; a full 48dp reads
+ * oversized floating over content. */
 export function ReloadSpinner({ spinning = true }: { spinning?: boolean }) {
-  return <Spinner contained spinning={spinning} accessible={false} />;
+  return <Spinner contained size={40} spinning={spinning} accessible={false} />;
 }
