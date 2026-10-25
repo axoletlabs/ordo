@@ -68,16 +68,27 @@ export function Toggle({ value, onValueChange, disabled = false, accessibilityLa
     ]),
   }));
   const handle = useAnimatedStyle(() => {
-    // Size and travel share the spatial spring. Clamp its overshoot so the
-    // thumb stays inside the track, including rapid reversals while pressed.
-    const progress = Math.max(0, Math.min(1, position.value));
-    const down = Math.max(0, Math.min(1, pressed.value));
+    // Travel and size run the spatial spring unclamped so the Expressive
+    // overshoot paints as a visible bounce. The track contains the thumb by
+    // squashing it against an inner edge when an overshoot would cross one,
+    // then the spring pulls it back — rapid reversals and the pressed 28dp
+    // state stay inside without ever flattening the spring.
+    const progress = position.value;
+    const down = pressed.value;
     const diameter = 16 + progress * 8 + down * (12 - progress * 8);
+    const height = Math.min(diameter, 28);
+    let width = diameter;
+    let left = 16 + progress * 20 - width / 2;
+    if (left < 2) {
+      width -= 2 - left;
+      left = 2;
+    }
+    if (left + width > 50) width = 50 - left;
     return {
-      left: 16 + progress * 20 - diameter / 2,
-      top: (32 - diameter) / 2,
-      width: diameter,
-      height: diameter,
+      left,
+      top: (32 - height) / 2,
+      width,
+      height,
       backgroundColor: interpolateColor(availability.value, [0, 1], [
         interpolateColor(selection.value, [0, 1], [`${palette.onSurface}61`, palette.surface]),
         interpolateColor(down, [0, 1], [
