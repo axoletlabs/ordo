@@ -11,6 +11,7 @@
     "web": "expo start --web",
     "start": "expo start",
     "lint": "eslint .",
+    "check:overlay-layout": "node scripts/check-overlay-layout.cjs",
     "typecheck": "node scripts/generate-licenses.cjs && tsc --noEmit",
     "clean": "rimraf .expo node_modules/.cache",
     "licenses:generate": "node scripts/generate-licenses.cjs",
@@ -81,7 +82,8 @@
     "@types/react": "~19.2.18",
     "babel-preset-expo": "~57.0.11",
     "rimraf": "^6.0.1",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "yoga-layout": "3.2.1"
   },
   "expo": {
     "autolinking": {

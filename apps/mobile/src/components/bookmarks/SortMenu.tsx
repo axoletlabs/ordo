@@ -44,6 +44,7 @@ export function SortMenu({
   embedded = false,
   onBack,
   onPageChange,
+  page: controlledPage,
 }: {
   visible: boolean;
   onDismiss: () => void;
@@ -56,9 +57,12 @@ export function SortMenu({
   embedded?: boolean;
   onBack?: () => void;
   onPageChange?: (page: Page) => void;
+  /** Embedded menus let the parent retain the committed page during exit. */
+  page?: Page;
 }) {
-  const [page, setPageState] = useOverlaySessionMode<Page>(visible, variant === "home" ? "root" : "bookmarks");
-  const setPage = (next: Page) => { setPageState(next); onPageChange?.(next); };
+  const [sessionPage, setPageState] = useOverlaySessionMode<Page>(visible, variant === "home" ? "root" : "bookmarks");
+  const page = controlledPage ?? sessionPage;
+  const setPage = (next: Page) => { if (controlledPage == null) setPageState(next); onPageChange?.(next); };
 
   const pickFolder = (sort: FolderListSort) => {
     onFolderSort?.(sort);
