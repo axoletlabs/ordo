@@ -471,15 +471,11 @@ function ReleaseSelector({
   selected: ChangelogRelease;
   onSelect: (tag: string) => void;
 }) {
-  // Repeating the same version on every preview makes the history needlessly
-  // wide. Keep full release names for accessibility and across version lines.
-  const sameVersion = releases.every((release) => release.version.split("-")[0] === releases[0].version.split("-")[0]);
   return (
-    <Segmented accessibilityLabel="Releases" scrollable visibleOptions={3} selectionScroll="reveal"
+    <Segmented accessibilityLabel="Releases" scrollable compact selectionScroll="reveal"
       options={releases.map((release) => ({
         value: release.tagName,
-        label: releaseName(release.version).replace(/^(\S+) (Preview)/, sameVersion ? "$2" : "$1\n$2"),
-        accessibilityLabel: releaseName(release.version),
+        label: releaseName(release.version),
       }))}
       value={selected.tagName} onChange={onSelect} />
   );
