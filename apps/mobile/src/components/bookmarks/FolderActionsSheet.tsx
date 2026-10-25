@@ -111,15 +111,20 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
   const deleteOpen = visible && mode === "delete";
   const verifyEmptyFolder = (displayFolder?.bookmarkCount ?? 0) === 0;
 
-  // Folder contents for the keep-on-delete picker. Fetched while expanded, and
-  // once per delete confirmation for folders whose cached count claims zero:
-  // a stale count must never hide the keep option for a folder with bookmarks.
+  // Warm the keep picker while the confirmation opens, before its expansion
+  // puts the request on the interaction path. This also verifies cached zero
+  // counts: stale metadata must never hide bookmarks that can be kept.
   const keepOptions = useFolderBookmarkOptions(
     displayFolder?.id ?? null,
-    deleteOpen && !deleteAccessBlocked && (keepOpen || verifyEmptyFolder),
+    deleteOpen && !deleteAccessBlocked,
   );
   const keepCount = keepIds.length;
   const keepTotal = keepOptions.data ? keepOptions.data.length : displayFolder?.bookmarkCount ?? 0;
+  // Reserve the same viewport for loading and loaded rows. A maxHeight alone
+  // lets FlatList's empty/loading content and rows size the dialog differently,
+  // producing a second jump when the request finishes. Keep long lists virtual.
+  const keepListHeight = Math.min(320, height * 0.45,
+    Math.max(120, keepTotal * (64 + spacing[2]) + spacing[2]));
   // The subtitle describes the pending outcome, not the picker's expansion:
   // collapsed-with-ticks is still a keep-some delete.
   const deleteSubtitle =
@@ -838,6 +843,9 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
                 {keepOpen && !deleteAccessBlocked ? (
                   <ThemedFlatList
                     data={keepOptions.data ?? []}
+                    initialNumToRender={6}
+                    maxToRenderPerBatch={6}
+                    windowSize={3}
                     keyExtractor={(item) => item.id}
                     renderItem={({ item }) => (
                       <KeepBookmarkRow
@@ -847,7 +855,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
                         onToggle={toggleKeep}
                       />
                     )}
-                    style={[styles.keepList, { maxHeight: Math.min(320, height * 0.45) }]}
+                    style={[styles.keepList, { height: keepListHeight }]}
                     contentContainerStyle={{ gap: spacing[2], padding: spacing[2] }}
                     ListHeaderComponent={keepOptions.isError && (keepOptions.data?.length ?? 0) > 0 ? (
                       <View style={styles.keepStatus}>
