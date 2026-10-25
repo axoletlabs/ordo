@@ -1,9 +1,10 @@
 /**
- * A bottom-sheet release reader: tonal release navigation above continuous
- * Markdown notes, with shared Material sheet and connected button treatments.
+ * One release at a time, with a content-sized sheet and anchored navigation.
+ * The top edge animates between releases; typography and actions stay stable.
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Image, Linking, ScrollView, StyleSheet, View } from "react-native";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Image, Linking, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import * as Clipboard from "expo-clipboard";
 import { Text, type TextColor } from "../ui/Text";
 import { Button } from "../ui/Button";
@@ -28,6 +29,7 @@ import { useChangelog } from "../../hooks/use-changelog";
 import { useTheme } from "../../theme/ThemeProvider";
 import { AppIcon } from "../ui/PinIcon";
 import { radius, resolveFont, spacing } from "../../theme/tokens";
+import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 
 type Piece =
   | { kind: "run"; inlines: ChangelogInline[] }
@@ -502,6 +504,8 @@ function ChangelogSheetBody({
   const changelog = useChangelog();
   const releases = changelog.releases;
   const [tag, setTag] = useState<string | null>(initialTag ?? null);
+  const { width, height } = useWindowDimensions();
+  const compactActions = height < 500 && width > height;
 
   useEffect(() => {
     if (visible) setTag(initialTag ?? null);
@@ -518,6 +522,18 @@ function ChangelogSheetBody({
   const date = selected && !Number.isNaN(Date.parse(selected.publishedAt))
     ? new Date(selected.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : null;
   const releaseDetails = [headline && selected ? releaseName(selected.version) : null, date].filter(Boolean).join(" · ");
+  const motion = useMaterialMotion();
+  const contentOpacity = useSharedValue(1);
+  const previousTag = useRef(selected?.tagName);
+  useLayoutEffect(() => {
+    const changed = previousTag.current != null && previousTag.current !== selected?.tagName;
+    previousTag.current = selected?.tagName;
+    if (visible && changed && !motion.reducedMotion) {
+      contentOpacity.value = 0;
+      contentOpacity.value = withSpring(1, materialMotion.effects.fast);
+    } else contentOpacity.value = 1;
+  }, [visible, selected?.tagName, motion, contentOpacity]);
+  const contentStyle = useAnimatedStyle(() => ({ opacity: contentOpacity.value }));
   let body: ReactNode;
   if (releases == null) {
     body = changelog.errorStatus == null ? (
@@ -537,23 +553,22 @@ function ChangelogSheetBody({
       <Text variant="body" color="secondary">Published updates will show up here.</Text>
     );
   } else {
-    body = <View style={styles.notesContent}><Notes blocks={blocks} /></View>;
+    body = <Animated.View style={[styles.notesContent, contentStyle]}><Notes blocks={blocks} /></Animated.View>;
   }
 
   return (
     <FloatingPanel visible={visible} onDismiss={onDismiss} onShow={onShow} maxWidth={640}
-      presentation="bottom-sheet" sheetSizing="expanded" scrollResetKey={selected?.tagName}>
+      presentation="bottom-sheet" sheetSizing="adaptive" scrollResetKey={selected?.tagName}>
       <PanelHeader title="What's new" titleVariant="labelLarge" titleColor="accent" align="left"
-        accessory={selected ? (
-          <View style={styles.releaseHeading}>
-            <Text variant="headlineSmall" accessibilityRole="header" numberOfLines={2}>{headline || releaseName(selected.version)}</Text>
-            {releaseDetails ? <Text variant="bodyMedium" color="secondary" numberOfLines={1}>{releaseDetails}</Text> : null}
-          </View>
-        ) : undefined} />
+        accessory={selected ? <Animated.View style={[styles.releaseHeading, contentStyle]}>
+          <Text variant="headlineSmall" accessibilityRole="header" numberOfLines={2}>{headline || releaseName(selected.version)}</Text>
+          {releaseDetails ? <Text variant="bodyMedium" color="secondary" numberOfLines={1}>{releaseDetails}</Text> : null}
+        </Animated.View> : undefined} />
       {body}
-      <PanelActions confirmLabel="Got it" size="md" fullWidth onConfirm={onDismiss}>
-        {selected && releases && releases.length > 1 ? <View style={styles.releaseNavigation}>
-          <Text variant="titleSmall" color="secondary">Earlier updates</Text>
+      <PanelActions confirmLabel="Got it" size={compactActions ? "sm" : "md"} fullWidth={!compactActions}
+        inline={compactActions} onConfirm={onDismiss}>
+        {selected && releases && releases.length > 1 ? <View style={[styles.releaseNavigation, compactActions ? { paddingTop: 0 } : null]}>
+          {!compactActions ? <Text variant="titleSmall" color="secondary">Release history</Text> : null}
           <ReleaseSelector releases={releases} selected={selected} onSelect={setTag} />
         </View> : null}
       </PanelActions>

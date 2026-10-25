@@ -57,8 +57,9 @@ export interface FloatingPanelProps {
   maxWidth?: number;
   /** Bottom sheets reuse the dialog's focus, Back, and retained exit lifecycle. */
   presentation?: "dialog" | "bottom-sheet";
-  /** Keep a release reader's sheet height stable as its content changes. */
-  sheetSizing?: "content" | "expanded";
+  /** Adaptive sheets animate their height to fit the content, keeping actions
+   * anchored at the bottom. Expanded sheets always use the height limit. */
+  sheetSizing?: "content" | "expanded" | "adaptive";
   onShow?: () => void | ReturnType<typeof setTimeout> | (() => void);
   /** Size the card to its children instead of stretching toward `maxWidth`. */
   fitContent?: boolean;
@@ -122,6 +123,8 @@ function FloatingPanelSurface({
   const { palette } = useTheme();
   const sheet = presentation === "bottom-sheet";
   const expandedSheet = sheet && sheetSizing === "expanded";
+  const adaptiveSheet = sheet && sheetSizing === "adaptive";
+  const fillSheet = expandedSheet || adaptiveSheet;
   const panelSurface = sheet ? palette.surfaceContainerLow : palette.surfaceContainerHigh;
   const titleId = React.useId();
   const onShowRef = React.useRef(onShow);
@@ -132,6 +135,10 @@ function FloatingPanelSurface({
   const [panelHeight, setPanelHeight] = React.useState(0);
   const [sheetHeaderHeight, setSheetHeaderHeight] = React.useState(0);
   const [sheetActionsHeight, setSheetActionsHeight] = React.useState(0);
+  const [sheetBodyHeight, setSheetBodyHeight] = React.useState<number | null>(null);
+  // Give the first invisible layout room to measure on native as well as web.
+  const adaptiveHeight = useSharedValue(height * 0.9);
+  const adaptiveReady = !adaptiveSheet || (sheetBodyHeight != null && sheetHeaderHeight > 0 && sheetActionsHeight > 0);
   const [measured, setMeasured] = React.useState(false);
   const dragOffset = useSharedValue(0);
   const resting = React.useRef({ width, height });
@@ -148,7 +155,7 @@ function FloatingPanelSurface({
   }, [dismissible, onDismiss]);
   const scrimPress = useScrimPress(visible && interactive && !obscured && dismissOnScrim, hideAndDismiss);
   const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, {
-    interactive: interactive && !obscured, onEntered, onExited, onExiting, ready: Platform.OS === "web" || measured,
+    interactive: interactive && !obscured, onEntered, onExited, onExiting, ready: (Platform.OS === "web" || measured) && adaptiveReady,
   });
   React.useEffect(() => {
     if (!rendered && !keepMounted) setMeasured(false);
@@ -221,6 +228,18 @@ function FloatingPanelSurface({
   const heightLimit = sheet
     ? Math.max(80, Math.min(viewportHeight * 0.9, viewportHeight - insets.top - spacing[16]))
     : Math.max(80, viewportHeight - insets.top - bottomInset - spacing[32]);
+  const fittedSheetHeight = Math.min(heightLimit, sheetHeaderHeight + sheetActionsHeight + (sheetBodyHeight ?? 0) + spacing[24] * 2);
+  const previousSize = React.useRef({ visible: false, ready: false, width, height });
+  React.useLayoutEffect(() => {
+    const previous = previousSize.current;
+    previousSize.current = { visible, ready: adaptiveReady, width, height };
+    if (!adaptiveSheet || !adaptiveReady || !visible) return;
+    const animate = previous.visible && previous.ready && previous.width === width && previous.height === height && !motion.reducedMotion;
+    adaptiveHeight.value = animate
+      ? withSpring(fittedSheetHeight, { ...motion.spatial, overshootClamping: true })
+      : fittedSheetHeight;
+  }, [adaptiveSheet, adaptiveReady, fittedSheetHeight, visible, width, height, motion, adaptiveHeight]);
+  const adaptiveSizeStyle = useAnimatedStyle(() => adaptiveSheet ? { height: adaptiveHeight.value } : {});
   const sheetInset = width < 600 ? spacing[16] : spacing[24];
   const sheetWidth = Math.min(maxWidth, width - insets.left - insets.right);
   const dialogWidth = Math.max(0, Math.min(maxWidth, width - insets.left - insets.right - spacing[32]));
@@ -313,25 +332,29 @@ function FloatingPanelSurface({
       ? React.cloneElement(action, { topSpacing: 16 }) : action)}
   </View>;
   const sheetBodyPadding = { paddingHorizontal: sheetInset, paddingVertical: spacing[24] };
-  const sheetBodyStyle = { flex: expandedSheet ? 1 : undefined, flexShrink: 1,
+  const sheetBodyStyle = { flex: fillSheet ? 1 : undefined, flexShrink: 1,
     maxHeight: Math.max(0, heightLimit - sheetHeaderHeight - sheetActionsHeight), backgroundColor: panelSurface };
+  // Measure natural content, independently of the animated scroll viewport.
+  // A viewport measurement here would feed the height animation back into
+  // itself and make short notes collapse or oscillate while switching.
+  const sheetBody = adaptiveSheet ? <View onLayout={(event) => setSheetBodyHeight(event.nativeEvent.layout.height)}>{body}</View> : body;
   // In extremely short windows/above a keyboard, scroll the whole sheet
   // rather than letting its fixed chrome hide the notes or dismissal action.
   const sheetScrollAll = scrollBody && (heightLimit < 280
-    || expandedSheet && heightLimit - sheetHeaderHeight - sheetActionsHeight < spacing[96]);
+    || fillSheet && heightLimit - sheetHeaderHeight - sheetActionsHeight < spacing[96]);
   const sheetContent = sheetScrollAll
     ? <ThemedScrollView key={scrollResetKey} testID="material-sheet-body" keyboardShouldPersistTaps="handled" nestedScrollEnabled
-        style={{ flex: expandedSheet ? 1 : undefined, flexShrink: 1, maxHeight: heightLimit, backgroundColor: panelSurface }}>
-        {sheetHeader}<View style={sheetBodyPadding}>{body}</View>{sheetActions}
+        style={{ flex: fillSheet ? 1 : undefined, flexShrink: 1, maxHeight: heightLimit, backgroundColor: panelSurface }}>
+        {sheetHeader}<View style={sheetBodyPadding}>{sheetBody}</View>{sheetActions}
       </ThemedScrollView>
     : <>{sheetHeader}
-        {scrollBody ? expandedSheet ? <View style={sheetBodyStyle}>
+        {scrollBody ? fillSheet ? <View style={sheetBodyStyle}>
           <ThemedScrollView key={scrollResetKey} testID="material-sheet-body" keyboardShouldPersistTaps="handled" nestedScrollEnabled
-            style={{ flex: 1 }} contentContainerStyle={sheetBodyPadding}>{body}</ThemedScrollView>
+            style={{ flex: 1 }} contentContainerStyle={sheetBodyPadding}>{sheetBody}</ThemedScrollView>
           <SheetScrollFades color={panelSurface} />
         </View> : <ThemedScrollView key={scrollResetKey} testID="material-sheet-body" keyboardShouldPersistTaps="handled" nestedScrollEnabled
           style={sheetBodyStyle} contentContainerStyle={sheetBodyPadding}>{body}</ThemedScrollView>
-          : <View testID="material-sheet-body" style={[sheetBodyStyle, sheetBodyPadding]}>{body}</View>}
+          : <View testID="material-sheet-body" style={[sheetBodyStyle, sheetBodyPadding]}>{sheetBody}</View>}
         {sheetActions}
       </>;
 
@@ -389,12 +412,13 @@ function FloatingPanelSurface({
                 padding: sheet ? 0 : panelPadding,
                 minWidth: fitContent ? Math.min(280, dialogWidth) : undefined,
                 maxHeight: heightLimit,
-                height: expandedSheet ? heightLimit : undefined,
+                height: fillSheet ? heightLimit : undefined,
                 backgroundColor: Platform.OS === "web" ? "transparent" : panelSurface,
                 ...corners,
                 ...(sheet ? { overflow: "hidden" as const } : {}),
               },
               panelStyle,
+              adaptiveSizeStyle,
               style,
             ]}
           >
@@ -407,7 +431,7 @@ function FloatingPanelSurface({
               isolation: "auto",
               overflow: "hidden",
             } as unknown as ViewStyle, scrimStyle]} /> : null}
-            <Animated.View style={[{ flexShrink: 1 }, expandedSheet ? { flex: 1 } : null, Platform.OS === "web" ? scrimStyle : null]}>
+            <Animated.View style={[{ flexShrink: 1 }, fillSheet ? { flex: 1 } : null, Platform.OS === "web" ? scrimStyle : null]}>
             <PanelPageContent style={pageStyle} leaving={pageLeaving}>
             <PanelTitleContext.Provider value={titleId}>
             <InputSurfaceContext.Provider value={panelSurface}>

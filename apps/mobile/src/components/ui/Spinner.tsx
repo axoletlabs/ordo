@@ -1,60 +1,56 @@
-/**
- * Material circular progress, or the Expressive shape-morphing loading indicator.
- */
+/** Material circular progress; Expressive mode uses the reference's wavy arc. */
 import React, { useEffect } from "react";
-import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
+import type { StyleProp, ViewStyle } from "react-native";
 import Animated, {
-  Easing,
-  ReduceMotion,
-  cancelAnimation,
-  useAnimatedProps,
-  useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
+  Easing, ReduceMotion, cancelAnimation, useAnimatedProps, useDerivedValue, useSharedValue,
+  withRepeat, withTiming,
 } from "react-native-reanimated";
-import Svg, { Circle, G, Path } from "react-native-svg";
+import Svg, { Path } from "react-native-svg";
 import { useTheme } from "../../theme/ThemeProvider";
-import { radius } from "../../theme/tokens";
 import { useMaterialMotion } from "../../theme/material-motion";
-import { circularIndeterminateArc } from "../../lib/material-progress";
-import { loadingMorphPath, loadingMorphState, MORPH_INTERVAL, MORPH_STEPS } from "../../lib/material-loading";
-import { LOADING_SHAPE_SCALE } from "../../lib/material-loading-shapes";
+import { circularIndeterminateArc, circularProgressPaths } from "../../lib/material-progress";
 import { useAnimationActivity } from "../../hooks/use-animation-activity";
 
-const SIZES = { sm: 16, md: 20, lg: 24 } as const;
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const SIZES = { sm: 20, md: 32, lg: 48 } as const;
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
 export type SpinnerSize = keyof typeof SIZES;
 
-export function spinnerExtent(size: SpinnerSize | number = "md"): number {
+export function spinnerExtent(size: SpinnerSize | number = "lg"): number {
   return typeof size === "number" ? size : SIZES[size];
 }
 
 export function Spinner({
-  size = "md",
+  size = "lg",
   color,
+  trackColor,
+  label = "Loading",
   style,
   accessible = true,
   spinning = true,
+  contained = false,
 }: {
   size?: SpinnerSize | number;
   color?: string;
+  trackColor?: string;
+  label?: string;
   style?: StyleProp<ViewStyle>;
   accessible?: boolean;
   spinning?: boolean;
+  /** Tonal circular container, used by pull-to-refresh. */
+  contained?: boolean;
 }) {
   const { palette, expressive } = useTheme();
   const { reducedMotion } = useMaterialMotion();
   const active = useAnimationActivity() && spinning;
   const extent = spinnerExtent(size);
+  const indicatorExtent = contained ? extent * 38 / 48 : extent;
+  const foreground = color ?? (contained ? palette.onPrimaryContainer : palette.primary);
+  const customColor = foreground !== palette.primary;
   const phase = useSharedValue(0);
-  const morph = useSharedValue(0);
-  const rotation = useSharedValue(0);
 
   useEffect(() => {
-    if (!active || reducedMotion || expressive) {
+    if (!active || reducedMotion) {
       cancelAnimation(phase);
       phase.value = 0;
       return;
@@ -68,95 +64,39 @@ export function Spinner({
       ReduceMotion.Never,
     );
     return () => cancelAnimation(phase);
-  }, [phase, active, reducedMotion, expressive]);
+  }, [phase, active, reducedMotion]);
 
-  const stroke = Math.max(2, extent * 0.1);
-  const radiusPx = extent / 2 - stroke / 2 - 0.5;
-  const circumference = 2 * Math.PI * radiusPx;
-  useEffect(() => {
-    morph.value = 0;
-    rotation.value = 0;
-    if (expressive && active && !reducedMotion) {
-      morph.value = withRepeat(withTiming(MORPH_STEPS, {
-        duration: MORPH_INTERVAL * MORPH_STEPS, easing: Easing.linear, reduceMotion: ReduceMotion.Never,
-      }), -1, false, undefined, ReduceMotion.Never);
-      rotation.value = withRepeat(withTiming(360, {
-        duration: 4666, easing: Easing.linear, reduceMotion: ReduceMotion.Never,
-      }), -1, false, undefined, ReduceMotion.Never);
-    }
-    return () => { cancelAnimation(morph); cancelAnimation(rotation); };
-  }, [expressive, active, reducedMotion, morph, rotation]);
-  const arc = useAnimatedProps(() => {
-    const motion = !spinning || reducedMotion ? { start: -90, sweep: 90 } : circularIndeterminateArc(phase.value);
-    return { strokeDasharray: [circumference * motion.sweep / 360, circumference], strokeDashoffset: -circumference * motion.start / 360 };
+  const paths = useDerivedValue(() => {
+    const arc = !spinning || reducedMotion ? { start: -90, sweep: 90 } : circularIndeterminateArc(phase.value);
+    return circularProgressPaths(arc.start, arc.sweep, expressive);
   });
-  const shape = useAnimatedProps(() => {
-    const state = loadingMorphState(morph.value);
-    return { d: loadingMorphPath(state.index, state.progress) };
-  });
-  const shapeRotation = useAnimatedStyle(() => {
-    const angle = loadingMorphState(morph.value).rotation + rotation.value;
-    return { transform: [{ rotate: `${angle}deg` }] };
-  });
+  const indicator = useAnimatedProps(() => ({ d: paths.value.indicator }));
+  const track = useAnimatedProps(() => ({ d: paths.value.track }));
 
   return (
     <Animated.View
       accessible={accessible}
       accessibilityRole={accessible ? "progressbar" : undefined}
-      accessibilityLabel={accessible ? "Loading" : undefined}
+      accessibilityLabel={accessible ? label : undefined}
+      accessibilityState={accessible ? { busy: spinning } : undefined}
+      aria-hidden={!accessible || undefined}
       importantForAccessibility={accessible ? "auto" : "no"}
-      testID={expressive ? "material-loading-indicator" : "material-circular-progress"}
-      style={[{ width: extent, height: extent }, style]}
+      testID={expressive ? "material-wavy-circular-progress" : "material-circular-progress"}
+      style={[{ width: extent, height: extent, flexShrink: 0, alignItems: "center", justifyContent: "center",
+        borderRadius: extent / 2, backgroundColor: contained ? palette.primaryContainer : "transparent" }, style]}
     >
-      {expressive ? (
-        <Animated.View style={[{ width: extent, height: extent }, shapeRotation]}>
-          <Svg width={extent} height={extent} viewBox="0 0 1 1">
-            <G transform={`translate(0.5 0.5) scale(${LOADING_SHAPE_SCALE}) translate(-0.5 -0.5)`}>
-              <AnimatedPath animatedProps={shape} d={loadingMorphPath(0, 0)} fill={color ?? palette.primary} />
-            </G>
-          </Svg>
-        </Animated.View>
-      ) : <Svg width={extent} height={extent} viewBox={`0 0 ${extent} ${extent}`}>
-        <AnimatedCircle animatedProps={arc}
-          cx={extent / 2}
-          cy={extent / 2}
-          r={radiusPx}
-          stroke={color ?? palette.primary}
-          strokeWidth={stroke}
-          strokeLinecap="round"
-          fill="none"
-        />
-      </Svg>}
+      <Svg width={indicatorExtent} height={indicatorExtent} viewBox="0 0 40 40"
+        aria-hidden importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
+        {expressive ? <AnimatedPath animatedProps={track} stroke={trackColor ?? (customColor ? foreground : palette.secondaryContainer)}
+          strokeOpacity={customColor && !trackColor ? 0.24 : 1} strokeWidth={4} strokeLinecap="round" fill="none" /> : null}
+        <AnimatedPath animatedProps={indicator} stroke={foreground}
+          strokeWidth={4} strokeLinecap="round" fill="none" />
+      </Svg>
     </Animated.View>
   );
 }
 
-/** Elevated chip around the spinner — the website pull-to-refresh HUD. */
-export function ReloadSpinner({
-  color,
-  backgroundColor,
-  borderColor,
-  spinning = true,
-}: {
-  color?: string;
-  backgroundColor: string;
-  borderColor: string;
-  spinning?: boolean;
-}) {
-  return (
-    <View style={[styles.chip, { backgroundColor, borderColor }]}>
-      <Spinner size="lg" color={color} spinning={spinning} accessible={false} />
-    </View>
-  );
+/** Contained variant shared by list and website pull-to-refresh. */
+export function ReloadSpinner({ spinning = true }: { spinning?: boolean }) {
+  return <Spinner contained spinning={spinning} accessible={false} />;
 }
-
-const styles = StyleSheet.create({
-  chip: {
-    width: 36,
-    height: 36,
-    borderRadius: radius.full,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-});
