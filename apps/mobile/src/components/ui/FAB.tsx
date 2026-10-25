@@ -96,6 +96,9 @@ export function FAB({
   alignTo = "scene",
 }: FABProps) {
   const { palette, shadows, expressive } = useTheme();
+  // A 56dp FAB uses the small 16dp corner in both systems. The increased
+  // 20dp corner belongs to the Expressive 80dp medium FAB.
+  const corner = radius.lg;
   const [labelWidth, setLabelWidth] = React.useState(0);
   const expanded = useSharedValue(1);
   const spatial = expansion?.spatial ?? expanded;
@@ -124,7 +127,7 @@ export function FAB({
     <Animated.View
       ref={anchorRef}
       collapsable={false}
-      style={[styles.fab, { bottom: fabBottomOffset(insets.bottom, bottom), right, borderRadius: expressive ? radius.xl : radius.lg }, shadows.level3, widthStyle]}
+      style={[styles.fab, { bottom: fabBottomOffset(insets.bottom, bottom), right, borderRadius: corner }, shadows.level3, widthStyle]}
     >
       <PressableScale
         animated
@@ -132,9 +135,9 @@ export function FAB({
         accessibilityLabel={accessibilityLabel}
         accessibilityHint={accessibilityHint}
         testID={testID}
-        style={[styles.fabHit, { width: "100%", overflow: "hidden", backgroundColor: palette.primaryContainer, borderRadius: expressive ? radius.xl : radius.lg, paddingHorizontal: spacing[16] }, hitStyle]}
+        style={[styles.fabHit, { width: "100%", overflow: "hidden", backgroundColor: palette.primaryContainer, borderRadius: corner, paddingHorizontal: spacing[16] }, hitStyle]}
         stateLayerColor={palette.onPrimaryContainer}
-        shape={{ rest: expressive ? radius.xl : radius.lg, pressed: expressive ? radius.md : radius.lg }}
+        shape={{ rest: corner, pressed: expressive ? radius.md : corner }}
         onPress={(event) => {
           haptics.light();
           // Centered dialogs don't need window coordinates. In particular,

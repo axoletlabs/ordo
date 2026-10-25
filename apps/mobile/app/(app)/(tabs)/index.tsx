@@ -1,6 +1,6 @@
 /** Bookmarks home: folders and unfiled bookmarks in one library list. */
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { StyleSheet, View, type FlatList, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { Platform, StyleSheet, View, type FlatList, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useAppRouter as useRouter } from "../../../src/hooks/use-app-router";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
@@ -14,6 +14,7 @@ import { searchScopeActive } from "../../../src/lib/search-bookmarks";
 import { ListLoadingFooter } from "../../../src/components/ui/ListLoadingFooter";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
 import { FAB, FABDock } from "../../../src/components/ui/FAB";
+import { FABMenu } from "../../../src/components/ui/FABMenu";
 import { ContextMenu, ContextMenuItem } from "../../../src/components/ui/ContextMenu";
 import { Button } from "../../../src/components/ui/Button";
 import { ScreenContent } from "../../../src/components/ui/ScreenContent";
@@ -150,7 +151,7 @@ const LibraryCatalogueWarmer = React.memo(function LibraryCatalogueWarmer({ sear
 });
 
 export default function BookmarksScreen() {
-  const { palette } = useTheme();
+  const { palette, expressive } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ bookmark?: string; focus?: string }>();
   useLegacyReaderLink(params.bookmark);
@@ -434,7 +435,8 @@ export default function BookmarksScreen() {
             : `Tap to ${createActionDescription(createButtonTapAction)}. Press and hold to ${createActionDescription(createButtonHoldAction)}.`
         }
         testID="add-bookmark-fab"
-        label={createActionLabel(createButtonTapAction)}
+        label={expressive && Platform.OS !== "web" && (createButtonTapAction === "menu" || createButtonHoldAction === "menu")
+          ? undefined : createActionLabel(createButtonTapAction)}
         expansion={collapsingFab.expansion}
         bottom={spacing[16]}
         maxContentWidth={contentWidth}
@@ -519,24 +521,11 @@ export default function BookmarksScreen() {
         lockType={filterUnlock?.lockType} pinLength={filterUnlock?.pinLength} onDismiss={() => setFilterUnlock(null)}
         onUnlocked={() => { if (filterUnlock) search.setFilters((previous) => ({ ...previous, folderIds: [...new Set([...previous.folderIds, filterUnlock.id])] })); setFilterUnlock(null); }} />
 
-      <ContextMenu visible={createMenuOpen} onDismiss={() => setCreateMenuOpen(false)} anchor={createAnchor}>
-        <ContextMenuItem
-          icon="bookmark-outline"
-          label="Save bookmark"
-          onPress={() => {
-            setCreateMenuOpen(false);
-            setAddOpen(true);
-          }}
-        />
-        <ContextMenuItem
-          icon="folder-outline"
-          label="New folder"
-          onPress={() => {
-            setCreateMenuOpen(false);
-            setCreateOpen(true);
-          }}
-        />
-      </ContextMenu>
+      <FABMenu visible={createMenuOpen} onDismiss={() => setCreateMenuOpen(false)} anchor={createAnchor}
+        actions={[
+          { icon: "bookmark-outline", label: "Save bookmark", onPress: () => setAddOpen(true) },
+          { icon: "folder-outline", label: "New folder", onPress: () => setCreateOpen(true) },
+        ]} />
 
       <AddBookmarkSheet
         visible={addOpen}

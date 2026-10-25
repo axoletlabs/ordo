@@ -1,7 +1,7 @@
 /**
  * Full-bleed feedback behind a library row: the tonal surface, the selection
  * tone and the hover/press state layer. In Expressive mode the surface's
- * corners lift under the pointer (see useRowLift) — the row container stops
+ * corners morph on press/selection (see useRowLift) — the row container stops
  * clipping so the morph is visible; in Standard mode everything is static.
  */
 import React from "react";

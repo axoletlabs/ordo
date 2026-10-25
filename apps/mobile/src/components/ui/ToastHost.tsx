@@ -49,6 +49,7 @@ function ToastItem({ toast, active, onExited }: { toast: Toast; active: boolean;
 
   // 0 → 1 enter/exit; horizontal px for swipe.
   const enter = useSharedValue(0);
+  const spatial = useSharedValue(0);
   const offsetX = useSharedValue(0);
 
   const finishExit = useCallback(() => {
@@ -64,10 +65,11 @@ function ToastItem({ toast, active, onExited }: { toast: Toast; active: boolean;
     if (dismissed.current) return;
     dismissed.current = true;
     setClosing(true);
+    spatial.value = motion.reducedMotion ? 0 : withSpring(0, motion.fast);
     if (motion.reducedMotion) { enter.value = 0; finishExit(); return; }
     enter.value = withTiming(0, { duration: 200 }, (complete) => { if (complete) runOnJS(finishExit)(); });
     closeFallback.current = setTimeout(finishExit, 270);
-  }, [enter, finishExit, motion.reducedMotion]);
+  }, [enter, spatial, finishExit, motion.reducedMotion, motion.fast]);
   useEffect(() => { if (!active) animateOut(); }, [active, animateOut]);
   useEffect(() => { if (closing && motion.reducedMotion) finishExit(); }, [closing, motion.reducedMotion, finishExit]);
 
@@ -77,7 +79,8 @@ function ToastItem({ toast, active, onExited }: { toast: Toast; active: boolean;
   useEffect(() => {
     if (dismissed.current) return;
     enter.value = motion.reducedMotion ? 1 : withSpring(1, materialMotion.effects.spatial);
-  }, [enter, motion.reducedMotion]);
+    spatial.value = motion.reducedMotion ? 1 : withSpring(1, motion.fast);
+  }, [enter, spatial, motion.reducedMotion, motion.fast]);
   useEffect(() => {
     // Hover/focus may pause the timer, but must never restart an exit fade.
     if (dismissed.current || hovered || focused) return;
@@ -102,15 +105,15 @@ function ToastItem({ toast, active, onExited }: { toast: Toast; active: boolean;
       if (past) {
         const dir = Math.sign(offsetX.value) || 1;
         if (motion.reducedMotion) runOnJS(animateOut)();
-        else offsetX.value = withSpring(dir * 500, materialMotion.effects.spatial, (finished) => { if (finished) runOnJS(animateOut)(); });
+        else offsetX.value = withSpring(dir * 500, motion.spatial, (finished) => { if (finished) runOnJS(animateOut)(); });
       } else {
-        offsetX.value = motion.reducedMotion ? 0 : withSpring(0, materialMotion.effects.spatial);
+        offsetX.value = motion.reducedMotion ? 0 : withSpring(0, motion.spatial);
       }
-    }), [toast.swipeable, motion.reducedMotion, animateOut, offsetX]);
+    }), [toast.swipeable, motion.reducedMotion, motion.spatial, animateOut, offsetX]);
 
   const animStyle = useAnimatedStyle(() => ({
     opacity: enter.value,
-    transform: [{ translateX: offsetX.value }, { translateY: (1 - enter.value) * 20 }],
+    transform: [{ translateX: offsetX.value }, { translateY: (1 - spatial.value) * 20 }],
   }));
 
   return (

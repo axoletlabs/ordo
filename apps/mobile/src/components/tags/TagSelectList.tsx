@@ -18,6 +18,7 @@ import { tagColorValue } from "../../lib/tag-colors";
 import { useResponsiveLayout } from "../../hooks/use-responsive-layout";
 import { toast } from "../ui/toast-store";
 import { errorMessage } from "../../lib/error-message";
+import { listCorners, listPosition } from "../../theme/list-shape";
 
 export interface TagSelectListProps {
   /** Currently selected tag ids (assignment or draft). */
@@ -53,7 +54,7 @@ export function TagSelectList({
   searchInputRef,
   searchAutoFocus,
 }: TagSelectListProps) {
-  const { palette } = useTheme();
+  const { palette, expressive } = useTheme();
   const { height } = useResponsiveLayout();
   const { data: catalogue } = useTags();
   const create = useCreateTag();
@@ -90,35 +91,48 @@ export function TagSelectList({
     }
   };
 
-  const renderRow = (tag: { id: string; name: string; color: TagColor }, selected: boolean) => menu ? (
-    // Dropdowns share menu selection colors/shape in both design modes; the
-    // standalone checklist below deliberately keeps its list-selection roles.
-    <ContextMenuItem
-      key={tag.id}
-      label={tag.name}
-      labelLines={1}
-      leading={<View style={[styles.dot, { backgroundColor: tagColorValue(tag.color).dot }]} />}
-      selected={selected}
-      selectionRole="menuitemcheckbox"
-      onPress={() => onToggle(tag.id)}
-    />
-  ) : (
-    <PressableScale
-      key={tag.id}
-      accessibilityRole="checkbox"
-      accessibilityLabel={tag.name}
-      accessibilityState={{ checked: selected }}
-      stateLayerColor={selected ? palette.onSecondaryContainer : palette.onSurface}
-      style={[styles.row, { backgroundColor: selected ? palette.secondaryContainer : "transparent" }]}
-      onPress={() => onToggle(tag.id)}
-    >
-      <View style={[styles.dot, { backgroundColor: tagColorValue(tag.color).dot }]} />
-      <Text variant="bodyLarge" numberOfLines={1} style={{ flex: 1, color: selected ? palette.onSecondaryContainer : palette.onSurface }}>
-        {tag.name}
-      </Text>
-      {selected ? <Ionicons name="checkmark" size={24} color={palette.onSecondaryContainer} /> : null}
-    </PressableScale>
-  );
+  const renderRow = (tag: { id: string; name: string; color: TagColor }, selected: boolean, index: number) => {
+    const corners = listCorners(listPosition(index, tags.all.length), selected);
+    const shape = expressive ? {
+      topLeft: corners.borderTopLeftRadius, topRight: corners.borderTopRightRadius,
+      bottomLeft: corners.borderBottomLeftRadius, bottomRight: corners.borderBottomRightRadius,
+    } : 0;
+    // Dropdowns use menu selection colors/shape; the standalone checklist
+    // keeps list-selection roles and the shared segmented-list silhouette.
+    if (menu) return (
+      <ContextMenuItem
+        key={tag.id}
+        label={tag.name}
+        labelLines={1}
+        leading={<View style={[styles.dot, { backgroundColor: tagColorValue(tag.color).dot }]} />}
+        selected={selected}
+        selectionRole="menuitemcheckbox"
+        onPress={() => onToggle(tag.id)}
+      />
+    );
+    return (
+      <PressableScale
+        key={tag.id}
+        accessibilityRole="checkbox"
+        accessibilityLabel={tag.name}
+        accessibilityState={{ checked: selected }}
+        stateLayerColor={selected ? palette.onSecondaryContainer : palette.onSurface}
+        shape={{ rest: shape, pressed: expressive ? 16 : shape }}
+        style={[styles.row, {
+          backgroundColor: selected ? palette.secondaryContainer : expressive ? palette.surfaceContainerLow : "transparent",
+          marginBottom: expressive && index < tags.all.length - 1 ? spacing[2] : 0,
+          paddingHorizontal: spacing[16],
+        }]}
+        onPress={() => onToggle(tag.id)}
+      >
+        <View style={[styles.dot, { backgroundColor: tagColorValue(tag.color).dot }]} />
+        <Text variant="bodyLarge" numberOfLines={1} style={{ flex: 1, color: selected ? palette.onSecondaryContainer : palette.onSurface }}>
+          {tag.name}
+        </Text>
+        {selected ? <Ionicons name="checkmark" size={24} color={palette.onSecondaryContainer} /> : null}
+      </PressableScale>
+    );
+  };
 
   const createRow =
     menu && autoCreate && (query.trim() || onRequestCreateTag) ? (
@@ -173,7 +187,7 @@ export function TagSelectList({
     <ThemedFlatList animateChanges
       data={menu ? tags.all : [...tags.selected, ...tags.unselected]}
       keyExtractor={(t) => t.id}
-      renderItem={({ item }) => renderRow(item, selectedIds.includes(item.id))}
+      renderItem={({ item, index }) => renderRow(item, selectedIds.includes(item.id), index)}
       style={{ maxHeight: listHeight, flexShrink: 1 }}
       keyboardShouldPersistTaps="always"
       keyboardDismissMode="none"

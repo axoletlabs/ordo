@@ -22,12 +22,14 @@ import { RowHighlight } from "../bookmarks/RowHighlight";
 import type { TagDto } from "@ordo/shared";
 import { rowOwnsHover } from "../../lib/row-hover";
 import { nativeHoverEvents } from "../../lib/pointer-hover";
+import { listCorners, type ListPosition } from "../../theme/list-shape";
 
 export interface TagRowProps {
   tag: TagDto;
   onPress: (tag: TagDto) => void | boolean;
   onMore?: (tag: TagDto, anchor: MenuAnchorRect) => void;
   highlighted?: boolean;
+  position?: ListPosition;
 }
 
 export const TagRow = React.memo(function TagRow({
@@ -35,6 +37,7 @@ export const TagRow = React.memo(function TagRow({
   onPress,
   onMore,
   highlighted,
+  position = "only",
 }: TagRowProps) {
   const { palette: basePalette, expressive } = useTheme();
   const palette = React.useMemo(() => highlighted ? {
@@ -81,8 +84,8 @@ export const TagRow = React.memo(function TagRow({
           }
           : nativeHoverEvents({}, setHovered))}
     >
-      <RowHighlight rest={expressive ? { borderTopLeftRadius: 20, borderTopRightRadius: 20, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 } : undefined}
-        expressive={expressive} hovered={hovered} pressed={pressed} selected={false} highlighted={!!highlighted} hoverRadius={24} pressRadius={28} />
+      <RowHighlight rest={expressive ? listCorners(position, false) : undefined}
+        expressive={expressive} hovered={hovered} pressed={pressed} selected={false} highlighted={!!highlighted} />
       <ListPressable
         feedback={false}
         accessibilityRole="button"

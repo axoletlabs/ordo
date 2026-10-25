@@ -29,7 +29,7 @@ export function SettingsSelect<T extends string>({
   onChange: (value: T) => void;
   title: string;
 }) {
-  const { palette } = useTheme();
+  const { palette, expressive } = useTheme();
   const { width } = useWindowDimensions();
   const anchorRef = React.useRef<View>(null);
   const [open, setOpen] = React.useState(false);
@@ -59,6 +59,7 @@ export function SettingsSelect<T extends string>({
           accessibilityState={{ expanded: open }}
           aria-haspopup="menu"
           stateLayerColor={palette.onSecondaryContainer}
+          shape={{ rest: 24, pressed: expressive ? radius.md : 24 }}
           onPress={show}
           hitSlop={{ top: 4, bottom: 4 }}
           style={[
