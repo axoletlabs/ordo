@@ -442,7 +442,8 @@ function SheetScrollFades({ color }: { color: string }) {
       </LinearGradient></Defs>
       <Rect width="100%" height="100%" fill={`url(#${id}-${edge})`} />
     </Svg>)}
-  </View>;}
+  </View>;
+}
 
 /** Ordinary panels keep their original layout tree. Only paged dialogs need
  * a content fade independent of the persistent surface and backdrop. */
