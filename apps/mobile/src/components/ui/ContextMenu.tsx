@@ -18,6 +18,7 @@ import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { AppIcon } from "./PinIcon";
 import { Spinner } from "./Spinner";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ResizeOwnerContext } from "./resize-owner";
 import { Text } from "./Text";
 import { PressableScale } from "./PressableScale";
 import { OverlayPortal } from "./overlay-host";
@@ -170,7 +171,8 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
     return listenForMenuOutsideScroll(() => menuRef.current as unknown as HTMLElement | null,
       hideAndDismiss, document, menuAnchorScrollSnapshot(anchor));
   }, [visible, rendered, backdrop, menuRef, hideAndDismiss, anchor]);
-  const page = useOverlayPage(visible, pageKey ?? "", children);
+  const [measuredPage, setMeasuredPage] = React.useState<string | null>(null);
+  const page = useOverlayPage(visible, pageKey ?? "", children, measuredPage === measureKey);
   const lastPlacement = React.useRef<MenuPlacement | null>(null);
   const placementLock = React.useRef<MenuPlacement | null>(null);
   const sessionSide = React.useRef<MenuPlacement["placement"] | null>(null);
@@ -259,6 +261,7 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
   const recordBodyHeight = React.useCallback((height: number) => {
     if (height <= 0) return;
     measuredBody.current = { key: measureKey, content };
+    setMeasuredPage(measureKey);
     applyBodyHeight(height);
   }, [applyBodyHeight, content, measureKey]);
   // A taller nested page may scroll, but must not grow below the viewport
@@ -324,6 +327,7 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
             surfaceSize,
           ]}
         >
+            <ResizeOwnerContext.Provider value>
             {/* This fixed measurement frame is independent of the animated
                 surface height. In Yoga a shrinking ScrollView otherwise reports
                 the old viewport as the next page's natural height. */}
@@ -347,6 +351,7 @@ const ContextMenuSurface = React.memo(function ContextMenuSurface({
                 </Animated.View>
               </MenuBody>
             </View>
+            </ResizeOwnerContext.Provider>
         </Animated.View>
       </View>
       </InputFocusScopeContext.Provider>
@@ -380,8 +385,7 @@ function MenuBody({ visible, measureKey, presentationKey, onPresented, onMeasure
     if (!visible) return;
     const node = ref.current;
     if (!node) return;
-    if (Platform.OS === "web") {
-      if (typeof ResizeObserver === "undefined") return;
+    if (Platform.OS === "web" && typeof ResizeObserver !== "undefined") {
       // Re-observe on every opening/session, even when a retained element kept
       // its size. RN Web's shared onLayout observer need not report an unchanged
       // box again. This initial async report avoids both a forced layout read
