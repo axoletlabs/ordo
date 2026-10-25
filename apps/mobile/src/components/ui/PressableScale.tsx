@@ -202,7 +202,7 @@ function AnimatedStatePressable(props: PressableScaleProps) {
  * scaling control changes the wrapper type (an expected remount), so the
  * strategy hook order can never change while a surface is mounted. */
 function ControlSurface({
-  scaleTo = 1, dim = false, style, visualStyle, children, disabled, onPressIn, onPressOut,
+  scaleTo = 1, dim = false, style, visualStyle, children, disabled, onPress, onPressIn, onPressOut,
   onHoverIn, onHoverOut, onFocus, onBlur, shape, stateLayerColor, stateLayerInset = 0,
   focusOnlyVisible = true, renderSurface, nativeGesture, motion, useTransform,
   animated: _animated, ...rest
@@ -318,11 +318,21 @@ function ControlSurface({
     }, cornerStyle, layerStyle]} />
   </>;
   const ActionPressable = nativeGesture && Platform.OS !== "web" ? AnimatedGesturePressable : AnimatedPressable;
+  const activate: NonNullable<PressableProps["onPress"]> = (event) => {
+    // Native Pressability may delay press-out to keep feedback visible for
+    // 130ms. Release before the action's overlay work, rather than retaining
+    // the pressed shape underneath it. Selection/group release stays batched.
+    if (releaseFrame.current != null) cancelAnimationFrame(releaseFrame.current);
+    releaseFrame.current = null;
+    setDown(false);
+    groupInteraction?.(false);
+    onPress?.(event);
+  };
   return (
     <ActionPressable
       {...rest}
       {...(Platform.OS === "web" ? { delayPressIn: 0, dataSet: { ...rest.dataSet, materialHoverSurface: "true" } } : {})}
-      {...(Platform.OS === "web" ? webSelectionKeys({ role: rest.role, accessibilityRole: rest.accessibilityRole, disabled, onKeyDown: rest.onKeyDown, onPress: rest.onPress }) : {})}
+      {...(Platform.OS === "web" ? webSelectionKeys({ role: rest.role, accessibilityRole: rest.accessibilityRole, disabled, onKeyDown: rest.onKeyDown, onPress: activate }) : {})}
       {...(Platform.OS !== "web" ? nativeHoverEvents({ disabled,
         onPointerEnter: rest.onPointerEnter, onPointerLeave: rest.onPointerLeave, onHoverIn, onHoverOut }, setHovered) : {})}
       aria-checked={rest.accessibilityState?.checked}
@@ -345,6 +355,7 @@ function ControlSurface({
         });
         onPressOut?.(event);
       }}
+      onPress={activate}
       onHoverIn={(event) => { setHovered(true); onHoverIn?.(event); }}
       onHoverOut={(event) => { setHovered(false); onHoverOut?.(event); }}
       onFocus={(event) => {
