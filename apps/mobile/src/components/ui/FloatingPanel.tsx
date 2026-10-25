@@ -17,6 +17,7 @@ import { OverlayPortal, useOverlayBlocked } from "./overlay-host";
 import { useTheme } from "../../theme/ThemeProvider";
 import { useOverlayPresence } from "../../hooks/use-overlay-presence";
 import { useOverlayFocus } from "../../hooks/use-overlay-focus";
+import { useOverlayPage } from "../../hooks/use-overlay-page";
 import { useScrimPress } from "../../hooks/use-scrim-press";
 import { PanelTitleContext } from "./panel-title";
 import { PanelPresenceContext } from "./panel-presence";
@@ -76,12 +77,22 @@ export interface FloatingPanelProps {
   obscured?: boolean;
   /** An anchored dropdown can own focus/back without hiding its parent form. */
   interactive?: boolean;
+  /** Nested dialog pages fade through in one surface, like context menus. */
+  pageKey?: string;
 }
 
 export function FloatingPanel(props: FloatingPanelProps) {
   const [activated, setActivated] = React.useState(props.visible);
   if (props.visible && !activated) setActivated(true);
-  return activated || props.keepMounted ? <FloatingPanelSurface {...props} /> : null;
+  if (!activated && !props.keepMounted) return null;
+  return props.pageKey != null ? <PagedFloatingPanelSurface {...props} pageKey={props.pageKey} /> : <FloatingPanelSurface {...props} />;
+}
+
+function PagedFloatingPanelSurface(props: FloatingPanelProps & { pageKey: string }) {
+  // The outgoing page retains its scroll ownership as well as its contents.
+  const page = useOverlayPage(props.visible, props.pageKey, { children: props.children, scrollBody: props.scrollBody });
+  return <FloatingPanelSurface {...props} scrollBody={page.content.scrollBody}
+    pageStyle={page.style} pageLeaving={page.leaving}>{page.content.children}</FloatingPanelSurface>;
 }
 
 function FloatingPanelSurface({
@@ -105,7 +116,9 @@ function FloatingPanelSurface({
   keepMounted = false,
   obscured = false,
   interactive = true,
-}: FloatingPanelProps) {
+  pageStyle,
+  pageLeaving = false,
+}: FloatingPanelProps & { pageStyle?: ReturnType<typeof useOverlayPage>["style"]; pageLeaving?: boolean }) {
   const { palette } = useTheme();
   const sheet = presentation === "bottom-sheet";
   const expandedSheet = sheet && sheetSizing === "expanded";
@@ -395,6 +408,7 @@ function FloatingPanelSurface({
               overflow: "hidden",
             } as unknown as ViewStyle, scrimStyle]} /> : null}
             <Animated.View style={[{ flexShrink: 1 }, expandedSheet ? { flex: 1 } : null, Platform.OS === "web" ? scrimStyle : null]}>
+            <PanelPageContent style={pageStyle} leaving={pageLeaving}>
             <PanelTitleContext.Provider value={titleId}>
             <InputSurfaceContext.Provider value={panelSurface}>
               {sheet ? sheetContent : <>
@@ -404,6 +418,7 @@ function FloatingPanelSurface({
               </>}
             </InputSurfaceContext.Provider>
             </PanelTitleContext.Provider>
+            </PanelPageContent>
             </Animated.View>
           </Animated.View>
           </View>
@@ -427,7 +442,17 @@ function SheetScrollFades({ color }: { color: string }) {
       </LinearGradient></Defs>
       <Rect width="100%" height="100%" fill={`url(#${id}-${edge})`} />
     </Svg>)}
-  </View>;
+  </View>;}
+
+/** Ordinary panels keep their original layout tree. Only paged dialogs need
+ * a content fade independent of the persistent surface and backdrop. */
+function PanelPageContent({ style, leaving, children }: {
+  style?: ReturnType<typeof useOverlayPage>["style"];
+  leaving: boolean;
+  children: React.ReactNode;
+}) {
+  return style ? <Animated.View pointerEvents={leaving ? "none" : "auto"}
+    style={[{ flexShrink: 1 }, style]}>{children}</Animated.View> : children;
 }
 
 /** Run opening callbacks where the portal's real blocking context is known.
