@@ -1,7 +1,7 @@
 /** Baseline segmented buttons / Expressive connected toggle button group. */
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Platform, ScrollView, StyleSheet, View, useWindowDimensions, type TextStyle } from "react-native";
-import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
 import { MaterialIcon } from "./MaterialIcon";
@@ -9,17 +9,15 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { radius } from "../../theme/tokens";
 import { haptics } from "../../lib/haptics";
 import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
-const AnimatedText = Animated.createAnimatedComponent(Text);
 type SegmentMotion = ReturnType<typeof useMaterialMotion>;
 type SegmentPalette = ReturnType<typeof useTheme>["palette"];
-const SegmentLabel = React.memo(function SegmentLabel({ label, foreground, idleForeground, selectedForeground,
+const SegmentLabel = React.memo(function SegmentLabel({ label, foreground,
   selected, labelStyle, reducedMotion }: {
-  label: string; foreground: string; idleForeground: string; selectedForeground: string;
+  label: string; foreground: string;
   selected: boolean; labelStyle?: TextStyle; reducedMotion: boolean;
 }) {
-  // One progress value drives both the colour fade and the reserved check slot.
-  // Selection and tint use the same effects spring, so splitting them into two
-  // shared values only doubled the per-label UI-thread state.
+  // The label uses its container's committed on-color. Only the check's
+  // appearance fades; fading both foreground and fill loses contrast midway.
   const progress = useSharedValue(selected ? 1 : 0);
   const previous = useRef({ selected, reducedMotion });
   useLayoutEffect(() => {
@@ -27,15 +25,12 @@ const SegmentLabel = React.memo(function SegmentLabel({ label, foreground, idleF
     previous.current = { selected, reducedMotion };
     progress.value = reducedMotion ? Number(selected) : withSpring(Number(selected), materialMotion.effects.fast);
   }, [selected, reducedMotion, progress]);
-  const labelStyleAnimated = useAnimatedStyle(() => ({
-    color: interpolateColor(progress.value, [0, 1], [idleForeground, selectedForeground]),
-  }));
   const checkStyle = useAnimatedStyle(() => ({ opacity: progress.value, width: 22 * progress.value }));
   // Retain the check through deselection; animate its slot with the fade so
   // labels don't jump sideways when the selection changes.
   return <><Animated.View testID="material-segment-check" pointerEvents="none" accessible={false}
     style={[{ overflow: "hidden", flexShrink: 0 }, checkStyle]}><MaterialIcon name="checkmark" size={18} color={foreground} /></Animated.View>
-    <AnimatedText testID="material-segment-label" variant="labelLarge" numberOfLines={1} style={[{ flexShrink: 1 }, labelStyle, labelStyleAnimated]}>{label}</AnimatedText></>;
+    <Text testID="material-segment-label" variant="labelLarge" numberOfLines={1} style={[{ flexShrink: 1 }, labelStyle, { color: foreground }]}>{label}</Text></>;
 });
 
 export interface SegmentedProps<T extends string> {
@@ -92,8 +87,7 @@ const Segment = React.memo(function Segment({ value, label, accessibilityLabel, 
       ...(!expressive ? { borderTopLeftRadius: outline.topLeft, borderBottomLeftRadius: outline.bottomLeft,
         borderTopRightRadius: outline.topRight, borderBottomRightRadius: outline.bottomRight } : {}),
     }]}>
-    <SegmentLabel label={label} foreground={foreground} idleForeground={idleForeground}
-      selectedForeground={selectedForeground} selected={selected} labelStyle={labelStyle}
+    <SegmentLabel label={label} foreground={foreground} selected={selected} labelStyle={labelStyle}
       reducedMotion={motion.reducedMotion} />
   </PressableScale>;
 }, function segmentPropsEqual(previous, next) {

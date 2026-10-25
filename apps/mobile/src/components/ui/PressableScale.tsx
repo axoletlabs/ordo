@@ -142,9 +142,10 @@ function StatePressable({ style, visualStyle, children, disabled, stateLayerColo
       if (renderSurface) return renderSurface({ children: content,
         backgroundStyle: { backgroundColor: flat?.backgroundColor }, cornerStyle: stateLayerCorners(flat),
         stateLayerColor: alphaTint(tint, feedbackFraction) });
-      const contents = <>{content}
+      const contents = <>
         {layerActive.current ? <StateLayer color={tint} surfaceStyle={visualStyle ?? style as StyleProp<ViewStyle>} inset={stateLayerInset}
-          fraction={feedbackFraction} /> : null}</>;
+          fraction={feedbackFraction} /> : null}
+        {content}</>;
       return visualStyle ? <View pointerEvents="box-none" style={visualStyle}>{contents}</View> : contents;
     }}
   </ActionPressable>;
@@ -238,9 +239,11 @@ function ControlSurface({
     dim,
     opacity: typeof flat?.opacity === "number" ? flat.opacity : undefined,
   });
-  const background = useSharedValue(typeof flat?.backgroundColor === "string" ? flat.backgroundColor : "transparent");
-  const backgroundColor = flat?.backgroundColor;
-  const previousBackground = useRef({ color: backgroundColor, reducedMotion: motion.reducedMotion });
+  // Selection commits container and on-container colors together. Springing
+  // only the fill (especially to/from transparent) leaves a newly selected
+  // label on the old container and produces washed-out intermediate frames.
+  // Geometry owns the spatial spring; hover/press ink owns the effects spring.
+  const backgroundStyle = { backgroundColor: flat?.backgroundColor };
   const focusLayer = focused && (!focusOnlyVisible || Platform.OS !== "web" || focusVisible);
   const fraction = stateLayerOpacity({ disabled, pressed: down, focused: focusLayer, hovered });
   const ink = useRef(fraction);
@@ -256,21 +259,15 @@ function ControlSurface({
     ? { outlineColor: focusRingColor, outlineWidth: 3, outlineOffset: -3, outlineStyle: "solid" as const } : null;
   const outerFocusStyle = focusRing ? (visualStyle ? { outlineStyle: "none" as const }
     : { outlineColor: palette.primary, outlineWidth: 3, outlineOffset: 2, outlineStyle: "solid" as const }) : null;
-  useLayoutEffect(() => {
-    if (typeof backgroundColor !== "string") return;
-    if (previousBackground.current.color === backgroundColor && previousBackground.current.reducedMotion === motion.reducedMotion) return;
-    previousBackground.current = { color: backgroundColor, reducedMotion: motion.reducedMotion };
-    background.value = motion.reducedMotion ? backgroundColor : withSpring(backgroundColor, materialMotion.effects.fast);
-  }, [background, backgroundColor, motion]);
-  const backgroundStyle = useAnimatedStyle(() => typeof backgroundColor === "string" ? { backgroundColor: background.value } : {});
   const restCorner = typeof flat?.borderRadius === "number" ? flat.borderRadius : 0;
   const restShape = cornerValues(shape?.rest ?? restCorner);
   const pressedShape = cornerValues(shape?.pressed ?? restCorner);
-  // Shape-only controls (e.g. connected segments) paint corners from the
-  // animated handle alone. Keep the resting silhouette in the static style so
-  // the first press/hover frame cannot render square before the UI thread
-  // applies the live value. VisualStyle is unchanged after the first frame.
-  const restCornerStyle = shape ? cornerRadiusStyle(restShape) : null;
+  // Seed static paint once. Updating it to the new selected/rest shape lets
+  // a React commit jump ahead of the running UI-thread spring. Explicitly
+  // replace the shorthand too, so callers' full-radius tokens cannot compete
+  // with animated longhands on native or web.
+  const initialCorners = useRef(cornerRadiusStyle(restShape)).current;
+  const restCornerStyle = shape ? { borderRadius: 0, ...initialCorners } : null;
   const layerCornerStyle = restCornerStyle ?? stateLayerCorners(flat);
   const corners = useSharedValue(restShape);
   const cornerKey = [...restShape, ...pressedShape].join(":");
@@ -312,10 +309,10 @@ function ControlSurface({
   const content = typeof children === "function" ? children({ pressed: down }) : children;
   const contents = renderSurface ? renderSurface({ children: content, backgroundStyle, cornerStyle,
     stateLayerStyle: layerStyle, stateLayerColor: alphaTint(tint, ink.current) }) : <>
-    {content}
     <Animated.View testID="material-state-layer" pointerEvents="none" accessible={false} style={[{ position: "absolute", top: stateLayerInset, bottom: stateLayerInset, left: stateLayerInset, right: stateLayerInset }, layerCornerStyle, {
       overflow: "hidden", backgroundColor: tintRgb ? "transparent" : alphaTint(tint, ink.current),
     }, cornerStyle, layerStyle]} />
+    {content}
   </>;
   const ActionPressable = nativeGesture && Platform.OS !== "web" ? AnimatedGesturePressable : AnimatedPressable;
   const activate: NonNullable<PressableProps["onPress"]> = (event) => {

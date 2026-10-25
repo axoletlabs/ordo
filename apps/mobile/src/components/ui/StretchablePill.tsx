@@ -34,15 +34,15 @@ function PillSurface({ state, geometry, canvasWidth }: { state: PressableSurface
   return <Animated.View pointerEvents="none" style={[styles.canvas, counterStyle]}>
     <PillPaint canvasWidth={canvasWidth} bleed={PILL_BLEED} fillStyle={state.backgroundStyle} cornerStyle={state.cornerStyle}
       leadingStyle={leadingStyle} middleStyle={middleStyle} />
-    <View style={[styles.contentRail, { width: canvasWidth }]}>
-      <Animated.View testID="material-pill-content" style={[styles.content, contentStyle]}>{state.children}</Animated.View>
-    </View>
     {/* The animated fill lands on each painted part; a canvas-level opacity
      * would composite the layer as a group and skew it off the surface. */}
     <Reanimated.View testID="material-pill-state-layer" style={styles.canvas}>
       <PillPaint canvasWidth={canvasWidth} bleed={0} fillStyle={[{ backgroundColor: state.stateLayerColor }, state.stateLayerStyle]} cornerStyle={state.cornerStyle}
         leadingStyle={leadingStyle} middleStyle={overlayMiddleStyle} />
     </Reanimated.View>
+    <View style={[styles.contentRail, { width: canvasWidth }]}>
+      <Animated.View testID="material-pill-content" style={[styles.content, contentStyle]}>{state.children}</Animated.View>
+    </View>
   </Animated.View>;
 }
 

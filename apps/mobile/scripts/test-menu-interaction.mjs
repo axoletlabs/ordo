@@ -158,11 +158,12 @@ test("native activation releases the pressed shape before running overlay work",
     "../../theme/state-layer": loadSource("../src/theme/state-layer.ts"),
     "./pressable-web": {}, "../../lib/pointer-hover": { nativeHoverEvents: () => ({}) },
   });
+  const pressedContent = node => node.props.children.props.children.find(child => typeof child === "boolean");
   const render = () => {
     cursor = 0;
     let node = PressableScale({ shape: { rest: 20, pressed: 8 }, children: ({ pressed }) => pressed,
       onPress: () => {
-        assert.equal(render().props.children.props.children[0], false, "overlay work must see a released trigger");
+        assert.equal(pressedContent(render()), false, "overlay work must see a released trigger");
         assert.equal(group.at(-1), false);
       } });
     while (typeof node.type === "function") node = node.type(node.props);
@@ -173,13 +174,13 @@ test("native activation releases the pressed shape before running overlay work",
   globalThis.cancelAnimationFrame = id => frames.delete(id);
   try {
     render().props.onPressIn({});
-    assert.equal(render().props.children.props.children[0], true);
+    assert.equal(pressedContent(render()), true);
     render().props.onPress({}); // Native's onPressOut has not fired yet.
-    assert.equal(render().props.children.props.children[0], false);
+    assert.equal(pressedContent(render()), false);
     render().props.onPressOut({});
     for (const callback of frames.values()) callback();
     frames.clear();
-    assert.equal(render().props.children.props.children[0], false);
+    assert.equal(pressedContent(render()), false);
 
     render().props.onPressIn({});
     render().props.onPressOut({}); // Ordinary press-out-before-press ordering.
