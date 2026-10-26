@@ -24,12 +24,14 @@ import { loadReaderFontPreview, loadReaderFontPreviews, preloadReaderFontPreview
 import { useReaderPreferences } from "../../hooks/use-reader-preferences";
 import { useAnimationActivityEffect, useAppForeground } from "../../hooks/use-animation-activity";
 import { usePreparedReaderOverlay } from "./use-prepared-reader-overlay";
+import { recordDiagnosticEvent } from "../../lib/local-diagnostics";
 import type { ReaderWorkScheduler } from "./reader-work";
 import type {
   ReaderFontFamily,
   ReaderFontSize,
   ReaderLineSpacing,
   ReaderTheme,
+  UpdateReaderPreferencesInput,
 } from "@ordo/shared";
 
 const sizeOptions: readonly { value: ReaderFontSize; label: string; accessibilityLabel: string }[] = [
@@ -167,13 +169,17 @@ export const ReaderControlsSheet = React.memo(React.forwardRef<ReaderControlsShe
     const open = useCallback(() => {
       retain();
       if (!visibleRef.current) {
+        recordDiagnosticEvent("reader.controls.open");
         setRetaining(true);
         setEntered(false);
       }
       setVisible(true);
       onOpen?.();
     }, [onOpen, retain]);
-    const close = useCallback(() => setVisible(false), []);
+    const close = useCallback(() => {
+      recordDiagnosticEvent("reader.controls.close");
+      setVisible(false);
+    }, []);
     const onEntered = useCallback(() => setEntered(true), []);
     const onExited = useCallback(() => { setRetaining(false); setEntered(false); }, []);
     useImperativeHandle(ref, () => ({ open, prepare }), [open, prepare]);
@@ -285,7 +291,11 @@ const ReaderControlsBody = React.memo(function ReaderControlsBody({
 }) {
   const { width, fontScale } = useWindowDimensions();
   const orientation = width < 360 || fontScale > 1.3 ? "vertical" : "horizontal";
-  const { preferences, setPreferences } = useReaderPreferences();
+  const { preferences, setPreferences: savePreferences } = useReaderPreferences();
+  const setPreferences = useCallback((patch: UpdateReaderPreferencesInput) => {
+    recordDiagnosticEvent("reader.preference", JSON.stringify(patch));
+    savePreferences(patch);
+  }, [savePreferences]);
   // Stable for TypefaceSegmented's memo: an unrelated preference change must
   // not re-render the five typeface options.
   const updateFontFamily = useCallback(

@@ -5,6 +5,7 @@ import * as Clipboard from "expo-clipboard";
 import { SettingsGroup, SettingsPage, SettingsScrollView } from "../../../src/components/settings/SettingsPage";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
 import { Text } from "../../../src/components/ui/Text";
+import { useAppRouter } from "../../../src/hooks/use-app-router";
 import { FloatingPanel } from "../../../src/components/ui/FloatingPanel";
 import { PanelHeader } from "../../../src/components/ui/PanelHeader";
 import { PanelActions } from "../../../src/components/ui/SheetActionRow";
@@ -53,9 +54,17 @@ export default function BuildDetailsScreen() {
             showChevron={!!commitRef} />
         </SettingsGroup>
         <RunningSettingsGroup />
+        <LocalDiagnosticsGroup />
       </SettingsScrollView>
     </SettingsPage>
   );
+}
+
+function LocalDiagnosticsGroup() {
+  const router = useAppRouter();
+  return <SettingsGroup label="Troubleshooting">
+    <SettingRow icon="pulse-outline" label="Diagnostics" onPress={() => router.push("/diagnostics")} showChevron />
+  </SettingsGroup>;
 }
 
 /**

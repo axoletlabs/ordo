@@ -6,10 +6,11 @@ import {
   StyleSheet,
   View,
   useWindowDimensions,
+  type LayoutChangeEvent,
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import Animated, { Easing, runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
+import Animated, { Easing, runOnJS, useAnimatedStyle, useDerivedValue, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -26,7 +27,7 @@ import { PanelTitleContext } from "./panel-title";
 import { PanelPresenceContext } from "./panel-presence";
 import { PanelHeader } from "./PanelHeader";
 import { PanelActions } from "./SheetActionRow";
-import { ThemedScrollView } from "./ThemedScrollView";
+import { ThemedScrollView, type ThemedScrollViewProps } from "./ThemedScrollView";
 import { InputSurfaceContext } from "./input-surface";
 import { InputFocusScopeContext, useInputFocusScope } from "./input-focus-scope";
 import { panelKeyboardLift } from "../../lib/panel-keyboard-layout";
@@ -135,6 +136,10 @@ function FloatingPanelSurface({
   const { width, height } = useWindowDimensions();
   const [availableHeight, setAvailableHeight] = React.useState(height);
   const [keyboardTop, setKeyboardTop] = React.useState<number | null>(null);
+  // Animated native layout reports must not feed React state. A height spring
+  // otherwise re-renders this publisher and republishes its entire portal on
+  // every frame, competing with Reanimated's Fabric commits.
+  const panelHeight = useSharedValue(0);
   const [naturalContentHeight, setNaturalContentHeight] = React.useState<number | null>(null);
   const [sheetHeaderHeight, setSheetHeaderHeight] = React.useState(0);
   const [sheetActionsHeight, setSheetActionsHeight] = React.useState(0);
@@ -143,12 +148,12 @@ function FloatingPanelSurface({
   const [measured, setMeasured] = React.useState(false);
   const [layoutFallback, setLayoutFallback] = React.useState(false);
   const dragOffset = useSharedValue(0);
+  const adaptiveHeight = useSharedValue(height * 0.9);
   const resting = React.useRef({ width, height });
   if (width !== resting.current.width || Platform.OS === "web") resting.current = { width, height };
   else resting.current.height = Math.max(resting.current.height, height);
   const restHeight = resting.current.height;
   const motion = useMaterialMotion();
-  const keyboardShift = useSharedValue(0);
   const insets = useSafeAreaInsets();
   const hideAndDismiss = React.useCallback(() => {
     if (!dismissible) return;
@@ -237,10 +242,30 @@ function FloatingPanelSurface({
     ? Math.max(80, Math.min(viewportHeight * 0.9, viewportHeight - insets.top - spacing[16]))
     : Math.max(80, viewportHeight - insets.top - bottomInset - spacing[32]);
   const fittedSheetHeight = Math.min(heightLimit, sheetHeaderHeight + sheetActionsHeight + (sheetBodyHeight ?? 0) + spacing[24] * 2);
-  const adaptiveSizeStyle = useSurfaceSize(adaptiveSheet ? adaptiveReady ? fittedSheetHeight : heightLimit : null, {
+  // In extremely short windows/above a keyboard, scroll the whole sheet.
+  const sheetScrollAll = scrollBody && (heightLimit < 280
+    || fillSheet && heightLimit - sheetHeaderHeight - sheetActionsHeight < spacing[96]);
+  // Android text should travel with a native transform, not be repositioned
+  // by Yoga on every height-spring frame. A full-height surface slides below
+  // the window; its visible extent is still the measured adaptive height.
+  // Keep compact/keyboard layouts on the ordinary all-content scroller.
+  const translatedAdaptiveSheet = adaptiveSheet && Platform.OS === "android" && !sheetScrollAll;
+  const previousSize = React.useRef({ visible: false, ready: false, width, height });
+  React.useLayoutEffect(() => {
+    const previous = previousSize.current;
+    previousSize.current = { visible, ready: adaptiveReady, width, height };
+    if (!translatedAdaptiveSheet || !adaptiveReady || !visible) return;
+    const animate = previous.visible && previous.ready && previous.width === width && previous.height === height && !motion.reducedMotion;
+    adaptiveHeight.value = animate
+      ? withSpring(fittedSheetHeight, { ...motion.spatial, overshootClamping: true })
+      : fittedSheetHeight;
+  }, [translatedAdaptiveSheet, adaptiveReady, fittedSheetHeight, visible, width, height, motion, adaptiveHeight]);
+  const adaptiveSizeStyle = useSurfaceSize(adaptiveSheet && !translatedAdaptiveSheet ? adaptiveReady ? fittedSheetHeight : heightLimit : null, {
     active: visible && !obscured && adaptiveReady,
     geometryKey: `${width}:${height}:${keyboardTop}:${heightLimit}:${insets.top}:${insets.bottom}`,
   });
+  const sheetActionsStyle = useAnimatedStyle(() => translatedAdaptiveSheet
+    ? { transform: [{ translateY: adaptiveHeight.value - heightLimit }] } : {});
   const sheetInset = width < 600 ? spacing[16] : spacing[24];
   const sheetWidth = Math.min(maxWidth, width - insets.left - insets.right);
   const dialogWidth = Math.max(0, Math.min(maxWidth, width - insets.left - insets.right - spacing[32]));
@@ -292,17 +317,25 @@ function FloatingPanelSurface({
     return () => { show.remove(); hide.remove(); };
   }, [rendered]);
 
-  const previousLift = React.useRef({ lift: 0, reducedMotion: motion.reducedMotion });
-  React.useEffect(() => {
+  const keyboardLift = useDerivedValue(() => {
     // Browser layout already follows its visual viewport; no keyboard worklet.
-    if (Platform.OS === "web") return;
+    if (Platform.OS === "web") return 0;
     const center = (restHeight + insets.top - insets.bottom) / 2;
-    const lift = sheet ? Math.min(0, viewportHeight - restHeight)
-      : panelKeyboardLift(center, fittedContentHeight ?? 0, viewportHeight, insets.top + spacing[16], bottomInset + spacing[16]);
-    if (previousLift.current.lift === lift && previousLift.current.reducedMotion === motion.reducedMotion) return;
-    previousLift.current = { lift, reducedMotion: motion.reducedMotion };
-    keyboardShift.value = withTiming(lift, { duration: motion.reducedMotion ? 0 : 250, easing: Easing.bezier(0.2, 0, 0, 1) });
-  }, [restHeight, fittedContentHeight, viewportHeight, insets.top, insets.bottom, bottomInset, keyboardShift, motion.reducedMotion, sheet]);
+    return sheet ? Math.min(0, viewportHeight - restHeight)
+      : panelKeyboardLift(center, panelHeight.value, viewportHeight, insets.top + spacing[16], bottomInset + spacing[16]);
+  });
+  // Separate the target from its animation: ordinary resizes that keep lift
+  // at zero must not restart a timing animation on every layout report.
+  const keyboardShift = useDerivedValue(() => motion.reducedMotion ? keyboardLift.value
+    : withTiming(keyboardLift.value, { duration: 250, easing: Easing.bezier(0.2, 0, 0, 1) }));
+  const recordPanelLayout = React.useCallback((event: LayoutChangeEvent) => {
+    const next = event.nativeEvent.layout.height;
+    if (next <= 0) return;
+    if (!measured) setMeasured(true);
+    // Sheets are bottom anchored: keyboard placement never needs their height.
+    // Dialog geometry stays on the UI runtime, including during live resizes.
+    if (!sheet) panelHeight.value = next;
+  }, [measured, panelHeight, sheet]);
 
   const scrimStyle = useAnimatedStyle(() => ({
     opacity: progress.value * obscuredFade.value,
@@ -312,7 +345,8 @@ function FloatingPanelSurface({
   // rounded panel (which leaves a square backing in Chromium).
   const panelStyle = useAnimatedStyle(() => sheet ? {
     opacity: progress.value * obscuredFade.value,
-    transform: [{ translateY: keyboardShift.value + Math.max(0, 1 - spatial.value) * heightLimit + dragOffset.value }],
+    transform: [{ translateY: keyboardShift.value + Math.max(0, 1 - spatial.value) * heightLimit + dragOffset.value
+      + (translatedAdaptiveSheet ? heightLimit - adaptiveHeight.value : 0) }],
   } : Platform.OS === "web" ? {} : ({
     opacity: progress.value * obscuredFade.value,
     transform: [{ translateY: keyboardShift.value + (1 - spatial.value) * 24 }, ...(Platform.OS === "ios" ? [{ scale: 0.94 + spatial.value * 0.06 }] : [])],
@@ -340,30 +374,29 @@ function FloatingPanelSurface({
       ? React.cloneElement(action, { topSpacing: 16 }) : action)}
   </View>;
   const sheetBodyPadding = { paddingHorizontal: sheetInset, paddingVertical: spacing[24] };
-  const sheetBodyStyle = { flex: fillSheet ? 1 : undefined, flexShrink: 1,
+  const sheetBodyStyle = { flex: fillSheet && !translatedAdaptiveSheet ? 1 : undefined, flexShrink: 1,
+    ...(translatedAdaptiveSheet ? { height: Math.max(0, fittedSheetHeight - sheetHeaderHeight - sheetActionsHeight) } : {}),
     maxHeight: Math.max(0, heightLimit - sheetHeaderHeight - sheetActionsHeight), backgroundColor: panelSurface };
   // Measure natural content, independently of the animated scroll viewport.
   // A viewport measurement here would feed the height animation back into
   // itself and make short notes collapse or oscillate while switching.
   const sheetBody = adaptiveSheet ? <View style={{ flexShrink: 0 }} onLayout={(event) => setSheetBodyHeight(event.nativeEvent.layout.height)}>{body}</View> : body;
-  // In extremely short windows/above a keyboard, scroll the whole sheet
-  // rather than letting its fixed chrome hide the notes or dismissal action.
-  const sheetScrollAll = scrollBody && (heightLimit < 280
-    || fillSheet && heightLimit - sheetHeaderHeight - sheetActionsHeight < spacing[96]);
   const sheetContent = sheetScrollAll
-    ? <ThemedScrollView key={scrollResetKey} testID="material-sheet-body" keyboardShouldPersistTaps="handled" nestedScrollEnabled
+    ? <PanelScrollView resetKey={scrollResetKey} testID="material-sheet-body" keyboardShouldPersistTaps="handled" nestedScrollEnabled
         style={{ flex: fillSheet ? 1 : undefined, flexShrink: 1, maxHeight: heightLimit, backgroundColor: panelSurface }}>
         {sheetHeader}<View style={sheetBodyPadding}>{sheetBody}</View>{sheetActions}
-      </ThemedScrollView>
+      </PanelScrollView>
     : <>{sheetHeader}
         {scrollBody ? fillSheet ? <View style={sheetBodyStyle}>
-          <ThemedScrollView key={scrollResetKey} testID="material-sheet-body" keyboardShouldPersistTaps="handled" nestedScrollEnabled
-            style={{ flex: 1 }} contentContainerStyle={sheetBodyPadding}>{sheetBody}</ThemedScrollView>
+          <PanelScrollView resetKey={scrollResetKey} testID="material-sheet-body" keyboardShouldPersistTaps="handled" nestedScrollEnabled
+            style={{ flex: 1 }} contentContainerStyle={sheetBodyPadding}>{sheetBody}</PanelScrollView>
           <SheetScrollFades color={panelSurface} />
-        </View> : <ThemedScrollView key={scrollResetKey} testID="material-sheet-body" keyboardShouldPersistTaps="handled" nestedScrollEnabled
-          style={sheetBodyStyle} contentContainerStyle={sheetBodyPadding}>{body}</ThemedScrollView>
+        </View> : <PanelScrollView resetKey={scrollResetKey} testID="material-sheet-body" keyboardShouldPersistTaps="handled" nestedScrollEnabled
+          style={sheetBodyStyle} contentContainerStyle={sheetBodyPadding}>{body}</PanelScrollView>
           : <View testID="material-sheet-body" style={[sheetBodyStyle, sheetBodyPadding]}>{sheetBody}</View>}
-        {sheetActions}
+        {translatedAdaptiveSheet ? <Animated.View style={[{ position: "absolute", left: 0, right: 0, bottom: 0 }, sheetActionsStyle]}>
+          {sheetActions}
+        </Animated.View> : sheetActions}
       </>;
 
   return (
@@ -399,12 +432,7 @@ function FloatingPanelSurface({
             Platform.OS !== "web" ? { flex: 0, height: restHeight } : null]}>
           <Animated.View
             ref={panelRef}
-            onLayout={Platform.OS === "web" ? undefined : (event) => {
-              const next = event.nativeEvent.layout.height;
-              // Sizing already follows the independent content measurement.
-              // Do not publish every frame of the height spring back to React.
-              if (!measured && next > 0) setMeasured(true);
-            }}
+            onLayout={Platform.OS === "web" || (sheet && measured) ? undefined : recordPanelLayout}
             role="dialog"
             aria-modal={visible && interactive && !obscured}
             aria-hidden={!visible}
@@ -465,6 +493,16 @@ function FloatingPanelSurface({
   );
 }
 
+/** Reset after the portal commits the new contents, preserving the native
+ * scroller, scrollbar worklets and text instances across release switches. */
+function PanelScrollView({ resetKey, ...props }: ThemedScrollViewProps & { resetKey?: string }) {
+  const ref = React.useRef<React.ComponentRef<typeof ThemedScrollView>>(null);
+  React.useLayoutEffect(() => {
+    if (resetKey != null) ref.current?.scrollTo({ x: 0, y: 0, animated: false });
+  }, [resetKey]);
+  return <ThemedScrollView ref={ref} {...props} />;
+}
+
 /** The body reports its intrinsic content size independently of its viewport.
  * Header and actions participate in the CURRENT animated height, so actions
  * never land outside the card while its target size is still being reached. */
@@ -504,8 +542,8 @@ function DialogContent({ headers, actions, body, scrollHeader, scrollAll, scroll
         ? React.cloneElement(header, { style: [header.props.style, { marginBottom: 0 }] }) : header)}
     </View> : null}
     <View testID="material-dialog-body" style={{ flex: 1, minHeight: 0, marginTop: gap, overflow: "hidden" }}>
-      {scrollBody ? <ThemedScrollView key={scrollResetKey} keyboardShouldPersistTaps="handled" nestedScrollEnabled
-        style={{ flex: 1 }} onContentSizeChange={(_width, next) => recordBody(next)}>{content}</ThemedScrollView>
+      {scrollBody ? <PanelScrollView resetKey={scrollResetKey} keyboardShouldPersistTaps="handled" nestedScrollEnabled
+        style={{ flex: 1 }} onContentSizeChange={(_width, next) => recordBody(next)}>{content}</PanelScrollView>
         : <View style={{ flexShrink: 0, maxHeight: bodyLimit }} onLayout={event => recordBody(event.nativeEvent.layout.height)}>{content}</View>}
     </View>
     {fixedActions ? <View testID="material-dialog-actions" style={{ flexShrink: 0 }}>

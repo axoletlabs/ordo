@@ -10,6 +10,7 @@
  */
 import React, { useEffect } from "react";
 import { Stack, useRouter, useSegments } from "expo-router";
+import { AppState } from "react-native";
 import * as SplashScreen from "expo-splash-screen";
 import * as Font from "expo-font";
 import * as Updates from "expo-updates";
@@ -35,6 +36,8 @@ import { useFolderTokenStore } from "../src/store/folder-tokens";
 import { useOnlineStore } from "../src/lib/online";
 import { cancelProactiveRefresh, ensureFreshAccessToken } from "../src/lib/api/client";
 import { initAppLifecycle } from "../src/lib/app-lifecycle";
+import { DiagnosticsOverlay } from "../src/components/DiagnosticsOverlay";
+import { cleanupDiagnosticExports } from "../src/lib/diagnostics/export";
 import { ToastHost } from "../src/components/ui/ToastHost";
 import { OverlayHost } from "../src/components/ui/overlay-host";
 import { OfflineGate } from "../src/components/OfflineGate";
@@ -59,8 +62,13 @@ import { enableFreeze } from "react-native-screens";
 import { normalizeReaderPreferences } from "@ordo/shared";
 import { useReducedMotionPreference } from "../src/hooks/use-reduced-motion-preference";
 import { useAutomaticOtaUpdate } from "../src/hooks/use-automatic-ota-update";
+import { installLocalErrorRecording, recordDiagnosticEvent, recordDiagnosticOperation, resetAccountDiagnostics, removeLegacyDiagnosticFiles } from "../src/lib/local-diagnostics";
 
-enableFreeze(true);
+// react-freeze 1.0.4 can loop indefinitely with multiple frozen boundaries on
+// React 19 (react-native-screens#5053). Pause background work via our activity
+// scopes instead; keep React able to commit retained screens normally.
+enableFreeze(false);
+installLocalErrorRecording();
 initAppLifecycle();
 
 // Hold the native splash as early as possible so it covers JS load + hydration
@@ -93,6 +101,8 @@ function RootShell() {
   const reducedMotion = useReducedMotionPreference();
   const router = useRouter();
   const segments = useSegments();
+  const routeTemplate = segments.join("/");
+  useEffect(() => { recordDiagnosticEvent("route", routeTemplate); }, [routeTemplate]);
   const status = useAuthStore((s) => s.status);
   const tokens = useAuthStore((s) => s.tokens);
   const userId = useAuthStore((s) => s.user?.id);
@@ -132,6 +142,7 @@ function RootShell() {
   useEffect(() => {
     if (status === "loading") return;
     const inAuthGroup = segments[0] === "(auth)";
+    if (segments[0] === "diagnostics" || segments[0] === "diagnostics-report") return;
     if (status === "unauthenticated" && !inAuthGroup) {
       router.replace("/(auth)/login");
     } else if (status === "authenticated" && inAuthGroup) {
@@ -172,7 +183,8 @@ function RootShell() {
   // the wrong group (e.g. login for an authenticated user) is never shown.
   const routeMatchesAuth =
     status !== "loading" &&
-    (status === "authenticated" ? segments[0] === "(app)" : segments[0] === "(auth)");
+    (segments[0] === "diagnostics" || segments[0] === "diagnostics-report" ||
+      (status === "authenticated" ? segments[0] === "(app)" : segments[0] === "(auth)"));
 
   // Before the first reveal the brand cover guards every reconciliation gap.
   // After it, auth changes crossfade between groups — re-covering with the
@@ -210,6 +222,8 @@ function RootShell() {
         >
           <Stack.Screen name="(auth)" />
           <Stack.Screen name="(app)" />
+          <Stack.Screen name="diagnostics" dangerouslySingular />
+          <Stack.Screen name="diagnostics-report" dangerouslySingular />
         </Stack>
         <IncomingShareHandler />
         {!showSplash && routeMatchesAuth && status === "authenticated" ? (
@@ -234,6 +248,7 @@ function RootShell() {
       </OverlayHost>
       <ToastHost />
       <OfflineGate />
+      <DiagnosticsOverlay />
       {showSplash && (
         <LaunchSplash
           onPresented={restarting ? markRestartSplashPresented : undefined}
@@ -243,13 +258,32 @@ function RootShell() {
   );
 }
 
-export default function RootLayout() {
+function RootProviders() {
   const [booted, setBooted] = React.useState(false);
   const restartCover = peekRestartCover();
 
   useEffect(() => {
+    void cleanupDiagnosticExports();
+    void removeLegacyDiagnosticFiles();
+    const auth = useAuthStore.subscribe((next, previous) => {
+      if (previous.user && next.user?.id !== previous.user.id) resetAccountDiagnostics();
+    });
+    const settings = useSettingsStore.subscribe((next, previous) => {
+      if (previous.hydrated && next.serverUrl !== previous.serverUrl) resetAccountDiagnostics();
+    });
+    return () => { auth(); settings(); };
+  }, []);
+
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => recordDiagnosticEvent("app.state", state));
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
     const releaseIsolation = installSessionCacheIsolation();
     (async () => {
+      const diagnosticStarted = performance.now();
+      let startupFailed = false;
       // Connectivity is an advisory signal, not a prerequisite for painting a
       // locally-restored session. A slow native network probe must not hold boot.
       void useOnlineStore.getState().init().catch((error) => console.warn("Connectivity bootstrap failed", error));
@@ -260,12 +294,13 @@ export default function RootLayout() {
       ]);
 
       for (const result of results) {
-        if (result.status === "rejected") console.warn("App bootstrap task failed", result.reason);
+        if (result.status === "rejected") { startupFailed = true; console.warn("App bootstrap task failed", result.reason); }
       }
 
       try {
         await useAuthStore.getState().hydrate();
       } catch (error) {
+        startupFailed = true;
         console.warn("Auth bootstrap failed", error);
         useAuthStore.setState({
           user: null,
@@ -279,8 +314,10 @@ export default function RootLayout() {
       try {
         await prepareLaunchLibrary();
       } catch (error) {
+        startupFailed = true;
         console.warn("Launch library prepare failed", error);
       } finally {
+        recordDiagnosticOperation("startup", startupFailed ? "failed" : "ok", performance.now() - diagnosticStarted);
         setBooted(true);
         void recordColdStart();
       }
@@ -298,11 +335,15 @@ export default function RootLayout() {
         <SafeAreaProvider>
           <QueryClientProvider client={queryClient}>
             <ThemeProvider>
-              <ErrorBoundary>{booted ? <RootShell /> : <LaunchSplash />}</ErrorBoundary>
+              {booted ? <RootShell /> : <LaunchSplash />}
             </ThemeProvider>
           </QueryClientProvider>
         </SafeAreaProvider>
       </GestureHandlerRootView>
     </ShareIntentProvider>
   );
+}
+
+export default function RootLayout() {
+  return <ErrorBoundary><RootProviders /></ErrorBoundary>;
 }

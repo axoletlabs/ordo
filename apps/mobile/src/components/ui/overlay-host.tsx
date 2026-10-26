@@ -79,10 +79,14 @@ function OverlayBackground({ api, children }: { api: OverlayApi; children: React
   // context through every article/list fiber merely to find those consumers.
   return <BackgroundBlockingContext.Provider value={api}>
     <OverlayBlockedContext.Provider value={null}>
-    {/* Web already has inert isolation and a full-viewport blocking scrim.
+    {/* Keep this native parent materialized across blocking transitions.
+        pointerEvents="none" and no-hide-descendants force a Fabric stacking
+        context; "auto" allows flattening. Without this stable boundary every
+        open/close can reparent the mounted background's native children.
+        Web already has inert isolation and a full-viewport blocking scrim.
         Toggling inherited CSS pointer-events here dirties the entire article
         subtree before a popup can paint. Native keeps its cheap hit-test gate. */}
-    <View style={styles.background} pointerEvents={Platform.OS === "web" ? undefined : blocked ? "none" : "auto"}
+    <View collapsable={false} style={styles.background} pointerEvents={Platform.OS === "web" ? undefined : blocked ? "none" : "auto"}
       accessibilityElementsHidden={blocked} importantForAccessibility={blocked ? "no-hide-descendants" : "auto"}>
       <AnimationActivityScopeContext.Provider value={activity}>
         <AnimationActivityContext.Provider value={true}>{children}</AnimationActivityContext.Provider>
@@ -141,7 +145,9 @@ function OverlayLayerSurface({ api, layer, covered }: { api: OverlayApi; layer: 
     return index >= 0 && index < top;
   } }), [api, layer.id]);
   return <OverlayBlockedContext.Provider value={blocking}>
-    <View pointerEvents={covered ? "none" : "box-none"}
+    {/* Coverage changes the same Fabric traits as background blocking. Keep
+        retained dialog/menu contents under one native parent during handoffs. */}
+    <View collapsable={false} pointerEvents={covered ? "none" : "box-none"}
       importantForAccessibility={covered ? "no-hide-descendants" : "auto"}
       accessibilityElementsHidden={covered}
       {...(Platform.OS === "web" ? { dataSet: { overlayLayer: layer.id } } : {})}

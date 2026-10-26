@@ -45,6 +45,7 @@ import {
   mergeAbortSignals,
   raceDeadline,
 } from "../fetch-timeout";
+import { recordDiagnosticOperation } from "../local-diagnostics";
 import { reportServerUnreachable } from "../server-availability";
 import { noteServerError, noteTimeout } from "../telemetry";
 import { assertSessionScope, captureSessionScope, isSessionScopeCurrent, SessionChangedError, type SessionScope } from "../session-scope";
@@ -198,12 +199,17 @@ let refreshInFlight: { owner: SessionScope; promise: Promise<RefreshResult> } | 
 let proactiveTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function doRefresh(owner: SessionScope): Promise<RefreshResult> {
+  const diagnosticStarted = performance.now();
+  const finish = (result: RefreshResult): RefreshResult => {
+    recordDiagnosticOperation("auth-refresh", result === "ok" ? "ok" : result === "superseded" ? "cancelled" : result === "rejected" ? "unauthorized" : "failed", performance.now() - diagnosticStarted);
+    return result;
+  };
   const { tokens, setTokens, clear } = useAuthStore.getState();
   const refreshToken = tokens?.refreshToken;
   if (!refreshToken) {
     cancelProactiveRefresh();
     void clear();
-    return "rejected";
+    return finish("rejected");
   }
   try {
     const res = await rawFetch(
@@ -218,26 +224,26 @@ async function doRefresh(owner: SessionScope): Promise<RefreshResult> {
       }, REQUEST_TIMEOUT_MS, owner,
     );
     const data = await raceDeadline(res.json(), REQUEST_HARD_TIMEOUT_MS);
-    if (!isSessionScopeCurrent(owner)) return "superseded";
-    if (useAuthStore.getState().tokens?.refreshToken !== refreshToken) return "ok";
+    if (!isSessionScopeCurrent(owner)) return finish("superseded");
+    if (useAuthStore.getState().tokens?.refreshToken !== refreshToken) return finish("ok");
     // Server rotates both tokens; persist the new pair.
     setTokens(data.tokens);
     scheduleProactiveRefresh(data.tokens?.expiresIn as number);
-    return "ok";
+    return finish("ok");
   } catch (e) {
-    if (!isSessionScopeCurrent(owner)) return "superseded";
+    if (!isSessionScopeCurrent(owner)) return finish("superseded");
     // Quick Save/foreground reconciliation may already have installed a newer
     // pair without changing the account. Its rotation must win this race too.
-    if (useAuthStore.getState().tokens?.refreshToken !== refreshToken) return "ok";
+    if (useAuthStore.getState().tokens?.refreshToken !== refreshToken) return finish("ok");
     const err = e instanceof ApiClientError ? e : new ApiClientError(0, null);
     // Only drop the session when the server actually rejected the refresh.
     // A down host, timeout, proxy 401, or 5xx must not sign the user out.
     if (isDefiniteRefreshRejection(err)) {
       cancelProactiveRefresh();
       void clear();
-      return "rejected";
+      return finish("rejected");
     }
-    return "unreachable";
+    return finish("unreachable");
   }
 }
 
@@ -306,6 +312,7 @@ async function request<T>(
   retried = false,
   owner = captureSessionScope(),
 ): Promise<T> {
+  const diagnosticStarted = performance.now();
   assertSessionScope(owner);
   const auth = options.auth ?? true;
   const { tokens } = useAuthStore.getState();
@@ -341,10 +348,11 @@ async function request<T>(
   try {
     const res = await rawFetch(url, init, timeoutMs, owner);
     assertSessionScope(owner);
-    if (options.raw) return res as T;
-    if (res.status === 204) return undefined as T;
+    if (options.raw) { recordDiagnosticOperation("api", "ok", performance.now() - diagnosticStarted); return res as T; }
+    if (res.status === 204) { recordDiagnosticOperation("api", "ok", performance.now() - diagnosticStarted); return undefined as T; }
     const data = await raceDeadline(res.json() as Promise<T>, timeoutMs + 2_000);
     assertSessionScope(owner);
+    recordDiagnosticOperation("api", "ok", performance.now() - diagnosticStarted);
     return data;
   } catch (e) {
     assertSessionScope(owner);
@@ -380,6 +388,7 @@ async function request<T>(
       });
     }
     noteApiFailure(err);
+    recordDiagnosticOperation("api", err.code === LOCAL_ERROR.TIMEOUT ? "timeout" : err.status === 401 ? "unauthorized" : err.status >= 500 ? "server-error" : "failed", performance.now() - diagnosticStarted);
     if (
       shouldClearSessionForError(err, {
         sentAccessToken,

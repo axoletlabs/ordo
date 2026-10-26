@@ -17,6 +17,7 @@ import { shouldAdoptQuickShareSession } from "../lib/share-intake";
 import { readQuickShareSession, syncQuickShareSession } from "../lib/share-targets";
 import { secureGet, secureSet, secureDelete, StorageKeys } from "../lib/storage";
 import { useSettingsStore } from "./settings";
+import { createCoalescedPersistence } from "../lib/coalesced-persistence";
 
 /** Accept current UserDto rows and older persisted sessions that still have `username`. */
 export function normalizePersistedUser(raw: unknown): UserDto | null {
@@ -76,16 +77,20 @@ export interface AuthState {
   clear: () => Promise<void>;
 }
 
+const saveAuth = createCoalescedPersistence<PersistedAuth | null>(payload => payload == null
+  ? secureDelete(StorageKeys.AUTH) : secureSet(StorageKeys.AUTH, payload));
+
 function persistAuth(
   user: UserDto,
   tokens: AuthTokens,
   accessExpiresAt: number | null,
   sessionUpdatedAt: number,
+  syncSidecar = true,
 ): void {
   const payload: PersistedAuth = { user, tokens, sessionUpdatedAt };
   if (accessExpiresAt != null) payload.accessExpiresAt = accessExpiresAt;
-  void secureSet(StorageKeys.AUTH, payload);
-  void syncQuickShareSession({
+  void saveAuth(payload);
+  if (syncSidecar) void syncQuickShareSession({
     serverUrl: useSettingsStore.getState().serverUrl,
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
@@ -145,7 +150,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       persistAuth(user, tokens, accessExpiresAt, nextUpdatedAt);
     } else {
       // Partial/corrupt blob: drop it so it isn't re-parsed on every launch.
-      if (saved) void secureDelete(StorageKeys.AUTH);
+      if (saved) void saveAuth(null);
       set({
         sessionGeneration: get().sessionGeneration + 1,
         user: null,
@@ -201,7 +206,8 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { tokens, accessExpiresAt, sessionUpdatedAt } = get();
     if (!tokens) return;
     set({ user });
-    persistAuth(user, tokens, accessExpiresAt, sessionUpdatedAt ?? Date.now());
+    // Profile/preferences edits leave the token-only Quick Save payload intact.
+    persistAuth(user, tokens, accessExpiresAt, sessionUpdatedAt ?? Date.now(), false);
   },
 
   clear: async () => {
@@ -214,7 +220,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       status: "unauthenticated",
     });
     await Promise.all([
-      secureDelete(StorageKeys.AUTH),
+      saveAuth(null),
       secureDelete(StorageKeys.RECOVERY_KEY),
       syncQuickShareSession(null),
     ]);

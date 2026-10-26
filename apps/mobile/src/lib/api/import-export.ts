@@ -14,6 +14,7 @@ import {
   type ImportJobDto,
   type ImportUploadJsonInput,
 } from "@ordo/shared";
+import { withDiagnosticOperation } from "../local-diagnostics";
 import { api } from "./client";
 import { normalizeFileUri } from "../import-export-uri";
 
@@ -30,7 +31,7 @@ const UPLOAD_TIMEOUT_MS = 90_000;
 const EXPORT_TIMEOUT_MS = 120_000;
 
 export const importExportApi = {
-  uploadImport: async (picked: PickedImportFile) => {
+  uploadImport: async (picked: PickedImportFile) => withDiagnosticOperation("import", async () => {
     if (Platform.OS === "web" && picked.file) {
       const form = new FormData();
       form.append("file", picked.file, picked.name);
@@ -54,7 +55,7 @@ export const importExportApi = {
       body,
       { timeoutMs: UPLOAD_TIMEOUT_MS },
     );
-  },
+  }),
 
   getImport: (id: string) =>
     api.get<ImportJobDto>(buildPath(ImportExportRoutes.getImport.path, { id })),
