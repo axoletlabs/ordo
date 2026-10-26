@@ -1,3 +1,4 @@
+import { flushLocalDiagnostics, recordDiagnosticOperation } from "../lib/local-diagnostics";
 import { Image } from "react-native";
 import { create } from "zustand";
 import * as Updates from "expo-updates";
@@ -84,6 +85,8 @@ export function reloadScreenOptionsForPalette(backgroundColor: string): RuntimeR
 
 /** Replace the JS runtime with a themed reload screen (no Expo white spinner). */
 export async function reloadRuntime(palette = currentPalette()): Promise<void> {
+  recordDiagnosticOperation("update-apply", "started", 0);
+  flushLocalDiagnostics();
   rememberRestartCover({ background: palette.background, mode: palette.mode });
   await pinSystemChrome(palette);
   await Updates.reloadAsync({

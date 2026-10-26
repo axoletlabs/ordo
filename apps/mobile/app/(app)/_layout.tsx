@@ -5,7 +5,6 @@
 import React, { useEffect } from "react";
 import { Platform, View } from "react-native";
 import { Stack } from "expo-router";
-import { enableFreeze } from "react-native-screens";
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
 import { useReducedMotionPreference } from "../../src/hooks/use-reduced-motion-preference";
 import { useTheme } from "../../src/theme/ThemeProvider";
@@ -20,8 +19,6 @@ import { PageTransition } from "../../src/components/ui/PageTransition";
 import { ChangelogAnnouncementHost } from "../../src/components/settings/ChangelogAnnouncementHost";
 import { useOverlayFocus } from "../../src/hooks/use-overlay-focus";
 import { AnimationActivityContext } from "../../src/hooks/use-animation-activity";
-
-enableFreeze(true);
 
 export const unstable_settings = {
   initialRouteName: "(tabs)",
@@ -145,7 +142,7 @@ function AuthenticatedAppLayout() {
         headerShown: false,
         animation: reducedMotion ? "none" : stackScreenAnimation(navigationAnimation),
         animationDuration: screenAnimationDuration(navigationAnimation),
-        freezeOnBlur: true,
+        freezeOnBlur: false,
         contentStyle: { backgroundColor: palette.background },
         fullScreenGestureEnabled: true,
       }}

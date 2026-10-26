@@ -32,7 +32,8 @@ const stubs = {
     useWindowDimensions: () => viewport, Keyboard: { metrics: () => null },
   },
   "react-native-reanimated": {
-    __esModule: true, default: { View }, useSharedValue: value => ({ value }), useAnimatedStyle: fn => fn(),
+    __esModule: true, default: { View }, useDerivedValue: fn => ({ get value() { return fn(); } }), useSharedValue: value => ({ value }), useAnimatedStyle: fn => fn(),
+    withTiming: value => value, Easing: { bezier: () => undefined },
   },
   "react-native-gesture-handler": {
     Gesture: { Pan: () => { const pan = new Proxy({}, { get: () => () => pan }); return pan; } }, GestureDetector: pass,

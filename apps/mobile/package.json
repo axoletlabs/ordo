@@ -13,9 +13,14 @@
     "lint": "eslint .",
     "check:overlay-layout": "node scripts/check-overlay-layout.cjs",
     "typecheck": "node scripts/generate-licenses.cjs && tsc --noEmit",
+    "test:diagnostics": "node scripts/test-local-diagnostics.cjs && node scripts/test-diagnostics-privacy.cjs && node scripts/test-diagnostics-export.cjs",
+    "test:animations": "node scripts/test-reanimated-registry.cjs",
+    "test:android-native": "node scripts/test-android-native-hotpaths.cjs",
     "clean": "rimraf .expo node_modules/.cache",
     "licenses:generate": "node scripts/generate-licenses.cjs",
-    "licenses:check": "node scripts/generate-licenses.cjs"
+    "licenses:check": "node scripts/generate-licenses.cjs",
+    "test:reader-performance": "node scripts/test-reader-performance.cjs",
+    "test:diagnostics-native": "node scripts/test-diagnostics-native.cjs"
   },
   "dependencies": {
     "@babel/runtime": "^7.29.7",

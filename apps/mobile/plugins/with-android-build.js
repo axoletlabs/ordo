@@ -27,6 +27,11 @@ const {
 } = require('./share-session-kotlin');
 const { ordoExportFileModuleKotlin } = require('./export-file-kotlin');
 const { ordoMaterialColorsModuleKotlin } = require('./material-colors-kotlin');
+const {
+  DIAGNOSTICS_POLICY_PREFS,
+  ordoDiagnosticsModuleKotlin,
+  ordoDiagnosticsPolicyKotlin,
+} = require('./diagnostics-kotlin');
 
 const SCROLLBAR_THUMB_XML = `<?xml version="1.0" encoding="utf-8"?>
 <shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
@@ -138,11 +143,27 @@ const NETWORK_SECURITY_CONFIG_XML = `<?xml version="1.0" encoding="utf-8"?>
 </network-security-config>
 `;
 
+// Diagnostics v2 keeps the recording master preference and its cutoff in a
+// private SharedPreferences file; it must never ride Android cloud backup or
+// device transfer. Both the bare and .xml forms cover vendor path handling.
+const DIAGNOSTICS_PREF_BACKUP_EXCLUDES = [
+  `<exclude domain="sharedpref" path="${DIAGNOSTICS_POLICY_PREFS}"/>`,
+  `<exclude domain="sharedpref" path="${DIAGNOSTICS_POLICY_PREFS}.xml"/>`,
+  '<exclude domain="sharedpref" path="ordo_diagnostics_incidents"/>',
+  '<exclude domain="sharedpref" path="ordo_diagnostics_incidents.xml"/>',
+];
+
 const BACKUP_RULES_XML = `<?xml version="1.0" encoding="utf-8"?>
 <full-backup-content>
     <exclude domain="sharedpref" path="SecureStore"/>
     <exclude domain="sharedpref" path="${QUICK_SHARE_SESSION_PREFS}"/>
     <exclude domain="file" path="${QUICK_SHARE_SESSION_FILE}"/>
+    <exclude domain="file" path="mmkv/ordo-diagnostics"/>
+    <exclude domain="file" path="mmkv/ordo-diagnostics.crc"/>
+    ${DIAGNOSTICS_PREF_BACKUP_EXCLUDES[0]}
+    ${DIAGNOSTICS_PREF_BACKUP_EXCLUDES[1]}
+    ${DIAGNOSTICS_PREF_BACKUP_EXCLUDES[2]}
+    ${DIAGNOSTICS_PREF_BACKUP_EXCLUDES[3]}
 </full-backup-content>
 `;
 
@@ -152,11 +173,23 @@ const DATA_EXTRACTION_RULES_XML = `<?xml version="1.0" encoding="utf-8"?>
         <exclude domain="sharedpref" path="SecureStore"/>
         <exclude domain="sharedpref" path="${QUICK_SHARE_SESSION_PREFS}"/>
         <exclude domain="file" path="${QUICK_SHARE_SESSION_FILE}"/>
+        <exclude domain="file" path="mmkv/ordo-diagnostics"/>
+        <exclude domain="file" path="mmkv/ordo-diagnostics.crc"/>
+        ${DIAGNOSTICS_PREF_BACKUP_EXCLUDES[0]}
+        ${DIAGNOSTICS_PREF_BACKUP_EXCLUDES[1]}
+        ${DIAGNOSTICS_PREF_BACKUP_EXCLUDES[2]}
+        ${DIAGNOSTICS_PREF_BACKUP_EXCLUDES[3]}
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="SecureStore"/>
         <exclude domain="sharedpref" path="${QUICK_SHARE_SESSION_PREFS}"/>
         <exclude domain="file" path="${QUICK_SHARE_SESSION_FILE}"/>
+        <exclude domain="file" path="mmkv/ordo-diagnostics"/>
+        <exclude domain="file" path="mmkv/ordo-diagnostics.crc"/>
+        ${DIAGNOSTICS_PREF_BACKUP_EXCLUDES[0]}
+        ${DIAGNOSTICS_PREF_BACKUP_EXCLUDES[1]}
+        ${DIAGNOSTICS_PREF_BACKUP_EXCLUDES[2]}
+        ${DIAGNOSTICS_PREF_BACKUP_EXCLUDES[3]}
     </device-transfer>
 </data-extraction-rules>
 `;
@@ -435,40 +468,59 @@ function screenSharePrivacyKotlin(packageName) {
 
 import android.app.Activity
 import android.os.Build
+import android.os.SystemClock
 import android.view.View
 import android.view.ViewGroup
-import android.view.ViewTreeObserver
 import java.util.Collections
 import java.util.WeakHashMap
 
-/**
- * Android 15 marks a window secure during screen share when any visible view
- * has a password or username autofill hint. React Native password fields get
- * that hint from their input type, so login, register, and other forms turn
- * the whole window black ("Content hidden"). Opt those views out. The field
- * still masks the password; only the full-window privacy screen is removed.
- */
+/** Android 15+ can redact a whole recording window for password/username
+ * autofill hints. Preserve the app's existing opt-out (fields stay masked),
+ * without scanning windows on every draw or walking the tree every frame. */
 object ScreenSharePrivacy {
+  private const val SCAN_GAP_MS = 250L
   private val watched = Collections.newSetFromMap(WeakHashMap<View, Boolean>())
+  private val windowAccess by lazy {
+    try {
+      val clazz = Class.forName("android.view.WindowManagerGlobal")
+      val instance = clazz.getMethod("getInstance").invoke(null)
+      val field = clazz.getDeclaredField("mViews")
+      field.isAccessible = true
+      Pair(instance, field)
+    } catch (_: Throwable) {
+      null
+    }
+  }
 
   fun install(activity: Activity) {
     if (Build.VERSION.SDK_INT < 35) return
     val decor = activity.window.decorView
-    val observer = decor.viewTreeObserver
-    val listener = ViewTreeObserver.OnPreDrawListener {
-      watchNewWindows()
-      true
+    var lastScanAt = -SCAN_GAP_MS
+    var scheduled = false
+    lateinit var scan: Runnable
+    // Coalesce layout bursts, with a trailing scan even if no more events
+    // arrive. Pure transform/opacity animations do not schedule this work.
+    val scheduleScan: () -> Unit = {
+      if (!scheduled) {
+        scheduled = true
+        decor.postDelayed(scan, maxOf(0L, SCAN_GAP_MS - (SystemClock.uptimeMillis() - lastScanAt)))
+      }
     }
-    observer.addOnPreDrawListener(listener)
-    watchNewWindows()
-  }
-
-  private fun watchNewWindows() {
-    for (root in windowRoots()) {
-      if (!watched.add(root)) continue
-      root.viewTreeObserver.addOnGlobalLayoutListener { disarmTree(root) }
-      disarmTree(root)
+    scan = Runnable {
+      scheduled = false
+      lastScanAt = SystemClock.uptimeMillis()
+      val roots = windowRoots().toMutableList()
+      // Hidden-API reflection can fail on an OEM build. App-owned inputs and
+      // portal overlays still live under this public activity root.
+      if (roots.none { it === decor }) roots.add(decor)
+      for (root in roots) {
+        if (watched.add(root)) {
+          root.viewTreeObserver.addOnGlobalLayoutListener { scheduleScan() }
+        }
+        disarmTree(root)
+      }
     }
+    scan.run()
   }
 
   private fun disarmTree(view: View) {
@@ -485,12 +537,8 @@ object ScreenSharePrivacy {
 
   private fun windowRoots(): List<View> {
     return try {
-      val clazz = Class.forName("android.view.WindowManagerGlobal")
-      val instance = clazz.getMethod("getInstance").invoke(null)
-      val field = clazz.getDeclaredField("mViews")
-      field.isAccessible = true
-      val views = field.get(instance)
-      when (views) {
+      val access = windowAccess ?: return emptyList()
+      when (val views = access.second.get(access.first)) {
         is List<*> -> views.filterIsInstance<View>()
         is Array<*> -> views.filterIsInstance<View>()
         else -> emptyList()
@@ -624,6 +672,25 @@ function patchMainApplicationForShareSession(contents, language) {
     offset: 0,
     anchor: /return packages/,
     newSrc: shareSessionPackageLine(isJava),
+  }).contents;
+}
+
+/**
+ * Load the native diagnostics recording policy before React starts and
+ * register background capture cancellation (plan §5: the master preference
+ * must gate native collectors in every process entry point, including the
+ * share receivers, and before any JS runs). Kotlin templates only; if the
+ * template drifts to Java, the module falls back to its own ensure() load.
+ */
+function patchMainApplicationForDiagnosticsPolicy(contents, language) {
+  if (language === 'java') return contents;
+  return mergeContents({
+    src: contents,
+    tag: 'ordo-diagnostics-policy',
+    comment: '    //',
+    offset: 1,
+    anchor: /super\.onCreate\(\)/,
+    newSrc: '    OrdoDiagnosticsPolicy.install(this)',
   }).contents;
 }
 
@@ -964,7 +1031,18 @@ const withAndroidBuild = (config) => {
         ordoExportFileModuleKotlin(packageName)
       );
       await fs.writeFile(path.join(sourceDir, 'QuickShareSave.kt'), quickShareSaveKotlin(packageName));
-      await fs.writeFile(path.join(sourceDir, 'OrdoMaterialColorsModule.kt'), ordoMaterialColorsModuleKotlin(packageName));
+      await fs.writeFile(
+        path.join(sourceDir, 'OrdoMaterialColorsModule.kt'),
+        ordoMaterialColorsModuleKotlin(packageName)
+      );
+      await fs.writeFile(
+        path.join(sourceDir, 'OrdoDiagnosticsModule.kt'),
+        ordoDiagnosticsModuleKotlin(packageName)
+      );
+      await fs.writeFile(
+        path.join(sourceDir, 'OrdoDiagnosticsPolicy.kt'),
+        ordoDiagnosticsPolicyKotlin(packageName)
+      );
       await fs.writeFile(
         path.join(sourceDir, 'ShareReceiverActivity.kt'),
         shareReceiverKotlin(packageName)
@@ -1006,6 +1084,10 @@ const withAndroidBuild = (config) => {
 
   config = withMainApplication(config, (c) => {
     c.modResults.contents = patchMainApplicationForShareSession(
+      c.modResults.contents,
+      c.modResults.language
+    );
+    c.modResults.contents = patchMainApplicationForDiagnosticsPolicy(
       c.modResults.contents,
       c.modResults.language
     );
@@ -1208,4 +1290,8 @@ module.exports.shareReceiverAlias = shareReceiverAlias;
 module.exports.screenSharePrivacyKotlin = screenSharePrivacyKotlin;
 module.exports.patchMainActivityForShareTargets = patchMainActivityForShareTargets;
 module.exports.patchMainApplicationForShareSession = patchMainApplicationForShareSession;
+module.exports.patchMainApplicationForDiagnosticsPolicy = patchMainApplicationForDiagnosticsPolicy;
+module.exports.DIAGNOSTICS_POLICY_PREFS = DIAGNOSTICS_POLICY_PREFS;
+module.exports.DIAGNOSTICS_PREF_BACKUP_EXCLUDES = DIAGNOSTICS_PREF_BACKUP_EXCLUDES;
+module.exports.ordoDiagnosticsPolicyKotlin = ordoDiagnosticsPolicyKotlin;
 module.exports.applySecurityCrypto = applySecurityCrypto;

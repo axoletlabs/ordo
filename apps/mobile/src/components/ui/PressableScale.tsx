@@ -303,7 +303,10 @@ function ControlSurface({
     // The fade lives in the color: a sub-1 ELEMENT opacity makes the
     // compositor rasterize the layer and its radius clips as a group that
     // stops matching the surface beneath it (squared-off caps, edge slivers).
-    const alpha = Math.max(0, Math.min(1, layer.value));
+    // Spring tails can stringify as e.g. "4.2e-7", which Reanimated's native
+    // color parser rejects and tears down the runtime. Match rgbaColor's
+    // decimal precision so every frame, including release, stays parseable.
+    const alpha = Math.round(Math.max(0, Math.min(1, layer.value)) * 1000) / 1000;
     return { backgroundColor: `rgba(${tintRgb[0]},${tintRgb[1]},${tintRgb[2]},${alpha})` };
   });
   const content = typeof children === "function" ? children({ pressed: down }) : children;

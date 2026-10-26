@@ -1,5 +1,5 @@
 /** A persistent search app bar and compact, contextual library actions. */
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Keyboard, Platform, StyleSheet, TextInput, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, type SharedValue } from "react-native-reanimated";
 import { useFocusEffect } from "expo-router";
@@ -212,7 +212,12 @@ export function LibraryHeader({ tools, query, onQueryChange, onFilter, filtersOn
     transform: [{ translateX: 8 * spatialProgress.value }] }));
   const hasSelection = selection != null;
   useEffect(() => { if (selection) Keyboard.dismiss(); }, [hasSelection]);
-  const user = useAuthStore((s) => s.user);
+  const userId = useAuthStore(s => s.user?.id);
+  const displayName = useAuthStore(s => s.user?.displayName);
+  const hasAvatar = useAuthStore(s => s.user?.hasAvatar);
+  const avatarUpdatedAt = useAuthStore(s => s.user?.avatarUpdatedAt);
+  const user = useMemo(() => userId ? { id: userId, displayName: displayName ?? "", hasAvatar: hasAvatar ?? false,
+    avatarUpdatedAt: avatarUpdatedAt ?? null } : null, [userId, displayName, hasAvatar, avatarUpdatedAt]);
   // Selection crossfade in the shared 56dp footprint. The search bar never
   // unmounts — its query, editing session and one-shot route autofocus intent
   // stay alive — and the selection bar is retained after its first use so

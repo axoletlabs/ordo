@@ -11,7 +11,7 @@ export default function LibraryLayout() {
       tabBar={() => null}
       detachInactiveScreens={false}
       screenOptions={{
-        headerShown: false, freezeOnBlur: true, lazy: true,
+        headerShown: false, freezeOnBlur: false, lazy: true,
         animation: "none",
         sceneStyle: { backgroundColor: palette.background },
       }}

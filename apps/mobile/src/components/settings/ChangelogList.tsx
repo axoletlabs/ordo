@@ -30,6 +30,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { AppIcon } from "../ui/PinIcon";
 import { radius, resolveFont, spacing } from "../../theme/tokens";
 import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
+import { recordDiagnosticEvent } from "../../lib/local-diagnostics";
 
 type Piece =
   | { kind: "run"; inlines: ChangelogInline[] }
@@ -508,6 +509,10 @@ function ChangelogSheetBody({
   const compactActions = height < 500 && width > height;
 
   useEffect(() => {
+    recordDiagnosticEvent(visible ? "changelog.open" : "changelog.close");
+  }, [visible]);
+
+  useEffect(() => {
     if (visible) setTag(initialTag ?? null);
   }, [visible, initialTag]);
 
@@ -569,7 +574,10 @@ function ChangelogSheetBody({
         inline={compactActions} onConfirm={onDismiss}>
         {selected && releases && releases.length > 1 ? <View style={[styles.releaseNavigation, compactActions ? { paddingTop: 0 } : null]}>
           {!compactActions ? <Text variant="titleSmall" color="secondary">Release history</Text> : null}
-          <ReleaseSelector releases={releases} selected={selected} onSelect={setTag} />
+          <ReleaseSelector releases={releases} selected={selected} onSelect={(next) => {
+            recordDiagnosticEvent("changelog.select", next);
+            setTag(next);
+          }} />
         </View> : null}
       </PanelActions>
     </FloatingPanel>

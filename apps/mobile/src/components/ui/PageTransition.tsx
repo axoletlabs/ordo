@@ -44,8 +44,12 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
       addListener(event: "transitionEnd", listener: (event: { data: { closing: boolean } }) => void): () => void;
     };
     const unsubscribe = stack.addListener("transitionEnd", (event) => { if (!event.data.closing) finish(); });
-    // Deep links/restored scenes can mount without a transition event.
-    const fallback = setTimeout(finish, screenAnimationDuration(preference) + 150);
+    // Required content must not wait indefinitely for an idle callback (or a
+    // low-priority transition). Deep links can also miss transitionEnd.
+    const fallback = setTimeout(() => {
+      cancelWork?.();
+      setReady(true);
+    }, screenAnimationDuration(preference) + 150);
     return () => { unsubscribe(); clearTimeout(fallback); cancelWork?.(); };
   }, [immediate, navigation, preference, ready]);
   const settings = useRef({ reducedMotion, preference, expressive });

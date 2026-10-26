@@ -240,6 +240,8 @@ export interface ArticleHtmlProps {
   onHeadingRef?: (id: string, view: ViewType | null) => void;
   /** Fires once the native HTML tree is actually mounted (after first paint). */
   onReady?: () => void;
+  /** First committed section; chrome can prepare while the rest stages. */
+  onUsable?: () => void;
   workScheduler?: ReaderWorkScheduler;
 }
 
@@ -379,10 +381,11 @@ const ARTICLE_CLASSES_STYLES = { [ARTICLE_END_CLASS]: { marginBottom: 0 } };
 
 /** Keep the scheduler below the providers: appending a section must not update
  * engine/config contexts or walk every already-mounted article component. */
-function ArticleSections({ sections, contentWidth, onReady, workScheduler }: {
+function ArticleSections({ sections, contentWidth, onReady, onUsable, workScheduler }: {
   sections: ReturnType<typeof prepareArticleSections>["sections"];
   contentWidth: number;
   onReady?: () => void;
+  onUsable?: () => void;
   workScheduler?: ReaderWorkScheduler;
 }) {
   const [mountedCount, setMountedCount] = useState(1);
@@ -394,6 +397,10 @@ function ArticleSections({ sections, contentWidth, onReady, workScheduler }: {
     return (workScheduler?.schedule ?? scheduleIdleWork)(() => startTransition(() => setMountedCount(count + 1)));
   }, [count, sections, workScheduler]);
   useAnimationActivityEffect(prepareNextSection);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => onUsable?.());
+    return () => cancelAnimationFrame(frame);
+  }, [sections, onUsable]);
   useEffect(() => {
     if (count < sections.length) return;
     const frame = requestAnimationFrame(() => onReady?.());
@@ -414,6 +421,7 @@ export const ArticleHtml = React.memo(function ArticleHtml({
   onHeadingsChange,
   onHeadingRef,
   onReady,
+  onUsable,
   workScheduler,
 }: ArticleHtmlProps) {
   const { palette } = useTheme();
@@ -522,7 +530,7 @@ export const ArticleHtml = React.memo(function ArticleHtml({
       renderers={ARTICLE_RENDERERS}
       defaultTextProps={defaultTextProps}
     >
-      <ArticleSections sections={sections} contentWidth={contentWidth} onReady={onReady} workScheduler={workScheduler} />
+      <ArticleSections sections={sections} contentWidth={contentWidth} onReady={onReady} onUsable={onUsable} workScheduler={workScheduler} />
     </RenderHTMLConfigProvider>
     </TRenderEngineProvider>
     </HighlightUiContext.Provider>

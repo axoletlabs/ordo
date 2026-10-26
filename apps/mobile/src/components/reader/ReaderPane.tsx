@@ -7,7 +7,7 @@
  * open according to the website-browser setting; "Read in ordo" appears when
  * extraction actually produced an article.
  */
-import React, { useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   findNodeHandle,
   Platform,
@@ -77,6 +77,7 @@ import {
 import * as bookmarkHooks from "../../hooks/use-bookmarks";
 import { useFolders } from "../../hooks/queries";
 import { useReaderPreferences } from "../../hooks/use-reader-preferences";
+import { useReaderPresentation } from "../../hooks/use-reader-presentation";
 import { useReaderChrome } from "../../hooks/use-reader-chrome";
 import { useSettingsStore } from "../../store/settings";
 import { domainFromUrl, formatDate } from "../../lib/format";
@@ -242,21 +243,17 @@ export function ReaderPane(props: ReaderPaneProps) {
     () => resolveReaderPalette(preferences.theme, preferences.amoled, systemScheme, { seed: appColor, expressive, contrast, deviceColors: materialYouColors ? deviceColors : null }),
     [preferences.theme, preferences.amoled, systemScheme, appColor, deviceColors, materialYouColors, expressive, contrast],
   );
-  // Commit control feedback first; let a long article reflow at interruptible
-  // priority. Only layout fields are deferred and compared: palette/theme and
-  // server acknowledgements with equal values must not hand the article a new
-  // preference object (or reconcile its sections) for unchanged text.
-  const deferredFontFamily = useDeferredValue(preferences.fontFamily);
-  const deferredFontSize = useDeferredValue(preferences.fontSize);
-  const deferredLineSpacing = useDeferredValue(preferences.lineSpacing);
-  const contentPreferences = useMemo<ReaderContentPreferences>(
+  const nextContentPreferences = useMemo<ReaderContentPreferences>(
     () => ({
-      fontFamily: deferredFontFamily,
-      fontSize: deferredFontSize,
-      lineSpacing: deferredLineSpacing,
+      fontFamily: preferences.fontFamily,
+      fontSize: preferences.fontSize,
+      lineSpacing: preferences.lineSpacing,
     }),
-    [deferredFontFamily, deferredFontSize, deferredLineSpacing],
+    [preferences.fontFamily, preferences.fontSize, preferences.lineSpacing],
   );
+  const nextPresentation = useMemo(() => ({ preferences: nextContentPreferences, palette: readerPalette }),
+    [nextContentPreferences, readerPalette]);
+  const presentation = useReaderPresentation(nextPresentation);
 
   // The reader surface owns the status bar (full-screen stack usage only);
   // on unmount, restore the style the app theme expects.
@@ -270,16 +267,17 @@ export function ReaderPane(props: ReaderPaneProps) {
   return (
     <ReaderPaneInner
       {...props}
-      contentPreferences={contentPreferences}
+      contentPreferences={presentation.preferences}
+      contentPalette={presentation.palette}
       readerPalette={readerPalette}
     />
   );
 }
 
 interface ReaderPaneInnerProps extends ReaderPaneProps {
-  /** Article layout preferences trail the controls by one deferred pass;
-   * palette and the controls panel update immediately. */
+  /** Article styles settle across bursts; controls and chrome update immediately. */
   contentPreferences: ReaderContentPreferences;
+  contentPalette: Palette;
   readerPalette: Palette;
 }
 
@@ -290,6 +288,7 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
   safeBottom = !embedded,
   initialSurface = "auto",
   contentPreferences,
+  contentPalette,
   readerPalette,
 }: ReaderPaneInnerProps) {
   const { palette: appPalette } = useTheme();
@@ -1094,14 +1093,16 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
     return true;
   }, []);
 
+  const prepareReaderChrome = useCallback(() => {
+    controlsRef.current?.prepare();
+    actionsRef.current?.prepare();
+  }, []);
   const handleArticleReady = useCallback(() => {
     htmlReadyRef.current = true;
     armContentSettle();
     const restoring = maybeRestore();
     if (!restoring) syncProgress(false);
     contentsRef.current?.prepare();
-    controlsRef.current?.prepare();
-    actionsRef.current?.prepare();
   }, [armContentSettle, maybeRestore, syncProgress]);
 
   // Start tracking once content exists; retry restore in case the native
@@ -1395,7 +1396,8 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
                 {articleHead}
 
                 {hasHtml ? (
-                <View style={styles.content}>
+                <ThemeOverrideProvider palette={contentPalette}>
+                <View style={[styles.content, { backgroundColor: contentPalette.background }]}>
                   <ReaderArticle
                     html={detail.data?.contentHtml ?? ""}
                     preferences={articlePreferences}
@@ -1405,9 +1407,11 @@ const ReaderPaneInner = React.memo(function ReaderPaneInner({
                     onHeadingsChange={handleHeadingsChange}
                     onHeadingRef={handleHeadingRef}
                     onReady={handleArticleReady}
+                    onUsable={prepareReaderChrome}
                     workScheduler={readerWork}
                   />
                 </View>
+                </ThemeOverrideProvider>
               ) : detailFetchFailed ? (
                 <EmptyState
                   compact
@@ -1605,6 +1609,7 @@ const styles = StyleSheet.create({
   browserParked: {
     ...StyleSheet.absoluteFill,
     opacity: 0,
-    zIndex: -1,
+    // The retained browser is the first sibling, behind the article. Avoid a
+    // negative zIndex during Fabric flatten/unflatten changes (RN #58648).
   },
 });

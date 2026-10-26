@@ -181,6 +181,34 @@ jobs:
       - name: Typecheck
         run: pnpm -r typecheck
 
+      - name: Verify diagnostics privacy, recording and exports
+        run: pnpm --filter @ordo/mobile test:diagnostics
+
+      - name: Setup Java for native diagnostics contract tests
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Install verified Kotlin test compiler
+        run: |
+          curl -fsSL --retry 3 -o "$RUNNER_TEMP/kotlin-compiler.zip" \
+            https://github.com/JetBrains/kotlin/releases/download/v2.2.0/kotlin-compiler-2.2.0.zip
+          echo "1adb6f1a5845ba0aa5a59e412e44c8e405236b957de1a9683619f1dca3b16932  $RUNNER_TEMP/kotlin-compiler.zip" | sha256sum -c -
+          unzip -q "$RUNNER_TEMP/kotlin-compiler.zip" -d "$RUNNER_TEMP/ordo-kotlin"
+          echo "KOTLINC=$RUNNER_TEMP/ordo-kotlin/kotlinc/bin/kotlinc" >> "$GITHUB_ENV"
+
+      - name: Verify generated native diagnostics and Android guards
+        run: |
+          pnpm --filter @ordo/mobile test:diagnostics-native
+          pnpm --filter @ordo/mobile test:android-native
+
+      - name: Verify animated style synchronization
+        run: pnpm --filter @ordo/mobile test:animations
+
+      - name: Verify reader persistence and native log configuration
+        run: pnpm --filter @ordo/mobile test:reader-performance
+
       - name: Verify native popup bootstrap layout
         run: pnpm --filter @ordo/mobile check:overlay-layout
 

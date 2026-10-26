@@ -1,128 +1,118 @@
-/**
- * Top-level error boundary. Catches render errors anywhere in the tree and
- * shows a small themed fallback instead of a blank/white screen.
- *
- * Retry remounts the current JS tree. Reload never applies a *different*
- * pending OTA — that is a separate, explicit action.
- */
+/** Emergency rendering deliberately uses native controls, outside app providers. */
 import React, { Component, type ReactNode } from "react";
-import {
-  Linking,
-  Platform,
-  StyleSheet,
-  View,
-  useColorScheme,
-} from "react-native";
+import { Linking, Platform, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import * as Clipboard from "expo-clipboard";
 import * as Updates from "expo-updates";
 import * as SplashScreen from "expo-splash-screen";
+import { currentAppPalette } from "../theme/current-app-palette";
 import { radius, resolveFont } from "../theme/tokens";
-import { Text } from "./ui/Text";
-import { Button } from "./ui/Button";
-import { ThemeOverrideProvider } from "../theme/ThemeProvider";
-import { resolvePalette } from "../theme/theme";
-import { useDeviceColors } from "../theme/device-colors";
-import { useSettingsStore } from "../store/settings";
 import { reloadRuntime } from "../store/update-restart";
+import { captureLocalError, collectLocalDiagnosticReport, getDiagnosticReportEpoch, localDiagnosticReport, recordDiagnosticEvent, subscribePreparedDiagnosticReport, type LocalErrorReport } from "../lib/local-diagnostics";
 
 const RELEASES_URL = "https://github.com/axoletlabs/ordo/releases";
 
-interface Props {
-  children: ReactNode;
+interface Props { children: ReactNode }
+interface State { error: Error | null; report: LocalErrorReport | null }
+
+// No ThemeProvider, portal, gesture handler, or Reanimated dependency in this
+// fallback's render path: any of them may be the component that just failed.
+function emergencyColors() {
+  try { return currentAppPalette(); }
+  catch {
+    return { background: "#101414", surfaceContainerHigh: "#252b2a", onSurface: "#e0e3e1", onSurfaceVariant: "#bec9c5", primary: "#90d5bf", onPrimary: "#00382c" };
+  }
 }
 
-interface State {
-  error: Error | null;
-}
-
-function Fallback({ error, onReset }: { error: Error; onReset: () => void }) {
-  const scheme = useColorScheme();
-  const { themeMode, amoled, materialYouColors, expressive, themeContrast, appColor } = useSettingsStore();
-  const deviceColors = useDeviceColors();
-  const palette = resolvePalette(themeMode, amoled, scheme, appColor, expressive, themeContrast, materialYouColors ? deviceColors : null);
-  const updates = Updates.useUpdates();
-  const pendingId = updates.downloadedUpdate?.updateId;
-  const runningId = updates.currentlyRunning.updateId;
-  const pendingIsDifferent =
-    updates.isUpdatePending && pendingId != null && pendingId !== runningId;
-  const runningOta = Updates.isEnabled && !updates.currentlyRunning.isEmbeddedLaunch;
-  const emergency = updates.currentlyRunning.isEmergencyLaunch;
-
-  const reloadCurrent = () => {
-    if (Platform.OS === "web" && typeof window !== "undefined") {
-      window.location.reload();
-      return;
-    }
-    if (pendingIsDifferent) {
-      onReset();
-      return;
-    }
-    void reloadRuntime().catch(onReset);
+function Fallback({ report, onReset }: { report: LocalErrorReport | null; onReset: () => void }) {
+  const palette = emergencyColors();
+  const [details, setDetails] = React.useState(false);
+  const [notice, setNotice] = React.useState("");
+  const [reportText, setReportText] = React.useState(localDiagnosticReport);
+  const epoch = React.useRef(getDiagnosticReportEpoch());
+  const [prepared, setPrepared] = React.useState(false);
+  const [preparing, setPreparing] = React.useState(false);
+  React.useEffect(() => subscribePreparedDiagnosticReport(() => {
+    if (epoch.current === getDiagnosticReportEpoch()) return;
+    epoch.current = getDiagnosticReportEpoch();
+    setReportText(localDiagnosticReport()); setDetails(false); setPrepared(false);
+  }), []);
+  const review = async () => {
+    if (preparing) return;
+    setPreparing(true);
+    const token = getDiagnosticReportEpoch();
+    try {
+      const text = await collectLocalDiagnosticReport();
+      if (token !== getDiagnosticReportEpoch()) return;
+      setReportText(text); setPrepared(true); setDetails(true);
+    } catch { setNotice("Couldn't prepare a report. Close and reopen the app."); }
+    finally { setPreparing(false); }
   };
+  const copy = async () => {
+    if (!prepared || epoch.current !== getDiagnosticReportEpoch()) return;
+    try { await Clipboard.setStringAsync(reportText); setNotice("Report copied."); }
+    catch { setNotice("Couldn't copy. You can select the report below."); }
+  };
+  const reload = () => {
+    if (Platform.OS === "web" && typeof window !== "undefined") { window.location.reload(); return; }
+    void reloadRuntime().catch(() => setNotice("Couldn't reload. Close and reopen the app."));
+  };
+  const action = (label: string, onPress: () => void, primary = false) => (
+    <Pressable accessibilityRole="button" onPress={onPress}
+      style={({ pressed }) => [styles.button, { backgroundColor: primary ? palette.primary : palette.surfaceContainerHigh, opacity: pressed ? 0.7 : 1 }]}>
+      <Text style={[styles.label, { color: primary ? palette.onPrimary : palette.onSurface }]}>{label}</Text>
+    </Pressable>
+  );
 
   return (
-    <ThemeOverrideProvider palette={palette}>
-    <View style={[styles.root, { backgroundColor: palette.background }]}>
-      <View style={[styles.card, { backgroundColor: palette.surfaceContainerHigh }]}>
-        <Text variant="headlineSmall" align="center">Something went wrong</Text>
-        <Text variant="bodyMedium" color="secondary" align="center" style={styles.message}>
-          {emergency
-            ? "The last update failed to launch, so this is the version built into the app."
-            : pendingIsDifferent
-              ? "Retry keeps the version you're on. Applying the downloaded update is a separate step."
-              : "An unexpected error occurred. Retrying usually fixes it."}
-        </Text>
-        <Text variant="bodySmall" color="danger" style={styles.details} selectable>
-          {error.message || error.name}
-        </Text>
+    <ScrollView style={{ flex: 1, backgroundColor: palette.background }} contentContainerStyle={styles.root}>
+      <View style={styles.card}>
+        <Text accessibilityRole="header" style={[styles.title, { color: palette.onSurface }]}>Something went wrong</Text>
+        <Text style={[styles.message, { color: palette.onSurfaceVariant }]}>Ordo couldn't display this screen. You can retry or copy a local report to help investigate.</Text>
+        <Text selectable style={[styles.message, { color: palette.onSurface }]}>{report?.message ?? "Error details omitted for privacy."}</Text>
         <View style={styles.actions}>
-          <Button label="Retry" style={styles.button} onPress={onReset} />
-          {pendingIsDifferent ? (
-            <Button label="Apply update" variant="secondary" style={styles.button} onPress={() => void reloadRuntime().catch(onReset)} />
-          ) : (
-            <Button label="Reload" variant="secondary" style={styles.button} onPress={reloadCurrent} />
-          )}
+          {action("Retry", onReset, true)}
+          {action(preparing ? "Preparing report…" : "Review report", () => void review())}
+          {prepared && details ? action("Copy report", () => void copy()) : null}
+          {prepared ? action(details ? "Hide details" : "Show details", () => setDetails(!details)) : null}
+          {Platform.OS === "web" || Updates.isEnabled ? action("Reload app", reload) : null}
         </View>
-        {runningOta ? (
-          <Button label="Restore bundled app" variant="ghost" style={styles.link} onPress={() => void Linking.openURL(RELEASES_URL).catch(() => {})} />
-        ) : null}
+        {Platform.OS !== "web" && Updates.isEnabled ? <Text style={[styles.message, { color: palette.onSurfaceVariant }]}>Retry keeps this version. Reload applies any downloaded update.</Text> : null}
+        <Text style={[styles.message, { color: palette.onSurfaceVariant }]}>Diagnostic reports stay on this device until you export them. Private content and unrestricted error messages are excluded. After restarting, open Settings → About → Build details → Diagnostics.</Text>
+        {notice ? <Text accessibilityLiveRegion="polite" style={[styles.message, { color: palette.onSurface }]}>{notice}</Text> : null}
+        {details ? reportText.match(/[\s\S]{1,3000}/g)?.map((chunk, index) => <Text key={index} selectable style={[styles.details, { color: palette.onSurface }]}>{chunk}</Text>) : null}
+        {Updates.isEnabled && !Updates.isEmbeddedLaunch
+          ? action("Open APK releases", () => void Linking.openURL(RELEASES_URL).catch(() => setNotice("Couldn't open releases."))) : null}
       </View>
-    </View>
-    </ThemeOverrideProvider>
+    </ScrollView>
   );
 }
 
 export class ErrorBoundary extends Component<Props, State> {
-  state: State = { error: null };
-
-  static getDerivedStateFromError(error: Error): State {
-    return { error };
+  state: State = { error: null, report: null };
+  static getDerivedStateFromError(error: unknown): Pick<State, "error"> {
+    return { error: error instanceof Error ? error : new Error(typeof error === "string" ? error : "An unknown render error occurred") };
   }
-
-  componentDidCatch(error: Error, info: { componentStack?: string }) {
-    console.error("Unhandled render error:", error, info.componentStack);
-    SplashScreen.hideAsync().catch(() => {});
+  componentDidCatch(error: unknown, info: { componentStack?: string | null }) {
+    const report = captureLocalError(error, "render", false, info.componentStack ?? "");
+    this.setState({ report });
+    void SplashScreen.hideAsync().catch(() => {});
   }
-
-  reset = () => this.setState({ error: null });
-
+  reset = () => {
+    recordDiagnosticEvent("error.retry");
+    this.setState({ error: null, report: null });
+  };
   render() {
-    if (this.state.error) {
-      return <Fallback error={this.state.error} onReset={this.reset} />;
-    }
-    return this.props.children;
+    return this.state.error ? <Fallback report={this.state.report} onReset={this.reset} /> : this.props.children;
   }
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
-  card: { width: "100%", maxWidth: 420, alignItems: "stretch", padding: 24, borderRadius: radius["2xl"] },
-  message: { marginTop: 16 },
-  details: {
-    marginTop: 12,
-    fontFamily: resolveFont("mono", "400"),
-    textAlign: "center",
-  },
-  actions: { flexDirection: "row", gap: 8, marginTop: 24 },
-  button: { flex: 1 },
-  link: { marginTop: 16 },
+  root: { flexGrow: 1, alignItems: "center", justifyContent: "center", paddingHorizontal: 24, paddingVertical: 64 },
+  card: { width: "100%", maxWidth: 560, gap: 16 },
+  title: { fontSize: 24, lineHeight: 32, fontFamily: resolveFont("sans", "400") },
+  message: { fontSize: 14, lineHeight: 20, fontFamily: resolveFont("sans", "400") },
+  actions: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  button: { minHeight: 48, paddingHorizontal: 24, paddingVertical: 14, justifyContent: "center", borderRadius: radius.full },
+  label: { fontSize: 14, lineHeight: 20, fontFamily: resolveFont("sans", "500") },
+  details: { fontSize: 12, lineHeight: 18, fontFamily: resolveFont("mono", "400") },
 });

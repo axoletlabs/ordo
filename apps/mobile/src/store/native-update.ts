@@ -1,3 +1,4 @@
+import { recordDiagnosticOperation, withDiagnosticOperation } from "../lib/local-diagnostics";
 import { Platform } from "react-native";
 import Constants from "expo-constants";
 import * as Device from "expo-device";
@@ -317,7 +318,7 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
       );
     };
     set({ status: "checking", error: null });
-    const request = (async () => {
+    const request = withDiagnosticOperation("update-check", async () => {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
@@ -392,7 +393,7 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
       });
       throw error;
     }
-    })().finally(() => {
+    }).finally(() => {
       if (checkInFlight === request) checkInFlight = null;
     });
     checkInFlight = request;
@@ -462,7 +463,7 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
         },
       );
       activeDownload = download;
-      const result = await download.downloadAsync();
+      const result = await withDiagnosticOperation("update-download", () => download.downloadAsync());
       if (activeDownload === download) activeDownload = null;
       if (!stillCurrent()) return;
       if (!result?.uri) throw new Error("The update download did not finish");
@@ -542,6 +543,7 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
     try {
       const contentUri = await FileSystem.getContentUriAsync(uri);
       if (epoch !== downloadEpoch) return;
+      recordDiagnosticOperation("update-apply", "started", 0);
       const result = await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
         data: contentUri,
         type: APK_MIME_TYPE,
@@ -555,6 +557,7 @@ export const useNativeUpdateStore = create<NativeUpdateState>((set, get) => ({
         return;
       }
       const canceled = result.resultCode === IntentLauncher.ResultCode.Canceled;
+      if (canceled) recordDiagnosticOperation("update-apply", "cancelled", 0);
       set({
         status: "downloaded",
         downloadedUri: uri,

@@ -82,4 +82,5 @@ allowBuilds:
 
 patchedDependencies:
   '@expo/plist@0.8.1': patches/@expo__plist@0.8.1.patch
+  react-native-reanimated@4.5.1: patches/react-native-reanimated@4.5.1.patch
   react-native-webview@13.16.1: patches/react-native-webview@13.16.1.patch

@@ -6,6 +6,7 @@
  * All functions are fail-safe: they resolve to null/void instead of throwing,
  * so a storage hiccup never crashes the app.
  */
+import { recordDiagnosticOperation } from "./local-diagnostics";
 import * as SecureStore from "expo-secure-store";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
@@ -25,11 +26,12 @@ function webSecureGet(key: string): string | null {
   }
 }
 
-function webSecureSet(key: string, value: string): void {
+function webSecureSet(key: string, value: string): boolean {
   try {
     window.localStorage.setItem(`secure.${key}`, value);
+    return true;
   } catch {
-    /* ignore — private-mode quirk */
+    return false;
   }
 }
 
@@ -55,16 +57,18 @@ export async function secureGet<T = any>(key: string): Promise<T | null> {
 
 /** Write a JSON-serializable value to the secure store. */
 export async function secureSet(key: string, value: unknown): Promise<void> {
+  const started = performance.now();
   try {
     if (isWeb) {
-      webSecureSet(key, JSON.stringify(value));
-      return;
+      if (!webSecureSet(key, JSON.stringify(value))) throw new Error("Storage unavailable");
+    } else {
+      await SecureStore.setItemAsync(key, JSON.stringify(value), {
+        keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+      });
     }
-    await SecureStore.setItemAsync(key, JSON.stringify(value), {
-      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-    });
+    recordDiagnosticOperation("storage", "ok", performance.now() - started);
   } catch {
-    /* ignore — best effort */
+    recordDiagnosticOperation("storage", "failed", performance.now() - started);
   }
 }
 
@@ -93,10 +97,12 @@ export async function prefsGet<T = any>(key: string): Promise<T | null> {
 
 /** Write a JSON value to preferences. */
 export async function prefsSet(key: string, value: unknown): Promise<void> {
+  const started = performance.now();
   try {
     await AsyncStorage.setItem(key, JSON.stringify(value));
+    recordDiagnosticOperation("storage", "ok", performance.now() - started);
   } catch {
-    /* ignore */
+    recordDiagnosticOperation("storage", "failed", performance.now() - started);
   }
 }
 
