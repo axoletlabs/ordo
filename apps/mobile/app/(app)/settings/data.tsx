@@ -7,6 +7,7 @@ import type { ExportFormat, FolderDto } from "@ordo/shared";
 import { TOKEN_TTL } from "@ordo/shared";
 import { SettingsPage, SettingsScrollView, SettingsGroup } from "../../../src/components/settings/SettingsPage";
 import { ImportFlow } from "../../../src/components/settings/ImportFlow";
+import { AnimatedDisclosure } from "../../../src/components/ui/AnimatedDisclosure";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
 import { Segmented } from "../../../src/components/ui/Segmented";
 import { Button } from "../../../src/components/ui/Button";
@@ -134,48 +135,54 @@ export default function DataScreen() {
             onPress={() => setMore((open) => !open)}
             value={isLibrary ? "Entire library" : `${selectedFolderIds.length} ${selectedFolderIds.length === 1 ? "folder" : "folders"}`}
             showChevron
+            chevronUp={more}
+            position={more ? "first" : "only"}
           />
-          {more ? (
-            <>
-              <SettingRow
-                icon="library-outline"
-                label="Entire library"
-                selectionRole="radio"
-                checked={isLibrary}
-                right={radio(isLibrary)}
-                rightFit="content"
-                onPress={() => setSelectedFolderIds([])}
-              />
-              {folders.map((folder) => {
-                const unlocked = !folder.protected || Boolean(tokenFor(folder.id));
-                if (!unlocked) {
-                  return (
-                    <SettingRow
-                      key={folder.id}
-                      icon="lock-closed-outline"
-                      label={folder.name}
-                      value="Unlock"
-                      onPress={() => setUnlockTarget({ folder, source: "export" })}
-                    />
-                  );
-                }
+          {/* SettingsGroup shapes only direct SettingRow children, so the
+            disclosure's rows carry their group positions explicitly. */}
+          <AnimatedDisclosure expanded={more}>
+            <SettingRow
+              icon="library-outline"
+              label="Entire library"
+              selectionRole="radio"
+              checked={isLibrary}
+              right={radio(isLibrary)}
+              rightFit="content"
+              onPress={() => setSelectedFolderIds([])}
+              position={folders.length > 0 ? "middle" : "last"}
+            />
+            {folders.map((folder, index) => {
+              const unlocked = !folder.protected || Boolean(tokenFor(folder.id));
+              const rowPosition = index === folders.length - 1 ? "last" : "middle";
+              if (!unlocked) {
                 return (
                   <SettingRow
                     key={folder.id}
-                    icon={folder.protected ? "lock-open-outline" : "folder-outline"}
-                    iconColor={folder.protected ? palette.success : undefined}
+                    icon="lock-closed-outline"
                     label={folder.name}
-                    selectionRole="checkbox"
-                    checked={selectedFolderIds.includes(folder.id)}
-                    description={`${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}`}
-                    right={check(selectedFolderIds.includes(folder.id))}
-                    rightFit="content"
-                    onPress={() => toggleFolder(folder.id)}
+                    value="Unlock"
+                    position={rowPosition}
+                    onPress={() => setUnlockTarget({ folder, source: "export" })}
                   />
                 );
-              })}
-            </>
-          ) : null}
+              }
+              return (
+                <SettingRow
+                  key={folder.id}
+                  icon={folder.protected ? "lock-open-outline" : "folder-outline"}
+                  iconColor={folder.protected ? palette.success : undefined}
+                  label={folder.name}
+                  selectionRole="checkbox"
+                  checked={selectedFolderIds.includes(folder.id)}
+                  description={`${folder.bookmarkCount} ${folder.bookmarkCount === 1 ? "bookmark" : "bookmarks"}`}
+                  right={check(selectedFolderIds.includes(folder.id))}
+                  rightFit="content"
+                  position={rowPosition}
+                  onPress={() => toggleFolder(folder.id)}
+                />
+              );
+            })}
+          </AnimatedDisclosure>
           <View style={styles.pad}>
             <Button label={exportLabel} block variant="tonal" size="md"
               loading={exportMutation.isPending} onPress={() => exportMutation.mutate()} />

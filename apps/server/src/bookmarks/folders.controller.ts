@@ -14,12 +14,15 @@ import type { Request } from "express";
 import {
   BatchFoldersSchema,
   CreateFolderSchema,
+  DeleteFolderWithKeepsSchema,
   RemoveFolderPasswordSchema,
   SetFolderPasswordSchema,
   UnlockFolderSchema,
   UpdateFolderSchema,
   type BatchFoldersInput,
   type CreateFolderInput,
+  type DeleteFolderWithKeepsInput,
+  type FolderDeleteResult,
   type FolderDto,
   type RemoveFolderPasswordInput,
   type SetFolderPasswordInput,
@@ -30,6 +33,24 @@ import { CurrentUser, type AuthContext } from "../common/decorators/current-user
 import { RateLimit } from "../common/rate-limit/rate-limit.decorator.js";
 import { FoldersService } from "./folders.service.js";
 import { getPresentedFolderTokens } from "../common/utils/folder-tokens.js";
+import { AppError } from "../common/errors/app-error.js";
+import { ErrorCode } from "@ordo/shared";
+
+/**
+ * The plain DELETE cascades every bookmark in the folder and its contract
+ * declares an empty body. Refuse anything else — including keepIds aliases —
+ * instead of ignoring it and destroying bookmarks the caller meant to save.
+ */
+function assertEmptyDeleteBody(body: unknown): void {
+  const empty = body === undefined || body === null ||
+    (typeof body === "object" && Object.keys(body).length === 0);
+  if (!empty) {
+    throw new AppError(
+      ErrorCode.VALIDATION_ERROR,
+      "This endpoint deletes every bookmark in the folder. To keep bookmarks, use POST /api/folders/:id/delete.",
+    );
+  }
+}
 
 @UseGuards(AuthGuard)
 @Controller("api/folders")
@@ -76,8 +97,23 @@ export class FoldersController {
     @Param("id") id: string,
     @Req() req: Request,
   ): Promise<{ success: true }> {
+    // This endpoint cascades every bookmark. A keepIds body must fail loudly
+    // instead of being ignored and deleting the bookmarks it meant to save.
+    assertEmptyDeleteBody(req.body);
     await this.folders.remove(id, user.userId, getPresentedFolderTokens(req));
     return { success: true };
+  }
+
+  /** Delete a folder, atomically moving the selected keeps to unfiled first. */
+  @Post(":id/delete")
+  @HttpCode(200)
+  async deleteWithKeeps(
+    @CurrentUser() user: AuthContext,
+    @Param("id") id: string,
+    @Body({ schema: DeleteFolderWithKeepsSchema }) body: DeleteFolderWithKeepsInput,
+    @Req() req: Request,
+  ): Promise<FolderDeleteResult> {
+    return this.folders.removeWithKeeps(id, user.userId, body.keepIds, getPresentedFolderTokens(req));
   }
 
   @Post(":id/password")

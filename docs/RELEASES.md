@@ -54,9 +54,9 @@ update request headers entirely for Development.
 
 ## CI gates and native compatibility
 
-Pushes, pull requests, dispatches and published releases run typecheck, lint,
-workspace tests, updater tests, script/installer tests and the production
-dependency audit. APKs, server archives and OTA all depend on those gates.
+Pushes, pull requests, dispatches and published releases run typecheck, lint
+and the production dependency audit. APKs, server archives and OTA all depend
+on those gates.
 Forks and pull requests do not distribute artifacts or receive publish secrets.
 Branch deletion events do not run builds.
 
@@ -111,12 +111,16 @@ does not replace Development because each has a different package ID.
 
 ## Ship a version
 
-Release notes are for people using the app. Keep each release to a few short
-bullets describing visible changes, useful improvements, and fixes. Omit build
+Release notes are for people using the app. Start each release body with a short
+headline (`###`), then a plain-language introduction explaining what changed.
+Follow with a few named highlights: a bold title and one short explanation per
+list item. Use small sections for remaining fixes or necessary installation
+guidance. Don't repeat highlights in a second list. Describe visible changes
+and useful improvements in terms of what the person can do or notice. Omit build
 numbers, branch merges, audits, test infrastructure, dependency details, and
 unchanged compatibility information. Include installation guidance only when
-the user must take action or could lose local data. Keep `CHANGELOG.md` and the
-published GitHub release body in sync; the app reads the published body.
+the user must take action or could lose local data. The app reads the
+published GitHub release body, not a file in this repository.
 
 1. Cut `release/x.y.z` from the intended source and set `version` in
    `apps/mobile/app.config.js` to that exact version (or its prerelease).

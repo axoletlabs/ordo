@@ -9,6 +9,7 @@ import { useSessionMutation as useMutation } from "../../hooks/use-session-mutat
 import type { DuplicatePolicy, FolderDto, ImportJobDto, ImportPreviewDto } from "@ordo/shared";
 import { IMPORT_EXPORT, normalizeImportPreview } from "@ordo/shared";
 import { FloatingPanel } from "../ui/FloatingPanel";
+import { AnimatedDisclosure } from "../ui/AnimatedDisclosure";
 import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Spinner } from "../ui/Spinner";
@@ -188,6 +189,20 @@ export function ImportFlow({
 
   const overlayOpen = phase === "uploading" || phase === "active";
   const busy = job?.status === "committing" || commitMutation.isPending;
+  // Mirrors the render chain below so each panel phase swaps with the shared
+  // fade-through instead of snapping the surface's height. All fetching
+  // placeholders share one key so transient busy states never swap with
+  // each other; only settled content changes animate.
+  const panelPage =
+    jobQuery.isError
+      ? "error"
+      : job?.status === "failed"
+        ? "failed"
+        : job?.status === "completed" && job.result
+          ? "completed"
+          : preview
+            ? "preview"
+            : "busy";
 
   return (
     <>
@@ -207,6 +222,7 @@ export function ImportFlow({
         onDismiss={() => reset(true)}
         dismissible={!busy}
         maxWidth={440}
+        pageKey={panelPage}
       >
         <ThemedScrollView
           bounces={false}
@@ -464,7 +480,7 @@ function PreviewState({
             onPress={onAdvanced}
             value={advanced ? "Hide" : "Show"}
           />
-          {advanced ? (
+          <AnimatedDisclosure expanded={advanced}>
             <View style={styles.advancedBody}>
               <Text variant="label" color="secondary">
                 Duplicates
@@ -478,7 +494,7 @@ function PreviewState({
                 rightFit="content"
               />
             </View>
-          ) : null}
+          </AnimatedDisclosure>
         </View>
       ) : null}
     </View>

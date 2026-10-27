@@ -37,8 +37,8 @@ const BLOCKED_SCHEMES = new Set([
 export type WebViewRequestAction = "allow" | "block" | "external";
 
 /**
- * Same-tab navigation shim. `target=_blank` / `window.open` otherwise do
- * nothing when the WebView does not create a second window.
+ * Trusted target=_blank links open in the same tab. Keep window.open native
+ * so scripts cannot turn unsolicited popups into same-tab redirects.
  */
 export const BROWSER_NAV_SCRIPT = `(function(){
   if (window.__ordoBrowser) return;
@@ -46,11 +46,8 @@ export const BROWSER_NAV_SCRIPT = `(function(){
   function go(url) {
     try { if (url) window.location.href = url; } catch (e) {}
   }
-  window.open = function(url) {
-    if (url) go(url);
-    return window;
-  };
   document.addEventListener('click', function(e) {
+    if (!e.isTrusted || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     var n = e.target;
     while (n && n.tagName !== 'A') n = n.parentElement;
     if (!n) return;

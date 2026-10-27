@@ -1,5 +1,5 @@
 /** A persistent search app bar and compact, contextual library actions. */
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Keyboard, Platform, StyleSheet, TextInput, View } from "react-native";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring, type SharedValue } from "react-native-reanimated";
 import { useFocusEffect } from "expo-router";
@@ -13,6 +13,7 @@ import { useTheme } from "../../theme/ThemeProvider";
 import { layout, radius, spacing } from "../../theme/tokens";
 import { registerSearchFieldFocus } from "../../lib/search-field-focus";
 import { useOverlayBlockingEffect } from "../ui/overlay-host";
+import { AnimatedDisclosure } from "../ui/AnimatedDisclosure";
 import { nativeFocusPermitted } from "../ui/input-focus-scope";
 import { MaterialIcon } from "../ui/MaterialIcon";
 import { Input } from "../ui/Input";
@@ -33,6 +34,19 @@ function SearchBarActions({ active, style, children }: { active: boolean; style:
     if (Platform.OS === "web" && ref.current) (ref.current as unknown as HTMLElement).inert = !active;
   }, [active]);
   return <Animated.View ref={ref} pointerEvents={active ? "box-none" : "none"} aria-hidden={!active}
+    accessibilityElementsHidden={!active} importantForAccessibility={active ? "auto" : "no-hide-descendants"}
+    style={style}>{children}</Animated.View>;
+}
+
+/** One bar of the selection crossfade. Both bars stay mounted in the shared
+ * 56dp footprint; the inactive one is inert, untouchable and unreadable while
+ * its opacity/translate fade settles. */
+function HeaderBarSurface({ active, style, children }: { active: boolean; style: React.ComponentProps<typeof Animated.View>["style"]; children: React.ReactNode }) {
+  const ref = useRef<View>(null);
+  useLayoutEffect(() => {
+    if (Platform.OS === "web" && ref.current) (ref.current as unknown as HTMLElement).inert = !active;
+  }, [active]);
+  return <Animated.View ref={ref} pointerEvents={active ? "auto" : "none"} aria-hidden={!active}
     accessibilityElementsHidden={!active} importantForAccessibility={active ? "auto" : "no-hide-descendants"}
     style={style}>{children}</Animated.View>;
 }
@@ -198,26 +212,61 @@ export function LibraryHeader({ tools, query, onQueryChange, onFilter, filtersOn
     transform: [{ translateX: 8 * spatialProgress.value }] }));
   const hasSelection = selection != null;
   useEffect(() => { if (selection) Keyboard.dismiss(); }, [hasSelection]);
-  const user = useAuthStore((s) => s.user);
+  const userId = useAuthStore(s => s.user?.id);
+  const displayName = useAuthStore(s => s.user?.displayName);
+  const hasAvatar = useAuthStore(s => s.user?.hasAvatar);
+  const avatarUpdatedAt = useAuthStore(s => s.user?.avatarUpdatedAt);
+  const user = useMemo(() => userId ? { id: userId, displayName: displayName ?? "", hasAvatar: hasAvatar ?? false,
+    avatarUpdatedAt: avatarUpdatedAt ?? null } : null, [userId, displayName, hasAvatar, avatarUpdatedAt]);
+  // Selection crossfade in the shared 56dp footprint. The search bar never
+  // unmounts — its query, editing session and one-shot route autofocus intent
+  // stay alive — and the selection bar is retained after its first use so
+  // exiting selection fades it out in place instead of cutting away.
+  const selectionSpatial = useSharedValue(0);
+  const selectionEffects = useSharedValue(0);
+  const [selectionMounted, setSelectionMounted] = useState(hasSelection);
+  if (hasSelection && !selectionMounted) setSelectionMounted(true);
+  const lastSelection = useRef(selection);
+  if (selection) lastSelection.current = selection;
+  useEffect(() => {
+    const target = hasSelection ? 1 : 0;
+    selectionSpatial.value = motion.reducedMotion ? target : withSpring(target, { ...motion.spatial, overshootClamping: true });
+    selectionEffects.value = motion.reducedMotion ? target : withSpring(target, materialMotion.effects.spatial);
+  }, [hasSelection, selectionSpatial, selectionEffects, motion.reducedMotion, motion.expressive]);
+  const searchSurfaceStyle = useAnimatedStyle(() => ({
+    opacity: 1 - selectionEffects.value,
+    transform: [{ translateX: -8 * selectionSpatial.value }],
+  }));
+  const selectionSurfaceStyle = useAnimatedStyle(() => ({
+    opacity: selectionEffects.value,
+    transform: [{ translateX: 8 * (1 - selectionSpatial.value) }],
+  }));
   return <View testID="material-app-bar" style={{ width: "100%", maxWidth, alignSelf: "center",
     paddingTop: barLayout.paddingTop, paddingBottom: barLayout.paddingBottom,
     paddingLeft: column.left, paddingRight: column.right }}>
-    <View style={[styles.appBar, { backgroundColor: palette.surfaceContainerHigh }, selection ? { display: "none" } : null]}>
-      <View style={styles.search}><LibrarySearch query={query} onChange={onQueryChange} autoFocus={autoFocusSearch} onFilter={onFilter} filtersOn={filtersOn} onFocusChange={setFocused} onInputFocusChange={setInputFocused} filterOpen={filterOpen} selecting={!!selection} spatialProgress={spatialProgress} effectsProgress={effectsProgress} /></View>
-      <SearchBarActions active={!focused} style={[styles.searchAccessories, toolsStyle]}>{tools}
-      <PressableScale accessibilityRole="button" accessibilityLabel="Account and settings"
-        onPress={() => router.navigate("/settings")} stateLayerColor={palette.onSurface}
-        stateLayerInset={4}
-        style={styles.account}>
-        {user ? <UserAvatar user={user} size={40} /> : <MaterialIcon name="person-circle" size={24} color={palette.onSecondaryContainer} />}
+    <View>
+      <HeaderBarSurface active={!hasSelection} style={[styles.appBar, { backgroundColor: palette.surfaceContainerHigh }, searchSurfaceStyle]}>
+        <View style={styles.search}><LibrarySearch query={query} onChange={onQueryChange} autoFocus={autoFocusSearch} onFilter={onFilter} filtersOn={filtersOn} onFocusChange={setFocused} onInputFocusChange={setInputFocused} filterOpen={filterOpen} selecting={hasSelection} spatialProgress={spatialProgress} effectsProgress={effectsProgress} /></View>
+        <SearchBarActions active={!focused} style={[styles.searchAccessories, toolsStyle]}>{tools}
+        <PressableScale accessibilityRole="button" accessibilityLabel="Account and settings"
+          onPress={() => router.navigate("/settings")} stateLayerColor={palette.onSurface}
+          stateLayerInset={4}
+          style={styles.account}>
+          {user ? <UserAvatar user={user} size={40} /> : <MaterialIcon name="person-circle" size={24} color={palette.onSecondaryContainer} />}
        </PressableScale>
        </SearchBarActions>
        <Animated.View testID="library-search-focus-ring" pointerEvents="none" style={[StyleSheet.absoluteFill, styles.focusRing, { borderColor: palette.primary }, ringStyle]} />
+      </HeaderBarSurface>
+      {selectionMounted && lastSelection.current ? (
+        <HeaderBarSurface active={hasSelection} style={[StyleSheet.absoluteFill, selectionSurfaceStyle]}>
+          <SelectionHeader {...(selection ?? lastSelection.current)} embedded />
+        </HeaderBarSurface>
+      ) : null}
     </View>
-    {selection ? <SelectionHeader {...selection} embedded /> : null}
-    {!selection && resultLabel ?
-      <Text variant="bodySmall" color="secondary" accessibilityLiveRegion="polite" style={{ marginTop: spacing[8], marginLeft: spacing[16] }}>{resultLabel}</Text> : null}
-    {!selection ? filters : null}
+    <AnimatedDisclosure expanded={!selection && resultLabel != null}>
+      {resultLabel ? <Text variant="bodySmall" color="secondary" accessibilityLiveRegion="polite" style={{ marginTop: spacing[8], marginLeft: spacing[16] }}>{resultLabel}</Text> : null}
+    </AnimatedDisclosure>
+    <AnimatedDisclosure expanded={!selection && filters != null}>{filters ?? null}</AnimatedDisclosure>
   </View>;
 }
 const styles = StyleSheet.create({

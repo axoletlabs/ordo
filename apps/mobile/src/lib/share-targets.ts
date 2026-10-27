@@ -8,6 +8,7 @@
  * React. Older builds wrote that JSON to filesDir/cacheDir; those leftovers
  * are deleted after the encrypted write. Deleted on logout.
  */
+import { recordDiagnosticOperation } from "./local-diagnostics";
 import { NativeModules, Platform } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 import {
@@ -132,6 +133,7 @@ export async function consumeQuickShareFlag(): Promise<boolean> {
     const info = await FileSystem.getInfoAsync(path);
     if (!info.exists) return false;
     await FileSystem.deleteAsync(path, { idempotent: true });
+    recordDiagnosticOperation("share", "ok", 0);
     return true;
   } catch {
     return false;

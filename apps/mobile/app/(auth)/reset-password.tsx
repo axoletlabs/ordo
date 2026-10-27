@@ -11,6 +11,7 @@ import { AuthLink } from "../../src/components/auth/AuthLink";
 import { EMAIL_OTP } from "@ordo/shared";
 import { ResetPasswordSchema } from "@ordo/shared/schemas";
 import { AuthShell } from "../../src/components/auth/AuthShell";
+import { AnimatedSwap } from "../../src/components/ui/AnimatedSwap";
 import { OtpDeliveryHint } from "../../src/components/auth/OtpDeliveryHint";
 import { Input } from "../../src/components/ui/Input";
 import { Button } from "../../src/components/ui/Button";
@@ -133,106 +134,108 @@ export default function ResetPasswordScreen() {
         </View>
       }
     >
-      {stage === "code" ? (
-        <>
-          <OtpDeliveryHint smtpConfigured={smtpConfigured} />
-          <OtpInput
-            label="Reset code"
-            value={token}
-            onChange={(value) => {
-              setToken(value);
-              setOtpError("");
-              setOtpStatus((s) => (s === "error" ? "idle" : s));
-            }}
-            status={otpStatus}
-            error={otpError || undefined}
-            onComplete={goToPassword}
-          />
-          <View style={{ height: spacing[24] }} />
-          <Button
-            label="Continue"
-            block
-            size="md"
-            onPress={() => goToPassword(token)}
-            disabled={!codeReady}
-          />
-          <View style={{ height: spacing[12] }} />
-          <Button
-            label={resend.isPending ? "Sending…" : "Resend code"}
-            variant="ghost"
-            block
-            onPress={onResend}
-            loading={resend.isPending}
-            disabled={!email}
-          />
-        </>
-      ) : (
-        <>
-          <Input
-            nativeID="reset-username"
-            label="Email"
-            value={email}
-            readOnly
-            onChangeText={() => {}}
-            showSoftInputOnFocus={false}
-            caretHidden
-            keyboardType="email-address"
-            {...usernameAutofillProps(credentialsLocked)}
-          />
-          <View style={{ height: spacing[16] }} />
-          <Input
-            key={credentialsLocked ? "password-locked" : "password"}
-            nativeID="reset-password"
-            label="New password"
-            required maxLength={256}
-            value={passwordField.value}
-            onChangeText={setNewPassword}
-            placeholder="At least 8 characters"
-            secureTextEntry={passwordField.secureTextEntry}
-            {...passwordAutofillProps("new-password", credentialsLocked)}
-            passwordRules="minlength: 8;"
-            rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
-            error={fieldError?.field === "newPassword" ? fieldError.message : undefined}
-            returnKeyType="next"
-            submitBehavior="submit"
-            onSubmitEditing={() => confirmRef.current?.focus()}
-          />
-          <View style={{ height: spacing[16] }} />
-          <Input
-            key={credentialsLocked ? "confirm-locked" : "confirm"}
-            nativeID="reset-password-confirm"
-            ref={confirmRef}
-            label="Confirm new password"
-            required maxLength={256}
-            value={confirmField.value}
-            onChangeText={setConfirm}
-            placeholder="Re-enter your new password"
-            secureTextEntry={confirmField.secureTextEntry}
-            {...passwordAutofillProps("new-password", credentialsLocked)}
-            passwordRules="minlength: 8;"
-            error={fieldError?.field === "confirm" ? fieldError.message : undefined}
-            returnKeyType="done"
-            onSubmitEditing={() => void submit()}
-          />
-          <View style={{ height: spacing[24] }} />
-          <FormError message={formError || undefined} />
-          <Button
-            label="Reset password"
-            block
-            size="md"
-            onPress={() => void submit()}
-            loading={busy}
-          />
-          <View style={{ height: spacing[12] }} />
-          <Button
-            label="Use a different code"
-            variant="ghost"
-            block
-            onPress={goToCode}
-            disabled={busy}
-          />
-        </>
-      )}
+      <AnimatedSwap transitionKey={stage}>
+        {stage === "code" ? (
+          <>
+            <OtpDeliveryHint smtpConfigured={smtpConfigured} />
+            <OtpInput
+              label="Reset code"
+              value={token}
+              onChange={(value) => {
+                setToken(value);
+                setOtpError("");
+                setOtpStatus((s) => (s === "error" ? "idle" : s));
+              }}
+              status={otpStatus}
+              error={otpError || undefined}
+              onComplete={goToPassword}
+            />
+            <View style={{ height: spacing[24] }} />
+            <Button
+              label="Continue"
+              block
+              size="md"
+              onPress={() => goToPassword(token)}
+              disabled={!codeReady}
+            />
+            <View style={{ height: spacing[12] }} />
+            <Button
+              label={resend.isPending ? "Sending…" : "Resend code"}
+              variant="ghost"
+              block
+              onPress={onResend}
+              loading={resend.isPending}
+              disabled={!email}
+            />
+          </>
+        ) : (
+          <>
+            <Input
+              nativeID="reset-username"
+              label="Email"
+              value={email}
+              readOnly
+              onChangeText={() => {}}
+              showSoftInputOnFocus={false}
+              caretHidden
+              keyboardType="email-address"
+              {...usernameAutofillProps(credentialsLocked)}
+            />
+            <View style={{ height: spacing[16] }} />
+            <Input
+              key={credentialsLocked ? "password-locked" : "password"}
+              nativeID="reset-password"
+              label="New password"
+              required maxLength={256}
+              value={passwordField.value}
+              onChangeText={setNewPassword}
+              placeholder="At least 8 characters"
+              secureTextEntry={passwordField.secureTextEntry}
+              {...passwordAutofillProps("new-password", credentialsLocked)}
+              passwordRules="minlength: 8;"
+              rightAccessory={<EyeToggle visible={showPwd} onPress={() => setShowPwd((v) => !v)} />}
+              error={fieldError?.field === "newPassword" ? fieldError.message : undefined}
+              returnKeyType="next"
+              submitBehavior="submit"
+              onSubmitEditing={() => confirmRef.current?.focus()}
+            />
+            <View style={{ height: spacing[16] }} />
+            <Input
+              key={credentialsLocked ? "confirm-locked" : "confirm"}
+              nativeID="reset-password-confirm"
+              ref={confirmRef}
+              label="Confirm new password"
+              required maxLength={256}
+              value={confirmField.value}
+              onChangeText={setConfirm}
+              placeholder="Re-enter your new password"
+              secureTextEntry={confirmField.secureTextEntry}
+              {...passwordAutofillProps("new-password", credentialsLocked)}
+              passwordRules="minlength: 8;"
+              error={fieldError?.field === "confirm" ? fieldError.message : undefined}
+              returnKeyType="done"
+              onSubmitEditing={() => void submit()}
+            />
+            <View style={{ height: spacing[24] }} />
+            <FormError message={formError || undefined} />
+            <Button
+              label="Reset password"
+              block
+              size="md"
+              onPress={() => void submit()}
+              loading={busy}
+            />
+            <View style={{ height: spacing[12] }} />
+            <Button
+              label="Use a different code"
+              variant="ghost"
+              block
+              onPress={goToCode}
+              disabled={busy}
+            />
+          </>
+        )}
+      </AnimatedSwap>
     </AuthShell>
   );
 }

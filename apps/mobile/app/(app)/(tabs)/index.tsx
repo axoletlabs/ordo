@@ -1,6 +1,6 @@
 /** Bookmarks home: folders and unfiled bookmarks in one library list. */
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { StyleSheet, View, type FlatList, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
+import { Platform, StyleSheet, View, type FlatList, type NativeScrollEvent, type NativeSyntheticEvent } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useAppRouter as useRouter } from "../../../src/hooks/use-app-router";
 import { ThemedFlashList } from "../../../src/components/ui/ThemedScrollView";
@@ -14,6 +14,7 @@ import { searchScopeActive } from "../../../src/lib/search-bookmarks";
 import { ListLoadingFooter } from "../../../src/components/ui/ListLoadingFooter";
 import { SelectionTools } from "../../../src/components/bookmarks/SelectionTools";
 import { FAB, FABDock } from "../../../src/components/ui/FAB";
+import { FABMenu } from "../../../src/components/ui/FABMenu";
 import { ContextMenu, ContextMenuItem } from "../../../src/components/ui/ContextMenu";
 import { Button } from "../../../src/components/ui/Button";
 import { ScreenContent } from "../../../src/components/ui/ScreenContent";
@@ -29,6 +30,7 @@ import { LockPrompt } from "../../../src/components/bookmarks/LockPrompt";
 import { MoveSheet } from "../../../src/components/bookmarks/MoveSheet";
 import { BookmarkRow } from "../../../src/components/bookmarks/BookmarkRow";
 import { ExtractionProgressLine } from "../../../src/components/bookmarks/ExtractionProgressLine";
+import { ListClearanceSpacer } from "../../../src/components/bookmarks/ListClearanceSpacer";
 import { EditTagsSheet } from "../../../src/components/tags/EditTagsSheet";
 import { useFolders } from "../../../src/hooks/use-folders";
 import { useFolderTokenStore } from "../../../src/store/folder-tokens";
@@ -85,6 +87,7 @@ type LibraryListProps = {
     | ((data: unknown, index: number) => { length: number; offset: number; index: number })
     | undefined;
   contentContainerStyle: { paddingBottom: number };
+  bottomClearance: number;
   refreshing: boolean;
   onRefresh: () => void;
   onEndReached: (() => void) | undefined;
@@ -109,6 +112,7 @@ const LibraryList = React.memo(function LibraryList({
   renderItem,
   getItemLayout,
   contentContainerStyle,
+  bottomClearance,
   refreshing,
   onRefresh,
   onEndReached,
@@ -129,7 +133,8 @@ const LibraryList = React.memo(function LibraryList({
       renderItem={renderItem}
       getItemLayout={getItemLayout}
       ListEmptyComponent={empty}
-      ListFooterComponent={footerVisible ? <ListLoadingFooter /> : null}
+      ListFooterComponent={<>{footerVisible ? <ListLoadingFooter /> : null}
+        <ListClearanceSpacer height={bottomClearance} /></>}
       contentContainerStyle={contentContainerStyle}
       refreshing={refreshing}
       onRefresh={onRefresh}
@@ -146,7 +151,7 @@ const LibraryCatalogueWarmer = React.memo(function LibraryCatalogueWarmer({ sear
 });
 
 export default function BookmarksScreen() {
-  const { palette } = useTheme();
+  const { palette, expressive } = useTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ bookmark?: string; focus?: string }>();
   useLegacyReaderLink(params.bookmark);
@@ -358,13 +363,9 @@ export default function BookmarksScreen() {
     [],
   );
   // No paddingTop — the header gap is `layout.headerContentGap`, and the
-  // first row's own padding sits inside that.
-  const listContentStyle = useMemo(
-    () => ({
-      paddingBottom: selection.active ? selectionClearance : listOverlayClearance,
-    }),
-    [selection.active, selectionClearance, listOverlayClearance],
-  );
+  // first row's own padding sits inside that. The selection/browsing
+  // clearance animates in the list footer instead of this static padding.
+  const listContentStyle = useMemo(() => ({ paddingBottom: spacing[16] }), []);
   const searchQueryRef = useRef(search.search);
   searchQueryRef.current = search.search;
   const retrySearch = useCallback(() => {
@@ -417,8 +418,10 @@ export default function BookmarksScreen() {
     return "create a folder";
   };
 
-  const createFab = !selection.active ? (
-    <FABDock maxWidth={contentWidth}>
+  // Always mounted: FABDock fades the whole dock out (and marks it inert)
+  // while hidden, so the FAB keeps its registration and does not remount.
+  const createFab = (
+    <FABDock maxWidth={contentWidth} visible={!selection.active}>
       <FAB
         onPress={(anchor) => runCreateAction(createButtonTapAction, anchor)}
         onLongPress={(anchor) => {
@@ -432,13 +435,14 @@ export default function BookmarksScreen() {
             : `Tap to ${createActionDescription(createButtonTapAction)}. Press and hold to ${createActionDescription(createButtonHoldAction)}.`
         }
         testID="add-bookmark-fab"
-        label={createActionLabel(createButtonTapAction)}
+        label={expressive && Platform.OS !== "web" && (createButtonTapAction === "menu" || createButtonHoldAction === "menu")
+          ? undefined : createActionLabel(createButtonTapAction)}
         expansion={collapsingFab.expansion}
         bottom={spacing[16]}
         maxContentWidth={contentWidth}
       />
     </FABDock>
-  ) : null;
+  );
 
   const headerRight = (
     <HeaderActions>
@@ -489,6 +493,7 @@ export default function BookmarksScreen() {
             empty={listEmptyState}
             footerVisible={search.active ? search.loadingMore : loadingMore}
             contentContainerStyle={listContentStyle}
+            bottomClearance={selection.active ? selectionClearance : listOverlayClearance}
             refreshing={refreshing}
             onRefresh={onRefresh}
             scrollEnabled={drag.scrollEnabled}
@@ -507,6 +512,7 @@ export default function BookmarksScreen() {
           <ContextMenuItem icon="pricetags-outline" label="Manage tags" onPress={() => { setToolsOpen(false); router.push("/tags"); }} />
         </> : <SortMenu embedded visible={toolsOpen} onDismiss={() => setToolsOpen(false)} anchor={toolsAnchor} variant="home"
           folderSort={folderSort} bookmarkSort={unfiledSort} onFolderSort={setFolderSort} onBookmarkSort={setUnfiledSort}
+          page={toolsPage === "sort:folders" ? "folders" : toolsPage === "sort:bookmarks" ? "bookmarks" : "root"}
           onBack={() => setToolsPage("actions")} onPageChange={(page) => setToolsPage(page === "root" ? "sort" : `sort:${page}`)} />}
       </ContextMenu>
       <SearchFilterMenu visible={filterOpen} onDismiss={() => setFilterOpen(false)} anchor={filterAnchor}
@@ -516,24 +522,11 @@ export default function BookmarksScreen() {
         lockType={filterUnlock?.lockType} pinLength={filterUnlock?.pinLength} onDismiss={() => setFilterUnlock(null)}
         onUnlocked={() => { if (filterUnlock) search.setFilters((previous) => ({ ...previous, folderIds: [...new Set([...previous.folderIds, filterUnlock.id])] })); setFilterUnlock(null); }} />
 
-      <ContextMenu visible={createMenuOpen} onDismiss={() => setCreateMenuOpen(false)} anchor={createAnchor}>
-        <ContextMenuItem
-          icon="bookmark-outline"
-          label="Save bookmark"
-          onPress={() => {
-            setCreateMenuOpen(false);
-            setAddOpen(true);
-          }}
-        />
-        <ContextMenuItem
-          icon="folder-outline"
-          label="New folder"
-          onPress={() => {
-            setCreateMenuOpen(false);
-            setCreateOpen(true);
-          }}
-        />
-      </ContextMenu>
+      <FABMenu visible={createMenuOpen} onDismiss={() => setCreateMenuOpen(false)} anchor={createAnchor}
+        actions={[
+          { icon: "bookmark-outline", label: "Save bookmark", onPress: () => setAddOpen(true) },
+          { icon: "folder-outline", label: "New folder", onPress: () => setCreateOpen(true) },
+        ]} />
 
       <AddBookmarkSheet
         visible={addOpen}

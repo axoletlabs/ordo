@@ -46,7 +46,7 @@ function ReminderCustomPanelContent({ visible, initialUnix, onDismiss, onExited,
   const parts = localTimeParts(at);
   const future = at > unixSeconds();
   const changeDate = (next: number) => setDraft((state) => ({ ...state, at: next }));
-  return <FloatingPanel visible={visible} onDismiss={onDismiss} onExited={onExited} dismissible={!busy} maxWidth={384} style={styles.panel}>
+  return <FloatingPanel visible={visible} onDismiss={onDismiss} onExited={onExited} dismissible={!busy} maxWidth={384} pageKey={section} style={styles.panel}>
     <PanelHeader title="Custom reminder" subtitle={subtitle} style={styles.rail} />
     <View style={styles.body}>
       <View style={styles.rail}><Segmented options={SECTIONS} accessibilityLabel="Reminder date or time" value={section} disabled={busy}

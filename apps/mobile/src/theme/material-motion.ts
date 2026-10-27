@@ -22,6 +22,16 @@ export const materialMotion = {
   effects: { fast: spring(3800, 1), spatial: spring(1600, 1), slow: spring(800, 1) },
 } as const;
 
+/** Official spring-to-curve conversions for non-interactive Web Animations.
+ * Interactive geometry continues to use interruptible spatial springs.
+ * https://m3.material.io/styles/motion/overview/specs
+ */
+export const materialWebMotion = {
+  standard: { duration: 500, easing: "cubic-bezier(0.27, 1.06, 0.18, 1)" },
+  expressive: { duration: 500, easing: "cubic-bezier(0.38, 1.21, 0.22, 1)" },
+  effects: { duration: 200, easing: "cubic-bezier(0.34, 0.8, 0.34, 1)" },
+} as const;
+
 // Motion is a shared value object, not render state. Stable identities let
 // memoized control groups and labels reuse it when their parent re-renders.
 // Keep both settings reactive, without allocating a wrapper for every caller.

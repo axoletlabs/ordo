@@ -3,8 +3,10 @@
  * server cannot be reached. Settings → Hosting stays usable so the host can
  * be changed.
  */
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useLayoutEffect, useRef } from "react";
 import { Platform, StyleSheet, View } from "react-native";
+import Animated, { useAnimatedStyle } from "react-native-reanimated";
+import { useOverlayPresence } from "../hooks/use-overlay-presence";
 import { useOverlayFocus } from "../hooks/use-overlay-focus";
 import { useRouter, useSegments } from "expo-router";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,6 +31,9 @@ export function OfflineGate() {
   const authStatus = useAuthStore((s) => s.status);
   const serverUrl = useSettingsStore((s) => s.serverUrl);
   const serverInfo = useServerInfo();
+  // Bundled legal notices and app information remain readable without a server.
+  const offlineReadable = segments[0] === "diagnostics" || segments[0] === "diagnostics-report" || ["settings/about", "settings/licenses", "settings/license", "settings/build-details"]
+    .some((path) => segments.join("/").endsWith(path));
   const onServerSettings = segments.join("/").includes("settings/server");
   const confirmedDown = useRef(false);
   const probedUrl = useRef(serverUrl);
@@ -47,31 +52,43 @@ export function OfflineGate() {
     });
   }, [qc, serverUrl]);
 
-   const serverDown = authStatus === "authenticated" && !onServerSettings &&
-     (isServerUnreachable(serverInfo.error) || confirmedDown.current);
-   const focusRef = useOverlayFocus(!online || serverDown, () => {}, "dialog", false, true);
+  const serverDown = authStatus === "authenticated" && !onServerSettings &&
+    (isServerUnreachable(serverInfo.error) || confirmedDown.current);
+  // Bundled about/licence screens stay readable: the gate never mounts there.
+  const visible = !offlineReadable && (!online || serverDown);
+  const focusRef = useOverlayFocus(visible, () => {}, "dialog", false, true);
+  const lastReason = useRef<"offline" | "server">("offline");
+  if (visible) lastReason.current = !online ? "offline" : "server";
+  const { rendered, progress } = useOverlayPresence(visible, () => {}, { interactive: false, dismissKeyboard: false });
+  const fade = useAnimatedStyle(() => ({ opacity: progress.value }));
+  useLayoutEffect(() => {
+    if (Platform.OS === "web" && focusRef.current) (focusRef.current as unknown as HTMLElement).inert = !visible;
+  }, [visible, rendered, focusRef]);
+  if (!rendered) return null;
 
-   if (!online) {
+  if (lastReason.current === "offline") {
     return (
-      <View
+      <Animated.View
         ref={focusRef}
-        {...(Platform.OS === "web" ? { tabIndex: -1, "aria-modal": true, role: "alertdialog" as const, dataSet: { materialOverlay: "true" } } : {})}
-        accessibilityViewIsModal
+        {...(Platform.OS === "web" ? { tabIndex: -1, "aria-modal": visible, role: "alertdialog" as const, dataSet: { materialOverlay: String(visible) } } : {})}
+        accessibilityViewIsModal={visible}
         accessibilityRole="alert"
         accessibilityLabel="You're offline. Connect to a network to use ordo."
-        pointerEvents="auto"
-        style={[styles.root, { backgroundColor: palette.background }]}
+        pointerEvents={visible ? "auto" : "none"}
+        aria-hidden={!visible}
+        accessibilityElementsHidden={!visible}
+        importantForAccessibility={visible ? "auto" : "no-hide-descendants"}
+        style={[styles.root, { backgroundColor: palette.background }, fade]}
       >
         <EmptyState
           icon="cloud-offline-outline"
           title="You're offline"
           message="ordo needs a network connection. Connect to a network to continue."
+          action={<Button label="Diagnostics" variant="ghost" onPress={() => router.push("/diagnostics")} />}
         />
-      </View>
+      </Animated.View>
     );
   }
-
-  if (!serverDown) return null;
 
   const cloud = isCloudServerUrl(serverUrl);
   const title = cloud ? "Can't reach ordo Cloud" : "Can't reach your server";
@@ -80,14 +97,17 @@ export function OfflineGate() {
     : "ordo needs your server to be online. Try again, or open Hosting to pick another.";
 
   return (
-    <View
+    <Animated.View
       ref={focusRef}
-      {...(Platform.OS === "web" ? { tabIndex: -1, "aria-modal": true, role: "alertdialog" as const, dataSet: { materialOverlay: "true" } } : {})}
-      accessibilityViewIsModal
+      {...(Platform.OS === "web" ? { tabIndex: -1, "aria-modal": visible, role: "alertdialog" as const, dataSet: { materialOverlay: String(visible) } } : {})}
+      accessibilityViewIsModal={visible}
       accessibilityRole="alert"
       accessibilityLabel={title}
-      pointerEvents="auto"
-      style={[styles.root, { backgroundColor: palette.background }]}
+      pointerEvents={visible ? "auto" : "none"}
+      aria-hidden={!visible}
+      accessibilityElementsHidden={!visible}
+      importantForAccessibility={visible ? "auto" : "no-hide-descendants"}
+      style={[styles.root, { backgroundColor: palette.background }, fade]}
     >
       <EmptyState
         icon="cloud-offline-outline"
@@ -111,10 +131,11 @@ export function OfflineGate() {
               variant="ghost"
               onPress={() => router.push("/settings/server")}
             />
+            <Button block label="About Ordo" variant="ghost" onPress={() => router.push("/settings/about")} />
           </View>
         }
       />
-    </View>
+    </Animated.View>
   );
 }
 

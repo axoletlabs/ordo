@@ -1,7 +1,7 @@
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { MaterialIcon as Ionicons } from "./MaterialIcon";
-import { Button, type ButtonVariant } from "./Button";
+import { Button, type ButtonSize, type ButtonVariant } from "./Button";
 import { ContextMenuItem } from "./ContextMenu";
 import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
 import { spacing, type Spacing } from "../../theme/tokens";
@@ -32,6 +32,7 @@ export function PanelActions({
   confirmDisabled,
   cancelDisabled,
   confirmVariant = "primary",
+  size = "sm",
   children,
   fullWidth = false,
   inline = false,
@@ -45,6 +46,7 @@ export function PanelActions({
   confirmDisabled?: boolean;
   cancelDisabled?: boolean;
   confirmVariant?: ButtonVariant;
+  size?: ButtonSize;
   /** Optional persistent content above the actions, such as release navigation. */
   children?: React.ReactNode;
   fullWidth?: boolean;
@@ -58,6 +60,7 @@ export function PanelActions({
       {onCancel ? <Button
         label={cancelLabel}
         variant="ghost"
+        size={size}
         onPress={() => {
           dismissKeyboard();
           onCancel();
@@ -68,6 +71,7 @@ export function PanelActions({
       <Button
         label={confirmLabel}
         variant={confirmVariant}
+        size={size}
         onPress={() => {
           dismissKeyboard();
           onConfirm();

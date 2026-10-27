@@ -27,6 +27,7 @@ apps/server/prisma/*.db.bak-*
 apps/server/prisma/ordo-avatars/
 apps/server/prisma/data/
 apps/server/src/generated/
+apps/mobile/src/generated/
 
 
 # auto-generated secrets and the deploy script's background server

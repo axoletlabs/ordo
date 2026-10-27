@@ -25,6 +25,7 @@ import { layout } from "../../theme/tokens";
 import type { SelectionStore } from "../../lib/selection-state";
 import { indexSelectionItems, selectedItems, selectionCapabilities } from "../../lib/selection-items";
 import { LazyMount } from "../ui/LazyMount";
+import { useFolderTokenStore } from "../../store/folder-tokens";
 
 const noFolders: readonly FolderDto[] = [];
 
@@ -72,6 +73,10 @@ function SelectionToolsContent({
   const captureSelection = () => setSnapshot(getSelected());
   const mixed = bookmarks.length > 0 && folders.length > 0;
   const snapshotFoldersOnly = folders.length > 0 && bookmarks.length === 0;
+  const accessRevision = useFolderTokenStore((state) => state.accessRevision);
+  void accessRevision;
+  const deleteAccessBlocked = folders.some((folder) =>
+    folder.protected && !useFolderTokenStore.getState().get(folder.id));
 
   const runBookmarks = async (
     action: "delete" | "markRead" | "markUnread",
@@ -176,6 +181,7 @@ function SelectionToolsContent({
   }
 
   const confirmDelete = () => {
+    if (busy || deleteAccessBlocked) return;
     haptics.medium();
     const selectedBookmarks = [...bookmarks];
     const selectedFolders = [...folders];
@@ -239,8 +245,9 @@ function SelectionToolsContent({
         visible={deleteOpen}
         icon="trash-outline"
         title={deleteTitle}
-        message={deleteMessage}
+        message={deleteAccessBlocked ? "Unlock the selected folders before deleting them." : deleteMessage}
         confirmLabel="Delete"
+        confirmDisabled={deleteAccessBlocked}
         loading={busy}
         onDismiss={() => setDeleteOpen(false)}
         onConfirm={confirmDelete}

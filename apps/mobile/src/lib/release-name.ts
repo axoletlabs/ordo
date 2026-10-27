@@ -1,6 +1,6 @@
 /**
  * Display name for a published version: "0.3.0 Preview 2", the name used in
- * the CHANGELOG headings — never the raw "v0.3.0-preview.2" development tag.
+ * published release headings — never the raw "v0.3.0-preview.2" development tag.
  */
 import { classifyReleaseVersion } from "./app-version";
 

@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import type {
   BatchFoldersInput,
   CreateFolderInput,
+  FolderDeleteResult,
   FolderDto,
   RemoveFolderPasswordInput,
   SetFolderPasswordInput,
@@ -11,11 +12,14 @@ import type {
 import { ErrorCode } from "@ordo/shared";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { AppError } from "../common/errors/app-error.js";
+import { isRecordNotFound } from "../common/utils/prisma-errors.js";
 import { RateLimitService } from "../common/rate-limit/rate-limit.service.js";
 import { FolderTokenService } from "./folder-token.service.js";
 import { FolderAccessService } from "./folder-access.service.js";
 import { toFolderDto } from "../common/mappers.js";
 import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
+
+const FOLDER_KEEP_MOVE_CHUNK = 500;
 
 @Injectable()
 export class FoldersService {
@@ -88,14 +92,95 @@ export class FoldersService {
     if (input.icon !== undefined) data.icon = input.icon;
     if (input.pinned !== undefined) data.pinned = input.pinned;
 
-    const updated = await this.prisma.folder.update({ where: { id: folderId }, data });
+    const updated = await this.prisma.folder
+      .update({ where: { id: folderId }, data })
+      .catch((cause) => {
+        // The folder was deleted between the access check and this write.
+        if (isRecordNotFound(cause)) {
+          throw new AppError(ErrorCode.FOLDER_NOT_FOUND, "This folder no longer exists.");
+        }
+        throw cause;
+      });
     return this.presentFolder(updated, await this.folderCounts(folderId));
   }
 
   /** Locked folders can only be deleted while unlocked (token presented). */
   async remove(folderId: string, userId: string, tokens: readonly string[] = []): Promise<void> {
     await this.access.requireFolder(folderId, userId, tokens);
-    await this.prisma.folder.delete({ where: { id: folderId } });
+    // deleteMany (not delete) so a replayed DELETE whose response was lost
+    // reports nothing done instead of surfacing Prisma P2025 as a 500.
+    await this.prisma.folder.deleteMany({ where: { id: folderId, userId } });
+  }
+
+  /**
+   * Delete a folder while preserving selected bookmarks, atomically. In one
+   * transaction: every `keepIds` bookmark that is STILL in this folder moves
+   * to unfiled, then the folder (and its remaining bookmarks) is deleted.
+   *
+   * - Keep IDs no longer in this folder — moved elsewhere by another client,
+   *   already deleted, or never owned — are no-ops that never block the
+   *   request and are never yanked to unfiled. The response's `keptIds` says
+   *   exactly which keeps landed in unfiled, so clients never have to guess.
+   * - Any failure (including the folder delete itself) rolls the moves back.
+   * - Retrying after a lost response finds the folder gone and reports
+   *   FOLDER_NOT_FOUND (404), leaving the already-preserved keeps unfiled.
+   */
+  async removeWithKeeps(
+    folderId: string,
+    userId: string,
+    keepIds: readonly string[] = [],
+    tokens: readonly string[] = [],
+  ): Promise<FolderDeleteResult> {
+    const keep = [...new Set(keepIds)];
+    const { keptIds, deletedBookmarks } = await this.prisma.$transaction(async (tx) => {
+      const folder = await tx.folder.findFirst({ where: { id: folderId, userId } });
+      if (!folder) {
+        throw new AppError(ErrorCode.FOLDER_NOT_FOUND, "This folder no longer exists.");
+      }
+      if (folder.passwordHash) {
+        const presented =
+          tokens.length > 0 ? await this.folderTokens.resolveFolderIds(tokens) : [];
+        if (!presented.includes(folder.id)) {
+          throw new AppError(ErrorCode.FOLDER_PROTECTED, "This folder is locked.", {
+            folderId: folder.id,
+          });
+        }
+      }
+      const total = await tx.bookmark.count({ where: { folderId: folder.id } });
+
+      const kept: string[] = [];
+      // Chunked so arbitrarily large keep lists stay far under SQLite's bound
+      // parameter limit; every chunk shares the enclosing transaction, so a
+      // later failure still rolls all of the moves back.
+      for (let offset = 0; offset < keep.length; offset += FOLDER_KEEP_MOVE_CHUNK) {
+        const chunk = keep.slice(offset, offset + FOLDER_KEEP_MOVE_CHUNK);
+        // Scope check first, then a move re-asserting it: a bookmark that
+        // leaves the folder between the two simply stays where its new owner
+        // put it instead of being yanked to unfiled.
+        const present = await tx.bookmark.findMany({
+          where: { userId, folderId: folder.id, id: { in: chunk } },
+          select: { id: true },
+        });
+        if (present.length === 0) continue;
+        const scope = { userId, folderId: folder.id, id: { in: present.map((row) => row.id) } };
+        const moved = await tx.bookmark.updateMany({ where: scope, data: { folderId: null } });
+        if (moved.count === present.length) {
+          kept.push(...present.map((row) => row.id));
+          continue;
+        }
+        // Rare: a row left the folder between the select and this write.
+        // Report only the rows that are verifiably unfiled now.
+        const settled = await tx.bookmark.findMany({
+          where: { userId, folderId: null, id: { in: present.map((row) => row.id) } },
+          select: { id: true },
+        });
+        kept.push(...settled.map((row) => row.id));
+      }
+
+      await tx.folder.deleteMany({ where: { id: folder.id, userId } });
+      return { keptIds: kept, deletedBookmarks: total - kept.length };
+    });
+    return { success: true, keptIds, keptBookmarks: keptIds.length, deletedBookmarks };
   }
 
   async batch(userId: string, input: BatchFoldersInput, tokens: readonly string[] = []): Promise<{ updated: number }> {

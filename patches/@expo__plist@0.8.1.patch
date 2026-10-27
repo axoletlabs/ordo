@@ -1,0 +1,13 @@
+diff --git a/build/parse.js b/build/parse.js
+index 572d7f8e6c005a105de5d016befee35f834b1a59..f04c35aef0fe233b6426c2654bd985efb103eb1d 100644
+--- a/build/parse.js
++++ b/build/parse.js
+@@ -66,7 +66,7 @@ function isEmptyNode(node) {
+  */
+ function parse(xml) {
+     // prevent the parser from logging non-fatal errors
+-    const doc = new xmldom_1.DOMParser({ errorHandler() { } }).parseFromString(xml);
++    const doc = new xmldom_1.DOMParser({ errorHandler() { } }).parseFromString(xml.trimStart(), "application/xml");
+     (0, assert_1.default)(doc.documentElement.nodeName === 'plist', 'malformed document. First element should be <plist>');
+     let plist = parsePlistXML(doc.documentElement);
+     // the root <plist> node gets interpreted as an Array,

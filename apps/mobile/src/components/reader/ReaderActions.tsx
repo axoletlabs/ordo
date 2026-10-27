@@ -1,5 +1,5 @@
 import React, { useCallback, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { APP_NAME, formatHighlightQuote, type BookmarkDto, type HighlightDto } from "@ordo/shared";
 import { HeaderIconButton } from "../ui/Header";
 import { ContextMenu, ContextMenuItem } from "../ui/ContextMenu";
@@ -16,6 +16,7 @@ import { EditTagsSheet } from "../tags/EditTagsSheet";
 import { ReminderCustomPanel } from "../bookmarks/ReminderCustomPanel";
 import { REMINDER_MENU_WIDTH, ReminderPresetItems, useSaveReminder } from "../bookmarks/ReminderFlow";
 import { useServerInfo } from "../../hooks/queries";
+import { BrowserAdBlockingToggle } from "../browser/BrowserAdBlockingToggle";
 import { useTheme } from "../../theme/ThemeProvider";
 import { spacing } from "../../theme/tokens";
 import { bookmarkCanBeArticle, bookmarkIsArticle } from "../../lib/bookmark-reader";
@@ -86,6 +87,7 @@ export const ReaderActions = React.memo(React.forwardRef<ReaderActionsHandle, Re
         {hasContents ? <ContextMenuItem key="contents" icon="list-outline" label="Table of contents" onPress={() => run(callbacks.current.onContents)} /> : null}
         {hasHtml && !website ? <ContextMenuItem key="highlights" icon="color-fill-outline" label="Highlights" onPress={() => setPage("highlights")} /> : null}
         {website ? <ContextMenuItem key="refresh" icon="refresh-outline" label="Refresh" onPress={() => run(callbacks.current.onRefresh)} /> : null}
+        {website && Platform.OS !== "web" ? <BrowserAdBlockingToggle key="ads" /> : null}
         <ContextMenuItem key="share" icon="share-social-outline" label={website ? "Share page" : "Share article"} onPress={() => run(callbacks.current.onShare)} />
         <ContextMenuItem key="copy-link" icon="link-outline" label="Copy link" onPress={() => run(callbacks.current.onCopyLink)} />
         <ContextMenuItem key="tags" icon="pricetags-outline" label="Edit tags" onPress={() => setPage("tags")} />

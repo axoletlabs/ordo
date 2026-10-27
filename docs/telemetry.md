@@ -40,3 +40,12 @@ Local flush timestamps remain on the device to throttle requests.
 - The data is anonymous daily counters, so there is no retention job.
 - The private telemetry dashboard reads aggregate counts; the public API has
   no telemetry stats endpoint.
+
+## Local diagnostics
+
+The app also offers optional [local diagnostics](diagnostics.md), on by default,
+with a separate on-device recording switch. Those reports use a closed technical
+schema, never reuse the install ID, and are not uploaded through telemetry. A
+person explicitly reviews and saves or copies a report before sharing it. Turning
+local diagnostics off deletes that local history without changing install
+telemetry.

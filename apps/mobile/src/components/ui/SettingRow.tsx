@@ -4,16 +4,23 @@ import { StyleSheet, View, useWindowDimensions } from "react-native";
 import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
+import { UnavailableLabel } from "./UnavailableLabel";
+import { Toggle, type ToggleProps } from "./Toggle";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
 import { runPressAction } from "../../lib/press-action";
 import { ROW_ICON_GLYPH } from "../../theme/alignment";
-import { layout, radius, spacing } from "../../theme/tokens";
+import { layout, spacing } from "../../theme/tokens";
+import { listCorners } from "../../theme/list-shape";
 
 export interface SettingRowProps {
   icon?: keyof typeof Ionicons.glyphMap;
   label: string;
+  /** Use 0 when the complete value must stay readable, such as a website address. */
+  labelLines?: number;
   description?: string;
+  /** Disables a switch (or replaces other controls with a status) and explains why. */
+  unavailableReason?: string;
   value?: string;
   onPress?: () => void | boolean | Promise<unknown>;
   right?: React.ReactNode;
@@ -35,7 +42,9 @@ export interface SettingRowProps {
 export function SettingRow({
   icon,
   label,
+  labelLines = 2,
   description,
+  unavailableReason,
   value,
   onPress,
   right,
@@ -52,18 +61,20 @@ export function SettingRow({
 }: SettingRowProps) {
   const { palette, expressive } = useTheme();
   const { width } = useWindowDimensions();
-  const tint = destructive ? palette.error : iconColor ?? palette.onSurfaceVariant;
-  const valueColor = destructive ? palette.danger : palette.textTertiary;
+  const selected = expressive && !!checked;
+  const foreground = selected ? palette.onSecondaryContainer : palette.onSurface;
+  const supportingColor = selected ? palette.onSecondaryContainer : palette.onSurfaceVariant;
+  const tint = destructive ? palette.error : iconColor ?? supportingColor;
+  const valueColor = destructive ? palette.danger : supportingColor;
+  const unavailable = !!unavailableReason;
+  const isToggle = React.isValidElement<ToggleProps>(right) && right.type === Toggle;
+  const supportingText = unavailableReason || description;
   const rowStyle = [styles.row, { borderBottomColor: palette.outlineVariant,
-    backgroundColor: palette.surfaceContainerLow,
-    borderRadius: expressive ? radius.xs : 0,
-    borderTopLeftRadius: position === "first" || position === "only" ? expressive ? radius.xl : radius.lg : undefined,
-    borderTopRightRadius: position === "first" || position === "only" ? expressive ? radius.xl : radius.lg : undefined,
-    borderBottomLeftRadius: position === "last" || position === "only" ? expressive ? radius.xl : radius.lg : undefined,
-    borderBottomRightRadius: position === "last" || position === "only" ? expressive ? radius.xl : radius.lg : undefined,
-    marginBottom: expressive ? spacing[2] : 0,
+    backgroundColor: expressive ? checked ? palette.secondaryContainer : palette.surfaceContainerLow : "transparent",
+    ...(expressive ? listCorners(position, !!checked) : { borderRadius: 0 }),
+    marginBottom: expressive && position !== "last" && position !== "only" ? spacing[2] : 0,
     borderBottomWidth: expressive || !divider ? 0 : StyleSheet.hairlineWidth,
-    opacity: disabled ? 0.38 : 1 }];
+    opacity: disabled && !unavailable && !isToggle ? 0.38 : 1 }];
 
   const content = (
     <>
@@ -73,32 +84,37 @@ export function SettingRow({
         </View>
       ) : null}
       <View style={styles.body}>
-        <Text variant="bodyLarge" numberOfLines={2} color={destructive ? "danger" : "primary"}>
+        <Text variant="bodyLarge" numberOfLines={labelLines} style={{ color: destructive ? palette.error : foreground }}>
           {label}
         </Text>
-        {description ? (
-          <Text variant="footnote" color="tertiary" style={styles.description}>
-            {description}
+        {supportingText ? (
+          <Text variant="footnote" style={[styles.description, { color: supportingColor }]}>
+            {supportingText}
           </Text>
         ) : null}
       </View>
-      {value ? (
+      {value && !unavailable ? (
         <Text variant="footnote" numberOfLines={1} style={[styles.value, { color: valueColor }]}>
           {value}
         </Text>
       ) : null}
-      {right ? (
+      {unavailable && !isToggle ? <UnavailableLabel /> : right ? (
         <View style={rightFit === "content" ? styles.trailingHug : [styles.trailing, { width: width < 380 ? 112 : layout.settingsControlWidth }]}>
-          {React.isValidElement(right) ? React.cloneElement(right as React.ReactElement<{ accessibilityLabel?: string }>, { accessibilityLabel: label }) : right}
+          {React.isValidElement<ToggleProps>(right)
+            ? React.cloneElement(right, { accessibilityLabel: right.props.accessibilityLabel ?? label,
+              ...(isToggle ? { disabled: disabled || unavailable || right.props.disabled,
+                accessibilityHint: unavailableReason ?? right.props.accessibilityHint } : {}) }) : right}
         </View>
       ) : null}
-      {showChevron ? (
+      {showChevron && !unavailable ? (
         <Ionicons name={chevronUp ? "chevron-up" : "chevron-forward"} size={ROW_ICON_GLYPH} color={palette.textFaint} />
       ) : null}
     </>
   );
 
-  if (!onPress) return <View style={rowStyle}>{content}</View>;
+  if (unavailable && !isToggle) return <View accessible accessibilityState={{ disabled: true }}
+    accessibilityLabel={`${label}, unavailable. ${unavailableReason}`} style={rowStyle}>{content}</View>;
+  if (!onPress || unavailable) return <View style={rowStyle}>{content}</View>;
   return (
     <PressableScale
       accessibilityRole={selectionRole ?? "button"}

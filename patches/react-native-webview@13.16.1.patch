@@ -1,0 +1,614 @@
+diff --git a/android/src/main/java/com/reactnativecommunity/webview/OrdoAdBlocker.java b/android/src/main/java/com/reactnativecommunity/webview/OrdoAdBlocker.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..9f6d3b2d2ce4f5987791414fcc59bfc254c02f4f
+--- /dev/null
++++ b/android/src/main/java/com/reactnativecommunity/webview/OrdoAdBlocker.java
+@@ -0,0 +1,111 @@
++package com.reactnativecommunity.webview;
++
++import java.net.URI;
++import java.util.Collection;
++import java.util.Collections;
++import java.util.HashSet;
++import java.util.Locale;
++import java.util.Set;
++
++/** Per-WebView immutable host rules. No network, disk access or JS bridge on the request thread. */
++public final class OrdoAdBlocker {
++    public static final OrdoAdBlocker DISABLED = new OrdoAdBlocker(Collections.emptySet(), Collections.emptySet());
++    private final Set<String> blockedHosts;
++    private final Set<String> allowedHosts;
++
++    public OrdoAdBlocker(Collection<String> blockedHosts, Collection<String> allowedHosts) {
++        this.blockedHosts = normalized(blockedHosts);
++        this.allowedHosts = normalized(allowedHosts);
++    }
++
++    private static Set<String> normalized(Collection<String> hosts) {
++        Set<String> result = new HashSet<>();
++        for (String host : hosts) {
++            if (host == null) continue;
++            String canonical = webHost("https://" + host + "/");
++            if (canonical != null && canonical.equals(normalizeHost(host))) result.add(canonical);
++        }
++        return Collections.unmodifiableSet(result);
++    }
++
++    private static String normalizeHost(String host) {
++        String result = host.toLowerCase(Locale.ROOT);
++        while (result.endsWith(".")) result = result.substring(0, result.length() - 1);
++        return result;
++    }
++
++    private static String webHost(String url) {
++        try {
++            URI uri = new URI(url);
++            if (!"https".equalsIgnoreCase(uri.getScheme()) && !"http".equalsIgnoreCase(uri.getScheme())) return null;
++            String host = uri.getHost();
++            return host == null ? null : normalizeHost(host);
++        } catch (Exception ignored) {
++            return null;
++        }
++    }
++
++    /** Immutable request observation shared by the request and UI threads. */
++    public static final class PageRequest {
++        public static final PageRequest UNKNOWN = new PageRequest("", "");
++        private final String url;
++        private final String method;
++
++        public PageRequest(String url, String method) {
++            this.url = url;
++            this.method = method;
++        }
++
++        public boolean canReload(String currentUrl) {
++            return currentUrl != null && !currentUrl.isEmpty() && currentUrl.equals(url)
++                && "GET".equalsIgnoreCase(method) && webHost(currentUrl) != null;
++        }
++    }
++
++    public boolean shouldBlock(String requestUrl, String topUrl, boolean mainFrame) {
++        if (mainFrame || blockedHosts.isEmpty()) return false;
++        String top = webHost(topUrl);
++        String host = webHost(requestUrl);
++        if (top == null || host == null || top.isEmpty() || host.isEmpty() || allowedHosts.contains(top)) return false;
++        // Walk DNS labels, never substrings: doubleclick.net.example.org is not an ad host.
++        String candidate = host;
++        while (true) {
++            if (blockedHosts.contains(candidate)) {
++                // A direct visit to an ad provider still works, including its own subdomains.
++                return !top.equals(candidate) && !top.endsWith("." + candidate);
++            }
++            int dot = candidate.indexOf('.');
++            if (dot < 0) return false;
++            candidate = candidate.substring(dot + 1);
++        }
++    }
++
++    public boolean shouldBlockNavigation(String targetUrl, String topUrl) {
++        return shouldBlock(targetUrl, topUrl, false);
++    }
++
++    public boolean shouldBlockResource(String requestUrl, String topUrl, boolean mainFrame, String method, String accept) {
++        // Never synthesize responses for submissions, CORS preflights or frame
++        // documents. Android does not expose WebKit's resource-type classifier.
++        if (!"GET".equalsIgnoreCase(method)) return false;
++        if (accept != null) {
++            String types = accept.toLowerCase(Locale.ROOT);
++            if (types.contains("text/html") || types.contains("application/xhtml+xml")) return false;
++        }
++        return shouldBlock(requestUrl, topUrl, mainFrame);
++    }
++
++    private Set<String> pageRules(String topUrl) {
++        String top = webHost(topUrl);
++        if (top == null || allowedHosts.contains(top)) return Collections.emptySet();
++        Set<String> result = new HashSet<>();
++        for (String host : blockedHosts) {
++            if (!top.equals(host) && !top.endsWith("." + host)) result.add(host);
++        }
++        return result;
++    }
++
++    public boolean changesPageRules(OrdoAdBlocker previous, String topUrl) {
++        return !pageRules(topUrl).equals(previous.pageRules(topUrl));
++    }
++}
+diff --git a/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java b/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
+index 80c68034b193a47bedb56ca527352de9548e8ac6..510460ffd727f1beebc6c61fecf9194308a3cefb 100644
+--- a/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
++++ b/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
+@@ -66,6 +66,61 @@ public class RNCWebView extends WebView implements LifecycleEventListener {
+     protected boolean injectedJavaScriptForMainFrameOnly = true;
+     protected boolean injectedJavaScriptBeforeContentLoadedForMainFrameOnly = true;
+ 
++    // Immutable configuration published to WebView's request thread.
++    protected volatile OrdoAdBlocker adBlocker = OrdoAdBlocker.DISABLED;
++    protected volatile String adBlockTopUrl = "";
++    protected volatile String adBlockNavigationOrigin = "";
++    protected volatile OrdoAdBlocker.PageRequest adBlockPageRequest = OrdoAdBlocker.PageRequest.UNKNOWN;
++    private String adBlockingRules = "";
++
++    public void setAdBlockingRules(@Nullable String value) {
++        String next = value == null ? "" : value;
++        if (next.equals(adBlockingRules)) return;
++        adBlockingRules = next;
++        OrdoAdBlocker config = OrdoAdBlocker.DISABLED;
++        try {
++            if (!next.isEmpty()) {
++                JSONObject json = new JSONObject(next);
++                org.json.JSONArray hosts = json.getJSONArray("blockedHosts");
++                org.json.JSONArray allowed = json.getJSONArray("allowedHosts");
++                java.util.List<String> blockedHosts = new java.util.ArrayList<>();
++                java.util.List<String> allowedHosts = new java.util.ArrayList<>();
++                for (int i = 0; i < hosts.length(); i++) blockedHosts.add(hosts.getString(i));
++                for (int i = 0; i < allowed.length(); i++) allowedHosts.add(allowed.getString(i));
++                config = new OrdoAdBlocker(blockedHosts, allowedHosts);
++            }
++        } catch (JSONException ignored) {
++            // Invalid configuration must never prevent a page loading.
++        }
++        OrdoAdBlocker previous = adBlocker;
++        adBlocker = config;
++        String current = getUrl();
++        // Updating another site's preference must not interrupt this page.
++        // Let in-flight navigations finish; new requests already see the rules.
++        if (getProgress() == 100 && adBlockPageRequest.canReload(current)
++                && config.changesPageRules(previous, current)) reload();
++    }
++
++    // Cached history entries may not issue a new request. Do not assume that
++    // the previous page's method describes a restored form response.
++    @Override
++    public void goBack() {
++        adBlockPageRequest = OrdoAdBlocker.PageRequest.UNKNOWN;
++        super.goBack();
++    }
++
++    @Override
++    public void goForward() {
++        adBlockPageRequest = OrdoAdBlocker.PageRequest.UNKNOWN;
++        super.goForward();
++    }
++
++    @Override
++    public void goBackOrForward(int steps) {
++        adBlockPageRequest = OrdoAdBlocker.PageRequest.UNKNOWN;
++        super.goBackOrForward(steps);
++    }
++
+     protected boolean messagingEnabled = false;
+     protected @Nullable
+     String messagingModuleName;
+diff --git a/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java b/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
+index 0287e1c56b07b6c23b4049f3992d88b86fdc5c79..6c056de1a0f745058cf4941ad0bc0699b19f1c25 100644
+--- a/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
++++ b/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
+@@ -45,6 +45,40 @@ public class RNCWebViewClient extends WebViewClient {
+     protected RNCWebView.ProgressChangedFilter progressChangedFilter = null;
+     protected @Nullable RNCBasicAuthCredential basicAuthCredential = null;
+ 
++    @Override
++    public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
++        RNCWebView webView = (RNCWebView) view;
++        if (request.isForMainFrame()) {
++            webView.adBlockTopUrl = request.getUrl().toString();
++            if (webView.adBlockNavigationOrigin.isEmpty()) webView.adBlockNavigationOrigin = webView.adBlockTopUrl;
++            webView.adBlockPageRequest = new OrdoAdBlocker.PageRequest(webView.adBlockTopUrl, request.getMethod());
++        }
++        String accept = null;
++        for (java.util.Map.Entry<String, String> header : request.getRequestHeaders().entrySet()) {
++            if ("Accept".equalsIgnoreCase(header.getKey())) { accept = header.getValue(); break; }
++        }
++        if (webView.adBlocker.shouldBlockResource(request.getUrl().toString(), webView.adBlockTopUrl,
++                request.isForMainFrame(), request.getMethod(), accept)) {
++            return new WebResourceResponse("text/plain", "UTF-8", 200, "OK",
++                java.util.Collections.singletonMap("Cache-Control", "no-store"),
++                new java.io.ByteArrayInputStream(new byte[0]));
++        }
++        return super.shouldInterceptRequest(view, request);
++    }
++
++    private void recordAdNavigationOrigin(WebView view, String url) {
++        android.net.Uri uri = android.net.Uri.parse(url);
++        if ("https".equalsIgnoreCase(uri.getScheme()) || "http".equalsIgnoreCase(uri.getScheme())) {
++            ((RNCWebView) view).adBlockNavigationOrigin = url;
++        }
++    }
++
++    @Override
++    public void onPageCommitVisible(WebView view, String url) {
++        super.onPageCommitVisible(view, url);
++        recordAdNavigationOrigin(view, url);
++    }
++
+     public void setBasicAuthCredential(@Nullable RNCBasicAuthCredential credential) {
+         basicAuthCredential = credential;
+     }
+@@ -62,6 +96,7 @@ public class RNCWebViewClient extends WebViewClient {
+         }
+ 
+         if (!mLastLoadFailed) {
++            recordAdNavigationOrigin(webView, url);
+             RNCWebView reactWebView = (RNCWebView) webView;
+ 
+             reactWebView.callInjectedJavaScript();
+@@ -73,6 +108,7 @@ public class RNCWebViewClient extends WebViewClient {
+     @Override
+     public void doUpdateVisitedHistory (WebView webView, String url, boolean isReload) {
+       super.doUpdateVisitedHistory(webView, url, isReload);
++      ((RNCWebView) webView).adBlockTopUrl = url;
+ 
+       ((RNCWebView) webView).dispatchEvent(
+         webView,
+@@ -84,6 +120,7 @@ public class RNCWebViewClient extends WebViewClient {
+     @Override
+     public void onPageStarted(WebView webView, String url, Bitmap favicon) {
+       super.onPageStarted(webView, url, favicon);
++      ((RNCWebView) webView).adBlockTopUrl = url;
+       mLastLoadFailed = false;
+ 
+       RNCWebView reactWebView = (RNCWebView) webView;
+@@ -92,7 +129,14 @@ public class RNCWebViewClient extends WebViewClient {
+ 
+     @Override
+     public boolean shouldOverrideUrlLoading(WebView view, String url) {
++        return shouldOverrideUrlLoading(view, url, true);
++    }
++
++    private boolean shouldOverrideUrlLoading(WebView view, String url, boolean isTopFrame) {
+         final RNCWebView rncWebView = (RNCWebView) view;
++        // Enforce before the JS callback, including its timeout/debug fallback.
++        if (isTopFrame && rncWebView.adBlocker.shouldBlockNavigation(url,
++                rncWebView.adBlockNavigationOrigin.isEmpty() ? rncWebView.adBlockTopUrl : rncWebView.adBlockNavigationOrigin)) return true;
+         final boolean isJsDebugging = rncWebView.getReactApplicationContext().getJavaScriptContextHolder().get() == 0;
+ 
+         if (!isJsDebugging && rncWebView.mMessagingJSModule != null) {
+@@ -101,6 +145,7 @@ public class RNCWebViewClient extends WebViewClient {
+             final AtomicReference<RNCWebViewModuleImpl.ShouldOverrideUrlLoadingLock.ShouldOverrideCallbackState> lockObject = lock.second;
+ 
+             final WritableMap event = createWebViewEvent(view, url);
++            event.putBoolean("isTopFrame", isTopFrame);
+             event.putDouble("lockIdentifier", lockIdentifier);
+             rncWebView.dispatchDirectShouldStartLoadWithRequest(event);
+ 
+@@ -132,9 +177,10 @@ public class RNCWebViewClient extends WebViewClient {
+             progressChangedFilter.setWaitingForCommandLoadUrl(true);
+ 
+             int reactTag = RNCWebViewWrapper.getReactTagFromWebView(view);
++            final WritableMap event = createWebViewEvent(view, url);
++            event.putBoolean("isTopFrame", isTopFrame);
+             UIManagerHelper.getEventDispatcherForReactTag((ReactContext) view.getContext(), reactTag).dispatchEvent(new TopShouldStartLoadWithRequestEvent(
+-                    reactTag,
+-                    createWebViewEvent(view, url)));
++                    reactTag, event));
+             return true;
+         }
+     }
+@@ -143,7 +189,7 @@ public class RNCWebViewClient extends WebViewClient {
+     @Override
+     public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+         final String url = request.getUrl().toString();
+-        return this.shouldOverrideUrlLoading(view, url);
++        return this.shouldOverrideUrlLoading(view, url, request.isForMainFrame());
+     }
+ 
+     @Override
+diff --git a/android/src/newarch/com/reactnativecommunity/webview/RNCWebViewManager.java b/android/src/newarch/com/reactnativecommunity/webview/RNCWebViewManager.java
+index 4709e2822499067cef3a4ce571991b96f844e085..147b91f5c3d79fe5f38f1c4c8e3da94abc6a62b8 100644
+--- a/android/src/newarch/com/reactnativecommunity/webview/RNCWebViewManager.java
++++ b/android/src/newarch/com/reactnativecommunity/webview/RNCWebViewManager.java
+@@ -154,6 +154,12 @@ public class RNCWebViewManager extends ViewGroupManager<RNCWebViewWrapper>
+         mRNCWebViewManagerImpl.setHasOnScroll(view, hasScrollEvent);
+     }
+ 
++    @Override
++    @ReactProp(name = "adBlockingRules")
++    public void setAdBlockingRules(RNCWebViewWrapper view, @Nullable String value) {
++        view.getWebView().setAdBlockingRules(value);
++    }
++
+     @Override
+     @ReactProp(name = "incognito")
+     public void setIncognito(RNCWebViewWrapper view, boolean value) {
+diff --git a/android/src/oldarch/com/reactnativecommunity/webview/RNCWebViewManager.java b/android/src/oldarch/com/reactnativecommunity/webview/RNCWebViewManager.java
+index 974337f41ce01a5102eeafa6e54fbb3b949c48d7..3004b4cab6d1541482bcf2be466f763d4f85f35e 100644
+--- a/android/src/oldarch/com/reactnativecommunity/webview/RNCWebViewManager.java
++++ b/android/src/oldarch/com/reactnativecommunity/webview/RNCWebViewManager.java
+@@ -122,6 +122,11 @@ public class RNCWebViewManager extends ViewGroupManager<RNCWebViewWrapper> {
+         mRNCWebViewManagerImpl.setHasOnScroll(view, hasScrollEvent);
+     }
+ 
++    @ReactProp(name = "adBlockingRules")
++    public void setAdBlockingRules(RNCWebViewWrapper view, @Nullable String value) {
++        view.getWebView().setAdBlockingRules(value);
++    }
++
+     @ReactProp(name = "incognito")
+     public void setIncognito(RNCWebViewWrapper view, boolean value) {
+         mRNCWebViewManagerImpl.setIncognito(view, value);
+diff --git a/apple/OrdoAdBlocking.h b/apple/OrdoAdBlocking.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..187635e4d16c40b25c694a087625b8e60fe6f351
+--- /dev/null
++++ b/apple/OrdoAdBlocking.h
+@@ -0,0 +1,30 @@
++#import <Foundation/Foundation.h>
++
++// Compare the effective policy for this page, independently of other sites'
++// exceptions or JSON ordering. Used only on the main thread during updates.
++static inline NSSet<NSString *> *OrdoPageAdRules(NSDictionary *config, NSURL *url)
++{
++  NSString *scheme = url.scheme.lowercaseString;
++  if (!([scheme isEqualToString:@"https"] || [scheme isEqualToString:@"http"])) return [NSSet set];
++  NSString *top = [url.host.lowercaseString stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"."]];
++  if (!top.length || [config[@"allowedHosts"] containsObject:top]) return [NSSet set];
++  NSMutableSet *hosts = [NSMutableSet set];
++  for (NSString *host in config[@"blockedHosts"]) {
++    if (![top isEqualToString:host] && ![top hasSuffix:[@"." stringByAppendingString:host]]) [hosts addObject:host];
++  }
++  return hosts;
++}
++
++// Content rules exclude documents. Navigation policy separately stops known
++// advertising destinations, using the page that initiated the navigation.
++static inline BOOL OrdoShouldBlockAdNavigation(NSDictionary *config, NSURL *target, NSURL *page)
++{
++  NSString *scheme = target.scheme.lowercaseString;
++  if (!([scheme isEqualToString:@"https"] || [scheme isEqualToString:@"http"])) return NO;
++  NSString *host = [target.host.lowercaseString stringByTrimmingCharactersInSet:[NSCharacterSet characterSetWithCharactersInString:@"."]];
++  if (!host.length) return NO;
++  for (NSString *blocked in OrdoPageAdRules(config, page)) {
++    if ([host isEqualToString:blocked] || [host hasSuffix:[@"." stringByAppendingString:blocked]]) return YES;
++  }
++  return NO;
++}
+diff --git a/apple/RNCWebView.mm b/apple/RNCWebView.mm
+index c0816b6320820a8586f3735b7971790cac8704fa..09c65af39cb2f8a056f9e3709b932d04def7e25c 100644
+--- a/apple/RNCWebView.mm
++++ b/apple/RNCWebView.mm
+@@ -289,6 +289,7 @@ static inline std::string nullSafeStringWithLength(id value) {
+         _view.name = RCTNSStringFromString(newViewProps.name);      \
+     }
+ 
++    REMAP_WEBVIEW_STRING_PROP(adBlockingRules)
+     REMAP_WEBVIEW_PROP(scrollEnabled)
+     REMAP_WEBVIEW_STRING_PROP(injectedJavaScript)
+     REMAP_WEBVIEW_STRING_PROP(injectedJavaScriptBeforeContentLoaded)
+diff --git a/apple/RNCWebViewImpl.h b/apple/RNCWebViewImpl.h
+index 1f6bbfd697a4e0b0aef2db344386b786839a1969..9549210d56f18520f2bcbc7dcee9b4aa3260b0ff 100644
+--- a/apple/RNCWebViewImpl.h
++++ b/apple/RNCWebViewImpl.h
+@@ -68,6 +68,7 @@ shouldStartLoadForRequest:(NSMutableDictionary<NSString *, id> *)request
+ 
+ @property (nonatomic, weak) id<RNCWebViewDelegate> _Nullable delegate;
+ @property (nonatomic, copy) NSDictionary * _Nullable source;
++@property (nonatomic, copy) NSString * _Nullable adBlockingRules;
+ @property (nonatomic, assign) BOOL messagingEnabled;
+ @property (nonatomic, copy) NSString * _Nullable injectedJavaScript;
+ @property (nonatomic, copy) NSString * _Nullable injectedJavaScriptBeforeContentLoaded;
+diff --git a/apple/RNCWebViewImpl.m b/apple/RNCWebViewImpl.m
+index 7f5c24d6e2cfb26eddbc513bf17a81c24a7273e2..9d57a116f41dfa3a1d0b3548a8739d62b4f07c1f 100644
+--- a/apple/RNCWebViewImpl.m
++++ b/apple/RNCWebViewImpl.m
+@@ -6,6 +6,7 @@
+  */
+ 
+ #import "RNCWebViewImpl.h"
++#import "OrdoAdBlocking.h"
+ #import <React/RCTConvert.h>
+ #import <React/RCTAutoInsetsProtocol.h>
+ #import "RNCWKProcessPoolManager.h"
+@@ -122,6 +123,14 @@ UIGestureRecognizerDelegate,
+ RCTAutoInsetsProtocol>
+ 
+ @property (nonatomic, copy) RNCWKWebView *webView;
++@property (nonatomic, strong) WKContentRuleList *ordoContentRuleList;
++@property (nonatomic, copy) NSDictionary *ordoActiveRuleConfig;
++@property (nonatomic, strong) NSURL *ordoAdNavigationOrigin;
++@property (nonatomic, assign) BOOL ordoTopNavigationCanReload;
++@property (nonatomic, assign) BOOL ordoReloadWaiting;
++@property (nonatomic, assign) NSUInteger ordoRuleGeneration;
++@property (nonatomic, assign) BOOL ordoRulesPending;
++@property (nonatomic, assign) BOOL ordoSourceWaiting;
+ @property (nonatomic, strong) WKUserScript *postMessageScript;
+ @property (nonatomic, strong) WKUserScript *injectedObjectJsonScript;
+ @property (nonatomic, strong) WKUserScript *atStartScript;
+@@ -468,6 +477,9 @@ RCTAutoInsetsProtocol>
+     wkWebViewConfig.processPool = [[RNCWKProcessPoolManager sharedManager] sharedProcessPool];
+   }
+   wkWebViewConfig.userContentController = [WKUserContentController new];
++  if (self.ordoContentRuleList) {
++    [wkWebViewConfig.userContentController addContentRuleList:self.ordoContentRuleList];
++  }
+ 
+ #if defined(__IPHONE_OS_VERSION_MAX_ALLOWED) && __IPHONE_OS_VERSION_MAX_ALLOWED >= 130000 /* iOS 13 */
+   if (@available(iOS 13.0, *)) {
+@@ -791,10 +803,63 @@ RCTAutoInsetsProtocol>
+   }
+ }
+ 
++// Apply to this view only. Hold its initial request until compilation finishes;
++// a timeout or compiler error releases the request without blocking anything.
++- (void)setAdBlockingRules:(NSString *)rules
++{
++  if ([_adBlockingRules isEqualToString:rules]) return;
++  _adBlockingRules = [rules copy];
++  NSUInteger generation = ++self.ordoRuleGeneration;
++  self.ordoRulesPending = YES;
++  NSDictionary *config = rules.length ? [NSJSONSerialization JSONObjectWithData:[rules dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil] : nil;
++  if (![config isKindOfClass:NSDictionary.class] || ![config[@"blockedHosts"] isKindOfClass:NSArray.class] || ![config[@"allowedHosts"] isKindOfClass:NSArray.class]) config = nil;
++  for (id host in [config[@"blockedHosts"] arrayByAddingObjectsFromArray:config[@"allowedHosts"]]) {
++    if (![host isKindOfClass:NSString.class]) { config = nil; break; }
++  }
++  NSString *encoded = config[@"webKitRules"];
++  __weak RNCWebViewImpl *weakSelf = self;
++  void (^finish)(WKContentRuleList *) = ^(WKContentRuleList *list) {
++    RNCWebViewImpl *strongSelf = weakSelf;
++    if (!strongSelf || strongSelf.ordoRuleGeneration != generation || !strongSelf.ordoRulesPending) return;
++    strongSelf.ordoRulesPending = NO;
++    NSDictionary *next = list ? config : nil;
++    NSURL *pageURL = strongSelf.webView.URL ?: [NSURL URLWithString:strongSelf.source[@"uri"]];
++    BOOL changed = ![OrdoPageAdRules(strongSelf.ordoActiveRuleConfig, pageURL)
++      isEqualToSet:OrdoPageAdRules(next, pageURL)];
++    // Keep the previous policy until the replacement is ready. Other owners'
++    // content rules must survive disabling or changing Ordo's blocker.
++    if (strongSelf.ordoContentRuleList) [strongSelf.webView.configuration.userContentController removeContentRuleList:strongSelf.ordoContentRuleList];
++    strongSelf.ordoContentRuleList = list;
++    strongSelf.ordoActiveRuleConfig = next;
++    if (list) [strongSelf.webView.configuration.userContentController addContentRuleList:list];
++    BOOL refreshRequested = strongSelf.ordoReloadWaiting;
++    strongSelf.ordoReloadWaiting = NO;
++    if (strongSelf.ordoSourceWaiting) {
++      strongSelf.ordoSourceWaiting = NO;
++      [strongSelf visitSource];
++    } else if (refreshRequested || (changed && !strongSelf.webView.loading && strongSelf.ordoTopNavigationCanReload)) {
++      // Never interrupt a navigation or replay a submitted form automatically.
++      [strongSelf reload];
++    }
++  };
++  if (![encoded isKindOfClass:NSString.class] || encoded.length == 0) {
++    finish(nil);
++    return;
++  }
++  // A fixed identifier replaces this app-owned entry instead of accumulating
++  // compiled lists every time a user changes a site exception.
++  [[WKContentRuleListStore defaultStore] compileContentRuleListForIdentifier:@"ordo-ads-v1"
++    encodedContentRuleList:encoded completionHandler:^(WKContentRuleList *list, NSError *error) {
++      dispatch_async(dispatch_get_main_queue(), ^{ finish(list); });
++    }];
++  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{ finish(nil); });
++}
++
+ - (void)setSource:(NSDictionary *)source
+ {
+   if (![_source isEqualToDictionary:source]) {
+     _source = [source copy];
++    self.ordoAdNavigationOrigin = nil;
+ 
+     if (_webView != nil) {
+       [self visitSource];
+@@ -835,6 +900,10 @@ RCTAutoInsetsProtocol>
+ 
+ - (void)visitSource
+ {
++  if (self.ordoRulesPending) {
++    self.ordoSourceWaiting = YES;
++    return;
++  }
+   // Check for a static html source first
+   NSString *html = [RCTConvert NSString:_source[@"html"]];
+   if (html) {
+@@ -1348,6 +1417,13 @@ RCTAutoInsetsProtocol>
+     BOOL isTopFrame = [request.URL isEqual:request.mainDocumentURL];
+     BOOL hasTargetFrame = navigationAction.targetFrame != nil;
+ 
++    if ((!hasTargetFrame || navigationAction.targetFrame.isMainFrame) &&
++        OrdoShouldBlockAdNavigation(self.ordoActiveRuleConfig, request.URL,
++          self.ordoAdNavigationOrigin ?: [NSURL URLWithString:self.source[@"uri"]])) {
++        decisionHandler(WKNavigationActionPolicyCancel);
++        return;
++    }
++
+     if (_onOpenWindow && !hasTargetFrame) {
+       // When OnOpenWindow should be called, we want to prevent the navigation
+       // If not prevented, the `decisionHandler` is called first and after that `createWebViewWithConfiguration` is called
+@@ -1381,6 +1457,9 @@ RCTAutoInsetsProtocol>
+                     }
+                 }
+ 
++                if (navigationAction.targetFrame.isMainFrame) {
++                    self.ordoTopNavigationCanReload = [request.HTTPMethod isEqualToString:@"GET"] && navigationType != WKNavigationTypeFormSubmitted && navigationType != WKNavigationTypeFormResubmitted && navigationType != WKNavigationTypeBackForward;
++                }
+                 // Allow all navigation by default
+                 decisionHandler(WKNavigationActionPolicyAllow);
+             });
+@@ -1416,6 +1495,9 @@ RCTAutoInsetsProtocol>
+         }
+     }
+ 
++    if (navigationAction.targetFrame.isMainFrame) {
++        self.ordoTopNavigationCanReload = [request.HTTPMethod isEqualToString:@"GET"] && navigationType != WKNavigationTypeFormSubmitted && navigationType != WKNavigationTypeFormResubmitted && navigationType != WKNavigationTypeBackForward;
++    }
+     // Allow all navigation by default
+     decisionHandler(WKNavigationActionPolicyAllow);
+ }
+@@ -1565,6 +1647,14 @@ RCTAutoInsetsProtocol>
+  * Called when the navigation is complete.
+  * @see https://fburl.com/rtys6jlb
+  */
++// Provisional redirects can change webView.URL before the document commits.
++// Keep the initiating page stable until WebKit commits a successful document.
++- (void)webView:(WKWebView *)webView didCommitNavigation:(WKNavigation *)navigation
++{
++  NSString *scheme = webView.URL.scheme.lowercaseString;
++  if ([scheme isEqualToString:@"https"] || [scheme isEqualToString:@"http"]) self.ordoAdNavigationOrigin = webView.URL;
++}
++
+ - (void)webView:(WKWebView *)webView
+ didFinishNavigation:(WKNavigation *)navigation
+ {
+@@ -1608,6 +1698,11 @@ didFinishNavigation:(WKNavigation *)navigation
+ 
+ - (void)reload
+ {
++  // An explicit refresh during a rule update must use the new preference.
++  if (self.ordoRulesPending) {
++    self.ordoReloadWaiting = YES;
++    return;
++  }
+   /**
+    * When the initial load fails due to network connectivity issues,
+    * [_webView reload] doesn't reload the webpage. Therefore, we must
+diff --git a/apple/RNCWebViewManager.mm b/apple/RNCWebViewManager.mm
+index f8f375f23b12039b64b7900034c8978e0235a8e7..306f212a0c6e4854fb5898d0225ca4253e7203e5 100644
+--- a/apple/RNCWebViewManager.mm
++++ b/apple/RNCWebViewManager.mm
+@@ -41,6 +41,7 @@ RCT_EXPORT_MODULE(RNCWebView)
+ }
+ 
+ RCT_EXPORT_VIEW_PROPERTY(source, NSDictionary)
++RCT_EXPORT_VIEW_PROPERTY(adBlockingRules, NSString)
+ // New arch only
+ RCT_CUSTOM_VIEW_PROPERTY(newSource, NSDictionary, RNCWebViewImpl) {}
+ RCT_EXPORT_VIEW_PROPERTY(onFileDownload, RCTDirectEventBlock)
+diff --git a/lib/WebViewTypes.d.ts b/lib/WebViewTypes.d.ts
+index 998cc88f03f3fbcd0a47f227c01f738dbf4c58bf..94041fdc2030388144d0884191b664b6e36028cc 100644
+--- a/lib/WebViewTypes.d.ts
++++ b/lib/WebViewTypes.d.ts
+@@ -962,6 +962,8 @@ export interface AndroidWebViewProps extends WebViewSharedProps {
+     onLoadSubResourceError?: (event: WebViewErrorEvent) => void;
+ }
+ export interface WebViewSharedProps extends ViewProps {
++  /** Ordo native ad host configuration. Empty disables blocking. */
++  adBlockingRules?: string;
+     /**
+      * Loads static html or a uri (with optional headers) in the WebView.
+      */
+diff --git a/src/RNCWebViewNativeComponent.ts b/src/RNCWebViewNativeComponent.ts
+index 7f4e6c4f73506efa9517314a3ff89f91b097763e..56ada0ad771eba6de89e792c2827ac9002a6dd08 100644
+--- a/src/RNCWebViewNativeComponent.ts
++++ b/src/RNCWebViewNativeComponent.ts
+@@ -143,6 +143,8 @@ type WebViewDownloadEvent = Readonly<{
+ // type MenuItem = Readonly<{label: string, key: string}>;
+ 
+ export interface NativeProps extends ViewProps {
++  /** Ordo native ad host configuration. Empty disables blocking. */
++  adBlockingRules?: string;
+   // Android only
+   allowFileAccess?: boolean;
+   allowsProtectedMedia?: boolean;
+diff --git a/src/WebViewTypes.ts b/src/WebViewTypes.ts
+index eca81415ab48676da18fc2be13b84e60fe5cb3f5..2b1a64e496cc995bceff22ab2091c9bca4ab0e0b 100644
+--- a/src/WebViewTypes.ts
++++ b/src/WebViewTypes.ts
+@@ -1171,6 +1171,8 @@ export interface AndroidWebViewProps extends WebViewSharedProps {
+ }
+ 
+ export interface WebViewSharedProps extends ViewProps {
++  /** Ordo native ad host configuration. Empty disables blocking. */
++  adBlockingRules?: string;
+   /**
+    * Loads static html or a uri (with optional headers) in the WebView.
+    */

@@ -1,7 +1,7 @@
 /**
  * Reader appearance controls: text size, typeface,
- * line spacing, theme (system/light/dark) and — when the effective theme is
- * dark — the AMOLED pure-black toggle. Presented as a FloatingPanel so it
+ * line spacing, theme (system/light/dark) and the AMOLED pure-black toggle
+ * (disabled in light mode). Presented as a FloatingPanel so it
  * matches the app's existing menu/sheet language on phones and tablets alike.
  *
  * The panel owns its open state and its own preference subscription. Opening
@@ -12,6 +12,7 @@
 import React, { useCallback, useContext, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Platform, StyleSheet, View, useWindowDimensions } from "react-native";
 import { FloatingPanel } from "../ui/FloatingPanel";
+import { AnimatedDisclosure } from "../ui/AnimatedDisclosure";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Segmented } from "../ui/Segmented";
 import { Text } from "../ui/Text";
@@ -23,12 +24,14 @@ import { loadReaderFontPreview, loadReaderFontPreviews, preloadReaderFontPreview
 import { useReaderPreferences } from "../../hooks/use-reader-preferences";
 import { useAnimationActivityEffect, useAppForeground } from "../../hooks/use-animation-activity";
 import { usePreparedReaderOverlay } from "./use-prepared-reader-overlay";
+import { recordDiagnosticEvent } from "../../lib/local-diagnostics";
 import type { ReaderWorkScheduler } from "./reader-work";
 import type {
   ReaderFontFamily,
   ReaderFontSize,
   ReaderLineSpacing,
   ReaderTheme,
+  UpdateReaderPreferencesInput,
 } from "@ordo/shared";
 
 const sizeOptions: readonly { value: ReaderFontSize; label: string; accessibilityLabel: string }[] = [
@@ -166,13 +169,17 @@ export const ReaderControlsSheet = React.memo(React.forwardRef<ReaderControlsShe
     const open = useCallback(() => {
       retain();
       if (!visibleRef.current) {
+        recordDiagnosticEvent("reader.controls.open");
         setRetaining(true);
         setEntered(false);
       }
       setVisible(true);
       onOpen?.();
     }, [onOpen, retain]);
-    const close = useCallback(() => setVisible(false), []);
+    const close = useCallback(() => {
+      recordDiagnosticEvent("reader.controls.close");
+      setVisible(false);
+    }, []);
     const onEntered = useCallback(() => setEntered(true), []);
     const onExited = useCallback(() => { setRetaining(false); setEntered(false); }, []);
     useImperativeHandle(ref, () => ({ open, prepare }), [open, prepare]);
@@ -284,7 +291,11 @@ const ReaderControlsBody = React.memo(function ReaderControlsBody({
 }) {
   const { width, fontScale } = useWindowDimensions();
   const orientation = width < 360 || fontScale > 1.3 ? "vertical" : "horizontal";
-  const { preferences, setPreferences } = useReaderPreferences();
+  const { preferences, setPreferences: savePreferences } = useReaderPreferences();
+  const setPreferences = useCallback((patch: UpdateReaderPreferencesInput) => {
+    recordDiagnosticEvent("reader.preference", JSON.stringify(patch));
+    savePreferences(patch);
+  }, [savePreferences]);
   // Stable for TypefaceSegmented's memo: an unrelated preference change must
   // not re-render the five typeface options.
   const updateFontFamily = useCallback(
@@ -329,15 +340,16 @@ const ReaderControlsBody = React.memo(function ReaderControlsBody({
     <View key="amoled" style={styles.amoledRow}>
       <View style={styles.amoledCopy}>
         <Text variant="bodyStrong">AMOLED black</Text>
-        {effectiveDark ? null : (
-          <Text variant="footnote" color="tertiary">Available in dark mode</Text>
-        )}
+        <AnimatedDisclosure expanded={!effectiveDark}>
+          <Text variant="footnote" color="tertiary">Switch the reader to dark mode to use pure black.</Text>
+        </AnimatedDisclosure>
       </View>
       <Toggle
         accessibilityLabel="Reader AMOLED black"
-        value={preferences.amoled && effectiveDark}
-        onValueChange={(amoled) => setPreferences({ amoled })}
+        accessibilityHint={!effectiveDark ? "Switch the reader to dark mode to use pure black." : undefined}
         disabled={!effectiveDark}
+        value={preferences.amoled}
+        onValueChange={(amoled) => setPreferences({ amoled })}
       />
     </View>,
   ], [

@@ -1,0 +1,72 @@
+name: Browser WebKit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/mobile/src/lib/browser-ad-blocking.ts'
+      - 'apps/mobile/plugins/**'
+      - 'apps/mobile/app.config.js'
+      - 'patches/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - '.github/workflows/browser-webkit.yml'
+  pull_request:
+    paths:
+      - 'apps/mobile/src/lib/browser-ad-blocking.ts'
+      - 'apps/mobile/plugins/**'
+      - 'apps/mobile/app.config.js'
+      - 'patches/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'apps/mobile/package.json'
+      - '.github/workflows/browser-webkit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  native-webkit:
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      # Expo SDK 57 requires Xcode 26.4+ / Swift 6.3, including its JSI
+      # constructor ownership and concurrency support (expo/expo#49214).
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    concurrency:
+      group: browser-webkit-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
+    steps:
+      - uses: actions/checkout@v5
+      - name: Verify Apple toolchain
+        run: |
+          xcodebuild -version
+          xcrun swift --version
+      - uses: ./.github/actions/setup-pnpm-node
+      - run: pnpm install --frozen-lockfile
+      - name: Build shared types
+        run: pnpm --filter @ordo/shared build
+      - name: Generate iOS project and pods
+        working-directory: apps/mobile
+        run: |
+          pnpm exec expo prebuild --platform ios --no-install
+          cd ios
+          pod install
+      - name: Compile patched WebView in the iOS app
+        working-directory: apps/mobile
+        run: |
+          workspace=$(node -e "process.stdout.write(require('node:fs').readdirSync('ios').find(f=>f.endsWith('.xcworkspace')))")
+          scheme="${workspace%.xcworkspace}"
+          if ! xcodebuild -workspace "ios/$workspace" -scheme "$scheme" -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build > /tmp/ordo-ios-build.log 2>&1; then
+            grep -n -i -E -C 5 'error:|fatal error|BUILD FAILED|requires.*[Ss]wift|unsupported' /tmp/ordo-ios-build.log || true
+            tail -200 /tmp/ordo-ios-build.log
+            exit 1
+          fi
+      - name: Save native build diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-diagnostics
+          path: /tmp/ordo-ios-build.log
+          retention-days: 7

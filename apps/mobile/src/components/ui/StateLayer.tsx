@@ -1,7 +1,7 @@
-import React, { useLayoutEffect, useRef } from "react";
+import React, { useLayoutEffect, useMemo, useRef } from "react";
 import { Animated, Platform, type StyleProp, type ViewStyle, StyleSheet } from "react-native";
 import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
-import { alphaTint, stateLayerCorners } from "../../theme/state-layer";
+import { alphaTint, opaqueComponents, stateLayerCorners } from "../../theme/state-layer";
 
 /**
  * Visibility fade for state feedback. The alpha lives in the color, so the
@@ -15,19 +15,24 @@ import { alphaTint, stateLayerCorners } from "../../theme/state-layer";
  * color flash this guards against. Animation starts are equally safe here.
  */
 export function useStateVisibility(active: boolean, useNativeDriver = Platform.OS !== "web", initialActive = active, immediate = false) {
+  return useStateValue(Number(active), useNativeDriver, Number(initialActive), immediate);
+}
+
+/** Preserve spring velocity when feedback is interrupted or retargeted. */
+function useStateValue(target: number, useNativeDriver: boolean, initial: number, immediate = false) {
   const { reducedMotion } = useMaterialMotion();
-  const opacity = useRef(new Animated.Value(initialActive ? 1 : 0)).current;
-  const previous = useRef({ active: initialActive, reducedMotion, immediate });
+  const value = useRef(new Animated.Value(initial)).current;
+  const previous = useRef({ target: initial, reducedMotion, immediate });
   useLayoutEffect(() => {
-    if (previous.current.active === active && previous.current.reducedMotion === reducedMotion && previous.current.immediate === immediate) return;
-    previous.current = { active, reducedMotion, immediate };
-    if (reducedMotion || immediate) { opacity.stopAnimation(); opacity.setValue(active ? 1 : 0); return; }
-    const animation = Animated.spring(opacity, { toValue: active ? 1 : 0, ...materialMotion.effects.fast,
+    if (previous.current.target === target && previous.current.reducedMotion === reducedMotion && previous.current.immediate === immediate) return;
+    previous.current = { target, reducedMotion, immediate };
+    if (reducedMotion || immediate) { value.stopAnimation(); value.setValue(target); return; }
+    const animation = Animated.spring(value, { toValue: target, ...materialMotion.effects.fast,
       useNativeDriver, isInteraction: false });
     animation.start();
     return () => animation.stop();
-  }, [opacity, reducedMotion, active, useNativeDriver, immediate]);
-  return opacity;
+  }, [value, reducedMotion, target, useNativeDriver, immediate]);
+  return value;
 }
 
 type StateLayerProps = {
@@ -46,13 +51,15 @@ export function StateLayer(props: StateLayerProps) {
 function ActiveStateLayer({ color, fraction, surfaceStyle, inset = 0, testID = "material-state-layer" }: StateLayerProps) {
   // Start the first on-demand layer transparent, retaining the same entrance
   // spring as an already-mounted layer (or settling immediately if reduced).
-  const opacity = useStateVisibility(fraction > 0, Platform.OS !== "web", false);
-  // Keep ink through exit. Clearing its alpha on release used to make the
-  // fade animate an already-invisible layer (a one-frame feedback blink).
-  const ink = useRef(fraction);
-  if (fraction > 0) ink.current = fraction;
+  const intensity = useStateValue(fraction, Platform.OS !== "web", 0);
+  const paint = useMemo(() => opaqueComponents(color) ? {
+    // Fade ink alpha, keeping the layer itself fully opaque so rounded clips
+    // match their surface throughout hover, press, focus and release.
+    backgroundColor: intensity.interpolate({ inputRange: [0, 1],
+      outputRange: [alphaTint(color, 0), alphaTint(color, 1)], extrapolate: "clamp" }),
+  } : { backgroundColor: color, opacity: intensity }, [color, intensity]);
   return <Animated.View testID={testID} pointerEvents="none" accessible={false}
     style={[{ position: "absolute", top: inset, bottom: inset, left: inset, right: inset },
       stateLayerCorners(StyleSheet.flatten(surfaceStyle)),
-      { overflow: "hidden", backgroundColor: alphaTint(color, ink.current), opacity }]} />;
+      { overflow: "hidden" }, paint]} />;
 }

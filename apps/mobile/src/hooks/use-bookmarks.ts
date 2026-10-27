@@ -191,19 +191,24 @@ export function useInfiniteBookmarks(folderId: string | null, enabled = true) {
 
 /** Every bookmark in a folder, paged through to the end. Pickers that offer a
  * folder's full contents (e.g. keep-on-folder-delete) need the whole list,
- * not the first page. Result is never cached: the picker refetches per use. */
+ * not the first page. Keyed by the folder-token access revision so a lock or
+ * token change never serves the previous unlock's contents; result is never
+ * cached: the picker refetches per use. */
 export function useFolderBookmarkOptions(folderId: string | null | undefined, enabled: boolean) {
+  const accessRevision = useFolderTokenStore((s) => s.accessRevision);
   return useQuery({
-    queryKey: ["bookmarks", "folder-options", folderId ?? null],
+    queryKey: ["bookmarks", "folder-options", folderId ?? null, accessRevision],
     queryFn: async ({ signal }) => {
       const target = folderId ?? null;
+      if (signal.aborted) throw new Error("Folder contents request was cancelled.");
       const items: BookmarkDto[] = [];
       let cursor: string | null = null;
       do {
         const page = await bookmarksApi.list({ folderId: target, cursor, limit: LIST_PAGE_SIZE, signal });
         items.push(...page.items);
+        if (signal.aborted) throw new Error("Folder contents request was cancelled.");
         cursor = page.nextCursor;
-      } while (cursor && !signal.aborted);
+      } while (cursor);
       return items;
     },
     enabled: enabled && folderId != null,

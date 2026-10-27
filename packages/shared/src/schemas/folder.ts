@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { BATCH_ITEM_LIMIT, FOLDER_ICONS, FOLDER_PIN_LENGTHS } from "../constants.js";
+import {
+  BATCH_ITEM_LIMIT,
+  FOLDER_DELETE_KEEP_LIMIT,
+  FOLDER_ICONS,
+  FOLDER_PIN_LENGTHS,
+} from "../constants.js";
 import type { FolderLockType } from "../types.js";
 
 /** One alternative per allowed PIN length (4 or 6 digits). */
@@ -72,13 +77,40 @@ export const RemoveFolderPasswordSchema = z
   });
 export type RemoveFolderPasswordInput = z.infer<typeof RemoveFolderPasswordSchema>;
 
+/**
+ * Delete a folder while atomically preserving selected bookmarks: the server
+ * moves the listed bookmarks to unfiled and deletes the folder (and its
+ * remaining bookmarks) in one transaction. `keepIds` that are no longer in
+ * this folder — moved elsewhere, already deleted, or never owned — are
+ * untouched no-ops and never block the request.
+ *
+ * Strict and required: this is a destructive endpoint, so a typo'd payload
+ * (`{}`, `{keepBookmarks: [...]}`) must fail validation instead of silently
+ * cascading every bookmark. An explicit `{"keepIds": []}` deletes the folder
+ * and everything in it, on purpose.
+ */
+export const DeleteFolderWithKeepsSchema = z
+  .object({
+    keepIds: z
+      .array(z.string().min(1))
+      .max(FOLDER_DELETE_KEEP_LIMIT, {
+        message: `Select at most ${FOLDER_DELETE_KEEP_LIMIT} bookmarks to keep.`,
+      }),
+  })
+  .strict();
+export type DeleteFolderWithKeepsInput = z.infer<typeof DeleteFolderWithKeepsSchema>;
+
 const batchFolderIds = z
   .array(z.string().min(1))
   .min(1, { message: "Select at least one folder." })
   .max(BATCH_ITEM_LIMIT, { message: `Select at most ${BATCH_ITEM_LIMIT} folders.` });
 
 export const BatchFoldersSchema = z.discriminatedUnion("action", [
-  z.object({ action: z.literal("delete"), ids: batchFolderIds }),
+  // Strict: a misrouted `keepIds` must fail loudly instead of being stripped
+  // and cascading the very bookmarks the caller meant to preserve.
+  z
+    .object({ action: z.literal("delete"), ids: batchFolderIds })
+    .strict(),
   z.object({ action: z.literal("pin"), ids: batchFolderIds, pinned: z.boolean() }),
 ]);
 export type BatchFoldersInput = z.infer<typeof BatchFoldersSchema>;

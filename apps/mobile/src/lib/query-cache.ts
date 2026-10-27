@@ -10,6 +10,7 @@
  * budgeting only limits what reaches disk, so saves stay small synchronous
  * writes regardless of how many folders were visited this session.
  */
+import { recordDiagnosticOperation } from "./local-diagnostics";
 import { AppState, Platform } from "react-native";
 import {
   persistQueryClientSave,
@@ -276,6 +277,7 @@ async function prefetchServerInfo(serverUrl: string): Promise<void> {
  */
 export async function prepareLaunchLibrary(): Promise<void> {
   const owner = captureSessionScope();
+  const diagnosticStarted = performance.now();
   const auth = useAuthStore.getState();
   if (auth.status !== "authenticated" || !auth.user) {
     stopQueryPersistence();
@@ -287,7 +289,9 @@ export async function prepareLaunchLibrary(): Promise<void> {
   if (!isSessionScopeCurrent(owner)) return;
 
   void prefetchServerInfo(serverUrl);
-  if (!homeLibraryCached()) void fetchHomeLibrary().catch((error) => {
+  const cached = homeLibraryCached();
+  recordDiagnosticOperation("cache", cached ? "hit" : "miss", performance.now() - diagnosticStarted);
+  if (!cached) void fetchHomeLibrary().catch((error) => {
     console.warn("Launch library fetch failed", error);
   });
 }

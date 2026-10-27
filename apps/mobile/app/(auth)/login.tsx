@@ -108,7 +108,10 @@ function LoginForm({ initialIdentifier }: { initialIdentifier: string }) {
     <>
       <AuthShell
         title="Sign in"
-        footer={<AuthLink href="/(auth)/register" label="Create account" replace />}
+        footer={<View style={{ gap: spacing[8] }}>
+          <AuthLink href="/(auth)/register" label="Create account" replace />
+          <AuthLink href="/diagnostics" label="Diagnostics & help" />
+        </View>}
         secondaryFooter={selfHosted ? (
           <View style={styles.hosting}>
             <Text variant="bodySmall" color="secondary" align="center">

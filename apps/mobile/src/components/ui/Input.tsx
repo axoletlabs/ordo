@@ -1,7 +1,8 @@
 /** Material filled / outlined / search fields, preserving native editing and autofill. */
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { StateLayer } from "./StateLayer";
+import { AnimatedDisclosure } from "./AnimatedDisclosure";
 import {
   AppState,
   Platform,
@@ -101,8 +102,8 @@ const FloatingLabel = React.memo(function FloatingLabel({ label, floating, fille
   useEffect(() => {
     if (previousFloat.current.floating === floating && previousFloat.current.reducedMotion === motion.reducedMotion) return;
     previousFloat.current = { floating, reducedMotion: motion.reducedMotion };
-    floatProgress.value = withTiming(floating ? 1 : 0, { duration: motion.reducedMotion ? 0 : 150 });
-  }, [floating, floatProgress, motion.reducedMotion]);
+    floatProgress.value = motion.reducedMotion ? Number(floating) : withSpring(Number(floating), motion.fast);
+  }, [floating, floatProgress, motion.reducedMotion, motion.fast]);
   const labelPosition = useAnimatedStyle(() => ({ top: 16 - (filled ? 8 : 16 + 8 * fontScale) * floatProgress.value }));
   const labelType = useAnimatedStyle(() => ({ fontSize: 16 - 4 * floatProgress.value, lineHeight: 24 - 8 * floatProgress.value }));
   return <Animated.View pointerEvents="none" style={[styles.floatingLabel, { left, backgroundColor }, labelPosition]}>
@@ -516,11 +517,11 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
           </View>
         ) : null}
       </View>
-      {support || reserveSupportingSpace || counterVisible ? <View style={[styles.msg, { minHeight: 16, flexDirection: "row", gap: spacing[16] }]}>
+      <AnimatedDisclosure expanded={!!(support || reserveSupportingSpace || counterVisible)}><View style={[styles.msg, { minHeight: 16, flexDirection: "row", gap: spacing[16] }]}>
         <Text nativeID={messageId} variant="bodySmall" color={error ? "danger" : "secondary"}
           accessibilityRole={error ? "alert" : undefined} accessibilityLiveRegion={error ? "polite" : "none"} style={[{ flex: 1 }, inactive ? { color: foreground } : null]}>{support ?? " "}</Text>
         {counterVisible ? <Text variant="bodySmall" color="secondary" accessibilityLabel={`${value?.length ?? 0} of ${rest.maxLength} characters`}>{value?.length ?? 0}/{rest.maxLength}</Text> : null}
-      </View> : null}
+      </View></AnimatedDisclosure>
     </View>
   );
 });

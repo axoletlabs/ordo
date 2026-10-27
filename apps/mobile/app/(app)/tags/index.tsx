@@ -51,15 +51,16 @@ export default function TagsScreen() {
   }, []);
 
   const renderTag = useCallback(
-    ({ item }: { item: TagDto }) => (
+    ({ item, index }: { item: TagDto; index: number }) => (
       <TagRow
         tag={item}
+        position={items.length === 1 ? "only" : index === 0 ? "first" : index === items.length - 1 ? "last" : "middle"}
         highlighted={actionsTag?.id === item.id}
         onPress={onPressTag}
         onMore={onMoreTag}
       />
     ),
-    [actionsTag?.id, onMoreTag, onPressTag],
+    [actionsTag?.id, items.length, onMoreTag, onPressTag],
   );
 
   const listContentStyle = useMemo(

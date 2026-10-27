@@ -15,6 +15,9 @@ const { APP_VARIANTS, easUpdatesChannel, resolveUpdatesChannel } = require("../.
 function git(args) {
   try {
     return execSync(`git ${args}`, {
+      // Expo may evaluate this config from a different checkout/process cwd.
+      // Build provenance and variant must describe this source tree.
+      cwd: __dirname,
       stdio: ["ignore", "pipe", "ignore"],
       // Fingerprint generate loads this config in a child process. An unbounded
       // `git status` can wait on index.lock and freeze the whole detect job.

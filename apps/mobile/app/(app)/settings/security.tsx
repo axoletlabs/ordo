@@ -6,6 +6,7 @@ import {
   SettingsPage,
   SettingsScrollView,
 } from "../../../src/components/settings/SettingsPage";
+import { AnimatedSwap } from "../../../src/components/ui/AnimatedSwap";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
 import { BackupCodesDialog } from "../../../src/components/auth/BackupCodesDialog";
 import { MfaSetupPanel } from "../../../src/components/auth/MfaSetupPanel";
@@ -32,38 +33,40 @@ export default function SecurityScreen() {
         style={{ flex: 1 }}
       >
         <SettingsScrollView keyboardShouldPersistTaps="handled">
-          {user?.mfaEnabled ? (
-            <>
+          <AnimatedSwap transitionKey={user?.mfaEnabled ? "enabled" : "setup"}>
+            {user?.mfaEnabled ? (
+              <>
+                <SettingsGroup label="Authenticator" compact>
+                  <SettingRow
+                    icon="key-outline"
+                    label="New backup codes"
+                    onPress={() => setStepUp("regenerate")}
+                    showChevron
+                  />
+                </SettingsGroup>
+                <SettingsGroup label="Danger zone">
+                  <SettingRow
+                    icon="close-circle-outline"
+                    label="Turn off authenticator"
+                    destructive
+                    onPress={() => setStepUp("disable")}
+                    showChevron
+                  />
+                </SettingsGroup>
+              </>
+            ) : (
               <SettingsGroup label="Authenticator" compact>
-                <SettingRow
-                  icon="key-outline"
-                  label="New backup codes"
-                  onPress={() => setStepUp("regenerate")}
-                  showChevron
-                />
+                <SettingsForm>
+                  <MfaSetupPanel
+                    onEnabled={(updated, codes) => {
+                      setUser(updated);
+                      setBackupCodes(codes);
+                    }}
+                  />
+                </SettingsForm>
               </SettingsGroup>
-              <SettingsGroup label="Danger zone">
-                <SettingRow
-                  icon="close-circle-outline"
-                  label="Turn off authenticator"
-                  destructive
-                  onPress={() => setStepUp("disable")}
-                  showChevron
-                />
-              </SettingsGroup>
-            </>
-          ) : (
-            <SettingsGroup label="Authenticator" compact>
-              <SettingsForm>
-                <MfaSetupPanel
-                  onEnabled={(updated, codes) => {
-                    setUser(updated);
-                    setBackupCodes(codes);
-                  }}
-                />
-              </SettingsForm>
-            </SettingsGroup>
-          )}
+            )}
+          </AnimatedSwap>
         </SettingsScrollView>
       </KeyboardAvoidingView>
 

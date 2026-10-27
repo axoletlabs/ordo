@@ -1,6 +1,6 @@
 /** Material floating action button, overlaid on the library content. */
 import React from "react";
-import { StyleSheet, View } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { MaterialIcon as Ionicons } from "./MaterialIcon";
 import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
@@ -14,7 +14,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useKeyboardVisible } from "../../hooks/use-keyboard-visible";
 import { useFocusEffect } from "expo-router";
 import { useFloatingActions } from "../../store/floating-actions";
-import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring, type SharedValue } from "react-native-reanimated";
+import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
 import { FAB_DEFAULT_BOTTOM, FAB_SIZE, fabBottomOffset } from "../../lib/fab-layout";
 
 interface FABBaseProps {
@@ -42,6 +43,8 @@ interface FABLayerProps {
   maxWidth: number;
 }
 
+const FABVisibilityContext = React.createContext(true);
+
 /** Centers an absolute FAB against the current navigation scene, not the window. */
 export function FABLayer({ children, maxWidth }: FABLayerProps) {
   return (
@@ -54,10 +57,27 @@ export function FABLayer({ children, maxWidth }: FABLayerProps) {
 }
 
 /** Overlay the action without reserving a separate row below the list. */
-export function FABDock({ children, maxWidth }: FABLayerProps) {
+export function FABDock({ children, maxWidth, visible = true }: FABLayerProps & { visible?: boolean }) {
   const keyboard = useKeyboardVisible();
-  if (keyboard) return null;
-  return <FABLayer maxWidth={maxWidth}>{children}</FABLayer>;
+  const shown = visible && !keyboard;
+  const motion = useMaterialMotion();
+  const position = useSharedValue(Number(shown));
+  const opacity = useSharedValue(Number(shown));
+  const ref = React.useRef<View>(null);
+  React.useLayoutEffect(() => {
+    const target = Number(shown);
+    position.value = motion.reducedMotion ? target : withSpring(target, motion.spatial);
+    opacity.value = motion.reducedMotion ? target : withSpring(target, materialMotion.effects.spatial);
+    if (Platform.OS === "web" && ref.current) (ref.current as unknown as HTMLElement).inert = !shown;
+  }, [shown, motion, opacity, position]);
+  const presence = useAnimatedStyle(() => ({ opacity: opacity.value,
+    transform: [{ translateY: (1 - position.value) * 24 }] }));
+  return <Animated.View ref={ref} pointerEvents={shown ? "box-none" : "none"}
+    aria-hidden={!shown} accessibilityElementsHidden={!shown}
+    importantForAccessibility={shown ? "auto" : "no-hide-descendants"}
+    style={[StyleSheet.absoluteFill, presence]}><FABVisibilityContext.Provider value={shown}>
+      <FABLayer maxWidth={maxWidth}>{children}</FABLayer>
+    </FABVisibilityContext.Provider></Animated.View>;
 }
 
 export function FAB({
@@ -76,6 +96,9 @@ export function FAB({
   alignTo = "scene",
 }: FABProps) {
   const { palette, shadows, expressive } = useTheme();
+  // A 56dp FAB uses the small 16dp corner in both systems. The increased
+  // 20dp corner belongs to the Expressive 80dp medium FAB.
+  const corner = radius.lg;
   const [labelWidth, setLabelWidth] = React.useState(0);
   const expanded = useSharedValue(1);
   const spatial = expansion?.spatial ?? expanded;
@@ -86,10 +109,12 @@ export function FAB({
   const hitStyle = useAnimatedStyle(() => ({ gap: label ? spacing[8] * Math.max(0, Math.min(1, spatial.value)) : 0 }));
   const labelStyle = useAnimatedStyle(() => ({ width: labelWidth * Math.max(0, spatial.value), opacity: Math.max(0, Math.min(1, effects.value)) }));
   const id = React.useId();
+  const dockVisible = React.useContext(FABVisibilityContext);
   useFocusEffect(React.useCallback(() => {
+    if (!dockVisible) return;
     useFloatingActions.getState().add(id);
     return () => useFloatingActions.getState().remove(id);
-  }, [id]));
+  }, [id, dockVisible]));
   const insets = useSafeAreaInsets();
   const column = useColumnPadding(maxContentWidth, alignTo);
   const anchorRef = React.useRef<View>(null);
@@ -102,7 +127,7 @@ export function FAB({
     <Animated.View
       ref={anchorRef}
       collapsable={false}
-      style={[styles.fab, { bottom: fabBottomOffset(insets.bottom, bottom), right, borderRadius: expressive ? radius.xl : radius.lg }, shadows.level3, widthStyle]}
+      style={[styles.fab, { bottom: fabBottomOffset(insets.bottom, bottom), right, borderRadius: corner }, shadows.level3, widthStyle]}
     >
       <PressableScale
         animated
@@ -110,9 +135,9 @@ export function FAB({
         accessibilityLabel={accessibilityLabel}
         accessibilityHint={accessibilityHint}
         testID={testID}
-        style={[styles.fabHit, { width: "100%", overflow: "hidden", backgroundColor: palette.primaryContainer, borderRadius: expressive ? radius.xl : radius.lg, paddingHorizontal: spacing[16] }, hitStyle]}
+        style={[styles.fabHit, { width: "100%", overflow: "hidden", backgroundColor: palette.primaryContainer, borderRadius: corner, paddingHorizontal: spacing[16] }, hitStyle]}
         stateLayerColor={palette.onPrimaryContainer}
-        shape={{ rest: expressive ? radius.xl : radius.lg, pressed: expressive ? radius.md : radius.lg }}
+        shape={{ rest: corner, pressed: expressive ? radius.md : corner }}
         onPress={(event) => {
           haptics.light();
           // Centered dialogs don't need window coordinates. In particular,

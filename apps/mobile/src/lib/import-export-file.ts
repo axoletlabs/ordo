@@ -9,6 +9,7 @@
 import { NativeModules, Platform, Share } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
 import { EXPORT_MIME, type ExportFormat } from "@ordo/shared";
+import { recordDiagnosticOperation } from "./local-diagnostics";
 import { isExportSaveCanceledCode } from "./import-export-uri";
 
 export { contentUriFromActivityResult } from "./import-export-uri";
@@ -38,15 +39,24 @@ export async function downloadExportFile(
   filename: string,
   mimeType: string,
 ): Promise<void> {
-  if (Platform.OS === "web") {
-    saveOnWeb(body, filename, mimeType);
-    return;
+  const started = performance.now();
+  try {
+    if (Platform.OS === "web") {
+      saveOnWeb(body, filename, mimeType);
+      recordDiagnosticOperation("export", "ok", performance.now() - started);
+      return;
+    }
+    if (Platform.OS === "android") {
+      await saveOnAndroid(body, filename, mimeType);
+      recordDiagnosticOperation("export", "ok", performance.now() - started);
+      return;
+    }
+    await saveOnIos(body, filename);
+  } catch (error) {
+    recordDiagnosticOperation("export", isExportSaveCanceled(error) ? "cancelled" : "failed", performance.now() - started);
+    throw error;
   }
-  if (Platform.OS === "android") {
-    await saveOnAndroid(body, filename, mimeType);
-    return;
-  }
-  await saveOnIos(body, filename);
+  recordDiagnosticOperation("export", "ok", performance.now() - started);
 }
 
 /** Parse the filename out of a content-disposition header (fallback provided). */

@@ -6,6 +6,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AppState, BackHandler, Platform } from "react-native";
 import { cancelAnimation, Easing, runOnJS, useSharedValue, withSpring, withTiming, type WithTimingConfig } from "react-native-reanimated";
+import { recordDiagnosticEvent } from "../lib/local-diagnostics";
 import { useMaterialMotion } from "../theme/material-motion";
 import { dismissKeyboard, keyboardIsOpen } from "./use-keyboard-visible";
 
@@ -82,6 +83,7 @@ export function useOverlayPresence(
     // behind the overlay between the fade finishing and the next surface
     // opening, which read as a close-then-delay on menu handoffs.
     setRendered(false);
+    recordDiagnosticEvent("overlay.closed");
     onExited.current?.();
   }, []);
   const finishEntrance = useCallback((token: number, part: "effects" | "spatial") => {
@@ -120,6 +122,7 @@ export function useOverlayPresence(
       const opening = !wasVisible.current;
       wasVisible.current = true;
       if (opening) {
+        recordDiagnosticEvent("overlay.opened");
         generation.current += 1;
         entered.current = true;
         if (hideKeyboard) dismissKeyboard();

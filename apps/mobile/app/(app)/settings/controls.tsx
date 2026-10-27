@@ -10,8 +10,10 @@ import {
   SettingsSelect,
   type SettingsSelectOption,
 } from "../../../src/components/settings/SettingsSelect";
+import { AnimatedDisclosure } from "../../../src/components/ui/AnimatedDisclosure";
 import { SettingRow } from "../../../src/components/ui/SettingRow";
 import { Toggle } from "../../../src/components/ui/Toggle";
+import { AdBlockExceptions } from "../../../src/components/settings/AdBlockExceptions";
 import { APP_NAME } from "@ordo/shared";
 import {
   useSettingsStore,
@@ -42,6 +44,10 @@ export default function ControlsScreen() {
   const holdAction = useSettingsStore((s) => s.createButtonHoldAction);
   const websiteBrowser = useSettingsStore((s) => s.websiteBrowser);
   const forceWebsiteDark = useSettingsStore((s) => s.forceWebsiteDark);
+  const blockWebsiteAds = useSettingsStore((s) => s.blockWebsiteAds);
+  const allowedSiteCount = useSettingsStore((s) => s.adBlockAllowedHosts.length);
+  const setBlockWebsiteAds = useSettingsStore((s) => s.setBlockWebsiteAds);
+  const [exceptionsOpen, setExceptionsOpen] = React.useState(false);
   const shareQuickBookmark = useSettingsStore((s) => s.shareQuickBookmark);
   const shareShowQuickAction = useSettingsStore((s) => s.shareShowQuickAction);
   const setTapAction = useSettingsStore((s) => s.setCreateButtonTapAction);
@@ -89,8 +95,11 @@ export default function ControlsScreen() {
                 <Toggle value={shareQuickBookmark} onValueChange={setShareQuickBookmark} />
               }
               rightFit="content"
+              position={shareQuickBookmark ? "first" : "only"}
             />
-            {shareQuickBookmark ? (
+            {/* SettingsGroup shapes only direct SettingRow children; the
+              revealed row keeps its group position explicitly. */}
+            <AnimatedDisclosure expanded={shareQuickBookmark}>
               <SettingRow
                 icon="share-outline"
                 label="Show alongside Save"
@@ -98,8 +107,9 @@ export default function ControlsScreen() {
                   <Toggle value={shareShowQuickAction} onValueChange={setShareShowQuickAction} />
                 }
                 rightFit="content"
+                position="last"
               />
-            ) : null}
+            </AnimatedDisclosure>
           </SettingsGroup>
         ) : null}
         <SettingsGroup label="Browser">
@@ -116,6 +126,18 @@ export default function ControlsScreen() {
             }
           />
           <SettingRow
+            icon="shield-checkmark-outline"
+            label="Block ads"
+            unavailableReason={Platform.OS === "web" ? "Available on Android and iOS." : undefined}
+            right={<Toggle value={blockWebsiteAds} onValueChange={setBlockWebsiteAds} />}
+            rightFit="content"
+          />
+          {Platform.OS !== "web" ? (
+            <SettingRow icon="shield-outline" label="Site exceptions" showChevron
+              value={String(allowedSiteCount)}
+              onPress={() => setExceptionsOpen(true)} />
+          ) : null}
+          <SettingRow
             icon="moon-outline"
             label="Force dark mode"
             right={
@@ -125,6 +147,7 @@ export default function ControlsScreen() {
           />
         </SettingsGroup>
       </SettingsScrollView>
+      <AdBlockExceptions visible={exceptionsOpen} onDismiss={() => setExceptionsOpen(false)} />
     </SettingsPage>
   );
 }

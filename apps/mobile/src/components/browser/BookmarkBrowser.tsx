@@ -16,11 +16,13 @@ import React, {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import { BackHandler, Linking, Platform, StyleSheet, View } from "react-native";
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { WebView, type WebViewNavigation } from "react-native-webview";
 import {
   BROWSER_PTR_THRESHOLD,
@@ -32,11 +34,13 @@ import {
   pageHostFromWebViewUrl,
   isCancelledWebViewError,
 } from "../../lib/in-app-browser";
+import { browserAdBlockingPageScript, browserAdBlockingRules, shouldBlockAdNavigation } from "../../lib/browser-ad-blocking";
 import { haptics } from "../../lib/haptics";
 import { WEBSITE_FORCE_DARK_SCRIPT } from "../../lib/website-force-dark";
 import { useSettingsStore } from "../../store/settings";
 import { useTheme } from "../../theme/ThemeProvider";
 import { currentAppPalette } from "../../theme/current-app-palette";
+import { browserPageStyleScript } from "../../lib/browser-page-style";
 import { spacing } from "../../theme/tokens";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
@@ -44,12 +48,37 @@ import { RefreshHud } from "../ui/RefreshHud";
 import { LinearProgress } from "../ui/LinearProgress";
 import { useRefreshFeedback } from "../../hooks/use-refresh-feedback";
 import { useOverlayBlocked } from "../ui/overlay-host";
+import { materialMotion, useMaterialMotion } from "../../theme/material-motion";
+
+/** Keeps the page-load track mounted after its first appearance so later
+ * loads fade in and out instead of popping; hidden frames leave the
+ * accessibility tree immediately. The track is absolutely positioned, so its
+ * fade has no layout effect on the page. */
+function LoadTrackFade({ visible, children }: { visible: boolean; children: React.ReactNode }) {
+  const motion = useMaterialMotion();
+  const opacity = useSharedValue(0);
+  const [activated, setActivated] = useState(visible);
+  if (visible && !activated) setActivated(true);
+  useLayoutEffect(() => {
+    opacity.value = motion.reducedMotion ? Number(visible) : withSpring(Number(visible), materialMotion.effects.fast);
+  }, [visible, motion.reducedMotion, opacity]);
+  const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
+  return activated ? (
+    <Animated.View pointerEvents="none" aria-hidden={!visible} accessibilityElementsHidden={!visible}
+      importantForAccessibility={visible ? "auto" : "no-hide-descendants"} style={[styles.progressTrack, style]}>
+      {children}
+    </Animated.View>
+  ) : null;
+}
 
 export interface BookmarkBrowserProps {
   url: string;
+  /** Optional app-owned document styling; ordinary websites keep their own theme. */
+  pageStyle?: string;
   /** When false, hardware back and header host updates are idle (parked view). */
   active?: boolean;
   onPageHost?: (host: string | null) => void;
+  onPageUrl?: (url: string) => void;
 }
 
 export interface BookmarkBrowserHandle {
@@ -59,16 +88,27 @@ export interface BookmarkBrowserHandle {
 }
 
 export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowserProps>(
-  function BookmarkBrowser({ url, active = true, onPageHost }, ref) {
+  function BookmarkBrowser({ url, pageStyle, active = true, onPageHost, onPageUrl }, ref) {
     const { palette } = useTheme();
     const blocked = useOverlayBlocked();
-    const forceWebsiteDark = useSettingsStore((s) => s.forceWebsiteDark);
+    const forceWebsiteDark = useSettingsStore((s) => s.forceWebsiteDark) && !pageStyle;
+    const blockWebsiteAds = useSettingsStore((s) => s.blockWebsiteAds);
+    const adBlockAllowedHosts = useSettingsStore((s) => s.adBlockAllowedHosts);
+    const currentPageUrl = useRef(url);
+    const adBlockingRules = useMemo(
+      () => browserAdBlockingRules(blockWebsiteAds, adBlockAllowedHosts),
+      [blockWebsiteAds, adBlockAllowedHosts],
+    );
+    const adBlockingPageScript = useMemo(
+      () => browserAdBlockingPageScript(blockWebsiteAds, adBlockAllowedHosts),
+      [blockWebsiteAds, adBlockAllowedHosts],
+    );
     const webRef = useRef<WebView>(null);
     const canGoBackRef = useRef(false);
     const ptrDyRef = useRef(0);
     const refreshingRef = useRef(false);
     const armedHapticRef = useRef(false);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(Platform.OS !== "web");
     const [progress, setProgress] = useState(0);
     const [error, setError] = useState<string | null>(null);
     const { refreshing, start: startRefresh, finish: finishRefresh } = useRefreshFeedback();
@@ -80,12 +120,20 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     const injected = useMemo(
       () =>
         browserInjectedJavaScript(
-          forceWebsiteDark ? WEBSITE_FORCE_DARK_SCRIPT : "true;",
+          `${forceWebsiteDark ? WEBSITE_FORCE_DARK_SCRIPT : "true;"}\n${adBlockingPageScript}\n${pageStyle ? browserPageStyleScript(pageStyle) : ""}`,
           chromeBackground,
         ),
-      [forceWebsiteDark, chromeBackground],
+      [forceWebsiteDark, chromeBackground, pageStyle, adBlockingPageScript],
     );
     const coverBlank = browserBlankCoverVisible(loading, progress, !!error);
+
+    useEffect(() => {
+      if (pageStyle) webRef.current?.injectJavaScript(browserPageStyleScript(pageStyle));
+    }, [pageStyle]);
+
+    useEffect(() => {
+      webRef.current?.injectJavaScript(adBlockingPageScript);
+    }, [adBlockingPageScript]);
 
     const finishLoad = useCallback(() => {
       refreshingRef.current = false;
@@ -135,7 +183,10 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     );
 
     useEffect(() => {
-      beginLoad();
+      // The web preview has no WebView backing the page, so there is no load
+      // lifecycle to track — starting one would leave the blank cover up.
+      if (Platform.OS !== "web") beginLoad();
+      currentPageUrl.current = url;
     }, [url, forceWebsiteDark, beginLoad]);
 
     useEffect(() => {
@@ -150,6 +201,9 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
 
     const handleShouldStart = useCallback(
       (request: { url: string; isTopFrame?: boolean }) => {
+        const settings = useSettingsStore.getState();
+        if (request.isTopFrame !== false && shouldBlockAdNavigation(request.url, currentPageUrl.current,
+          settings.blockWebsiteAds, settings.adBlockAllowedHosts)) return false;
         const action = webViewRequestAction(request.url, request.isTopFrame !== false);
         if (action === "allow") return true;
         if (action === "external") {
@@ -162,6 +216,8 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
 
     const handleOpenWindow = useCallback((event: { nativeEvent: { targetUrl: string } }) => {
       const next = event.nativeEvent.targetUrl;
+      const settings = useSettingsStore.getState();
+      if (shouldBlockAdNavigation(next, currentPageUrl.current, settings.blockWebsiteAds, settings.adBlockAllowedHosts)) return;
       const action = webViewRequestAction(next, true);
       if (action === "allow") {
         webRef.current?.injectJavaScript(
@@ -177,10 +233,12 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     const handleNav = useCallback(
       (nav: WebViewNavigation) => {
         canGoBackRef.current = nav.canGoBack;
+        if (!nav.loading) currentPageUrl.current = nav.url;
         if (!active) return;
         onPageHost?.(pageHostFromWebViewUrl(nav.url));
+        onPageUrl?.(nav.url);
       },
-      [active, onPageHost],
+      [active, onPageHost, onPageUrl],
     );
 
     const handleProgress = useCallback(
@@ -248,11 +306,22 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
     // Loading progress and the refresh HUD can update dozens of times per
     // second. Reuse the page element rather than reconciling the native WebView
     // (and all its freshly allocated style/config props) on every HUD frame.
-    const page = useMemo(() => (
+    const page = useMemo(() => Platform.OS === "web" ? (
+        // react-native-webview has no web implementation; show the shared
+        // empty state instead of its raw unsupported-platform message.
+        <View style={[styles.webFallback, { flex: 1, backgroundColor: chromeBackground }]}>
+          <EmptyState
+            icon="compass-outline"
+            title="Live pages need the ordo app"
+            message={pageHostFromWebViewUrl(url) ? `${pageHostFromWebViewUrl(url)} opens in the app on your device.` : undefined}
+          />
+        </View>
+      ) : (
         <WebView
           ref={webRef}
           key={`${url}:${forceWebsiteDark ? "dark" : "auto"}`}
           source={source}
+          adBlockingRules={adBlockingRules}
           style={[styles.web, { backgroundColor: chromeBackground }]}
           containerStyle={[styles.web, { backgroundColor: chromeBackground }]}
           startInLoadingState={false}
@@ -299,7 +368,7 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           injectedJavaScriptBeforeContentLoaded={injected}
           injectedJavaScript={injected}
         />
-    ), [url, forceWebsiteDark, source, chromeBackground, beginLoad, finishLoad, handleProgress,
+    ), [url, forceWebsiteDark, adBlockingRules, source, chromeBackground, beginLoad, finishLoad, handleProgress,
       handleError, handleNav, handleShouldStart, handleOpenWindow, handleMessage, recoverProcess, injected, blocked]);
 
     return (
@@ -312,14 +381,9 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           />
         ) : null}
         <RefreshHud dy={ptrDy} refreshing={refreshing} />
-        {loading && !error ? (
-          <View
-            pointerEvents="none"
-            style={styles.progressTrack}
-          >
-            <LinearProgress label="Page load" value={progress > 0 ? progress : undefined} />
-          </View>
-        ) : null}
+        <LoadTrackFade visible={loading && !error}>
+          <LinearProgress label="Page load" value={progress > 0 ? progress : undefined} />
+        </LoadTrackFade>
         {error ? (
           <View style={[styles.error, { backgroundColor: chromeBackground }]}>
             <EmptyState
@@ -338,14 +402,16 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
 const styles = StyleSheet.create({
   wrap: { flex: 1, minHeight: 0, overflow: "hidden" },
   web: { flex: 1, margin: 0, padding: 0, ...(Platform.OS === "web" ? ({ height: "100%" } as const) : null) },
+  webFallback: { alignItems: "center", justifyContent: "center" },
   blankCover: { ...StyleSheet.absoluteFill },
+  // Position the fading wrapper itself: an in-flow wrapper lands below the
+  // flexing WebView and clips the bar. Let LinearProgress own the height
+  // (4dp straight, 10dp wavy) so the full wave stays visible.
   progressTrack: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    height: 4,
-    overflow: "hidden",
   },
   error: {
     ...StyleSheet.absoluteFill,

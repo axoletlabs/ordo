@@ -314,7 +314,11 @@ export function removeBookmarksEverywhere(qc: QueryClient, ids: ReadonlySet<stri
   });
 }
 
-/** Every bookmark currently in the React Query cache (lists + reader detail). */
+/** Every bookmark currently in the React Query cache (lists + reader detail).
+ * Plain BookmarkDto[] payloads (the keep picker's folder-options query)
+ * participate too: undo snapshots and replay row-painting need rows that no
+ * paged list ever loaded. Reminder rows and other arrays fail isBookmarkRecord
+ * and are ignored. */
 export function collectCachedBookmarks(qc: QueryClient): BookmarkDto[] {
   const byId = new Map<string, { item: BookmarkDto; cachedAt: number }>();
   for (const query of qc.getQueryCache().getAll()) {
@@ -333,6 +337,10 @@ export function collectCachedBookmarks(qc: QueryClient): BookmarkDto[] {
         for (const item of page.items) {
           if (isBookmarkRecord(item)) consider(item);
         }
+      }
+    } else if (Array.isArray(data)) {
+      for (const item of data) {
+        if (isBookmarkRecord(item)) consider(item);
       }
     } else if (isBookmarkRecord(data)) {
       consider(data);

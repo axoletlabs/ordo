@@ -40,6 +40,7 @@ import {
   decodeTitleCursor,
 } from "../common/utils/cursor.js";
 import { findFtsBookmarkIds, ftsBodyQuery, ftsPrefixQuery } from "../prisma/bookmark-fts.js";
+import { isForeignKeyViolation, isRecordNotFound } from "../common/utils/prisma-errors.js";
 import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
 import { isLibraryCiphertext } from "../crypto/library-crypto.js";
 import { mapCooperative, rankSearchResultsCooperative } from "./cooperative-rank.js";
@@ -191,6 +192,17 @@ export class BookmarksService implements OnApplicationBootstrap {
         tags: { create: tagIds.map((tagId) => ({ tagId })) },
       },
       select: LIST_SELECT,
+    }).catch(async (cause) => {
+      // Lost a race with a concurrent delete: the target folder or one of the
+      // requested tags vanished between validation and insert. SQLite does
+      // not name the violated column, so recheck the actual relations.
+      if (isForeignKeyViolation(cause)) {
+        if (folder && !(await this.prisma.folder.count({ where: { id: folder.id, userId } }))) {
+          throw new AppError(ErrorCode.FOLDER_NOT_FOUND, "This folder no longer exists.");
+        }
+        await this.tags.requireOwnedIds(userId, tagIds);
+      }
+      throw cause;
     });
     this.extraction.enqueue([
       {
@@ -466,11 +478,23 @@ export class BookmarksService implements OnApplicationBootstrap {
       data.remindAt = changes.remindAt;
     }
 
-    const updated = await this.prisma.bookmark.update({
-      where: { id: bookmarkId },
-      data: this.crypto.sealBookmark(userId, bookmarkId, data),
-      select: LIST_SELECT,
-    });
+    const updated = await this.prisma.bookmark
+      .update({
+        where: { id: bookmarkId },
+        data: this.crypto.sealBookmark(userId, bookmarkId, data),
+        select: LIST_SELECT,
+      })
+      .catch((cause) => {
+        // Lost a race with a concurrent delete of this bookmark, or of the
+        // folder it was being moved into; report 404s instead of a 500.
+        if (isRecordNotFound(cause)) {
+          throw new AppError(ErrorCode.BOOKMARK_NOT_FOUND, "This bookmark no longer exists.");
+        }
+        if (isForeignKeyViolation(cause) && changes.folderId) {
+          throw new AppError(ErrorCode.FOLDER_NOT_FOUND, "This folder no longer exists.");
+        }
+        throw cause;
+      });
     if (changes.contentKindOverride === "article" && (bookmark.fetchStatus !== "ok" || !bookmark.contentHtml)) {
       this.extraction.enqueue([
         {
@@ -527,7 +551,14 @@ export class BookmarksService implements OnApplicationBootstrap {
       await this.access.requireFolder(bookmark.folderId, userId, tokens);
     }
     this.extraction.cancel(bookmarkId);
-    await this.prisma.bookmark.delete({ where: { id: bookmarkId } });
+    // deleteMany (not delete) so a replayed delete whose response was lost
+    // reports a clean 404 instead of surfacing Prisma P2025 as a 500.
+    const result = await this.prisma.bookmark.deleteMany({
+      where: { id: bookmarkId, userId },
+    });
+    if (result.count === 0) {
+      throw new AppError(ErrorCode.BOOKMARK_NOT_FOUND, "This bookmark no longer exists.");
+    }
   }
 
   async updateTags(
@@ -623,10 +654,18 @@ export class BookmarksService implements OnApplicationBootstrap {
       if (input.folderId) {
         await this.access.requireFolder(input.folderId, userId, tokens);
       }
-      const result = await this.prisma.bookmark.updateMany({
-        where: { id: { in: targetIds }, userId },
-        data: { folderId: input.folderId },
-      });
+      const result = await this.prisma.bookmark
+        .updateMany({
+          where: { id: { in: targetIds }, userId },
+          data: { folderId: input.folderId },
+        })
+        .catch((cause) => {
+          // The target folder vanished between the access check and this write.
+          if (isForeignKeyViolation(cause) && input.folderId) {
+            throw new AppError(ErrorCode.FOLDER_NOT_FOUND, "This folder no longer exists.");
+          }
+          throw cause;
+        });
       return { updated: result.count };
     }
 

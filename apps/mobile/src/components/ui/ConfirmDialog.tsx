@@ -22,6 +22,7 @@ export function ConfirmDialog({
   confirmVariant,
   onConfirm,
   loading = false,
+  confirmDisabled = false,
   cancelLabel = "Cancel",
   dismissible = true,
 }: {
@@ -39,6 +40,7 @@ export function ConfirmDialog({
   confirmVariant?: ButtonVariant;
   onConfirm: () => void;
   loading?: boolean;
+  confirmDisabled?: boolean;
   cancelLabel?: string;
   dismissible?: boolean;
 }) {
@@ -70,6 +72,7 @@ export function ConfirmDialog({
         onCancel={onDismiss}
         cancelLabel={cancelLabel}
         loading={loading}
+        confirmDisabled={confirmDisabled}
         cancelDisabled={!canDismiss}
       />
     </FloatingPanel>
