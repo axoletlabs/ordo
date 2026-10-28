@@ -113,3 +113,90 @@ for (const value of values) {
 layer.value = 0;
 assert.equal(processColor(paint().backgroundColor) >>> 24, 0, 'release settles fully transparent');
 console.log(`PASS: actual state-layer paint survives ${values.length} spring-tail/retarget values in the installed Android color processor`);
+
+// TypeScript-only tests cannot catch a callback skipped by the worklet plugin.
+// Compile the real hook with the Android production Babel config, then execute
+// the serialized completion on a separate VM, as the native UI runtime does.
+const babel = require('@babel/core');
+const hookPath = path.resolve(__dirname, '../src/hooks/use-surface-size.ts');
+const compiledHook = babel.transformFileSync(hookPath, {
+  cwd: path.resolve(__dirname, '..'),
+  envName: 'production',
+  caller: { name: 'metro', bundler: 'metro', platform: 'android', isDev: false, supportsStaticESM: false },
+}).code;
+
+function surfaceHarness(reducedMotion = false) {
+  const slots = [], effects = [], springs = [], jsQueue = [];
+  let cursor = 0;
+  const motion = { reducedMotion, spatial: { stiffness: 380, damping: 31, mass: 1 } };
+  const exports = {};
+  const dependencies = {
+    react: {
+      useRef: initial => slots[cursor++] ??= { current: initial },
+      useLayoutEffect: (effect, deps) => {
+        const index = cursor++;
+        const previous = slots[index];
+        if (previous && deps.every((value, i) => Object.is(value, previous.deps[i]))) return;
+        effects.push(() => {
+          previous?.cleanup?.();
+          slots[index] = { deps, cleanup: effect() };
+        });
+      },
+    },
+    'react-native-reanimated': {
+      useSharedValue: initial => slots[cursor++] ??= { value: initial },
+      useAnimatedStyle: style => style(),
+      cancelAnimation: () => {},
+      withSpring: (target, config, callback) => { springs.push({ target, callback }); return target; },
+      runOnJS: callback => (...args) => jsQueue.push(() => callback(...args)),
+    },
+    '../theme/material-motion': { useMaterialMotion: () => motion },
+  };
+  vm.runInNewContext(compiledHook, { exports, require: name => {
+    assert(name in dependencies, `Unexpected surface dependency: ${name}`);
+    return dependencies[name];
+  } });
+  return {
+    springs, jsQueue,
+    render: (height, options) => {
+      cursor = 0;
+      const style = exports.useSurfaceSize(height, options);
+      while (effects.length) effects.shift()();
+      return style;
+    },
+    complete: (callback, finished) => {
+      assert.equal(typeof callback?.__workletHash, 'number',
+        'session-row collapse completion must be compiled as a UI worklet');
+      const worklet = vm.runInNewContext(`(${callback.__initData.code})`);
+      worklet.call({ __closure: callback.__closure }, finished);
+    },
+  };
+}
+
+const surface = surfaceHarness();
+surface.render(null);
+surface.render(72);
+assert.equal(surface.springs.length, 0, 'first measurement must lay out directly');
+let removed = 0, stale = 0;
+surface.render(0, { onSettled: () => stale++ });
+const collapse = surface.springs.at(-1);
+assert.equal(collapse.target, 0);
+surface.complete(collapse.callback, false);
+assert.equal(surface.jsQueue.length, 0, 'cancelled collapse must not remove the row');
+// Replacing the JS callback must not restart geometry or freeze an old owner.
+surface.render(0, { onSettled: () => removed++ });
+assert.equal(surface.springs.length, 1);
+surface.complete(collapse.callback, true);
+assert.equal(removed, 0, 'UI completion must schedule row removal on JS');
+assert.equal(surface.jsQueue.length, 1);
+surface.jsQueue.shift()();
+assert.equal(removed, 1);
+assert.equal(stale, 0, 'completion must use the latest committed JS callback');
+surface.render(72);
+assert.equal(surface.springs.at(-1).callback, undefined, 'ordinary resizing needs no completion callback');
+const reducedSurface = surfaceHarness(true);
+reducedSurface.render(0, { onSettled: () => removed++ });
+assert.equal(reducedSurface.springs.length, 0);
+assert.equal(reducedSurface.jsQueue.length, 0);
+assert.equal(removed, 2, 'reduced motion must settle directly on JS');
+console.log('PASS: production Android row-collapse worklet, JS dispatch, cancellation, callback replacement, ordinary resizing and reduced motion');

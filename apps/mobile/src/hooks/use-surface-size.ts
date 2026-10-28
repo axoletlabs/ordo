@@ -39,6 +39,8 @@ export function useSurfaceSize(height: number | null, {
     if (height == null) { cancelAnimation(extent); return; }
     const notify = () => settledRef.current?.();
     extent.value = animate ? withSpring(height, spring, settledRef.current ? finished => {
+      // Conditional callbacks are not auto-workletized by the Babel plugin.
+      "worklet";
       if (finished) runOnJS(notify)();
     } : undefined) : height;
     if (!animate) notify();
