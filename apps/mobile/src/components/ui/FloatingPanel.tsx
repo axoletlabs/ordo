@@ -64,6 +64,8 @@ export interface FloatingPanelProps {
   /** Adaptive sheets animate their height to fit the content, keeping actions
    * anchored at the bottom. Expanded sheets always use the height limit. */
   sheetSizing?: "content" | "expanded" | "adaptive";
+  /** Space between a bottom sheet's header and its scrollable body. */
+  sheetBodyTopPadding?: number;
   onShow?: () => void | ReturnType<typeof setTimeout> | (() => void);
   /** Size the card to its children instead of stretching toward `maxWidth`. */
   fitContent?: boolean;
@@ -112,6 +114,7 @@ function FloatingPanelSurface({
   maxWidth = layout.overlayMaxWidth,
   presentation = "dialog",
   sheetSizing = "content",
+  sheetBodyTopPadding = spacing[24],
   onShow,
   fitContent = false,
   dismissible = true,
@@ -241,7 +244,7 @@ function FloatingPanelSurface({
   const heightLimit = sheet
     ? Math.max(80, Math.min(viewportHeight * 0.9, viewportHeight - insets.top - spacing[16]))
     : Math.max(80, viewportHeight - insets.top - bottomInset - spacing[32]);
-  const fittedSheetHeight = Math.min(heightLimit, sheetHeaderHeight + sheetActionsHeight + (sheetBodyHeight ?? 0) + spacing[24] * 2);
+  const fittedSheetHeight = Math.min(heightLimit, sheetHeaderHeight + sheetActionsHeight + (sheetBodyHeight ?? 0) + sheetBodyTopPadding + spacing[24]);
   // In extremely short windows/above a keyboard, scroll the whole sheet.
   const sheetScrollAll = scrollBody && (heightLimit < 280
     || fillSheet && heightLimit - sheetHeaderHeight - sheetActionsHeight < spacing[96]);
@@ -373,7 +376,7 @@ function FloatingPanelSurface({
     {actions.map((action) => React.isValidElement<React.ComponentProps<typeof PanelActions>>(action)
       ? React.cloneElement(action, { topSpacing: 16 }) : action)}
   </View>;
-  const sheetBodyPadding = { paddingHorizontal: sheetInset, paddingVertical: spacing[24] };
+  const sheetBodyPadding = { paddingHorizontal: sheetInset, paddingTop: sheetBodyTopPadding, paddingBottom: spacing[24] };
   const sheetBodyStyle = { flex: fillSheet && !translatedAdaptiveSheet ? 1 : undefined, flexShrink: 1,
     ...(translatedAdaptiveSheet ? { height: Math.max(0, fittedSheetHeight - sheetHeaderHeight - sheetActionsHeight) } : {}),
     maxHeight: Math.max(0, heightLimit - sheetHeaderHeight - sheetActionsHeight), backgroundColor: panelSurface };

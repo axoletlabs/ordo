@@ -90,11 +90,24 @@ function releaseLineOf(value) {
   return classified ? classified.version.split("-")[0].split(".").slice(0, 2).join(".") : null;
 }
 
-/** Stable/Preview Android versionCode. Development returns null (run number). */
-function androidBuildNumber(value) {
+/** Stable/Preview Android versionCode. Stable uses the full stable tag history. */
+function androidBuildNumber(value, tags) {
   const classified = typeof value === "string" ? classifyReleaseVersion(value) : value;
   if (!classified) return null;
-  if (classified.kind === "stable") return 1;
+  if (classified.kind === "stable") {
+    if (!Array.isArray(tags)) return null;
+    const versions = [...new Set(tags.map(classifyReleaseVersion)
+      .filter((tag) => tag?.kind === "stable").map((tag) => tag.version))];
+    // A shallow or incomplete checkout must not silently reuse a build number.
+    if (!versions.includes("0.1.0") || !versions.includes("0.2.0")) return null;
+    versions.sort(compareVersions);
+    const index = versions.indexOf(classified.version);
+    if (index >= 0) return index + 1;
+    // A newly published stable version must follow the current stable line;
+    // inserting one before an existing tag would change its build number.
+    if (compareVersions(classified.version, versions[versions.length - 1]) <= 0) return null;
+    return versions.length + 1;
+  }
   if (classified.channel !== "preview") return null;
   return (PREVIEW_CODE_BASES[releaseLineOf(classified)] ?? 0) + (classified.number ?? 0);
 }
