@@ -129,13 +129,23 @@ published GitHub release body, not a file in this repository.
 Compare each Stable release with the previous Stable release, including the
 changes that first appeared in Preview. Compare each Preview with the previous
 Preview in the same release line; for Preview 1, compare with the previous
-Stable release. Check the actual changes between those tags and describe the
-result people will see, including fixes and removals where they matter. Do not
-repeat earlier Preview notes unless the behavior changed again. If a change was
-added and later removed before Stable, do not present it as a Stable feature.
-Group notes under clear headings such as New, Improved, and Fixed, and use
-simple, medium-length sentences. The first Stable release describes the app
-itself because there is no earlier Stable release to compare.
+Stable release. The first Stable release describes the app itself because
+there is no earlier Stable release to compare.
+
+Read the source at both comparison tags and check what people could actually
+do before and after. Do not rely on commit messages or earlier release notes
+as proof. Check the final result rather than listing work that was later
+changed or removed. Include important fixes and removals when they affect
+people, and verify claims about speed, download size, or supported devices.
+
+Group changes under clear headings such as New, Improved, and Fixed. Put an
+ability under New only if it did not exist in the earlier release. If an
+existing feature has a new design or works better, describe the change under
+Improved; for example, a new reminder clock improves an existing reminder
+feature. Do not repeat earlier Preview notes unless the behavior changed again.
+Use named highlights without a colon at the end of the title. Keep sentences
+clear and medium in length, and use simple words. If a complicated word is
+needed, ask the user for permission before using it.
 
 The files in `docs/release-notes/` record the rewritten published history.
 When editing a published release, update its file and GitHub release body
