@@ -280,8 +280,11 @@ function NoteList({ items, nested }: { items: ChangelogListItem[]; nested?: bool
         if (first.type !== "paragraph" || first.inlines[0]?.type !== "strong") return null;
         const description = first.inlines.slice(1).map((part, partIndex) => partIndex === 0 && part.type === "text"
           ? { ...part, text: part.text.replace(/^\s*[—–:-]?\s*/, "") } : part);
+        const title = first.inlines[0].inlines.map((part, partIndex, all) =>
+          partIndex === all.length - 1 && part.type === "text"
+            ? { ...part, text: part.text.replace(/:\s*$/, "") } : part);
         return <View key={index} style={styles.highlight}>
-          <InlineRun inlines={first.inlines[0].inlines} variant="headline" />
+          <InlineRun inlines={title} variant="headline" />
           {description.length ? <InlineRun inlines={description} variant="bodyMedium" color="secondary" /> : null}
           {item.blocks.slice(1).map((block, blockIndex) => <BlockView key={blockIndex} block={block} nested />)}
         </View>;
@@ -563,7 +566,7 @@ function ChangelogSheetBody({
 
   return (
     <FloatingPanel visible={visible} onDismiss={onDismiss} onShow={onShow} maxWidth={640}
-      presentation="bottom-sheet" sheetSizing="adaptive" scrollResetKey={selected?.tagName}>
+      presentation="bottom-sheet" sheetSizing="adaptive" sheetBodyTopPadding={spacing[8]} scrollResetKey={selected?.tagName}>
       <PanelHeader title="What's new" titleVariant="labelLarge" titleColor="accent" align="left"
         accessory={selected ? <Animated.View style={[styles.releaseHeading, contentStyle]}>
           <Text variant="headlineSmall" accessibilityRole="header" numberOfLines={2}>{headline || releaseName(selected.version)}</Text>
