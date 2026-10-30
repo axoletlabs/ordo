@@ -31,16 +31,6 @@ auditConfig:
     # saved URLs and article content are never passed to this parser.
     # expires: 2026-11-01 — remove when an upstream patch is published.
     - GHSA-vfj7-8cjw-p6xm
-    # decode-uri-component out-of-bounds decode (GHSA-vcc3-ghjq-m6fr).
-    # The advisory's patched floor 0.4.3 was never published; 0.4.1 is
-    # still inside the vulnerable range, and every release since (0.4.x,
-    # 0.5.x) is ESM-only without the CJS default export that
-    # query-string@7 — its only dependent, via expo-router tooling —
-    # requires. Overriding would crash the tooling at require time.
-    # Inputs are the developer's own router query strings, never saved
-    # article content or URLs.
-    # expires: 2026-11-01 — remove when expo-router ships query-string 9.
-    - GHSA-vcc3-ghjq-m6fr
 
 overrides:
   js-yaml: 4.3.2
@@ -50,6 +40,9 @@ overrides:
   nanoid@3: 3.3.18
   brace-expansion@5: 5.0.12
   deepmerge-ts: 8.0.1
+  # Fix malformed URI decoding and quadratic work in query-string's decoder.
+  # The patch below keeps query-string 7's CommonJS and plus-sign behavior.
+  decode-uri-component: 0.5.1
   # CVE audit floors for transitive deps whose parents have not caught up:
   # compression DoS (>=1.8.2), source-map-js event-loop DoS (>=1.2.2),
   # proxy-addr IPv4-mapped IP spoofing (>=2.0.8), shell-quote quote()
@@ -82,5 +75,6 @@ allowBuilds:
 
 patchedDependencies:
   '@expo/plist@0.8.1': patches/@expo__plist@0.8.1.patch
+  decode-uri-component@0.5.1: patches/decode-uri-component@0.5.1.patch
   react-native-reanimated@4.5.1: patches/react-native-reanimated@4.5.1.patch
   react-native-webview@13.16.1: patches/react-native-webview@13.16.1.patch

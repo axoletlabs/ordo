@@ -1,0 +1,29 @@
+--- a/index.js
++++ b/index.js
+@@ -136,12 +136,14 @@
+ 	return input.replace(multiMatcher, run => decode(run));
+ }
+ 
+-export default function decodeUriComponent(encodedURI) {
++module.exports = function decodeUriComponent(encodedURI) {
+ 	if (typeof encodedURI !== 'string') {
+ 		throw new TypeError(`Expected \`encodedURI\` to be of type \`string\`, got \`${typeof encodedURI}\``);
+ 	}
+ 
+ 	try {
++		// query-string 7 expects plus signs to decode as spaces.
++		encodedURI = encodedURI.replace(/\+/g, ' ');
+ 		// Try the built in decoder first
+ 		return decodeURIComponent(encodedURI);
+ 	} catch {
+--- a/package.json
++++ b/package.json
+@@ -10,7 +10,7 @@
+ 		"email": "sam.verschueren@gmail.com",
+ 		"url": "github.com/SamVerschueren"
+ 	},
+-	"type": "module",
++	"type": "commonjs",
+ 	"exports": {
+ 		"types": "./index.d.ts",
+ 		"default": "./index.js"
