@@ -172,6 +172,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify query-string decoder compatibility and malformed input
+        run: node scripts/test-uri-decoder.cjs
+
       - name: Generate Prisma client
         run: pnpm db:generate
 
