@@ -15,6 +15,7 @@
     "typecheck": "node scripts/generate-licenses.cjs && tsc --noEmit",
     "test:diagnostics": "node scripts/test-local-diagnostics.cjs && node scripts/test-diagnostics-privacy.cjs && node scripts/test-diagnostics-export.cjs",
     "test:animations": "node scripts/test-reanimated-registry.cjs",
+    "test:tags": "node scripts/test-tag-update.cjs",
     "test:android-native": "node scripts/test-android-native-hotpaths.cjs",
     "clean": "rimraf .expo node_modules/.cache",
     "licenses:generate": "node scripts/generate-licenses.cjs",

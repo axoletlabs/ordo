@@ -68,56 +68,18 @@ function updateTagInBookmarks(qc: QueryClient, id: string, input: TagUpdateInput
   ));
 }
 
-/** Undo only fields this mutation still owns, not concurrent bookmark/tag edits. */
-function restoreTagFields<T extends TagSummaryDto>(
-  tag: T,
-  previous: TagSummaryDto | undefined,
-  input: TagUpdateInput["input"],
-): T {
-  if (!previous) return tag;
-  return {
-    ...tag,
-    ...(input.name !== undefined && tag.name === input.name ? { name: previous.name } : {}),
-    ...(input.color !== undefined && tag.color === input.color ? { color: previous.color } : {}),
-  };
-}
-
 export function useUpdateTag() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, input }: TagUpdateInput) => tagsApi.update(id, input),
-    onMutate: async ({ id, input }) => {
+    onMutate: async () => {
       await Promise.all([
         qc.cancelQueries({ queryKey: tagsAnyAccess }),
         qc.cancelQueries({ queryKey: ["bookmarks"] }),
       ]);
-      const prev = qc.getQueriesData<TagDto[]>({ queryKey: tagsAnyAccess });
-      const bookmarks = new Map<string, BookmarkDto>();
-      qc.setQueriesData<TagDto[]>({ queryKey: tagsAnyAccess }, (old) =>
-        old ? old.map((t) => (t.id === id ? { ...t, ...input } : t)) : old,
-      );
-      mapCachedBookmarks(qc, (b) => {
-        const next = mapBookmarkTags(b, (t) => t.id === id ? { ...t, ...input } : t);
-        if (next !== b) bookmarks.set(b.id, b);
-        return next;
-      });
-      return { prev, bookmarks };
     },
-    onError: (_e, { id, input }, ctx) => {
-      ctx?.prev.forEach(([key, data]) => qc.setQueryData<TagDto[]>(key, (current) =>
-        current?.map((tag) => tag.id === id
-          ? restoreTagFields(tag, data?.find((t) => t.id === id), input)
-          : tag),
-      ));
-      mapCachedBookmarks(qc, (bookmark) => {
-        const previous = ctx?.bookmarks.get(bookmark.id);
-        const original = [...(previous?.tags ?? []), ...(previous?.suggestedTags ?? [])]
-          .find((tag) => tag.id === id);
-        return mapBookmarkTags(bookmark, (tag) => tag.id === id
-          ? restoreTagFields(tag, original, input)
-          : tag);
-      });
-    },
+    // Publish only confirmed edits: duplicate names and other rejected saves
+    // must not briefly rename/recolor tags in the catalogue or bookmark chips.
     onSuccess: (updated, { id }) => {
       qc.setQueriesData<TagDto[]>({ queryKey: tagsAnyAccess }, (old) =>
         old ? sortTags(old.map((t) => (t.id === id ? { ...t, ...updated } : t))) : old,
