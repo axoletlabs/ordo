@@ -122,6 +122,21 @@ unchanged compatibility information. Include installation guidance only when
 the user must take action or could lose local data. The app reads the
 published GitHub release body, not a file in this repository.
 
+Compare each Stable release with the previous Stable release, including the
+changes that first appeared in Preview. Compare each Preview with the previous
+Preview in the same release line; for Preview 1, compare with the previous
+Stable release. Check the actual changes between those tags and describe the
+result people will see, including fixes and removals where they matter. Do not
+repeat earlier Preview notes unless the behavior changed again. If a change was
+added and later removed before Stable, do not present it as a Stable feature.
+Group notes under clear headings such as New, Improved, and Fixed, and use
+simple, medium-length sentences. The first Stable release describes the app
+itself because there is no earlier Stable release to compare.
+
+The files in `docs/release-notes/` record the rewritten published history.
+When editing a published release, update its file and GitHub release body
+together. The GitHub release body remains the source shown in the app.
+
 1. Cut `release/x.y.z` from the intended source and set `version` in
    `apps/mobile/app.config.js` to that exact version (or its prerelease).
 2. Commit and push the release branch before creating the tag.
@@ -144,7 +159,7 @@ git commit -m "Set the release version to 0.2.0."
 git push -u origin release/0.2.0
 git tag v0.2.0
 git push origin v0.2.0
-gh release create v0.2.0 --target release/0.2.0 --title "0.2.0" --generate-notes --latest
+gh release create v0.2.0 --target release/0.2.0 --title "0.2.0" --notes-file /path/to/reviewed-notes.md --latest
 ```
 
 `v0.2.0-preview.1` uses `release/0.2.0` too; publish with `--prerelease` and without
