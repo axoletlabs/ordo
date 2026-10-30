@@ -73,14 +73,13 @@ jobs:
           echo "updates_channel=$CHANNEL" >> "$GITHUB_OUTPUT"
           echo "app_variant=$CHANNEL" >> "$GITHUB_OUTPUT"
           echo "App variant: $CHANNEL (branch=${BRANCH:-none})"
-          # Only Development follows the Actions run number for versionCode.
-          # Stable and Preview are separate packages with release-derived
-          # codes: Preview continues the count of every preview an earlier
-          # line shipped, so Android never sees a downgrade across lines.
+          # Each app identity has its own versionCode sequence. Stable counts
+          # stable tags; Preview continues its own sequence across lines.
+          # The full tag history is required for a stable build number.
           if [ "$CHANNEL" = "development" ]; then
             VERSION_CODE="${{ github.run_number }}"
           else
-            VERSION_CODE="$(VERSION="$VERSION" node -e "const {androidBuildNumber}=require('./scripts/release-policy.js'); process.stdout.write(String(androidBuildNumber(process.env.VERSION) ?? 1))")"
+            VERSION_CODE="$(VERSION="$VERSION" node -e "const {execFileSync}=require('node:child_process'); const {androidBuildNumber}=require('./scripts/release-policy.js'); const tags=execFileSync('git',['tag','--list'],{encoding:'utf8'}).trim().split(/\\s+/); const n=androidBuildNumber(process.env.VERSION,tags); if(n == null || n < 1) { console.error('Cannot determine Android build number from the complete release history'); process.exit(1); } process.stdout.write(String(n))")"
           fi
           echo "version_code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
 
@@ -174,6 +173,9 @@ jobs:
 
       - name: Verify query-string decoder compatibility and malformed input
         run: node scripts/test-uri-decoder.cjs
+
+      - name: Verify release build numbering
+        run: node scripts/test-release-numbers.cjs
 
       - name: Generate Prisma client
         run: pnpm db:generate

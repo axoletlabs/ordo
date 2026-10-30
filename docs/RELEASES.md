@@ -97,8 +97,12 @@ the compiler is verified by content. Kotlin/Java reuse Gradle's build cache.
 Every APK of a build — the universal package and all four ABI splits — shares
 one `versionCode`. Only Development uses the CI run number, so its build
 numbers keep growing across manual builds. Preview and Stable are separate apps
-with release-derived numbers: Stable stays at 1 (an equal-code install is a
-replace), and Preview adds its sequence number to the line's offset in
+with release-derived numbers. Stable counts stable tags in version order, so
+0.1.0, 0.2.0 and 0.3.0 are 1, 2 and 3, and every later stable release adds
+one. CI needs the complete tag history and rejects a new stable version older
+than an existing stable tag. Existing published APKs retain their original
+numbers: 0.1.0 used 726 and 0.2.0 used 1. Preview adds its sequence number to
+the line's offset in
 `PREVIEW_CODE_BASES` (`scripts/release-policy.js`) — the count of previews
 earlier lines shipped — so the count keeps rising when a new line opens
 instead of restarting below the previous line's previews. A re-run reuses its
