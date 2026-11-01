@@ -13,16 +13,6 @@ nodeLinker: hoisted
 
 auditConfig:
   ignoreGhsas:
-    # node-forge RSA PKCS#1 v1.5 signature forgery via nested DigestAlgorithm
-    # padding (GHSA-86w9-cpqp-85rv / CVE-2026-85393; vulnerable <=1.4.0, no
-    # patched release exists — fix PR digitalbazaar/forge#1152 is still open).
-    # node-forge here only backs @expo/cli and @expo/code-signing-certificates:
-    # developer/CI tooling that never ships in the APK, and its verify calls
-    # only check certificates and signatures the tooling itself just made.
-    # ordo updates ship unsigned, so no forged signature reaches a device.
-    # expires: 2026-11-01 — the audit-ignore watchdog fails CI on this date
-    # or the day a patched node-forge is published, whichever comes first.
-    - GHSA-86w9-cpqp-85rv
     # braces recursive AST stack-exhaustion DoS (GHSA-vfj7-8cjw-p6xm).
     # npm still publishes only <=3.0.3; the audit's suggested 3.0.4 does not
     # exist, and GitHub lists no patched release. Our production dependency
