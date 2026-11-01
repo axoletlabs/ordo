@@ -476,7 +476,7 @@ function ReleaseSelector({
   onSelect: (tag: string) => void;
 }) {
   return (
-    <Segmented accessibilityLabel="Releases" scrollable compact selectionScroll="reveal"
+    <Segmented accessibilityLabel="Releases" scrollable selectionScroll="reveal"
       options={releases.map((release) => ({
         value: release.tagName,
         label: releaseName(release.version),
