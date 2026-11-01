@@ -212,7 +212,7 @@ export function useFolderBookmarkOptions(folderId: string | null | undefined, en
       return items;
     },
     enabled: enabled && folderId != null,
-    staleTime: 30_000,
+    staleTime: 0,
     gcTime: 0,
     retry: 1,
   });

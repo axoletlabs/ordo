@@ -46,6 +46,10 @@ const UNDO_MS = 5_500;
 const pendingBookmarkIds = new Set<string>();
 const pendingFolderIds = new Set<string>();
 const pendingTagIds = new Set<string>();
+// Keep rows are visible in Bookmarks during Undo, but retain their real source
+// folder until the atomic server response confirms the move. Actions on these
+// rows must still send the source folder's unlock token.
+const pendingKeeps = new Map<string, { folderId: string; row: BookmarkDto | null }>();
 let stripperStarted = false;
 const activeIntents = new Set<string>();
 const pendingToastIds = new Set<string>();
@@ -77,6 +81,31 @@ function sortFolders(folders: FolderDto[]) {
 
 function sortTags(tags: TagDto[]) {
   return sortTagsDefault(tags);
+}
+
+function bookmarkHidden(bookmark: BookmarkDto, key: readonly unknown[]): boolean {
+  if (pendingBookmarkIds.has(bookmark.id)) return true;
+  if (!bookmark.folderId || !pendingFolderIds.has(bookmark.folderId)) return false;
+  const keep = pendingKeeps.get(bookmark.id);
+  return !keep || keep.folderId !== bookmark.folderId || key[1] === bookmark.folderId;
+}
+
+function keepListRow(bookmark: BookmarkDto): BookmarkDto {
+  if (!("contentHtml" in bookmark) && !("highlights" in bookmark)) return bookmark;
+  const { contentHtml: _html, highlights: _highlights, ...row } = bookmark as BookmarkDetailDto;
+  return row;
+}
+
+function rememberKeep(bookmark: BookmarkDto) {
+  const keep = pendingKeeps.get(bookmark.id);
+  if (keep && (!keep.row || (bookmark.updatedAt ?? "") >= (keep.row.updatedAt ?? ""))) keep.row = keepListRow(bookmark);
+}
+
+function registerKeeps(intent: DeleteIntent, rows: readonly BookmarkDto[]) {
+  const byId = new Map(rows.map((row) => [row.id, keepListRow(row)]));
+  for (const keep of intent.keeps ?? []) {
+    if (!pendingKeeps.has(keep.id)) pendingKeeps.set(keep.id, { folderId: keep.folderId, row: byId.get(keep.id) ?? null });
+  }
 }
 
 function tagSummary(tag: TagDto): TagSummaryDto {
@@ -119,7 +148,8 @@ function ensurePendingStripper() {
     if (key[1] === "extraction-progress") return;
 
     if (key[1] === "detail" && isBookmarkRecord(data)) {
-      if (pendingBookmarkIds.has(data.id) || (data.folderId && pendingFolderIds.has(data.folderId))) {
+      rememberKeep(data);
+      if (bookmarkHidden(data, key)) {
         queryClient.removeQueries({ queryKey: event.query.queryKey });
       } else if (pendingTagIds.size > 0 && bookmarkHasPendingTag(data)) {
         queryClient.setQueryData(event.query.queryKey, stripPendingTags(data));
@@ -128,13 +158,27 @@ function ensurePendingStripper() {
     }
 
     if (!isPagedBookmarks(data)) return;
+    // A refetch still sees the pre-commit server state. Retain provisional
+    // keeps in the root, including a root query opened during the Undo window.
+    const incomingKeeps: BookmarkDto[] = [];
+    if (pendingKeeps.size > 0) {
+      for (const page of data.pages) for (const item of page?.items ?? []) rememberKeep(item);
+      if (key[1] === null && data.pages.length > 0) {
+        const present = new Set(data.pages.flatMap((page) => (page?.items ?? []).map((item) => item.id)));
+        for (const keep of pendingKeeps.values()) {
+          const row = keep.row;
+          if (row && (row.folderId === keep.folderId || row.folderId === null) &&
+            !present.has(row.id) && !pendingBookmarkIds.has(row.id)) incomingKeeps.push(row);
+        }
+      }
+    }
     const rowsPending = pendingBookmarkIds.size > 0 || pendingFolderIds.size > 0;
     const needsHide = rowsPending && data.pages.some(
       (page) =>
         Array.isArray(page?.items) &&
         page.items.some(
           (item) =>
-            pendingBookmarkIds.has(item.id) || (item.folderId != null && pendingFolderIds.has(item.folderId)),
+            bookmarkHidden(item, key),
         ),
     );
     const needsTagStrip =
@@ -142,20 +186,16 @@ function ensurePendingStripper() {
       data.pages.some(
         (page) => Array.isArray(page?.items) && page.items.some((item) => bookmarkHasPendingTag(item)),
       );
-    if (!needsHide && !needsTagStrip) return;
+    if (!needsHide && !needsTagStrip && incomingKeeps.length === 0) return;
 
     queryClient.setQueryData(event.query.queryKey, {
       ...data,
-      pages: data.pages.map((page) => {
+      pages: data.pages.map((page, index) => {
         if (!page || !Array.isArray(page.items)) return page;
         return {
           ...page,
-          items: page.items
-            .filter(
-              (item) =>
-                !pendingBookmarkIds.has(item.id) &&
-                !(item.folderId != null && pendingFolderIds.has(item.folderId)),
-            )
+          items: [...(index === 0 ? incomingKeeps : []), ...page.items]
+            .filter((item) => !bookmarkHidden(item, key))
             .map((item) => (needsTagStrip ? stripPendingTags(item) : item)),
         };
       }),
@@ -174,18 +214,18 @@ function bookmarkHasPendingTag(bookmark: BookmarkDto) {
  * deleted (and therefore needs the stripper run on it)? */
 function cachedDataHidesPending(queryKey: readonly unknown[], data: unknown): boolean {
   if (queryKey[1] === "detail") {
-    return isBookmarkRecord(data) && (pendingBookmarkIds.has(data.id) ||
-      (!!data.folderId && pendingFolderIds.has(data.folderId)) ||
+    return isBookmarkRecord(data) && (bookmarkHidden(data, queryKey) ||
       (pendingTagIds.size > 0 && bookmarkHasPendingTag(data)));
   }
   if (!isPagedBookmarks(data)) return false;
+  if (queryKey[1] === null && pendingKeeps.size > 0) return true;
   const rowsPending = pendingBookmarkIds.size > 0 || pendingFolderIds.size > 0;
   const tagsPending = pendingTagIds.size > 0;
   if (!rowsPending && !tagsPending) return false;
   for (const page of data.pages) {
     if (!page || !Array.isArray(page.items)) continue;
     for (const item of page.items) {
-      if (rowsPending && (pendingBookmarkIds.has(item.id) || (item.folderId != null && pendingFolderIds.has(item.folderId)))) return true;
+      if (rowsPending && bookmarkHidden(item, queryKey)) return true;
       if (tagsPending && bookmarkHasPendingTag(item)) return true;
     }
   }
@@ -273,9 +313,6 @@ interface BookmarkRestore {
 interface HideGroup {
   bookmarks: readonly BookmarkDto[];
   bumpCounts: boolean;
-  /** Kept bookmarks ride along for membership/restore only: the folder's
-   * tombstone hides them, but they are never journal-tombstoned or counted. */
-  tombstone?: boolean;
 }
 
 /** Hide several bookmark groups with ONE membership walk and ONE cache sweep.
@@ -287,19 +324,16 @@ function hideBookmarks(groups: readonly HideGroup[]): BookmarkRestore {
   const lists = new Map<string, (readonly unknown[])[]>();
   const ids = new Set<string>();
   for (const group of groups) {
-    if (group.tombstone === false) continue;
     for (const bookmark of group.bookmarks) ids.add(bookmark.id);
   }
-  const tracked = new Set<string>();
-  for (const group of groups) for (const bookmark of group.bookmarks) tracked.add(bookmark.id);
-  if (tracked.size === 0) return { details, lists };
+  if (ids.size === 0) return { details, lists };
   for (const query of queryClient.getQueryCache().findAll({ queryKey: ["bookmarks"] })) {
     const data = query.state.data;
     if (!isPagedBookmarks(data)) continue;
     for (const page of data.pages) {
       if (!page || !Array.isArray(page.items)) continue;
       for (const item of page.items) {
-        if (!tracked.has(item.id)) continue;
+        if (!ids.has(item.id)) continue;
         lists.set(item.id, [...(lists.get(item.id) ?? []), query.queryKey]);
       }
     }
@@ -309,7 +343,6 @@ function hideBookmarks(groups: readonly HideGroup[]): BookmarkRestore {
     for (const bookmark of group.bookmarks) {
       const detail = queryClient.getQueryData<BookmarkDetailDto | BookmarkDto>(qk.bookmark(bookmark.id));
       if (detail) details.set(bookmark.id, detail);
-      if (group.tombstone === false) continue;
       pendingBookmarkIds.add(bookmark.id);
       if (bookmark.remindAt != null) cancelReminderIds.push(bookmark.id);
     }
@@ -319,9 +352,9 @@ function hideBookmarks(groups: readonly HideGroup[]): BookmarkRestore {
       for (const id of cancelReminderIds) cancelBookmarkReminder(id);
     });
   }
-  // Kept rows also leave their old folder during the window. They have no
-  // bookmark tombstone, but the pending folder suppresses refetched copies.
-  removeBookmarksEverywhere(queryClient, tracked);
+  // Keeps stay in global caches and the root while the source folder leaves.
+  // The subscriber removes their old folder-list membership separately.
+  removeBookmarksEverywhere(queryClient, ids);
   removeRemindersFromCache(queryClient, ids);
   queryClient.removeQueries({ queryKey: ["bookmarks", "detail"], predicate: (query) => ids.has(String(query.queryKey[2])) });
   for (const group of groups) {
@@ -481,6 +514,7 @@ export interface UndoableDeleteOpts {
 }
 
 function releaseIntent(intent: DeleteIntent) {
+  for (const keep of intent.keeps ?? []) pendingKeeps.delete(keep.id);
   for (const bookmark of intent.bookmarks) pendingBookmarkIds.delete(bookmark.id);
   for (const id of intent.contained) pendingBookmarkIds.delete(id);
   for (const id of intent.folders) {
@@ -510,6 +544,7 @@ function syncJournalScope() {
     pendingToastIds.clear();
     pendingBookmarkIds.clear(); pendingFolderIds.clear(); pendingTagIds.clear();
     pendingProtectedFolders.clear();
+    pendingKeeps.clear();
     activeIntents.clear();
     journalScope = key;
     scopeGeneration += 1;
@@ -694,6 +729,11 @@ async function replayDeleteIntent(key: string, intent: DeleteIntent, cachedRows:
   assertScope();
   forgetDeleteIntent(key, intent.id);
   if (deleteJournalKey() !== key) return;
+  // The retained picker is a plain-array cache too. Leaving it behind would
+  // let collectCachedBookmarks rediscover cascaded rows after tombstones clear.
+  for (const id of intent.folders) {
+    queryClient.removeQueries({ queryKey: ["bookmarks", "folder-options", id] });
+  }
   releaseIntent(intent);
   // Keeps that are unaccountably elsewhere must not linger as stale folder
   // rows; refetch restores wherever they really live.
@@ -704,7 +744,7 @@ async function replayDeleteIntent(key: string, intent: DeleteIntent, cachedRows:
   }
   const movedKeeps = [...settlement.verified.entries()]
     .filter((entry): entry is [string, BookmarkDto] => entry[1] !== null)
-    .map(([, row]) => ({ ...row, folderId: null }));
+    .map(([, row]) => ({ ...keepListRow(row), folderId: null }));
   moveBookmarksInCache(queryClient, movedKeeps);
   if (movedKeeps.length > 0) {
     for (const query of queryClient.getQueryCache().findAll({ queryKey: ["bookmarks", "library-index"] })) {
@@ -734,7 +774,9 @@ export function resumePendingDeletes() {
     const intents = readDeleteIntents(key);
     if (intents.length === 0) return;
     ensurePendingStripper();
+    const cachedRows = collectCachedBookmarks(queryClient);
     for (const intent of intents) {
+      registerKeeps(intent, cachedRows);
       const activeKey = `${key}:${intent.id}`;
       for (const bookmark of intent.bookmarks) pendingBookmarkIds.add(bookmark.id);
       for (const id of intent.contained) pendingBookmarkIds.add(id);
@@ -816,9 +858,8 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
   const contained = collectBookmarksInFolders(folderIds).filter(
     (bookmark) => !pendingBookmarkIds.has(bookmark.id) && !standaloneIds.has(bookmark.id),
   );
-  // Ticked bookmarks leave the folder at commit time instead of cascading.
-  // They are never tombstoned: the folder's tombstone already hides them, so
-  // undo restores them in place and commit surfaces them in Bookmarks.
+  // Ticked bookmarks appear in the root during Undo without being marked as
+  // server-confirmed moves. Only the atomic endpoint settles their membership.
   // Every explicit tick is preserved verbatim — even one whose own delete is
   // still undoable: if that delete later commits, the atomic endpoint treats
   // the vanished keep as a no-op; if it is undone, the keep saves the row.
@@ -855,17 +896,27 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
   const generation = scopeGeneration;
   activeIntents.add(activeKey);
 
+  registerKeeps(journal.intent, contained);
   hideFolders(folders);
   // One membership walk + one cache sweep for contained and standalone rows.
-  // Kept bookmarks ride along so Undo can put them back without a refetch.
+  // Keeps retain their latest rows and need only membership reconciliation.
   const keepRows = contained.filter((bookmark) => keepIdSet.has(bookmark.id));
   const restoreGroups: { bookmarks: readonly BookmarkDto[]; snapshot: BookmarkRestore; bumpCounts: boolean }[] = [];
   const hideGroups: HideGroup[] = [
     { bookmarks: deletableContained as readonly BookmarkDto[], bumpCounts: false },
     { bookmarks: standalone as readonly BookmarkDto[], bumpCounts: true },
-    ...(keepRows.length > 0 ? [{ bookmarks: keepRows as readonly BookmarkDto[], bumpCounts: false, tombstone: false as const }] : []),
   ].filter((group) => group.bookmarks.length > 0);
   const combined = hideBookmarks(hideGroups);
+  // Keeping every row leaves no bookmark tombstones to publish. Still notify
+  // the root/source lists so their pending membership is reconciled now.
+  if (keepRows.length > 0) {
+    for (const query of queryClient.getQueryCache().findAll({ queryKey: ["bookmarks"] })) {
+      if (isPagedBookmarks(query.state.data) &&
+        (query.queryKey[1] === null || folderIds.has(String(query.queryKey[1])))) {
+        queryClient.setQueryData(query.queryKey, query.state.data);
+      }
+    }
+  }
   for (const group of hideGroups) {
     restoreGroups.push({ bookmarks: group.bookmarks, snapshot: { details: combined.details, lists: combined.lists }, bumpCounts: group.bumpCounts });
   }
@@ -877,7 +928,13 @@ export function deleteUndoable(opts: UndoableDeleteOpts): { undo: () => void; co
   const showToast = opts.showToast !== false;
 
   const restore = () => {
+    const currentKeeps = collectCachedBookmarks(queryClient).filter((row) => keepIdSet.has(row.id));
+    for (const keep of journal.intent.keeps ?? []) pendingKeeps.delete(keep.id);
     restoreFolders(folders);
+    // Keeps were never removed from global/detail caches. Reconcile their
+    // provisional root membership with the latest rows, retaining edits or
+    // moves made while Undo was available.
+    moveBookmarksInCache(queryClient, currentKeeps.map(keepListRow));
     // Release tag tombstones before re-inserting hidden bookmarks; otherwise
     // the stripper would immediately erase tags from the restored snapshots.
     restoreTags(tags, tagAssignments);

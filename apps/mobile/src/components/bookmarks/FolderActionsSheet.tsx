@@ -110,7 +110,6 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
   const deleteAccessBlocked = Boolean(displayFolder?.protected && !folderUnlocked);
   const { height } = useResponsiveLayout();
   const deleteOpen = visible && mode === "delete";
-  const verifyEmptyFolder = (displayFolder?.bookmarkCount ?? 0) === 0;
 
   // Warm the keep picker while the confirmation opens, before its expansion
   // puts the request on the interaction path. This also verifies cached zero
@@ -119,7 +118,15 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
     displayFolder?.id ?? null,
     deleteOpen && !deleteAccessBlocked,
   );
-  const keepCount = keepIds.length;
+  // A reopened folder may have lost bookmarks since these ticks were saved.
+  // Keep valid choices, but never display or submit selections outside the
+  // current picker (e.g. "3 of 0" after moving everything out).
+  const keepOptionIds = React.useMemo(() => keepOptions.data
+    ? new Set(keepOptions.data.map((item) => item.id)) : null, [keepOptions.data]);
+  const currentKeepIds = keepOptionIds
+    ? keepIds.filter((id) => keepOptionIds.has(id))
+    : keepIds;
+  const keepCount = currentKeepIds.length;
   const keepTotal = keepOptions.data ? keepOptions.data.length : displayFolder?.bookmarkCount ?? 0;
   // Reserve the same viewport for loading and loaded rows. A maxHeight alone
   // lets FlatList's empty/loading content and rows size the dialog differently,
@@ -130,7 +137,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
   const deleteSubtitle =
     keepCount > 0
       ? "Selected bookmarks will move to Bookmarks. This folder and any unselected bookmarks will be deleted. You can undo this."
-      : keepTotal > 0 || keepOptions.isPending
+      : keepTotal > 0 || keepOptions.isPending || keepOptions.isFetching
         ? "This folder and its bookmarks will be deleted. Select any bookmarks you want to keep. You can undo this."
         : "This empty folder will be deleted. You can undo this.";
   // The collapsed summary must carry the folder's real count: a bare "None"
@@ -142,19 +149,17 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
   const keepValue =
     deleteAccessBlocked
       ? "Locked"
-      : keepCount > 0
-        ? `${keepCount} of ${keepTotal}`
-        : keepOptions.isPending
+      : keepOptions.isPending || keepOptions.isFetching
           ? "Checking…"
           : keepOptions.isError
             ? "Try again"
             : keepTotal > 0
-              ? `0 of ${keepTotal}`
+              ? `${keepCount} of ${keepTotal}`
               : "None";
-  // Verify a cached empty count before allowing deletion. A failed check must
-  // leave the picker available so the user can retry rather than blindly delete.
-  const keepChoiceBlocked = (keepOpen || verifyEmptyFolder) && (keepOptions.isPending || keepOptions.isError);
-  const showKeepRow = keepTotal > 0 || keepCount > 0 || (verifyEmptyFolder && keepChoiceBlocked);
+  // Recheck membership on every opening before a destructive confirmation.
+  // Cached results must not hide new bookmarks or submit obsolete choices.
+  const keepChoiceBlocked = keepOptions.isPending || keepOptions.isFetching || keepOptions.isError;
+  const showKeepRow = keepTotal > 0 || keepCount > 0 || (!deleteAccessBlocked && keepChoiceBlocked);
 
   // Nested pages share ownership; final dismissal starts the row's fade now.
   useMenuHighlight(visible, displayFolder ? folderKey(displayFolder.id) : null);
@@ -179,6 +184,12 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
     setRemoving(false);
     void isDeviceLockAvailable().then(setDeviceLockAvailable);
   }, [visible, folder?.id]);
+
+  React.useEffect(() => {
+    if (!deleteOpen || !keepOptionIds || keepOptions.isFetching || keepOptions.isError) return;
+    setKeepIds((current) => current.every((id) => keepOptionIds.has(id))
+      ? current : current.filter((id) => keepOptionIds.has(id)));
+  }, [deleteOpen, keepOptionIds, keepOptions.isFetching, keepOptions.isError]);
 
   // Keep choices belong to the folder being deleted, not to this sheet session:
   // reopening the same folder restores the ticks, a different folder starts clean.
@@ -453,7 +464,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
     if (!folder || busy || keepChoiceBlocked || deleteAccessBlocked) return;
     haptics.medium();
     del.mutate(folder, {
-      keepIds,
+      keepIds: currentKeepIds,
       onDeleted: () => {
         onDeleted?.(folder.id);
         onDismiss();
@@ -887,7 +898,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
                       </View>
                     ) : null}
                     ListEmptyComponent={
-                      keepOptions.isPending ? (
+                      keepOptions.isPending || keepOptions.isFetching ? (
                         <View style={styles.keepStatus}><Spinner /></View>
                       ) : keepOptions.isError ? (
                         <View style={styles.keepStatus}>

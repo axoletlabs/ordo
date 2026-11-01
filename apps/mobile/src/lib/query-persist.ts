@@ -145,10 +145,22 @@ export function trimPersistedQueryData(queryKey: readonly unknown[], data: unkno
   if (!data || typeof data !== "object") return data;
   const pages = (data as { pages?: unknown }).pages;
   const pageParams = (data as { pageParams?: unknown }).pageParams;
-  if (!Array.isArray(pages) || pages.length <= MAX_PERSISTED_LIST_PAGES) return data;
+  if (!Array.isArray(pages)) return data;
+  // Pending folder-delete keeps can appear in Bookmarks before the server
+  // confirms their move. They still belong to their source folder and must
+  // stay in RAM, especially when that source folder is protected or hidden.
+  let changed = pages.length > MAX_PERSISTED_LIST_PAGES;
+  const keptPages = pages.slice(0, MAX_PERSISTED_LIST_PAGES).map((page) => {
+    if (!page || !Array.isArray(page.items)) return page;
+    const items = page.items.filter((item: { folderId?: unknown } | null) => item?.folderId === queryKey[1]);
+    if (items.length === page.items.length) return page;
+    changed = true;
+    return { ...page, items };
+  });
+  if (!changed) return data;
   return {
     ...(data as object),
-    pages: pages.slice(0, MAX_PERSISTED_LIST_PAGES),
+    pages: keptPages,
     pageParams: Array.isArray(pageParams) ? pageParams.slice(0, MAX_PERSISTED_LIST_PAGES) : pageParams,
   };
 }
