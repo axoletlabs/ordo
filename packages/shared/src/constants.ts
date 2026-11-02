@@ -112,7 +112,7 @@ export const FOLDER_DELETE_KEEP_LIMIT = 20_000;
  * pipeline changes enough that stored content should be re-extracted; rows
  * with an older (or missing) version are refreshed in the background.
  */
-export const EXTRACTION_VERSION = 12;
+export const EXTRACTION_VERSION = 13;
 
 /** Client poll cadence while a bookmark is `pending` (200ms → 1.5s). */
 export function extractionPollIntervalMs(dataUpdateCount: number): number {
