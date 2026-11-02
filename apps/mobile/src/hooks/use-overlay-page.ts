@@ -57,5 +57,8 @@ export function useOverlayPage<T>(visible: boolean, pageKey: string, value: T) {
     cancelAnimation(progress);
   }, [progress]);
   const style = useAnimatedStyle(() => ({ opacity: progress.value }));
-  return { content, contentKey, style, leaving: outgoing !== null };
+  return { content, contentKey, style, leaving: outgoing !== null,
+    /** The committed successor, available while the outgoing page fades so the
+     * surface can pre-measure it and animate geometry with the fade-in. */
+    incoming: outgoing ? { key: pageKey, value } : null };
 }

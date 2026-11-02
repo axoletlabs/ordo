@@ -29,7 +29,7 @@ import { PanelHeader } from "./PanelHeader";
 import { PanelActions } from "./SheetActionRow";
 import { ThemedScrollView, type ThemedScrollViewProps } from "./ThemedScrollView";
 import { InputSurfaceContext } from "./input-surface";
-import { InputFocusScopeContext, useInputFocusScope } from "./input-focus-scope";
+import { InputFocusScopeContext, useInputFocusScope, type InputFocusScope } from "./input-focus-scope";
 import { panelKeyboardLift } from "../../lib/panel-keyboard-layout";
 import { useMaterialMotion } from "../../theme/material-motion";
 import { PressableScale } from "./PressableScale";
@@ -38,6 +38,13 @@ function panelChildren(children: React.ReactNode): React.ReactNode[] {
   return React.Children.toArray(children).flatMap((child) =>
     React.isValidElement<{ children?: React.ReactNode }>(child) && (child.type === React.Fragment || child.type === ThemedScrollView)
       ? panelChildren(child.props.children) : [child]);
+}
+
+/** Header/body/actions decomposition shared by the live page and its ghost. */
+function splitPanelChildren(nodes: React.ReactNode[]) {
+  const headers = nodes.filter((node) => React.isValidElement(node) && node.type === PanelHeader);
+  const actions = nodes.filter((node) => React.isValidElement(node) && node.type === PanelActions);
+  return { headers, actions, body: nodes.filter((node) => !headers.includes(node) && !actions.includes(node)) };
 }
 import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
 import { layout, radius, spacing } from "../../theme/tokens";
@@ -88,6 +95,9 @@ export interface FloatingPanelProps {
   pageKey?: string;
 }
 
+/** A prepared successor page, measured offscreen while the current one leaves. */
+type PanelGhost = ReturnType<typeof splitPanelChildren>;
+
 export function FloatingPanel(props: FloatingPanelProps) {
   const [activated, setActivated] = React.useState(props.visible);
   if (props.visible && !activated) setActivated(true);
@@ -98,8 +108,12 @@ export function FloatingPanel(props: FloatingPanelProps) {
 function PagedFloatingPanelSurface(props: FloatingPanelProps & { pageKey: string }) {
   // Retain content and scroll ownership together during the outgoing fade.
   const page = useOverlayPage(props.visible, props.pageKey, { children: props.children, scrollBody: props.scrollBody });
+  // While the outgoing page fades, the surface measures this successor so the
+  // height spring starts in the same commit as the fade-in (see PageGhost).
+  const ghost = page.incoming
+    ? splitPanelChildren(panelChildren(page.incoming.value.children)) : null;
   return <FloatingPanelSurface {...props} scrollBody={page.content.scrollBody}
-    pageLeaving={page.leaving} pageStyle={page.style}>{page.content.children}</FloatingPanelSurface>;
+    pageLeaving={page.leaving} pageStyle={page.style} ghost={ghost}>{page.content.children}</FloatingPanelSurface>;
 }
 
 function FloatingPanelSurface({
@@ -124,9 +138,11 @@ function FloatingPanelSurface({
   keepMounted = false,
   obscured = false,
   interactive = true,
+  pageKey,
   pageStyle,
   pageLeaving = false,
-}: FloatingPanelProps & { pageLeaving?: boolean; pageStyle?: ReturnType<typeof useOverlayPage>["style"] }) {
+  ghost = null,
+}: FloatingPanelProps & { pageLeaving?: boolean; pageStyle?: ReturnType<typeof useOverlayPage>["style"]; ghost?: PanelGhost | null }) {
   const { palette } = useTheme();
   const sheet = presentation === "bottom-sheet";
   const expandedSheet = sheet && sheetSizing === "expanded";
@@ -143,7 +159,16 @@ function FloatingPanelSurface({
   // otherwise re-renders this publisher and republishes its entire portal on
   // every frame, competing with Reanimated's Fabric commits.
   const panelHeight = useSharedValue(0);
-  const [naturalContentHeight, setNaturalContentHeight] = React.useState<number | null>(null);
+  // The live chain's natural height, keyed by page: during a page swap the
+  // committed height still describes the outgoing page, so the keyed compare
+  // is what tells the ghost hand-off apart from a stale report.
+  const [naturalContent, setNaturalContent] = React.useState<{ key: string; height: number } | null>(null);
+  // The successor's natural height, measured while the outgoing page fades.
+  // Applied in the swap commit so the height spring runs with the fade-in
+  // instead of trailing it by the live measure's extra commit rounds.
+  const [ghostHeight, setGhostHeight] = React.useState<{ key: string; height: number } | null>(null);
+  const pageKeyRef = React.useRef<string | undefined>(pageKey);
+  pageKeyRef.current = pageKey;
   const [sheetHeaderHeight, setSheetHeaderHeight] = React.useState(0);
   const [sheetActionsHeight, setSheetActionsHeight] = React.useState(0);
   const [sheetBodyHeight, setSheetBodyHeight] = React.useState<number | null>(null);
@@ -164,12 +189,12 @@ function FloatingPanelSurface({
     onDismiss();
   }, [dismissible, onDismiss]);
   const scrimPress = useScrimPress(visible && interactive && !obscured && dismissOnScrim, hideAndDismiss);
-  const layoutReady = (Platform.OS === "web" || measured) && adaptiveReady && (fillSheet || naturalContentHeight != null);
+  const layoutReady = (Platform.OS === "web" || measured) && adaptiveReady && (fillSheet || naturalContent != null);
   const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, {
     interactive: interactive && !obscured, onEntered, onExited, onExiting, ready: layoutReady || layoutFallback,
   });
   React.useEffect(() => {
-    if (!rendered && !keepMounted) { setMeasured(false); setNaturalContentHeight(null); setLayoutFallback(false); }
+    if (!rendered && !keepMounted) { setMeasured(false); setNaturalContent(null); setLayoutFallback(false); setGhostHeight(null); }
   }, [rendered, keepMounted]);
   // A layout report should arrive in the first frame. If it never does,
   // release the entrance instead of keeping an invisible, blocking dialog.
@@ -283,8 +308,18 @@ function FloatingPanelSurface({
   const customStyle = StyleSheet.flatten(style);
   const topPadding = customStyle?.paddingTop ?? customStyle?.paddingVertical ?? customStyle?.padding ?? (sheet ? 0 : panelPadding);
   const bottomPadding = customStyle?.paddingBottom ?? customStyle?.paddingVertical ?? customStyle?.padding ?? (sheet ? 0 : panelPadding);
-  const fittedContentHeight = !fillSheet && naturalContentHeight != null
-    ? Math.min(heightLimit, naturalContentHeight + Number(topPadding) + Number(bottomPadding)) : null;
+  // The ghost only wins in the swap commit, while the keyed live measure
+  // still describes the outgoing page. The first live report keyed to this
+  // page is the real geometry and is authoritative from there on.
+  const liveReady = naturalContent != null && naturalContent.key === pageKey;
+  const ghostReady = !pageLeaving && ghostHeight != null && ghostHeight.key === pageKey && !liveReady;
+  const measuredNaturalHeight = ghostReady ? ghostHeight.height : naturalContent?.height ?? null;
+  React.useLayoutEffect(() => {
+    if (pageLeaving || !liveReady) return;
+    setGhostHeight(null);
+  }, [pageLeaving, liveReady]);
+  const fittedContentHeight = !fillSheet && measuredNaturalHeight != null
+    ? Math.min(heightLimit, measuredNaturalHeight + Number(topPadding) + Number(bottomPadding)) : null;
   const contentSizeStyle = useSurfaceSize(fittedContentHeight, {
     active: visible && !obscured,
     geometryKey: `${width}:${height}:${keyboardTop}:${heightLimit}:${panelPadding}`,
@@ -295,8 +330,16 @@ function FloatingPanelSurface({
   const scrollAll = scrollBody && heightLimit < 220;
   const recordNaturalHeight = React.useCallback((next: number) => {
     if (next <= 0 || obscured) return;
-    setNaturalContentHeight(current => current != null && Math.abs(current - next) < 0.5 ? current : next);
+    const key = pageKeyRef.current ?? "";
+    setNaturalContent(current => current != null && current.key === key && Math.abs(current.height - next) < 0.5
+      ? current : { key, height: next });
   }, [obscured]);
+  const recordGhostHeight = React.useCallback((next: number) => {
+    if (next <= 0) return;
+    const key = pageKeyRef.current ?? "";
+    setGhostHeight(current => current != null && current.key === key && Math.abs(current.height - next) < 0.5
+      ? current : { key, height: next });
+  }, []);
 
   React.useLayoutEffect(() => {
     if (!visible) return;
@@ -455,7 +498,7 @@ function FloatingPanelSurface({
                 // Native flex:1 children need a definite first viewport to
                 // produce header/body/action measurements. Without it Yoga
                 // collapses the unmeasured dialog before those callbacks run.
-                height: fillSheet || naturalContentHeight == null ? heightLimit : undefined,
+                height: fillSheet || naturalContent?.height == null ? heightLimit : undefined,
                 backgroundColor: Platform.OS === "web" ? "transparent" : panelSurface,
                 ...corners,
                 ...(sheet ? { overflow: "hidden" as const } : {}),
@@ -483,7 +526,8 @@ function FloatingPanelSurface({
             </OverlayPageContent> : <DialogContent headers={headers} actions={actions} body={body}
               scrollHeader={scrollHeader} scrollAll={scrollAll} scrollBody={scrollBody}
               scrollResetKey={scrollResetKey} heightLimit={Math.max(0, heightLimit - Number(topPadding) - Number(bottomPadding))}
-              onMeasure={recordNaturalHeight} leaving={pageLeaving} style={pageStyle} fade={Platform.OS === "web" ? scrimStyle : undefined} />}
+              onMeasure={recordNaturalHeight} leaving={pageLeaving} style={pageStyle} fade={Platform.OS === "web" ? scrimStyle : undefined}
+              ghost={ghost} onGhostMeasure={recordGhostHeight} />}
             </InputSurfaceContext.Provider>
             </PanelTitleContext.Provider>
             </ResizeOwnerContext.Provider>
@@ -510,13 +554,15 @@ function PanelScrollView({ resetKey, ...props }: ThemedScrollViewProps & { reset
  * Header and actions participate in the CURRENT animated height, so actions
  * never land outside the card while its target size is still being reached. */
 function DialogContent({ headers, actions, body, scrollHeader, scrollAll, scrollBody,
-  scrollResetKey, heightLimit, onMeasure, style, fade, leaving }: {
+  scrollResetKey, heightLimit, onMeasure, style, fade, leaving, ghost, onGhostMeasure }: {
   headers: React.ReactNode[]; actions: React.ReactNode[]; body: React.ReactNode[];
   scrollHeader: boolean; scrollAll: boolean; scrollBody: boolean;
   scrollResetKey?: string; heightLimit: number; onMeasure: (height: number) => void;
   style?: ReturnType<typeof useOverlayPage>["style"];
   fade?: ReturnType<typeof useOverlayPage>["style"];
   leaving: boolean;
+  ghost?: PanelGhost | null;
+  onGhostMeasure?: (height: number) => void;
 }) {
   const [headerHeight, setHeaderHeight] = React.useState(0);
   const [actionsHeight, setActionsHeight] = React.useState(0);
@@ -548,12 +594,56 @@ function DialogContent({ headers, actions, body, scrollHeader, scrollAll, scroll
       {scrollBody ? <PanelScrollView resetKey={scrollResetKey} keyboardShouldPersistTaps="handled" nestedScrollEnabled
         style={{ flex: 1 }} onContentSizeChange={(_width, next) => recordBody(next)}>{content}</PanelScrollView>
         : <View style={{ flexShrink: 0, maxHeight: bodyLimit }} onLayout={event => recordBody(event.nativeEvent.layout.height)}>{content}</View>}
+      {ghost && onGhostMeasure ? <PageGhost headers={ghost.headers} actions={ghost.actions} body={ghost.body}
+        scrollHeader={scrollHeader} scrollAll={scrollAll} heightLimit={bodyLimit} onMeasure={onGhostMeasure} /> : null}
     </View>
     {fixedActions ? <View testID="material-dialog-actions" style={{ flexShrink: 0 }}>
       <View onLayout={event => setActionsHeight(event.nativeEvent.layout.height)}>{actions}</View>
     </View> : null}
   </OverlayPageContent>;
 }
+
+/** Offscreen measurement of the page a fading dialog is leaving. Rendering it
+ * during the outgoing fade lets the surface spring to the successor's height
+ * in the swap commit, together with the incoming fade, instead of trailing
+ * the fade by the live measure's extra commit rounds (a late second motion
+ * the eye reads as a jump). Painted nothing, receives nothing. */
+function PageGhost({ headers, actions, body, scrollHeader, scrollAll, heightLimit, onMeasure }: {
+  headers: React.ReactNode[]; actions: React.ReactNode[]; body: React.ReactNode[];
+  scrollHeader: boolean; scrollAll: boolean; heightLimit: number;
+  onMeasure: (height: number) => void;
+}) {
+  const [headerHeight, setHeaderHeight] = React.useState(0);
+  const [actionsHeight, setActionsHeight] = React.useState(0);
+  const [bodyHeight, setBodyHeight] = React.useState<number | null>(null);
+  const gap = !scrollHeader && headers.length && body.length ? spacing[16] : 0;
+  const fixedHeader = !scrollHeader && headers.length > 0;
+  const fixedActions = !scrollAll && actions.length > 0;
+  React.useEffect(() => {
+    if (bodyHeight == null || fixedHeader && headerHeight === 0 || fixedActions && actionsHeight === 0) return;
+    onMeasure(Math.min(heightLimit, (fixedHeader ? headerHeight : 0) + (fixedActions ? actionsHeight : 0) + bodyHeight + gap));
+  }, [bodyHeight, headerHeight, actionsHeight, fixedHeader, fixedActions, gap, heightLimit, onMeasure]);
+  const ref = React.useRef<View>(null);
+  React.useLayoutEffect(() => {
+    if (Platform.OS === "web" && ref.current) (ref.current as unknown as HTMLElement).inert = true;
+  }, []);
+  return <InputFocusScopeContext.Provider value={GHOST_FOCUS_SCOPE}>
+    <View ref={ref} pointerEvents="none" aria-hidden importantForAccessibility="no-hide-descendants"
+      testID="material-dialog-ghost" style={[StyleSheet.absoluteFill, styles.ghost]}>
+      {fixedHeader ? <View style={{ flexShrink: 0 }} onLayout={event => setHeaderHeight(event.nativeEvent.layout.height)}>
+        {headers.map(header => React.isValidElement<{ style?: StyleProp<ViewStyle> }>(header)
+          ? React.cloneElement(header, { style: [header.props.style, { marginBottom: 0 }] }) : header)}
+      </View> : null}
+      <View onLayout={event => setBodyHeight(event.nativeEvent.layout.height)}>{body}</View>
+      {fixedActions ? <View onLayout={event => setActionsHeight(event.nativeEvent.layout.height)}>{actions}</View> : null}
+    </View>
+  </InputFocusScopeContext.Provider>;
+}
+
+/** The ghost's fields live outside every real overlay scope: never the top
+ * owner, so they cannot take native focus, keep the keyboard, or win a resume
+ * while their invisible measurement copy exists. */
+const GHOST_FOCUS_SCOPE: InputFocusScope = { active: false, ready: false, session: 0, owner: -1 };
 
 /** Keep partially scrolled lines from colliding with the sheet's fixed chrome.
  * Body padding leaves the first and last lines clear of these 24dp fades. */
@@ -648,4 +738,5 @@ const styles = StyleSheet.create({
   },
   sheetHandleTarget: { height: 48, alignItems: "center", justifyContent: "center" },
   sheetHandle: { width: 32, height: 4, borderRadius: radius.full },
+  ghost: { opacity: 0 },
 });
