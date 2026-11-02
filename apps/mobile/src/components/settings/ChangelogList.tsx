@@ -269,28 +269,6 @@ function Paragraph({ inlines, variant }: { inlines: ChangelogInline[]; variant: 
 
 function NoteList({ items, nested }: { items: ChangelogListItem[]; nested?: boolean }) {
   const { palette } = useTheme();
-  // Named highlights use ordinary Markdown, so the same notes remain readable
-  // on GitHub. Keep them together on one tonal surface, not a card per point.
-  const highlights = !nested && items.length > 0 && items.every((item) =>
-    item.kind === "bullet" && item.blocks[0]?.type === "paragraph" && item.blocks[0].inlines[0]?.type === "strong");
-  if (highlights) {
-    return <View testID="changelog-highlights" style={[styles.highlights, { backgroundColor: palette.surfaceContainerHigh }]}>
-      {items.map((item, index) => {
-        const first = item.blocks[0];
-        if (first.type !== "paragraph" || first.inlines[0]?.type !== "strong") return null;
-        const description = first.inlines.slice(1).map((part, partIndex) => partIndex === 0 && part.type === "text"
-          ? { ...part, text: part.text.replace(/^\s*[—–:-]?\s*/, "") } : part);
-        const title = first.inlines[0].inlines.map((part, partIndex, all) =>
-          partIndex === all.length - 1 && part.type === "text"
-            ? { ...part, text: part.text.replace(/:\s*$/, "") } : part);
-        return <View key={index} style={styles.highlight}>
-          <InlineRun inlines={title} variant="headline" />
-          {description.length ? <InlineRun inlines={description} variant="bodyMedium" color="secondary" /> : null}
-          {item.blocks.slice(1).map((block, blockIndex) => <BlockView key={blockIndex} block={block} nested />)}
-        </View>;
-      })}
-    </View>;
-  }
   return (
     <View testID="changelog-list" style={[styles.list, nested ? styles.nestedList : null]}>
       {items.map((item, index) => (
@@ -529,7 +507,9 @@ function ChangelogSheetBody({
   }, [selected?.body]);
   const date = selected && !Number.isNaN(Date.parse(selected.publishedAt))
     ? new Date(selected.publishedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : null;
-  const releaseDetails = [headline && selected ? releaseName(selected.version) : null, date].filter(Boolean).join(" · ");
+  const version = selected ? releaseName(selected.version) : null;
+  const releaseTitle = headline && headline.trim() !== version ? headline : "What's new";
+  const releaseDetails = [version, date].filter(Boolean).join(" · ");
   const motion = useMaterialMotion();
   const contentOpacity = useSharedValue(1);
   const previousTag = useRef(selected?.tagName);
@@ -567,11 +547,8 @@ function ChangelogSheetBody({
   return (
     <FloatingPanel visible={visible} onDismiss={onDismiss} onShow={onShow} maxWidth={640}
       presentation="bottom-sheet" sheetSizing="adaptive" sheetBodyTopPadding={spacing[8]} scrollResetKey={selected?.tagName}>
-      <PanelHeader title="What's new" titleVariant="labelLarge" titleColor="accent" align="left"
-        accessory={selected ? <Animated.View style={[styles.releaseHeading, contentStyle]}>
-          <Text variant="headlineSmall" accessibilityRole="header" numberOfLines={2}>{headline || releaseName(selected.version)}</Text>
-          {releaseDetails ? <Text variant="bodyMedium" color="secondary" numberOfLines={1}>{releaseDetails}</Text> : null}
-        </Animated.View> : undefined} />
+      <PanelHeader title={releaseTitle} titleVariant="headlineSmall" titleColor="primary" align="left"
+        subtitle={releaseDetails || undefined} />
       {body}
       <PanelActions confirmLabel="Got it" size={compactActions ? "sm" : "md"} fullWidth={!compactActions}
         inline={compactActions} onConfirm={onDismiss}>
@@ -614,9 +591,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   noteBlock: { marginTop: spacing[16] },
-  highlights: { padding: spacing[16], borderRadius: radius.xl, gap: spacing[16] },
-  highlight: { gap: spacing[4] },
-  releaseHeading: { marginTop: spacing[4], width: "100%", gap: spacing[4] },
   sectionHeading: { marginTop: spacing[24] },
   sectionBody: { marginTop: spacing[8] },
   empty: { gap: spacing[16] },
