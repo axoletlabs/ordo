@@ -15,6 +15,8 @@ import {
 } from "./reader.service.js";
 import { TagSuggestionService } from "./tag-suggestion.service.js";
 import { htmlToSearchText } from "./html-text.js";
+import { isJunkPageTitle, isUsablePageTitle, peekMetadata } from "./reader-parse.js";
+import { provisionalTitle } from "./provisional-title.js";
 import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
 import { isLibraryCiphertext } from "../crypto/library-crypto.js";
 
@@ -176,7 +178,7 @@ export class ExtractionService {
     if (this.canceled.has(bookmarkId)) return;
     const existingOverride = await this.prisma.bookmark.findUnique({
       where: { id: bookmarkId },
-      select: { contentKindOverride: true, userId: true },
+      select: { contentKindOverride: true, title: true, userId: true },
     });
     if (this.canceled.has(bookmarkId)) return;
     const userId = existingOverride?.userId;
@@ -193,9 +195,20 @@ export class ExtractionService {
         onHtml: (html) => {
           capturedHtml = html;
         },
-        onMetadata: (meta) => this.writeEarlyMetadata(bookmarkId, userId, meta, mode, force),
+        onMetadata: (meta) => this.writeEarlyMetadata(bookmarkId, userId, url, meta, mode, force),
       });
       if (this.canceled.has(bookmarkId)) return;
+      // Imports keep their stored title (`mode: "content"`), but a hostname
+      // placeholder was never a real title — let a usable one replace it.
+      const importedTitleFix =
+        mode === "content" &&
+        isUsablePageTitle(extracted.title, url) &&
+        !isUsablePageTitle(
+          this.openStoredTitle(bookmarkId, userId, existingOverride?.title),
+          url,
+        )
+          ? { title: extracted.title.slice(0, 500) }
+          : {};
       const written = await this.prisma.bookmark.updateMany({
         where: force
           ? { id: bookmarkId, contentKindOverride: "article" }
@@ -217,6 +230,7 @@ export class ExtractionService {
                 extractionVersion: EXTRACTION_VERSION,
               }
             : {
+                ...importedTitleFix,
                 readingTimeMinutes: extracted.readingTimeMinutes,
                 contentHtml: extracted.contentHtml,
                 fetchStatus: "ok",
@@ -235,7 +249,7 @@ export class ExtractionService {
       );
       const existing = await this.prisma.bookmark.findUnique({
         where: { id: bookmarkId },
-        select: { contentHtml: true, userId: true },
+        select: { contentHtml: true, title: true, userId: true },
       });
       if (this.canceled.has(bookmarkId)) return;
       const storedHtml = existing
@@ -252,34 +266,69 @@ export class ExtractionService {
         unsupported &&
         (storedContentIsShell ||
           ["social_video_or_app", "js_required", "too_short", "not_an_article"].includes(reason));
+      const storeUnsupported = definitivelyUnreadable || (unsupported && !existing?.contentHtml);
+
+      // A rejected page still names itself: og:title/<title> sit in the HTML
+      // the reader just threw away — or never bothered to fetch for known
+      // non-articles like repo homepages. Rescue the title so the library
+      // shows "facebook/react" instead of "github.com".
+      const currentTitle = existing
+        ? (this.crypto.openBookmark({
+            id: bookmarkId,
+            userId: existing.userId,
+            title: existing.title,
+          }).title as string | null)
+        : null;
+      const rescued =
+        storeUnsupported &&
+        (capturedHtml !== undefined || (unsupported && reason !== "non_html_content"))
+          ? await this.rescueMetadata(
+              url,
+              capturedHtml,
+              userId ?? existing?.userId,
+              controller.signal,
+            )
+          : null;
+      const rescuedTitleText = rescued?.title ?? null;
+      const rescuedTitle =
+        rescuedTitleText &&
+        isUsablePageTitle(rescuedTitleText, url) &&
+        !isUsablePageTitle(currentTitle, url)
+          ? { title: rescuedTitleText.slice(0, 500) }
+          : currentTitle && isJunkPageTitle(currentTitle)
+            ? // An early metadata write stuck a wall title; fall back to the
+              // provisional one rather than keep the junk.
+              { title: provisionalTitle(url, safeHostname(url)) }
+            : {};
+
       await this.prisma.bookmark
         .updateMany({
           where: force
             ? { id: bookmarkId, contentKindOverride: "article" }
             : { id: bookmarkId },
-          data:
-            definitivelyUnreadable || (unsupported && !existing?.contentHtml)
-              ? this.sealExtractionWrite(userId ?? existing?.userId, bookmarkId, {
-                  fetchStatus: "unsupported",
+          data: storeUnsupported
+            ? this.sealExtractionWrite(userId ?? existing?.userId, bookmarkId, {
+                ...rescuedTitle,
+                fetchStatus: "unsupported",
+                extractionReason: reason,
+                extractionVersion: EXTRACTION_VERSION,
+                description: rescued?.description ? rescued.description.slice(0, 1000) : null,
+                author: rescued?.author ? rescued.author.slice(0, 200) : null,
+                publishedAt: rescued?.publishedAt ? new Date(rescued.publishedAt) : null,
+                contentHtml: null,
+                readingTimeMinutes: null,
+              })
+            : existing?.contentHtml
+              ? {
+                  fetchStatus: "ok",
+                  extractionReason: null,
+                  extractionVersion: EXTRACTION_VERSION,
+                }
+              : {
+                  fetchStatus: "failed",
                   extractionReason: reason,
                   extractionVersion: EXTRACTION_VERSION,
-                  description: null,
-                  author: null,
-                  publishedAt: null,
-                  contentHtml: null,
-                  readingTimeMinutes: null,
-                })
-              : existing?.contentHtml
-                ? {
-                    fetchStatus: "ok",
-                    extractionReason: null,
-                    extractionVersion: EXTRACTION_VERSION,
-                  }
-                : {
-                    fetchStatus: "failed",
-                    extractionReason: reason,
-                    extractionVersion: EXTRACTION_VERSION,
-                  },
+                },
         })
         .catch((updateError: unknown) => {
           this.logger.error(
@@ -301,9 +350,44 @@ export class ExtractionService {
     }
   }
 
+  /**
+   * Best-effort title/description for a bookmark the reader rejected. Parses
+   * HTML that was already fetched when present; otherwise makes one
+   * metadata-only fetch that skips the article gates.
+   */
+  private async rescueMetadata(
+    url: string,
+    capturedHtml: string | undefined,
+    userId: string | undefined,
+    signal: AbortSignal,
+  ): Promise<ArticleMetadata | null> {
+    try {
+      return capturedHtml
+        ? peekMetadata(capturedHtml, url)
+        : await this.reader.fetchMetadata(url, { signal, userId });
+    } catch (err) {
+      this.logger.debug(
+        `Title rescue skipped for ${safeHostname(url)}: ${(err as Error).message}`,
+      );
+      return null;
+    }
+  }
+
+  /** Decrypt a stored title for placeholder checks (passthrough when plain). */
+  private openStoredTitle(
+    bookmarkId: string,
+    userId: string | undefined,
+    title: string | null | undefined,
+  ): string | null {
+    if (title === null || title === undefined) return null;
+    if (!userId) return title;
+    return (this.crypto.openBookmark({ id: bookmarkId, userId, title }).title as string) ?? null;
+  }
+
   private async writeEarlyMetadata(
     bookmarkId: string,
     userId: string | undefined,
+    url: string,
     meta: ArticleMetadata,
     mode: ExtractionMode,
     force: boolean,
@@ -316,7 +400,12 @@ export class ExtractionService {
       author?: string | null;
       publishedAt?: Date | null;
     } = {};
-    if (meta.title) data.title = meta.title.slice(0, 500);
+    // Only early-write titles that actually name a page: a challenge or
+    // interstitial title ("Just a moment...") would otherwise stick when the
+    // full extraction is rejected afterwards.
+    if (meta.title && isUsablePageTitle(meta.title, url)) {
+      data.title = meta.title.slice(0, 500);
+    }
     if (meta.description) data.description = meta.description.slice(0, 1000);
     if (meta.author) data.author = meta.author.slice(0, 200);
     if (meta.publishedAt) data.publishedAt = new Date(meta.publishedAt);

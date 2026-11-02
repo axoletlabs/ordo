@@ -46,6 +46,8 @@ export interface ExtractOptions extends ParseOptions {
 interface LoadHtmlOptions {
   cache?: boolean;
   userId?: string;
+  /** Title-only fetch: skip destination, redirect, and AMP article rejections. */
+  metadataOnly?: boolean;
 }
 
 const FETCH_TIMEOUT_MS = 8_000;
@@ -119,13 +121,39 @@ export class ReaderService implements OnModuleDestroy {
     const persist = options.cache !== false;
     if (!persist) {
       this.noteFetch(options.userId);
-      return this.fetchAndMaybeAmp(url, forceArticle, signal, options);
+      return options.metadataOnly
+        ? { html: await this.fetchHtml(url, forceArticle, signal, true) }
+        : this.fetchAndMaybeAmp(url, forceArticle, signal, options);
     }
     const html = await this.htmlCache.remember(url, () => {
       this.noteFetch(options.userId);
-      return this.fetchHtml(url, forceArticle, signal);
+      return this.fetchHtml(url, forceArticle, signal, options.metadataOnly);
     });
-    return this.followAmp(url, html, forceArticle, signal, options);
+    return options.metadataOnly ? { html } : this.followAmp(url, html, forceArticle, signal, options);
+  }
+
+  /**
+   * Fetch just a page's head metadata for destinations the article reader
+   * rejects (repo homepages, app shells, login walls). Keeps the SSRF, budget,
+   * and size limits but skips every article-quality gate and AMP following.
+   */
+  async fetchMetadata(
+    url: string,
+    options: { signal?: AbortSignal; userId?: string } = {},
+  ): Promise<ArticleMetadata | null> {
+    let parsed: URL;
+    try {
+      parsed = new URL(url);
+    } catch {
+      return null;
+    }
+    // Real files (PDFs, images, archives) have no HTML head to read.
+    if (classifyDestination(parsed) === "non_html_content") return null;
+    const { html } = await this.loadHtml(url, true, options.signal, {
+      userId: options.userId,
+      metadataOnly: true,
+    });
+    return peekMetadata(html, url);
   }
 
   private async fetchAndMaybeAmp(
@@ -180,11 +208,12 @@ export class ReaderService implements OnModuleDestroy {
     url: string,
     forceArticle: boolean,
     signal: AbortSignal | undefined,
+    metadataOnly = false,
   ): Promise<string> {
     let lastError: unknown;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        return await this.fetchHtmlOnce(url, forceArticle, signal);
+        return await this.fetchHtmlOnce(url, forceArticle, signal, metadataOnly);
       } catch (err) {
         lastError = err;
         if (err instanceof UnsupportedContentError) throw err;
@@ -200,6 +229,7 @@ export class ReaderService implements OnModuleDestroy {
     url: string,
     forceArticle: boolean,
     signal: AbortSignal | undefined,
+    metadataOnly = false,
   ): Promise<string> {
     let current = new URL(url);
     let res: Response | null = null;
@@ -227,7 +257,7 @@ export class ReaderService implements OnModuleDestroy {
       if (!location) break;
       if (redirects === MAX_REDIRECTS) throw new Error("Too many redirects");
       current = new URL(location, current);
-      this.rejectUnsupportedDestination(current.toString(), forceArticle);
+      if (!metadataOnly) this.rejectUnsupportedDestination(current.toString(), forceArticle);
     }
     if (!res) throw new Error(`Request to ${url} returned no response`);
     if (isRetryableStatus(res.status) && !combined.aborted) {

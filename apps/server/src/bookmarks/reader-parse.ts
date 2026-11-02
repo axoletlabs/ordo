@@ -334,6 +334,41 @@ export function decodeHtmlBytes(bytes: Uint8Array, contentType: string): string 
   }
 }
 
+/**
+ * Page titles that name a wall, not a page: bot challenges, JS gates,
+ * interstitials. Never promote these to a bookmark title.
+ */
+const JUNK_TITLE_PATTERNS: RegExp[] = [
+  ...BOT_CHALLENGE_PATTERNS,
+  /^(?:please|kindly) (?:enable|turn on|activate) /,
+  /^enable (?:javascript|js)\b/,
+  /javascript (?:is|must be) (?:disabled|required)/,
+  /^please wait\b/,
+  /^attention required/,
+  /^one more step/,
+  /^redirecting\b/,
+  /^untitled( document)?$/,
+  /^(?:page )?not found$/,
+  /^error \d{3}\b/,
+  /^403 forbidden/,
+  /^429 too many requests/,
+];
+
+export function isJunkPageTitle(title: string | null | undefined): boolean {
+  const t = (title ?? "").replace(/\s+/g, " ").trim().toLowerCase();
+  if (!t) return true;
+  return JUNK_TITLE_PATTERNS.some((pattern) => pattern.test(t));
+}
+
+/** A title worth storing: names a page, not the hostname or a bot wall. */
+export function isUsablePageTitle(title: string | null | undefined, url: string): boolean {
+  const t = (title ?? "").replace(/\s+/g, " ").trim();
+  if (t.length < 2 || t.length > 500) return false;
+  if (isJunkPageTitle(t)) return false;
+  const host = safeHostname(url).toLowerCase();
+  return !host || t.toLowerCase() !== host;
+}
+
 export function classifyShellText(text: string): ReaderRejectionReason | null {
   if (text.length > SHELL_TEXT_LIMIT) return null;
   const t = text.toLowerCase();
