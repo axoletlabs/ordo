@@ -14,7 +14,6 @@ import { useAppRouter } from "../../../src/hooks/use-app-router";
 import { useNativeUpdateStore } from "../../../src/store/native-update";
 import { APP_VARIANT } from "../../../src/lib/app-variant";
 import { releaseName } from "../../../src/lib/release-name";
-import { CLOUD_WEBSITE_URL } from "../../../src/lib/hosting";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { layout, radius, spacing } from "../../../src/theme/tokens";
 
@@ -62,7 +61,6 @@ export default function AboutScreen() {
         </SettingsGroup>
 
         <SettingsGroup label="The project">
-          <SettingRow icon="globe-outline" label="Ordo website" onPress={() => openURL(CLOUD_WEBSITE_URL)} showChevron />
           <SettingRow icon="logo-github" label="Source code" onPress={() => openURL(REPO_URL)} showChevron />
         </SettingsGroup>
 
