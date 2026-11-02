@@ -2,6 +2,7 @@
 import React from "react";
 import { StyleSheet, View, useWindowDimensions } from "react-native";
 import { MaterialIcon as Ionicons } from "./MaterialIcon";
+import { Badge } from "./Badge";
 import { PressableScale } from "./PressableScale";
 import { Text } from "./Text";
 import { UnavailableLabel } from "./UnavailableLabel";
@@ -18,6 +19,8 @@ export interface SettingRowProps {
   label: string;
   /** Use 0 when the complete value must stay readable, such as a website address. */
   labelLines?: number;
+  /** Small pill after the label, e.g. "Beta" for unfinished features. */
+  badge?: string;
   description?: string;
   /** Disables a switch (or replaces other controls with a status) and explains why. */
   unavailableReason?: string;
@@ -43,6 +46,7 @@ export function SettingRow({
   icon,
   label,
   labelLines = 2,
+  badge,
   description,
   unavailableReason,
   value,
@@ -68,6 +72,7 @@ export function SettingRow({
   const valueColor = destructive ? palette.danger : supportingColor;
   const unavailable = !!unavailableReason;
   const isToggle = React.isValidElement<ToggleProps>(right) && right.type === Toggle;
+  const accessLabel = badge ? `${label}, ${badge}` : label;
   const supportingText = unavailableReason || description;
   const rowStyle = [styles.row, { borderBottomColor: palette.outlineVariant,
     backgroundColor: expressive ? checked ? palette.secondaryContainer : palette.surfaceContainerLow : "transparent",
@@ -84,9 +89,12 @@ export function SettingRow({
         </View>
       ) : null}
       <View style={styles.body}>
-        <Text variant="bodyLarge" numberOfLines={labelLines} style={{ color: destructive ? palette.error : foreground }}>
-          {label}
-        </Text>
+        <View style={styles.labelRow}>
+          <Text variant="bodyLarge" numberOfLines={labelLines} style={[styles.label, { color: destructive ? palette.error : foreground }]}>
+            {label}
+          </Text>
+          {badge ? <Badge tone="blue">{badge}</Badge> : null}
+        </View>
         {supportingText ? (
           <Text variant="footnote" style={[styles.description, { color: supportingColor }]}>
             {supportingText}
@@ -101,7 +109,7 @@ export function SettingRow({
       {unavailable && !isToggle ? <UnavailableLabel /> : right ? (
         <View style={rightFit === "content" ? styles.trailingHug : [styles.trailing, { width: width < 380 ? 112 : layout.settingsControlWidth }]}>
           {React.isValidElement<ToggleProps>(right)
-            ? React.cloneElement(right, { accessibilityLabel: right.props.accessibilityLabel ?? label,
+            ? React.cloneElement(right, { accessibilityLabel: right.props.accessibilityLabel ?? accessLabel,
               ...(isToggle ? { disabled: disabled || unavailable || right.props.disabled,
                 accessibilityHint: unavailableReason ?? right.props.accessibilityHint } : {}) }) : right}
         </View>
@@ -120,7 +128,7 @@ export function SettingRow({
       accessibilityRole={selectionRole ?? "button"}
       disabled={disabled}
       accessibilityState={{ disabled, ...(selectionRole ? { checked: !!checked } : {}) }}
-      accessibilityLabel={description ? `${label}, ${description}` : label}
+      accessibilityLabel={description ? `${accessLabel}, ${description}` : accessLabel}
       style={rowStyle}
       onPress={() => {
         runPressAction(onPress, haptics.light);
@@ -144,6 +152,8 @@ const styles = StyleSheet.create({
   },
   icon: { width: 24, height: 24, alignItems: "center", justifyContent: "center" },
   body: { flex: 1, flexBasis: 0, minWidth: 0 },
+  labelRow: { flexDirection: "row", alignItems: "center", gap: spacing[8] },
+  label: { flexShrink: 1 },
   description: { marginTop: spacing[2] },
   value: { maxWidth: layout.settingsControlWidth, flexShrink: 0, textAlign: "right" },
   trailing: {
