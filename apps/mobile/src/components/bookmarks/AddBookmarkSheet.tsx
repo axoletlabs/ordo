@@ -24,6 +24,7 @@ import { CreateFolderPanel } from "./CreateFolderPanel";
 import { useCreateBookmark } from "../../hooks/use-bookmarks";
 import { useFolders } from "../../hooks/queries";
 import { useFolderTokenStore } from "../../store/folder-tokens";
+import { useSettingsStore } from "../../store/settings";
 import { useTags } from "../../hooks/use-tags";
 import { TagSelectList } from "../tags/TagSelectList";
 import { CreateTagPanel } from "../tags/CreateTagPanel";
@@ -242,6 +243,34 @@ function AddBookmarkContent({
       setSelectedTagIds([...initialTagIds]);
     }
   }, [folderId, initialTagIds, initialUrl, tagKey, visible]);
+
+  // (Beta) Clipboard auto-paste: with the setting on, an opening draft with
+  // no link yet pulls the first URL from the clipboard — even from inside
+  // surrounding text. Silent and best effort: blocked reads, empty boards,
+  // or text without a link just leave the field untouched. Declared after
+  // the reset above so a resolved read lands on the freshly cleared draft;
+  // the revision guard keeps it from ever overwriting typed text.
+  React.useEffect(() => {
+    if (!visible || shareIntake || initialUrl) return;
+    if (!useSettingsStore.getState().autoPasteClipboardLink) return;
+    const epoch = ++pasteEpoch.current;
+    const revision = draftRevision.current;
+    void (async () => {
+      try {
+        // Probe without reading first so an empty clipboard never triggers
+        // the iOS paste notice; if the probe is unavailable, read anyway.
+        if (!(await Clipboard.hasStringAsync().catch(() => true))) return;
+        const clipboard = await Clipboard.getStringAsync();
+        if (!active.current || epoch !== pasteEpoch.current || revision !== draftRevision.current) return;
+        const next = extractSharedUrl(undefined, clipboard);
+        if (!next) return;
+        setUrl(next);
+        setError("");
+      } catch {
+        // The user didn't ask for this read, so never surface its errors.
+      }
+    })();
+  }, [initialUrl, shareIntake, visible]);
 
   React.useEffect(() => {
     if (!visible) return;

@@ -1,6 +1,7 @@
 /**
  * Client/UI settings store: server URL, theme mode, AMOLED, haptics,
- * website-browser, in-app force-dark, and share-sheet preferences.
+ * website-browser, in-app force-dark, share-sheet preferences, and the
+ * save form's clipboard auto-paste.
  * Persisted to AsyncStorage (non-secret). Hydrated explicitly on app start.
  */
 import { create } from "zustand";
@@ -53,6 +54,8 @@ export interface SettingsState {
   shareQuickBookmark: boolean;
   /** When Quick Bookmark is on, also keep the normal Save share target. */
   shareShowQuickAction: boolean;
+  /** (Beta) Prefill the save form's link from a URL on the clipboard. Off by default. */
+  autoPasteClipboardLink: boolean;
   hapticsEnabled: boolean;
   /** One-time tip: OTP is printed to the server console when SMTP is unset. */
   consoleOtpTipDismissed: boolean;
@@ -76,6 +79,7 @@ export interface SettingsState {
   clearAdBlockAllowedHosts: () => void;
   setShareQuickBookmark: (on: boolean) => void;
   setShareShowQuickAction: (on: boolean) => void;
+  setAutoPasteClipboardLink: (on: boolean) => void;
   setHapticsEnabled: (on: boolean) => void;
   dismissConsoleOtpTip: () => void;
 }
@@ -105,6 +109,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   adBlockAllowedHosts: [],
   shareQuickBookmark: false,
   shareShowQuickAction: false,
+  autoPasteClipboardLink: false,
   hapticsEnabled: true,
   consoleOtpTipDismissed: false,
   hydrated: false,
@@ -136,6 +141,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       shareQuickBookmark: saved?.shareQuickBookmark === true,
       shareShowQuickAction:
         saved?.shareQuickBookmark === true && saved?.shareShowQuickAction === true,
+      autoPasteClipboardLink: saved?.autoPasteClipboardLink === true,
       hapticsEnabled: saved?.hapticsEnabled !== false,
       consoleOtpTipDismissed: saved?.consoleOtpTipDismissed === true,
       hydrated: true,
@@ -237,6 +243,11 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
       quickBookmark: get().shareQuickBookmark,
       showAlongside: shareShowQuickAction,
     });
+  },
+  setAutoPasteClipboardLink: (autoPasteClipboardLink) => {
+    if (get().autoPasteClipboardLink === autoPasteClipboardLink) return;
+    set({ autoPasteClipboardLink });
+    void persistSettings({ ...get(), autoPasteClipboardLink });
   },
   setHapticsEnabled: (hapticsEnabled) => {
     set({ hapticsEnabled });

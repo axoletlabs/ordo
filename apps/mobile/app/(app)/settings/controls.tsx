@@ -1,4 +1,4 @@
-/** Preferences for shortcuts, gestures, the share sheet, and the in-app website browser. */
+/** Preferences for shortcuts, gestures, the save form, the share sheet, and the in-app website browser. */
 import React from "react";
 import { Platform } from "react-native";
 import {
@@ -50,12 +50,14 @@ export default function ControlsScreen() {
   const [exceptionsOpen, setExceptionsOpen] = React.useState(false);
   const shareQuickBookmark = useSettingsStore((s) => s.shareQuickBookmark);
   const shareShowQuickAction = useSettingsStore((s) => s.shareShowQuickAction);
+  const autoPasteClipboardLink = useSettingsStore((s) => s.autoPasteClipboardLink);
   const setTapAction = useSettingsStore((s) => s.setCreateButtonTapAction);
   const setHoldAction = useSettingsStore((s) => s.setCreateButtonHoldAction);
   const setWebsiteBrowser = useSettingsStore((s) => s.setWebsiteBrowser);
   const setForceWebsiteDark = useSettingsStore((s) => s.setForceWebsiteDark);
   const setShareQuickBookmark = useSettingsStore((s) => s.setShareQuickBookmark);
   const setShareShowQuickAction = useSettingsStore((s) => s.setShareShowQuickAction);
+  const setAutoPasteClipboardLink = useSettingsStore((s) => s.setAutoPasteClipboardLink);
 
   return (
     <SettingsPage title="Controls">
@@ -84,6 +86,16 @@ export default function ControlsScreen() {
                 onChange={setHoldAction}
               />
             }
+          />
+        </SettingsGroup>
+        <SettingsGroup label="Save bookmark">
+          <SettingRow
+            icon="clipboard-outline"
+            label="Auto-paste links"
+            badge="Beta"
+            description="Fill the link field with a link from your clipboard when the save form opens."
+            right={<Toggle value={autoPasteClipboardLink} onValueChange={setAutoPasteClipboardLink} />}
+            rightFit="content"
           />
         </SettingsGroup>
         {Platform.OS === "android" ? (
