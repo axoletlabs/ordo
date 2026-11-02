@@ -1,3 +1,4 @@
+import { parseHexColor } from "../lib/hsv-color";
 import { APP_COLOR } from "./material-colors";
 
 /** Seeds generate every Material role, including accessible light/dark pairs. */
@@ -14,12 +15,7 @@ export const APP_PALETTES = [
 
 /** Accept familiar RGB shorthand, with or without #; reject alpha and CSS. */
 export function normalizeAppColor(value: unknown): string | null {
-  if (typeof value !== "string") return null;
-  const hex = value.trim().replace(/^#/, "");
-  if (/^[\da-f]{3}$/i.test(hex)) {
-    return `#${hex.split("").map((digit) => digit + digit).join("")}`.toUpperCase();
-  }
-  return /^[\da-f]{6}$/i.test(hex) ? `#${hex.toUpperCase()}` : null;
+  return typeof value === "string" ? parseHexColor(value) : null;
 }
 
 export function appPaletteName(seed: string): string {

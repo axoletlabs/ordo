@@ -12,7 +12,6 @@ import { useSettingsStore, type NavigationAnimation } from "../../../src/store/s
 import { useShallow } from "zustand/react/shallow";
 import { useTheme } from "../../../src/theme/ThemeProvider";
 import { type ThemeMode } from "../../../src/theme/theme";
-import { materialYouAvailable } from "../../../src/theme/device-colors";
 import { layout, spacing } from "../../../src/theme/tokens";
 
 const themeOptions: readonly SettingsSelectOption<ThemeMode>[] = [
@@ -37,8 +36,6 @@ export default function AppearanceScreen() {
   const settings = useSettingsStore(useShallow((state) => ({
     themeMode: state.themeMode,
     setThemeMode: state.setThemeMode,
-    materialYouColors: state.materialYouColors,
-    setMaterialYouColors: state.setMaterialYouColors,
     appColor: state.appColor,
     setAppColor: state.setAppColor,
     themeContrast: state.themeContrast,
@@ -63,11 +60,7 @@ export default function AppearanceScreen() {
         <SettingRow icon="contrast-outline" label="AMOLED black" description="Pure black page background"
           unavailableReason={dark ? undefined : "Switch to dark mode to use pure black."}
           rightFit="content" right={<Toggle value={settings.amoled} onValueChange={settings.setAmoled} accessibilityLabel="AMOLED black" />} />
-        <SettingRow icon="color-fill-outline" label="Material You colors"
-          description="Use your wallpaper colors instead of your app palette."
-          unavailableReason={materialYouAvailable ? undefined : "Requires Android 12 or later."}
-          rightFit="content" right={<Toggle value={settings.materialYouColors} onValueChange={settings.setMaterialYouColors} accessibilityLabel="Material You colors" />} />
-        <AppPalettePicker value={settings.appColor} onChange={settings.setAppColor} overridden={settings.materialYouColors && materialYouAvailable} />
+        <AppPalettePicker value={settings.appColor} onChange={settings.setAppColor} />
         <Text variant="labelLarge" color="secondary" style={styles.controlLabel}>Contrast</Text>
         <View style={styles.contrast}>
           <Segmented accessibilityLabel="Color contrast" options={contrasts} value={String(settings.themeContrast)} onChange={(value) => settings.setThemeContrast(Number(value) as 0 | 0.5 | 1)} />
