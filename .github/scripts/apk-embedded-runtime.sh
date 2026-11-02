@@ -34,7 +34,7 @@ if [[ -z "$RUN_ID" && -n "$SHA" ]]; then
   while read -r id; do
     [[ -z "$id" ]] && continue
     conclusion="$(gh api "repos/${REPO}/actions/runs/${id}/jobs" \
-      --jq '[.jobs[] | select(.name == "build_apk") | .conclusion] | .[0] // empty')"
+      --jq '[.jobs[] | select(.name == "build_apk" or .name == "assemble_release") | .conclusion] | .[0] // empty')"
     if [[ "$conclusion" == "success" ]]; then
       RUN_ID="$id"
       break
@@ -63,7 +63,7 @@ if gh run download "$RUN_ID" -n android-runtime-version -D "$tmpdir" -R "$REPO" 
 fi
 
 JOB_ID="$(gh api "repos/${REPO}/actions/runs/${RUN_ID}/jobs" \
-  --jq '[.jobs[] | select(.name == "build_apk" and .conclusion == "success")][0].id // empty')"
+  --jq '[.jobs[] | select((.name == "build_apk" or .name == "assemble_release") and .conclusion == "success")][0].id // empty')"
 if [[ -z "$JOB_ID" ]]; then
   exit 1
 fi
