@@ -1,7 +1,8 @@
 name: Audit ignores
 
 # Audit exceptions are safe only while their reason holds. This check fails
-# the day a patched release is published or an ignore passes its expiry.
+# the day a patched release is published, an advisory is withdrawn upstream,
+# or an ignore passes its expiry.
 
 on:
   schedule:

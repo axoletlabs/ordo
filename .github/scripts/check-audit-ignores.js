@@ -2,7 +2,8 @@
 "use strict";
 /**
  * Fail when an ignored advisory no longer deserves ignoring: a patched
- * release is now published, or the ignore's expiry date has passed.
+ * release is now published, the advisory was withdrawn upstream, or the
+ * ignore's expiry date has passed.
  * Ignores that can never expire quietly rot; this runs daily in CI.
  */
 const { spawnSync } = require("node:child_process");
@@ -75,7 +76,12 @@ function check(ignores, today, deps) {
     if (today > expiry[1]) {
       failures.push(`${id}: ignore expired on ${expiry[1]}. Renew it with a fresh expiry and rationale, or remove it.`);
     }
-    for (const patch of advisoryPatches(id, deps)) {
+    const advisory = deps?.advisory ?? fetchAdvisory(id);
+    if (advisory?.withdrawn_at) {
+      failures.push(`${id}: advisory was withdrawn upstream on ${advisory.withdrawn_at.slice(0, 10)}. Remove the ignore.`);
+      continue;
+    }
+    for (const patch of advisoryPatches(id, { advisory })) {
       if (deps ? deps.isPublished(patch.package, patch.version) : publishedOnNpm(patch.package, patch.version)) {
         failures.push(`${id}: ${patch.package}@${patch.version} is published. Remove the ignore and take the update.`);
       }

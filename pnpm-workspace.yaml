@@ -11,16 +11,11 @@ minimumReleaseAgeExclude:
 
 nodeLinker: hoisted
 
-auditConfig:
-  ignoreGhsas:
-    # braces recursive AST stack-exhaustion DoS (GHSA-vfj7-8cjw-p6xm).
-    # npm still publishes only <=3.0.3; the audit's suggested 3.0.4 does not
-    # exist, and GitHub lists no patched release. Our production dependency
-    # paths are Metro/micromatch build tooling, not APK or backend execution.
-    # Glob patterns come from developer-controlled build configuration;
-    # saved URLs and article content are never passed to this parser.
-    # expires: 2026-11-01 — remove when an upstream patch is published.
-    - GHSA-vfj7-8cjw-p6xm
+# auditConfig.ignoreGhsas: each entry needs a comment with an "expires:
+# YYYY-MM-DD" line and a rationale; .github/scripts/check-audit-ignores.js
+# fails CI when an expiry passes, a patched release ships, or the advisory
+# is withdrawn upstream. The last ignore (GHSA-vfj7-8cjw-p6xm, braces) was
+# removed 2026-11-02 after GitHub withdrew the advisory.
 
 overrides:
   js-yaml: 4.3.2
