@@ -13,10 +13,12 @@ import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
 import { PanelActions } from "../ui/SheetActionRow";
 import { CheckLine } from "../ui/CheckLine";
+import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { Text } from "../ui/Text";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { spacing } from "../../theme/tokens";
-import { FOOTNOTE_LINE_BOX } from "../../theme/type-metrics";
+import { iconGlyphStyle } from "../../theme/icon-glyph";
+import { CHECK_GLYPH, FOOTNOTE_LINE_BOX } from "../../theme/type-metrics";
 import { haptics } from "../../lib/haptics";
 import { useSettingsStore } from "../../store/settings";
 import { useAuthStore } from "../../store/auth";
@@ -24,6 +26,7 @@ import { useServerProbe } from "../../hooks/use-server-probe";
 import { useCommitServerSwitch } from "../../hooks/use-commit-server-switch";
 import { isCloudServerUrl } from "../../lib/hosting";
 import { probeServer } from "../../lib/server-probe";
+import { useTheme } from "../../theme/ThemeProvider";
 
 type Step = "intro" | "address";
 
@@ -36,6 +39,7 @@ export function SelfHostFlow({
   visible: boolean;
   onDismiss: () => void;
 }) {
+  const { palette } = useTheme();
   const currentUrl = useSettingsStore((s) => s.serverUrl);
   const signedIn = useAuthStore((s) => s.status === "authenticated");
   const { commit, busy } = useCommitServerSwitch();
@@ -141,19 +145,21 @@ export function SelfHostFlow({
         <ThemedScrollView keyboardShouldPersistTaps="handled">
           <PanelHeader
             title={step === "intro" ? "Use your own server" : "Server address"}
+            icon="server-outline"
+            iconColor={palette.accent}
             accessory={
-              <Text variant="monoSmall" color="tertiary">
-                {stepIndex} / {STEPS.length}
+              <Text variant="label" color="tertiary">
+                Step {stepIndex} of {STEPS.length}
               </Text>
             }
           />
 
           {step === "intro" ? (
             <View style={styles.stack}>
-              <Text variant="footnote" color="secondary">
+              <Text variant="bodySmall" color="secondary">
                 ordo Cloud is the default. Your own server is optional, and you run it.
               </Text>
-              <Text variant="footnote" color="secondary">
+              <Text variant="bodySmall" color="secondary">
                 Axolet does not operate, monitor, or back up a server you host, and is
                 not responsible for downtime, data loss, or anything that happens on it.
               </Text>
@@ -228,14 +234,15 @@ export function SelfHostFlow({
 }
 
 function CopyList({ items }: { items: readonly string[] }) {
+  const { palette } = useTheme();
   return (
     <View style={styles.list}>
       {items.map((item) => (
         <View key={item} style={styles.listRow}>
-          <View style={styles.mark}>
-            <Text variant="footnote" color="secondary" style={styles.markGlyph}>
-              ·
-            </Text>
+          {/* Same first-line box as CheckLine, so the marks and the agreement
+            checkbox sit on one aligned grid. */}
+          <View style={styles.mark} pointerEvents="none">
+            <Ionicons name="checkmark" size={CHECK_GLYPH} color={palette.onSurfaceVariant} style={iconGlyphStyle(CHECK_GLYPH)} />
           </View>
           <Text variant="footnote" color="secondary" style={styles.listCopy}>
             {item}
@@ -254,11 +261,7 @@ const styles = StyleSheet.create({
     width: FOOTNOTE_LINE_BOX,
     height: FOOTNOTE_LINE_BOX,
     alignItems: "center",
-  },
-  markGlyph: {
-    lineHeight: FOOTNOTE_LINE_BOX,
-    textAlign: "center",
-    includeFontPadding: false,
+    justifyContent: "center",
   },
   listCopy: { flex: 1, includeFontPadding: false },
 });
