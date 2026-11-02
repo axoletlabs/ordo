@@ -13,6 +13,11 @@ on:
         required: false
         default: 'false'
         type: boolean
+      force_release_matrix:
+        description: 'Run the release ABI matrix + assemble without publishing (maintenance/warm-up)'
+        required: false
+        default: false
+        type: boolean
 
 # Full release/OTA design: docs/RELEASES.md. Invariants a CI edit must keep:
 # - main never publishes a version; each version is its own release/x.y.z
@@ -370,7 +375,10 @@ jobs:
 
   build_apk:
     needs: [detect, analyze, supply-chain]
-    if: github.repository == 'axoletlabs/ordo' && needs.detect.outputs.should_build == 'true'
+    # Development and branch APK artifact builds. Published releases use the
+    # build_abi matrix + assemble_release, which produce the same artifacts
+    # (ordo-apk-<channel>, android-runtime-version) roughly twice as fast.
+    if: github.repository == 'axoletlabs/ordo' && needs.detect.outputs.should_build == 'true' && needs.detect.outputs.is_release != 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     permissions:
@@ -485,14 +493,8 @@ jobs:
         run: bash "$GITHUB_WORKSPACE/.github/scripts/restore-upload-keystore.sh"
 
       - name: Build APK (CI artifact, arm64 only)
-        if: needs.detect.outputs.is_release != 'true'
         working-directory: apps/mobile/android
         run: ./gradlew assembleRelease -PreactNativeArchitectures=arm64-v8a -Pandroid.versionCode=${{ needs.detect.outputs.version_code }}
-
-      - name: Build APKs (release, per-ABI splits + universal)
-        if: needs.detect.outputs.is_release == 'true'
-        working-directory: apps/mobile/android
-        run: ./gradlew assembleRelease -Pandroid.buildAbiSplits=true -Pandroid.versionCode=${{ needs.detect.outputs.version_code }}
 
       - name: Show ccache stats
         if: always()
@@ -529,6 +531,256 @@ jobs:
           path: apps/mobile/android/app/build/outputs/apk/release/*.apk
           retention-days: 14
           overwrite: true
+
+  # Published releases: one runner per ABI instead of one runner compiling
+  # every ABI serially. Each job builds a single-ABI unsigned APK; the
+  # assemble_release job merges them into the universal APK, signs all five
+  # with the real upload key (which never leaves this workflow's last job)
+  # and runs the same verify-apks.py gate the monolithic build used.
+  build_abi:
+    needs: [detect, analyze, supply-chain]
+    if: >-
+      github.repository == 'axoletlabs/ordo' &&
+        (needs.detect.outputs.is_release == 'true' || inputs.force_release_matrix == true)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        abi: [armeabi-v7a, arm64-v8a, x86, x86_64]
+    env:
+      EXPO_UPDATES_CHANNEL: ${{ needs.detect.outputs.updates_channel }}
+      ORDO_APP_VARIANT: ${{ needs.detect.outputs.app_variant }}
+      ORDO_BUILD_BRANCH: ${{ github.ref_name }}
+      ORDO_ENABLE_CCACHE: '1'
+      CCACHE_DIR: /home/runner/.ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_COMPILERCHECK: content
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Cache Gradle dependencies
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.gradle/caches/modules-2
+            ~/.gradle/wrapper/dists
+          key: gradle-deps-${{ hashFiles('apps/mobile/package.json', 'pnpm-lock.yaml') }}
+          restore-keys: gradle-deps-
+
+      - name: Cache Gradle build outputs
+        uses: actions/cache@v5
+        with:
+          path: ~/.gradle/caches/build-cache-1
+          key: gradle-build-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: gradle-build-
+
+      # Same C++ carry-over as build_apk; entries for all ABIs share one
+      # cache dir, keyed per run with a shared restore prefix.
+      - name: Cache ccache
+        uses: actions/cache@v5
+        with:
+          path: /home/runner/.ccache
+          key: ccache-${{ runner.os }}-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.abi }}
+          restore-keys: ccache-${{ runner.os }}-
+
+      - name: Set up ccache
+        run: |
+          command -v ccache >/dev/null || sudo apt-get install -y ccache
+          ccache --set-config=max_size=3G
+          ccache --zero-stats >/dev/null
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build shared package
+        run: pnpm --filter @ordo/shared build
+
+      - name: Install EAS CLI
+        if: needs.detect.outputs.app_variant != 'development'
+        run: npm install -g eas-cli@24.8.0
+
+      - name: Ensure the updates channel exists
+        if: needs.detect.outputs.app_variant != 'development'
+        working-directory: apps/mobile
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/ensure-updates-channel.sh"
+
+      - name: Prebuild (generate native Android project)
+        working-directory: apps/mobile
+        run: pnpm exec expo prebuild --platform android --no-install
+
+      - name: Verify OTA channel embedded
+        working-directory: apps/mobile
+        run: |
+          CHANNEL="${{ needs.detect.outputs.updates_channel }}"
+          if [[ "$CHANNEL" == "development" ]]; then
+            if grep -q "expo-channel-name" android/app/src/main/AndroidManifest.xml; then
+              echo "::error::Development APK must not contain an OTA channel"
+              exit 1
+            fi
+          else
+            grep -q "expo-channel-name" android/app/src/main/AndroidManifest.xml
+            grep -q "$CHANNEL" android/app/src/main/AndroidManifest.xml
+          fi
+
+      - name: Fingerprint Android runtime
+        working-directory: apps/mobile
+        run: |
+          node "$GITHUB_WORKSPACE/.github/scripts/generate-android-fingerprint.js" --platform android \
+            > /tmp/android-fingerprint.json
+          HASH="$(jq -r '.hash' /tmp/android-fingerprint.json)"
+          echo "$HASH" > "$RUNNER_TEMP/android-runtime-version.txt"
+          echo "EXPO_UPDATES_FINGERPRINT_OVERRIDE=$HASH" >> "$GITHUB_ENV"
+          echo "Android runtime (pre-Gradle): $HASH"
+
+      # No upload keystore here: matrix APKs are unsigned and assemble_release
+      # is the only job that touches the signing key.
+      - name: Build one ABI (unsigned)
+        working-directory: apps/mobile/android
+        env:
+          ABI: ${{ matrix.abi }}
+        run: ./gradlew assembleRelease -PreactNativeArchitectures="$ABI" -Pandroid.versionCode=${{ needs.detect.outputs.version_code }}
+
+      - name: Show ccache stats
+        if: always()
+        run: if command -v ccache >/dev/null; then ccache --show-stats; fi
+
+      - name: Prepare ABI artifact
+        env:
+          ABI: ${{ matrix.abi }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/abi"
+          OUT=apps/mobile/android/app/build/outputs/apk/release
+          APK="$OUT/app-release.apk"
+          [[ -f "$APK" ]] || APK="$OUT/app-release-unsigned.apk"
+          cp "$APK" "$RUNNER_TEMP/abi/app-$ABI-release.apk"
+          cp "$RUNNER_TEMP/android-runtime-version.txt" "$RUNNER_TEMP/abi/"
+
+      - name: Upload ABI artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: abi-${{ matrix.abi }}
+          path: ${{ runner.temp }}/abi
+          retention-days: 1
+          overwrite: true
+
+  # Merge the per-ABI APKs into the universal APK, sign everything with the
+  # upload key, verify, and publish the same artifacts the monolithic
+  # build_apk used to produce (same names; release and OTA scripts are
+  # unchanged consumers).
+  assemble_release:
+    needs: [detect, analyze, supply-chain, build_abi]
+    if: >-
+      github.repository == 'axoletlabs/ordo' &&
+        (needs.detect.outputs.is_release == 'true' || inputs.force_release_matrix == true)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      ORDO_UPLOAD_STORE_TYPE: PKCS12
+      ORDO_UPLOAD_STORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+      ORDO_UPLOAD_KEY_ALIAS: ordo
+      ORDO_UPLOAD_KEY_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Download ABI artifacts
+        uses: actions/download-artifact@v6
+        with:
+          pattern: abi-*
+          path: ${{ runner.temp }}/abi
+          merge-multiple: false
+
+      - name: Restore upload keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: bash "$GITHUB_WORKSPACE/.github/scripts/restore-upload-keystore.sh"
+
+      - name: Merge universal APK from ABI outputs
+        run: |
+          python3 .github/scripts/merge-abi-apks.py \
+            --arm64 "$RUNNER_TEMP/abi/abi-arm64-v8a/app-arm64-v8a-release.apk" \
+            --armeabi-v7a "$RUNNER_TEMP/abi/abi-armeabi-v7a/app-armeabi-v7a-release.apk" \
+            --x86 "$RUNNER_TEMP/abi/abi-x86/app-x86-release.apk" \
+            --x86_64 "$RUNNER_TEMP/abi/abi-x86_64/app-x86_64-release.apk" \
+            --output "$RUNNER_TEMP/universal-unsigned.apk"
+
+      - name: Sign and align all release APKs
+        run: |
+          RELEASE_DIR="$RUNNER_TEMP/release"
+          mkdir -p "$RELEASE_DIR"
+          BUILD_TOOLS=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+          for ABI in armeabi-v7a arm64-v8a x86 x86_64; do
+            SRC="$RUNNER_TEMP/abi/abi-$ABI/app-$ABI-release.apk"
+            "$BUILD_TOOLS/zipalign" -f -p 4 "$SRC" "$RUNNER_TEMP/aligned-$ABI.apk"
+            "$BUILD_TOOLS/apksigner" sign \
+              --ks "$ORDO_UPLOAD_STORE_FILE" --ks-type PKCS12 \
+              --ks-key-alias "$ORDO_UPLOAD_KEY_ALIAS" \
+              --ks-pass "pass:$ORDO_UPLOAD_STORE_PASSWORD" \
+              --key-pass "pass:$ORDO_UPLOAD_KEY_PASSWORD" \
+              --out "$RELEASE_DIR/app-$ABI-release.apk" \
+              "$RUNNER_TEMP/aligned-$ABI.apk"
+          done
+          "$BUILD_TOOLS/zipalign" -f -p 4 "$RUNNER_TEMP/universal-unsigned.apk" \
+            "$RUNNER_TEMP/universal-aligned.apk"
+          "$BUILD_TOOLS/apksigner" sign \
+            --ks "$ORDO_UPLOAD_STORE_FILE" --ks-type PKCS12 \
+            --ks-key-alias "$ORDO_UPLOAD_KEY_ALIAS" \
+            --ks-pass "pass:$ORDO_UPLOAD_STORE_PASSWORD" \
+            --key-pass "pass:$ORDO_UPLOAD_KEY_PASSWORD" \
+            --out "$RELEASE_DIR/app-universal-release.apk" \
+            "$RUNNER_TEMP/universal-aligned.apk"
+
+      - name: Verify packaged APK signing, versions, runtime and channel
+        env:
+          VERSION: ${{ needs.detect.outputs.version }}
+          BASE_CODE: ${{ needs.detect.outputs.version_code }}
+        run: |
+          python3 .github/scripts/verify-apks.py "$RUNNER_TEMP/release" \
+            --version "$VERSION" --base-code "$BASE_CODE" \
+            --runtime "$(cat "$RUNNER_TEMP/abi/abi-arm64-v8a/android-runtime-version.txt")" \
+            --channel "${{ needs.detect.outputs.updates_channel }}" --release
+
+      - name: Upload verified Android runtime version
+        uses: actions/upload-artifact@v6
+        with:
+          name: android-runtime-version
+          path: ${{ runner.temp }}/abi/abi-arm64-v8a/android-runtime-version.txt
+          retention-days: 90
+          overwrite: true
+
+      # Same artifact name and APK filenames the monolithic build produced;
+      # rename-release-apks.sh and the release job are unchanged.
+      - name: Upload APK artifact
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ordo-apk-${{ needs.detect.outputs.updates_channel }}
+          path: ${{ runner.temp }}/release/*.apk
+          retention-days: 14
+          overwrite: true
+
 
   package_server:
     needs: [detect, analyze, supply-chain]
@@ -591,7 +843,9 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
   release:
-    needs: [detect, build_apk, package_server]
+    # build_apk covers branch/dev builds, assemble_release the published
+    # matrix path; exactly one of them runs for a release.
+    needs: [detect, build_apk, assemble_release, package_server]
     # Attaches APKs to the GitHub Release that triggered this run.
     # Stable (Latest): tag vX.Y.Z, pre-release unchecked.
     # Preview (pre-release): tag vX.Y.Z-preview.N, pre-release checked.
