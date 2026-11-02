@@ -558,6 +558,13 @@ jobs:
       CCACHE_DIR: /home/runner/.ccache
       CCACHE_BASEDIR: ${{ github.workspace }}
       CCACHE_COMPILERCHECK: content
+      # Throwaway key: AGP refuses to package a release without a storeFile
+      # (the app's signing config is unconditional). assemble_release strips
+      # this signature and signs everything with the real upload key.
+      ORDO_UPLOAD_STORE_TYPE: PKCS12
+      ORDO_UPLOAD_STORE_PASSWORD: ordo-matrix-pass
+      ORDO_UPLOAD_KEY_ALIAS: ordo
+      ORDO_UPLOAD_KEY_PASSWORD: ordo-matrix-pass
     steps:
       - uses: actions/checkout@v5
 
@@ -646,9 +653,15 @@ jobs:
           echo "EXPO_UPDATES_FINGERPRINT_OVERRIDE=$HASH" >> "$GITHUB_ENV"
           echo "Android runtime (pre-Gradle): $HASH"
 
-      # No upload keystore here: matrix APKs are unsigned and assemble_release
-      # is the only job that touches the signing key.
-      - name: Build one ABI (unsigned)
+      - name: Create throwaway matrix signing key
+        run: |
+          keytool -genkeypair -noprompt -keystore "$RUNNER_TEMP/ordo-matrix.p12" \
+            -storetype PKCS12 -storepass ordo-matrix-pass -keypass ordo-matrix-pass \
+            -alias ordo -dname "CN=Ordo CI matrix" -keyalg RSA -keysize 2048 -validity 2
+          echo "ORDO_UPLOAD_STORE_FILE=$RUNNER_TEMP/ordo-matrix.p12" >> "$GITHUB_ENV"
+
+      # Signed with the throwaway key; assemble_release replaces it.
+      - name: Build one ABI
         working-directory: apps/mobile/android
         env:
           ABI: ${{ matrix.abi }}
@@ -733,6 +746,9 @@ jobs:
           BUILD_TOOLS=$(find "${ANDROID_HOME:-$ANDROID_SDK_ROOT}/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
           for ABI in armeabi-v7a arm64-v8a x86 x86_64; do
             SRC="$RUNNER_TEMP/abi/abi-$ABI/app-$ABI-release.apk"
+            # The matrix jobs signed with a throwaway key; drop its JAR
+            # signature entries so only the real upload key remains.
+            zip -dq "$SRC" "META-INF/*.SF" "META-INF/*.RSA" "META-INF/*.EC" 2>/dev/null || true
             "$BUILD_TOOLS/zipalign" -f -p 4 "$SRC" "$RUNNER_TEMP/aligned-$ABI.apk"
             "$BUILD_TOOLS/apksigner" sign \
               --ks "$ORDO_UPLOAD_STORE_FILE" --ks-type PKCS12 \
