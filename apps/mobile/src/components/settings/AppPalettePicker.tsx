@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
-import { Platform, StyleSheet, View } from "react-native";
+import { Platform, ScrollView, StyleSheet, View } from "react-native";
+import { useColumnPadding } from "../../hooks/use-scene-column-insets";
 import { useRadioGroupKeys } from "../../hooks/use-radio-group-keys";
 import { haptics } from "../../lib/haptics";
 import { clampHsv, hexToHsv, hsvToHex, type Hsv } from "../../lib/hsv-color";
@@ -50,6 +51,7 @@ export function AppPalettePicker({ value, onChange }: {
   onChange: (color: string) => void;
 }) {
   const { palette } = useTheme();
+  const column = useColumnPadding(layout.maxSettingsWidth);
   const contrast = useSettingsStore((state) => state.themeContrast);
   const materialYou = useSettingsStore((state) => state.materialYouColors);
   const setMaterialYouColors = useSettingsStore((state) => state.setMaterialYouColors);
@@ -120,43 +122,51 @@ export function AppPalettePicker({ value, onChange }: {
       <Text variant="labelLarge" color="secondary">App palette</Text>
       <Text variant="bodySmall" color="secondary">{wallpaperOn ? "Wallpaper" : appPaletteName(value)}</Text>
     </View>
-    <View {...radioKeys} accessibilityRole="radiogroup" accessibilityLabel="App palette" style={styles.grid}>
-      {materialYouAvailable ? <PressableScale accessibilityRole="radio" accessibilityLabel="Wallpaper, Material You"
-        accessibilityHint="Use colors from your Android wallpaper."
-        accessibilityState={{ checked: selectedKey === WALLPAPER }}
-        {...(Platform.OS === "web" ? { tabIndex: selectedKey === WALLPAPER ? 0 : -1 } : {})}
-        onPress={() => selectKey(WALLPAPER)} style={styles.option}>
-        <View style={[styles.ring, { borderColor: selectedKey === WALLPAPER ? palette.primary : "transparent" }]}>
-          <PaletteSwatch size="fill" colors={wallpaperColors ?? undefined} selected={selectedKey === WALLPAPER}
-            icon={wallpaperColors ? undefined : "images-outline"}
-            fallback={palette.surfaceContainerHighest} iconColor={palette.onSurfaceVariant} />
-        </View>
-      </PressableScale> : null}
-      {options.map((option) => {
-        const selected = selectedKey === option.seed;
-        return <PressableScale key={option.seed} accessibilityRole="radio"
-          accessibilityLabel={option.name} accessibilityState={{ checked: selected }}
-          {...(Platform.OS === "web" ? { tabIndex: selected ? 0 : -1 } : {})}
-          onPress={() => selectKey(option.seed)} style={styles.option}>
-          <View style={[styles.ring, { borderColor: selected ? palette.primary : "transparent" }]}>
-            <PaletteSwatch size="fill" colors={option.colors} selected={selected} />
+    <ScrollView horizontal nestedScrollEnabled showsHorizontalScrollIndicator={false}
+      keyboardShouldPersistTaps="handled" testID="app-palette-scroller"
+      style={[styles.scroller, { marginLeft: -column.left, marginRight: -column.right }]}
+      contentContainerStyle={[styles.row, {
+        paddingLeft: column.left + layout.rowInset,
+        paddingRight: column.right + layout.rowInset,
+      }]}>
+      <View {...radioKeys} accessibilityRole="radiogroup" accessibilityLabel="App palette" style={styles.grid}>
+        {materialYouAvailable ? <PressableScale accessibilityRole="radio" accessibilityLabel="Wallpaper, Material You"
+          accessibilityHint="Use colors from your Android wallpaper."
+          accessibilityState={{ checked: selectedKey === WALLPAPER }}
+          {...(Platform.OS === "web" ? { tabIndex: selectedKey === WALLPAPER ? 0 : -1 } : {})}
+          onPress={() => selectKey(WALLPAPER)} style={styles.option}>
+          <View style={[styles.ring, { borderColor: selectedKey === WALLPAPER ? palette.primary : "transparent" }]}>
+            <PaletteSwatch size="fill" colors={wallpaperColors ?? undefined} selected={selectedKey === WALLPAPER}
+              icon={wallpaperColors ? undefined : "images-outline"}
+              fallback={palette.surfaceContainerHighest} iconColor={palette.onSurfaceVariant} />
           </View>
-        </PressableScale>;
-      })}
-      <PressableScale accessibilityRole="radio"
-        accessibilityLabel={custom ? `Custom color, ${value}` : "Custom color"}
-        accessibilityHint="Opens the color picker."
-        accessibilityState={{ checked: selectedKey === CUSTOM, expanded: customOpen }}
-        {...(Platform.OS === "web" ? { tabIndex: selectedKey === CUSTOM ? 0 : -1 } : {})}
-        onPress={openCustom} style={styles.option}>
-        <View style={[styles.ring, { borderColor: selectedKey === CUSTOM ? palette.primary : "transparent" }]}>
-          {customColors ? <PaletteSwatch size="fill" colors={customColors} selected={selectedKey === CUSTOM} />
-            : <View style={[styles.swatch, styles.swatchFill, { backgroundColor: palette.surfaceContainerHighest, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.outlineVariant }]}>
-              <MaterialIcon name="color-palette-outline" size={14} color={palette.primary} />
-            </View>}
-        </View>
-      </PressableScale>
-    </View>
+        </PressableScale> : null}
+        {options.map((option) => {
+          const selected = selectedKey === option.seed;
+          return <PressableScale key={option.seed} accessibilityRole="radio"
+            accessibilityLabel={option.name} accessibilityState={{ checked: selected }}
+            {...(Platform.OS === "web" ? { tabIndex: selected ? 0 : -1 } : {})}
+            onPress={() => selectKey(option.seed)} style={styles.option}>
+            <View style={[styles.ring, { borderColor: selected ? palette.primary : "transparent" }]}>
+              <PaletteSwatch size="fill" colors={option.colors} selected={selected} />
+            </View>
+          </PressableScale>;
+        })}
+        <PressableScale accessibilityRole="radio"
+          accessibilityLabel={custom ? `Custom color, ${value}` : "Custom color"}
+          accessibilityHint="Opens the color picker."
+          accessibilityState={{ checked: selectedKey === CUSTOM, expanded: customOpen }}
+          {...(Platform.OS === "web" ? { tabIndex: selectedKey === CUSTOM ? 0 : -1 } : {})}
+          onPress={openCustom} style={styles.option}>
+          <View style={[styles.ring, { borderColor: selectedKey === CUSTOM ? palette.primary : "transparent" }]}>
+            {customColors ? <PaletteSwatch size="fill" colors={customColors} selected={selectedKey === CUSTOM} />
+              : <View style={[styles.swatch, styles.swatchFill, { backgroundColor: palette.surfaceContainerHighest, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.outlineVariant }]}>
+                <MaterialIcon name="color-palette-outline" size={14} color={palette.primary} />
+              </View>}
+          </View>
+        </PressableScale>
+      </View>
+    </ScrollView>
     <FloatingPanel visible={customOpen} onDismiss={() => setCustomOpen(false)}>
       <PanelHeader title="Custom color" subtitle="ordo builds matching light and dark palettes from this color." />
       <View style={[styles.preview, { backgroundColor: preview.surfaceContainerLow }]}>
@@ -187,12 +197,15 @@ export function AppPalettePicker({ value, onChange }: {
 }
 
 const styles = StyleSheet.create({
-  root: { paddingHorizontal: layout.rowInset, paddingTop: spacing[16], paddingBottom: spacing[8] },
-  heading: { flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", gap: spacing[8], marginBottom: spacing[8] },
-  grid: { flexDirection: "row", flexWrap: "nowrap", alignItems: "center" },
-  option: { flexGrow: 1, flexShrink: 1, flexBasis: 0, maxWidth: layout.touchTargetMin, minWidth: 0,
-    minHeight: layout.touchTargetMin, alignItems: "center", justifyContent: "center", borderRadius: radius.lg },
-  ring: { width: "100%", maxWidth: 40, aspectRatio: 1, borderWidth: 2, borderRadius: radius.full, padding: 1 },
+  root: { paddingTop: spacing[16], paddingBottom: spacing[8] },
+  heading: { flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", gap: spacing[8],
+    marginBottom: spacing[8], paddingHorizontal: layout.rowInset },
+  scroller: { flexGrow: 0 },
+  row: { flexGrow: 0 },
+  grid: { flexDirection: "row", flexWrap: "nowrap", alignItems: "center", gap: spacing[8] },
+  option: { width: layout.touchTargetMin, height: layout.touchTargetMin, flexGrow: 0, flexShrink: 0,
+    alignItems: "center", justifyContent: "center", borderRadius: radius.lg },
+  ring: { width: 40, height: 40, borderWidth: 2, borderRadius: radius.full, padding: 1 },
   swatch: { borderRadius: radius.full, overflow: "hidden", alignItems: "center", justifyContent: "center" },
   swatchFill: { width: "100%", flex: 1, alignSelf: "stretch" },
   swatchSide: { width: "50%", alignSelf: "flex-end", flex: 1 },
