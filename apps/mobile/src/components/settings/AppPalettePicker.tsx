@@ -1,5 +1,5 @@
 import React, { useMemo, useRef, useState } from "react";
-import { Platform, StyleSheet, View, useWindowDimensions } from "react-native";
+import { Platform, StyleSheet, View } from "react-native";
 import { useRadioGroupKeys } from "../../hooks/use-radio-group-keys";
 import { haptics } from "../../lib/haptics";
 import { clampHsv, hexToHsv, hsvToHex, type Hsv } from "../../lib/hsv-color";
@@ -23,21 +23,25 @@ const CUSTOM = "custom";
 const seeds = APP_PALETTES.map((option) => option.seed);
 
 /** A miniature of the generated palette, rather than the unadjusted seed. */
-function PaletteSwatch({ colors, selected = false, icon, fallback, iconColor }: {
+function PaletteSwatch({ colors, selected = false, icon, fallback, iconColor, size = 32 }: {
   colors?: MaterialColors;
   selected?: boolean;
   icon?: React.ComponentProps<typeof MaterialIcon>["name"];
   fallback?: string;
   iconColor?: string;
+  size?: number | "fill";
 }) {
-  return <View accessible={false} style={[styles.swatch, { backgroundColor: colors?.primary ?? fallback ?? "transparent" }]}>
+  const fill = size === "fill";
+  const glyph = typeof size === "number" ? Math.max(12, Math.round(size * 0.5)) : 14;
+  return <View accessible={false} style={[styles.swatch, fill ? styles.swatchFill : { width: size, height: size },
+    { backgroundColor: colors?.primary ?? fallback ?? "transparent" }]}>
     {colors ? <View style={styles.swatchSide}>
       <View style={[styles.tone, { backgroundColor: colors.secondaryContainer }]} />
       <View style={[styles.tone, { backgroundColor: colors.tertiary }]} />
     </View> : null}
     {selected ? <View style={[styles.check, { backgroundColor: colors?.primary ?? fallback ?? "transparent" }]}>
-      <MaterialIcon name="checkmark" size={16} color={colors?.onPrimary ?? iconColor ?? "#fff"} />
-    </View> : icon ? <MaterialIcon name={icon} size={16} color={iconColor} /> : null}
+      <MaterialIcon name="checkmark" size={glyph} color={colors?.onPrimary ?? iconColor ?? "#fff"} />
+    </View> : icon ? <MaterialIcon name={icon} size={glyph} color={iconColor} /> : null}
   </View>;
 }
 
@@ -46,7 +50,6 @@ export function AppPalettePicker({ value, onChange }: {
   onChange: (color: string) => void;
 }) {
   const { palette } = useTheme();
-  const { width } = useWindowDimensions();
   const contrast = useSettingsStore((state) => state.themeContrast);
   const materialYou = useSettingsStore((state) => state.materialYouColors);
   const setMaterialYouColors = useSettingsStore((state) => state.setMaterialYouColors);
@@ -75,10 +78,6 @@ export function AppPalettePicker({ value, onChange }: {
     ...seeds,
     CUSTOM,
   ];
-  const [gridWidth, setGridWidth] = useState(0);
-  const columns = gridWidth > 0
-    ? Math.max(1, Math.floor((gridWidth + spacing[4]) / (layout.touchTargetMin + spacing[4])))
-    : width >= 768 ? keys.length : 5;
   const previewSeed = normalizeAppColor(draft) ?? hsvToHex(hsv);
   const preview = useMemo(() => materialColorRoles(previewSeed, dark, false, contrast),
     [previewSeed, dark, contrast]);
@@ -99,7 +98,7 @@ export function AppPalettePicker({ value, onChange }: {
     }
     applySeed(key);
   };
-  const radioKeys = useRadioGroupKeys(keys, selectKey, columns);
+  const radioKeys = useRadioGroupKeys(keys, selectKey, keys.length);
   const openCustom = () => {
     setHsv(hexToHsv(value) ?? { h: 174, s: 1, v: 0.42 });
     setDraft(value);
@@ -121,15 +120,14 @@ export function AppPalettePicker({ value, onChange }: {
       <Text variant="labelLarge" color="secondary">App palette</Text>
       <Text variant="bodySmall" color="secondary">{wallpaperOn ? "Wallpaper" : appPaletteName(value)}</Text>
     </View>
-    <View {...radioKeys} accessibilityRole="radiogroup" accessibilityLabel="App palette" style={styles.grid}
-      onLayout={(event) => setGridWidth(event.nativeEvent.layout.width)}>
+    <View {...radioKeys} accessibilityRole="radiogroup" accessibilityLabel="App palette" style={styles.grid}>
       {materialYouAvailable ? <PressableScale accessibilityRole="radio" accessibilityLabel="Wallpaper, Material You"
         accessibilityHint="Use colors from your Android wallpaper."
         accessibilityState={{ checked: selectedKey === WALLPAPER }}
         {...(Platform.OS === "web" ? { tabIndex: selectedKey === WALLPAPER ? 0 : -1 } : {})}
         onPress={() => selectKey(WALLPAPER)} style={styles.option}>
         <View style={[styles.ring, { borderColor: selectedKey === WALLPAPER ? palette.primary : "transparent" }]}>
-          <PaletteSwatch colors={wallpaperColors ?? undefined} selected={selectedKey === WALLPAPER}
+          <PaletteSwatch size="fill" colors={wallpaperColors ?? undefined} selected={selectedKey === WALLPAPER}
             icon={wallpaperColors ? undefined : "images-outline"}
             fallback={palette.surfaceContainerHighest} iconColor={palette.onSurfaceVariant} />
         </View>
@@ -141,7 +139,7 @@ export function AppPalettePicker({ value, onChange }: {
           {...(Platform.OS === "web" ? { tabIndex: selected ? 0 : -1 } : {})}
           onPress={() => selectKey(option.seed)} style={styles.option}>
           <View style={[styles.ring, { borderColor: selected ? palette.primary : "transparent" }]}>
-            <PaletteSwatch colors={option.colors} selected={selected} />
+            <PaletteSwatch size="fill" colors={option.colors} selected={selected} />
           </View>
         </PressableScale>;
       })}
@@ -152,9 +150,9 @@ export function AppPalettePicker({ value, onChange }: {
         {...(Platform.OS === "web" ? { tabIndex: selectedKey === CUSTOM ? 0 : -1 } : {})}
         onPress={openCustom} style={styles.option}>
         <View style={[styles.ring, { borderColor: selectedKey === CUSTOM ? palette.primary : "transparent" }]}>
-          {customColors ? <PaletteSwatch colors={customColors} selected={selectedKey === CUSTOM} />
-            : <View style={[styles.swatch, { backgroundColor: palette.surfaceContainerHighest, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.outlineVariant }]}>
-              <MaterialIcon name="color-palette-outline" size={16} color={palette.primary} />
+          {customColors ? <PaletteSwatch size="fill" colors={customColors} selected={selectedKey === CUSTOM} />
+            : <View style={[styles.swatch, styles.swatchFill, { backgroundColor: palette.surfaceContainerHighest, borderWidth: StyleSheet.hairlineWidth, borderColor: palette.outlineVariant }]}>
+              <MaterialIcon name="color-palette-outline" size={14} color={palette.primary} />
             </View>}
         </View>
       </PressableScale>
@@ -191,13 +189,15 @@ export function AppPalettePicker({ value, onChange }: {
 const styles = StyleSheet.create({
   root: { paddingHorizontal: layout.rowInset, paddingTop: spacing[16], paddingBottom: spacing[8] },
   heading: { flexDirection: "row", flexWrap: "wrap", alignItems: "baseline", gap: spacing[8], marginBottom: spacing[8] },
-  grid: { flexDirection: "row", flexWrap: "wrap", gap: spacing[4] },
-  option: { width: layout.touchTargetMin, minHeight: layout.touchTargetMin, alignItems: "center", justifyContent: "center", borderRadius: radius.lg },
-  ring: { borderWidth: 2, borderRadius: radius.full, padding: spacing[2] },
-  swatch: { width: 32, height: 32, borderRadius: radius.full, overflow: "hidden", alignItems: "center", justifyContent: "center" },
+  grid: { flexDirection: "row", flexWrap: "nowrap", alignItems: "center" },
+  option: { flexGrow: 1, flexShrink: 1, flexBasis: 0, maxWidth: layout.touchTargetMin, minWidth: 0,
+    minHeight: layout.touchTargetMin, alignItems: "center", justifyContent: "center", borderRadius: radius.lg },
+  ring: { width: "100%", maxWidth: 40, aspectRatio: 1, borderWidth: 2, borderRadius: radius.full, padding: 1 },
+  swatch: { borderRadius: radius.full, overflow: "hidden", alignItems: "center", justifyContent: "center" },
+  swatchFill: { width: "100%", flex: 1, alignSelf: "stretch" },
   swatchSide: { width: "50%", alignSelf: "flex-end", flex: 1 },
   tone: { flex: 1 },
-  check: { position: "absolute", top: 6, left: 6, width: 20, height: 20, borderRadius: radius.full, alignItems: "center", justifyContent: "center" },
+  check: { position: "absolute", width: "62%", height: "62%", top: "19%", left: "19%", borderRadius: radius.full, alignItems: "center", justifyContent: "center" },
   preview: { flexDirection: "row", alignItems: "center", gap: spacing[16], borderRadius: radius.lg, padding: spacing[12], marginBottom: spacing[16] },
   previewCopy: { flex: 1 },
   previewAction: { width: 40, height: 40, borderRadius: radius.full, alignItems: "center", justifyContent: "center" },
