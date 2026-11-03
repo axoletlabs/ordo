@@ -8,7 +8,7 @@
 
 ## App
 
-Download the Android app from [Releases](https://github.com/axoletlabs/ordo/releases) and sign in. New installs use [ordo Cloud](https://api.ordo.axolet.com).
+Download the Android app from [Releases](https://github.com/axoletlabs/ordo/releases) and sign in. New installs use [ordo Cloud](https://ordo-cloud.axolet.com).
 
 The app sends anonymous daily counts to ordo Cloud: an install ID plus opens, timeouts, server errors, and sign-in failures for the day. Nothing else — no account, email, device name, server URL, app version, platform, or hosting mode. A server you host does not receive these counts. See [docs/telemetry.md](docs/telemetry.md) for the exact payload.
 

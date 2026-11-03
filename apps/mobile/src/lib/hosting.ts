@@ -21,11 +21,10 @@ export const CLOUD_SERVER_URL: string = CLOUD_SERVER_URLS[APP_VARIANT];
 
 /** Every hosted API hostname, mapped to its tier's canonical origin. */
 const CLOUD_API_ORIGINS: Readonly<Record<string, string>> = {
+  // legacy prod host, DNS removed — kept so saved URLs migrate to the stable origin
   "api.ordo.axolet.com": CLOUD_SERVER_URLS.stable,
   "api-ordo.axolet.com": CLOUD_SERVER_URLS.stable,
-  "ordo.api.axolet.com": CLOUD_SERVER_URLS.stable,
   "ordo-api.axolet.com": CLOUD_SERVER_URLS.stable,
-  "ordo.cloud.axolet.com": CLOUD_SERVER_URLS.stable,
   "ordo-cloud.axolet.com": CLOUD_SERVER_URLS.stable,
   "api-ordo-preview.axolet.com": CLOUD_SERVER_URLS.preview,
   "ordo-api-preview.axolet.com": CLOUD_SERVER_URLS.preview,
