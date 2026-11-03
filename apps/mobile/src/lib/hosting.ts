@@ -1,11 +1,41 @@
 /**
  * Cloud vs self-host. Fresh installs talk to ordo Cloud. A saved self-host
- * URL is kept; Cloud API hosts are always the HTTPS Cloud origin.
+ * URL is kept; Cloud API hosts are always the HTTPS Cloud origin of their
+ * tier (stable / preview / development).
  */
+import { APP_VARIANT } from "./app-variant";
 
-/** Hosted API origin. Trailing slashes are not part of the origin. */
-export const CLOUD_SERVER_URL = "https://api.ordo.axolet.com";
-const CLOUD_API_HOST = "api.ordo.axolet.com";
+/**
+ * Hosted API origin per app variant: stable ships the prod door, the preview
+ * and development apps get -preview / -dev doors of the same name.
+ * Trailing slashes are not part of the origin.
+ */
+const CLOUD_SERVER_URLS = {
+  stable: "https://ordo-cloud.axolet.com",
+  preview: "https://ordo-cloud-preview.axolet.com",
+  development: "https://ordo-cloud-dev.axolet.com",
+} as const;
+
+/** Hosted API origin for this build. */
+export const CLOUD_SERVER_URL: string = CLOUD_SERVER_URLS[APP_VARIANT];
+
+/** Every hosted API hostname, mapped to its tier's canonical origin. */
+const CLOUD_API_ORIGINS: Readonly<Record<string, string>> = {
+  "api.ordo.axolet.com": CLOUD_SERVER_URLS.stable,
+  "api-ordo.axolet.com": CLOUD_SERVER_URLS.stable,
+  "ordo.api.axolet.com": CLOUD_SERVER_URLS.stable,
+  "ordo-api.axolet.com": CLOUD_SERVER_URLS.stable,
+  "ordo.cloud.axolet.com": CLOUD_SERVER_URLS.stable,
+  "ordo-cloud.axolet.com": CLOUD_SERVER_URLS.stable,
+  "api-ordo-preview.axolet.com": CLOUD_SERVER_URLS.preview,
+  "ordo-api-preview.axolet.com": CLOUD_SERVER_URLS.preview,
+  "ordo-cloud-preview.axolet.com": CLOUD_SERVER_URLS.preview,
+  "api-ordo-dev.axolet.com": CLOUD_SERVER_URLS.development,
+  "ordo-api-dev.axolet.com": CLOUD_SERVER_URLS.development,
+  "ordo-cloud-dev.axolet.com": CLOUD_SERVER_URLS.development,
+};
+
+const CLOUD_ORIGINS = new Set<string>(Object.values(CLOUD_API_ORIGINS));
 
 export const CLOUD_DISPLAY_NAME = "ordo Cloud";
 
@@ -23,13 +53,9 @@ function originOf(raw: string): string | null {
   return canonicalizeServerUrl(raw);
 }
 
-function isCloudApiHost(hostname: string): boolean {
-  return hostname.toLowerCase() === CLOUD_API_HOST;
-}
-
 /**
  * Origin for a typed server URL. Cloud API hosts always become the HTTPS
- * Cloud origin so cleartext cannot be used against ordo Cloud.
+ * Cloud origin of their tier so cleartext cannot be used against ordo Cloud.
  */
 export function canonicalizeServerUrl(raw: string): string | null {
   let value = raw.trim();
@@ -38,7 +64,8 @@ export function canonicalizeServerUrl(raw: string): string | null {
   try {
     const url = new URL(value);
     if (!url.hostname) return null;
-    if (isCloudApiHost(url.hostname)) return CLOUD_SERVER_URL;
+    const cloudOrigin = CLOUD_API_ORIGINS[url.hostname.toLowerCase()];
+    if (cloudOrigin) return cloudOrigin;
     return url.origin;
   } catch {
     return null;
@@ -46,7 +73,8 @@ export function canonicalizeServerUrl(raw: string): string | null {
 }
 
 export function isCloudServerUrl(url: string | null | undefined): boolean {
-  return url ? originOf(url) === CLOUD_SERVER_URL : false;
+  const origin = url ? originOf(url) : null;
+  return origin ? CLOUD_ORIGINS.has(origin) : false;
 }
 
 export function hostingModeOf(url: string): HostingMode {
@@ -73,5 +101,5 @@ export function resolvePersistedServerUrl(
 /** Cloud is not a self-host destination — send people back to the hosted path. */
 export function isSelfHostDestination(url: string | null | undefined): boolean {
   const origin = url ? originOf(url) : null;
-  return Boolean(origin) && origin !== CLOUD_SERVER_URL;
+  return origin !== null && !CLOUD_ORIGINS.has(origin);
 }
