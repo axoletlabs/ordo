@@ -105,7 +105,7 @@ export default function SettingsScreen() {
         onDismiss={() => setConfirmingLogout(false)}
         icon="log-out-outline"
         title="Sign out?"
-        message="You'll need to sign in again."
+        message="You'll need to sign in again"
         confirmLabel="Sign out"
         loading={logout.isPending}
         dismissible={!logout.isPending}

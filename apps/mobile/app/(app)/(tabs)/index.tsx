@@ -390,7 +390,7 @@ export default function BookmarksScreen() {
         <EmptyState
           icon="bookmark-outline"
           title="No bookmarks yet"
-          message="Save a link to start reading."
+          message="Save a link to start reading"
           action={<Button label="Save bookmark" onPress={openAddSheet} />}
         />
       </View>

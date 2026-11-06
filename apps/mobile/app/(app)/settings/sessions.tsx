@@ -143,7 +143,7 @@ export default function SessionsScreen() {
               <EmptyState
                 icon="phone-portrait-outline"
                 title="No active sessions"
-                message="No other devices are signed in."
+                message="No other devices are signed in"
               />
             </View>
           }
