@@ -6,6 +6,7 @@ import {
   buildPath,
   type BatchBookmarksInput,
   type BookmarkListSort,
+  type UpdateBookmarkInput,
 } from "@ordo/shared";
 import { api } from "./client";
 import { BOOKMARK_DETAIL_TIMEOUT_MS } from "../fetch-timeout";
@@ -82,7 +83,7 @@ export const bookmarksApi = {
 
   update: (
     id: string,
-    body: { folderId?: string | null; isRead?: boolean; readProgress?: number; contentKindOverride?: "article" | "web" | null; remindAt?: number | null },
+    body: UpdateBookmarkInput,
     opts?: { folderId?: string | null },
   ) =>
     api.patch<typeof BookmarkRoutes.update.response>(

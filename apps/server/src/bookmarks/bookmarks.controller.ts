@@ -34,6 +34,7 @@ import {
   type ExtractionProgressDto,
   type HighlightDto,
   type UpdateHighlightInput,
+  type UpdateBookmarkInput,
 } from "@ordo/shared";
 import { AuthGuard } from "../auth/auth.guard.js";
 import {
@@ -190,13 +191,7 @@ export class BookmarksController {
   async update(
     @CurrentUser() user: AuthContext,
     @Param("id") id: string,
-    @Body({ schema: UpdateBookmarkSchema }) body: {
-      folderId?: string | null;
-      isRead?: boolean;
-      readProgress?: number;
-      contentKindOverride?: "article" | "web" | null;
-      remindAt?: number | null;
-    },
+    @Body({ schema: UpdateBookmarkSchema }) body: UpdateBookmarkInput,
     @Req() req: Request,
   ): Promise<BookmarkDto> {
     return this.bookmarks.update(user.userId, id, body, getPresentedFolderTokens(req));
