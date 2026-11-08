@@ -1,0 +1,1 @@
+ALTER TABLE "Bookmark" ADD COLUMN "titleEdited" BOOLEAN NOT NULL DEFAULT false;

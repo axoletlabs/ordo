@@ -8,6 +8,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { EXTRACTION_VERSION, type ExtractionProgressDto } from "@ordo/shared";
 import { PrismaService } from "../prisma/prisma.service.js";
+import type { Prisma } from "../prisma/client.js";
 import {
   ReaderService,
   UnsupportedContentError,
@@ -209,7 +210,7 @@ export class ExtractionService {
         )
           ? { title: extracted.title.slice(0, 500) }
           : {};
-      const written = await this.prisma.bookmark.updateMany({
+      const written = await this.writeExtractedBookmark({
         where: force
           ? { id: bookmarkId, contentKindOverride: "article" }
           : { id: bookmarkId },
@@ -301,35 +302,34 @@ export class ExtractionService {
               { title: provisionalTitle(url, safeHostname(url)) }
             : {};
 
-      await this.prisma.bookmark
-        .updateMany({
-          where: force
-            ? { id: bookmarkId, contentKindOverride: "article" }
-            : { id: bookmarkId },
-          data: storeUnsupported
-            ? this.sealExtractionWrite(userId ?? existing?.userId, bookmarkId, {
-                ...rescuedTitle,
-                fetchStatus: "unsupported",
+      await this.writeExtractedBookmark({
+        where: force
+          ? { id: bookmarkId, contentKindOverride: "article" }
+          : { id: bookmarkId },
+        data: storeUnsupported
+          ? this.sealExtractionWrite(userId ?? existing?.userId, bookmarkId, {
+              ...rescuedTitle,
+              fetchStatus: "unsupported",
+              extractionReason: reason,
+              extractionVersion: EXTRACTION_VERSION,
+              description: rescued?.description ? rescued.description.slice(0, 1000) : null,
+              author: rescued?.author ? rescued.author.slice(0, 200) : null,
+              publishedAt: rescued?.publishedAt ? new Date(rescued.publishedAt) : null,
+              contentHtml: null,
+              readingTimeMinutes: null,
+            })
+          : existing?.contentHtml
+            ? {
+                fetchStatus: "ok",
+                extractionReason: null,
+                extractionVersion: EXTRACTION_VERSION,
+              }
+            : {
+                fetchStatus: "failed",
                 extractionReason: reason,
                 extractionVersion: EXTRACTION_VERSION,
-                description: rescued?.description ? rescued.description.slice(0, 1000) : null,
-                author: rescued?.author ? rescued.author.slice(0, 200) : null,
-                publishedAt: rescued?.publishedAt ? new Date(rescued.publishedAt) : null,
-                contentHtml: null,
-                readingTimeMinutes: null,
-              })
-            : existing?.contentHtml
-              ? {
-                  fetchStatus: "ok",
-                  extractionReason: null,
-                  extractionVersion: EXTRACTION_VERSION,
-                }
-              : {
-                  fetchStatus: "failed",
-                  extractionReason: reason,
-                  extractionVersion: EXTRACTION_VERSION,
-                },
-        })
+              },
+      })
         .catch((updateError: unknown) => {
           this.logger.error(
             `Could not update extraction status for bookmark ${bookmarkId}: ${(updateError as Error).message}`,
@@ -410,18 +410,29 @@ export class ExtractionService {
     if (meta.author) data.author = meta.author.slice(0, 200);
     if (meta.publishedAt) data.publishedAt = new Date(meta.publishedAt);
     if (Object.keys(data).length === 0) return;
-    await this.prisma.bookmark
-      .updateMany({
-        where: force
-          ? { id: bookmarkId, contentKindOverride: "article", fetchStatus: "pending" }
-          : { id: bookmarkId, fetchStatus: "pending" },
-        data: this.sealExtractionWrite(userId, bookmarkId, data),
-      })
+    await this.writeExtractedBookmark({
+      where: force
+        ? { id: bookmarkId, contentKindOverride: "article", fetchStatus: "pending" }
+        : { id: bookmarkId, fetchStatus: "pending" },
+      data: this.sealExtractionWrite(userId, bookmarkId, data),
+    })
       .catch((err: unknown) => {
         this.logger.debug(
           `Early metadata write skipped for ${bookmarkId}: ${(err as Error).message}`,
         );
       });
+  }
+
+  private async writeExtractedBookmark({ where, data }: Prisma.BookmarkUpdateManyArgs) {
+    const { title, ...metadata } = data;
+    if (title === undefined) return this.prisma.bookmark.updateMany({ where, data });
+    // Guard the title at write time: the user can rename while a fetch is in
+    // flight. Other metadata must still finish even when that title is kept.
+    const [, written] = await this.prisma.$transaction([
+      this.prisma.bookmark.updateMany({ where: { ...where, titleEdited: false }, data: { title } }),
+      this.prisma.bookmark.updateMany({ where, data: metadata }),
+    ]);
+    return written;
   }
 
   private sealExtractionWrite<T extends Record<string, unknown>>(

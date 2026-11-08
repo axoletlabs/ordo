@@ -21,6 +21,7 @@ import {
   type BookmarkListSort,
   type BookmarkReminderDto,
   type CursorPage,
+  type UpdateBookmarkInput,
 } from "@ordo/shared";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { AppError } from "../common/errors/app-error.js";
@@ -389,13 +390,7 @@ export class BookmarksService implements OnApplicationBootstrap {
   async update(
     userId: string,
     bookmarkId: string,
-    changes: {
-      folderId?: string | null;
-      isRead?: boolean;
-      readProgress?: number;
-      contentKindOverride?: "article" | "web" | null;
-      remindAt?: number | null;
-    },
+    changes: UpdateBookmarkInput,
     tokens: readonly string[],
   ): Promise<BookmarkDto> {
     const raw = await this.prisma.bookmark.findFirst({
@@ -410,6 +405,7 @@ export class BookmarksService implements OnApplicationBootstrap {
     }
 
     const data: {
+      titleEdited?: boolean;
       folderId?: string | null;
       isRead?: boolean;
       readProgress?: number;
@@ -476,6 +472,13 @@ export class BookmarksService implements OnApplicationBootstrap {
     }
     if (changes.remindAt !== undefined) {
       data.remindAt = changes.remindAt;
+    }
+    // A presentation change can restore the original page metadata. Keep the
+    // user's title, including when title and classification arrive together.
+    if (bookmark.titleEdited) delete data.title;
+    if (changes.title !== undefined) {
+      data.title = changes.title;
+      data.titleEdited = true;
     }
 
     const updated = await this.prisma.bookmark

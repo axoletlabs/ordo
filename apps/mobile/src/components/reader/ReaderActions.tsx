@@ -13,6 +13,7 @@ import { ThemedScrollView } from "../ui/ThemedScrollView";
 import { LazyMount } from "../ui/LazyMount";
 import { sheetMenuStyles } from "../ui/SheetActionRow";
 import { EditTagsSheet } from "../tags/EditTagsSheet";
+import { EditBookmarkTitlePanel } from "../bookmarks/EditBookmarkTitlePanel";
 import { ReminderCustomPanel } from "../bookmarks/ReminderCustomPanel";
 import { REMINDER_MENU_WIDTH, ReminderPresetItems, useSaveReminder } from "../bookmarks/ReminderFlow";
 import { useServerInfo } from "../../hooks/queries";
@@ -63,7 +64,7 @@ export const ReaderActions = React.memo(React.forwardRef<ReaderActionsHandle, Re
   const { palette } = useTheme();
   const { data: serverInfo } = useServerInfo();
   const reminders = serverInfo?.reminders === true;
-  const [page, setPage] = useState<"actions" | "highlights" | "tags" | "remind" | "remind-custom" | null>(null);
+  const [page, setPage] = useState<"actions" | "highlights" | "title" | "tags" | "remind" | "remind-custom" | null>(null);
   const [anchor, setAnchor] = useState<MenuAnchorRect | null>(null);
   const { prepared, prepare, retain } = usePreparedReaderOverlay(workScheduler);
   const close = useCallback(() => setPage(null), []);
@@ -91,6 +92,7 @@ export const ReaderActions = React.memo(React.forwardRef<ReaderActionsHandle, Re
         <ContextMenuItem key="share" icon="share-social-outline" label={website ? "Share page" : "Share article"} onPress={() => run(callbacks.current.onShare)} />
         <ContextMenuItem key="copy-link" icon="link-outline" label="Copy link" onPress={() => run(callbacks.current.onCopyLink)} />
         <ContextMenuItem key="tags" icon="pricetags-outline" label="Edit tags" onPress={() => setPage("tags")} />
+        <ContextMenuItem key="title" icon="pencil-outline" label="Edit title" onPress={() => setPage("title")} />
         {reminders ? <ContextMenuItem key="remind" icon="alarm-outline" label={remindAt != null ? "Edit reminder" : "Remind"}
           trailing={remindAt != null ? <Text variant="monoSmall" color="tertiary" numberOfLines={1}>
             {formatReminderWhen(remindAt)}</Text> : undefined} onPress={() => setPage("remind")} /> : null}
@@ -112,6 +114,7 @@ export const ReaderActions = React.memo(React.forwardRef<ReaderActionsHandle, Re
         showBack onBack={() => setPage("actions")} onPick={saveReminder} onCustom={() => setPage("remind-custom")} /> : actionItems}
     </ContextMenu>
     <ReaderTagEditor visible={page === "tags"} bookmark={bookmark} onDismiss={close} />
+    <EditBookmarkTitlePanel visible={page === "title"} bookmark={bookmark} onDismiss={close} />
     <ReminderCustomPanel visible={page === "remind-custom"} initialUnix={bookmark.remindAt ?? null} busy={reminderBusy}
       onDismiss={() => setPage("remind")} onConfirm={(unix) => saveReminder(unix)} />
     <LazyMount active={page === "highlights"}>

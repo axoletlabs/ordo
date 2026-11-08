@@ -165,6 +165,8 @@ model Bookmark {
   folderId            String?
   url                 String
   title               String
+  /** User-edited titles survive background metadata extraction. */
+  titleEdited         Boolean   @default(false)
   description         String?
   domain              String
   contentHtml         String?

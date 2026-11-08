@@ -96,6 +96,8 @@ export const AVATAR = {
 export const DEFAULT_PAGE_SIZE = 20;
 export const MAX_PAGE_SIZE = 100;
 
+export const BOOKMARK_TITLE_MAX_LENGTH = 500;
+
 /** Max bookmarks or folders in one batch selection request. */
 export const BATCH_ITEM_LIMIT = 200;
 
