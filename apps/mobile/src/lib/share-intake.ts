@@ -20,6 +20,8 @@ export const QUICK_SHARE_SESSION_PREFS = "ordo_quick_share_session";
 export type ShareIntakeMode = "sheet" | "quick";
 
 export interface QuickShareSession {
+  /** Stable across token rotations; replaced for every sign-in. */
+  sessionId?: string;
   serverUrl: string;
   accessToken: string;
   refreshToken: string;
@@ -98,6 +100,7 @@ export function parseQuickShareSession(raw: unknown): QuickShareSession | null {
   const updatedAt =
     typeof row.updatedAt === "number" && Number.isFinite(row.updatedAt) ? row.updatedAt : 0;
   return {
+    ...(typeof row.sessionId === "string" && row.sessionId ? { sessionId: row.sessionId } : {}),
     serverUrl: row.serverUrl.replace(/\/+$/, ""),
     accessToken: row.accessToken,
     refreshToken: row.refreshToken,

@@ -29,7 +29,9 @@ internal object ShareSessionStore {
   private val lock = Any()
 
   @JvmStatic
-  fun read(context: Context): String? {
+  fun read(context: Context): String? = synchronized(lock) { readLocked(context) }
+
+  private fun readLocked(context: Context): String? {
     try {
       val stored = prefs(context).getString(KEY, null)
       if (!stored.isNullOrEmpty()) {
@@ -47,13 +49,21 @@ internal object ShareSessionStore {
   }
 
   @JvmStatic
-  fun write(context: Context, json: String) {
-    prefs(context).edit().putString(KEY, json).commit()
+  fun write(context: Context, json: String) = synchronized(lock) {
+    check(prefs(context).edit().putString(KEY, json).commit()) { "Session write failed" }
     deleteLegacyFiles(context)
   }
 
+  /** A refresh only owns the exact snapshot it read before the network call. */
   @JvmStatic
-  fun clear(context: Context) {
+  fun replace(context: Context, expected: String, json: String): Boolean = synchronized(lock) {
+    if (readLocked(context) != expected) return@synchronized false
+    write(context, json)
+    true
+  }
+
+  @JvmStatic
+  fun clear(context: Context) = synchronized(lock) {
     try {
       prefs(context).edit().remove(KEY).commit()
     } catch (_: Exception) {

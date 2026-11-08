@@ -18,11 +18,11 @@ const SPLASH_PRESENT_TIMEOUT_MS = 1500;
 const COVER_KEY = "restartCover";
 
 interface UpdateRestartState {
-  restarting: boolean;
+  status: "idle" | "preparing" | "presenting" | "reloading";
 }
 
 export const useUpdateRestartStore = create<UpdateRestartState>(() => ({
-  restarting: false,
+  status: "idle",
 }));
 
 let resolveRestartSplash: (() => void) | null = null;
@@ -85,48 +85,60 @@ export function reloadScreenOptionsForPalette(backgroundColor: string): RuntimeR
 
 /** Replace the JS runtime with a themed reload screen (no Expo white spinner). */
 export async function reloadRuntime(palette = currentPalette()): Promise<void> {
-  recordDiagnosticOperation("update-apply", "started", 0);
-  flushLocalDiagnostics();
-  rememberRestartCover({ background: palette.background, mode: palette.mode });
-  await pinSystemChrome(palette);
-  await Updates.reloadAsync({
-    reloadScreenOptions: reloadScreenOptionsForPalette(palette.background),
-  });
+  if (useUpdateRestartStore.getState().status !== "idle") {
+    throw new Error("A restart is already in progress");
+  }
+  useUpdateRestartStore.setState({ status: "reloading" });
+  try {
+    recordDiagnosticOperation("update-apply", "started", 0);
+    flushLocalDiagnostics();
+    rememberRestartCover({ background: palette.background, mode: palette.mode });
+    await pinSystemChrome(palette);
+    await Updates.reloadAsync({
+      reloadScreenOptions: reloadScreenOptionsForPalette(palette.background),
+    });
+  } catch (error) {
+    useUpdateRestartStore.setState({ status: "idle" });
+    clearRestartCover();
+    throw error;
+  }
 }
 
 /** Paint the branded fallback before replacing the JS runtime. */
 export async function restartRuntime(beforeReload?: () => Promise<void>): Promise<void> {
-  if (useUpdateRestartStore.getState().restarting) {
-    await beforeReload?.();
-    return;
+  if (useUpdateRestartStore.getState().status !== "idle") {
+    throw new Error("A restart is already in progress");
   }
-
-  const palette = currentPalette();
-  rememberRestartCover({ background: palette.background, mode: palette.mode });
-  await pinSystemChrome(palette);
-
-  const splashPresented = new Promise<void>((resolve) => {
-    resolveRestartSplash = resolve;
-  });
-  useUpdateRestartStore.setState({ restarting: true });
-  await Promise.race([
-    splashPresented,
-    new Promise<void>((resolve) => setTimeout(resolve, SPLASH_PRESENT_TIMEOUT_MS)),
-  ]);
-  resolveRestartSplash = null;
-
+  // Reserve before the first await: another tap must not run a second commit
+  // callback or replace the first operation's splash acknowledgement.
+  useUpdateRestartStore.setState({ status: "preparing" });
   try {
+    const palette = currentPalette();
+    rememberRestartCover({ background: palette.background, mode: palette.mode });
+    await pinSystemChrome(palette);
+
+    const splashPresented = new Promise<void>((resolve) => {
+      resolveRestartSplash = resolve;
+    });
+    useUpdateRestartStore.setState({ status: "presenting" });
+    await Promise.race([
+      splashPresented,
+      new Promise<void>((resolve) => setTimeout(resolve, SPLASH_PRESENT_TIMEOUT_MS)),
+    ]);
+    resolveRestartSplash = null;
+
     await beforeReload?.();
     // Re-pin after the overlay commits so StatusBar unmount restores this
     // chrome, not the light splash color expo-splash-screen stamps on Android.
     await pinSystemChrome(palette);
     await nextFrame();
+    useUpdateRestartStore.setState({ status: "reloading" });
     await Updates.reloadAsync({
       reloadScreenOptions: reloadScreenOptionsForPalette(palette.background),
     });
   } catch (error) {
     resolveRestartSplash = null;
-    useUpdateRestartStore.setState({ restarting: false });
+    useUpdateRestartStore.setState({ status: "idle" });
     clearRestartCover();
     throw error;
   }

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { BATCH_ITEM_LIMIT, MAX_TAGS_PER_BOOKMARK } from "../constants.js";
+import { BATCH_ITEM_LIMIT, BOOKMARK_TITLE_MAX_LENGTH, MAX_TAGS_PER_BOOKMARK } from "../constants.js";
 import { UNIX_SECONDS_MAX, UNIX_SECONDS_MIN } from "../reminders.js";
 import { isSupportedUrl } from "../urls.js";
 
@@ -35,6 +35,12 @@ export type PrefetchBookmarkInput = z.infer<typeof PrefetchBookmarkSchema>;
 
 export const UpdateBookmarkSchema = z
   .object({
+    title: z
+      .string()
+      .trim()
+      .min(1, { message: "Enter a title." })
+      .max(BOOKMARK_TITLE_MAX_LENGTH, { message: `Use ${BOOKMARK_TITLE_MAX_LENGTH} characters or fewer.` })
+      .optional(),
     /** Passing `null` moves the bookmark to unfiled. */
     folderId: folderId.optional(),
     isRead: z.boolean().optional(),
@@ -51,6 +57,7 @@ export const UpdateBookmarkSchema = z
   })
   .refine(
     (v) =>
+      v.title !== undefined ||
       v.folderId !== undefined ||
       v.isRead !== undefined ||
       v.readProgress !== undefined ||

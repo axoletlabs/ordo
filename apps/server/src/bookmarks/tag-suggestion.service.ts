@@ -31,6 +31,7 @@ export class TagSuggestionService {
         description: true,
         domain: true,
         contentHtml: true,
+        updatedAt: true,
         tags: { select: { tagId: true } },
         suggestions: { select: { tagId: true, status: true } },
       },
@@ -64,18 +65,30 @@ export class TagSuggestionService {
       },
     ).map(({ id }) => id);
 
-    await this.prisma.$transaction([
-      this.prisma.bookmarkTagSuggestion.deleteMany({
+    await this.prisma.$transaction(async (tx) => {
+      // Scoring is asynchronous relative to tag edits and extraction. Claim
+      // only the content revision we scored and re-read decisions at commit.
+      const current = await tx.bookmark.findUnique({
+        where: { id: bookmarkId },
+        select: {
+          updatedAt: true,
+          tags: { select: { tagId: true } },
+          suggestions: { where: { status: "dismissed" }, select: { tagId: true } },
+        },
+      });
+      if (!current || current.updatedAt.getTime() !== bookmark.updatedAt.getTime()) return;
+      const excludedNow = new Set([
+        ...current.tags.map(({ tagId }) => tagId),
+        ...current.suggestions.map(({ tagId }) => tagId),
+      ]);
+      const pending = suggested.filter((tagId) => !excludedNow.has(tagId));
+      await tx.bookmarkTagSuggestion.deleteMany({
         where: { bookmarkId, status: "pending" },
-      }),
-      ...(suggested.length > 0
-        ? [
-            this.prisma.bookmarkTagSuggestion.createMany({
-              data: suggested.map((tagId) => ({ bookmarkId, tagId })),
-            }),
-          ]
-        : []),
-    ]);
+      });
+      if (pending.length > 0) await tx.bookmarkTagSuggestion.createMany({
+        data: pending.map((tagId) => ({ bookmarkId, tagId })),
+      });
+    });
   }
 
   /** Fire-and-forget wrapper for use inside the extraction pipeline. */

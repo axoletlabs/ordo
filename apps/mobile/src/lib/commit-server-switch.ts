@@ -13,9 +13,27 @@ export type ServerSwitchResult =
   | { ok: true; restarted: boolean }
   | { ok: false };
 
+let switchState: "idle" | "committing" = "idle";
+
 export async function commitServerSwitch(nextUrl: string): Promise<ServerSwitchResult> {
+  if (switchState !== "idle") return { ok: false };
+  switchState = "committing";
+  try {
+    return await performServerSwitch(nextUrl);
+  } catch {
+    return { ok: false };
+  } finally {
+    switchState = "idle";
+  }
+}
+
+async function performServerSwitch(nextUrl: string): Promise<ServerSwitchResult> {
   const signedIn = useAuthStore.getState().status === "authenticated";
   if (!signedIn) {
+    await Promise.all([
+      useAuthStore.getState().clear(),
+      useFolderTokenStore.getState().clearAll(),
+    ]);
     await useSettingsStore.getState().setServerUrl(nextUrl);
     return { ok: true, restarted: false };
   }
@@ -28,8 +46,10 @@ export async function commitServerSwitch(nextUrl: string): Promise<ServerSwitchR
       await Promise.all([
         useAuthStore.getState().clear(),
         useFolderTokenStore.getState().clearAll(),
-        useSettingsStore.getState().setServerUrl(nextUrl),
       ]);
+      // Persist cleared secrets before the origin: a crash between writes
+      // must not attach the previous server's credentials to the new one.
+      await useSettingsStore.getState().setServerUrl(nextUrl);
       switchCommitted = true;
     });
   } catch {

@@ -18,6 +18,7 @@ import { formatReminderWhen } from "../../lib/bookmark-reminders";
 import type { MenuAnchorRect } from "../../lib/menu-anchor";
 import type { BookmarkDto } from "@ordo/shared";
 import { ReminderCustomPanel } from "./ReminderCustomPanel";
+import { EditBookmarkTitlePanel } from "./EditBookmarkTitlePanel";
 import { REMINDER_MENU_WIDTH, ReminderPresetItems, useSaveReminder } from "./ReminderFlow";
 
 function useSetContentKindMissing() {
@@ -52,7 +53,7 @@ export function BookmarkActionsSheet({
 }: BookmarkActionsSheetProps) {
   const router = useRouter();
   const setContentKind = useSetContentKind();
-  const [mode, setMode] = useOverlaySessionMode<"menu" | "remind" | "delete">(visible, "menu");
+  const [mode, setMode] = useOverlaySessionMode<"menu" | "title" | "remind" | "delete">(visible, "menu");
   const [remindPage, setRemindPage] = useOverlaySessionMode<"presets" | "custom">(
     visible && mode === "remind",
     "presets",
@@ -113,6 +114,11 @@ export function BookmarkActionsSheet({
             onToggleRead(displayBookmark);
             onDismiss();
           }}
+        />
+        <ContextMenuItem
+          icon="pencil-outline"
+          label="Edit title"
+          onPress={() => setMode("title")}
         />
         <ContextMenuItem
           icon="folder-open-outline"
@@ -225,6 +231,7 @@ export function BookmarkActionsSheet({
         onDismiss={() => setRemindPage("presets")}
         onConfirm={(unix) => saveReminder(unix)}
       />
+      <EditBookmarkTitlePanel visible={visible && mode === "title"} bookmark={displayBookmark} onDismiss={onDismiss} />
       <ConfirmDialog
         visible={visible && mode === "delete"}
         icon="trash-outline"

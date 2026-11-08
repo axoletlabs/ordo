@@ -390,6 +390,24 @@ export function useSetContentKind() {
   });
 }
 
+export function useUpdateBookmarkTitle() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationKey: BOOKMARK_WRITE_KEY,
+    mutationFn: ({ id, folderId, title }: { id: string; folderId: string | null; title: string }) =>
+      bookmarksApi.update(id, { title }, { folderId }),
+    // Keep failed edits in the dialog; publish only a confirmed title.
+    onSuccess: async (updated) => {
+      const owner = captureSessionScope();
+      await qc.cancelQueries({ queryKey: ["bookmarks"] });
+      if (!isSessionScopeCurrent(owner)) return;
+      updateBookmarkEverywhere(qc, updated.id, (bookmark) => ({ ...bookmark, title: updated.title }));
+      syncReminderInCache(qc, updated);
+    },
+    onSettled: () => invalidateSettledBookmarkWrites(qc, true),
+  });
+}
+
 export function useSetBookmarkReminder() {
   const qc = useQueryClient();
   return useMutation({

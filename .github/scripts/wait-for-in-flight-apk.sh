@@ -5,7 +5,6 @@
 # packaging, so publishing before the binary finishes makes Check say "up to date".
 set -euo pipefail
 
-REPO="${GITHUB_REPOSITORY:?}"
 CURRENT_RUN="${GITHUB_RUN_ID:-0}"
 BRANCH="${1:-${GITHUB_REF_NAME:-main}}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,32 +36,13 @@ older_in_flight_ids() {
 # True when this run might still produce a binary we must out-timestamp.
 run_has_pending_apk() {
   local run_id="$1"
-  local jobs detect_status apk_status apk_conclusion
-  jobs="$(gh api "repos/${REPO}/actions/runs/${run_id}/jobs" --jq '[.jobs[] | {name,status,conclusion}]')" || exit 1
-  detect_status="$(jq -r '.[] | select(.name == "detect") | .status' <<<"$jobs")"
-  # APK-producing jobs: the dev build_apk job, the release build_abi matrix,
-  # and assemble_release that signs/publishes the matrix output.
-  apk_status="$(jq -r '[.[] | select(.name == "build_apk" or (.name | startswith("build_abi")) or .name == "assemble_release") | .status] | join(",")' <<<"$jobs")"
-  apk_conclusion="$(jq -r '[.[] | select(.name == "build_apk" or (.name | startswith("build_abi")) or .name == "assemble_release") | .conclusion // empty] | join(",")' <<<"$jobs")"
-
-  if [[ "$detect_status" == "in_progress" || "$detect_status" == "queued" || "$detect_status" == "waiting" ]]; then
-    echo "run ${run_id}: detect is ${detect_status}"
-    return 0
-  fi
-  if [[ "$apk_status" == *"in_progress"* || "$apk_status" == *"queued"* || "$apk_status" == *"waiting"* ]]; then
-    echo "run ${run_id}: an APK job is ${apk_status}"
-    return 0
-  fi
-  if [[ -n "$apk_status" && "$apk_conclusion" != *"failure"* ]]; then
-    echo "run ${run_id}: APK jobs ${apk_conclusion:-done}"
-    return 1
-  fi
-  # Detect finished but no APK job has appeared yet.
-  if [[ "$detect_status" == "completed" && -z "$apk_status" ]]; then
-    echo "run ${run_id}: waiting for an APK job to be scheduled"
-    return 0
-  fi
-  return 1
+  local state
+  state="$(bash "$SCRIPT_DIR/apk-run-state.sh" "$run_id")" || exit 1
+  echo "run ${run_id}: ${state}"
+  case "$state" in
+    deciding|building) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 started="$(date +%s)"

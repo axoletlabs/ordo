@@ -191,6 +191,11 @@ jobs:
       - name: Typecheck
         run: pnpm -r typecheck
 
+      - name: Verify bookmark title editing and extraction races
+        run: |
+          pnpm --filter @ordo/server build
+          pnpm --filter @ordo/server test:bookmark-title
+
       - name: Verify diagnostics privacy, recording and exports
         run: pnpm --filter @ordo/mobile test:diagnostics
 

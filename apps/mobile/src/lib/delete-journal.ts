@@ -42,21 +42,50 @@ function write(key: string, entries: DeleteIntent[]) {
   }
 }
 
-export function readDeleteIntents(key: string): DeleteIntent[] {
-  const raw = read(key);
-  if (!raw) return [];
-  const entries = JSON.parse(raw) as DeleteIntent[];
+function isDeleteIntent(entry: unknown): entry is DeleteIntent {
+  if (!entry || typeof entry !== "object") return false;
+  const intent = entry as Partial<DeleteIntent>;
   const keepsValid = (keeps: DeleteIntent["keeps"]) =>
     keeps === undefined ||
     (Array.isArray(keeps) && keeps.every((keep) => typeof keep?.id === "string" && typeof keep?.folderId === "string"));
-  if (!Array.isArray(entries) || entries.some((entry) =>
-    typeof entry.id !== "string" || !Array.isArray(entry.bookmarks) ||
-    entry.bookmarks.some((item) => typeof item.id !== "string" || !(item.folderId === null || typeof item.folderId === "string")) ||
-    [entry.folders, entry.tags, entry.contained].some((ids) => !Array.isArray(ids) || ids.some((id) => typeof id !== "string")) ||
-    !keepsValid(entry.keeps))) {
-    throw new Error("Couldn't read pending deletions.");
+  return (
+    typeof intent.id === "string" &&
+    Array.isArray(intent.bookmarks) &&
+    intent.bookmarks.every((item) => typeof item?.id === "string" && (item.folderId === null || typeof item.folderId === "string")) &&
+    [intent.folders, intent.tags, intent.contained].every((ids) => Array.isArray(ids) && ids.every((id) => typeof id === "string")) &&
+    keepsValid(intent.keeps)
+  );
+}
+
+/** Read the journal defensively. Corrupt storage must never brick deletion
+ * forever: salvage every entry that still validates, rewrite the repaired
+ * list, and drop the rest. Untrusted bytes are the only thing discarded —
+ * a valid intent's tombstones still replay. */
+export function readDeleteIntents(key: string): DeleteIntent[] {
+  const raw = read(key);
+  if (!raw) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    resetDeleteIntents(key);
+    return [];
   }
+  if (!Array.isArray(parsed)) {
+    resetDeleteIntents(key);
+    return [];
+  }
+  const entries = parsed.filter(isDeleteIntent);
+  if (entries.length !== parsed.length) resetDeleteIntents(key, entries);
   return entries;
+}
+
+function resetDeleteIntents(key: string, entries: DeleteIntent[] = []) {
+  try {
+    write(key, entries);
+  } catch {
+    /* best effort: a full/quarantined journal must still let the caller run */
+  }
 }
 
 export function recordDeleteIntent(input: Omit<DeleteIntent, "id">) {

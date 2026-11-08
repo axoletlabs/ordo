@@ -6,7 +6,7 @@ import * as Updates from "expo-updates";
 import * as SplashScreen from "expo-splash-screen";
 import { currentAppPalette } from "../theme/current-app-palette";
 import { radius, resolveFont } from "../theme/tokens";
-import { reloadRuntime } from "../store/update-restart";
+import { reloadRuntime, useUpdateRestartStore } from "../store/update-restart";
 import { captureLocalError, collectLocalDiagnosticReport, getDiagnosticReportEpoch, localDiagnosticReport, recordDiagnosticEvent, subscribePreparedDiagnosticReport, type LocalErrorReport } from "../lib/local-diagnostics";
 
 const RELEASES_URL = "https://github.com/axoletlabs/ordo/releases";
@@ -31,6 +31,7 @@ function Fallback({ report, onReset }: { report: LocalErrorReport | null; onRese
   const epoch = React.useRef(getDiagnosticReportEpoch());
   const [prepared, setPrepared] = React.useState(false);
   const [preparing, setPreparing] = React.useState(false);
+  const reloading = useUpdateRestartStore(state => state.status !== "idle");
   React.useEffect(() => subscribePreparedDiagnosticReport(() => {
     if (epoch.current === getDiagnosticReportEpoch()) return;
     epoch.current = getDiagnosticReportEpoch();
@@ -53,8 +54,13 @@ function Fallback({ report, onReset }: { report: LocalErrorReport | null; onRese
     catch { setNotice("Couldn't copy. You can select the report below."); }
   };
   const reload = () => {
+    if (useUpdateRestartStore.getState().status !== "idle") return;
     if (Platform.OS === "web" && typeof window !== "undefined") { window.location.reload(); return; }
-    void reloadRuntime().catch(() => setNotice("Couldn't reload. Close and reopen the app."));
+    // reloadRuntime rejects while another restart owns the runtime; that is not
+    // a failure the user should be told to work around.
+    void reloadRuntime().catch(() => {
+      setNotice("Couldn't reload. Close and reopen the app.");
+    });
   };
   const action = (label: string, onPress: () => void, primary = false) => (
     <Pressable accessibilityRole="button" onPress={onPress}
@@ -74,7 +80,7 @@ function Fallback({ report, onReset }: { report: LocalErrorReport | null; onRese
           {action(preparing ? "Preparing report…" : "Review report", () => void review())}
           {prepared && details ? action("Copy report", () => void copy()) : null}
           {prepared ? action(details ? "Hide details" : "Show details", () => setDetails(!details)) : null}
-          {Platform.OS === "web" || Updates.isEnabled ? action("Reload app", reload) : null}
+          {Platform.OS === "web" || Updates.isEnabled ? action(reloading ? "Reloading…" : "Reload app", reload) : null}
         </View>
         {Platform.OS !== "web" && Updates.isEnabled ? <Text style={[styles.message, { color: palette.onSurfaceVariant }]}>Retry keeps this version. Reload applies any downloaded update.</Text> : null}
         <Text style={[styles.message, { color: palette.onSurfaceVariant }]}>Diagnostic reports stay on this device until you export them. Private content and unrestricted error messages are excluded. After restarting, open Settings → About → Build details → Diagnostics.</Text>

@@ -104,7 +104,7 @@ export default function TagsScreen() {
             refreshing={refreshing}
             onRefresh={onRefresh}
             ListEmptyComponent={<View style={styles.empty}><EmptyState icon="pricetags-outline" title="No tags yet"
-              message="Create a tag to organize bookmarks." action={<Button label="New tag" onPress={() => setCreateOpen(true)} />} /></View>}
+              message="Create a tag to organize bookmarks" action={<Button label="New tag" onPress={() => setCreateOpen(true)} />} /></View>}
           />
         )}
       </ScreenContent>

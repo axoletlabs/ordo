@@ -8,6 +8,7 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { EXTRACTION_VERSION, type ExtractionProgressDto } from "@ordo/shared";
 import { PrismaService } from "../prisma/prisma.service.js";
+import type { Prisma } from "../prisma/client.js";
 import {
   ReaderService,
   UnsupportedContentError,
@@ -19,6 +20,7 @@ import { isJunkPageTitle, isUsablePageTitle, peekMetadata } from "./reader-parse
 import { provisionalTitle } from "./provisional-title.js";
 import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
 import { isLibraryCiphertext } from "../crypto/library-crypto.js";
+import { LibraryKeyService } from "../crypto/library-key.service.js";
 
 /** `full` overwrites title/metadata; `content` keeps the imported title. */
 export type ExtractionMode = "full" | "content";
@@ -39,22 +41,29 @@ export interface ExtractionTask {
 const CONCURRENCY = 8;
 const PER_HOST = 3;
 const LOW_PRIORITY_MAX = 2;
-/** How long a cancel flag for a non-in-flight task outlives the cancel call. */
-const CANCELED_GRACE_MS = 60_000;
+
+interface RunningExtraction {
+  status: "running";
+  controller: AbortController;
+}
+type ExtractionWork = { status: "queued"; task: ExtractionTask } | RunningExtraction;
+interface PendingResume {
+  status: "loading" | "ready";
+  dek: Buffer | null;
+}
 
 @Injectable()
 export class ExtractionService {
   private readonly logger = new Logger(ExtractionService.name);
   private readonly high = new Map<string, ExtractionTask[]>();
   private readonly low = new Map<string, ExtractionTask[]>();
-  private readonly queuedIds = new Set<string>();
-  private readonly canceled = new Set<string>();
-  private readonly controllers = new Map<string, AbortController>();
+  /** The current attempt owns all writes and cleanup for its bookmark. */
+  private readonly work = new Map<string, ExtractionWork>();
   private readonly hostActive = new Map<string, number>();
   /** userId → number of pending rows observed in this fetch wave. */
   private readonly waves = new Map<string, number>();
   private readonly idleWaiters: Array<() => void> = [];
-  private readonly resumedUsers = new Set<string>();
+  private readonly resumedUsers = new Map<string, PendingResume>();
   private active = 0;
   private lowActive = 0;
 
@@ -63,15 +72,15 @@ export class ExtractionService {
     private readonly reader: ReaderService,
     private readonly tagSuggestions: TagSuggestionService,
     private readonly crypto: LibraryCryptoService,
+    private readonly keys: LibraryKeyService,
   ) {}
 
   /** Queue work; `countTowardProgress` is for newly pending rows (not stale refresh). */
   enqueue(tasks: ExtractionTask[], countTowardProgress = true): void {
     const added: ExtractionTask[] = [];
     for (const task of tasks) {
-      if (this.queuedIds.has(task.bookmarkId)) continue;
-      if (this.canceled.has(task.bookmarkId)) this.canceled.delete(task.bookmarkId);
-      this.queuedIds.add(task.bookmarkId);
+      if (this.work.has(task.bookmarkId)) continue;
+      this.work.set(task.bookmarkId, { status: "queued", task });
       const lane = (task.priority ?? "high") === "low" ? this.low : this.high;
       const host = hostKey(task.url);
       const list = lane.get(host) ?? [];
@@ -93,25 +102,36 @@ export class ExtractionService {
 
   /** After a live session has the DEK, retry pending rows that boot skipped. */
   resumePending(userId: string, dek: Buffer | null): void {
-    if (this.resumedUsers.has(userId)) return;
-    this.resumedUsers.add(userId);
-    void this.enqueuePending(userId, dek);
+    const previous = this.resumedUsers.get(userId);
+    if (previous && (previous.dek !== null || dek === null)) return;
+    const resume: PendingResume = { status: "loading", dek };
+    this.resumedUsers.set(userId, resume);
+    void this.enqueuePending(userId, dek, resume).then((complete) => {
+      if (this.resumedUsers.get(userId) !== resume) return;
+      if (complete) resume.status = "ready";
+      else this.resumedUsers.delete(userId);
+    }).catch((error: unknown) => {
+      if (this.resumedUsers.get(userId) === resume) this.resumedUsers.delete(userId);
+      this.logger.warn(`Could not resume pending extraction: ${(error as Error).message}`);
+    });
   }
 
-  private async enqueuePending(userId: string, dek: Buffer | null): Promise<void> {
+  private async enqueuePending(userId: string, dek: Buffer | null, resume: PendingResume): Promise<boolean> {
     const rows = await this.prisma.bookmark.findMany({
       where: { userId, fetchStatus: "pending" },
       select: { id: true, url: true, userId: true, contentKindOverride: true },
     });
     const tasks: ExtractionTask[] = [];
+    let complete = true;
     for (const row of rows) {
       let url = row.url;
       try {
         url = this.crypto.run(dek, () => this.crypto.openBookmark(row).url as string);
       } catch {
+        complete = false;
         continue;
       }
-      if (isLibraryCiphertext(url)) continue;
+      if (isLibraryCiphertext(url)) { complete = false; continue; }
       tasks.push({
         bookmarkId: row.id,
         url,
@@ -122,21 +142,16 @@ export class ExtractionService {
         dek,
       });
     }
-    if (tasks.length > 0) this.enqueue(tasks, false);
+    if (this.resumedUsers.get(userId) === resume && tasks.length > 0) this.enqueue(tasks, false);
+    return complete;
   }
 
   /** Drop queued work and abort an in-flight fetch for a deleted bookmark. */
   cancel(bookmarkId: string): void {
-    this.canceled.add(bookmarkId);
-    this.queuedIds.delete(bookmarkId);
+    const work = this.work.get(bookmarkId);
+    this.work.delete(bookmarkId);
     this.dropQueued(bookmarkId);
-    this.controllers.get(bookmarkId)?.abort();
-    if (!this.controllers.has(bookmarkId)) {
-      // Nothing in flight: the flag only guards the take-next race, so drop
-      // it shortly to keep the set from growing for the process lifetime.
-      const timer = setTimeout(() => this.canceled.delete(bookmarkId), CANCELED_GRACE_MS);
-      timer.unref?.();
-    }
+    if (work?.status === "running") work.controller.abort();
   }
 
   prefetch(url: string, userId?: string): void {
@@ -174,135 +189,142 @@ export class ExtractionService {
     mode: ExtractionMode = "full",
     forceArticle = false,
     cachedHtml?: string,
+    attempt?: RunningExtraction,
   ): Promise<void> {
-    if (this.canceled.has(bookmarkId)) return;
-    const existingOverride = await this.prisma.bookmark.findUnique({
-      where: { id: bookmarkId },
-      select: { contentKindOverride: true, title: true, userId: true },
-    });
-    if (this.canceled.has(bookmarkId)) return;
-    const userId = existingOverride?.userId;
-    const force = forceArticle || existingOverride?.contentKindOverride === "article";
-    const controller = new AbortController();
-    this.controllers.set(bookmarkId, controller);
+    const work: RunningExtraction = attempt ?? { status: "running", controller: new AbortController() };
+    if (!attempt) {
+      this.cancel(bookmarkId);
+      this.work.set(bookmarkId, work);
+    }
+    const current = () => this.work.get(bookmarkId) === work && !work.controller.signal.aborted;
+    const controller = work.controller;
     let capturedHtml = cachedHtml;
     try {
-      const extracted = await this.reader.extract(url, {
-        forceArticle: force,
-        html: cachedHtml,
-        signal: controller.signal,
-        userId,
-        onHtml: (html) => {
-          capturedHtml = html;
-        },
-        onMetadata: (meta) => this.writeEarlyMetadata(bookmarkId, userId, url, meta, mode, force),
-      });
-      if (this.canceled.has(bookmarkId)) return;
-      // Imports keep their stored title (`mode: "content"`), but a hostname
-      // placeholder was never a real title — let a usable one replace it.
-      const importedTitleFix =
-        mode === "content" &&
-        isUsablePageTitle(extracted.title, url) &&
-        !isUsablePageTitle(
-          this.openStoredTitle(bookmarkId, userId, existingOverride?.title),
-          url,
-        )
-          ? { title: extracted.title.slice(0, 500) }
-          : {};
-      const written = await this.prisma.bookmark.updateMany({
-        where: force
-          ? { id: bookmarkId, contentKindOverride: "article" }
-          : { id: bookmarkId },
-        data: this.sealExtractionWrite(
-          userId,
-          bookmarkId,
-          mode === "full"
-            ? {
-                title: extracted.title,
-                description: extracted.description,
-                domain: extracted.domain,
-                author: extracted.author,
-                publishedAt: extracted.publishedAt ? new Date(extracted.publishedAt) : null,
-                readingTimeMinutes: extracted.readingTimeMinutes,
-                contentHtml: extracted.contentHtml,
-                fetchStatus: "ok",
-                extractionReason: null,
-                extractionVersion: EXTRACTION_VERSION,
-              }
-            : {
-                ...importedTitleFix,
-                readingTimeMinutes: extracted.readingTimeMinutes,
-                contentHtml: extracted.contentHtml,
-                fetchStatus: "ok",
-                extractionReason: null,
-                extractionVersion: EXTRACTION_VERSION,
-              },
-        ),
-      });
-      if (written.count > 0) this.tagSuggestions.refreshSafely(bookmarkId);
-    } catch (err) {
-      if (this.canceled.has(bookmarkId) || controller.signal.aborted) return;
-      const unsupported = err instanceof UnsupportedContentError;
-      const reason = unsupported ? err.reason : "fetch_error";
-      this.logger.warn(
-        `Extraction ${unsupported ? "rejected" : "failed"} for bookmark ${bookmarkId} (${safeHostname(url)}): ${reason} — ${(err as Error).message}`,
-      );
-      const existing = await this.prisma.bookmark.findUnique({
+      if (!current()) return;
+      const existingOverride = await this.prisma.bookmark.findUnique({
         where: { id: bookmarkId },
-        select: { contentHtml: true, title: true, userId: true },
+        select: { contentKindOverride: true, title: true, userId: true },
       });
-      if (this.canceled.has(bookmarkId)) return;
-      const storedHtml = existing
-        ? (this.crypto.openBookmark({
-            id: bookmarkId,
-            userId: existing.userId,
-            contentHtml: existing.contentHtml,
-          }).contentHtml as string | null)
-        : null;
-      const storedContentIsShell = storedHtml
-        ? this.reader.classifyShellText(htmlToSearchText(storedHtml)) !== null
-        : false;
-      const definitivelyUnreadable =
-        unsupported &&
-        (storedContentIsShell ||
-          ["social_video_or_app", "js_required", "too_short", "not_an_article"].includes(reason));
-      const storeUnsupported = definitivelyUnreadable || (unsupported && !existing?.contentHtml);
-
-      // A rejected page still names itself: og:title/<title> sit in the HTML
-      // the reader just threw away — or never bothered to fetch for known
-      // non-articles like repo homepages. Rescue the title so the library
-      // shows "facebook/react" instead of "github.com".
-      const currentTitle = existing
-        ? (this.crypto.openBookmark({
-            id: bookmarkId,
-            userId: existing.userId,
-            title: existing.title,
-          }).title as string | null)
-        : null;
-      const rescued =
-        storeUnsupported &&
-        (capturedHtml !== undefined || (unsupported && reason !== "non_html_content"))
-          ? await this.rescueMetadata(
-              url,
-              capturedHtml,
-              userId ?? existing?.userId,
-              controller.signal,
-            )
-          : null;
-      const rescuedTitleText = rescued?.title ?? null;
-      const rescuedTitle =
-        rescuedTitleText &&
-        isUsablePageTitle(rescuedTitleText, url) &&
-        !isUsablePageTitle(currentTitle, url)
-          ? { title: rescuedTitleText.slice(0, 500) }
-          : currentTitle && isJunkPageTitle(currentTitle)
-            ? // An early metadata write stuck a wall title; fall back to the
-              // provisional one rather than keep the junk.
-              { title: provisionalTitle(url, safeHostname(url)) }
+      if (!current() || !existingOverride) return;
+      const userId = existingOverride?.userId;
+      const force = forceArticle || existingOverride?.contentKindOverride === "article";
+      try {
+        const extracted = await this.reader.extract(url, {
+          forceArticle: force,
+          html: cachedHtml,
+          signal: controller.signal,
+          userId,
+          onHtml: (html) => {
+            capturedHtml = html;
+          },
+          onMetadata: (meta) => current() ? this.writeEarlyMetadata(bookmarkId, userId, url, meta, mode, force) : Promise.resolve(),
+        });
+        if (!current()) return;
+        // Imports keep their stored title (`mode: "content"`), but a hostname
+        // placeholder was never a real title — let a usable one replace it.
+        const importedTitleFix =
+          mode === "content" &&
+          isUsablePageTitle(extracted.title, url) &&
+          !isUsablePageTitle(
+            this.openStoredTitle(bookmarkId, userId, existingOverride?.title),
+            url,
+          )
+            ? { title: extracted.title.slice(0, 500) }
             : {};
+        const written = await this.writeExtractedBookmark({
+          where: force
+            ? { id: bookmarkId, contentKindOverride: "article" }
+            : { id: bookmarkId },
+          data: this.sealExtractionWrite(
+            userId,
+            bookmarkId,
+            mode === "full"
+              ? {
+                  title: extracted.title,
+                  description: extracted.description,
+                  domain: extracted.domain,
+                  author: extracted.author,
+                  publishedAt: extracted.publishedAt ? new Date(extracted.publishedAt) : null,
+                  readingTimeMinutes: extracted.readingTimeMinutes,
+                  contentHtml: extracted.contentHtml,
+                  fetchStatus: "ok",
+                  extractionReason: null,
+                  extractionVersion: EXTRACTION_VERSION,
+                }
+              : {
+                  ...importedTitleFix,
+                  readingTimeMinutes: extracted.readingTimeMinutes,
+                  contentHtml: extracted.contentHtml,
+                  fetchStatus: "ok",
+                  extractionReason: null,
+                  extractionVersion: EXTRACTION_VERSION,
+                },
+          ),
+        });
+        if (written.count > 0) this.tagSuggestions.refreshSafely(bookmarkId);
+      } catch (err) {
+        if (!current()) return;
+        const unsupported = err instanceof UnsupportedContentError;
+        const reason = unsupported ? err.reason : "fetch_error";
+        this.logger.warn(
+          `Extraction ${unsupported ? "rejected" : "failed"} for bookmark ${bookmarkId} (${safeHostname(url)}): ${reason} — ${(err as Error).message}`,
+        );
+        const existing = await this.prisma.bookmark.findUnique({
+          where: { id: bookmarkId },
+          select: { contentHtml: true, title: true, userId: true },
+        });
+        if (!current()) return;
+        const storedHtml = existing
+          ? (this.crypto.openBookmark({
+              id: bookmarkId,
+              userId: existing.userId,
+              contentHtml: existing.contentHtml,
+            }).contentHtml as string | null)
+          : null;
+        const storedContentIsShell = storedHtml
+          ? this.reader.classifyShellText(htmlToSearchText(storedHtml)) !== null
+          : false;
+        const definitivelyUnreadable =
+          unsupported &&
+          (storedContentIsShell ||
+            ["social_video_or_app", "js_required", "too_short", "not_an_article"].includes(reason));
+        const storeUnsupported = definitivelyUnreadable || (unsupported && !existing?.contentHtml);
 
-      await this.prisma.bookmark
-        .updateMany({
+        // A rejected page still names itself: og:title/<title> sit in the HTML
+        // the reader just threw away — or never bothered to fetch for known
+        // non-articles like repo homepages. Rescue the title so the library
+        // shows "facebook/react" instead of "github.com".
+        const currentTitle = existing
+          ? (this.crypto.openBookmark({
+              id: bookmarkId,
+              userId: existing.userId,
+              title: existing.title,
+            }).title as string | null)
+          : null;
+        const rescued =
+          storeUnsupported &&
+          (capturedHtml !== undefined || (unsupported && reason !== "non_html_content"))
+            ? await this.rescueMetadata(
+                url,
+                capturedHtml,
+                userId ?? existing?.userId,
+                controller.signal,
+              )
+            : null;
+        const rescuedTitleText = rescued?.title ?? null;
+        const rescuedTitle =
+          rescuedTitleText &&
+          isUsablePageTitle(rescuedTitleText, url) &&
+          !isUsablePageTitle(currentTitle, url)
+            ? { title: rescuedTitleText.slice(0, 500) }
+            : currentTitle && isJunkPageTitle(currentTitle)
+              ? // An early metadata write stuck a wall title; fall back to the
+                // provisional one rather than keep the junk.
+                { title: provisionalTitle(url, safeHostname(url)) }
+              : {};
+
+        if (!current()) return;
+        await this.writeExtractedBookmark({
           where: force
             ? { id: bookmarkId, contentKindOverride: "article" }
             : { id: bookmarkId },
@@ -330,23 +352,23 @@ export class ExtractionService {
                   extractionVersion: EXTRACTION_VERSION,
                 },
         })
-        .catch((updateError: unknown) => {
-          this.logger.error(
-            `Could not update extraction status for bookmark ${bookmarkId}: ${(updateError as Error).message}`,
-          );
-        });
-      if (!force) {
-        const latest = await this.prisma.bookmark.findUnique({
-          where: { id: bookmarkId },
-          select: { contentKindOverride: true, contentHtml: true },
-        });
-        if (latest?.contentKindOverride === "article" && !latest.contentHtml) {
-          await this.enrichBookmark(bookmarkId, url, mode, true, capturedHtml);
+          .catch((updateError: unknown) => {
+            this.logger.error(
+              `Could not update extraction status for bookmark ${bookmarkId}: ${(updateError as Error).message}`,
+            );
+          });
+        if (!force && current()) {
+          const latest = await this.prisma.bookmark.findUnique({
+            where: { id: bookmarkId },
+            select: { contentKindOverride: true, contentHtml: true },
+          });
+          if (current() && latest?.contentKindOverride === "article" && !latest.contentHtml) {
+            await this.enrichBookmark(bookmarkId, url, mode, true, capturedHtml, work);
+          }
         }
       }
     } finally {
-      this.controllers.delete(bookmarkId);
-      this.canceled.delete(bookmarkId);
+      if (this.work.get(bookmarkId) === work) this.work.delete(bookmarkId);
     }
   }
 
@@ -393,7 +415,6 @@ export class ExtractionService {
     force: boolean,
   ): Promise<void> {
     if (mode !== "full") return;
-    if (this.canceled.has(bookmarkId)) return;
     const data: {
       title?: string;
       description?: string | null;
@@ -410,18 +431,29 @@ export class ExtractionService {
     if (meta.author) data.author = meta.author.slice(0, 200);
     if (meta.publishedAt) data.publishedAt = new Date(meta.publishedAt);
     if (Object.keys(data).length === 0) return;
-    await this.prisma.bookmark
-      .updateMany({
-        where: force
-          ? { id: bookmarkId, contentKindOverride: "article", fetchStatus: "pending" }
-          : { id: bookmarkId, fetchStatus: "pending" },
-        data: this.sealExtractionWrite(userId, bookmarkId, data),
-      })
+    await this.writeExtractedBookmark({
+      where: force
+        ? { id: bookmarkId, contentKindOverride: "article", fetchStatus: "pending" }
+        : { id: bookmarkId, fetchStatus: "pending" },
+      data: this.sealExtractionWrite(userId, bookmarkId, data),
+    })
       .catch((err: unknown) => {
         this.logger.debug(
           `Early metadata write skipped for ${bookmarkId}: ${(err as Error).message}`,
         );
       });
+  }
+
+  private async writeExtractedBookmark({ where, data }: Prisma.BookmarkUpdateManyArgs) {
+    const { title, ...metadata } = data;
+    if (title === undefined) return this.prisma.bookmark.updateMany({ where, data });
+    // Guard the title at write time: the user can rename while a fetch is in
+    // flight. Other metadata must still finish even when that title is kept.
+    const [, written] = await this.prisma.$transaction([
+      this.prisma.bookmark.updateMany({ where: { ...where, titleEdited: false }, data: { title } }),
+      this.prisma.bookmark.updateMany({ where, data: metadata }),
+    ]);
+    return written;
   }
 
   private sealExtractionWrite<T extends Record<string, unknown>>(
@@ -444,15 +476,23 @@ export class ExtractionService {
       this.active += 1;
       if (isLow) this.lowActive += 1;
       this.bumpHost(task.url, 1);
-      void this.crypto
-        .runAsync(task.dek ?? null, () =>
-          this.enrichBookmark(task.bookmarkId, task.url, task.mode, task.forceArticle),
+      const attempt: RunningExtraction = { status: "running", controller: new AbortController() };
+      this.work.set(task.bookmarkId, attempt);
+      void this.keys
+        .runWithCurrentKey(task.userId, task.dek ?? null, () =>
+          this.enrichBookmark(task.bookmarkId, task.url, task.mode, task.forceArticle, undefined, attempt),
         )
+        .catch((error: unknown) => {
+          this.resumedUsers.delete(task.userId);
+          this.logger.error(`Extraction worker failed: ${(error as Error).message}`);
+        })
         .finally(() => {
+          // Key resolution can fail before enrichBookmark starts and owns its
+          // cleanup. Release that attempt too, so a later scan can retry it.
+          if (this.work.get(task.bookmarkId) === attempt) this.work.delete(task.bookmarkId);
           this.active -= 1;
           if (isLow) this.lowActive -= 1;
           this.bumpHost(task.url, -1);
-          this.queuedIds.delete(task.bookmarkId);
           this.pump();
           this.notifyIdle();
         });
@@ -465,11 +505,8 @@ export class ExtractionService {
       if ((this.hostActive.get(host) ?? 0) >= PER_HOST) continue;
       while (list.length > 0) {
         const task = list.shift()!;
-        if (this.canceled.has(task.bookmarkId)) {
-          this.queuedIds.delete(task.bookmarkId);
-          this.canceled.delete(task.bookmarkId);
-          continue;
-        }
+        const work = this.work.get(task.bookmarkId);
+        if (work?.status !== "queued" || work.task !== task) continue;
         if (list.length === 0) lane.delete(host);
         return task;
       }

@@ -13,6 +13,11 @@ import { LibraryKeyService } from "./library-key.service.js";
 /**
  * Keeps the request-scoped data-encryption key in AsyncLocalStorage for the
  * whole handler (and only the handler). Background work must snapshot the DEK.
+ *
+ * Sessions minted before the account's library key existed carry no wrapped
+ * DEK. Hydrating those from the server wrap keeps them encrypting/decrypting
+ * the same way as fresh sessions instead of writing plaintext into an
+ * already-migrated library.
  */
 @Injectable()
 export class LibraryCryptoInterceptor implements NestInterceptor {
@@ -24,14 +29,19 @@ export class LibraryCryptoInterceptor implements NestInterceptor {
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const req = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    const dek = req.user?.dek ?? null;
+    const sessionDek = req.user?.dek ?? null;
     const userId = req.user?.userId;
     return from(
-      this.crypto.runAsync(dek, async () => {
-        if (userId && dek) await this.keys.ensureServerWrap(userId, dek);
-        if (userId) this.extraction.resumePending(userId, dek);
-        return lastValueFrom(next.handle(), { defaultValue: undefined });
-      }),
+      (async () => {
+        const handle = async () => {
+          const dek = this.crypto.snapshot();
+          if (userId && dek) await this.keys.ensureServerWrap(userId, dek);
+          if (userId) this.extraction.resumePending(userId, dek);
+          return lastValueFrom(next.handle(), { defaultValue: undefined });
+        };
+        return userId ? this.keys.runWithCurrentKey(userId, sessionDek, handle)
+          : this.crypto.runAsync(null, handle);
+      })(),
     );
   }
 }

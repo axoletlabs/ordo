@@ -125,10 +125,15 @@ export class ReaderService implements OnModuleDestroy {
         ? { html: await this.fetchHtml(url, forceArticle, signal, true) }
         : this.fetchAndMaybeAmp(url, forceArticle, signal, options);
     }
-    const html = await this.htmlCache.remember(url, () => {
-      this.noteFetch(options.userId);
-      return this.fetchHtml(url, forceArticle, signal, options.metadataOnly);
-    });
+    const html = await this.htmlCache.remember(
+      url,
+      (fetchSignal) => {
+        this.noteFetch(options.userId);
+        return this.fetchHtml(url, forceArticle, fetchSignal, options.metadataOnly);
+      },
+      signal,
+      `${forceArticle ? "forced" : "regular"}:${options.metadataOnly ? "metadata" : "article"}`,
+    );
     return options.metadataOnly ? { html } : this.followAmp(url, html, forceArticle, signal, options);
   }
 
@@ -179,10 +184,15 @@ export class ReaderService implements OnModuleDestroy {
       this.rejectUnsupportedDestination(amp, forceArticle);
       const persist = options.cache !== false;
       const ampHtml = persist
-        ? await this.htmlCache.remember(amp, () => {
-            this.noteFetch(options.userId);
-            return this.fetchHtml(amp, forceArticle, signal);
-          })
+        ? await this.htmlCache.remember(
+            amp,
+            (fetchSignal) => {
+              this.noteFetch(options.userId);
+              return this.fetchHtml(amp, forceArticle, fetchSignal);
+            },
+            signal,
+            `${forceArticle ? "forced" : "regular"}:article`,
+          )
         : await this.fetchHtml(amp, forceArticle, signal);
       return { html: ampHtml, fallbackHtml: html };
     } catch (err) {

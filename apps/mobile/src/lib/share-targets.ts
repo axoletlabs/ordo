@@ -11,6 +11,7 @@
 import { recordDiagnosticOperation } from "./local-diagnostics";
 import { NativeModules, Platform } from "react-native";
 import * as FileSystem from "expo-file-system/legacy";
+import { createCoalescedPersistence } from "./coalesced-persistence";
 import {
   QUICK_SHARE_BOOKMARK_FILE,
   QUICK_SHARE_ENABLED_FILE,
@@ -71,7 +72,7 @@ export async function syncQuickShareFlags(opts: {
   await syncSidecarFile(QUICK_SHARE_ENABLED_FILE, opts.showAlongside ? "1" : null);
 }
 
-export async function syncQuickShareSession(session: QuickShareSession | null): Promise<void> {
+const persistSession = createCoalescedPersistence(async (session: QuickShareSession | null) => {
   const native = shareSessionNative();
   if (native) {
     try {
@@ -84,9 +85,19 @@ export async function syncQuickShareSession(session: QuickShareSession | null): 
     return;
   }
   await syncSidecarFile(QUICK_SHARE_SESSION_FILE, session ? JSON.stringify(session) : null);
+});
+
+let sessionWrite: Promise<void> = Promise.resolve();
+
+export function syncQuickShareSession(session: QuickShareSession | null): Promise<void> {
+  sessionWrite = persistSession(session);
+  return sessionWrite;
 }
 
 export async function readQuickShareSession(): Promise<QuickShareSession | null> {
+  // A foreground read must not see the old account while logout/login is
+  // still flushing a queued native write.
+  await sessionWrite;
   const native = shareSessionNative();
   if (native) {
     try {
@@ -108,15 +119,6 @@ export async function readQuickShareSession(): Promise<QuickShareSession | null>
     }
   }
   return null;
-}
-
-export async function patchQuickShareSessionServerUrl(serverUrl: string): Promise<void> {
-  const current = await readQuickShareSession();
-  if (!current) return;
-  await syncQuickShareSession({
-    ...current,
-    serverUrl: serverUrl.replace(/\/+$/, ""),
-  });
 }
 
 /** Send Ordo behind the sender without synthesizing a back press the overlay can eat. */

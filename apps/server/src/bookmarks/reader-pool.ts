@@ -32,11 +32,11 @@ export class ExtractPool {
   private readonly pending = new Map<number, Job>();
   private readonly queue: Job[] = [];
   private nextId = 1;
-  private inline = false;
+  private state: "workers" | "inline" | "closed" = "workers";
 
   constructor() {
     if (process.env.ORDO_EXTRACT_WORKERS === "0") {
-      this.inline = true;
+      this.state = "inline";
       return;
     }
     try {
@@ -45,19 +45,17 @@ export class ExtractPool {
         const worker = new Worker(filename);
         worker.on("message", (msg: WorkerResponse) => this.onMessage(worker, msg));
         worker.on("error", () => this.fallbackToInline());
-        worker.on("exit", (code) => {
-          if (code !== 0) this.fallbackToInline();
-        });
+        worker.on("exit", () => this.fallbackToInline());
         this.workers.push(worker);
       }
     } catch {
-      this.inline = true;
+      this.fallbackToInline();
     }
   }
 
   private fallbackToInline(): void {
-    if (this.inline && this.workers.length === 0) return;
-    this.inline = true;
+    if (this.state !== "workers") return;
+    this.state = "inline";
     const workers = this.workers.splice(0);
     for (const worker of workers) {
       worker.removeAllListeners();
@@ -76,7 +74,8 @@ export class ExtractPool {
   }
 
   parse(html: string, url: string, forceArticle: boolean): Promise<ExtractedContent> {
-    if (this.inline || this.workers.length === 0) {
+    if (this.state === "closed") return Promise.reject(new Error("extract pool closed"));
+    if (this.state === "inline") {
       try {
         return Promise.resolve(extractFromHtml(html, url, { forceArticle }));
       } catch (err) {
@@ -90,18 +89,19 @@ export class ExtractPool {
   }
 
   async close(): Promise<void> {
-    this.inline = true;
+    if (this.state === "closed") return;
+    this.state = "closed";
     const jobs = [...this.pending.values(), ...this.queue.splice(0)];
     this.pending.clear();
     this.busy.clear();
     const workers = this.workers.splice(0);
+    for (const job of jobs) job.reject(new Error("extract pool closed"));
     await Promise.all(
       workers.map((worker) => {
         worker.removeAllListeners();
         return worker.terminate();
       }),
     );
-    for (const job of jobs) job.reject(new Error("extract pool closed"));
   }
 
   private pump(): void {

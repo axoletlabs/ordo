@@ -6,6 +6,7 @@
 import { AppState } from "react-native";
 import { create } from "zustand";
 import { secureGet, secureSet, StorageKeys } from "../lib/storage";
+import { createCoalescedPersistence } from "../lib/coalesced-persistence";
 
 interface FolderTokenEntry {
   token: string;
@@ -14,6 +15,10 @@ interface FolderTokenEntry {
 }
 
 type FolderTokenMap = Record<string, FolderTokenEntry>;
+// Unlock, expiry and logout share one ordered writer. A slow unlock must not
+// restore a token after a later clear has already reached secure storage.
+const saveTokens = createCoalescedPersistence<FolderTokenMap>(tokens =>
+  secureSet(StorageKeys.FOLDER_TOKENS, tokens));
 
 export interface FolderTokenState {
   tokens: FolderTokenMap;
@@ -59,7 +64,7 @@ function schedulePrune() {
       accessRevision: s.accessRevision + 1,
     }));
     armAll(next);
-    void secureSet(StorageKeys.FOLDER_TOKENS, next);
+    void saveTokens(next);
   });
 }
 
@@ -132,7 +137,7 @@ export const useFolderTokenStore = create<FolderTokenState>((set, get) => ({
     const next = { ...get().tokens, [folderId]: { token, expiresAt } };
     armExpiry(folderId, expiresAt);
     set((s) => ({ tokens: next, accessRevision: s.accessRevision + 1 }));
-    void secureSet(StorageKeys.FOLDER_TOKENS, next);
+    void saveTokens(next);
   },
 
   clear: (folderId) => {
@@ -140,12 +145,12 @@ export const useFolderTokenStore = create<FolderTokenState>((set, get) => ({
     const next = { ...get().tokens };
     delete next[folderId];
     set((s) => ({ tokens: next, accessRevision: s.accessRevision + 1 }));
-    void secureSet(StorageKeys.FOLDER_TOKENS, next);
+    void saveTokens(next);
   },
 
   clearAll: async () => {
     for (const id of [...expiryTimers.keys()]) disarmExpiry(id);
     set((s) => ({ tokens: {}, accessRevision: s.accessRevision + 1 }));
-    await secureSet(StorageKeys.FOLDER_TOKENS, {});
+    await saveTokens({});
   },
 }));

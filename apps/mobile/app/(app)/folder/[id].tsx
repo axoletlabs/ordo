@@ -122,7 +122,7 @@ const FolderBookmarkList = React.memo(function FolderBookmarkList({
       ListFooterComponent={<>{footerVisible ? <ListLoadingFooter /> : null}
         <ListClearanceSpacer height={bottomClearance} /></>}
       ListEmptyComponent={<View style={styles.empty}><EmptyState icon="bookmark-outline" title="No bookmarks here"
-        message="Save a link to start reading." action={<Button onPress={onSave} label="Save bookmark" />} /></View>}
+        message="Save a link to start reading" action={<Button onPress={onSave} label="Save bookmark" />} /></View>}
     />
   );
 });
@@ -357,7 +357,7 @@ export default function FolderDetailScreen() {
           <EmptyState
             icon="lock-closed-outline"
             title="This folder is locked"
-            message="Unlock it to view its bookmarks."
+            message="Unlock it to view its bookmarks"
             action={<Button label="Unlock" onPress={() => setUnlockOpen(true)} />}
           />
         </ScreenContent>

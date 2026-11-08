@@ -49,7 +49,7 @@ type TapHandlers = {
 };
 
 let notifications: NotificationsModule | null | undefined;
-let handlerReady = false;
+let handlerState: { status: "idle" } | { status: "setting-up"; ready: Promise<void> } | { status: "ready" } = { status: "idle" };
 let receivedBound = false;
 let consumedLaunchResponse = false;
 let bootPromise: Promise<void> | null = null;
@@ -60,7 +60,20 @@ let fired: Record<string, number> = {};
 let firedLoaded = false;
 let armed: Record<string, number> = {};
 let armedLoaded = false;
+// A bookmark has one in-flight OS transition. Later saves/cancels wait for it,
+// so a slow schedule cannot recreate a reminder after cancellation.
+const transitions = new Map<string, Promise<void>>();
 let exactAlarmScreenShown = false;
+
+function transition<T>(bookmarkId: string, work: () => Promise<T>): Promise<T> {
+  const result = (transitions.get(bookmarkId) ?? Promise.resolve()).then(work);
+  const settled = result.then(() => {}, () => {});
+  transitions.set(bookmarkId, settled);
+  void settled.then(() => {
+    if (transitions.get(bookmarkId) === settled) transitions.delete(bookmarkId);
+  });
+  return result;
+}
 
 function nativeOk(): boolean {
   return Platform.OS === "android" || Platform.OS === "ios";
@@ -161,26 +174,39 @@ async function forgetPingState(bookmarkId: string): Promise<void> {
   await forgetArmed(bookmarkId);
 }
 
-async function ensureHandler(mod: NotificationsModule): Promise<void> {
-  if (!handlerReady) {
-    handlerReady = true;
-    mod.setNotificationHandler({
-      handleNotification: async () => ({
-        shouldShowBanner: true,
-        shouldShowList: true,
-        shouldPlaySound: true,
-        shouldSetBadge: false,
-      }),
-    });
-    if (Platform.OS === "android") {
-      await mod.setNotificationChannelAsync(CHANNEL_ID, {
-        name: "Reminders",
-        importance: mod.AndroidImportance.HIGH,
-        enableVibrate: true,
-        lockscreenVisibility: mod.AndroidNotificationVisibility.PUBLIC,
+/** Failed channel setup returns to idle so the next caller can retry. */
+function ensureHandlerSetup(mod: NotificationsModule): Promise<void> {
+  if (handlerState.status === "ready") return Promise.resolve();
+  if (handlerState.status === "setting-up") return handlerState.ready;
+  const ready = Promise.resolve().then(async () => {
+    try {
+      mod.setNotificationHandler({
+        handleNotification: async () => ({
+          shouldShowBanner: true,
+          shouldShowList: true,
+          shouldPlaySound: true,
+          shouldSetBadge: false,
+        }),
       });
+      if (Platform.OS === "android") {
+        await mod.setNotificationChannelAsync(CHANNEL_ID, {
+          name: "Reminders",
+          importance: mod.AndroidImportance.HIGH,
+          enableVibrate: true,
+          lockscreenVisibility: mod.AndroidNotificationVisibility.PUBLIC,
+        });
+      }
+      handlerState = { status: "ready" };
+    } catch {
+      handlerState = { status: "idle" };
     }
-  }
+  });
+  handlerState = { status: "setting-up", ready };
+  return ready;
+}
+
+async function ensureHandler(mod: NotificationsModule): Promise<void> {
+  await ensureHandlerSetup(mod);
   try {
     const actions = reminderActions();
     await mod.setNotificationCategoryAsync(REMINDER_PING_CATEGORY, actions, CATEGORY_OPTIONS);
@@ -365,11 +391,16 @@ async function scheduledAtByBookmark(mod: NotificationsModule): Promise<Map<stri
 async function presentDue(mod: NotificationsModule, row: ReminderPingRow): Promise<void> {
   const map = await loadFired();
   if (map[row.id] === row.remindAt) return;
-  await mod.scheduleNotificationAsync({
-    identifier: identifier(row.id),
-    content: notificationContent(row),
-    trigger: null,
-  });
+  try {
+    await mod.scheduleNotificationAsync({
+      identifier: identifier(row.id),
+      content: notificationContent(row),
+      trigger: null,
+    });
+  } catch {
+    // A refused presentation remains eligible for the next sync.
+    return;
+  }
   await rememberFired(row.id, row.remindAt);
 }
 
@@ -477,10 +508,14 @@ async function applyPing(
   await scheduleFuture(mod, row);
 }
 
-export async function syncBookmarkReminder(
+export function syncBookmarkReminder(
   bookmark: Pick<BookmarkDto, "id" | "title" | "remindAt"> &
     Partial<Pick<BookmarkDto, "folderId" | "domain" | "description">>,
 ): Promise<boolean> {
+  return transition(bookmark.id, () => syncReminder(bookmark));
+}
+
+async function syncReminder(bookmark: Parameters<typeof syncBookmarkReminder>[0]): Promise<boolean> {
   const mod = await loadNotifications();
   if (!mod) return false;
   await ensureHandler(mod);
@@ -503,12 +538,14 @@ export async function syncBookmarkReminder(
   return true;
 }
 
-export async function cancelBookmarkReminder(bookmarkId: string): Promise<void> {
-  const mod = await loadNotifications();
-  if (!mod) return;
-  await cancelId(mod, bookmarkId);
-  await dismissId(mod, bookmarkId);
-  await forgetPingState(bookmarkId);
+export function cancelBookmarkReminder(bookmarkId: string): Promise<void> {
+  return transition(bookmarkId, async () => {
+    const mod = await loadNotifications();
+    if (!mod) return;
+    await cancelId(mod, bookmarkId);
+    await dismissId(mod, bookmarkId);
+    await forgetPingState(bookmarkId);
+  });
 }
 
 export async function reconcileReminderNotifications(
@@ -520,23 +557,20 @@ export async function reconcileReminderNotifications(
   await ensureHandler(mod);
   const allowed = await ensureReminderPermissions();
   const wanted = new Set(rows.map((row) => row.id));
-  const [scheduled, presented] = await Promise.all([scheduledAtByBookmark(mod), presentedBookmarkIds(mod)]);
+  const scheduled = await scheduledAtByBookmark(mod);
   for (const bookmarkId of scheduled.keys()) {
     if (wanted.has(bookmarkId)) continue;
-    await cancelId(mod, bookmarkId);
-    await dismissId(mod, bookmarkId);
-    await forgetPingState(bookmarkId);
+    await cancelBookmarkReminder(bookmarkId);
   }
   if (!allowed) return;
   const now = unixSeconds();
   for (const row of rows) {
-    await applyPing(
-      mod,
-      row,
-      now,
-      scheduled.get(row.id),
-      presented.has(row.id),
-    );
+    await transition(row.id, async () => {
+      const [currentScheduled, currentPresented] = await Promise.all([
+        scheduledAtByBookmark(mod), presentedBookmarkIds(mod),
+      ]);
+      await applyPing(mod, row, now, currentScheduled.get(row.id), currentPresented.has(row.id));
+    });
   }
 }
 
@@ -638,7 +672,11 @@ async function bootReminderNotifications(): Promise<void> {
 
 export function reminderNotificationsReady(): Promise<void> {
   if (!nativeOk()) return Promise.resolve();
-  bootPromise ??= bootReminderNotifications();
+  bootPromise ??= bootReminderNotifications().catch(() => {
+    // Boot is best effort: never leave an unhandled rejection from the
+    // module-level warm-up. The next caller retries.
+    bootPromise = null;
+  });
   return bootPromise;
 }
 

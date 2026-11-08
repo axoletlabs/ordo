@@ -41,6 +41,7 @@ export function useSaveReminder(bookmark: ReminderFlowBookmark | null, onDismiss
   // still update its bookmark and toast, but cannot dismiss a different
   // menu the user opened while it was in flight.
   const activeSession = React.useRef<object | null>(null);
+  const saving = React.useRef(false);
   React.useLayoutEffect(() => {
     activeSession.current = visible ? {} : null;
     return () => { activeSession.current = null; };
@@ -50,6 +51,10 @@ export function useSaveReminder(bookmark: ReminderFlowBookmark | null, onDismiss
     const target = bookmarkRef.current;
     const session = activeSession.current;
     if (!target || !session) return;
+    // Menu rows disable on `busy`, but two taps can arrive before that render.
+    // Only the first one may write; a second write would race its toast/dismiss.
+    if (saving.current) return;
+    saving.current = true;
     setReminder.mutate(
       {
         id: target.id,
@@ -66,6 +71,9 @@ export function useSaveReminder(bookmark: ReminderFlowBookmark | null, onDismiss
           if (activeSession.current === session) onDismiss();
         },
         onError: (err) => toast.error(errorMessage(err, "Couldn't update this reminder.")),
+        onSettled: () => {
+          saving.current = false;
+        },
       },
     );
   };

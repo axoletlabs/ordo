@@ -23,6 +23,7 @@ import { PrismaService } from "../prisma/prisma.service.js";
 import { TokenService } from "../auth/token.service.js";
 import { AppError } from "../common/errors/app-error.js";
 import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
+import { LibraryKeyService } from "../crypto/library-key.service.js";
 
 const PAGE_SIZE = 500;
 
@@ -80,6 +81,7 @@ export class ExportService {
     private readonly prisma: PrismaService,
     private readonly tokens: TokenService,
     private readonly crypto: LibraryCryptoService,
+    private readonly keys: LibraryKeyService,
   ) {}
 
   async export(
@@ -160,6 +162,7 @@ export class ExportService {
     const nameById = new Map(folders.map((f) => [f.id, f.name] as const));
     const prisma = this.prisma;
     const crypto = this.crypto;
+    const keys = this.keys;
 
     async function* generate(): AsyncGenerator<string> {
       yield `{"format":"ordo-export","version":1,"exportedAt":${JSON.stringify(new Date().toISOString())}`;
@@ -186,6 +189,8 @@ export class ExportService {
           select: { ...EXPORT_SELECT, tags: { select: { tag: { select: { id: true, name: true } } } } },
         });
         if (rows.length === 0) break;
+        // Streaming outlives the request lease; migration may have installed a key.
+        dek ??= await keys.resolveServerDek(userId);
         for (const raw of rows) {
           const row = crypto.run(dek, () => crypto.openBookmark({ ...raw, userId })) as ExportRow;
           const payload = {
@@ -225,6 +230,7 @@ export class ExportService {
   ): Readable {
     const prisma = this.prisma;
     const crypto = this.crypto;
+    const keys = this.keys;
 
     async function* generate(): AsyncGenerator<string> {
       yield `<!DOCTYPE NETSCAPE-Bookmark-file-1>\n<!-- This is an automatically generated file. It will be read and overwritten. DO NOT EDIT! -->\n<META HTTP-EQUIV="Content-Type" CONTENT="text/html; charset=UTF-8">\n<TITLE>Bookmarks</TITLE>\n<H1>Bookmarks</H1>\n<DL><p>\n`;
@@ -234,6 +240,7 @@ export class ExportService {
         folderId: string | null,
       ): AsyncGenerator<string> {
         const rows = await pageAll(prisma, { userId, folderId });
+        dek ??= await keys.resolveServerDek(userId);
         // Library exports skip empty folders; a chosen folder is always emitted.
         if (rows.length === 0 && folderId !== null && includeUnfiled) return;
         yield `    <DT><H3>${escapeHtml(folderName)}</H3>\n    <DL><p>\n`;
@@ -267,10 +274,12 @@ export class ExportService {
     const nameById = new Map(folders.map((f) => [f.id, f.name] as const));
     const prisma = this.prisma;
     const crypto = this.crypto;
+    const keys = this.keys;
 
     async function* generate(): AsyncGenerator<string> {
       yield "url,title,folder,tags,isRead,readProgress,completedAt,createdAt,updatedAt,description,author,publishedAt,readingTimeMinutes\n";
       const rows = await pageAll(prisma, where);
+      dek ??= await keys.resolveServerDek(userId);
       for (const raw of rows) {
         const row = crypto.run(dek, () => crypto.openBookmark({ ...raw, userId })) as ExportRow;
         yield [

@@ -11,6 +11,7 @@
  * refresh writes that copy back; we adopt it on hydrate and foreground.
  */
 import { create } from "zustand";
+import { randomUUID } from "expo-crypto";
 import { normalizeReaderPreferences, type AuthTokens, type UserDto } from "@ordo/shared";
 import { accessExpiresAtFromNow } from "../lib/auth-session-policy";
 import { shouldAdoptQuickShareSession } from "../lib/share-intake";
@@ -18,6 +19,7 @@ import { readQuickShareSession, syncQuickShareSession } from "../lib/share-targe
 import { secureGet, secureSet, secureDelete, StorageKeys } from "../lib/storage";
 import { useSettingsStore } from "./settings";
 import { createCoalescedPersistence } from "../lib/coalesced-persistence";
+import { canonicalizeServerUrl } from "../lib/hosting";
 
 /** Accept current UserDto rows and older persisted sessions that still have `username`. */
 export function normalizePersistedUser(raw: unknown): UserDto | null {
@@ -49,6 +51,9 @@ export function normalizePersistedUser(raw: unknown): UserDto | null {
 export type AuthStatus = "loading" | "authenticated" | "unauthenticated";
 
 export interface PersistedAuth {
+  sessionId?: string;
+  /** Credentials belong to this origin even if a server switch is interrupted. */
+  serverUrl?: string;
   user: UserDto;
   tokens: AuthTokens;
   /** Epoch ms when the access token expires. Client-stamped; not on the wire. */
@@ -58,6 +63,7 @@ export interface PersistedAuth {
 }
 
 export interface AuthState {
+  sessionId: string | null;
   /** Runtime-only ownership boundary; token rotation does not change it. */
   sessionGeneration: number;
   user: UserDto | null;
@@ -85,13 +91,16 @@ function persistAuth(
   tokens: AuthTokens,
   accessExpiresAt: number | null,
   sessionUpdatedAt: number,
+  sessionId: string,
   syncSidecar = true,
 ): void {
-  const payload: PersistedAuth = { user, tokens, sessionUpdatedAt };
+  const serverUrl = useSettingsStore.getState().serverUrl;
+  const payload: PersistedAuth = { user, tokens, sessionUpdatedAt, serverUrl, sessionId };
   if (accessExpiresAt != null) payload.accessExpiresAt = accessExpiresAt;
   void saveAuth(payload);
   if (syncSidecar) void syncQuickShareSession({
-    serverUrl: useSettingsStore.getState().serverUrl,
+    sessionId,
+    serverUrl,
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
     accessExpiresAt,
@@ -111,6 +120,7 @@ function tokensFromSidecar(current: AuthTokens, sidecar: {
 }
 
 export const useAuthStore = create<AuthState>((set, get) => ({
+  sessionId: null,
   sessionGeneration: 0,
   user: null,
   tokens: null,
@@ -119,10 +129,19 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   status: "loading",
 
   hydrate: async () => {
+    if (get().status !== "loading") return;
+    const generation = get().sessionGeneration;
+    const serverUrl = useSettingsStore.getState().serverUrl;
+    const mayHydrate = () => get().status === "loading" &&
+      get().sessionGeneration === generation && useSettingsStore.getState().serverUrl === serverUrl;
     const saved = await secureGet<PersistedAuth>(StorageKeys.AUTH);
+    if (!mayHydrate()) return;
     void secureDelete(StorageKeys.RECOVERY_KEY);
     const user = normalizePersistedUser(saved?.user);
-    if (user && saved?.tokens?.accessToken && saved?.tokens?.refreshToken) {
+    const sameServer = saved?.serverUrl == null ||
+      (typeof saved.serverUrl === "string" && canonicalizeServerUrl(saved.serverUrl) === serverUrl);
+    if (sameServer && user && saved?.tokens?.accessToken && saved?.tokens?.refreshToken) {
+      const sessionId = typeof saved.sessionId === "string" && saved.sessionId ? saved.sessionId : randomUUID();
       let tokens = saved.tokens;
       let accessExpiresAt =
         typeof saved.accessExpiresAt === "number" && Number.isFinite(saved.accessExpiresAt)
@@ -133,13 +152,15 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           ? saved.sessionUpdatedAt
           : null;
       const sidecar = await readQuickShareSession();
-      if (shouldAdoptQuickShareSession(sessionUpdatedAt, sidecar)) {
+      if (!mayHydrate()) return;
+      if (shouldAdoptQuickShareSession(sessionUpdatedAt, sidecar) && sidecar.sessionId === sessionId && canonicalizeServerUrl(sidecar.serverUrl) === serverUrl) {
         tokens = tokensFromSidecar(tokens, sidecar);
         accessExpiresAt = sidecar.accessExpiresAt;
         sessionUpdatedAt = sidecar.updatedAt;
       }
       const nextUpdatedAt = sessionUpdatedAt ?? Date.now();
       set({
+        sessionId,
         sessionGeneration: get().sessionGeneration + 1,
         user,
         tokens,
@@ -147,11 +168,12 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         sessionUpdatedAt: nextUpdatedAt,
         status: "authenticated",
       });
-      persistAuth(user, tokens, accessExpiresAt, nextUpdatedAt);
+      persistAuth(user, tokens, accessExpiresAt, nextUpdatedAt, sessionId);
     } else {
       // Partial/corrupt blob: drop it so it isn't re-parsed on every launch.
       if (saved) void saveAuth(null);
       set({
+        sessionId: null,
         sessionGeneration: get().sessionGeneration + 1,
         user: null,
         tokens: null,
@@ -164,25 +186,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   reconcileShareSession: async () => {
-    const { user, tokens, sessionUpdatedAt, status, sessionGeneration } = get();
+    const { user, tokens, sessionUpdatedAt, status, sessionGeneration, sessionId } = get();
     const serverUrl = useSettingsStore.getState().serverUrl;
-    if (status !== "authenticated" || !user || !tokens) return;
+    if (status !== "authenticated" || !user || !tokens || !sessionId) return;
     const sidecar = await readQuickShareSession();
     if (get().sessionGeneration !== sessionGeneration || get().tokens !== tokens || useSettingsStore.getState().serverUrl !== serverUrl) return;
     if (!shouldAdoptQuickShareSession(sessionUpdatedAt, sidecar)) return;
+    if (sidecar.sessionId !== sessionId) return;
+    if (canonicalizeServerUrl(sidecar.serverUrl) !== serverUrl) return;
     const nextTokens = tokensFromSidecar(tokens, sidecar);
     set({
       tokens: nextTokens,
       accessExpiresAt: sidecar.accessExpiresAt,
       sessionUpdatedAt: sidecar.updatedAt,
     });
-    persistAuth(user, nextTokens, sidecar.accessExpiresAt, sidecar.updatedAt);
+    persistAuth(user, nextTokens, sidecar.accessExpiresAt, sidecar.updatedAt, sessionId);
   },
 
   setSession: (session) => {
     const accessExpiresAt = session.accessExpiresAt ?? accessExpiresAtFromNow(session.tokens.expiresIn);
     const sessionUpdatedAt = Date.now();
+    const sessionId = randomUUID();
     set({
+      sessionId,
       sessionGeneration: get().sessionGeneration + 1,
       user: session.user,
       tokens: session.tokens,
@@ -190,28 +216,29 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       sessionUpdatedAt,
       status: "authenticated",
     });
-    persistAuth(session.user, session.tokens, accessExpiresAt, sessionUpdatedAt);
+    persistAuth(session.user, session.tokens, accessExpiresAt, sessionUpdatedAt, sessionId);
   },
 
   setTokens: (tokens) => {
-    const user = get().user;
-    if (!user) return;
+    const { user, sessionId } = get();
+    if (!user || !sessionId) return;
     const accessExpiresAt = accessExpiresAtFromNow(tokens.expiresIn);
     const sessionUpdatedAt = Date.now();
     set({ tokens, accessExpiresAt, sessionUpdatedAt });
-    persistAuth(user, tokens, accessExpiresAt, sessionUpdatedAt);
+    persistAuth(user, tokens, accessExpiresAt, sessionUpdatedAt, sessionId);
   },
 
   setUser: (user) => {
-    const { tokens, accessExpiresAt, sessionUpdatedAt } = get();
-    if (!tokens) return;
+    const { tokens, accessExpiresAt, sessionUpdatedAt, sessionId } = get();
+    if (!tokens || !sessionId) return;
     set({ user });
     // Profile/preferences edits leave the token-only Quick Save payload intact.
-    persistAuth(user, tokens, accessExpiresAt, sessionUpdatedAt ?? Date.now(), false);
+    persistAuth(user, tokens, accessExpiresAt, sessionUpdatedAt ?? Date.now(), sessionId, false);
   },
 
   clear: async () => {
     set({
+      sessionId: null,
       sessionGeneration: get().sessionGeneration + 1,
       user: null,
       tokens: null,

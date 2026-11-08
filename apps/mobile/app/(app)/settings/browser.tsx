@@ -20,7 +20,7 @@ export default function LegalDocumentScreen() {
   const document = LEGAL_DOCUMENTS.find((doc) => doc.id === id);
   if (!document) return (
     <SettingsPage title="Legal">
-      <EmptyState icon="cloud-offline-outline" title="Couldn't open this document" message="This policy link is missing or invalid." />
+      <EmptyState icon="cloud-offline-outline" title="Couldn't open this document" message="This policy link is missing or invalid" />
     </SettingsPage>
   );
   return <LegalDocumentPane key={document.id} document={document} />;
