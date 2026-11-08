@@ -133,6 +133,7 @@ function MoveSheetContent({
 
   return (
     <FloatingPanel
+      presentation="responsive"
       visible={visible}
       scrollBody={Boolean(lockedTarget)}
       dismissible={!busy}

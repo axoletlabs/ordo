@@ -546,7 +546,7 @@ function ChangelogSheetBody({
 
   return (
     <FloatingPanel visible={visible} onDismiss={onDismiss} onShow={onShow} maxWidth={640}
-      presentation="bottom-sheet" sheetSizing="adaptive" sheetBodyTopPadding={spacing[8]} scrollResetKey={selected?.tagName}>
+      presentation="bottom-sheet" dragFromBody sheetSizing="adaptive" sheetBodyTopPadding={spacing[8]} scrollResetKey={selected?.tagName}>
       <PanelHeader title={releaseTitle} titleVariant="headlineSmall" titleColor="primary" align="left"
         subtitle={releaseDetails || undefined} />
       {body}

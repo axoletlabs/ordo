@@ -271,7 +271,7 @@ const ReaderControlsContent = React.memo(function ReaderControlsContent({
     };
   }, [entered, foreground, groupsReady, prepared, previewIdle, visible, workScheduler]));
   return (
-    <FloatingPanel visible={visible} onDismiss={onDismiss} keepMounted={prepared} onEntered={onEntered} onExited={onExited}>
+    <FloatingPanel presentation="responsive" visible={visible} onDismiss={onDismiss} keepMounted={prepared} onEntered={onEntered} onExited={onExited}>
       <PanelHeader title="Reader" onClose={onDismiss} />
       <PreviewFreezeContext.Provider value={!previewIdle}>
         <ReaderControlsBody effectiveDark={effectiveDark} visible={visible} preparedCount={preparedCount} />

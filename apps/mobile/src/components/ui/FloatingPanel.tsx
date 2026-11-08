@@ -10,7 +10,8 @@ import {
   type StyleProp,
   type ViewStyle,
 } from "react-native";
-import Animated, { Easing, runOnJS, useAnimatedStyle, useDerivedValue, useSharedValue, withSpring, withTiming, type SharedValue } from "react-native-reanimated";
+import Animated, { cancelAnimation, Easing, runOnJS, useAnimatedStyle, useDerivedValue, useSharedValue, withSpring, withTiming, useAnimatedScrollHandler, type SharedValue } from "react-native-reanimated";
+import { sheetDragOrigin, sheetDragPosition, shouldDismissSheet } from "../../lib/sheet-gesture";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -25,6 +26,8 @@ import { OverlayPageContent } from "./OverlayPageContent";
 import { ResizeOwnerContext } from "./resize-owner";
 import { PanelTitleContext } from "./panel-title";
 import { PanelPresenceContext } from "./panel-presence";
+import type { ButtonVariant } from "./Button";
+import { DraftDismissContext, useDraftDismiss } from "./draft-dismiss";
 import { PanelHeader } from "./PanelHeader";
 import { PanelActions } from "./SheetActionRow";
 import { ThemedScrollView, type ThemedScrollViewProps } from "./ThemedScrollView";
@@ -54,7 +57,7 @@ const READY_FALLBACK_MS = 200;
 
 export interface FloatingPanelProps {
   visible: boolean;
-  onDismiss: () => void;
+  onDismiss: () => void | boolean;
   onExited?: () => void;
   /** The opening fade and spatial spring have both settled. */
   onEntered?: () => void;
@@ -67,7 +70,11 @@ export interface FloatingPanelProps {
   style?: StyleProp<ViewStyle>;
   maxWidth?: number;
   /** Bottom sheets reuse the dialog's focus, Back, and retained exit lifecycle. */
-  presentation?: "dialog" | "bottom-sheet";
+  presentation?: "dialog" | "bottom-sheet" | "responsive";
+  /** Non-text draft fields supplement the shared input edit tracking. */
+  dirty?: boolean;
+  /** Changelog notes allow downward dismissal only when their body is at top. */
+  dragFromBody?: boolean;
   /** Adaptive sheets animate their height to fit the content, keeping actions
    * anchored at the bottom. Expanded sheets always use the height limit. */
   sheetSizing?: "content" | "expanded" | "adaptive";
@@ -102,7 +109,93 @@ export function FloatingPanel(props: FloatingPanelProps) {
   const [activated, setActivated] = React.useState(props.visible);
   if (props.visible && !activated) setActivated(true);
   if (!activated && !props.keepMounted) return null;
-  return props.pageKey != null ? <PagedFloatingPanelSurface {...props} pageKey={props.pageKey} /> : <FloatingPanelSurface {...props} />;
+  return <GuardedFloatingPanel {...props} />;
+}
+
+function GuardedFloatingPanel(props: FloatingPanelProps) {
+  const draft = useDraftDismiss(props.visible, props.dirty);
+  const onDismiss = React.useCallback(() => draft.scope.request(() => { props.onDismiss(); }), [draft.scope, props.onDismiss]);
+  const guarded = { ...props, onDismiss, obscured: !!props.obscured || draft.confirming };
+  return <>
+    <DraftDismissContext.Provider value={draft.scope}>
+      {props.pageKey != null ? <PagedFloatingPanelSurface {...guarded} pageKey={props.pageKey} /> : <FloatingPanelSurface {...guarded} />}
+    </DraftDismissContext.Provider>
+    {draft.used ? <ConfirmDialog visible={draft.confirming} title="Discard changes?"
+      message="Your unsaved changes will be lost." confirmLabel="Discard" cancelLabel="Keep editing"
+      onDismiss={draft.keep} onConfirm={draft.discard} /> : null}
+  </>;
+}
+
+/** Confirmation shares the overlay family without a circular module import. */
+export function ConfirmDialog({
+  visible,
+  onDismiss,
+  onExited,
+  onExiting,
+  icon,
+  tone = "danger",
+  title,
+  message,
+  children,
+  confirmLabel,
+  confirmVariant,
+  onConfirm,
+  loading = false,
+  confirmDisabled = false,
+  cancelLabel = "Cancel",
+  dismissible = true,
+}: {
+  visible: boolean;
+  onDismiss: () => void;
+  onExited?: () => void;
+  /** Runs when the exit fade starts; see FloatingPanelProps.onExiting. */
+  onExiting?: () => void;
+  icon?: React.ComponentProps<typeof PanelHeader>["icon"];
+  tone?: "danger" | "accent";
+  title: string;
+  message: string;
+  children?: React.ReactNode;
+  confirmLabel: string;
+  confirmVariant?: ButtonVariant;
+  onConfirm: () => void;
+  loading?: boolean;
+  confirmDisabled?: boolean;
+  cancelLabel?: string;
+  dismissible?: boolean;
+}) {
+  const { palette } = useTheme();
+  const canDismiss = dismissible && !loading;
+  const danger = (confirmVariant ?? (tone === "danger" ? "danger" : "primary")) === "danger";
+
+  return (
+    <FloatingPanel
+      visible={visible}
+      onDismiss={onDismiss}
+      onExited={onExited}
+      onExiting={onExiting}
+      dismissible={canDismiss}
+      maxWidth={layout.overlayConfirmWidth}
+    >
+      <PanelHeader
+        title={title}
+        subtitle={message}
+        icon={icon}
+        iconColor={danger ? palette.danger : palette.accent}
+        iconBackground={danger ? palette.dangerSoft : palette.accentSoft}
+      />
+      {children ? <View style={styles.confirmExtra}>{children}</View> : null}
+      <PanelActions
+        confirmLabel={confirmLabel}
+        confirmVariant={danger ? "danger" : "primary"}
+        onConfirm={onConfirm}
+        onCancel={onDismiss}
+        cancelLabel={cancelLabel}
+        loading={loading}
+        confirmDisabled={confirmDisabled}
+        cancelDisabled={!canDismiss}
+      />
+    </FloatingPanel>
+  );
 }
 
 function PagedFloatingPanelSurface(props: FloatingPanelProps & { pageKey: string }) {
@@ -140,11 +233,13 @@ function FloatingPanelSurface({
   interactive = true,
   pageKey,
   pageStyle,
+  dragFromBody = false,
   pageLeaving = false,
   ghost = null,
 }: FloatingPanelProps & { pageLeaving?: boolean; pageStyle?: ReturnType<typeof useOverlayPage>["style"]; ghost?: PanelGhost | null }) {
   const { palette } = useTheme();
-  const sheet = presentation === "bottom-sheet";
+  const { width, height } = useWindowDimensions();
+  const sheet = presentation === "bottom-sheet" || presentation === "responsive" && width < 600;
   const expandedSheet = sheet && sheetSizing === "expanded";
   const adaptiveSheet = sheet && sheetSizing !== "expanded";
   const fillSheet = expandedSheet || adaptiveSheet;
@@ -152,7 +247,6 @@ function FloatingPanelSurface({
   const titleId = React.useId();
   const onShowRef = React.useRef(onShow);
   React.useLayoutEffect(() => { onShowRef.current = onShow; }, [onShow]);
-  const { width, height } = useWindowDimensions();
   const [availableHeight, setAvailableHeight] = React.useState(height);
   const [keyboardTop, setKeyboardTop] = React.useState<number | null>(null);
   // Animated native layout reports must not feed React state. A height spring
@@ -175,7 +269,8 @@ function FloatingPanelSurface({
   const adaptiveReady = !adaptiveSheet || (sheetBodyHeight != null && sheetHeaderHeight > 0 && sheetActionsHeight > 0);
   const [measured, setMeasured] = React.useState(false);
   const [layoutFallback, setLayoutFallback] = React.useState(false);
-  const dragOffset = useSharedValue(0);
+  const dragOffset = useSharedValue(height);
+  const releaseVelocity = useSharedValue(0);
   const adaptiveHeight = useSharedValue(height * 0.9);
   const resting = React.useRef({ width, height });
   if (width !== resting.current.width || Platform.OS === "web") resting.current = { width, height };
@@ -184,9 +279,9 @@ function FloatingPanelSurface({
   const motion = useMaterialMotion();
   const insets = useSafeAreaInsets();
   const hideAndDismiss = React.useCallback(() => {
-    if (!dismissible) return;
+    if (!dismissible) return false;
     dismissKeyboard();
-    onDismiss();
+    return onDismiss() !== false;
   }, [dismissible, onDismiss]);
   const scrimPress = useScrimPress(visible && interactive && !obscured && dismissOnScrim, hideAndDismiss);
   const layoutReady = (Platform.OS === "web" || measured) && adaptiveReady && (fillSheet || naturalContent != null);
@@ -343,7 +438,6 @@ function FloatingPanelSurface({
 
   React.useLayoutEffect(() => {
     if (!visible) return;
-    dragOffset.value = 0;
     setAvailableHeight(height);
     if (Platform.OS !== "web") {
       const metrics = Keyboard.metrics();
@@ -383,15 +477,50 @@ function FloatingPanelSurface({
     if (!sheet) panelHeight.value = next;
   }, [measured, panelHeight, sheet]);
 
+  const sheetWasOpen = React.useRef(false);
+  React.useLayoutEffect(() => {
+    if (!sheet) { sheetWasOpen.current = false; return; }
+    const open = visible && (layoutReady || layoutFallback);
+    if (open && !sheetWasOpen.current) {
+      cancelAnimation(dragOffset);
+      dragOffset.value = motion.reducedMotion ? 0 : withSpring(0, motion.spatial);
+    } else if (!visible && sheetWasOpen.current) {
+      dragOffset.value = motion.reducedMotion ? heightLimit : withSpring(heightLimit, { ...motion.spatial, velocity: releaseVelocity.value });
+      releaseVelocity.value = 0;
+    }
+    sheetWasOpen.current = open;
+  }, [sheet, visible, layoutReady, layoutFallback, heightLimit, motion, dragOffset, releaseVelocity]);
+  React.useLayoutEffect(() => {
+    // A draft confirmation or sibling picker takes ownership without closing
+    // this retained surface. Bring its sole drag value back to rest.
+    if (visible && obscured && sheet) dragOffset.value = motion.reducedMotion ? 0 : withSpring(0, { ...motion.spatial, velocity: releaseVelocity.value });
+  }, [visible, obscured, sheet, dragOffset, releaseVelocity, motion]);
+  const dragDismiss = React.useCallback((velocity: number) => {
+    releaseVelocity.value = velocity;
+    const accepted = hideAndDismiss();
+    const target = accepted ? heightLimit : 0;
+    dragOffset.value = motion.reducedMotion ? target : withSpring(target, { ...motion.spatial, velocity });
+    if (!accepted) releaseVelocity.value = 0;
+  }, [hideAndDismiss, heightLimit, releaseVelocity, dragOffset, motion]);
+  const previousPage = React.useRef(pageKey);
+  React.useLayoutEffect(() => {
+    if (pageKey !== previousPage.current && visible && sheet) {
+      dragOffset.value = motion.reducedMotion ? 0 : withSpring(0, motion.spatial);
+      releaseVelocity.value = 0;
+    }
+    previousPage.current = pageKey;
+  }, [pageKey, visible, sheet, motion, dragOffset, releaseVelocity]);
+  const gestureEnabled = sheet && dismissible && visible && interactive && !obscured;
+  const fadeStyle = useAnimatedStyle(() => ({ opacity: progress.value * obscuredFade.value }));
   const scrimStyle = useAnimatedStyle(() => ({
-    opacity: progress.value * obscuredFade.value,
+    opacity: progress.value * obscuredFade.value * (sheet ? Math.max(0, 1 - Math.max(0, dragOffset.value) / heightLimit) : 1),
   }));
   // Web keeps its input ancestors untransformed/unclipped. Fade a separate
   // clipped surface and the contents, rather than compositing the entire
   // rounded panel (which leaves a square backing in Chromium).
   const panelStyle = useAnimatedStyle(() => sheet ? {
     opacity: progress.value * obscuredFade.value,
-    transform: [{ translateY: keyboardShift.value + Math.max(0, 1 - spatial.value) * heightLimit + dragOffset.value
+    transform: [{ translateY: keyboardShift.value + dragOffset.value
       + (translatedAdaptiveSheet ? heightLimit - adaptiveHeight.value : 0) }],
   } : Platform.OS === "web" ? {} : ({
     opacity: progress.value * obscuredFade.value,
@@ -404,15 +533,14 @@ function FloatingPanelSurface({
 
   if (!rendered && !keepMounted) return null;
 
-  const sheetHeader = <View testID="material-sheet-header" onLayout={(event) => setSheetHeaderHeight(event.nativeEvent.layout.height)}
-    style={{ backgroundColor: panelSurface }}>
-    <SheetHandle enabled={dismissible && visible && interactive && !obscured} dismissible={dismissible}
-      onDismiss={hideAndDismiss} dragOffset={dragOffset} />
+  const sheetHeader = <SheetDragHeader enabled={gestureEnabled} dismissible={dismissible}
+    offset={dragOffset} onDismiss={dragDismiss} onHandleDismiss={hideAndDismiss} surface={panelSurface}
+    onLayout={(event) => setSheetHeaderHeight(event.nativeEvent.layout.height)}>
     <View style={{ paddingHorizontal: sheetInset, paddingBottom: spacing[8] }}>
       {headers.map((header) => React.isValidElement<{ style?: StyleProp<ViewStyle> }>(header)
         ? React.cloneElement(header, { style: [header.props.style, { marginBottom: 0 }] }) : header)}
     </View>
-  </View>;
+  </SheetDragHeader>;
   const sheetActions = <View testID="material-sheet-actions" onLayout={(event) => setSheetActionsHeight(event.nativeEvent.layout.height)}
     style={{ paddingHorizontal: sheetInset, paddingBottom: Math.max(spacing[16], bottomInset),
       backgroundColor: panelSurface }}>
@@ -427,18 +555,22 @@ function FloatingPanelSurface({
   // A viewport measurement here would feed the height animation back into
   // itself and make short notes collapse or oscillate while switching.
   const sheetBody = adaptiveSheet ? <View style={{ flexShrink: 0 }} onLayout={(event) => setSheetBodyHeight(event.nativeEvent.layout.height)}>{body}</View> : body;
+  const sheetScrollProps = {
+    resetKey: scrollResetKey,
+    dismissDrag: dragFromBody ? { enabled: gestureEnabled, offset: dragOffset, onDismiss: dragDismiss } : undefined,
+  };
   const sheetContent = sheetScrollAll
-    ? <PanelScrollView resetKey={scrollResetKey} testID="material-sheet-body" keyboardShouldPersistTaps="handled" nestedScrollEnabled
+    ? <SheetScrollView {...sheetScrollProps} testID="material-sheet-body" nestedScrollEnabled
         style={{ flex: fillSheet ? 1 : undefined, flexShrink: 1, maxHeight: heightLimit, backgroundColor: panelSurface }}>
         {sheetHeader}<View style={sheetBodyPadding}>{sheetBody}</View>{sheetActions}
-      </PanelScrollView>
+      </SheetScrollView>
     : <>{sheetHeader}
         {scrollBody ? fillSheet ? <View style={sheetBodyStyle}>
-          <PanelScrollView resetKey={scrollResetKey} testID="material-sheet-body" keyboardShouldPersistTaps="handled" nestedScrollEnabled
-            style={{ flex: 1 }} contentContainerStyle={sheetBodyPadding}>{sheetBody}</PanelScrollView>
+          <SheetScrollView {...sheetScrollProps} testID="material-sheet-body" nestedScrollEnabled
+            style={{ flex: 1 }} contentContainerStyle={sheetBodyPadding}>{sheetBody}</SheetScrollView>
           <SheetScrollFades color={panelSurface} />
-        </View> : <PanelScrollView resetKey={scrollResetKey} testID="material-sheet-body" keyboardShouldPersistTaps="handled" nestedScrollEnabled
-          style={sheetBodyStyle} contentContainerStyle={sheetBodyPadding}>{body}</PanelScrollView>
+        </View> : <SheetScrollView {...sheetScrollProps} testID="material-sheet-body" nestedScrollEnabled
+          style={sheetBodyStyle} contentContainerStyle={sheetBodyPadding}>{body}</SheetScrollView>
           : <View testID="material-sheet-body" style={[sheetBodyStyle, sheetBodyPadding]}>{sheetBody}</View>}
         {translatedAdaptiveSheet ? <Animated.View style={[{ position: "absolute", left: 0, right: 0, bottom: 0 }, sheetActionsStyle]}>
           {sheetActions}
@@ -517,16 +649,16 @@ function FloatingPanelSurface({
               zIndex: "auto",
               isolation: "auto",
               overflow: "hidden",
-            } as unknown as ViewStyle, scrimStyle]} /> : null}
+            } as unknown as ViewStyle, fadeStyle]} /> : null}
             <ResizeOwnerContext.Provider value>
             <PanelTitleContext.Provider value={titleId}>
             <InputSurfaceContext.Provider value={panelSurface}>
-            {sheet ? <OverlayPageContent leaving={pageLeaving} style={[{ flex: 1, minHeight: 0 }, Platform.OS === "web" ? scrimStyle : null, pageStyle]}>
+            {sheet ? <OverlayPageContent leaving={pageLeaving} style={[{ flex: 1, minHeight: 0 }, Platform.OS === "web" ? fadeStyle : null, pageStyle]}>
               {sheetContent}
             </OverlayPageContent> : <DialogContent headers={headers} actions={actions} body={body}
               scrollHeader={scrollHeader} scrollAll={scrollAll} scrollBody={scrollBody}
               scrollResetKey={scrollResetKey} heightLimit={Math.max(0, heightLimit - Number(topPadding) - Number(bottomPadding))}
-              onMeasure={recordNaturalHeight} leaving={pageLeaving} style={pageStyle} fade={Platform.OS === "web" ? scrimStyle : undefined}
+              onMeasure={recordNaturalHeight} leaving={pageLeaving} style={pageStyle} fade={Platform.OS === "web" ? fadeStyle : undefined}
               ghost={ghost} onGhostMeasure={recordGhostHeight} />}
             </InputSurfaceContext.Provider>
             </PanelTitleContext.Provider>
@@ -540,6 +672,33 @@ function FloatingPanelSurface({
   );
 }
 
+type SheetDismissDrag = { enabled: boolean; offset: SharedValue<number>; onDismiss: (velocity: number) => void };
+function SheetDragHeader({ enabled, offset, onDismiss, dismissible, onHandleDismiss, surface, onLayout, children }: SheetDismissDrag & {
+  dismissible: boolean; onHandleDismiss: () => void; surface: string;
+  onLayout: (event: LayoutChangeEvent) => void; children: React.ReactNode;
+}) {
+  const pressAfter = useSharedValue(0);
+  const pan = useSheetPan(enabled, offset, onDismiss, undefined, pressAfter);
+  return <GestureDetector gesture={pan}><View testID="material-sheet-header" onLayout={onLayout} style={{ backgroundColor: surface }}>
+    <SheetHandle dismissible={dismissible} onDismiss={() => { if (Date.now() >= pressAfter.value) onHandleDismiss(); }} />
+    {children}
+  </View></GestureDetector>;
+}
+
+function SheetScrollView({ dismissDrag, ...props }: ThemedScrollViewProps & { resetKey?: string; dismissDrag?: SheetDismissDrag }) {
+  return dismissDrag ? <DraggablePanelScrollView {...props} dismissDrag={dismissDrag} /> : <PanelScrollView {...props} />;
+}
+
+/** Only a sheet body that supports dismissal registers these worklets. Dialogs
+ * and list-owned pickers keep their existing native scroll ownership. */
+function DraggablePanelScrollView({ dismissDrag, ...props }: ThemedScrollViewProps & { resetKey?: string; dismissDrag: SheetDismissDrag }) {
+  const scroll = useSharedValue(0);
+  const pan = useSheetPan(dismissDrag.enabled, dismissDrag.offset, dismissDrag.onDismiss, scroll);
+  const onScroll = useAnimatedScrollHandler({ onScroll: e => { scroll.value = e.contentOffset.y; } });
+  return <PanelScrollView {...props} scrollGesture={pan} animatedScrollHandler={onScroll} bounces={false}
+    scrollEventThrottle={16} onScroll={Platform.OS === "web" ? e => { scroll.value = e.nativeEvent.contentOffset.y; } : undefined} />;
+}
+
 /** Reset after the portal commits the new contents, preserving the native
  * scroller, scrollbar worklets and text instances across release switches. */
 function PanelScrollView({ resetKey, ...props }: ThemedScrollViewProps & { resetKey?: string }) {
@@ -547,7 +706,7 @@ function PanelScrollView({ resetKey, ...props }: ThemedScrollViewProps & { reset
   React.useLayoutEffect(() => {
     if (resetKey != null) ref.current?.scrollTo({ x: 0, y: 0, animated: false });
   }, [resetKey]);
-  return <ThemedScrollView ref={ref} {...props} />;
+  return <ThemedScrollView ref={ref} keyboardDismissMode="on-drag" keyboardShouldPersistTaps="handled" {...props} />;
 }
 
 /** The body reports its intrinsic content size independently of its viewport.
@@ -686,39 +845,61 @@ const PanelOnShow = React.memo(function PanelOnShow({ visible, enabled, onShowRe
   return null;
 });
 
-/** Dialogs never allocate/register sheet gesture worklets. Only the handle
- * owns dismissal: dragging or selecting long notes stays with the scroller. */
-function SheetHandle({ enabled, dismissible, onDismiss, dragOffset }: {
-  enabled: boolean; dismissible: boolean; onDismiss: () => void; dragOffset: SharedValue<number>;
-}) {
-  const { palette } = useTheme();
+/** Finger tracking is direct; settling always starts from the current value.
+ * Body recognition fails immediately unless it begins at the scroll boundary. */
+function useSheetPan(enabled: boolean, offset: SharedValue<number>, onDismiss: (velocity: number) => void, scroll?: SharedValue<number>, pressAfter?: SharedValue<number>) {
   const { reducedMotion, spatial } = useMaterialMotion();
-  const pressAfter = React.useRef(0);
-  const beginDrag = React.useCallback(() => { pressAfter.current = Infinity; }, []);
-  const endDrag = React.useCallback(() => {
-    // RN Web may send a click after a pan, including a cancelled pan.
-    if (pressAfter.current === Infinity) pressAfter.current = Date.now() + 200;
-  }, []);
-  const pan = React.useMemo(() => Gesture.Pan().enabled(enabled).activeOffsetY(8)
-    .onStart(() => { runOnJS(beginDrag)(); })
-    .onUpdate((event) => { dragOffset.value = Math.max(0, event.translationY); })
-    .onEnd((event) => {
-      if (event.translationY > 64 || (event.translationY > 8 && event.velocityY > 800)) runOnJS(onDismiss)();
-      else dragOffset.value = reducedMotion ? 0 : withSpring(0, spatial);
+  const start = useSharedValue(0);
+  const dragging = useSharedValue(false);
+  const touchStart = useSharedValue({ x: 0, y: 0 });
+  return React.useMemo(() => {
+    const pan = Gesture.Pan().enabled(enabled).activeOffsetY([-8, 8]).failOffsetX([-16, 16])
+    .manualActivation(!!scroll)
+    .onTouchesDown((e, manager) => {
+      if (!scroll) return;
+      const t = e.allTouches[0];
+      if (!t || scroll.value > 1 || e.numberOfTouches !== 1) { manager.fail(); return; }
+      touchStart.value = { x: t.absoluteX, y: t.absoluteY };
     })
-    .onFinalize((_event, success) => {
-      runOnJS(endDrag)();
-      if (!success) dragOffset.value = reducedMotion ? 0 : withSpring(0, spatial);
-    }), [beginDrag, dragOffset, enabled, endDrag, onDismiss, reducedMotion, spatial]);
-  return <GestureDetector gesture={pan}>
-    <PressableScale accessibilityRole="button" accessibilityLabel="Dismiss sheet" disabled={!dismissible}
-      onPress={() => { if (Date.now() >= pressAfter.current) onDismiss(); }} style={styles.sheetHandleTarget}>
-      <View style={[styles.sheetHandle, { backgroundColor: palette.onSurfaceVariant }]} />
-    </PressableScale>
-  </GestureDetector>;
+    .onTouchesMove((e, manager) => {
+      if (!scroll) return;
+      if (scroll.value > 1 || e.numberOfTouches !== 1) { manager.fail(); return; }
+      // Pan translation is available at activation; never steal upward scroll.
+      const touch = e.allTouches[0];
+      if (!touch) { manager.fail(); return; }
+      const dx = touch.absoluteX - touchStart.value.x, dy = touch.absoluteY - touchStart.value.y;
+      if (dy < -8 || Math.abs(dx) > 16) manager.fail();
+      else if (dy > 8) manager.activate();
+    })
+    .onBegin(() => { cancelAnimation(offset); start.value = sheetDragOrigin(offset.value); dragging.value = true; })
+    .onStart(() => { if (pressAfter) pressAfter.value = Infinity; })
+    .onUpdate(e => {
+      offset.value = sheetDragPosition(start.value, e.translationY);
+    })
+    .onEnd(e => {
+      dragging.value = false;
+      if (shouldDismissSheet(offset.value, e.velocityY)) runOnJS(onDismiss)(e.velocityY);
+      else offset.value = reducedMotion ? 0 : withSpring(0, { ...spatial, velocity: e.velocityY });
+    })
+    .onFinalize((_e, success) => {
+      if (!success && dragging.value) offset.value = reducedMotion ? 0 : withSpring(0, spatial);
+      dragging.value = false;
+      if (pressAfter?.value === Infinity) pressAfter.value = Date.now() + 200;
+    });
+    return scroll ? Gesture.Simultaneous(Gesture.Native(), pan) : pan;
+  }, [enabled, offset, onDismiss, reducedMotion, spatial, start, dragging, scroll, touchStart, pressAfter]);
+}
+
+function SheetHandle({ dismissible, onDismiss }: { dismissible: boolean; onDismiss: () => void }) {
+  const { palette } = useTheme();
+  return <PressableScale accessibilityRole="button" accessibilityLabel="Dismiss sheet" disabled={!dismissible}
+    onPress={onDismiss} style={styles.sheetHandleTarget}>
+    <View style={[styles.sheetHandle, { backgroundColor: palette.onSurfaceVariant }]} />
+  </PressableScale>;
 }
 
 const styles = StyleSheet.create({
+  confirmExtra: { width: "100%", alignItems: "center", gap: spacing[6], marginBottom: spacing[4] },
   root: { ...StyleSheet.absoluteFill },
   frame: {
     flex: 1,

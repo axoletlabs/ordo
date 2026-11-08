@@ -167,7 +167,7 @@ export function AppPalettePicker({ value, onChange }: {
         </PressableScale>
       </View>
     </ScrollView>
-    <FloatingPanel visible={customOpen} onDismiss={() => setCustomOpen(false)}>
+    <FloatingPanel dirty={draft !== value} visible={customOpen} onDismiss={() => setCustomOpen(false)}>
       <PanelHeader title="Custom color" subtitle="ordo builds matching light and dark palettes from this color." />
       <View style={[styles.preview, { backgroundColor: preview.surfaceContainerLow }]}>
         <PaletteSwatch colors={preview} />

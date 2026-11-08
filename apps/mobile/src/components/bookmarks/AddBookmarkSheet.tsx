@@ -2,10 +2,11 @@
  * Floating dialog to validate and save a new URL.
  */
 import React, { useState } from "react";
-import { Platform, StyleSheet, View, type TextInput } from "react-native";
+import { Platform, StyleSheet, View, useWindowDimensions, type TextInput } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
+import { ResponsivePicker } from "../ui/ResponsivePicker";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { AnimatedSwap } from "../ui/AnimatedSwap";
 import { AnimatedDisclosure } from "../ui/AnimatedDisclosure";
@@ -17,7 +18,7 @@ import { Text } from "../ui/Text";
 import { PressableScale } from "../ui/PressableScale";
 import { PickerField } from "../ui/PickerField";
 import { FolderPickerMenu } from "./FolderPickerMenu";
-import { ContextMenu, type MenuAnchorRect } from "../ui/ContextMenu";
+import type { MenuAnchorRect } from "../ui/ContextMenu";
 import { PanelActions } from "../ui/SheetActionRow";
 import { UnlockForm } from "./LockPrompt";
 import { CreateFolderPanel } from "./CreateFolderPanel";
@@ -89,6 +90,7 @@ function AddBookmarkContent({
   onSaved,
 }: AddBookmarkSheetProps) {
   const { palette } = useTheme();
+  const { width } = useWindowDimensions();
   const create = useCreateBookmark();
   const { data: folders } = useFolders();
   const { data: tags } = useTags();
@@ -132,7 +134,7 @@ function AddBookmarkContent({
   const surfaceRef = React.useRef<Surface>(surface);
   const folderPickerOpen = surface === "folderPicker";
   const tagPickerOpen = surface === "tagPicker";
-  const panelObscured = surface === "createFolder" || surface === "createTag";
+  const panelObscured = surface === "createFolder" || surface === "createTag" || width < 600 && (surface === "folderPicker" || surface === "tagPicker");
   const panelInteractive = surface === "form" || surface === "unlock";
   // Stable content key: callers may pass a fresh same-value array (or the same
   // set in another order) on every render, which is not a new intent and must
@@ -394,6 +396,8 @@ function AddBookmarkContent({
   return (
     <>
       <FloatingPanel
+        presentation="responsive"
+        dirty={!!url.trim() || url.trim() !== (initialUrl ?? "").trim() || selectedTagIds.slice().sort().join() !== [...initialTagIds].sort().join() || selectedFolderId !== (folderId ?? null)}
         visible={visible}
         pageKey={lockedFolderId ? "unlock" : "save"}
         obscured={panelObscured}
@@ -496,14 +500,14 @@ function AddBookmarkContent({
       <FolderPickerMenu visible={folderPickerOpen} onDismiss={() => setDestinationOpen(false)} folders={folders ?? []} anchor={destinationAnchor} returnFocusRef={urlRef}
         value={selectedFolderId} onChange={(id) => setSelectedDestination(id ?? ROOT_DESTINATION)}
         onCreate={() => { setDestinationOpen(false); setCreateFolderOpen(true); }} />
-      <ContextMenu visible={tagPickerOpen} onDismiss={() => setShowTagPicker(false)} anchor={tagAnchor} width={tagAnchor?.width} scrollBody={false} keyboardDismiss={false} estimatedHeight={280} returnFocusRef={urlRef}>
+      <ResponsivePicker title="Tags" visible={tagPickerOpen} onDismiss={() => setShowTagPicker(false)} anchor={tagAnchor} width={tagAnchor?.width} scrollBody={false} keyboardDismiss={false} estimatedHeight={280} returnFocusRef={urlRef}>
         <View ref={tagMenuRef} {...tagOpeningFocus} style={{ paddingHorizontal: spacing[16], flexShrink: 1 }}>
         <TagSelectList selectedIds={selectedTagIds} searchInputRef={tagSearchRef}
           searchAutoFocus={Platform.OS !== "web"}
           onToggle={(tagId) => setSelectedTagIds((previous) => previous.includes(tagId) ? previous.filter((id) => id !== tagId) : [...previous, tagId])}
           menu maxHeight={240} onRequestCreateTag={() => { setShowTagPicker(false); setCreateTagOpen(true); }} />
         </View>
-      </ContextMenu>
+      </ResponsivePicker>
       <CreateFolderPanel
         visible={surface === "createFolder"}
         onDismiss={() => { if (ownsChild("createFolder")) setCreateFolderOpen(false); }}

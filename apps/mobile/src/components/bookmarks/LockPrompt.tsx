@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Platform, StyleSheet, View } from "react-native";
 import { useFocusEffect } from "expo-router";
 import { TOKEN_TTL, type FolderLockType, type FolderPinLength } from "@ordo/shared";
+import { DraftDismissAction } from "../ui/draft-dismiss";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { PanelHeader } from "../ui/PanelHeader";
 import { Input } from "../ui/Input";
@@ -297,7 +298,7 @@ export function UnlockForm({
       ) : isPassword ? (
         <Button label="Unlock" block onPress={() => void submitPassword()} loading={unlock.isPending} />
       ) : onCancel ? (
-        <Button
+        <DraftDismissAction><Button
           label={cancelLabel}
           variant="secondary"
           onPress={() => {
@@ -305,7 +306,7 @@ export function UnlockForm({
             onCancel();
           }}
           style={sheetMenuStyles.cancel}
-        />
+        /></DraftDismissAction>
       ) : null}
       <Text variant="footnote" color="tertiary" align="center" style={styles.footnote}>
         Unlocked for {UNLOCK_MINUTES} minutes on this device.

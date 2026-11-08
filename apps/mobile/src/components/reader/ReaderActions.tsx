@@ -134,7 +134,7 @@ const ReaderHighlights = React.memo(function ReaderHighlights({ visible, highlig
   onRemove: (id: string) => void;
 }) {
   const { palette } = useTheme();
-  return <FloatingPanel visible={visible} onDismiss={onDismiss}>
+  return <FloatingPanel presentation="responsive" visible={visible} onDismiss={onDismiss}>
       <PanelHeader title="Highlights" subtitle={highlights.length === 0 ? "Select a passage in the article to save it." : undefined} />
       {highlights.length > 0 ? <ThemedScrollView style={styles.highlightList}>
         {highlights.map((row) => <View key={row.id} style={styles.highlightRow}>

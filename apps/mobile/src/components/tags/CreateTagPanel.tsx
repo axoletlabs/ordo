@@ -54,7 +54,7 @@ export function CreateTagPanel({ visible, onDismiss, onCreated }: CreateTagPanel
   };
 
   return (
-    <FloatingPanel visible={visible} onDismiss={onDismiss} dismissible={!create.isPending}>
+    <FloatingPanel dirty={color !== DEFAULT_TAG_COLOR} visible={visible} onDismiss={onDismiss} dismissible={!create.isPending}>
       <PanelHeader title="New tag" />
       <View style={styles.body}>
         <Input

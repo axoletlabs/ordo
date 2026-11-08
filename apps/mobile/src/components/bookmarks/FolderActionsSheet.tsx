@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { Image } from "expo-image";
 import { APP_NAME, DEFAULT_FOLDER_ICON, type BookmarkDto, type FolderDto, type FolderIcon, type FolderLockType, type FolderPinLength } from "@ordo/shared";
+import { DraftDismissAction } from "../ui/draft-dismiss";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { ThemedFlatList, ThemedScrollView } from "../ui/ThemedScrollView";
 import { PanelHeader } from "../ui/PanelHeader";
@@ -519,7 +520,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
         ) : null}
       </ContextMenu>
 
-      <FloatingPanel visible={dialogOpen} dismissible={!busy} onDismiss={onDismiss}>
+      <FloatingPanel dirty={mode === "icon" && icon !== (displayFolder?.icon ?? DEFAULT_FOLDER_ICON) || mode === "lockCredential" && (pattern.length > 0 || savedPattern.length > 0 || !!savedPin)} visible={dialogOpen} dismissible={!busy} onDismiss={onDismiss}>
       {folder && mode === "rename" ? (
         <>
           <PanelHeader title="Rename folder" />
@@ -646,7 +647,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
           )}
           <View style={sheetMenuStyles.stack}>
             {lockType === "pattern" || lockType === "pin" ? (
-              <Button label="Back" variant="secondary" disabled={busy} onPress={() => showMode("lockChoice")} />
+              <DraftDismissAction><Button label="Back" variant="secondary" disabled={busy} onPress={() => showMode("lockChoice")} /></DraftDismissAction>
             ) : (
               <PanelActions
                 confirmLabel="Lock folder"
@@ -738,7 +739,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
               rightAccessory={<EyeToggle visible={showPassword} onPress={() => setShowPassword((value) => !value)} />}
             /></AutofillForm>
           )}
-          <PressableScale
+          <DraftDismissAction><PressableScale
             accessibilityRole="button"
             accessibilityLabel="Use account password"
             disabled={busy}
@@ -747,10 +748,10 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
             style={styles.forgot}
           >
             <Text variant="labelLarge" color="accent">Use account password</Text>
-          </PressableScale>
+          </PressableScale></DraftDismissAction>
           <View style={sheetMenuStyles.stack}>
             {(folder.lockType ?? "password") === "pattern" || (folder.lockType ?? "password") === "pin" ? (
-              <Button label="Cancel" variant="secondary" disabled={removing} onPress={() => showMode("menu")} />
+              <DraftDismissAction><Button label="Cancel" variant="secondary" disabled={removing} onPress={() => showMode("menu")} /></DraftDismissAction>
             ) : (
               <PanelActions
                 confirmLabel={(folder.lockType ?? "password") === "device" ? "Use device lock" : "Remove lock"}
@@ -793,7 +794,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
             rightAccessory={<EyeToggle visible={showAccountPassword} onPress={() => setShowAccountPassword((value) => !value)} />}
           />
           </AutofillForm>
-          <PressableScale
+          <DraftDismissAction><PressableScale
             accessibilityRole="button"
             accessibilityLabel={(folder.lockType ?? "password") === "device" ? "Use device lock" : "Use folder password"}
             disabled={busy}
@@ -810,7 +811,7 @@ function FolderActionsContent({ visible, onDismiss, folder, anchor, onDeleted, o
                     ? "Use folder PIN"
                     : "Use folder password"}
             </Text>
-          </PressableScale>
+          </PressableScale></DraftDismissAction>
           <PanelActions
             confirmLabel="Remove lock"
             confirmVariant="danger"

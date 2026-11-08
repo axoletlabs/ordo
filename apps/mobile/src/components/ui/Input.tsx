@@ -1,4 +1,5 @@
 /** Material filled / outlined / search fields, preserving native editing and autofill. */
+import { usePanelDraftField } from "./draft-dismiss";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
 import { StateLayer } from "./StateLayer";
@@ -63,6 +64,7 @@ function appCanTakeFocus(state: AppStateStatus) {
 }
 
 export interface InputProps extends Omit<TextInputProps, "style"> {
+  trackDraft?: boolean;
   label?: string;
   error?: string;
   helper?: string;
@@ -127,6 +129,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   onBlur,
   onChange,
   onChangeText,
+  trackDraft = true,
   onKeyPress,
   secureTextEntry,
   sensitive,
@@ -141,6 +144,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   reserveSupportingSpace = false,
   ...rest
 }, ref) {
+  const markDraft = usePanelDraftField(value ?? "");
   const { palette } = useTheme();
   const { fontScale } = useWindowDimensions();
   const messageId = React.useId();
@@ -479,6 +483,7 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
           onChangeText={canEdit ? (text) => {
             // The native field is authoritative while typing. A late parent
             // commit echoing this text must not look like an external edit.
+            if (trackDraft && variant !== "search") markDraft(text);
             lastAppliedValue.current = text;
             setHasText(text.length > 0); onChangeText?.(text);
           } : undefined}

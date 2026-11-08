@@ -3,6 +3,7 @@
  * typing, paste, and OS autofill share the same editing rules. Completing the
  * last character fires `onComplete`. Success / error play a bounce or a shake.
  */
+import { usePanelDraftField } from "./draft-dismiss";
 import React, { useEffect, useLayoutEffect, useRef } from "react";
 import {
   Platform,
@@ -92,6 +93,7 @@ export function OtpInput({
   purpose = "otp",
   style,
 }: OtpInputProps) {
+  const markDraft = usePanelDraftField(value);
   const { palette } = useTheme();
   const fieldSurface = React.useContext(InputSurfaceContext) ?? palette.surface;
   const inputFocusScope = React.useContext(InputFocusScopeContext);
@@ -337,6 +339,7 @@ export function OtpInput({
     if (next.value !== chars) {
       skipRestoredComplete.current = false;
       if (next.value.length === chars.length) haptics.selection();
+      markDraft(next.value);
       onChange(next.value);
     }
     // Reconcile even rejected input or retyping the same digit at the end.
