@@ -14,7 +14,6 @@
 # detect treats as native-incompatible and mints a spare APK.
 set -euo pipefail
 
-REPO="${GITHUB_REPOSITORY:?}"
 CURRENT_RUN="${GITHUB_RUN_ID:-0}"
 CURRENT_SHA="${CURRENT_SHA:-${GITHUB_SHA:-}}"
 BRANCH="${1:-${GITHUB_REF_NAME:-main}}"
@@ -38,26 +37,12 @@ list_runs() {
 # decided yet. False for a finished JS-only detect (build_apk skipped).
 might_produce_apk() {
   local run_id="$1"
-  local jobs detect_status apk_status apk_conclusion
-  jobs="$(gh api "repos/${REPO}/actions/runs/${run_id}/jobs" --jq '[.jobs[] | {name,status,conclusion}]')" || exit 1
-  detect_status="$(jq -r '.[] | select(.name == "detect") | .status' <<<"$jobs")"
-  apk_status="$(jq -r '.[] | select(.name == "build_apk") | .status' <<<"$jobs")"
-  apk_conclusion="$(jq -r '.[] | select(.name == "build_apk") | .conclusion // empty' <<<"$jobs")"
-
-  if [[ "$apk_status" == "in_progress" || "$apk_status" == "queued" || "$apk_status" == "waiting" ]]; then
-    return 0
-  fi
-  if [[ "$apk_status" == "completed" && "$apk_conclusion" == "success" ]]; then
-    return 0
-  fi
-  if [[ "$detect_status" == "in_progress" || "$detect_status" == "queued" || "$detect_status" == "waiting" ]]; then
-    return 0
-  fi
-  # Detect finished but the APK job has not appeared yet.
-  if [[ "$detect_status" == "completed" && -z "$apk_status" ]]; then
-    return 0
-  fi
-  return 1
+  local state
+  state="$(bash "$SCRIPT_DIR/apk-run-state.sh" "$run_id")" || exit 1
+  case "$state" in
+    deciding|building|built) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 progress="$(list_runs in_progress)"

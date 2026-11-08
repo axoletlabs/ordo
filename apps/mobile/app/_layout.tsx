@@ -107,7 +107,7 @@ function RootShell() {
   const tokens = useAuthStore((s) => s.tokens);
   const userId = useAuthStore((s) => s.user?.id);
   const serverUrl = useSettingsStore((s) => s.serverUrl);
-  const restarting = useUpdateRestartStore((s) => s.restarting);
+  const restarting = useUpdateRestartStore((s) => s.status === "presenting" || s.status === "reloading");
   useAutomaticOtaUpdate();
   const { restartCount } = Updates.useUpdates();
   const runtimeRestart = restarting || restartCount > 0 || peekRestartCover() != null;

@@ -10,6 +10,22 @@ import {
 export const LIBRARY_CIPHER_PREFIX = "enc1.";
 export const DATA_ENCRYPTION_VERSION = 1;
 
+/**
+ * Explicit lifecycle for the one-way plaintext -> ciphertext rewrite.
+ *
+ * - `plaintext`: no DEK is installed; every row is readable as-is.
+ * - `migrating`: the DEK (password wrap + server wrap) is durably installed and
+ *   the row rewrite is in progress or was interrupted. The rewrite is
+ *   idempotent, so any later sign-in can resume it.
+ * - `encrypted`: the rewrite finished; rows written from now on must be sealed.
+ */
+export const LIBRARY_STATE = {
+  PLAINTEXT: "plaintext",
+  MIGRATING: "migrating",
+  ENCRYPTED: "encrypted",
+} as const;
+export type LibraryState = (typeof LIBRARY_STATE)[keyof typeof LIBRARY_STATE];
+
 const IV_LEN = 12;
 const TAG_LEN = 16;
 const DEK_LEN = 32;

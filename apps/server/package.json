@@ -11,12 +11,16 @@
     "lint": "eslint \"src/**/*.ts\" --max-warnings=0",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:bookmark-title": "node scripts/test-bookmark-title.cjs",
+    "test:state-invariants": "node scripts/test-state-invariants.cjs",
     "db:generate": "DATABASE_URL=\"file:./ordo.db\" prisma generate",
     "db:migrate": "DATABASE_URL=\"file:./ordo.db\" prisma migrate deploy",
     "db:setup": "DATABASE_URL=\"file:./ordo.db\" prisma generate && DATABASE_URL=\"file:./ordo.db\" prisma migrate deploy",
     "db:upgrade": "node dist/prisma/upgrade-cli.js",
     "studio": "prisma studio",
-    "clean": "rimraf dist .turbo src/generated"
+    "clean": "rimraf dist .turbo src/generated",
+    "test:state-workers": "node scripts/test-state-workers.cjs",
+    "test:state-credentials": "node scripts/test-state-credentials.cjs",
+    "test:state": "pnpm test:state-invariants && pnpm test:state-workers && pnpm test:state-credentials"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",

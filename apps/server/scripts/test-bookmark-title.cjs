@@ -64,7 +64,7 @@ const bookmarks = new BookmarksService(prisma, { enqueue() {} }, access, {}, cry
             author: null, publishedAt: null, readingTimeMinutes: 1, contentHtml: '<p>Article content</p>',
           };
         },
-      }, { refreshSafely() {} }, crypto);
+      }, { refreshSafely() {} }, crypto, { runWithCurrentKey: (_user, dek, run) => crypto.runAsync(dek, run) });
       const extracting = extraction.enrichBookmark(row.id, 'https://example.test/article');
       await ready;
       const updated = await bookmarks.update(user.id, row.id, UpdateBookmarkSchema.parse({ title: '  My title  ' }), []);

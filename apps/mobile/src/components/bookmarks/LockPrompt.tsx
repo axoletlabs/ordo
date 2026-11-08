@@ -73,6 +73,8 @@ export function UnlockForm({
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const deviceAttempted = useRef(false);
+  const devicePrompt = useRef(false);
+  const submitting = useRef(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -97,7 +99,15 @@ export function UnlockForm({
   }, [folderId, lockType, pinLength]);
 
   const finishUnlock = async (credential: string) => {
-    await unlock.mutateAsync({ id: folderId, password: credential });
+    // A second tap can land before React Query reports the mutation as pending,
+    // so the request itself owns the attempt.
+    if (submitting.current) return;
+    submitting.current = true;
+    try {
+      await unlock.mutateAsync({ id: folderId, password: credential });
+    } finally {
+      submitting.current = false;
+    }
     haptics.success();
     reset();
     onUnlocked?.();
@@ -139,6 +149,7 @@ export function UnlockForm({
   };
 
   const submitPassword = async () => {
+    if (unlock.isPending) return;
     setError("");
     if (!password) {
       setError("Enter the folder password.");
@@ -153,6 +164,10 @@ export function UnlockForm({
   };
 
   const submitDeviceLock = async () => {
+    // The OS prompt is modal but the button stays tappable, and the mutation is
+    // not pending until a credential comes back.
+    if (unlock.isPending || devicePrompt.current) return;
+    devicePrompt.current = true;
     setError("");
     let credential: string | null;
     try {
@@ -160,6 +175,8 @@ export function UnlockForm({
     } catch {
       setError("Device authentication was cancelled or unsuccessful.");
       return;
+    } finally {
+      devicePrompt.current = false;
     }
     if (!credential) {
       setError(

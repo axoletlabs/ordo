@@ -33,8 +33,13 @@ model User {
   dekServerWrapped      String?
   /// Unused leftover from recovery-key wraps; kept so existing DBs still load.
   dekRecoveryWrapped    String?
-  /// 0 = plaintext legacy library; 1 = fields encrypted with the account DEK.
+  /// 0 = plaintext legacy library; 1 = a DEK is durably installed for this account.
   dataEncryptionVersion Int       @default(0)
+  /// Library field rewrite lifecycle: plaintext | migrating | encrypted.
+  /// `migrating` means the DEK above is durable but rows may still be
+  /// plaintext (a crash or a concurrent reader interrupted the rewrite); the
+  /// next sign-in that unwraps the DEK finishes the idempotent rewrite.
+  libraryState          String    @default("plaintext")
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 

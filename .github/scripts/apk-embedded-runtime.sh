@@ -15,6 +15,7 @@ REPO="${GITHUB_REPOSITORY:?}"
 RUN_ID=""
 SHA=""
 BRANCH=""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -33,9 +34,8 @@ if [[ -z "$RUN_ID" && -n "$SHA" ]]; then
     '.[] | select(.head_sha == $sha and ($branch == "" or (.head_branch == $branch and (($branch | startswith("release/")) == false or .event == "push")) or ($tag != "" and .event == "release" and .head_branch == $tag))) | .id' <<<"$runs")"
   while read -r id; do
     [[ -z "$id" ]] && continue
-    conclusion="$(gh api "repos/${REPO}/actions/runs/${id}/jobs" \
-      --jq '[.jobs[] | select(.name == "build_apk" or .name == "assemble_release") | .conclusion] | .[0] // empty')"
-    if [[ "$conclusion" == "success" ]]; then
+    state="$(bash "$SCRIPT_DIR/apk-run-state.sh" "$id")"
+    if [[ "$state" == "built" ]]; then
       RUN_ID="$id"
       break
     fi
@@ -43,6 +43,9 @@ if [[ -z "$RUN_ID" && -n "$SHA" ]]; then
 fi
 
 if [[ -z "$RUN_ID" ]]; then
+  exit 1
+fi
+if [[ "$(bash "$SCRIPT_DIR/apk-run-state.sh" "$RUN_ID")" != "built" ]]; then
   exit 1
 fi
 

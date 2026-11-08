@@ -39,11 +39,30 @@ export async function claimInstanceOwner(prisma: OwnerStore, userId: string): Pr
     where: { id: INSTANCE_SETTINGS_ID },
   });
   if (!row) {
-    await prisma.instanceSettings.create({
-      data: { id: INSTANCE_SETTINGS_ID, name: APP_NAME, ownerUserId: userId },
-    });
-    return;
+    try {
+      await prisma.instanceSettings.create({
+        data: { id: INSTANCE_SETTINGS_ID, name: APP_NAME, ownerUserId: userId },
+      });
+      return;
+    } catch (err) {
+      // Two first registrations can both observe no row. The id is a primary
+      // key, so exactly one create wins; the loser re-reads the winner's row
+      // instead of surfacing P2002 as a 500 after creating the account.
+      const raced = await prisma.instanceSettings
+        .findUnique({ where: { id: INSTANCE_SETTINGS_ID } })
+        .catch(() => null);
+      if (!raced) throw err;
+      return claimExistingOwner(prisma, userId, raced);
+    }
   }
+  return claimExistingOwner(prisma, userId, row);
+}
+
+async function claimExistingOwner(
+  prisma: OwnerStore,
+  userId: string,
+  row: InstanceSettingsRow,
+): Promise<void> {
   if (row.ownerUserId) {
     const owner = await prisma.user.findUnique({
       where: { id: row.ownerUserId },

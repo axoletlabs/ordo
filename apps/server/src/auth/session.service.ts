@@ -1,6 +1,6 @@
 import { Injectable } from "@nestjs/common";
 import { ErrorCode, SESSION, type SessionDeviceType } from "@ordo/shared";
-import type { Session } from "../prisma/client.js";
+import type { Prisma, Session, User } from "../prisma/client.js";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { AppError } from "../common/errors/app-error.js";
 import type { TokenPair } from "./token.service.js";
@@ -12,6 +12,82 @@ export interface AccessValidation {
   sessionId: string;
   expired: boolean;
   dek: Buffer | null;
+}
+
+/**
+ * The credential state a caller checked before it started slow work (bcrypt,
+ * scrypt, TOTP). Session creation re-proves this snapshot atomically with the
+ * insert, so a login that lost a race with a password reset/change or an MFA
+ * toggle cannot mint a session for credentials that no longer exist.
+ */
+export interface CredentialSnapshot {
+  passwordHash: string;
+  /** Compared only when the key is present; `undefined` skips the check. */
+  totpEnabledAt?: Date | null;
+  /** Compared only when the key is present; `undefined` skips the check. */
+  totpSecretEnc?: string | null;
+}
+
+export function credentialSnapshot(
+  user: Pick<User, "passwordHash" | "totpEnabledAt" | "totpSecretEnc">,
+): CredentialSnapshot {
+  return {
+    passwordHash: user.passwordHash,
+    totpEnabledAt: user.totpEnabledAt,
+    totpSecretEnc: user.totpSecretEnc,
+  };
+}
+
+export function credentialsChangedError(): AppError {
+  return new AppError(
+    ErrorCode.SESSION_REVOKED,
+    "Your sign-in was interrupted. Please sign in again.",
+  );
+}
+
+/**
+ * Prove `snapshot` and hold the user row for the rest of the transaction.
+ *
+ * A no-op UPDATE still runs as a write, so SQLite evaluates the `WHERE` under
+ * the write lock: a password reset/change or MFA toggle that commits first
+ * makes the match fail, and one that tries to commit later waits. Everything
+ * the caller writes afterwards in this same transaction is therefore based on
+ * the snapshot it verified.
+ */
+export async function claimCredentialSnapshot(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  snapshot: CredentialSnapshot,
+): Promise<boolean> {
+  const matched = await tx.$executeRaw`
+    UPDATE "User" SET "updatedAt" = "updatedAt"
+    WHERE "id" = ${userId} AND "passwordHash" = ${snapshot.passwordHash}
+  `;
+  if (matched === 0) return false;
+  if (snapshot.totpEnabledAt === undefined && snapshot.totpSecretEnc === undefined) return true;
+  const current = await tx.user.findUnique({
+    where: { id: userId },
+    select: { totpEnabledAt: true, totpSecretEnc: true },
+  });
+  if (!current) return false;
+  if (
+    snapshot.totpEnabledAt !== undefined &&
+    !sameInstant(current.totpEnabledAt, snapshot.totpEnabledAt)
+  ) {
+    return false;
+  }
+  if (
+    snapshot.totpSecretEnc !== undefined &&
+    current.totpSecretEnc !== snapshot.totpSecretEnc
+  ) {
+    return false;
+  }
+  return true;
+}
+
+function sameInstant(a: Date | null, b: Date | null): boolean {
+  if (a === null || b === null) return a === b;
+  return a.getTime() === b.getTime();
 }
 
 /** Manages session rows: creation, access validation, refresh rotation, revocation. */
@@ -27,25 +103,30 @@ export class SessionService {
     userId: string,
     meta: { deviceInfo: string; deviceName: string | null; deviceType: SessionDeviceType; ip: string },
     dek: Buffer | null = null,
+    snapshot?: CredentialSnapshot,
   ): Promise<{ session: Session; tokens: TokenPair }> {
     const pair = this.tokens.generatePair();
     const wraps = dek ? this.crypto.wrapForSession(dek, pair) : { dekWrapped: null, dekRefreshWrapped: null };
-    const session = await this.prisma.session.create({
-      data: {
-        userId,
-        deviceInfo: meta.deviceInfo,
-        deviceName: meta.deviceName,
-        deviceType: meta.deviceType,
-        ip: meta.ip,
-        accessTokenHash: pair.accessHash,
-        accessTokenExpiresAt: pair.accessTokenExpiresAt,
-        refreshTokenHash: pair.refreshHash,
-        refreshTokenExpiresAt: pair.refreshTokenExpiresAt,
-        lastSeenAt: new Date(),
-        dekWrapped: wraps.dekWrapped,
-        dekRefreshWrapped: wraps.dekRefreshWrapped,
-      },
+    const session = await this.prisma.$transaction(async (tx) => {
+      if (snapshot && !(await claimCredentialSnapshot(tx, userId, snapshot))) return null;
+      return tx.session.create({
+        data: {
+          userId,
+          deviceInfo: meta.deviceInfo,
+          deviceName: meta.deviceName,
+          deviceType: meta.deviceType,
+          ip: meta.ip,
+          accessTokenHash: pair.accessHash,
+          accessTokenExpiresAt: pair.accessTokenExpiresAt,
+          refreshTokenHash: pair.refreshHash,
+          refreshTokenExpiresAt: pair.refreshTokenExpiresAt,
+          lastSeenAt: new Date(),
+          dekWrapped: wraps.dekWrapped,
+          dekRefreshWrapped: wraps.dekRefreshWrapped,
+        },
+      });
     });
+    if (!session) throw credentialsChangedError();
     await this.enforceSessionCap(userId, session.id);
     return { session, tokens: pair };
   }

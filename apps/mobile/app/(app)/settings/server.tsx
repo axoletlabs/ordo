@@ -217,6 +217,7 @@ function ServerEditPanel({
   const [probeDetail, setProbeDetail] = useState<string | null>(null);
   const [probeInfo, setProbeInfo] = useState<Pick<ServerInfoDto, "name" | "version"> | null>(null);
   const [busy, setBusy] = useState(false);
+  const submitting = useRef(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rename = useMutation({ mutationFn: serverApi.rename });
 
@@ -287,6 +288,10 @@ function ServerEditPanel({
   };
 
   const submit = async () => {
+    // Two taps can arrive before `busy`/`rename.isPending` re-render the action;
+    // a second rename or switch must not run.
+    if (submitting.current) return;
+    submitting.current = true;
     setNameError("");
     try {
       if (urlDirty) {
@@ -313,6 +318,7 @@ function ServerEditPanel({
       haptics.error();
       setNameError(errorMessage(cause));
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };

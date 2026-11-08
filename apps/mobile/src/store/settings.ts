@@ -7,7 +7,7 @@
 import { create } from "zustand";
 import { normalizeAdBlockAllowedHosts } from "../lib/browser-ad-blocking";
 import { setHapticsEnabled as applyHapticsEnabled } from "../lib/haptics";
-import { patchQuickShareSessionServerUrl, syncQuickShareFlags } from "../lib/share-targets";
+import { syncQuickShareFlags } from "../lib/share-targets";
 import { canonicalizeServerUrl, DEFAULT_SERVER_URL, resolvePersistedServerUrl } from "../lib/hosting";
 import { prefsGet, prefsSet, StorageKeys } from "../lib/storage";
 import type { ThemeMode } from "../theme/theme";
@@ -162,7 +162,6 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
     const next = canonicalizeServerUrl(url) ?? url;
     set({ serverUrl: next });
     await persistSettings({ ...get(), serverUrl: next });
-    void patchQuickShareSessionServerUrl(next);
   },
   setThemeMode: (mode) => {
     set({ themeMode: mode });

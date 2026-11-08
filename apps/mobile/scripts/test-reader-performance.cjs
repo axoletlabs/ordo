@@ -45,6 +45,8 @@ const persistence = compile(path.join(root, 'lib/coalesced-persistence.ts'), {})
       : new Promise(resolve => nativeWrites.push({ key, deleted: true, resolve })),
   };
   const { useAuthStore } = compile(path.join(root, 'store/auth.ts'), {
+    'expo-crypto': { randomUUID: require('node:crypto').randomUUID },
+    '../lib/hosting': { canonicalizeServerUrl: url => url },
     '../lib/coalesced-persistence': persistence,
     '../lib/storage': storage,
     '../lib/share-intake': { shouldAdoptQuickShareSession: () => false },

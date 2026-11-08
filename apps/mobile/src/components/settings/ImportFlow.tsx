@@ -62,6 +62,14 @@ export function ImportFlow({
   const prevStatus = useRef<string | undefined>(undefined);
   /** True after the user dismisses; upload must not reopen the panel. */
   const dismissedRef = useRef(false);
+  /**
+   * Set once the user picks a file or dismisses. The mount read of the saved
+   * job must not reopen an old import (or replace a newer upload) after that.
+   */
+  const claimedRef = useRef(false);
+  /** The server flips ready → committing once; a second tap would 4xx. */
+  const confirmingRef = useRef(false);
+  const intake = useRef<{ status: "idle" | "picking" | "uploading" }>({ status: "idle" });
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [jobId, setJobId] = useState<string | null>(null);
@@ -76,12 +84,17 @@ export function ImportFlow({
   };
 
   useEffect(() => {
+    let alive = true;
     void prefsGet<string>(StorageKeys.IMPORT_JOB).then((id) => {
-      if (id) {
-        setJobId(id);
-        setPhase("active");
-      }
+      if (!alive || claimedRef.current || !id) return;
+      claimedRef.current = true;
+      setJobId(id);
+      setPhase("active");
     });
+    return () => {
+      alive = false;
+      intake.current = { status: "idle" };
+    };
   }, []);
 
   const jobQuery = useQuery({
@@ -103,7 +116,11 @@ export function ImportFlow({
   }, [preview, folders]);
 
   const reset = (cancel = true) => {
+    if (confirmingRef.current || job?.status === "committing") return;
+    claimedRef.current = true;
+    confirmingRef.current = false;
     dismissedRef.current = true;
+    intake.current = { status: "idle" };
     if (cancel && jobId) void importExportApi.cancelImport(jobId).catch(() => undefined);
     persistJob(null);
     setPhase("idle");
@@ -114,45 +131,53 @@ export function ImportFlow({
   };
 
   const pickFile = async () => {
-    const result = await DocumentPicker.getDocumentAsync({
-      multiple: false,
-      copyToCacheDirectory: true,
-      type: [
-        "text/*",
-        "text/html",
-        "text/csv",
-        "application/json",
-        "application/xhtml+xml",
-        "application/octet-stream",
-        "*/*",
-      ],
-    });
-    if (result.canceled) return;
-    const asset = result.assets[0];
-    if (!asset) return;
-    if ((asset.size ?? 0) > IMPORT_EXPORT.MAX_FILE_BYTES) {
-      toast.error("That file is larger than 50 MB.");
-      return;
-    }
-    dismissedRef.current = false;
-    setPhase("uploading");
+    if (intake.current.status !== "idle") return;
+    const attempt: typeof intake.current = { status: "picking" };
+    intake.current = attempt;
+    claimedRef.current = true;
     try {
+      const result = await DocumentPicker.getDocumentAsync({
+        multiple: false,
+        copyToCacheDirectory: true,
+        type: [
+          "text/*",
+          "text/html",
+          "text/csv",
+          "application/json",
+          "application/xhtml+xml",
+          "application/octet-stream",
+          "*/*",
+        ],
+      });
+      if (intake.current !== attempt) return;
+      if (result.canceled) return;
+      const asset = result.assets[0];
+      if (!asset) return;
+      if ((asset.size ?? 0) > IMPORT_EXPORT.MAX_FILE_BYTES) {
+        toast.error("That file is larger than 50 MB.");
+        return;
+      }
+      dismissedRef.current = false;
+      attempt.status = "uploading";
+      setPhase("uploading");
       const { jobId: id } = await importExportApi.uploadImport({
         uri: asset.uri,
         file: asset.file,
         name: asset.name || "import",
         size: asset.size,
       });
-      if (dismissedRef.current) {
+      if (intake.current !== attempt || dismissedRef.current) {
         void importExportApi.cancelImport(id).catch(() => undefined);
         return;
       }
       persistJob(id);
       setPhase("active");
     } catch (err) {
-      if (dismissedRef.current) return;
+      if (intake.current !== attempt || dismissedRef.current) return;
       toast.error(errorMessage(err, "The upload failed."));
       setPhase("idle");
+    } finally {
+      if (intake.current === attempt) intake.current = { status: "idle" };
     }
   };
 
@@ -164,9 +189,12 @@ export function ImportFlow({
         lockedMatches.map((f) => tokenFor(f.id)).filter((t): t is string => Boolean(t)),
       ),
     onSuccess: (updated) => {
-      qc.setQueryData(qk.importJob(jobId as string), updated);
+      qc.setQueryData(qk.importJob(updated.id), updated);
     },
     onError: (err) => toast.error(errorMessage(err, "The import could not be confirmed.")),
+    onSettled: () => {
+      confirmingRef.current = false;
+    },
   });
 
   useEffect(() => {
@@ -189,6 +217,11 @@ export function ImportFlow({
 
   const overlayOpen = phase === "uploading" || phase === "active";
   const busy = job?.status === "committing" || commitMutation.isPending;
+  const confirmImport = () => {
+    if (confirmingRef.current || busy) return;
+    confirmingRef.current = true;
+    commitMutation.mutate();
+  };
   // Mirrors the render chain below so each panel phase swaps with the shared
   // fade-through instead of snapping the surface's height. All fetching
   // placeholders share one key so transient busy states never swap with
@@ -233,7 +266,7 @@ export function ImportFlow({
           ) : jobQuery.isError ? (
             <ErrorState
               message={errorMessage(jobQuery.error, "This import no longer exists.")}
-              onRetry={() => reset(false)}
+              onRetry={() => void jobQuery.refetch()}
             />
           ) : job?.status === "parsing" ? (
             <BusyState title="Reading file" subtitle={job.fileName || undefined} />
@@ -259,7 +292,7 @@ export function ImportFlow({
               onPolicy={setPolicy}
               onAtomic={setAtomic}
               onAdvanced={() => setAdvanced((v) => !v)}
-              onConfirm={() => commitMutation.mutate()}
+              onConfirm={confirmImport}
               onDiscard={() => reset(true)}
               confirming={busy}
             />

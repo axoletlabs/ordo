@@ -44,6 +44,7 @@ import { detectAndParse } from "./parsers/index.js";
 import type { InvalidRow, ParsedEntry, ParsedFolder } from "./parsers/parse-utils.js";
 import { flattenFolderName, safeHostname } from "./parsers/parse-utils.js";
 import { LibraryCryptoService } from "../crypto/library-crypto.service.js";
+import { LibraryKeyService } from "../crypto/library-key.service.js";
 
 interface FolderRow {
   id: string;
@@ -89,6 +90,8 @@ interface CommitPlan {
 @Injectable()
 export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
   private readonly logger = new Logger(ImportService.name);
+  /** Any job created before this process existed may have been interrupted. */
+  private readonly bootAt = new Date();
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
@@ -96,10 +99,14 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
     private readonly tokens: TokenService,
     private readonly extraction: ExtractionService,
     private readonly crypto: LibraryCryptoService,
+    private readonly keys: LibraryKeyService,
   ) {}
 
-  onApplicationBootstrap(): void {
-    void this.sweep();
+  async onApplicationBootstrap(): Promise<void> {
+    // Nest awaits this hook before accepting requests. An old ready job may
+    // legitimately be committed after restart; recovery must finish first.
+    await this.recoverInterrupted();
+    await this.sweep();
     this.sweepTimer = setInterval(() => void this.sweep(), IMPORT_EXPORT.SWEEP_MS);
     this.sweepTimer.unref?.();
   }
@@ -109,10 +116,42 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
     this.sweepTimer = null;
   }
 
-  /** Delete jobs past their expiry. */
+  /**
+   * A parse or commit only ever runs inside the process that created it, so
+   * any row still `parsing` / `committing` at boot belongs to a previous run
+   * that died. Those states have no resumable input (the upload bytes and the
+   * in-flight transaction are gone), so fail them explicitly instead of
+   * leaving clients polling until the TTL expires.
+   */
+  async recoverInterrupted(): Promise<void> {
+    try {
+      const result = await this.prisma.importJob.updateMany({
+        // Only interrupted work from a previous process can be recovered.
+        where: {
+          status: { in: ["parsing", "committing"] },
+          createdAt: { lt: this.bootAt },
+        },
+        data: {
+          status: "failed",
+          failure: "The server restarted before this import finished. Upload the file again.",
+          entries: null,
+        },
+      });
+      if (result.count > 0) {
+        this.logger.warn(`Marked ${result.count} interrupted import job(s) as failed`);
+      }
+    } catch (err) {
+      this.logger.warn(`Import recovery failed: ${(err as Error).message}`);
+      throw err;
+    }
+  }
+
+  /** Delete jobs past their expiry (never a commit that is still running). */
   async sweep(): Promise<void> {
     try {
-      await this.prisma.importJob.deleteMany({ where: { expiresAt: { lt: new Date() } } });
+      await this.prisma.importJob.deleteMany({
+        where: { expiresAt: { lt: new Date() }, status: { not: "committing" } },
+      });
     } catch (err) {
       this.logger.warn(`Import job sweep failed: ${(err as Error).message}`);
     }
@@ -128,28 +167,44 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
         expiresAt: new Date(Date.now() + IMPORT_EXPORT.JOB_TTL_MS),
       },
     });
-    void this.crypto.runAsync(this.crypto.snapshot(), () => this.parseJob(job.id, userId, text));
+    this.continueJob(userId, job.id, "parsing", () => this.parseJob(job.id, userId, text));
     return { jobId: job.id };
   }
 
   async getJob(userId: string, jobId: string): Promise<ImportJobDto> {
-    const job = await this.prisma.importJob.findFirst({ where: { id: jobId, userId } });
+    let job = await this.prisma.importJob.findFirst({ where: { id: jobId, userId } });
     if (!job) throw new AppError(ErrorCode.IMPORT_NOT_FOUND, "This import no longer exists.");
-    if (job.expiresAt < new Date()) {
-      await this.prisma.importJob.deleteMany({ where: { id: job.id } }).catch(() => undefined);
-      throw new AppError(ErrorCode.IMPORT_NOT_FOUND, "This import expired. Upload the file again.");
+    if (job.expiresAt < new Date() && job.status !== "committing") {
+      const deleted = await this.prisma.importJob.deleteMany({
+        where: { id: job.id, userId, expiresAt: { lt: new Date() }, status: { not: "committing" } },
+      });
+      if (deleted.count > 0) {
+        throw new AppError(ErrorCode.IMPORT_NOT_FOUND, "This import expired. Upload the file again.");
+      }
+      // A claim may have refreshed its TTL after the read above.
+      job = await this.prisma.importJob.findFirst({ where: { id: jobId, userId } });
+      if (!job) throw new AppError(ErrorCode.IMPORT_NOT_FOUND, "This import no longer exists.");
     }
     return toJobDto(this.crypto.openImportJob(job));
   }
 
   /** Delete a staged or finished job. */
   async cancel(userId: string, jobId: string): Promise<void> {
+    // Conditional delete closes the read-then-delete race with commit(): if
+    // the claim wins, this deletes nothing; if this wins, the claim sees no
+    // ready row. Either way the job cannot be removed mid-commit.
+    const deleted = await this.prisma.importJob.deleteMany({
+      where: { id: jobId, userId, status: { not: "committing" } },
+    });
+    if (deleted.count > 0) return;
     const job = await this.prisma.importJob.findFirst({ where: { id: jobId, userId } });
     if (!job) throw new AppError(ErrorCode.IMPORT_NOT_FOUND, "This import no longer exists.");
-    if (job.status === "committing") {
-      throw new AppError(ErrorCode.IMPORT_INVALID_STATE, "This import is already running.");
+    if (job.status !== "committing") {
+      // Finished between the conditional delete and this read; remove it now.
+      await this.prisma.importJob.deleteMany({ where: { id: job.id, userId, status: { not: "committing" } } });
+      return;
     }
-    await this.prisma.importJob.deleteMany({ where: { id: job.id } });
+    throw new AppError(ErrorCode.IMPORT_INVALID_STATE, "This import is already running.");
   }
 
   /**
@@ -163,8 +218,10 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
     folderTokens: string[],
   ): Promise<ImportJobDto> {
     const claimed = await this.prisma.importJob.updateMany({
-      where: { id: jobId, userId, status: "ready" },
-      data: { status: "committing" },
+      where: { id: jobId, userId, status: "ready", expiresAt: { gt: new Date() } },
+      // Refresh the TTL: the commit is now active and must outlive the staged
+      // preview window without the sweeper deleting it mid-run.
+      data: { status: "committing", expiresAt: new Date(Date.now() + IMPORT_EXPORT.JOB_TTL_MS) },
     });
     if (claimed.count === 0) {
       const job = await this.prisma.importJob.findFirst({ where: { id: jobId, userId } });
@@ -174,10 +231,18 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
         `This import is ${job.status}; only a previewed import can be confirmed.`,
       );
     }
-    void this.crypto.runAsync(this.crypto.snapshot(), () =>
-      this.runCommit(jobId, userId, input, folderTokens),
-    );
+    this.continueJob(userId, jobId, "committing", () => this.runCommit(jobId, userId, input, folderTokens));
     return this.getJob(userId, jobId);
+  }
+
+  private continueJob(userId: string, jobId: string, status: "parsing" | "committing", work: () => Promise<void>): void {
+    void this.keys.runWithCurrentKey(userId, this.crypto.snapshot(), work).catch(async (error: unknown) => {
+      this.logger.error(`Import ${jobId} could not start: ${(error as Error).message}`);
+      await this.prisma.importJob.updateMany({
+        where: { id: jobId, userId, status },
+        data: { status: "failed", entries: null, failure: "The import could not be started. Upload the file again." },
+      });
+    }).catch((error: unknown) => this.logger.error(`Import failure could not be recorded: ${(error as Error).message}`));
   }
 
   // --- parsing + preview ---
@@ -192,8 +257,8 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
         parsed.invalid,
         parsed.folders,
       );
-      await this.prisma.importJob.update({
-        where: { id: jobId },
+      await this.prisma.importJob.updateMany({
+        where: { id: jobId, status: "parsing" },
         data: this.crypto.sealImportJob(userId, jobId, {
           status: "ready",
           sourceFormat: parsed.format,
@@ -210,7 +275,7 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
         this.logger.warn(`Import parse ${jobId} failed: ${(err as Error)?.message}`);
       }
       await this.prisma.importJob
-        .update({ where: { id: jobId }, data: { status: "failed", failure: message } })
+        .updateMany({ where: { id: jobId, status: "parsing" }, data: this.crypto.sealImportJob(userId, jobId, { status: "failed", failure: message }) })
         .catch(() => undefined);
     }
   }
@@ -303,7 +368,9 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
   ): Promise<void> {
     try {
       const job = await this.prisma.importJob.findUnique({ where: { id: jobId } });
-      if (!job?.entries) throw new AppError(ErrorCode.IMPORT_NOT_FOUND, "This import no longer exists.");
+      if (job?.status !== "committing" || !job.entries) {
+        throw new AppError(ErrorCode.IMPORT_NOT_FOUND, "This import no longer exists.");
+      }
       const opened = this.crypto.openImportJob(job);
       const staged = JSON.parse(opened.entries as string) as StagedPayload;
 
@@ -316,11 +383,11 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
       }
 
       const result = input.atomic
-        ? await this.commitAtomic(userId, input.duplicatePolicy, plan)
+        ? await this.commitAtomic(userId, input.duplicatePolicy, plan, jobId)
         : await this.commitBestEffort(userId, input.duplicatePolicy, plan);
 
-      await this.prisma.importJob.update({
-        where: { id: jobId },
+      if (!input.atomic) await this.prisma.importJob.updateMany({
+        where: { id: jobId, status: "committing" },
         data: this.crypto.sealImportJob(userId, jobId, {
           status: "completed",
           result: JSON.stringify(result),
@@ -347,7 +414,7 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
         this.logger.error(`Import commit ${jobId} failed: ${(err as Error)?.stack ?? err}`);
       }
       await this.prisma.importJob
-        .update({ where: { id: jobId }, data: { status: "failed", failure: message, entries: null } })
+        .updateMany({ where: { id: jobId, status: "committing" }, data: this.crypto.sealImportJob(userId, jobId, { status: "failed", failure: message, entries: null }) })
         .catch(() => undefined);
     }
   }
@@ -482,12 +549,13 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
     userId: string,
     policy: DuplicatePolicy,
     plan: CommitPlan,
+    jobId: string,
   ): Promise<ImportResultDto> {
     return this.prisma.$transaction(async (tx) => {
       const newFolderIds = await this.createFolders(tx, userId, plan.foldersToCreate);
       await this.writeBookmarks(tx, userId, plan, newFolderIds);
       await this.applyTagLinks(tx, userId, plan);
-      return {
+      const result: ImportResultDto = {
         imported: plan.creates.length,
         updated: plan.updates.length,
         skipped: plan.skipped,
@@ -497,6 +565,21 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
         duplicatePolicy: policy,
         failures: plan.failed.slice(0, IMPORT_EXPORT.MAX_INVALID_SAMPLES),
       };
+      // The result and imported rows form one durable transition. A crash
+      // after committing rows must not leave an apparently failed atomic job.
+      const completed = await tx.importJob.updateMany({
+        where: { id: jobId, userId, status: "committing" },
+        data: this.crypto.sealImportJob(userId, jobId, {
+          status: "completed",
+          result: JSON.stringify(result),
+          entries: null,
+          expiresAt: new Date(Date.now() + IMPORT_EXPORT.JOB_TTL_MS),
+        }),
+      });
+      if (completed.count !== 1) {
+        throw new AppError(ErrorCode.IMPORT_INVALID_STATE, "This import is no longer running.");
+      }
+      return result;
     });
   }
 
@@ -584,11 +667,13 @@ export class ImportService implements OnApplicationBootstrap, OnModuleDestroy {
           publishedAt: entry.publishedAt ? new Date(entry.publishedAt) : null,
           readingTimeMinutes: entry.readingTimeMinutes,
           readProgress: entry.readProgress,
-          completedAt: entry.completedAt
-            ? new Date(entry.completedAt)
-            : entry.isRead
-              ? (createdAt ?? now)
-              : null,
+          // isRead is the source of truth: an unread import never carries a
+          // completion timestamp, even when the source file includes both.
+          completedAt: entry.isRead
+            ? entry.completedAt
+              ? new Date(entry.completedAt)
+              : (createdAt ?? now)
+            : null,
           isRead: entry.isRead,
           fetchStatus: "pending",
           ...(createdAt ? { createdAt } : {}),

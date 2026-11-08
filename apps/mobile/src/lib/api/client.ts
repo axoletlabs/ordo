@@ -141,7 +141,8 @@ function noteUnreachable(url: string, owner?: SessionScope) {
 async function rawFetch(url: string, init: RequestInit, timeoutMs = REQUEST_TIMEOUT_MS, owner?: SessionScope): Promise<Response> {
   const timeout = createTimeoutSignal(timeoutMs);
   const userSignal = init.signal;
-  const signal = userSignal ? mergeAbortSignals([userSignal, timeout.signal]) : timeout.signal;
+  const merged = userSignal ? mergeAbortSignals([userSignal, timeout.signal]) : null;
+  const signal = merged?.signal ?? timeout.signal;
   try {
     const res = await raceDeadline(fetch(url, { ...init, signal }), timeoutMs + 2_000);
     if (!res.ok) throw await parseError(res);
@@ -167,6 +168,7 @@ async function rawFetch(url: string, init: RequestInit, timeoutMs = REQUEST_TIME
     );
   } finally {
     timeout.clear();
+    merged?.dispose();
   }
 }
 

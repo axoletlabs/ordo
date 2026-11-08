@@ -33,24 +33,29 @@ export class FolderTokenService implements OnApplicationBootstrap, OnModuleDestr
 
   async setPassword(folderId: string, password: string, lockType: FolderLockType): Promise<void> {
     const passwordHash = await bcrypt.hash(password, FOLDER_BCRYPT_COST);
-    await this.prisma.folder.update({
-      where: { id: folderId },
-      data: {
-        passwordHash,
-        lockType,
-        pinLength: lockType === "pin" && isFolderPinLength(password.length) ? password.length : null,
-      },
-    });
-    // invalidate any outstanding tokens for this folder
-    await this.prisma.folderToken.deleteMany({ where: { folderId } });
+    // Change the lock and invalidate outstanding unlock tokens atomically: a
+    // crash after the password write must never leave old tokens valid.
+    await this.prisma.$transaction([
+      this.prisma.folder.update({
+        where: { id: folderId },
+        data: {
+          passwordHash,
+          lockType,
+          pinLength: lockType === "pin" && isFolderPinLength(password.length) ? password.length : null,
+        },
+      }),
+      this.prisma.folderToken.deleteMany({ where: { folderId } }),
+    ]);
   }
 
   async removePassword(folderId: string): Promise<void> {
-    await this.prisma.folder.update({
-      where: { id: folderId },
-      data: { passwordHash: null, lockType: null, pinLength: null },
-    });
-    await this.prisma.folderToken.deleteMany({ where: { folderId } });
+    await this.prisma.$transaction([
+      this.prisma.folder.update({
+        where: { id: folderId },
+        data: { passwordHash: null, lockType: null, pinLength: null },
+      }),
+      this.prisma.folderToken.deleteMany({ where: { folderId } }),
+    ]);
   }
 
   async assertPassword(folder: Folder, password: string): Promise<void> {
@@ -67,12 +72,18 @@ export class FolderTokenService implements OnApplicationBootstrap, OnModuleDestr
   async unlock(folder: Folder, password: string): Promise<{ token: string; expiresIn: number }> {
     await this.assertPassword(folder, password);
     const { token, hash } = this.tokens.generateFolderToken();
-    await this.prisma.folderToken.create({
-      data: {
-        folderId: folder.id,
-        tokenHash: hash,
-        expiresAt: new Date(Date.now() + TOKEN_TTL.FOLDER_MS),
-      },
+    await this.prisma.$transaction(async (tx) => {
+      const current = await tx.folder.findUnique({ where: { id: folder.id } });
+      if (!current || current.passwordHash !== folder.passwordHash) {
+        throw new AppError(ErrorCode.INVALID_FOLDER_PASSWORD, "The folder lock changed. Try again.");
+      }
+      await tx.folderToken.create({
+        data: {
+          folderId: folder.id,
+          tokenHash: hash,
+          expiresAt: new Date(Date.now() + TOKEN_TTL.FOLDER_MS),
+        },
+      });
     });
     return { token, expiresIn: Math.round(TOKEN_TTL.FOLDER_MS / 1000) };
   }

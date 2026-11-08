@@ -16,7 +16,8 @@
     "db:generate": "turbo run db:generate",
     "deploy:server": "node scripts/deploy-server.js",
     "deploy:server:update": "node scripts/deploy-server.js update",
-    "clean": "turbo run clean && rimraf node_modules"
+    "clean": "turbo run clean && rimraf node_modules",
+    "test:state": "node scripts/test-ci-apk-state.cjs && pnpm --filter @ordo/server test:state && pnpm --filter @ordo/mobile test:state"
   },
   "devDependencies": {
     "eslint": "^10.8.0",

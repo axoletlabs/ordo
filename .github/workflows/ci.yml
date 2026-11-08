@@ -196,6 +196,9 @@ jobs:
           pnpm --filter @ordo/server build
           pnpm --filter @ordo/server test:bookmark-title
 
+      - name: Verify guarded state transitions and crash recovery
+        run: pnpm test:state
+
       - name: Verify diagnostics privacy, recording and exports
         run: pnpm --filter @ordo/mobile test:diagnostics
 
@@ -217,6 +220,7 @@ jobs:
         run: |
           pnpm --filter @ordo/mobile test:diagnostics-native
           pnpm --filter @ordo/mobile test:android-native
+          pnpm --filter @ordo/mobile test:state-native
 
       - name: Verify animated style synchronization
         run: pnpm --filter @ordo/mobile test:animations

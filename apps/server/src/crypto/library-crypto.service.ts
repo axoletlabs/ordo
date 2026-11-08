@@ -36,6 +36,18 @@ interface CryptoStore {
 @Injectable()
 export class LibraryCryptoService {
   private readonly als = new AsyncLocalStorage<CryptoStore>();
+  private readonly legacyTransitions = new Map<string, Promise<void>>();
+
+  /** Serialize key installation with work that may still hold a null DEK. */
+  withLegacyTransition<T>(userId: string, work: () => Promise<T>): Promise<T> {
+    const result = (this.legacyTransitions.get(userId) ?? Promise.resolve()).then(work);
+    const settled = result.then(() => {}, () => {});
+    this.legacyTransitions.set(userId, settled);
+    void settled.then(() => {
+      if (this.legacyTransitions.get(userId) === settled) this.legacyTransitions.delete(userId);
+    });
+    return result;
+  }
 
   snapshot(): Buffer | null {
     const dek = this.currentDek();

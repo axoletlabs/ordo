@@ -21,7 +21,7 @@ import { AppError } from "../common/errors/app-error.js";
 import { equalHex, hashEmailOtp } from "../common/utils/tokens.js";
 import { APP_CONFIG } from "../config/config.module.js";
 import type { AppConfig } from "../config/config.module.js";
-import { SessionService } from "./session.service.js";
+import { SessionService, claimCredentialSnapshot, credentialSnapshot, credentialsChangedError } from "./session.service.js";
 import { TokenService } from "./token.service.js";
 import { MailService } from "./mail.service.js";
 import { RateLimitService } from "../common/rate-limit/rate-limit.service.js";
@@ -113,6 +113,7 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
           dekPasswordWrapped: keyMaterial.dekPasswordWrapped,
           dekServerWrapped: keyMaterial.dekServerWrapped,
           dataEncryptionVersion: keyMaterial.dataEncryptionVersion,
+          libraryState: keyMaterial.libraryState,
         },
       });
     } catch (err) {
@@ -165,22 +166,43 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
 
     this.rateLimit.clearLogin({ accountKey: email, userId: user.id });
     this.assertEmailVerified(user);
+    // Snapshot the credential state the password was verified against. Slow
+    // work below (scrypt/DEK provisioning) must not be allowed to mint a
+    // session if a reset/change or MFA toggle landed meanwhile.
+    const verified = credentialSnapshot(user);
 
     const provisioned = await this.libraryKeys.provisionWithPassword(user, input.password);
+    // Re-read for the response DTO (final encryption state), but keep guarding
+    // on the verified snapshot rather than this newer read.
+    const current = await this.prisma.user.findUnique({ where: { id: user.id } });
+    if (!current) {
+      throw new AppError(ErrorCode.UNAUTHORIZED, "Account not found.");
+    }
+    this.assertEmailVerified(current);
 
-    if (this.mfa.isEnabled(user)) {
-      return this.mfa.createLoginChallenge(user, provisioned.dek);
+    if (this.mfa.isEnabled(current)) {
+      return this.mfa.createLoginChallenge(current, provisioned.dek, verified);
     }
 
-    const { session, tokens } = await this.sessions.create(user.id, meta, provisioned.dek);
-    return this.buildAuthResponse(user, session, tokens);
+    const { session, tokens } = await this.sessions.create(
+      current.id,
+      meta,
+      provisioned.dek,
+      verified,
+    );
+    return this.buildAuthResponse(current, session, tokens);
   }
 
   async completeMfaLogin(challengeToken: string, code: string, meta: ClientMeta): Promise<AuthResponse> {
     const { user, dek } = await this.mfa.consumeLoginCode(challengeToken, code);
     this.assertEmailVerified(user);
     this.rateLimit.clearLogin({ accountKey: user.email, userId: user.id });
-    const { session, tokens } = await this.sessions.create(user.id, meta, dek);
+    const { session, tokens } = await this.sessions.create(
+      user.id,
+      meta,
+      dek,
+      credentialSnapshot(user),
+    );
     return this.buildAuthResponse(user, session, tokens);
   }
 
@@ -196,7 +218,12 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
     const { user, dek } = await this.mfa.consumeEmailRecovery(challengeToken, otp);
     this.assertEmailVerified(user);
     this.rateLimit.clearLogin({ accountKey: user.email, userId: user.id });
-    const { session, tokens } = await this.sessions.create(user.id, meta, dek);
+    const { session, tokens } = await this.sessions.create(
+      user.id,
+      meta,
+      dek,
+      credentialSnapshot(user),
+    );
     return this.buildAuthResponse(user, session, tokens);
   }
 
@@ -272,16 +299,27 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
       throw this.invalidOtp();
     }
     const record = await this.matchOtp(user.id, token, EMAIL_OTP_PURPOSE.VERIFY);
-    await this.prisma.$transaction([
-      this.prisma.emailVerificationToken.update({
-        where: { id: record.id },
-        data: { consumedAt: new Date() },
-      }),
-      this.prisma.user.update({
+    const now = new Date();
+    const verified = await this.prisma.$transaction(async (tx) => {
+      const consumed = await tx.emailVerificationToken.updateMany({
+        where: {
+          id: record.id,
+          consumedAt: null,
+          attempts: { lt: EMAIL_OTP.MAX_ATTEMPTS },
+          expiresAt: { gt: now },
+        },
+        data: { consumedAt: now },
+      });
+      if (consumed.count === 0) return false;
+      await tx.user.update({
         where: { id: user.id },
-        data: { emailVerifiedAt: new Date() },
-      }),
-    ]);
+        data: { emailVerifiedAt: user.emailVerifiedAt ?? now },
+      });
+      return true;
+    });
+    if (!verified) {
+      throw this.invalidOtp();
+    }
   }
 
   async resendVerification(email: string): Promise<void> {
@@ -324,8 +362,7 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
       throw new AppError(ErrorCode.EMAIL_ALREADY_EXISTS, "An account with this email already exists.");
     }
 
-    await this.prisma.user.update({ where: { id: userId }, data: { pendingEmail: newEmail } });
-    await this.createAndSendOtp(userId, newEmail, EMAIL_OTP_PURPOSE.EMAIL_CHANGE);
+    await this.createAndSendOtp(userId, newEmail, EMAIL_OTP_PURPOSE.EMAIL_CHANGE, user);
     await this.mail.sendEmailChangeNotice(user.email, newEmail).catch(() => undefined);
   }
 
@@ -364,7 +401,12 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
         // Claim the OTP and swap the address atomically: a concurrent verify or
         // resend can only ever win once, and the target must still be pending.
         const consumed = await tx.emailVerificationToken.updateMany({
-          where: { id: record.id, consumedAt: null },
+          where: {
+            id: record.id,
+            consumedAt: null,
+            attempts: { lt: EMAIL_OTP.MAX_ATTEMPTS },
+            expiresAt: { gt: new Date() },
+          },
           data: { consumedAt: new Date() },
         });
         if (consumed.count === 0) return null;
@@ -373,6 +415,9 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
           data: { email: pendingEmail, pendingEmail: null, emailVerifiedAt: new Date() },
         });
         if (changed.count === 0) return null;
+        await tx.emailVerificationToken.deleteMany({
+          where: { userId, purpose: { not: EMAIL_OTP_PURPOSE.EMAIL_CHANGE } },
+        });
         return tx.user.findUnique({ where: { id: userId } });
       });
       if (!claimed) {
@@ -428,24 +473,50 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
     }
     await this.mfa.assertStepUp(user, mfaCode);
     const passwordHash = await bcrypt.hash(newPassword, BCRYPT_COST);
-    const dek =
-      this.crypto.snapshot() ??
-      (user.dekPasswordWrapped && user.dekKdfSalt
-        ? await this.crypto.unwrapPassword(user.dekPasswordWrapped, currentPassword, user.dekKdfSalt)
-        : null);
+    let dek: Buffer | null = null;
+    if (this.crypto.snapshot()) {
+      dek = this.crypto.snapshot();
+    } else if (user.dekPasswordWrapped && user.dekKdfSalt) {
+      try {
+        dek = await this.crypto.unwrapPassword(user.dekPasswordWrapped, currentPassword, user.dekKdfSalt);
+      } catch {
+        // The password verified a moment ago, so a failed unwrap means another
+        // credential write (reset/change) landed in between.
+        throw credentialsChangedError();
+      }
+    }
     // Store the new hash and the re-wrapped library key in one write; a
     // password change that landed without its re-wrap would lock the library.
-    const updated = await this.prisma.user.update({
-      where: { id: userId },
-      data: {
-        passwordHash,
-        ...(dek ? await this.libraryKeys.wrapPasswordMaterial(dek, newPassword) : {}),
-      },
+    // The write is guarded on the hash we verified, and revoking every session
+    // and every pending MFA login challenge happens in the same transaction:
+    // a crash can't leave a session or a half-finished sign-in alive under the
+    // old password, and a concurrent stale change can't clobber a newer one.
+    const keyMaterial = dek ? await this.libraryKeys.wrapPasswordMaterial(dek, newPassword) : {};
+    const applied = await this.prisma.$transaction(async (tx) => {
+      const changed = await tx.user.updateMany({
+        where: {
+          id: userId, passwordHash: user.passwordHash,
+          dataEncryptionVersion: user.dataEncryptionVersion,
+          dekPasswordWrapped: user.dekPasswordWrapped,
+        },
+        data: { passwordHash, ...keyMaterial },
+      });
+      if (changed.count === 0) return null;
+      await tx.session.deleteMany({ where: { userId } });
+      await tx.mfaChallenge.deleteMany({ where: { userId } });
+      return tx.user.findUnique({ where: { id: userId } });
     });
-    // Sign out everywhere (including this session) and start fresh.
-    await this.sessions.revokeAll(userId);
-    const { session, tokens } = await this.sessions.create(updated.id, meta, dek);
-    return this.buildAuthResponse(updated, session, tokens);
+    if (!applied) throw credentialsChangedError();
+    // Start fresh on this device, guarded on the credential row this
+    // transaction committed (not a later re-read a concurrent reset could have
+    // replaced).
+    const { session, tokens } = await this.sessions.create(
+      applied.id,
+      meta,
+      dek,
+      credentialSnapshot(applied),
+    );
+    return this.buildAuthResponse(applied, session, tokens);
   }
 
   async deleteAccount(
@@ -506,37 +577,74 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
     // Re-wrap the library key alongside the new hash in the same transaction so
     // the two can never disagree about which password opens the library.
     const keyMaterial = dek ? await this.libraryKeys.wrapPasswordMaterial(dek, newPassword) : {};
-    await this.prisma.$transaction([
-      this.prisma.emailVerificationToken.update({
-        where: { id: record.id },
-        data: { consumedAt: new Date() },
-      }),
-      this.prisma.user.update({
-        where: { id: user.id },
+    const now = new Date();
+    const reset = await this.prisma.$transaction(async (tx) => {
+      // One conditional write consumes the code: two parallel requests with
+      // the same OTP can no longer both reset the password, and a code retired
+      // by the attempt cap (or expired since the match) cannot be spent.
+      const consumed = await tx.emailVerificationToken.updateMany({
+        where: {
+          id: record.id,
+          consumedAt: null,
+          attempts: { lt: EMAIL_OTP.MAX_ATTEMPTS },
+          expiresAt: { gt: now },
+        },
+        data: { consumedAt: now },
+      });
+      if (consumed.count === 0) return false;
+      // Guard the write on the hash we read: a reset racing a signed-in
+      // password change must not overwrite the newer credential/wrap pair.
+      const changed = await tx.user.updateMany({
+        where: {
+          id: user.id, passwordHash: user.passwordHash, email: user.email,
+          dataEncryptionVersion: user.dataEncryptionVersion,
+          dekPasswordWrapped: user.dekPasswordWrapped,
+        },
         data: {
           passwordHash,
-          emailVerifiedAt: user.emailVerifiedAt ?? new Date(),
+          emailVerifiedAt: user.emailVerifiedAt ?? now,
           ...keyMaterial,
         },
-      }),
-    ]);
-    await this.sessions.revokeAll(user.id);
+      });
+      if (changed.count === 0) return false;
+      // Revoke old sessions and every pending MFA sign-in in the same write: a
+      // crash between the password update and revocation would leave stolen
+      // sessions — or a challenge carrying the old DEK stash — valid.
+      await tx.session.deleteMany({ where: { userId: user.id } });
+      await tx.mfaChallenge.deleteMany({ where: { userId: user.id } });
+      return true;
+    });
+    if (!reset) throw this.invalidOtp();
   }
 
   private async createAndSendOtp(
     userId: string,
     email: string,
     purpose: EmailOtpPurpose,
+    emailChangeSnapshot?: User,
   ): Promise<void> {
-    await this.prisma.emailVerificationToken.deleteMany({ where: { userId, purpose } });
     const token = this.tokens.generateVerificationToken();
-    await this.prisma.emailVerificationToken.create({
-      data: {
-        userId,
-        purpose,
-        token: this.hashOtp(userId, token, this.otpScope(purpose, email)),
-        expiresAt: new Date(Date.now() + EMAIL_OTP.TTL_MS),
-      },
+    // Replace the previous code in one transaction: two concurrent resends
+    // must not leave two live codes behind (the user's newest email would
+    // otherwise be matched against whichever row happened to be newest).
+    await this.prisma.$transaction(async (tx) => {
+      if (emailChangeSnapshot) {
+        if (!(await claimCredentialSnapshot(tx, userId, credentialSnapshot(emailChangeSnapshot)))) throw credentialsChangedError();
+        await tx.user.update({ where: { id: userId }, data: { pendingEmail: email } });
+      }
+      const current = await tx.user.findUnique({ where: { id: userId }, select: { email: true, pendingEmail: true } });
+      if (!current || (purpose === EMAIL_OTP_PURPOSE.EMAIL_CHANGE ? current.pendingEmail : current.email) !== email) {
+        throw this.invalidOtp();
+      }
+      await tx.emailVerificationToken.deleteMany({ where: { userId, purpose } });
+      await tx.emailVerificationToken.create({
+        data: {
+          userId,
+          purpose,
+          token: this.hashOtp(userId, token, this.otpScope(purpose, email)),
+          expiresAt: new Date(Date.now() + EMAIL_OTP.TTL_MS),
+        },
+      });
     });
     try {
       if (purpose === EMAIL_OTP_PURPOSE.PASSWORD_RESET) {
@@ -577,18 +685,35 @@ export class AuthService implements OnApplicationBootstrap, OnModuleDestroy {
     if (!record || record.expiresAt < new Date()) {
       throw this.invalidOtp();
     }
+    if (record.attempts >= EMAIL_OTP.MAX_ATTEMPTS) {
+      // A crash between counting the last wrong guess and retiring the row must
+      // not reopen the counter for another guess.
+      await this.prisma.emailVerificationToken
+        .updateMany({ where: { id: record.id, consumedAt: null }, data: { consumedAt: new Date() } })
+        .catch(() => undefined);
+      throw this.invalidOtp();
+    }
     if (!equalHex(this.hashOtp(userId, otp, scope), record.token)) {
-      const attempts = record.attempts + 1;
-      await this.prisma.emailVerificationToken.update({
-        where: { id: record.id },
-        data:
-          attempts >= EMAIL_OTP.MAX_ATTEMPTS
-            ? { attempts, consumedAt: new Date() }
-            : { attempts },
-      });
+      await this.recordOtpFailure(record.id);
       throw this.invalidOtp();
     }
     return record;
+  }
+
+  /**
+   * Count a wrong code atomically. A read-modify-write would let parallel
+   * guesses all persist attempts = 1 and dodge MAX_ATTEMPTS, so increment in
+   * the database and retire the token once the shared counter reaches the cap.
+   */
+  private async recordOtpFailure(id: string): Promise<void> {
+    await this.prisma.emailVerificationToken.updateMany({
+      where: { id, consumedAt: null },
+      data: { attempts: { increment: 1 } },
+    });
+    await this.prisma.emailVerificationToken.updateMany({
+      where: { id, consumedAt: null, attempts: { gte: EMAIL_OTP.MAX_ATTEMPTS } },
+      data: { consumedAt: new Date() },
+    });
   }
 
   /**

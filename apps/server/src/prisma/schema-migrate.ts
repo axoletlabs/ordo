@@ -127,10 +127,18 @@ export function splitSqlStatements(sql: string): string[] {
 }
 
 async function applyMigration(client: SchemaSqlClient, migration: PrismaMigrationFile): Promise<void> {
-  for (const statement of splitSqlStatements(migration.sql)) {
-    await client.$executeRawUnsafe(statement);
-  }
-  await markApplied(client, migration);
+  // Apply every statement and record the migration in one transaction. Without
+  // this a crash mid-file leaves unmarked DDL behind, and the next boot either
+  // fails on the already-created objects or baselines a half-built schema.
+  await client.$transaction(
+    async (tx) => {
+      for (const statement of splitSqlStatements(migration.sql)) {
+        await tx.$executeRawUnsafe(statement);
+      }
+      await markApplied(tx, migration);
+    },
+    { timeout: 60_000 },
+  );
 }
 
 async function markApplied(client: SchemaSqlClient, migration: PrismaMigrationFile): Promise<void> {

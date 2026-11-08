@@ -44,23 +44,25 @@ export function raceDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
   return Promise.race([promise, deadline]).finally(() => clearTimeout(timer!));
 }
 
-export function mergeAbortSignals(signals: AbortSignal[]): AbortSignal {
+export function mergeAbortSignals(signals: AbortSignal[]): { signal: AbortSignal; dispose: () => void } {
   const present = signals.filter((signal) => signal != null);
+  const noop = () => {};
   if (present.length === 0) {
-    return new AbortController().signal;
+    return { signal: new AbortController().signal, dispose: noop };
   }
-  if (present.length === 1) return present[0]!;
+  if (present.length === 1) return { signal: present[0]!, dispose: noop };
 
   const controller = new AbortController();
-  const abort = () => controller.abort();
+  const dispose = () => present.forEach(signal => signal.removeEventListener("abort", abort));
+  const abort = () => { controller.abort(); dispose(); };
   for (const signal of present) {
     if (signal.aborted) {
-      controller.abort();
-      return controller.signal;
+      abort();
+      return { signal: controller.signal, dispose };
     }
     signal.addEventListener("abort", abort, { once: true });
   }
-  return controller.signal;
+  return { signal: controller.signal, dispose };
 }
 
 export function createTimeoutSignal(ms: number): {

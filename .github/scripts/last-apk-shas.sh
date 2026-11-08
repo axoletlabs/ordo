@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Print unique head SHAs of the most recent successful build_apk jobs on the
+# Print unique head SHAs of the most recent successful APK publishing jobs on the
 # given branch, newest first. Optional second arg is the max count (default 3).
 set -euo pipefail
 
@@ -18,8 +18,8 @@ for page in 1 2 3 4 5; do
   fi
   while read -r id; do
     [[ -z "$id" ]] && continue
-    conclusion="$(gh api "repos/${REPO}/actions/runs/${id}/jobs" --jq '[.jobs[] | select(.name == "build_apk") | .conclusion] | .[0] // empty')"
-    if [[ "$conclusion" != "success" ]]; then
+    state="$(bash "$SCRIPT_DIR/apk-run-state.sh" "$id")"
+    if [[ "$state" != "built" ]]; then
       continue
     fi
     sha="$(gh api "repos/${REPO}/actions/runs/${id}" --jq .head_sha)"

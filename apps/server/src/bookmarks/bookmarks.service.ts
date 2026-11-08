@@ -392,6 +392,7 @@ export class BookmarksService implements OnApplicationBootstrap {
     bookmarkId: string,
     changes: UpdateBookmarkInput,
     tokens: readonly string[],
+    retries = 2,
   ): Promise<BookmarkDto> {
     const raw = await this.prisma.bookmark.findFirst({
       where: { id: bookmarkId, userId },
@@ -435,6 +436,9 @@ export class BookmarksService implements OnApplicationBootstrap {
         data.isRead = true;
         data.completedAt = bookmark.completedAt ?? new Date();
       } else {
+        // Falling back below completion clears both halves of the read state:
+        // an unread row must never carry a completion timestamp.
+        data.isRead = false;
         data.completedAt = null;
       }
     }
@@ -483,14 +487,21 @@ export class BookmarksService implements OnApplicationBootstrap {
 
     const updated = await this.prisma.bookmark
       .update({
-        where: { id: bookmarkId },
+        where: {
+          id: bookmarkId, userId, updatedAt: raw.updatedAt,
+          isRead: raw.isRead, completedAt: raw.completedAt,
+          contentKindOverride: raw.contentKindOverride,
+          articleUndoSnapshot: raw.articleUndoSnapshot, titleEdited: raw.titleEdited,
+        },
         data: this.crypto.sealBookmark(userId, bookmarkId, data),
         select: LIST_SELECT,
       })
-      .catch((cause) => {
+      .catch(async (cause) => {
         // Lost a race with a concurrent delete of this bookmark, or of the
         // folder it was being moved into; report 404s instead of a 500.
         if (isRecordNotFound(cause)) {
+          const exists = await this.prisma.bookmark.count({ where: { id: bookmarkId, userId } });
+          if (exists) return null;
           throw new AppError(ErrorCode.BOOKMARK_NOT_FOUND, "This bookmark no longer exists.");
         }
         if (isForeignKeyViolation(cause) && changes.folderId) {
@@ -498,6 +509,10 @@ export class BookmarksService implements OnApplicationBootstrap {
         }
         throw cause;
       });
+    if (!updated) {
+      if (retries > 0) return this.update(userId, bookmarkId, changes, tokens, retries - 1);
+      throw new AppError(ErrorCode.CONFLICT, "This bookmark changed. Try again.");
+    }
     if (changes.contentKindOverride === "article" && (bookmark.fetchStatus !== "ok" || !bookmark.contentHtml)) {
       this.extraction.enqueue([
         {
@@ -598,6 +613,13 @@ export class BookmarksService implements OnApplicationBootstrap {
         where: { bookmarkId, tagId: { in: tagIds } },
       });
       return tx.bookmark.findUniqueOrThrow({ where: { id: bookmarkId }, select: LIST_SELECT });
+    }).catch((cause) => {
+      // A concurrent delete between the ownership check and this write must
+      // surface as 404, not an unhandled P2025.
+      if (isRecordNotFound(cause)) {
+        throw new AppError(ErrorCode.BOOKMARK_NOT_FOUND, "This bookmark no longer exists.");
+      }
+      throw cause;
     });
     return this.present(updated);
   }
@@ -1030,6 +1052,7 @@ function restoreArticleUndoSnapshot(snapshot: ArticleUndoSnapshot) {
     extractionReason: snapshot.extractionReason,
     extractionVersion: snapshot.extractionVersion,
     readProgress: 0,
+    isRead: false,
     completedAt: null,
   };
 }

@@ -33,6 +33,7 @@ internal object QuickShareSave {
   private enum class Outcome { SAVED, AUTH, INVALID, FALLBACK }
 
   private class Session(
+    var snapshot: String,
     val serverUrl: String,
     var accessToken: String,
     var refreshToken: String,
@@ -81,13 +82,15 @@ internal object QuickShareSave {
       }
       val created = createBookmark(session, url)
       if (created == 200 || created == 201) return Outcome.SAVED
-      if (created == 401 && !usedRefresh) {
+      if (created == 401) {
+        // A token refreshed moments ago still failed: the session is dead.
+        if (usedRefresh) return Outcome.AUTH
         if (!refresh(context, session)) return Outcome.AUTH
         val retried = createBookmark(session, url)
         if (retried == 200 || retried == 201) return Outcome.SAVED
         if (retried == 401) return Outcome.AUTH
       }
-      if (created == 401) return Outcome.AUTH
+      // Anything else (including a retried 5xx) is worth retrying in the sheet.
       return Outcome.FALLBACK
     } catch (_: Exception) {
       return Outcome.FALLBACK
@@ -111,8 +114,7 @@ internal object QuickShareSave {
     session.refreshToken = tokens.getString("refreshToken")
     val expiresIn = tokens.optInt("expiresIn", 0)
     session.accessExpiresAt = System.currentTimeMillis() + expiresIn * 1000L
-    writeSession(context, session)
-    return true
+    return writeSession(context, session)
   }
 
   private fun createBookmark(session: Session, url: String): Int {
@@ -170,21 +172,26 @@ internal object QuickShareSave {
       val refreshToken = json.optString("refreshToken")
       if (server.isEmpty() || access.isEmpty() || refreshToken.isEmpty()) return null
       val expires = if (json.isNull("accessExpiresAt")) null else json.optLong("accessExpiresAt")
-      Session(server, access, refreshToken, if (expires != null && expires > 0L) expires else null)
+      Session(raw, server, access, refreshToken, if (expires != null && expires > 0L) expires else null)
     } catch (_: Exception) {
       null
     }
   }
 
-  private fun writeSession(context: Context, session: Session) {
-    val json = JSONObject()
+  private fun writeSession(context: Context, session: Session): Boolean {
+    // Preserve the sign-in identity; never resurrect a logged-out session or
+    // overwrite tokens published by a newer JS/native refresh.
+    val json = JSONObject(session.snapshot)
       .put("serverUrl", session.serverUrl)
       .put("accessToken", session.accessToken)
       .put("refreshToken", session.refreshToken)
       .put("updatedAt", System.currentTimeMillis())
     if (session.accessExpiresAt != null) json.put("accessExpiresAt", session.accessExpiresAt as Long)
     else json.put("accessExpiresAt", JSONObject.NULL)
-    ShareSessionStore.write(context, json.toString())
+    val next = json.toString()
+    if (!ShareSessionStore.replace(context, session.snapshot, next)) return false
+    session.snapshot = next
+    return true
   }
 
   @JvmStatic

@@ -21,16 +21,29 @@ function applyNetworkState(
   onlineManager.setOnline(online);
 }
 
+/** Guards the native subscription against effect re-runs (StrictMode, fast
+ * refresh, a remounted provider): one listener per process. */
+let networkInit: Promise<void> | null = null;
+
 export const useOnlineStore = create<OnlineState>((set) => ({
   online: true,
-  init: async () => {
-    try {
-      applyNetworkState(await Network.getNetworkStateAsync(), set);
-    } catch {
-      set({ online: true });
-      onlineManager.setOnline(true);
-    }
-    Network.addNetworkStateListener((state) => applyNetworkState(state, set));
+  init: () => {
+    if (networkInit) return networkInit;
+    networkInit = (async () => {
+      try {
+        applyNetworkState(await Network.getNetworkStateAsync(), set);
+      } catch {
+        set({ online: true });
+        onlineManager.setOnline(true);
+      }
+      try {
+        Network.addNetworkStateListener((state) => applyNetworkState(state, set));
+      } catch {
+        /* keep the last known state; retry on the next init call */
+        networkInit = null;
+      }
+    })();
+    return networkInit;
   },
 }));
 

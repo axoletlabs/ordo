@@ -18,7 +18,7 @@ export function OtaUpdateCard() {
   const { native, phases } = update;
   const [manualChecking, setManualChecking] = React.useState(false);
   const checkInFlight = React.useRef(false);
-  const restarting = useUpdateRestartStore((state) => state.restarting);
+  const restarting = useUpdateRestartStore((state) => state.status !== "idle");
   const check = async () => {
     if (checkInFlight.current) return;
     checkInFlight.current = true;
