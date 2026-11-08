@@ -62,6 +62,8 @@ export function SettingsScrollView({
   return (
     <ThemedScrollView
       style={styles.scroll}
+      keyboardDismissMode="on-drag"
+      keyboardShouldPersistTaps="handled"
       contentContainerStyle={[styles.scrollContent, contentContainerStyle]}
       scrollBarInsets={scrollBarInsetsOverride ?? chromeInsets}
       {...props}

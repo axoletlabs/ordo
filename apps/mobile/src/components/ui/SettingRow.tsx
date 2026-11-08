@@ -72,6 +72,11 @@ export function SettingRow({
   const valueColor = destructive ? palette.danger : supportingColor;
   const unavailable = !!unavailableReason;
   const isToggle = React.isValidElement<ToggleProps>(right) && right.type === Toggle;
+  // The row owns one switch action and one accessible target. A display-only
+  // thumb avoids nested press handlers firing twice when the thumb is tapped.
+  const toggle = isToggle && !onPress ? right as React.ReactElement<ToggleProps> : null;
+  const rowDisabled = disabled || unavailable || !!toggle?.props.disabled;
+  const activate = onPress ?? (toggle ? () => toggle.props.onValueChange(!toggle.props.value) : undefined);
   const accessLabel = badge ? `${label}, ${badge}` : label;
   const supportingText = unavailableReason || description;
   const rowStyle = [styles.row, { borderBottomColor: palette.outlineVariant,
@@ -111,7 +116,8 @@ export function SettingRow({
           {React.isValidElement<ToggleProps>(right)
             ? React.cloneElement(right, { accessibilityLabel: right.props.accessibilityLabel ?? accessLabel,
               ...(isToggle ? { disabled: disabled || unavailable || right.props.disabled,
-                accessibilityHint: unavailableReason ?? right.props.accessibilityHint } : {}) }) : right}
+                accessibilityHint: unavailableReason ?? right.props.accessibilityHint,
+                ...(toggle ? { displayOnly: true } : {}) } : {}) }) : right}
         </View>
       ) : null}
       {showChevron && !unavailable ? (
@@ -122,16 +128,17 @@ export function SettingRow({
 
   if (unavailable && !isToggle) return <View accessible accessibilityState={{ disabled: true }}
     accessibilityLabel={`${label}, unavailable. ${unavailableReason}`} style={rowStyle}>{content}</View>;
-  if (!onPress || unavailable) return <View style={rowStyle}>{content}</View>;
+  if (!activate) return <View style={rowStyle}>{content}</View>;
   return (
     <PressableScale
-      accessibilityRole={selectionRole ?? "button"}
-      disabled={disabled}
-      accessibilityState={{ disabled, ...(selectionRole ? { checked: !!checked } : {}) }}
+      accessibilityRole={toggle ? "switch" : selectionRole ?? "button"}
+      disabled={rowDisabled}
+      accessibilityState={{ disabled: rowDisabled, ...(toggle ? { checked: toggle.props.value } : selectionRole ? { checked: !!checked } : {}) }}
+      accessibilityHint={unavailableReason ?? toggle?.props.accessibilityHint}
       accessibilityLabel={description ? `${accessLabel}, ${description}` : accessLabel}
       style={rowStyle}
       onPress={() => {
-        runPressAction(onPress, haptics.light);
+        runPressAction(activate, toggle ? haptics.selection : haptics.light);
       }}
     >
       {content}
