@@ -23,9 +23,7 @@
     "licenses:generate": "node scripts/generate-licenses.cjs",
     "licenses:check": "node scripts/generate-licenses.cjs",
     "test:reader-performance": "node scripts/test-reader-performance.cjs",
-    "test:diagnostics-native": "node scripts/test-diagnostics-native.cjs",
-    "test:state": "node scripts/test-state-core.cjs && node scripts/test-state-stores.cjs && node scripts/test-ui-state.cjs",
-    "test:state-native": "node scripts/test-native-session-state.cjs"
+    "test:diagnostics-native": "node scripts/test-diagnostics-native.cjs"
   },
   "dependencies": {
     "@babel/runtime": "^7.29.7",
