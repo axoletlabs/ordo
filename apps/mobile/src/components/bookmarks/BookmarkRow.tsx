@@ -11,6 +11,7 @@ import { ListPressable } from "../ui/ListPressable";
 import { Spinner } from "../ui/Spinner";
 import { Text } from "../ui/Text";
 import { TagChip } from "../tags/TagChip";
+import { BookmarkSwipe } from "./BookmarkSwipe";
 import { RowHighlight } from "./RowHighlight";
 import { SelectionMark } from "./SelectionMark";
 import { SelectionDragHandle, useSelectionDragRow } from "./SelectionDrag";
@@ -207,11 +208,12 @@ export const BookmarkRow = React.memo(function BookmarkRow({
   const wrapStyle = React.useMemo(() => [
     styles.wrap,
     fixedRowHeight != null ? { height: fixedRowHeight } : null,
-    { borderBottomWidth: 0, marginBottom: expressive ? spacing[2] : 0,
+    { borderBottomWidth: 0,
       overflow: expressive ? ("visible" as const) : ("hidden" as const) },
   ], [expressive, fixedRowHeight]);
 
   return (
+    <BookmarkSwipe bookmark={bookmark} disabled={!!selectionMode}>
     <ThemeOverrideProvider palette={palette}>
     <View
       ref={setRowRef}
@@ -415,6 +417,7 @@ export const BookmarkRow = React.memo(function BookmarkRow({
       </View>}
     </View>
     </ThemeOverrideProvider>
+    </BookmarkSwipe>
   );
 });
 
