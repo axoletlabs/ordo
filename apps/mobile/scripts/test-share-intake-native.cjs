@@ -55,6 +55,12 @@ object ShareSessionStore {
   var raw: String? = null
   fun read(context: android.content.Context) = raw
   fun write(context: android.content.Context, value: String) { raw = value }
+  /** Mirrors the real store: a refresh owns only the snapshot it read. */
+  fun replace(context: android.content.Context, expected: String, value: String): Boolean {
+    if (raw != expected) return false
+    raw = value
+    return true
+  }
 }
 `,
   "Context.kt": `package android.content
