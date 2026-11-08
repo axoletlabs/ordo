@@ -7,6 +7,7 @@
  * is keyed by the signed-in email so a completed change cannot leave the
  * previous address and password sitting in the next visit.
  */
+import { useFormNavigationGuard } from "../../../src/hooks/use-form-navigation-guard";
 import React, { useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform } from "react-native";
 import { useRouter } from "expo-router";
@@ -60,6 +61,8 @@ function ChangeEmailForm() {
       newEmail: newEmail.trim().toLowerCase(),
     });
 
+  const navigationGuard = useFormNavigationGuard(!!currentPassword || !!newEmail);
+
   const runChange = async (mfaCode?: string) => {
     const parsed = ChangeEmailSchema.safeParse(submittedRef.current);
     if (!parsed.success) {
@@ -75,10 +78,10 @@ function ChangeEmailForm() {
     setShowPwd(false);
     setFormError("");
     requestEmailChange.reset();
-    router.replace({
+    navigationGuard.finish(() => router.replace({
       pathname: "/settings/verify-email",
       params: { email: parsed.data.newEmail, nonce: String(Date.now()) },
-    });
+    }));
   };
 
   const submit = async () => {
@@ -106,7 +109,7 @@ function ChangeEmailForm() {
   const passwordField = lockedSecretDisplay(currentPassword, credentialsLocked, showPwd);
 
   return (
-    <SettingsPage title="Email">
+    <SettingsPage onBack={() => router.back()} title="Email">
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
@@ -180,6 +183,7 @@ function ChangeEmailForm() {
           setFormError(errorMessage(err));
         }}
       />
+    {navigationGuard.confirmation}
     </SettingsPage>
   );
 }

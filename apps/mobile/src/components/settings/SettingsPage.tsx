@@ -26,9 +26,10 @@ interface SettingsPageProps {
   title: string;
   children: React.ReactNode;
   right?: React.ReactNode;
+  onBack?: () => void;
 }
 
-export function SettingsPage({ title, children, right }: SettingsPageProps) {
+export function SettingsPage({ title, children, right, onBack }: SettingsPageProps) {
   const { palette } = useTheme();
   const router = useRouter();
 
@@ -39,7 +40,7 @@ export function SettingsPage({ title, children, right }: SettingsPageProps) {
         showBack
         right={right}
         maxWidth={layout.maxSettingsWidth}
-        onBack={() => (router.canGoBack() ? router.back() : router.replace("/settings"))}
+        onBack={onBack ?? (() => (router.canGoBack() ? router.back() : router.replace("/settings")))}
       />
       {children}
     </View>

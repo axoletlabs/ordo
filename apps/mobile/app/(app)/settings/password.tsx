@@ -1,3 +1,4 @@
+import { useFormNavigationGuard } from "../../../src/hooks/use-form-navigation-guard";
 import React, { useRef, useState } from "react";
 import { KeyboardAvoidingView, Platform } from "react-native";
 import { useRouter } from "expo-router";
@@ -35,6 +36,8 @@ export default function ChangePasswordScreen() {
   const credentialsLocked = useCredentialLock(mfaOpen);
   const submittedRef = useRef({ currentPassword: "", newPassword: "" });
 
+  const navigationGuard = useFormNavigationGuard(!!currentPassword || !!newPassword || !!confirm);
+
   const runChange = async (mfaCode?: string) => {
     const parsed = ChangePasswordSchema.safeParse({
       currentPassword: submittedRef.current.currentPassword,
@@ -54,7 +57,7 @@ export default function ChangePasswordScreen() {
     setFormError("");
     haptics.success();
     toast.success("Password changed. All devices were signed out.");
-    router.back();
+    navigationGuard.finish(() => router.back());
   };
 
   const submit = async () => {
@@ -92,7 +95,7 @@ export default function ChangePasswordScreen() {
   const confirmField = lockedSecretDisplay(confirm, credentialsLocked, showPwd);
 
   return (
-    <SettingsPage title="Password">
+    <SettingsPage onBack={() => router.back()} title="Password">
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
@@ -167,6 +170,7 @@ export default function ChangePasswordScreen() {
           setFormError(errorMessage(err));
         }}
       />
+    {navigationGuard.confirmation}
     </SettingsPage>
   );
 }
