@@ -5,10 +5,10 @@ import { PressableScale } from "./PressableScale";
 import { useButtonGroupInteraction } from "./ButtonGroup";
 import { useTheme } from "../../theme/ThemeProvider";
 
-export function IconButton({ name, variant = "tonal", color, style, ...props }: Omit<PressableProps, "style" | "children"> & {
+export function IconButton({ name, variant = "tonal", color, iconSize = 24, style, ...props }: Omit<PressableProps, "style" | "children"> & {
   name: keyof typeof MaterialIcon.glyphMap;
   variant?: "standard" | "filled" | "tonal" | "outlined";
-  color?: string; style?: StyleProp<ViewStyle>;
+  color?: string; iconSize?: number; style?: StyleProp<ViewStyle>;
 }) {
   const { palette, expressive } = useTheme();
   const grouped = useButtonGroupInteraction() != null;
@@ -27,7 +27,7 @@ export function IconButton({ name, variant = "tonal", color, style, ...props }: 
     visualStyle={{ alignSelf: "stretch", marginHorizontal: 4, height: 40, borderRadius: 20,
       backgroundColor: background, borderWidth: variant === "outlined" ? 1 : 0, borderColor: props.disabled ? `${palette.onSurface}1f` : expressive ? palette.outlineVariant : palette.outline,
       alignItems: "center", justifyContent: "center" }}>
-    <MaterialIcon name={name} size={24} color={foreground} />
+    <MaterialIcon name={name} size={iconSize} color={foreground} />
     </PressableScale>
   </View>;
 }

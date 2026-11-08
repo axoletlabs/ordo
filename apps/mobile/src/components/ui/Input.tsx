@@ -1,6 +1,6 @@
 /** Material filled / outlined / search fields, preserving native editing and autofill. */
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from "react-native-reanimated";
+import Animated, { interpolateColor, useAnimatedStyle, useSharedValue, withSpring, type AnimatedStyle, type SharedValue } from "react-native-reanimated";
 import { StateLayer } from "./StateLayer";
 import { AnimatedDisclosure } from "./AnimatedDisclosure";
 import {
@@ -20,7 +20,7 @@ import { MaterialIcon } from "./MaterialIcon";
 import { useTheme } from "../../theme/ThemeProvider";
 import { fontSize, radius, resolveFont, spacing } from "../../theme/tokens";
 import { caretAfterKey, shouldCorrectWebCaret } from "../../lib/web-input-caret";
-import { useMaterialMotion } from "../../theme/material-motion";
+import { materialWebMotion, useMaterialMotion } from "../../theme/material-motion";
 import { InputSurfaceContext } from "./input-surface";
 import { InputFocusScopeContext, markNativeFocus, nativeFocusPermitted, registerNativeFocusField } from "./input-focus-scope";
 import { useOverlayBlocked } from "./overlay-host";
@@ -72,6 +72,8 @@ export interface InputProps extends Omit<TextInputProps, "style"> {
   overlayRightAccessory?: boolean;
   /** Skip measuring the overlay; avoids TextInput padding jumps while typing. */
   overlayPaddingRight?: number;
+  /** Compact inset; interpolates to overlayPaddingRight with the field. */
+  compactOverlayPaddingRight?: number;
   mono?: boolean;
   variant?: "filled" | "outlined" | "search";
   /** Embedded search bars let their enclosing surface own the focus outline. */
@@ -87,6 +89,133 @@ export interface InputProps extends Omit<TextInputProps, "style"> {
   showCounter?: boolean;
   /** Opt in to an empty supporting row; otherwise only real messages/counters take space. */
   reserveSupportingSpace?: boolean;
+  /** Keep one editable field as it expands from a compact row. Opt-in only. */
+  compact?: boolean;
+  /** A surrounding field group may present validation in one shared message. */
+  hideSupportingText?: boolean;
+}
+
+export function inputDensityMetrics(fontScale: number) {
+  const compactBody = Math.max(32, 20 * fontScale + 12);
+  const expandedBody = Math.max(56, 24 * fontScale + 32);
+  const compact = compactBody + 16;
+  return { compact, compactBody, expandedBody, extra: expandedBody + 8 * fontScale - compact };
+}
+
+const DensityContext = React.createContext<null | {
+  animated: boolean; compact: boolean;
+  container: AnimatedStyle<ViewStyle>; box: AnimatedStyle<ViewStyle>;
+  input: AnimatedStyle<TextStyle>; label: AnimatedStyle<ViewStyle>;
+  icon: AnimatedStyle<ViewStyle>; outline: AnimatedStyle<ViewStyle>;
+  accessory: AnimatedStyle<ViewStyle>;
+}>(null);
+const AnimatedTextInput = Animated.createAnimatedComponent(TextInput);
+/** A field group may own expansion so positions and field geometry cannot
+ * diverge when a focus transition is interrupted. Web inherits a CSS number. */
+export const InputExpansionContext = React.createContext<SharedValue<number> | "web" | null>(null);
+
+/** Only expanding fields allocate geometry animations. The input node and its
+ * native editing/focus machinery remain mounted throughout the transition. */
+const InputDensity = Platform.OS === "web" ? WebInputDensity : NativeInputDensity;
+
+type InputDensityProps = { compact: boolean; invalid: boolean; children: React.ReactNode;
+  paddingRight?: number; compactPaddingRight?: number };
+
+function WebInputDensity({ compact, invalid, paddingRight, compactPaddingRight, children }: InputDensityProps) {
+  const motion = useMaterialMotion();
+  const { palette } = useTheme();
+  const fieldSurface = React.useContext(InputSurfaceContext) ?? palette.surface;
+  const { fontScale } = useWindowDimensions();
+  const metrics = inputDensityMetrics(fontScale);
+  const compactRadius = motion.expressive ? metrics.compactBody / 2 : radius.sm;
+  const curve = materialWebMotion.contained[motion.expressive ? "expressive" : "standard"];
+  const accessoryWidth = Math.max(0, (paddingRight ?? 0) - (compactPaddingRight ?? paddingRight ?? 0));
+  const grouped = React.useContext(InputExpansionContext) === "web";
+  const length = (from: number, to: number) => `calc(${from}px + ${to - from}px * var(--ordo-input-expansion))` as unknown as number;
+  const amount = (from: number, to: number) => `calc(${from} + ${to - from} * var(--ordo-input-expansion))` as unknown as number;
+  const transition = {
+    transitionProperty: "padding-top, padding-bottom, padding-left, padding-right, min-height, font-size, line-height, border-radius, background-color, width, margin-right, opacity, transform",
+    transitionDuration: `${motion.reducedMotion ? 0 : curve.duration}ms`,
+    transitionTimingFunction: curve.easing,
+  } as ViewStyle;
+  return <DensityContext.Provider value={{
+    animated: false,
+    compact,
+    container: grouped ? { paddingTop: length(8, 8 * fontScale), paddingBottom: length(8, 0) }
+      : { paddingTop: compact ? 8 : 8 * fontScale, paddingBottom: compact ? 8 : 0, ...transition },
+    box: { minHeight: compact ? metrics.compactBody : metrics.expandedBody,
+      backgroundColor: compact ? palette.surfaceContainerHighest : fieldSurface,
+      borderRadius: compact ? compactRadius : radius.sm,
+      paddingLeft: compact ? 12 : 16, paddingRight: compact ? 12 : 16, ...transition,
+      ...(grouped ? { minHeight: length(metrics.compactBody, metrics.expandedBody), borderRadius: length(compactRadius, radius.sm),
+        paddingLeft: length(12, 16), paddingRight: length(12, 16), transitionProperty: "background-color" } : {}) },
+    input: { paddingTop: compact ? 6 : 16, paddingBottom: compact ? 6 : 16,
+      ...(compactPaddingRight != null ? { paddingRight: compact ? compactPaddingRight : paddingRight } : {}),
+      fontSize: compact ? 14 : 16, lineHeight: compact ? 20 : 24, ...transition,
+      ...(grouped ? { paddingTop: length(6, 16), paddingBottom: length(6, 16), fontSize: length(14, 16), lineHeight: length(20, 24),
+        ...(compactPaddingRight != null ? { paddingRight: length(compactPaddingRight, paddingRight ?? compactPaddingRight) } : {}),
+        transitionProperty: "none" } : {}) },
+    icon: { width: compact ? 16 : 0, marginRight: compact ? 8 : 0, opacity: compact ? 1 : 0,
+      transform: [{ scale: compact ? 1 : 0 }], ...transition,
+      ...(grouped ? { width: length(16, 0), marginRight: length(8, 0), opacity: amount(1, 0), transform: [{ scale: amount(1, 0) }], transitionProperty: "none" } : {}) },
+    accessory: grouped ? { width: length(0, accessoryWidth),
+      opacity: "clamp(0, calc(2.5 * var(--ordo-input-expansion) - 1.5), 1)" as unknown as number }
+      : { width: compact ? 0 : accessoryWidth, opacity: compact ? 0 : 1, ...transition },
+    outline: grouped ? { opacity: invalid ? 1 : amount(0, 1), borderRadius: length(compactRadius, radius.sm) }
+      : { opacity: compact && !invalid ? 0 : 1, borderRadius: compact ? compactRadius : radius.sm, ...transition },
+    label: { opacity: compact ? 0 : 1, transitionProperty: "opacity",
+      transitionDuration: `${motion.reducedMotion ? 0 : materialWebMotion.effects.duration}ms`,
+      transitionTimingFunction: materialWebMotion.effects.easing } as ViewStyle,
+  }}>{children}</DensityContext.Provider>;
+}
+
+function NativeInputDensity({ compact, invalid, paddingRight, compactPaddingRight, children }: InputDensityProps) {
+  const motion = useMaterialMotion();
+  const { palette } = useTheme();
+  const fieldSurface = React.useContext(InputSurfaceContext) ?? palette.surface;
+  const { fontScale } = useWindowDimensions();
+  const metrics = inputDensityMetrics(fontScale);
+  const compactRadius = motion.expressive ? metrics.compactBody / 2 : radius.sm;
+  const accessoryWidth = Math.max(0, (paddingRight ?? 0) - (compactPaddingRight ?? paddingRight ?? 0));
+  const groupProgress = React.useContext(InputExpansionContext);
+  const ownProgress = useSharedValue(compact ? 0 : 1);
+  const progress = groupProgress && groupProgress !== "web" ? groupProgress : ownProgress;
+  useLayoutEffect(() => {
+    if (groupProgress) return;
+    progress.value = motion.reducedMotion ? Number(!compact)
+      : withSpring(Number(!compact), { ...motion.spatial, overshootClamping: true });
+  }, [compact, motion, progress, groupProgress]);
+  const container = useAnimatedStyle(() => ({ paddingTop: 8 + (8 * fontScale - 8) * progress.value, paddingBottom: 8 * (1 - progress.value) }));
+  const box = useAnimatedStyle(() => ({
+    minHeight: metrics.compactBody + (metrics.expandedBody - metrics.compactBody) * progress.value,
+    backgroundColor: interpolateColor(progress.value, [0, 1], [palette.surfaceContainerHighest, fieldSurface]),
+    borderRadius: compactRadius + (radius.sm - compactRadius) * progress.value,
+    paddingLeft: 12 + 4 * progress.value, paddingRight: 12 + 4 * progress.value,
+  }));
+  const input = useAnimatedStyle(() => ({ paddingTop: 6 + 10 * progress.value, paddingBottom: 6 + 10 * progress.value,
+    ...(compactPaddingRight != null ? { paddingRight: compactPaddingRight + ((paddingRight ?? compactPaddingRight) - compactPaddingRight) * progress.value } : {}),
+    fontSize: 14 + 2 * progress.value, lineHeight: 20 + 4 * progress.value }));
+  const label = useAnimatedStyle(() => ({ opacity: progress.value }));
+  const icon = useAnimatedStyle(() => ({ width: 16 * (1 - progress.value), marginRight: 8 * (1 - progress.value), opacity: 1 - progress.value,
+    transform: [{ scale: 1 - progress.value }] }));
+  // Reveal the full glyph only after its inset has made room for it. On blur,
+  // hide it before the URL reclaims that space, avoiding a crossfade over text.
+  const accessory = useAnimatedStyle(() => ({ width: accessoryWidth * progress.value,
+    opacity: Math.max(0, Math.min(1, (progress.value - 0.6) / 0.4)) }));
+  const outline = useAnimatedStyle(() => ({ opacity: invalid ? 1 : progress.value,
+    borderRadius: compactRadius + (radius.sm - compactRadius) * progress.value }));
+  return <DensityContext.Provider value={{ animated: true, compact, container, box, input, label, icon, outline, accessory }}>{children}</DensityContext.Provider>;
+}
+
+/** Keep the glyph at its final size and position while its space is released.
+ * Clipping a shrinking slot slices icons into slivers during focus handoff.
+ * Native shares the field's progress, including interrupted transitions. */
+export function ExpandingInputAccessory({ children }: { children: React.ReactNode }) {
+  const density = React.useContext(DensityContext);
+  const Slot = (density?.animated ? Animated.View : View) as typeof Animated.View;
+  return <Slot style={[{ height: 48 }, density?.accessory]}>
+    <View style={{ position: "absolute", right: 0, top: 0, width: 48, height: 48 }}>{children}</View>
+  </Slot>;
 }
 
 /** Floating label owns its animation so unlabeled fields (search bars, inline
@@ -97,6 +226,7 @@ const FloatingLabel = React.memo(function FloatingLabel({ label, floating, fille
   left: number; backgroundColor: string; color: string;
 }) {
   const motion = useMaterialMotion();
+  const density = React.useContext(DensityContext);
   const floatProgress = useSharedValue(floating ? 1 : 0);
   const previousFloat = useRef({ floating, reducedMotion: motion.reducedMotion });
   useEffect(() => {
@@ -106,12 +236,18 @@ const FloatingLabel = React.memo(function FloatingLabel({ label, floating, fille
   }, [floating, floatProgress, motion.reducedMotion, motion.fast]);
   const labelPosition = useAnimatedStyle(() => ({ top: 16 - (filled ? 8 : 16 + 8 * fontScale) * floatProgress.value }));
   const labelType = useAnimatedStyle(() => ({ fontSize: 16 - 4 * floatProgress.value, lineHeight: 24 - 8 * floatProgress.value }));
-  return <Animated.View pointerEvents="none" style={[styles.floatingLabel, { left, backgroundColor }, labelPosition]}>
+  return <Animated.View pointerEvents="none" style={[styles.floatingLabel, { left, backgroundColor }, labelPosition, density?.label]}>
     <AnimatedLabel variant="bodyLarge" style={[{ color }, labelType]}>{label}</AnimatedLabel>
   </Animated.View>;
 });
 
-export const Input = React.forwardRef<TextInput, InputProps>(function Input({
+export const Input = React.forwardRef<TextInput, InputProps>(function Input({ compact, compactOverlayPaddingRight, ...props }, ref) {
+  return compact === undefined ? <InputContent {...props} ref={ref} />
+    : <InputDensity compact={compact} invalid={!!props.error} paddingRight={props.overlayPaddingRight}
+        compactPaddingRight={compactOverlayPaddingRight}><InputContent {...props} ref={ref} /></InputDensity>;
+});
+
+const InputContent = React.forwardRef<TextInput, InputProps>(function InputContent({
   label,
   error,
   helper,
@@ -139,9 +275,15 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   showRequiredIndicator = true,
   showCounter = false,
   reserveSupportingSpace = false,
+  hideSupportingText = false,
   ...rest
 }, ref) {
-  const { palette } = useTheme();
+  const { palette, expressive } = useTheme();
+  const density = React.useContext(DensityContext);
+  // Both branches expose the same native instance. Use the animated prop
+  // superset here; ordinary fields never receive an animated style handle.
+  const FieldView = (density?.animated ? Animated.View : View) as typeof Animated.View;
+  const FieldInput = (density?.animated ? AnimatedTextInput : TextInput) as typeof AnimatedTextInput;
   const { fontScale } = useWindowDimensions();
   const messageId = React.useId();
   const fieldSurface = React.useContext(InputSurfaceContext) ?? palette.surface;
@@ -154,9 +296,9 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
   const canEdit = !inactive && !readOnly;
   const indicateRequired = required && showRequiredIndicator;
   const displayLabel = label && indicateRequired ? `${label} *` : label;
-  const support = error || helper;
+  const support = hideSupportingText ? undefined : error || helper;
   const counterVisible = showCounter && rest.maxLength != null;
-  const foreground = inactive ? alphaTint(palette.onSurface, 0.38) : palette.onSurface;
+  const foreground = inactive ? alphaTint(palette.onSurface, 0.38) : density?.compact ? palette.onSurfaceVariant : palette.onSurface;
   const [hasText, setHasText] = useState(!!value);
   const [overlayWidth, setOverlayWidth] = useState(0);
   const inputRef = useRef<TextInput>(null);
@@ -331,18 +473,19 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
 
   const search = variant === "search";
   const filled = variant === "filled";
+  const leadingSize = density ? 16 : 24;
   const leadingIcon = React.isValidElement<React.ComponentProps<typeof MaterialIcon>>(icon) && icon.type === MaterialIcon
-    ? React.cloneElement(icon, { size: 24, style: [icon.props.style, { width: 24, height: 24 }] }) : icon;
+    ? React.cloneElement(icon, { size: leadingSize, style: [icon.props.style, { width: leadingSize, height: leadingSize }] }) : icon;
   const borderColor = inactive ? alphaTint(palette.onSurface, 0.12) : error ? palette.error : focused ? palette.primary : hovered ? palette.onSurface : palette.outline;
   const borderWidth = search ? 0 : focused && !inactive ? 2 : 1;
-  const floating = focused || hasText || !!value;
+  const floating = !!density || focused || hasText || !!value;
   // Keep the system face for secure editing/AutoFill, including across reveal.
   const fontFamily = secret
     ? undefined
     : mono && Platform.OS !== "android"
       ? resolveFont("mono", "400")
       : resolveFont("sans", "400");
-  const overlay = overlayRightAccessory && !!rightAccessory && !error;
+  const overlay = overlayRightAccessory && !!rightAccessory && (!error || hideSupportingText);
   const padRight =
     overlayPaddingRight != null
       ? overlayPaddingRight
@@ -362,8 +505,12 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
       : null;
 
   return (
-    <View style={[label && !filled && !search ? { paddingTop: 8 * fontScale } : null, containerStyle]}>
-      <View
+    <FieldView
+      onPointerDown={(event) => { if (density && !inactive && event.target === event.currentTarget) inputRef.current?.focus(); }}
+      onStartShouldSetResponder={(event) => !!density && !inactive && event.target === event.currentTarget}
+      onResponderRelease={() => { if (density && !inactive) inputRef.current?.focus(); }}
+      style={[label && !filled && !search ? { paddingTop: 8 * fontScale } : null, containerStyle, density?.container]}>
+      <FieldView
         onPointerEnter={(event) => { if (event.nativeEvent.pointerType !== "touch") setHovered(true); }}
         onPointerLeave={() => setHovered(false)}
         onPointerDown={(event) => { if (!inactive && event.target === event.currentTarget) inputRef.current?.focus(); }}
@@ -377,19 +524,20 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
             borderRadius: search ? radius.full : filled ? 0 : radius.sm,
             ...(filled ? { borderTopLeftRadius: radius.xs, borderTopRightRadius: radius.xs } : {}),
           },
+          density?.box,
         ]}
       >
         <StateLayer testID="material-field-hover" color={palette.onSurface} fraction={hovered && !inactive ? 0.08 : 0}
-          surfaceStyle={{ borderRadius: search ? radius.full : filled ? 0 : radius.sm,
+          surfaceStyle={{ borderRadius: density?.compact && expressive ? inputDensityMetrics(fontScale).compactBody / 2 : search ? radius.full : filled ? 0 : radius.sm,
             ...(filled ? { borderTopLeftRadius: radius.xs, borderTopRightRadius: radius.xs } : {}) }} />
         {search && focused && showFocusIndicator ? <View testID="material-search-focus-ring" pointerEvents="none" style={[StyleSheet.absoluteFill, { borderColor, borderWidth: 2, borderRadius: radius.full }]} /> : null}
         {filled ? <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: borderWidth, backgroundColor: borderColor }} />
-          : !search ? <View pointerEvents="none" style={[StyleSheet.absoluteFill, { borderColor, borderWidth, borderRadius: radius.sm }]} /> : null}
+          : !search ? <FieldView pointerEvents="none" style={[StyleSheet.absoluteFill, { borderColor, borderWidth, borderRadius: radius.sm }, density?.outline]} /> : null}
         {label ? <FloatingLabel label={displayLabel ?? label} floating={floating} filled={filled} fontScale={fontScale}
-          left={icon ? 48 : 12} backgroundColor={filled || search ? "transparent" : fieldSurface}
+          left={icon && !density ? 48 : 12} backgroundColor={filled || search ? "transparent" : fieldSurface}
           color={inactive ? foreground : error ? palette.error : focused ? palette.primary : palette.onSurfaceVariant} /> : null}
-        {icon ? <View pointerEvents="none" style={[styles.icon, inactive ? { opacity: 0.38 } : null]}>{leadingIcon}</View> : null}
-        <TextInput
+        {icon ? <FieldView pointerEvents="none" style={[styles.icon, density?.icon, inactive ? { opacity: 0.38 } : null]}>{leadingIcon}</FieldView> : null}
+        <FieldInput
           ref={setInputRef}
           placeholderTextColor={inactive ? foreground : palette.onSurfaceVariant}
           autoCorrect={false}
@@ -493,9 +641,10 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
             Platform.OS === "web" ? { outlineStyle: "none", outlineWidth: 0, boxShadow: "none" } as unknown as TextStyle : null,
             padRight != null ? { paddingRight: padRight } : null,
             filled && label ? { paddingTop: spacing[8] + 16 * fontScale, paddingBottom: spacing[8] } : null,
+            density?.input,
           ]}
         />
-        {error && !inactive ? <View testID="material-field-error-icon" pointerEvents="none" style={{ marginLeft: 8 }}><MaterialIcon name="alert-circle" size={24} color={palette.error} accessible={false} /></View> : null}
+        {error && !inactive && !hideSupportingText ? <View testID="material-field-error-icon" pointerEvents="none" style={{ marginLeft: 8 }}><MaterialIcon name="alert-circle" size={24} color={palette.error} accessible={false} /></View> : null}
         {rightAccessory ? (
           <View
             ref={accessoryRef}
@@ -516,13 +665,13 @@ export const Input = React.forwardRef<TextInput, InputProps>(function Input({
             {rightAccessory}
           </View>
         ) : null}
-      </View>
+      </FieldView>
       <AnimatedDisclosure expanded={!!(support || reserveSupportingSpace || counterVisible)}><View style={[styles.msg, { minHeight: 16, flexDirection: "row", gap: spacing[16] }]}>
         <Text nativeID={messageId} variant="bodySmall" color={error ? "danger" : "secondary"}
           accessibilityRole={error ? "alert" : undefined} accessibilityLiveRegion={error ? "polite" : "none"} style={[{ flex: 1 }, inactive ? { color: foreground } : null]}>{support ?? " "}</Text>
         {counterVisible ? <Text variant="bodySmall" color="secondary" accessibilityLabel={`${value?.length ?? 0} of ${rest.maxLength} characters`}>{value?.length ?? 0}/{rest.maxLength}</Text> : null}
       </View></AnimatedDisclosure>
-    </View>
+    </FieldView>
   );
 });
 

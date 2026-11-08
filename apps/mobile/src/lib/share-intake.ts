@@ -51,9 +51,30 @@ export function shouldAbandonShareIntake(wasActive: boolean, nextState: string):
 }
 
 /** System toast after a share-target save; visible over the sender app. */
-export function shareSavedToast(destination?: string | null): string {
+export function shareSavedToast(destination?: string | null, count = 1): string {
   const name = destination?.trim();
-  return name ? `Saved to ${name}` : "Saved to Bookmarks";
+  const prefix = count > 1 ? `${count} bookmarks saved` : "Saved";
+  return `${prefix} to ${name || "Bookmarks"}`;
+}
+
+/** Older receivers used a plain flag. New receivers send failed Quick Save
+ * batches straight to review, including how many links already succeeded. */
+export function parseQuickShareHandoff(raw: string) {
+  const empty = { fromQuickTarget: false, review: false, savedCount: 0 };
+  if (raw.trim() === "1") return { fromQuickTarget: true, review: false, savedCount: 0 };
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (!value || typeof value !== "object") return empty;
+    const row = value as Record<string, unknown>;
+    return {
+      fromQuickTarget: row.quick === true,
+      review: row.review === true,
+      savedCount: typeof row.savedCount === "number" && Number.isSafeInteger(row.savedCount) && row.savedCount > 0
+        ? row.savedCount : 0,
+    };
+  } catch {
+    return empty;
+  }
 }
 
 export function parseQuickShareSession(raw: unknown): QuickShareSession | null {

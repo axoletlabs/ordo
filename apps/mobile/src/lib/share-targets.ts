@@ -17,6 +17,7 @@ import {
   QUICK_SHARE_FLAG_FILE,
   QUICK_SHARE_SESSION_FILE,
   parseQuickShareSession,
+  parseQuickShareHandoff,
   type QuickShareSession,
 } from "./share-intake";
 
@@ -126,16 +127,18 @@ export function moveAppToBackground(): boolean {
   return true;
 }
 
-export async function consumeQuickShareFlag(): Promise<boolean> {
+export async function consumeQuickShareHandoff(): Promise<ReturnType<typeof parseQuickShareHandoff>> {
+  const empty = parseQuickShareHandoff("");
   const path = androidFile(FileSystem.cacheDirectory, QUICK_SHARE_FLAG_FILE);
-  if (!path) return false;
+  if (!path) return empty;
   try {
     const info = await FileSystem.getInfoAsync(path);
-    if (!info.exists) return false;
+    if (!info.exists) return empty;
+    const raw = await FileSystem.readAsStringAsync(path);
     await FileSystem.deleteAsync(path, { idempotent: true });
     recordDiagnosticOperation("share", "ok", 0);
-    return true;
+    return parseQuickShareHandoff(raw);
   } catch {
-    return false;
+    return empty;
   }
 }
