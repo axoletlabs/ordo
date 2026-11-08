@@ -2,24 +2,20 @@
  * Android-style 3×3 pattern lock: draw through dots, connecting lines follow
  * the finger, and lifting completes the pattern.
  */
-import React, { useMemo, useRef, useState } from "react";
-import {
-  PanResponder,
-  Platform,
-  StyleSheet,
-  View,
-  type GestureResponderEvent,
-  type NativeTouchEvent,
-} from "react-native";
-import Svg, { Line } from "react-native-svg";
+import React, { useEffect, useMemo, useState } from "react";
+import { Platform, StyleSheet, View } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, { runOnJS, useAnimatedProps, useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
+import Svg, { Path } from "react-native-svg";
 import { useTheme } from "../../theme/ThemeProvider";
 import { haptics } from "../../lib/haptics";
 import { radius } from "../../theme/tokens";
 import { PressableScale } from "../ui/PressableScale";
 import { Button } from "../ui/Button";
 import { Text } from "../ui/Text";
+import { usePanelDraftField } from "../ui/draft-dismiss";
 import { appendPatternNode } from "../../lib/pattern-input";
-
+const AnimatedPath = Animated.createAnimatedComponent(Path);
 const NODES = 9;
 const COLS = 3;
 const SIZE = 252;
@@ -39,37 +35,15 @@ function nodeCenter(index: number): { x: number; y: number } {
 
 const CENTERS = Array.from({ length: NODES }, (_, i) => nodeCenter(i));
 
-function hitIndex(x: number, y: number, used: ReadonlySet<number>): number | null {
-  const r2 = HIT_RADIUS * HIT_RADIUS;
-  for (let i = 0; i < NODES; i++) {
-    if (used.has(i)) continue;
-    const dx = x - CENTERS[i].x;
-    const dy = y - CENTERS[i].y;
-    if (dx * dx + dy * dy <= r2) return i;
-  }
-  return null;
-}
-
-function clamp(n: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, n));
-}
-
-/**
- * Board-local point from window coordinates. Never uses locationX/Y after grant:
- * once the pointer leaves the view, those are relative to whatever is under the
- * finger and the trail jumps to the top of the box.
- */
-function localFromPage(pageX: number, pageY: number, origin: { x: number; y: number }) {
-  return { x: pageX - origin.x, y: pageY - origin.y };
-}
-
-function originFromGrant(native: NativeTouchEvent): { x: number; y: number } | null {
-  const { pageX, pageY, locationX, locationY } = native;
-  if (!Number.isFinite(pageX) || !Number.isFinite(pageY)) return null;
-  if (Number.isFinite(locationX) && Number.isFinite(locationY)) {
-    return { x: pageX - locationX, y: pageY - locationY };
-  }
-  return null;
+function PatternDot({ node, nodes, error }: { node: number; nodes: SharedValue<number[]>; error: boolean }) {
+  const { palette } = useTheme();
+  const c = CENTERS[node];
+  const halo = useAnimatedStyle(() => ({ backgroundColor: nodes.value.includes(node) ? error ? palette.dangerSoft : palette.accentSoft : "transparent" }));
+  const dot = useAnimatedStyle(() => ({ borderColor: nodes.value.includes(node) ? error ? palette.danger : palette.accent : palette.borderStrong,
+    backgroundColor: nodes.value.includes(node) ? error ? palette.danger : palette.accent : "transparent" }));
+  return <Animated.View pointerEvents="none" style={[styles.halo, { left: c.x - HALO / 2, top: c.y - HALO / 2 }, halo]}>
+    <Animated.View style={[styles.dot, dot]} />
+  </Animated.View>;
 }
 
 export function PatternInput({
@@ -88,108 +62,48 @@ export function PatternInput({
 }) {
   const { palette } = useTheme();
   const [buttonEntry, setButtonEntry] = useState(false);
-  const [stroke, setStroke] = useState<number[] | null>(null);
-  const [finger, setFinger] = useState<{ x: number; y: number } | null>(null);
-  const boardRef = useRef<View>(null);
-  const originRef = useRef({ x: 0, y: 0 });
-  const strokingRef = useRef(false);
-  const strokeRef = useRef<number[]>([]);
-  const disabledRef = useRef(disabled);
-  disabledRef.current = disabled;
-  const onChangeRef = useRef(onChange);
-  onChangeRef.current = onChange;
-  const onCompleteRef = useRef(onComplete);
-  onCompleteRef.current = onComplete;
-
-  const shown = stroke ?? value;
-  const used = useMemo(() => new Set(shown), [shown]);
+  const nodes = useSharedValue<number[]>(value);
+  const finger = useSharedValue({ x: 0, y: 0 });
+  const drawing = useSharedValue(false);
+  const trackDraft = usePanelDraftField(JSON.stringify(value));
   const active = error ? palette.danger : palette.accent;
-  const idle = palette.borderStrong;
-
-  const measureOrigin = () => {
-    if (strokingRef.current) return;
-    boardRef.current?.measureInWindow((x, y) => {
-      if (strokingRef.current) return;
-      if (Number.isFinite(x) && Number.isFinite(y)) {
-        originRef.current = { x, y };
-      }
-    });
+  useEffect(() => { if (!drawing.value) nodes.value = value; }, [value, nodes, drawing]);
+  const finishStroke = (path: number[]) => {
+    if (!path.length) return;
+    if (path.length < 4) haptics.warning();
+    trackDraft(JSON.stringify(path.length < 4 ? [] : path));
+    onChange(path.length < 4 ? [] : path);
+    onComplete?.(path);
   };
-
-  const addNode = (node: number) => {
-    const current = strokeRef.current;
-    if (current.includes(node)) return;
-    const next = appendPatternNode(current, node);
-    strokeRef.current = next;
-    setStroke(next);
-    onChangeRef.current(next);
-    haptics.selection();
-  };
-
-  const probe = (x: number, y: number) => {
-    if (!Number.isFinite(x) || !Number.isFinite(y)) return;
-    const node = hitIndex(x, y, new Set(strokeRef.current));
-    if (node !== null) addNode(node);
-    setFinger({ x: clamp(x, 0, SIZE), y: clamp(y, 0, SIZE) });
-  };
-
-  const finishStroke = () => {
-    strokingRef.current = false;
-    const path = strokeRef.current;
-    setFinger(null);
-    setStroke(null);
-    if (path.length === 0) return;
-    if (path.length < 4) {
-      haptics.warning();
-      onChangeRef.current([]);
-    } else {
-      onChangeRef.current(path);
-    }
-    onCompleteRef.current?.(path);
-  };
-
-  const probeRef = useRef(probe);
-  probeRef.current = probe;
-  const finishStrokeRef = useRef(finishStroke);
-  finishStrokeRef.current = finishStroke;
-
-  // The gesture reads current props through refs. Construct it only once;
-  // useRef(create(...)) still constructs a discarded responder on every move.
-  const [responder] = useState(() =>
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => !disabledRef.current,
-      onStartShouldSetPanResponderCapture: () => !disabledRef.current,
-      onMoveShouldSetPanResponder: () => !disabledRef.current,
-      onMoveShouldSetPanResponderCapture: () => !disabledRef.current,
-      onPanResponderTerminationRequest: () => false,
-      onShouldBlockNativeResponder: () => true,
-      onPanResponderGrant: (evt: GestureResponderEvent) => {
-        if (disabledRef.current) return;
-        strokeRef.current = [];
-        setStroke([]);
-        onChangeRef.current([]);
-        const guessed = originFromGrant(evt.nativeEvent);
-        if (guessed) originRef.current = guessed;
-        else {
-          boardRef.current?.measureInWindow((x, y) => {
-            if (Number.isFinite(x) && Number.isFinite(y)) originRef.current = { x, y };
-          });
+  const pan = useMemo(() => {
+    const probe = (x: number, y: number) => {
+      "worklet";
+      finger.value = { x: Math.max(0, Math.min(SIZE, x)), y: Math.max(0, Math.min(SIZE, y)) };
+      for (let node = 0; node < NODES; node++) {
+        if (nodes.value.includes(node)) continue;
+        const c = CENTERS[node];
+        if ((x - c.x) ** 2 + (y - c.y) ** 2 <= HIT_RADIUS ** 2) {
+          nodes.value = appendPatternNode(nodes.value, node);
+          runOnJS(haptics.selection)(); break;
         }
-        strokingRef.current = true;
-        const local = localFromPage(evt.nativeEvent.pageX, evt.nativeEvent.pageY, originRef.current);
-        probeRef.current(local.x, local.y);
-      },
-      onPanResponderMove: (evt: GestureResponderEvent) => {
-        if (disabledRef.current) return;
-        const local = localFromPage(evt.nativeEvent.pageX, evt.nativeEvent.pageY, originRef.current);
-        probeRef.current(local.x, local.y);
-      },
-      onPanResponderRelease: () => finishStrokeRef.current(),
-      onPanResponderTerminate: () => finishStrokeRef.current(),
-    }),
-  );
-
-  const last = shown.length > 0 ? CENTERS[shown[shown.length - 1]] : null;
+      }
+    };
+    return Gesture.Pan().enabled(!disabled).minDistance(0).maxPointers(1)
+      .onStart(e => { nodes.value = []; drawing.value = true; probe(e.x, e.y); })
+      .onUpdate(e => { probe(e.x, e.y); })
+      .onEnd(() => { drawing.value = false; const path = nodes.value; if (path.length < 4) nodes.value = []; runOnJS(finishStroke)(path); })
+      .onFinalize((_e, success) => { drawing.value = false;
+        if (!success) { nodes.value = []; runOnJS(onChange)([]); }
+      });
+  }, [disabled, onChange, onComplete, nodes, finger, drawing]);
+  const pathProps = useAnimatedProps(() => {
+    let d = "";
+    for (let i = 0; i < nodes.value.length; i++) {
+      const c = CENTERS[nodes.value[i]]; d += `${i ? "L" : "M"}${c.x},${c.y} `;
+    }
+    if (drawing.value && nodes.value.length) d += `L${finger.value.x},${finger.value.y}`;
+    return { d };
+  });
 
   if (buttonEntry) return <View style={{ gap: 8 }}>
     <Text variant="bodyMedium">Choose dots in order. Dots between two choices are added automatically.</Text>
@@ -198,109 +112,29 @@ export function PatternInput({
         accessibilityLabel={`Dot ${node + 1}, row ${Math.floor(node / 3) + 1}, column ${node % 3 + 1}`}
         accessibilityState={{ disabled: disabled || value.includes(node) }} disabled={disabled || value.includes(node)}
         style={{ width: 72, height: 72, borderRadius: radius.full, alignItems: "center", justifyContent: "center", backgroundColor: value.includes(node) ? palette.secondaryContainer : palette.surfaceContainerHigh }}
-        onPress={() => { strokeRef.current = value; addNode(node); setStroke(null); }}>
+        onPress={() => { const next = appendPatternNode(value, node); trackDraft(JSON.stringify(next)); onChange(next); haptics.selection(); }}>
         <Text variant="titleLarge" style={{ color: value.includes(node) ? palette.onSecondaryContainer : palette.onSurface }}>{node + 1}</Text>
       </PressableScale>)}
     </View>
     <Text variant="bodySmall" accessibilityLiveRegion="polite">{value.length} dots selected</Text>
     <Button label="Clear pattern" variant="ghost" disabled={disabled || !value.length}
-      onPress={() => { strokeRef.current = []; setStroke(null); onChange([]); }} />
+      onPress={() => onChange([])} />
     <Button label="Submit pattern" disabled={disabled || !value.length}
-      onPress={() => { strokeRef.current = value; finishStroke(); }} />
+      onPress={() => finishStroke(value)} />
     <Button label="Draw pattern instead" variant="ghost" disabled={disabled} onPress={() => setButtonEntry(false)} />
   </View>;
 
-  const webPointerProps =
-    Platform.OS === "web"
-      ? ({
-          onPointerDown: (event: {
-            currentTarget: { setPointerCapture?: (id: number) => void };
-            nativeEvent?: { pointerId?: number };
-            pointerId?: number;
-          }) => {
-            const id = event.nativeEvent?.pointerId ?? event.pointerId;
-            if (typeof id !== "number") return;
-            try {
-              event.currentTarget.setPointerCapture?.(id);
-            } catch {
-              /* ignore */
-            }
-          },
-        } as object)
-      : null;
-
-   return (<View style={{ gap: 8 }}>
-    <View
-      ref={boardRef}
-      collapsable={false}
-      onLayout={measureOrigin}
-      {...responder.panHandlers}
-      {...webPointerProps}
-      accessibilityLabel="Pattern lock. Draw to connect at least four dots."
-      accessibilityState={{ disabled }}
-      style={[styles.board, { opacity: disabled ? 0.55 : 1 }]}
-    >
-      <Svg width={SIZE} height={SIZE} style={StyleSheet.absoluteFill} pointerEvents="none">
-        {shown.slice(1).map((node, i) => {
-          const from = CENTERS[shown[i]];
-          const to = CENTERS[node];
-          return (
-            <Line
-              key={`${shown[i]}-${node}`}
-              x1={from.x}
-              y1={from.y}
-              x2={to.x}
-              y2={to.y}
-              stroke={active}
-              strokeWidth={LINE_WIDTH}
-              strokeLinecap="round"
-            />
-          );
-        })}
-        {last && finger ? (
-          <Line
-            x1={last.x}
-            y1={last.y}
-            x2={finger.x}
-            y2={finger.y}
-            stroke={active}
-            strokeWidth={LINE_WIDTH}
-            strokeLinecap="round"
-            strokeOpacity={0.55}
-          />
-        ) : null}
+  return <View style={{ gap: 8 }}>
+    <GestureDetector gesture={pan}><View collapsable={false}
+      accessibilityLabel="Pattern lock. Draw to connect at least four dots." accessibilityState={{ disabled }}
+      style={[styles.board, { opacity: disabled ? 0.55 : 1 }]}>
+      <Svg width={SIZE} height={SIZE} pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <AnimatedPath animatedProps={pathProps} fill="none" stroke={active} strokeWidth={LINE_WIDTH} strokeLinecap="round" strokeLinejoin="round" />
       </Svg>
-      {CENTERS.map((center, node) => {
-        const selected = used.has(node);
-        return (
-          <View
-            key={node}
-            pointerEvents="none"
-            style={[
-              styles.halo,
-              {
-                left: center.x - HALO / 2,
-                top: center.y - HALO / 2,
-                backgroundColor: selected ? (error ? palette.dangerSoft : palette.accentSoft) : "transparent",
-              },
-            ]}
-          >
-            <View
-              style={[
-                styles.dot,
-                {
-                  borderColor: selected ? active : idle,
-                  backgroundColor: selected ? active : "transparent",
-                },
-              ]}
-            />
-          </View>
-        );
-      })}
-    </View>
-    <Button label="Use buttons to enter pattern" variant="ghost" disabled={disabled} onPress={() => { setStroke(null); setFinger(null); setButtonEntry(true); }} />
-    </View>
-  );
+      {CENTERS.map((_, node) => <PatternDot key={node} node={node} nodes={nodes} error={error} />)}
+    </View></GestureDetector>
+    <Button label="Use buttons to enter pattern" variant="ghost" disabled={disabled} onPress={() => setButtonEntry(true)} />
+  </View>;
 }
 
 const styles = StyleSheet.create({

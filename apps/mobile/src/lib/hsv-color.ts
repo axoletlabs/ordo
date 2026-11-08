@@ -2,18 +2,22 @@
 export type Hsv = { h: number; s: number; v: number };
 
 export function clamp(value: number, min: number, max: number) {
+  "worklet";
   return Math.min(max, Math.max(min, value));
 }
 
 export function clampHsv({ h, s, v }: Hsv): Hsv {
+  "worklet";
   return { h: ((h % 360) + 360) % 360, s: clamp(s, 0, 1), v: clamp(v, 0, 1) };
 }
 
 function channel(value: number) {
+  "worklet";
   return Math.round(clamp(value, 0, 1) * 255);
 }
 
 function toHex(value: number) {
+  "worklet";
   return value.toString(16).padStart(2, "0").toUpperCase();
 }
 
@@ -27,6 +31,7 @@ export function parseHexColor(value: string): string | null {
 }
 
 export function hsvToRgb({ h, s, v }: Hsv) {
+  "worklet";
   const hsv = clampHsv({ h, s, v });
   const chroma = hsv.v * hsv.s;
   const x = chroma * (1 - Math.abs((hsv.h / 60) % 2 - 1));
@@ -42,6 +47,7 @@ export function hsvToRgb({ h, s, v }: Hsv) {
 }
 
 export function hsvToHex(hsv: Hsv): string {
+  "worklet";
   const { r, g, b } = hsvToRgb(hsv);
   return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
 }
@@ -73,5 +79,6 @@ export function hexToHsv(value: string): Hsv | null {
 
 /** Fully saturated, fully bright color for a hue slider fill. */
 export function hueHex(h: number): string {
+  "worklet";
   return hsvToHex({ h, s: 1, v: 1 });
 }
