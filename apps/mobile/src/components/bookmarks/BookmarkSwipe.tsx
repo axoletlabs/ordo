@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import ReanimatedSwipeable, { type SwipeableMethods } from "react-native-gesture-handler/ReanimatedSwipeable";
 import { useQueryClient } from "@tanstack/react-query";
@@ -21,10 +21,11 @@ export function BookmarkSwipe({ bookmark, disabled, children }: {
   const ref = useRef<SwipeableMethods>(null);
   const { palette, expressive } = useTheme();
   const motion = useMaterialMotion();
+  const [revealed, setRevealed] = useState(false);
   const qc = useQueryClient();
   const read = useToggleRead(bookmark.folderId);
   const remove = useDeleteBookmark(bookmark.folderId);
-  useEffect(() => { ref.current?.reset(); }, [bookmark.id, disabled]);
+  useEffect(() => { ref.current?.reset(); setRevealed(false); }, [bookmark.id, disabled]);
   const act = (action: () => void) => {
     ref.current?.close();
     if (disabled) return;
@@ -36,7 +37,7 @@ export function BookmarkSwipe({ bookmark, disabled, children }: {
     }
     action();
   };
-  const actions = () => <View style={{ flexDirection: "row", alignItems: "stretch" }}>
+  const actions = () => <View accessibilityElementsHidden={!revealed} importantForAccessibility={revealed ? "auto" : "no-hide-descendants"} aria-hidden={!revealed} pointerEvents={revealed ? "auto" : "none"} style={{ flexDirection: "row", alignItems: "stretch" }}>
     <ListPressable accessibilityRole="button" accessibilityLabel={bookmark.isRead ? "Mark unread" : "Mark read"}
       onPress={() => act(() => {
         haptics.selection();
@@ -54,6 +55,7 @@ export function BookmarkSwipe({ bookmark, disabled, children }: {
   return <ReanimatedSwipeable ref={ref} enabled={!disabled} friction={1}
     dragOffsetFromLeftEdge={20} dragOffsetFromRightEdge={20} rightThreshold={64}
     overshootRight={false} renderRightActions={actions}
+    onSwipeableWillOpen={() => setRevealed(true)} onSwipeableWillClose={() => setRevealed(false)}
     animationOptions={{ ...motion.spatial, ...(motion.reducedMotion ? { overshootClamping: true, damping: 1000 } : {}) }}
     containerStyle={{ marginBottom: expressive ? 2 : 0 }}
     childrenContainerStyle={{ backgroundColor: expressive ? palette.surfaceContainerLow : palette.surface }}>

@@ -41,7 +41,9 @@ export function useMaterialRefresh(refreshing: boolean, onRefresh?: (() => void)
     try { onRefresh(); } finally {
       // A caller that never sets refreshing must not permanently lock the gesture.
       if (resetTimer.current) clearTimeout(resetTimer.current);
-      resetTimer.current = setTimeout(() => { committed.current = false; busy.value = false; }, 1000);
+      resetTimer.current = setTimeout(() => {
+        if (!options.current.refreshing) { committed.current = false; busy.value = false; }
+      }, 1000);
     }
   }, [cancel]);
   const begin = useCallback((x: number, y: number, touches: number) => {
