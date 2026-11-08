@@ -218,6 +218,34 @@ jobs:
           pnpm --filter @ordo/mobile test:diagnostics-native
           pnpm --filter @ordo/mobile test:android-native
 
+      - name: Verify multi-link save drafts and share intake
+        run: |
+          pnpm --filter @ordo/mobile test:bookmark-drafts
+          pnpm --filter @ordo/mobile test:input-density
+          pnpm --filter @ordo/mobile test:share-intake
+
+      # The Quick Save helper is generated Kotlin that only the device would
+      # otherwise compile. These jars let the contract test build it against
+      # JVM fakes and exercise the real batch write path.
+      - name: Install JVM jars for the Quick Save contract test
+        run: |
+          JARS="$RUNNER_TEMP/ordo-native-jars"
+          mkdir -p "$JARS"
+          fetch() {
+            curl -fsSL --retry 3 -o "$JARS/$2" "$1"
+            echo "$3  $JARS/$2" | sha256sum -c -
+          }
+          fetch https://repo1.maven.org/maven2/org/json/json/20240303/json-20240303.jar json.jar \
+            3cf6cd6892e32e2b4c1c39e0f52f5248a2f5b37646fdfbb79a66b46b618414ed
+          fetch https://repo1.maven.org/maven2/com/squareup/okhttp3/okhttp/4.9.2/okhttp-4.9.2.jar okhttp.jar \
+            3b2ee1b768c1df28c30d2fe6b38dda4d2c519210e30ca3d27950618c563c92de
+          fetch https://repo1.maven.org/maven2/com/squareup/okio/okio/2.8.0/okio-2.8.0.jar okio.jar \
+            4496b06e73982fcdd8a5393f46e5df2ce2fa4465df5895454cac68a32f09bbc8
+          echo "NATIVE_TEST_CLASSPATH=$JARS/json.jar:$JARS/okhttp.jar:$JARS/okio.jar" >> "$GITHUB_ENV"
+
+      - name: Verify generated Quick Save Kotlin and batch writes
+        run: pnpm --filter @ordo/mobile test:share-intake-native
+
       - name: Verify animated style synchronization
         run: pnpm --filter @ordo/mobile test:animations
 
