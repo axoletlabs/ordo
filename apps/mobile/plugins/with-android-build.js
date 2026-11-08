@@ -119,7 +119,7 @@ function shortcutsXml(packageName) {
   return `<?xml version="1.0" encoding="utf-8"?>
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
     <share-target android:targetClass="${packageName}.QuickShareReceiverActivity">
-        <data android:mimeType="text/plain" />
+        <data android:mimeType="text/*" />
         <category android:name="${quickShareCategory(packageName)}" />
     </share-target>
 </shortcuts>
@@ -196,8 +196,11 @@ const DATA_EXTRACTION_RULES_XML = `<?xml version="1.0" encoding="utf-8"?>
 
 function sendIntentFilter(includeDefault = true) {
   const filter = {
-    action: [{ $: { 'android:name': 'android.intent.action.SEND' } }],
-    data: [{ $: { 'android:mimeType': 'text/plain' } }],
+    action: [
+      { $: { 'android:name': 'android.intent.action.SEND' } },
+      { $: { 'android:name': 'android.intent.action.SEND_MULTIPLE' } },
+    ],
+    data: [{ $: { 'android:mimeType': 'text/*' } }],
   };
   if (includeDefault) {
     filter.category = [{ $: { 'android:name': 'android.intent.category.DEFAULT' } }];
@@ -251,6 +254,7 @@ import android.os.FileObserver
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
+import org.json.JSONObject
 import java.io.File
 
 internal object ShareIntake {
@@ -278,12 +282,12 @@ internal object ShareIntake {
       forwardToMain(activity, false)
       return
     }
-    QuickShareSave.save(activity, quick)
+    QuickShareSave.save(activity)
   }
 
   @JvmStatic
   fun canForwardToMain(activity: Activity): Boolean {
-    if (QuickShareSave.urlFromIntent(activity.intent) == null) {
+    if (QuickShareSave.urlsFromIntent(activity.intent).isEmpty()) {
       Toast.makeText(activity, QuickShareSave.INVALID, Toast.LENGTH_SHORT).show()
       activity.finish()
       return false
@@ -319,26 +323,24 @@ internal object ShareIntake {
   }
 
   @JvmStatic
-  fun forwardToMain(activity: Activity, quick: Boolean) {
-    if (quick) markQuick(activity)
+  fun forwardToMain(activity: Activity, quick: Boolean, remaining: List<String>? = null, savedCount: Int = 0, review: Boolean = false) {
     val intent = activity.intent
+    val urls = remaining ?: QuickShareSave.urlsFromIntent(intent)
+    File(activity.cacheDir, FLAG_FILE).writeText(JSONObject()
+      .put("quick", quick).put("review", review).put("savedCount", savedCount).toString())
     val mainIntent = Intent(activity, MainActivity::class.java).apply {
-      action = intent.action
-      setDataAndType(intent.data, intent.type)
-      clipData = intent.clipData
-      intent.extras?.let { putExtras(it) }
+      // expo-share-intent only accepts ACTION_SEND for text. Normalize arrays,
+      // ClipData and ACTION_SEND_MULTIPLE into one lossless text payload.
+      action = Intent.ACTION_SEND
+      type = "text/plain"
+      putExtra(Intent.EXTRA_TEXT, urls.joinToString("\\n"))
+      intent.getCharSequenceExtra(Intent.EXTRA_TITLE)?.let { putExtra(Intent.EXTRA_TITLE, it) }
       addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
       addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
       addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
-      addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
     }
     activity.startActivity(mainIntent)
     activity.finish()
-  }
-
-  @JvmStatic
-  fun markQuick(context: Context) {
-    File(context.cacheDir, FLAG_FILE).writeText("1")
   }
 
   @JvmStatic

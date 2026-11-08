@@ -54,7 +54,7 @@ export interface SettingsState {
   shareQuickBookmark: boolean;
   /** When Quick Bookmark is on, also keep the normal Save share target. */
   shareShowQuickAction: boolean;
-  /** (Beta) Prefill the save form's link from a URL on the clipboard. Off by default. */
+  /** (Beta) Prefill the save form with clipboard links. Off by default. */
   autoPasteClipboardLink: boolean;
   hapticsEnabled: boolean;
   /** One-time tip: OTP is printed to the server console when SMTP is unset. */

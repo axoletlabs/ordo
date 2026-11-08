@@ -93,7 +93,7 @@ export default function ControlsScreen() {
             icon="clipboard-outline"
             label="Auto-paste links"
             badge="Beta"
-            description="Fill the link field with a link from your clipboard when the save form opens."
+            description="Fill the save form with links from your clipboard, one field per link."
             right={<Toggle value={autoPasteClipboardLink} onValueChange={setAutoPasteClipboardLink} />}
             rightFit="content"
           />

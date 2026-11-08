@@ -11,7 +11,7 @@ import { useIncomingShareStore } from "../../store/incoming-share";
 export function ChangelogAnnouncementHost({ enabled }: { enabled: boolean }) {
   const build = useBuildInfo();
   const pathname = usePathname();
-  const pendingShare = useIncomingShareStore((state) => state.pendingUrl);
+  const pendingShare = useIncomingShareStore((state) => state.pendingUrls.length > 0);
   const key = changelogBuildKey(build.releaseVersion, build.gitHash);
   const [seen, setSeen] = useState<{ key: unknown } | null>(null);
   const [announcement, setAnnouncement] = useState<{ key: string; tag: string } | null>(null);
