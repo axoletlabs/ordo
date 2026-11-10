@@ -277,7 +277,12 @@ export const ThemedFlatList = React.forwardRef(function ThemedFlatList<T>(
   const blocked = useNativeOverlayBlocked();
   const { wrapper, inner } = splitScrollLayoutStyle(style);
   const customRefresh = !refreshControl && !!onRefresh;
-  const refresh = useMaterialRefresh(!!refreshing, onRefresh, customRefresh && !blocked && rest.scrollEnabled !== false);
+  // `blocked` must not feed the gesture's enabled state: a menu publish lands while
+  // the finger is held on a row, and RNGH cancels a begun handler mid-touch on an
+  // enabled flip (that reentrant cancel is what killed the process on 2.32). The
+  // blocking scrim already stops new input under overlays; the hook re-arms nothing
+  // and commits nothing while the shared value says disabled.
+  const refresh = useMaterialRefresh(!!refreshing, onRefresh, customRefresh && rest.scrollEnabled !== false);
   const fill = wrapper?.flex == null && wrapper?.maxHeight == null && wrapper?.height == null;
   const itemCount = Array.isArray(data) ? data.length : data == null ? 0 : 1;
   const motion = useMaterialMotion();
