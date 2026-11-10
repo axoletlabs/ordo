@@ -75,6 +75,10 @@ export interface FloatingPanelProps {
   dirty?: boolean;
   /** Changelog notes allow downward dismissal only when their body is at top. */
   dragFromBody?: boolean;
+  /** Pickers whose own field receives the keyboard pass false: the surface's
+   * entrance and exit then leave the IME alone so focus transfers between the
+   * parent field and the picker's search field without a hide/show cycle. */
+  keyboardDismiss?: boolean;
   /** Adaptive sheets animate their height to fit the content, keeping actions
    * anchored at the bottom. Expanded sheets always use the height limit. */
   sheetSizing?: "content" | "expanded" | "adaptive";
@@ -226,6 +230,7 @@ function FloatingPanelSurface({
   fitContent = false,
   dismissible = true,
   dismissOnScrim = true,
+  keyboardDismiss = true,
   scrollBody = true,
   scrollResetKey,
   keepMounted = false,
@@ -287,6 +292,7 @@ function FloatingPanelSurface({
   const layoutReady = (Platform.OS === "web" || measured) && adaptiveReady && (fillSheet || naturalContent != null);
   const { rendered, progress, spatial } = useOverlayPresence(visible, hideAndDismiss, {
     interactive: interactive && !obscured, onEntered, onExited, onExiting, ready: layoutReady || layoutFallback,
+    dismissKeyboard: keyboardDismiss,
   });
   React.useEffect(() => {
     if (!rendered && !keepMounted) { setMeasured(false); setNaturalContent(null); setLayoutFallback(false); setGhostHeight(null); }
@@ -548,8 +554,17 @@ function FloatingPanelSurface({
       ? React.cloneElement(action, { topSpacing: 16 }) : action)}
   </View>;
   const sheetBodyPadding = { paddingHorizontal: sheetInset, paddingTop: sheetBodyTopPadding, paddingBottom: spacing[24] };
+  // Translated (Android) bodies keep the explicit height only when their own
+  // scroll viewport needs a definite parent to measure against. A picker body
+  // (scrollBody=false) must stay auto: its measuring child sits INSIDE this
+  // view, so deriving the height from that measurement let a shrinkable body
+  // collapse to the available space, report 0, and pin the sheet at
+  // header+actions (a fixed point that clipped the first field). An auto body
+  // is always the right visible extent anyway - its natural height up to the
+  // maxHeight clamp, which equals fittedSheetHeight - header - actions
+  // whenever the clamp binds - and the actions pin to the same extent.
   const sheetBodyStyle = { flex: fillSheet && !translatedAdaptiveSheet ? 1 : undefined, flexShrink: 1,
-    ...(translatedAdaptiveSheet ? { height: Math.max(0, fittedSheetHeight - sheetHeaderHeight - sheetActionsHeight) } : {}),
+    ...(translatedAdaptiveSheet && scrollBody ? { height: Math.max(0, fittedSheetHeight - sheetHeaderHeight - sheetActionsHeight) } : {}),
     maxHeight: Math.max(0, heightLimit - sheetHeaderHeight - sheetActionsHeight), backgroundColor: panelSurface };
   // Measure natural content, independently of the animated scroll viewport.
   // A viewport measurement here would feed the height animation back into

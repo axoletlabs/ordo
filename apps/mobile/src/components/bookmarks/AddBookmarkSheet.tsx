@@ -295,12 +295,13 @@ function AddBookmarkContent({
     return () => clearTimeout(handle);
   }, [activeLinkId, links, visible]);
 
-  /** Dropdowns own the surface: release the link field's focus before the
-   * picker opens so a suspended panel never keeps the caret or the IME. On
-   * native the field's last-focus record survives, so an outside-tap close
-   * returns the keyboard to Link rather than the library search behind it. */
+  /** Dropdowns own the surface: hand the link row to the picker. On native
+   * the picker's search field moves focus (and the IME target) in one step
+   * through the scoped focus take, so an eager blur here would only start an
+   * IME hide its reopen has to fight. Web restores focus through its own
+   * overlay machinery and expects the field released before the picker opens. */
   const handFocusToDropdown = () => {
-    urlRef.current?.blur();
+    if (Platform.OS === "web") urlRef.current?.blur();
     setActiveLinkId(null);
   };
 
@@ -554,7 +555,7 @@ function AddBookmarkContent({
           </>
         )}
       </FloatingPanel>
-      <FolderPickerMenu visible={folderPickerOpen} onDismiss={() => setDestinationOpen(false)} folders={folders ?? []} anchor={destinationAnchor}
+      <FolderPickerMenu visible={folderPickerOpen} onDismiss={() => setDestinationOpen(false)} folders={folders ?? []} anchor={destinationAnchor} returnFocusRef={urlRef}
         value={selectedFolderId} onChange={(id) => setSelectedDestination(id ?? ROOT_DESTINATION)}
         onCreate={() => { setDestinationOpen(false); setCreateFolderOpen(true); }} />
       <ResponsivePicker title="Tags" visible={tagPickerOpen} onDismiss={() => setShowTagPicker(false)} anchor={tagAnchor} width={tagAnchor?.width} scrollBody={false} keyboardDismiss={false} estimatedHeight={280} returnFocusRef={urlRef}>
