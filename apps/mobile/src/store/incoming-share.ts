@@ -3,18 +3,24 @@ import { create } from "zustand";
 import { shouldAbandonShareIntake } from "../lib/share-intake";
 
 interface IncomingShareState {
-  pendingUrl: string | null;
+  pendingUrls: string[];
   /** Bumped when the intake is cancelled so in-flight handlers cannot reopen it. */
   generation: number;
-  setPendingUrl: (url: string) => void;
+  begin: () => number;
+  setPendingUrls: (urls: string[]) => void;
   clear: () => void;
 }
 
-export const useIncomingShareStore = create<IncomingShareState>((set) => ({
-  pendingUrl: null,
+export const useIncomingShareStore = create<IncomingShareState>((set, get) => ({
+  pendingUrls: [],
   generation: 0,
-  setPendingUrl: (pendingUrl) => set({ pendingUrl }),
-  clear: () => set((state) => ({ pendingUrl: null, generation: state.generation + 1 })),
+  begin: () => {
+    const generation = get().generation + 1;
+    set({ pendingUrls: [], generation });
+    return generation;
+  },
+  setPendingUrls: (pendingUrls) => set({ pendingUrls }),
+  clear: () => set((state) => ({ pendingUrls: [], generation: state.generation + 1 })),
 }));
 
 let lastAppState = AppState.currentState;

@@ -1,10 +1,10 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { useShareIntentContext } from "expo-share-intent";
 import { APP_NAME } from "@ordo/shared";
 import { returnToShareSender, saveUnfiledBookmark } from "../lib/share-target";
 import { shareIntakeMode, shareSavedToast } from "../lib/share-intake";
-import { consumeQuickShareFlag } from "../lib/share-targets";
-import { extractSharedUrl } from "../lib/shared-url";
+import { consumeQuickShareHandoff } from "../lib/share-targets";
+import { extractSharedUrls } from "../lib/shared-url";
 import { prefetchExtraction } from "../lib/prefetch-extraction";
 import { errorMessage } from "../lib/error-message";
 import { haptics } from "../lib/haptics";
@@ -17,33 +17,35 @@ import { useSettingsStore } from "../store/settings";
  *  Quick Save usually never reaches here: the translucent receiver POSTs
  *  natively. This handler is the Save sheet plus the JS fallback. */
 export function IncomingShareHandler() {
-  const setPendingUrl = useIncomingShareStore((state) => state.setPendingUrl);
+  const setPendingUrls = useIncomingShareStore((state) => state.setPendingUrls);
+  const consumed = useRef<object | null>(null);
   const { hasShareIntent, shareIntent, resetShareIntent, error } = useShareIntentContext();
 
   useEffect(() => {
-    if (!hasShareIntent) return;
+    if (!hasShareIntent || consumed.current === shareIntent) return;
+    consumed.current = shareIntent;
 
-    const url = extractSharedUrl(shareIntent.webUrl, shareIntent.text);
+    const urls = extractSharedUrls(shareIntent.webUrl, shareIntent.text);
     resetShareIntent();
 
-    if (!url) {
+    if (!urls.length) {
       useIncomingShareStore.getState().clear();
       returnToShareSender("The shared text doesn't contain a valid link.");
       return;
     }
 
-    const generation = useIncomingShareStore.getState().generation;
+    const generation = useIncomingShareStore.getState().begin();
     const stillThisIntake = () => useIncomingShareStore.getState().generation === generation;
 
     void (async () => {
-      const fromQuickTarget = await consumeQuickShareFlag();
+      const handoff = await consumeQuickShareHandoff();
       if (!stillThisIntake()) return;
 
       const { shareQuickBookmark, shareShowQuickAction } = useSettingsStore.getState();
-      const mode = shareIntakeMode({
+      const mode = handoff.review ? "sheet" : shareIntakeMode({
         quickBookmark: shareQuickBookmark,
         showAlongside: shareShowQuickAction,
-        fromQuickTarget,
+        fromQuickTarget: handoff.fromQuickTarget,
       });
 
       if (useAuthStore.getState().status !== "authenticated") {
@@ -53,25 +55,32 @@ export function IncomingShareHandler() {
       }
 
       if (mode === "sheet") {
-        prefetchExtraction(url);
+        prefetchExtraction(urls[0]);
         if (!stillThisIntake()) return;
-        setPendingUrl(url);
+        setPendingUrls(urls);
+        if (handoff.savedCount) toast.error(`${handoff.savedCount} saved. Save the remaining links here.`);
         return;
       }
 
+      let saved = 0;
       try {
-        await saveUnfiledBookmark(url);
+        for (const url of urls) {
+          if (!stillThisIntake()) return;
+          await saveUnfiledBookmark(url);
+          saved++;
+        }
         if (!stillThisIntake()) return;
         haptics.success();
-        returnToShareSender(shareSavedToast());
+        returnToShareSender(shareSavedToast(undefined, urls.length));
       } catch (err) {
         if (!stillThisIntake()) return;
-        toast.error(errorMessage(err));
-        prefetchExtraction(url);
-        setPendingUrl(url);
+        const remaining = urls.slice(saved);
+        toast.error(saved ? `${saved} saved. ${errorMessage(err)}` : errorMessage(err));
+        prefetchExtraction(remaining[0]);
+        setPendingUrls(remaining);
       }
     })();
-  }, [hasShareIntent, resetShareIntent, setPendingUrl, shareIntent]);
+  }, [hasShareIntent, resetShareIntent, setPendingUrls, shareIntent]);
 
   useEffect(() => {
     if (!error) return;

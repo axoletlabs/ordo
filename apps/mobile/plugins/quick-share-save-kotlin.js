@@ -12,11 +12,12 @@ import android.view.HapticFeedbackConstants
 import android.widget.Toast
 import org.json.JSONArray
 import org.json.JSONObject
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * Save a shared URL from the translucent receiver without launching React.
+ * Save shared URLs from the translucent receiver without launching React.
  * Falls back to MainActivity when the network is unreachable so the JS sheet
  * can retry. Auth failures stay off-screen (toast + finish).
  */
@@ -28,9 +29,10 @@ internal object QuickShareSave {
   const val SIGN_IN = "Sign in to save bookmarks."
   const val INVALID = "The shared text doesn't contain a valid link."
   private val main = Handler(Looper.getMainLooper())
-  private val urlPattern = Regex("https?://\\\\S+", RegexOption.IGNORE_CASE)
+  private val urlPattern = Regex("""https?://[^\\s<>"']+""", RegexOption.IGNORE_CASE)
+  private val saveLock = Any()
 
-  private enum class Outcome { SAVED, AUTH, INVALID, FALLBACK }
+  private enum class Outcome { SAVED, AUTH, FALLBACK }
 
   private class Session(
     var snapshot: String,
@@ -40,61 +42,62 @@ internal object QuickShareSave {
     var accessExpiresAt: Long?
   )
 
+  private class Result(val outcome: Outcome, val saved: Int, val remaining: List<String>)
+
   @JvmStatic
-  fun save(activity: Activity, forwardQuick: Boolean) {
-    val url = extractFromIntent(activity.intent)
-    if (url == null) {
+  fun save(activity: Activity) {
+    val urls = urlsFromIntent(activity.intent)
+    if (urls.isEmpty()) {
       toast(activity, INVALID)
       activity.finish()
       return
     }
     Thread {
-      val outcome = saveUrl(activity.applicationContext, url)
+      // Token refresh and sequential creates belong to one batch. A second
+      // receiver must read the newly rotated session rather than race it.
+      val result = synchronized(saveLock) { saveUrls(activity.applicationContext, urls) }
       main.post {
         if (activity.isFinishing) return@post
-        when (outcome) {
-          Outcome.SAVED -> {
+        when {
+          result.outcome == Outcome.SAVED -> {
             haptic(activity)
-            toast(activity, SAVED)
+            toast(activity, if (result.saved == 1) SAVED else "\${result.saved} bookmarks saved to Bookmarks")
             activity.finish()
           }
-          Outcome.AUTH -> {
+          result.outcome == Outcome.AUTH && result.saved == 0 -> {
             toast(activity, SIGN_IN)
             activity.finish()
           }
-          Outcome.INVALID -> {
-            toast(activity, INVALID)
-            activity.finish()
-          }
-          Outcome.FALLBACK -> ShareIntake.forwardToMain(activity, forwardQuick)
+          else -> ShareIntake.forwardToMain(activity, false, result.remaining, result.saved, true)
         }
       }
     }.start()
   }
 
-  private fun saveUrl(context: Context, url: String): Outcome {
-    val session = readSession(context) ?: return Outcome.AUTH
-    var usedRefresh = false
-    try {
-      if (needsRefresh(session)) {
-        if (!refresh(context, session)) return Outcome.AUTH
-        usedRefresh = true
+  private fun saveUrls(context: Context, urls: List<String>): Result {
+    val session = readSession(context) ?: return Result(Outcome.AUTH, 0, urls)
+    var saved = 0
+    for ((index, url) in urls.withIndex()) {
+      val remaining = urls.drop(index)
+      try {
+        var usedRefresh = false
+        if (needsRefresh(session)) {
+          if (!refresh(context, session)) return Result(Outcome.AUTH, saved, remaining)
+          usedRefresh = true
+        }
+        var created = createBookmark(session, url)
+        if (created == 401 && !usedRefresh) {
+          if (!refresh(context, session)) return Result(Outcome.AUTH, saved, remaining)
+          created = createBookmark(session, url)
+        }
+        if (created == 401) return Result(Outcome.AUTH, saved, remaining)
+        if (created != 200 && created != 201) return Result(Outcome.FALLBACK, saved, remaining)
+        saved++
+      } catch (_: Exception) {
+        return Result(Outcome.FALLBACK, saved, remaining)
       }
-      val created = createBookmark(session, url)
-      if (created == 200 || created == 201) return Outcome.SAVED
-      if (created == 401) {
-        // A token refreshed moments ago still failed: the session is dead.
-        if (usedRefresh) return Outcome.AUTH
-        if (!refresh(context, session)) return Outcome.AUTH
-        val retried = createBookmark(session, url)
-        if (retried == 200 || retried == 201) return Outcome.SAVED
-        if (retried == 401) return Outcome.AUTH
-      }
-      // Anything else (including a retried 5xx) is worth retrying in the sheet.
-      return Outcome.FALLBACK
-    } catch (_: Exception) {
-      return Outcome.FALLBACK
     }
+    return Result(Outcome.SAVED, saved, emptyList())
   }
 
   private fun needsRefresh(session: Session): Boolean {
@@ -195,42 +198,67 @@ internal object QuickShareSave {
   }
 
   @JvmStatic
-  fun urlFromIntent(intent: Intent): String? = extractFromIntent(intent)
-
-  private fun extractFromIntent(intent: Intent): String? {
-    val extras = arrayOf(
-      intent.getStringExtra(Intent.EXTRA_TEXT),
-      intent.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()
-    )
-    for (extra in extras) {
-      extractSharedUrl(extra)?.let { return it }
+  @Suppress("DEPRECATION")
+  fun urlsFromIntent(intent: Intent): List<String> {
+    val urls = LinkedHashMap<String, String>()
+    fun add(text: String?) {
+      for (url in extractSharedUrls(text)) urls.putIfAbsent(urlKey(url) ?: continue, url)
+    }
+    when (val text = intent.extras?.get(Intent.EXTRA_TEXT)) {
+      is CharSequence -> add(text.toString())
+      is Array<*> -> text.filterIsInstance<CharSequence>().forEach { add(it.toString()) }
+      is Iterable<*> -> text.filterIsInstance<CharSequence>().forEach { add(it.toString()) }
+    }
+    when (val stream = intent.extras?.get(Intent.EXTRA_STREAM)) {
+      is android.net.Uri -> add(stream.toString())
+      is Array<*> -> stream.filterIsInstance<android.net.Uri>().forEach { add(it.toString()) }
+      is Iterable<*> -> stream.filterIsInstance<android.net.Uri>().forEach { add(it.toString()) }
     }
     val clip = intent.clipData
     if (clip != null) {
       for (i in 0 until clip.itemCount) {
-        extractSharedUrl(clip.getItemAt(i).text?.toString())?.let { return it }
+        add(clip.getItemAt(i).text?.toString())
+        add(clip.getItemAt(i).uri?.toString())
       }
     }
-    return null
+    add(intent.data?.toString())
+    return urls.values.toList()
   }
 
-  fun extractSharedUrl(text: String?): String? {
-    if (text.isNullOrBlank()) return null
-    val match = urlPattern.find(text) ?: return null
-    var trimmed = match.value.replace(Regex("[.,;:!?]+\$"), "")
-    val pairs = arrayOf("(" to ")", "[" to "]", "{" to "}")
-    for ((opening, closing) in pairs) {
-      while (
-        trimmed.endsWith(closing) &&
-        trimmed.split(closing).size > trimmed.split(opening).size
-      ) {
-        trimmed = trimmed.dropLast(1)
+  fun extractSharedUrls(text: String?): List<String> {
+    if (text.isNullOrBlank()) return emptyList()
+    val urls = LinkedHashMap<String, String>()
+    for (match in urlPattern.findAll(text)) {
+      for (candidate in match.value.split(Regex("""[,;](?=https?://)""", RegexOption.IGNORE_CASE))) {
+        var trimmed = candidate.replace(Regex("""[.,;:!?]+$"""), "")
+        val pairs = arrayOf("(" to ")", "[" to "]", "{" to "}")
+        for ((opening, closing) in pairs) {
+          while (trimmed.endsWith(closing) && trimmed.split(closing).size > trimmed.split(opening).size) {
+            trimmed = trimmed.dropLast(1)
+          }
+        }
+        val key = urlKey(trimmed) ?: continue
+        urls.putIfAbsent(key, trimmed)
       }
     }
-    val lower = trimmed.lowercase()
-    if (!lower.startsWith("http://") && !lower.startsWith("https://")) return null
-    return trimmed
+    return urls.values.toList()
   }
+
+  private fun urlKey(value: String): String? = try {
+    val authority = Regex("""^https?://([^/?#]*)""", RegexOption.IGNORE_CASE).find(value)?.groupValues?.get(1)
+    val url = value.toHttpUrlOrNull()
+    if (url == null || authority.isNullOrBlank() ||
+      authority.any { it.isWhitespace() || it in "<>{}|^" || it.code == 96 || it.code == 92 || it == '"' }) null
+    else {
+      // React Native already exposes OkHttp. Its URL parser also normalizes
+      // dot segments, IDNs and Unicode paths, like the JS URL implementation.
+      val host = if (url.host.contains(':')) "[" + url.host + "]" else url.host
+      val port = if (url.scheme == "http" && url.port == 80 || url.scheme == "https" && url.port == 443) "" else ":" + url.port
+      val path = if (url.encodedPath == "/") "" else url.encodedPath
+      url.scheme + "://" + host + port + path +
+        (url.encodedQuery?.let { "?" + it } ?: "") + (url.encodedFragment?.takeIf { it.isNotEmpty() }?.let { "#" + it } ?: "")
+    }
+  } catch (_: Exception) { null }
 
   private fun toast(activity: Activity, message: String) {
     Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()

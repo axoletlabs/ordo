@@ -111,8 +111,9 @@ function RootShell() {
   useAutomaticOtaUpdate();
   const { restartCount } = Updates.useUpdates();
   const runtimeRestart = restarting || restartCount > 0 || peekRestartCover() != null;
-  const sharedUrl = useIncomingShareStore((s) => s.pendingUrl);
-  const clearSharedUrl = useIncomingShareStore((s) => s.clear);
+  const sharedUrls = useIncomingShareStore((s) => s.pendingUrls);
+  const shareGeneration = useIncomingShareStore((s) => s.generation);
+  const clearSharedUrls = useIncomingShareStore((s) => s.clear);
   const [minElapsed, setMinElapsed] = React.useState(
     () => runtimeRestart || Date.now() - LAUNCH_STARTED_AT >= MIN_SPLASH_MS,
   );
@@ -228,18 +229,19 @@ function RootShell() {
         <IncomingShareHandler />
         {!showSplash && routeMatchesAuth && status === "authenticated" ? (
           <AddBookmarkSheet
-            visible={!!sharedUrl}
+            key={shareGeneration}
+            visible={sharedUrls.length > 0}
             onDismiss={() => {
-              clearSharedUrl();
+              clearSharedUrls();
               returnToShareSender();
             }}
-            onSaved={(destination) => {
-              clearSharedUrl();
-              returnToShareSender(shareSavedToast(destination));
+            onSaved={(destination, count) => {
+              clearSharedUrls();
+              returnToShareSender(shareSavedToast(destination, count));
             }}
             folderId={null}
             allowFolderSelection
-            initialUrl={sharedUrl ?? undefined}
+            initialUrls={sharedUrls}
             shareIntake
           />
         ) : null}

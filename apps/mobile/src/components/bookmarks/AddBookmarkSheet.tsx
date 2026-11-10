@@ -1,5 +1,5 @@
 /**
- * Floating dialog to validate and save a new URL.
+ * Floating dialog to collect, validate, and save one or more links.
  */
 import React, { useState } from "react";
 import { Platform, StyleSheet, View, useWindowDimensions, type TextInput } from "react-native";
@@ -8,14 +8,11 @@ import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
 import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { ResponsivePicker } from "../ui/ResponsivePicker";
 import { FloatingPanel } from "../ui/FloatingPanel";
-import { AnimatedSwap } from "../ui/AnimatedSwap";
 import { AnimatedDisclosure } from "../ui/AnimatedDisclosure";
 import { PanelHeader } from "../ui/PanelHeader";
-import { Input } from "../ui/Input";
-import { IconButton } from "../ui/IconButton";
-import { extractSharedUrl } from "../../lib/shared-url";
+import { Button } from "../ui/Button";
+import { extractSharedUrls } from "../../lib/shared-url";
 import { Text } from "../ui/Text";
-import { PressableScale } from "../ui/PressableScale";
 import { PickerField } from "../ui/PickerField";
 import { FolderPickerMenu } from "./FolderPickerMenu";
 import type { MenuAnchorRect } from "../ui/ContextMenu";
@@ -33,11 +30,9 @@ import { errorMessage, isFolderProtected } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
 import { prefetchExtraction } from "../../lib/prefetch-extraction";
 import { toast } from "../ui/toast-store";
-import { spacing, radius } from "../../theme/tokens";
-import { useTheme } from "../../theme/ThemeProvider";
-import { domainFromUrl } from "../../lib/format";
-import { focusTextInput } from "../../lib/focus-text-input";
-import { isSupportedUrl } from "@ordo/shared";
+import { spacing } from "../../theme/tokens";
+import { bookmarkDraftsFromUrls, pasteBookmarkDrafts, normalizeBookmarkDraft, validateBookmarkDrafts, type BookmarkDraft } from "../../lib/bookmark-drafts";
+import { BookmarkLinkField, BookmarkLinkLayout, useBookmarkLinkActions } from "./BookmarkLinkField";
 import { LazyMount } from "../ui/LazyMount";
 import { useOpeningFocus } from "./use-opening-focus";
 
@@ -49,16 +44,17 @@ export interface AddBookmarkSheetProps {
   folderName?: string | null;
   allowFolderSelection?: boolean;
   initialUrl?: string;
+  initialUrls?: readonly string[];
   /** Tags preselected for the new bookmark (e.g. from a tag view). */
   initialTagIds?: string[];
   /**
-   * Share-sheet intake: URL is already known, so don't autofocus the keyboard,
+   * Share-sheet intake: links are already known, so don't autofocus the keyboard,
    * don't dismiss on a scrim tap (that returns to the sender on Android), and
-   * show the link as a confirmed preview until the user edits it.
+   * keep the links compact until the user edits one.
    */
   shareIntake?: boolean;
   /** Share intake only: called instead of `onDismiss` after a successful save. */
-  onSaved?: (destinationLabel: string | null) => void;
+  onSaved?: (destinationLabel: string | null, count: number) => void;
 }
 
 const ROOT_DESTINATION = "__bookmarks__";
@@ -85,16 +81,26 @@ function AddBookmarkContent({
   folderName,
   allowFolderSelection = false,
   initialUrl,
+  initialUrls,
   initialTagIds = NO_TAGS,
   shareIntake = false,
   onSaved,
 }: AddBookmarkSheetProps) {
-  const { palette } = useTheme();
   const { width } = useWindowDimensions();
+  const intakeKey = JSON.stringify(initialUrls ?? (initialUrl ? [initialUrl] : []));
+  const intakeUrls = React.useMemo(() => JSON.parse(intakeKey) as string[], [intakeKey]);
+  const hasIntake = intakeUrls.length > 0;
   const create = useCreateBookmark();
   const { data: folders } = useFolders();
   const { data: tags } = useTags();
-  const [url, setUrl] = useState("");
+  const [links, setLinks] = useState<BookmarkDraft[]>(() => bookmarkDraftsFromUrls(intakeUrls));
+  const nextLinkId = React.useRef(Math.max(1, intakeUrls.length));
+  const [activeLinkId, setActiveLinkId] = useState<number | null>(shareIntake && hasIntake ? null : 0);
+  const [focusRequest, setFocusRequest] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [saveProgress, setSaveProgress] = useState(0);
+  const saveRun = React.useRef<object | null>(null);
+  const entranceReady = React.useRef(false);
   const urlRef = React.useRef<TextInput>(null);
   const tagSearchRef = React.useRef<TextInput>(null);
   const tagMenuRef = React.useRef<View>(null);
@@ -111,7 +117,6 @@ function AddBookmarkContent({
   const [showTagPicker, setShowTagPicker] = useState(false);
   const [destinationAnchor, setDestinationAnchor] = useState<MenuAnchorRect | null>(null);
   const [tagAnchor, setTagAnchor] = useState<MenuAnchorRect | null>(null);
-  const [urlEditing, setUrlEditing] = useState(false);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>(initialTagIds);
   const [selectedDestination, setSelectedDestination] = useState(folderId ?? ROOT_DESTINATION);
   const selectedFolderId = selectedDestination === ROOT_DESTINATION ? null : selectedDestination;
@@ -140,18 +145,18 @@ function AddBookmarkContent({
   // set in another order) on every render, which is not a new intent and must
   // not reset an active draft.
   const tagKey = [...new Set(initialTagIds)].sort().join("\u0000");
-  const appliedProps = React.useRef({ visible: false, folderId, initialUrl, tagKey });
+  const appliedProps = React.useRef({ visible: false, folderId, intakeKey, tagKey });
   // One applied open/intake session. Render-adjusted state, not a mutable
   // ref: a discarded concurrent render must not invent a close/new URL and
   // then silently suppress or mis-focus a save that belongs to the live
   // session. Stable across clipboard requests and child pickers; closing or
   // a different intake URL starts a new token. The committed token is
   // published before paint below, so real closes invalidate in-flight saves.
-  const [session, setSession] = React.useState(() => ({ visible, initialUrl, token: visible ? 1 : 0 }));
+  const [session, setSession] = React.useState(() => ({ visible, intakeKey, token: visible ? 1 : 0 }));
   if (session.visible !== visible) {
-    setSession({ visible, initialUrl, token: session.token + 1 });
-  } else if (visible && session.initialUrl !== initialUrl) {
-    setSession({ visible, initialUrl, token: session.token + 1 });
+    setSession({ visible, intakeKey, token: session.token + 1 });
+  } else if (visible && session.intakeKey !== intakeKey) {
+    setSession({ visible, intakeKey, token: session.token + 1 });
   }
   const committedSession = React.useRef(session.token);
 
@@ -194,6 +199,7 @@ function AddBookmarkContent({
   // paint. Waiting for the passive reset left a selector active for one commit.
   React.useLayoutEffect(() => {
     if (visible) return;
+    entranceReady.current = false;
     // Mark the session closed before paint so a synchronous reopen cannot
     // mistake a stale `true` for "still open".
     appliedProps.current.visible = false;
@@ -204,7 +210,6 @@ function AddBookmarkContent({
     setCreateTagOpen(false);
     setLockedFolderId(null);
     setShowTagPicker(false);
-    setUrlEditing(false);
   }, [visible]);
 
   // Opening resets the draft from the props of that session. While the sheet
@@ -217,13 +222,17 @@ function AddBookmarkContent({
       return;
     }
     if (!applied.visible) {
-      appliedProps.current = { visible: true, folderId, initialUrl, tagKey };
+      appliedProps.current = { visible: true, folderId, intakeKey, tagKey };
       setSelectedDestination(folderId ?? ROOT_DESTINATION);
-      setUrl(initialUrl ?? "");
+      setLinks(bookmarkDraftsFromUrls(intakeUrls));
+      nextLinkId.current = Math.max(1, intakeUrls.length);
+      setActiveLinkId(shareIntake && hasIntake ? null : 0);
+      setFocusRequest(0);
+      saveRun.current = null;
+      setSaving(false);
       setError("");
       setLockedFolderId(null);
       setShowTagPicker(false);
-      setUrlEditing(false);
       setSelectedTagIds(initialTagIds);
       return;
     }
@@ -231,29 +240,33 @@ function AddBookmarkContent({
       applied.folderId = folderId;
       setSelectedDestination(folderId ?? ROOT_DESTINATION);
     }
-    if (applied.initialUrl !== initialUrl) {
-      applied.initialUrl = initialUrl;
+    if (applied.intakeKey !== intakeKey) {
+      applied.intakeKey = intakeKey;
       // A different intake URL is a new drafted link even without a close:
       // an in-flight save for the previous link must not settle into it.
       draftRevision.current += 1;
-      setUrl(initialUrl ?? "");
+      setLinks(bookmarkDraftsFromUrls(intakeUrls));
+      nextLinkId.current = Math.max(1, intakeUrls.length);
+      setActiveLinkId(shareIntake && hasIntake ? null : 0);
+      setFocusRequest(0);
+      saveRun.current = null;
+      setSaving(false);
       setError("");
-      setUrlEditing(false);
     }
     if (applied.tagKey !== tagKey) {
       applied.tagKey = tagKey;
       setSelectedTagIds([...initialTagIds]);
     }
-  }, [folderId, initialTagIds, initialUrl, tagKey, visible]);
+  }, [folderId, initialTagIds, intakeKey, intakeUrls, hasIntake, shareIntake, tagKey, visible]);
 
   // (Beta) Clipboard auto-paste: with the setting on, an opening draft with
-  // no link yet pulls the first URL from the clipboard — even from inside
+  // no link yet pulls every URL from the clipboard — even from inside
   // surrounding text. Silent and best effort: blocked reads, empty boards,
   // or text without a link just leave the field untouched. Declared after
   // the reset above so a resolved read lands on the freshly cleared draft;
   // the revision guard keeps it from ever overwriting typed text.
   React.useEffect(() => {
-    if (!visible || shareIntake || initialUrl) return;
+    if (!visible || shareIntake || hasIntake) return;
     if (!useSettingsStore.getState().autoPasteClipboardLink) return;
     const epoch = ++pasteEpoch.current;
     const revision = draftRevision.current;
@@ -264,21 +277,24 @@ function AddBookmarkContent({
         if (!(await Clipboard.hasStringAsync().catch(() => true))) return;
         const clipboard = await Clipboard.getStringAsync();
         if (!active.current || epoch !== pasteEpoch.current || revision !== draftRevision.current) return;
-        const next = extractSharedUrl(undefined, clipboard);
-        if (!next) return;
-        setUrl(next);
+        const urls = extractSharedUrls(undefined, clipboard);
+        if (!urls.length) return;
+        setLinks(bookmarkDraftsFromUrls(urls));
+        nextLinkId.current = Math.max(1, urls.length);
         setError("");
       } catch {
         // The user didn't ask for this read, so never surface its errors.
       }
     })();
-  }, [initialUrl, shareIntake, visible]);
+  }, [intakeKey, hasIntake, shareIntake, visible]);
 
   React.useEffect(() => {
     if (!visible) return;
-    const handle = setTimeout(() => prefetchExtraction(url), 400);
+    const link = links.find((draft) => draft.id === activeLinkId);
+    if (!link) return;
+    const handle = setTimeout(() => prefetchExtraction(link.url), 400);
     return () => clearTimeout(handle);
-  }, [url, visible]);
+  }, [activeLinkId, links, visible]);
 
   /** Dropdowns own the surface: release the link field's focus before the
    * picker opens so a suspended panel never keeps the caret or the IME. On
@@ -286,12 +302,15 @@ function AddBookmarkContent({
    * returns the keyboard to Link rather than the library search behind it. */
   const handFocusToDropdown = () => {
     urlRef.current?.blur();
+    setActiveLinkId(null);
   };
 
   const reset = () => {
     pasteEpoch.current += 1;
     draftRevision.current += 1;
-    setUrl("");
+    setLinks([{ id: 0, url: "" }]);
+    setActiveLinkId(0);
+    setFocusRequest(0);
     setError("");
     setLockedFolderId(null);
     setSelectedDestination(folderId ?? ROOT_DESTINATION);
@@ -299,7 +318,6 @@ function AddBookmarkContent({
     setShowTagPicker(false);
     setCreateFolderOpen(false);
     setCreateTagOpen(false);
-    setUrlEditing(false);
     setSelectedTagIds(initialTagIds);
   };
 
@@ -308,22 +326,48 @@ function AddBookmarkContent({
     onDismiss();
   };
 
-  const submit = async () => {
-    if (create.isPending) return;
+  const editLink = (id: number, input: TextInput | null = null) => {
+    if (saving || saveRun.current) return;
+    if (input) urlRef.current = input;
+    setActiveLinkId(id);
+    if (!input) {
+      pasteEpoch.current += 1;
+      setFocusRequest((value) => value + 1);
+    }
+  };
+
+  const addLink = () => {
+    if (saving) return;
+    draftRevision.current += 1;
+    const empty = links.find((link) => !link.url.trim());
+    const id = empty?.id ?? nextLinkId.current++;
+    if (!empty) setLinks((previous) => [...previous, { id, url: "" }]);
+    editLink(id);
+  };
+
+  const removeLink = (id: number) => {
+    if (saving || links.length === 1) return;
+    draftRevision.current += 1;
+    setLinks((previous) => previous.filter((link) => link.id !== id));
+    if (activeLinkId === id) {
+      const index = links.findIndex((link) => link.id === id);
+      editLink(links[index + 1]?.id ?? links[index - 1].id);
+    }
     setError("");
-    const trimmed = url.trim();
-    if (!trimmed) {
-      setError("Enter a URL.");
-      if (shareIntake) setUrlEditing(true);
+  };
+
+  const submit = async () => {
+    if (saveRun.current) return;
+    pasteEpoch.current += 1;
+    setError("");
+    const checked = validateBookmarkDrafts(links);
+    setLinks(checked);
+    const invalid = checked.find((draft) => draft.error);
+    if (invalid) {
+      editLink(invalid.id);
       return;
     }
-    let normalized = trimmed;
-    if (!/^https?:\/\//i.test(normalized)) normalized = `https://${normalized}`;
-    if (!isSupportedUrl(normalized)) {
-      setError("Enter a valid URL.");
-      if (shareIntake) setUrlEditing(true);
-      return;
-    }
+    const pending = checked.filter((draft) => draft.url.trim());
     if (selectedFolderId && !useFolderTokenStore.getState().get(selectedFolderId)) {
       const dest = folders?.find((folder) => folder.id === selectedFolderId);
       if (dest?.protected) {
@@ -331,47 +375,67 @@ function AddBookmarkContent({
         return;
       }
     }
-    const session = committedSession.current;
+    const owner = committedSession.current;
+    const run = {};
+    saveRun.current = run;
+    setSaving(true);
+    setSaveProgress(0);
+    const saved = new Set<number>();
+    const ownsRun = () => owner === committedSession.current && active.current && saveRun.current === run;
     try {
-      await create.mutateAsync({ url: normalized, folderId: selectedFolderId, tagIds: selectedTagIds });
-      // The request may settle after the user closed/reopened or supplied a
-      // new intake URL. Its cache write stands, but only the session that
-      // started it may dismiss, reset, report, or focus the UI. Compare the
-      // committed token: a discarded render never reached layout publication.
-      // An unmount keeps the token but clears `active`, so route changes are
-      // covered too.
-      if (session !== committedSession.current || !active.current) return;
+      // Reuse the canonical create mutation so every successful item updates
+      // the library, folder counts, tags, and extraction queue immediately.
+      for (const draft of pending) {
+        if (!ownsRun()) return;
+        await create.mutateAsync({ url: normalizeBookmarkDraft(draft.url), folderId: selectedFolderId, tagIds: selectedTagIds });
+        saved.add(draft.id);
+        if (!ownsRun()) return;
+        setSaveProgress(saved.size);
+      }
       haptics.success();
       if (shareIntake) {
         reset();
-        onSaved?.(destination);
+        onSaved?.(destination, pending.length);
         if (!onSaved) onDismiss();
         return;
       }
-      toast.success(destination ? `Saved to ${destination}` : "Saved");
+      const label = pending.length === 1 ? "Bookmark" : `${pending.length} bookmarks`;
+      toast.success(destination ? `${label} saved to ${destination}` : `${label} saved`);
       close();
     } catch (e) {
-      if (session !== committedSession.current || !active.current) return;
+      if (!ownsRun()) return;
+      // A retry must never resubmit links that already succeeded.
+      if (saved.size) {
+        setLinks((previous) => previous.filter((draft) => !saved.has(draft.id)));
+        setActiveLinkId(null);
+      }
       if (selectedFolderId && isFolderProtected(e)) {
         setLockedFolderId(selectedFolderId);
         return;
       }
       haptics.error();
-      setError(errorMessage(e));
+      setError(saved.size ? `${saved.size} saved. Remaining links are kept here. ${errorMessage(e)}` : errorMessage(e));
+    } finally {
+      if (saveRun.current === run) {
+        saveRun.current = null;
+        setSaving(false);
+      }
     }
   };
 
   const lockedFolder = folders?.find((folder) => folder.id === lockedFolderId);
 
-  const pasteLink = async () => {
+  const pasteLink = async (id: number) => {
+    if (saving || saveRun.current) return;
     const epoch = ++pasteEpoch.current;
     const revision = draftRevision.current;
     try {
       const clipboard = await Clipboard.getStringAsync();
       if (!active.current || epoch !== pasteEpoch.current || revision !== draftRevision.current) return;
-      const next = extractSharedUrl(undefined, clipboard) ?? clipboard.trim();
-      if (!next) { setError("Clipboard is empty. Copy a link first."); return; }
-      setUrl(next);
+      const extracted = extractSharedUrls(undefined, clipboard);
+      const urls = extracted.length ? extracted : clipboard.trim() ? [clipboard.trim()] : [];
+      if (!urls.length) { setError("Clipboard is empty. Copy a link first."); return; }
+      setLinks((previous) => pasteBookmarkDrafts(previous, id, urls, () => nextLinkId.current++));
       setError("");
       requestAnimationFrame(() => {
         if (!active.current || epoch !== pasteEpoch.current || revision !== draftRevision.current) return;
@@ -381,7 +445,7 @@ function AddBookmarkContent({
         // Paste is explicit user intent for this field, so reopening the IME
         // here is appropriate. The helper only resets this same field on the
         // Android Back-hid-the-IME edge; it never blurs another surface.
-        focusTextInput(urlRef.current);
+        editLink(id);
       });
     } catch {
       if (active.current && epoch === pasteEpoch.current && revision === draftRevision.current) {
@@ -391,19 +455,52 @@ function AddBookmarkContent({
   };
 
   const unlocking = Boolean(lockedFolderId);
-  const showUrlPreview = shareIntake && !urlEditing && Boolean(url.trim());
+  const linkCount = links.filter((draft) => draft.url.trim()).length;
+  const invalidIndex = links.findIndex((draft) => draft.error);
+  const validation = invalidIndex < 0 ? "" : `Link ${invalidIndex + 1}: ${links[invalidIndex].error}`;
+  const linkActions = useBookmarkLinkActions({
+    onFocus: editLink,
+    onBlur: (id) => {
+      if (visible && panelInteractive && entranceReady.current) {
+        setActiveLinkId((current) => current === id ? null : current);
+      }
+    },
+    onChange: (id, url) => {
+      draftRevision.current += 1;
+      // Native keyboard paste also arrives through onChangeText. A pasted
+      // collection should never be left as one invalid, concatenated URL.
+      const candidates = url.match(/https?:\/\/[^\s<>"']+/gi) ?? [];
+      const isBatch = candidates.length > 1 || candidates.some(candidate => /[,;]https?:\/\//i.test(candidate));
+      const urls = isBatch ? extractSharedUrls(undefined, url) : [];
+      setLinks((previous) => urls.length
+        ? pasteBookmarkDrafts(previous, id, urls, () => nextLinkId.current++)
+        : previous.map((link) => link.id === id ? { ...link, url, error: undefined } : link));
+      if (error) setError("");
+    },
+    onRemove: removeLink,
+    onPaste: (id) => { void pasteLink(id); },
+    onNext: addLink,
+  });
 
   return (
     <>
       <FloatingPanel
         presentation="responsive"
-        dirty={!!url.trim() || url.trim() !== (initialUrl ?? "").trim() || selectedTagIds.slice().sort().join() !== [...initialTagIds].sort().join() || selectedFolderId !== (folderId ?? null)}
+        dirty={links.some((link) => link.url.trim().length > 0 && !intakeUrls.includes(link.url.trim())) || selectedTagIds.slice().sort().join() !== [...initialTagIds].sort().join() || selectedFolderId !== (folderId ?? null)}
         visible={visible}
         pageKey={lockedFolderId ? "unlock" : "save"}
         obscured={panelObscured}
         interactive={panelInteractive}
-        dismissible={!create.isPending}
+        dismissible={!saving}
         dismissOnScrim={!shareIntake}
+        onEntered={() => {
+          entranceReady.current = true;
+          // The panel dismisses the previous IME after measuring. Its blur
+          // must not collapse the opening editor before focus can settle.
+          if (!shareIntake && panelInteractive && activeLinkId !== null && !saving) {
+            setFocusRequest((value) => value + 1);
+          }
+        }}
         onDismiss={() => {
           if (unlocking) setLockedFolderId(null);
           else close();
@@ -425,79 +522,40 @@ function AddBookmarkContent({
           />
         ) : (
           <>
-            <PanelHeader title="Save bookmark" onClose={!shareIntake && !create.isPending ? close : undefined} />
-            <View style={styles.body}>
-            <AnimatedSwap transitionKey={showUrlPreview ? "preview" : "edit"}>
-            {showUrlPreview ? (
-              <PressableScale
-                accessibilityRole="button"
-                accessibilityLabel="Edit link"
-                disabled={create.isPending}
-                onPress={() => setUrlEditing(true)}
-                style={[
-                  styles.urlPreview,
-                  {
-                    borderColor: error ? palette.error : palette.outlineVariant,
-                    backgroundColor: palette.surfaceContainerHighest,
-                  },
-                ]}
-              >
-                <Ionicons name="link-outline" size={18} color={palette.textTertiary} style={iconGlyphStyle(18)} />
-                <View style={styles.urlPreviewText}>
-                  <Text variant="titleMedium" numberOfLines={1}>
-                    {domainFromUrl(url) || url}
-                  </Text>
-                  <Text variant="bodySmall" color="secondary" numberOfLines={2}>
-                    {url}
-                  </Text>
-                </View>
-                <Ionicons name="pencil-outline" size={16} color={palette.textTertiary} style={iconGlyphStyle(16)} />
-              </PressableScale>
-            ) : (
-              <Input
-                ref={urlRef}
-                label="Link"
-                disabled={create.isPending}
-                variant="outlined"
-                value={url}
-                onChangeText={(next) => { draftRevision.current += 1; setUrl(next); if (error) setError(""); }}
-                placeholder="Paste a link"
-                keyboardType="url"
-                autoCapitalize="none"
-                autoCorrect={false}
-                autoFocus={visible && (!shareIntake || urlEditing)}
-                error={error || undefined}
-                icon={<Ionicons name="link-outline" size={18} color={palette.textTertiary} style={iconGlyphStyle(18)} />}
-                onSubmitEditing={() => void submit()}
-                returnKeyType="done"
-                overlayRightAccessory overlayPaddingRight={56}
-                rightAccessory={<IconButton name="clipboard-outline" variant="standard" accessibilityLabel="Paste link from clipboard" onPress={() => void pasteLink()} />}
-              />
-            )}
-            </AnimatedSwap>
-            <AnimatedDisclosure expanded={Boolean(showUrlPreview && error)}>
-              <Text variant="footnote" color="danger" style={styles.urlPreviewError}>
-                {error}
-              </Text>
-            </AnimatedDisclosure>
+            <PanelHeader title={links.length > 1 ? "Save bookmarks" : "Save bookmark"} onClose={!shareIntake && !saving ? close : undefined} />
+            <BookmarkLinkLayout activeIndex={links.findIndex((draft) => draft.id === activeLinkId)}
+              fields={links.map((draft, index) => <BookmarkLinkField key={draft.id}
+                  draft={draft} index={index} expanded={activeLinkId === draft.id}
+                  disabled={saving} removable={links.length > 1}
+                  autoFocus={visible && index === 0 && !shareIntake}
+                  focusRequest={activeLinkId === draft.id ? focusRequest : 0}
+                  focusEnabled={visible && panelInteractive}
+                  actions={linkActions} />)}>
+              <View>
+                <Button label="Add link" variant="ghost" disabled={saving} style={styles.addLink}
+                  icon={<Ionicons name="add" size={20} />} onPress={addLink} />
+                <AnimatedDisclosure expanded={Boolean(error || validation)}>
+                  <Text variant="bodySmall" color="danger" style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">{error || validation}</Text>
+                </AnimatedDisclosure>
+              </View>
 
-            {allowFolderSelection ? <PickerField label="Folder" value={destination ?? "Bookmarks"} dropdown expanded={destinationOpen} disabled={create.isPending}
+            {allowFolderSelection ? <PickerField label="Folder" value={destination ?? "Bookmarks"} dropdown expanded={destinationOpen} disabled={saving}
               icon={selectedFolder?.icon ?? "bookmark-outline"} onPress={(anchor) => { handFocusToDropdown(); setDestinationAnchor(anchor); setDestinationOpen(true); }} />
               : destination ? <Text variant="bodyMedium" color="secondary">Saving to {destination}</Text> : null}
-            <PickerField label="Tags" icon="pricetags-outline" dropdown expanded={showTagPicker} disabled={create.isPending}
+            <PickerField label="Tags" icon="pricetags-outline" dropdown expanded={showTagPicker} disabled={saving}
               value={selectedTagIds.length ? selectedTagIds.map((id) => tags?.find((tag) => tag.id === id)?.name).filter(Boolean).join(", ") || `${selectedTagIds.length} tags selected` : "Add tags"}
               onPress={(anchor) => { handFocusToDropdown(); setTagAnchor(anchor); setShowTagPicker(true); }} />
-            </View>
+            </BookmarkLinkLayout>
             <PanelActions
-              confirmLabel="Save bookmark"
+              confirmLabel={saving && linkCount > 1 ? `Saving ${Math.min(saveProgress + 1, linkCount)} of ${linkCount}` : linkCount > 1 ? `Save ${linkCount} bookmarks` : "Save bookmark"}
               onConfirm={() => void submit()}
               onCancel={close}
-              loading={create.isPending}
+              loading={saving}
             />
           </>
         )}
       </FloatingPanel>
-      <FolderPickerMenu visible={folderPickerOpen} onDismiss={() => setDestinationOpen(false)} folders={folders ?? []} anchor={destinationAnchor} returnFocusRef={urlRef}
+      <FolderPickerMenu visible={folderPickerOpen} onDismiss={() => setDestinationOpen(false)} folders={folders ?? []} anchor={destinationAnchor}
         value={selectedFolderId} onChange={(id) => setSelectedDestination(id ?? ROOT_DESTINATION)}
         onCreate={() => { setDestinationOpen(false); setCreateFolderOpen(true); }} />
       <ResponsivePicker title="Tags" visible={tagPickerOpen} onDismiss={() => setShowTagPicker(false)} anchor={tagAnchor} width={tagAnchor?.width} scrollBody={false} keyboardDismiss={false} estimatedHeight={280} returnFocusRef={urlRef}>
@@ -527,17 +585,6 @@ function AddBookmarkContent({
 }
 
 const styles = StyleSheet.create({
-  body: { gap: spacing[16] },
-  urlPreview: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: spacing[8],
-    minHeight: 72,
-    paddingHorizontal: spacing[16],
-    paddingVertical: spacing[16],
-    borderWidth: 1,
-    borderRadius: radius.lg,
-  },
-  urlPreviewText: { flex: 1, minWidth: 0, gap: spacing[2] },
-  urlPreviewError: { marginTop: spacing[6] },
+  addLink: { alignSelf: "flex-start" },
+  error: { marginTop: spacing[8] },
 });
