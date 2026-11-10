@@ -17,7 +17,7 @@ import {
   type ViewStyle,
 } from "react-native";
 import { type FlashListProps } from "@shopify/flash-list";
-import { GestureDetector } from "react-native-gesture-handler";
+import { GestureDetector, type GestureType, type ComposedGesture } from "react-native-gesture-handler";
 import Animated, { LinearTransition, runOnJS, useAnimatedScrollHandler, useComposedEventHandler,
   type ScrollHandlerProcessed } from "react-native-reanimated";
 import { useMaterialMotion } from "../../theme/material-motion";
@@ -38,6 +38,7 @@ import { useSceneReady } from "../../hooks/use-scene-ready";
 import { BookmarkListSkeleton } from "./BookmarkListSkeleton";
 
 export type ThemedScrollViewProps = ScrollViewProps & {
+  scrollGesture?: GestureType | ComposedGesture;
   scrollBarInsets?: ScrollBarInsets;
   /** UI-thread scroll animation. JS bookkeeping is sampled, not frame-critical. */
   animatedScrollHandler?: ScrollHandlerProcessed<Record<string, unknown>>;
@@ -87,6 +88,7 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
       indicatorStyle: _indicatorStyle,
       scrollBarInsets,
       animatedScrollHandler,
+      scrollGesture,
       ...props
     },
     ref,
@@ -121,6 +123,7 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
         style={[styles.host, fill ? styles.fill : null, wrapper]}
         onLayout={chainHandlers(Platform.OS === "web" ? undefined : bar.onLayout, onLayout)}
       >
+        <ScrollGesture gesture={scrollGesture}>
         <VerticalScrollView
           ref={ref}
           {...props}
@@ -141,11 +144,16 @@ export const ThemedScrollView = React.forwardRef<ScrollView, ThemedScrollViewPro
           onContentSizeChange={chainHandlers(Platform.OS === "web" ? undefined : bar.onContentSizeChange, onContentSizeChange)}
           scrollEventThrottle={scrollEventThrottle ?? 16}
         />
+        </ScrollGesture>
         {bar.overlay}
       </View>
     );
   },
 );
+
+function ScrollGesture({ gesture, children }: { gesture?: GestureType | ComposedGesture; children: React.ReactElement }) {
+  return gesture ? <GestureDetector gesture={gesture}>{children}</GestureDetector> : children;
+}
 
 type ScrollBridgeProps = {
   animatedScrollHandler?: ScrollHandlerProcessed<Record<string, unknown>>;

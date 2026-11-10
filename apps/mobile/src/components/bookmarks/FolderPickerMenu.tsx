@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useState } from "react";
 import { Platform, View, type TextInput } from "react-native";
-import { ContextMenu, ContextMenuItem, type MenuAnchorRect } from "../ui/ContextMenu";
+import { ContextMenuItem, type MenuAnchorRect } from "../ui/ContextMenu";
+import { ResponsivePicker } from "../ui/ResponsivePicker";
 import { Input } from "../ui/Input";
 import { Text } from "../ui/Text";
 import { MaterialIcon } from "../ui/MaterialIcon";
@@ -30,7 +31,7 @@ export function FolderPickerMenu({ visible, onDismiss, folders, value, onChange,
   });
   const options = useMemo(() => [{ id: null as string | null, name: "Bookmarks", icon: "bookmark-outline" as const, protected: false }, ...folders]
     .filter((folder) => folder.name.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())), [folders, query]);
-  return <ContextMenu visible={visible} onDismiss={onDismiss} anchor={anchor} width={anchor?.width} scrollBody={false} keyboardDismiss={false} estimatedHeight={320} returnFocusRef={returnFocusRef}>
+  return <ResponsivePicker title="Save to folder" visible={visible} onDismiss={onDismiss} anchor={anchor} width={anchor?.width} scrollBody={false} keyboardDismiss={false} estimatedHeight={320} returnFocusRef={returnFocusRef}>
     <View ref={contentRef} {...openingFocus} style={{ flexShrink: 1, gap: spacing[8], paddingHorizontal: spacing[16] }}>
       <Input ref={searchRef} variant="search" value={query} onChangeText={setQuery} placeholder="Find a folder" accessibilityLabel="Find a folder"
         autoFocus={Platform.OS !== "web"} containerStyle={{ flexShrink: 0 }} icon={<MaterialIcon name="search" />} />
@@ -42,5 +43,5 @@ export function FolderPickerMenu({ visible, onDismiss, folders, value, onChange,
           onPress={() => { onChange(item.id); onDismiss(); }} />} />
       <ContextMenuItem label="New folder" onPress={onCreate} icon="add" />
     </View>
-  </ContextMenu>;
+  </ResponsivePicker>;
 }

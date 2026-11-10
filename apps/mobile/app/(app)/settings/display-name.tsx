@@ -1,3 +1,4 @@
+import { useFormNavigationGuard } from "../../../src/hooks/use-form-navigation-guard";
 import React, { useState } from "react";
 import { KeyboardAvoidingView, Platform } from "react-native";
 import { useRouter } from "expo-router";
@@ -22,6 +23,8 @@ export default function ChangeDisplayNameScreen() {
   const [displayName, setDisplayName] = useState(user?.displayName ?? "");
   const [formError, setFormError] = useState("");
 
+  const navigationGuard = useFormNavigationGuard(displayName !== (user?.displayName ?? ""));
+
   const submit = async () => {
     setFormError("");
     const parsed = ChangeDisplayNameSchema.safeParse({ displayName: displayName.trim() });
@@ -34,7 +37,7 @@ export default function ChangeDisplayNameScreen() {
       await changeName.mutateAsync(parsed.data);
       haptics.success();
       toast.success("Display name updated");
-      router.back();
+      navigationGuard.finish(() => router.back());
     } catch (error) {
       haptics.error();
       setFormError(errorMessage(error));
@@ -44,7 +47,7 @@ export default function ChangeDisplayNameScreen() {
   const unchanged = displayName.trim() === (user?.displayName ?? "");
 
   return (
-    <SettingsPage title="Display name">
+    <SettingsPage onBack={() => router.back()} title="Display name">
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={{ flex: 1 }}
@@ -75,6 +78,7 @@ export default function ChangeDisplayNameScreen() {
           </SettingsGroup>
         </SettingsScrollView>
       </KeyboardAvoidingView>
+    {navigationGuard.confirmation}
     </SettingsPage>
   );
 }

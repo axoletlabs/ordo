@@ -1,5 +1,8 @@
-import React, { useMemo, useRef, useState } from "react";
-import { PanResponder, Platform, StyleSheet, View, type GestureResponderEvent, type ViewStyle } from "react-native";
+import { usePanelDraftField } from "./draft-dismiss";
+import React, { useEffect, useMemo, useState } from "react";
+import { Platform, StyleSheet, TextInput, View, useWindowDimensions, type TextInputProps, type ViewStyle } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, { runOnJS, useAnimatedProps, useDerivedValue, useSharedValue, type SharedValue } from "react-native-reanimated";
 import Svg, { Circle, Line, Text as SvgText } from "react-native-svg";
 import { useTheme } from "../../theme/ThemeProvider";
 import { radius, resolveFont, spacing } from "../../theme/tokens";
@@ -9,6 +12,29 @@ import { PressableScale } from "./PressableScale";
 import { Segmented } from "./Segmented";
 import { Text } from "./Text";
 
+const AnimatedReadout = Animated.createAnimatedComponent(TextInput);
+const AnimatedLine = Animated.createAnimatedComponent(Line);
+const AnimatedCircle = Animated.createAnimatedComponent(Circle);
+const AnimatedLabel = Animated.createAnimatedComponent(SvgText);
+function DialLabel({ x, y, hand, children }: { x: number; y: number; hand: SharedValue<{ x: number; y: number }>; children: string }) {
+  const { palette } = useTheme();
+  const props = useAnimatedProps(() => ({ fill: Math.hypot(x - hand.value.x, y - hand.value.y) <= 24 ? palette.onPrimary : palette.onSurface }));
+  return <AnimatedLabel x={x} y={y + 5.5} textAnchor="middle" fontSize={16}
+    fontFamily={resolveFont("sans", "400")} animatedProps={props}>{children}</AnimatedLabel>;
+}
+function ClockReadout({ selected, active, fallback, color }: { selected: SharedValue<number>; active: boolean; fallback: number; color: string }) {
+  const { expressive } = useTheme();
+  const { fontScale } = useWindowDimensions();
+  const props = useAnimatedProps<TextInputProps & { text: string }>(() => {
+    const text = String(active ? selected.value : fallback).padStart(2, "0");
+    return { text, defaultValue: text, ...(Platform.OS === "web" ? { value: text } : {}) };
+  });
+  return <AnimatedReadout editable={false} pointerEvents="none" focusable={false} tabIndex={-1} caretHidden accessible={false} aria-hidden
+    importantForAccessibility="no-hide-descendants" underlineColorAndroid="transparent"
+    defaultValue={String(fallback).padStart(2, "0")} animatedProps={props}
+    style={{ width: Math.max(64, 52 * fontScale), padding: 0, color, textAlign: "center", fontSize: 45, lineHeight: 52,
+      fontFamily: resolveFont("sans", expressive ? "500" : "400"), fontWeight: expressive ? "500" : "400", includeFontPadding: false }} />;
+}
 const PERIODS = [{ value: "am", label: "AM" }, { value: "pm", label: "PM" }] as const;
 const INDEXES = Array.from({ length: 12 }, (_, index) => index);
 /** Rendered dial size. Geometry stays in CLOCK_SIZE units; the SVG viewBox scales. */
@@ -19,62 +45,48 @@ export function ClockTimePicker({ hour, minute, hour12, disabled = false, onChan
   hour: number; minute: number; hour12: boolean; disabled?: boolean;
   onChange: (hour: number, minute: number) => void;
 }) {
+  const markDraft = usePanelDraftField(`${hour}:${minute}`);
   const { palette } = useTheme();
+  const change = (nextHour: number, nextMinute: number) => { markDraft(`${nextHour}:${nextMinute}`); onChange(nextHour, nextMinute); };
   const [field, setField] = useState<ClockField>("hour");
   const shownHour = hour12 ? hour % 12 || 12 : hour;
   const value = field === "hour" ? shownHour : minute;
   const valueText = field === "minute" ? `${value} minutes` : hour12 ? `${value} ${hour >= 12 ? "PM" : "AM"}` : `${String(value).padStart(2, "0")} hours`;
   const min = field === "hour" && hour12 ? 1 : 0;
   const max = field === "minute" ? 59 : hour12 ? 12 : 23;
-  const inner = field === "hour" && !hour12 && (hour === 0 || hour > 12);
-  const hand = clockPoint(field === "hour" ? hour % 12 : minute, field === "hour" ? 12 : 60, inner);
-  const width = useRef(CLOCK_SIZE);
-  const origin = useRef({ x: 0, y: 0 });
-  const gestureField = useRef<ClockField | null>(null);
-  const lastValue = useRef<number | null>(null);
-  const setValue = (next: number, fromDrag = false) => {
-    // Continuous move events can batch before controlled props catch up. A
-    // drag back to its starting value must still overwrite the pending choice.
-    if (disabled || !fromDrag && next === value) return;
+  const selected = useSharedValue(value);
+  const width = useSharedValue(CLOCK_SIZE);
+  const probed = useSharedValue(false);
+  useEffect(() => { selected.value = value; }, [value, selected]);
+  const handPoint = useDerivedValue(() => clockPoint(field === "hour" ? selected.value % 12 : selected.value,
+    field === "hour" ? 12 : 60, field === "hour" && !hour12 && (selected.value === 0 || selected.value > 12)));
+  const lineProps = useAnimatedProps(() => ({ x2: handPoint.value.x, y2: handPoint.value.y }));
+  const dotProps = useAnimatedProps(() => ({ cx: handPoint.value.x, cy: handPoint.value.y }));
+  const minuteDotProps = useAnimatedProps(() => ({ cx: handPoint.value.x, cy: handPoint.value.y, opacity: field === "minute" && selected.value % 5 !== 0 ? 1 : 0 }));
+  const setValue = (next: number) => {
+    if (disabled || next === value) return;
     haptics.selection();
-    onChange(field === "hour" ? hour12 ? next % 12 + (hour >= 12 ? 12 : 0) : next : hour, field === "minute" ? next : minute);
+    change(field === "hour" ? hour12 ? next % 12 + (hour >= 12 ? 12 : 0) : next : hour, field === "minute" ? next : minute);
   };
-  const current = useRef({ disabled, field, hour12, setValue });
-  current.current = { disabled, field, hour12, setValue };
-  const probe = (event: GestureResponderEvent, dragging = false) => {
-    const state = current.current;
-    if (state.disabled || gestureField.current !== state.field) return;
-    // Page coordinates stay relative to the original surface while dragging,
-    // even when a native event's target/location changes under the finger.
-    const x = (event.nativeEvent.pageX - origin.current.x) * CLOCK_SIZE / width.current;
-    const y = (event.nativeEvent.pageY - origin.current.y) * CLOCK_SIZE / width.current;
-    const next = clockValueAt(x, y, state.field, state.hour12, dragging ? 1 : 5);
-    if (next == null || next === lastValue.current) return;
-    lastValue.current = next;
-    state.setValue(next, dragging);
+  const commit = (next: number) => {
+    if (disabled) return;
+    change(field === "hour" ? hour12 ? next % 12 + (hour >= 12 ? 12 : 0) : next : hour, field === "minute" ? next : minute);
+    if (field === "hour") setField("minute");
   };
-  const probeRef = useRef(probe);
-  probeRef.current = probe;
-  const responder = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => !current.current.disabled,
-    onMoveShouldSetPanResponder: () => !current.current.disabled,
-    onPanResponderTerminationRequest: () => false,
-    onShouldBlockNativeResponder: () => true,
-    onPanResponderGrant: (event) => {
-      if (current.current.disabled) return;
-      const { pageX, pageY, locationX, locationY } = event.nativeEvent;
-      origin.current = { x: pageX - locationX, y: pageY - locationY };
-      gestureField.current = current.current.field;
-      lastValue.current = null;
-      probeRef.current(event);
-    },
-    onPanResponderMove: (event) => probeRef.current(event, true),
-    onPanResponderRelease: () => {
-      if (!current.current.disabled && gestureField.current === "hour" && lastValue.current != null) setField("minute");
-      gestureField.current = null;
-    },
-    onPanResponderTerminate: () => { gestureField.current = null; },
-  }), []);
+  const pan = useMemo(() => {
+    const probe = (x: number, y: number, step: 1 | 5) => {
+      "worklet";
+      const next = clockValueAt(x * CLOCK_SIZE / width.value, y * CLOCK_SIZE / width.value, field, hour12, step);
+      if (next == null) return;
+      probed.value = true;
+      if (next !== selected.value) { selected.value = next; runOnJS(haptics.selection)(); }
+    };
+    return Gesture.Pan().enabled(!disabled).minDistance(0).maxPointers(1)
+      .onStart(e => { probed.value = false; probe(e.x, e.y, 5); })
+      .onUpdate(e => { probe(e.x, e.y, 1); })
+      .onEnd(() => { if (probed.value) runOnJS(commit)(selected.value); })
+      .onFinalize((_e, success) => { if (!success) selected.value = value; });
+  }, [disabled, field, hour12, hour, minute, selected, width, value, probed]);
   const keyboard = Platform.OS === "web" ? {
     tabIndex: disabled ? -1 as const : 0 as const,
     role: "slider" as const,
@@ -102,15 +114,14 @@ export function ClockTimePicker({ hour, minute, hour12, disabled = false, onChan
           accessibilityValue={{ text: String(part === "hour" ? shownHour : minute).padStart(2, "0") }} aria-pressed={field === part}
           onPress={() => setField(part)} stateLayerColor={field === part ? palette.onPrimaryContainer : palette.onSurfaceVariant}
           style={[styles.value, { backgroundColor: field === part ? palette.primaryContainer : palette.surfaceContainerHighest }]}>
-          <Text variant="displayMedium" style={{ color: field === part ? palette.onPrimaryContainer : palette.onSurfaceVariant }}>
-            {String(part === "hour" ? shownHour : minute).padStart(2, "0")}
-          </Text>
+          <ClockReadout selected={selected} active={field === part} fallback={part === "hour" ? shownHour : minute}
+            color={field === part ? palette.onPrimaryContainer : palette.onSurfaceVariant} />
         </PressableScale>
       </React.Fragment>)}
     </View>
     {hour12 ? <Segmented accessibilityLabel="Day period" disabled={disabled} options={PERIODS} value={hour >= 12 ? "pm" : "am"}
-      onChange={(period) => onChange(hour % 12 + (period === "pm" ? 12 : 0), minute)} /> : null}
-    <View {...responder.panHandlers} {...keyboard} testID="reminder-clock" collapsable={false} accessible accessibilityRole="adjustable"
+      onChange={(period) => change(hour % 12 + (period === "pm" ? 12 : 0), minute)} /> : null}
+    <GestureDetector gesture={pan}><View {...keyboard} testID="reminder-clock" collapsable={false} accessible accessibilityRole="adjustable"
       accessibilityLabel={`Reminder ${field}`} accessibilityHint="Drag the clock hand or adjust the value. Select hour or minute above to switch."
       aria-disabled={disabled} accessibilityState={{ disabled }} accessibilityValue={{ min, max, now: value, text: valueText }}
       accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
@@ -119,22 +130,20 @@ export function ClockTimePicker({ hour, minute, hour12, disabled = false, onChan
           setValue(stepClockValue(value, event.nativeEvent.actionName === "increment" ? 1 : -1, field, hour12));
         }
       }}
-      onLayout={(event) => { if (event.nativeEvent.layout.width > 0) width.current = event.nativeEvent.layout.width; }}
+      onLayout={(event) => { if (event.nativeEvent.layout.width > 0) width.value = event.nativeEvent.layout.width; }}
       style={[styles.clock, { opacity: disabled ? 0.38 : 1 }, Platform.OS === "web" ? { touchAction: "none", userSelect: "none", outlineColor: palette.primary } as ViewStyle : null]}>
       <Svg width="100%" height="100%" viewBox={`0 0 ${CLOCK_SIZE} ${CLOCK_SIZE}`} pointerEvents="none" accessible={Platform.OS === "web" ? undefined : false} aria-hidden>
         <Circle cx={CLOCK_CENTER} cy={CLOCK_CENTER} r={CLOCK_CENTER} fill={palette.surfaceContainerHighest} />
-        <Line x1={CLOCK_CENTER} y1={CLOCK_CENTER} x2={hand.x} y2={hand.y} stroke={palette.primary} strokeWidth={2} />
-        <Circle cx={hand.x} cy={hand.y} r={24} fill={palette.primary} />
+        <AnimatedLine x1={CLOCK_CENTER} y1={CLOCK_CENTER} animatedProps={lineProps} stroke={palette.primary} strokeWidth={2} />
+        <AnimatedCircle animatedProps={dotProps} r={24} fill={palette.primary} />
         <Circle cx={CLOCK_CENTER} cy={CLOCK_CENTER} r={4} fill={palette.primary} />
         {labels.map((label) => {
           const point = clockPoint(label.index, 12, label.inner);
-          const covered = Math.hypot(point.x - hand.x, point.y - hand.y) <= 24;
-          return <SvgText key={`${label.inner}-${label.value}`} x={point.x} y={point.y + 5.5} textAnchor="middle" fontSize={16}
-            fontFamily={resolveFont("sans", "400")} fill={covered ? palette.onPrimary : palette.onSurface}>{label.label}</SvgText>;
+          return <DialLabel key={`${label.inner}-${label.value}`} x={point.x} y={point.y} hand={handPoint}>{label.label}</DialLabel>;
         })}
-        {field === "minute" && minute % 5 !== 0 ? <Circle cx={hand.x} cy={hand.y} r={3} fill={palette.onPrimary} /> : null}
+        <AnimatedCircle animatedProps={minuteDotProps} r={3} fill={palette.onPrimary} />
       </Svg>
-    </View>
+    </View></GestureDetector>
     <Text accessibilityLiveRegion="polite" style={styles.fieldLive}>{field === "hour" ? "Hour" : "Minutes"}</Text>
   </View>;
 }

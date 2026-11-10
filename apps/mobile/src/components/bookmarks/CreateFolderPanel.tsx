@@ -70,6 +70,7 @@ function CreateFolderContent({
   return (
     <FloatingPanel
       visible={visible}
+      dirty={icon !== DEFAULT_FOLDER_ICON}
       obscured={iconOpen}
       onDismiss={close}
       dismissible={!createFolder.isPending}

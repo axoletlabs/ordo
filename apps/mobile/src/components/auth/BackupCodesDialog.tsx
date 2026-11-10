@@ -1,7 +1,8 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { PanelHeader } from "../ui/PanelHeader";
 import { FloatingPanel } from "../ui/FloatingPanel";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { Text } from "../ui/Text";
 import { PanelActions } from "../ui/SheetActionRow";
 import { toast } from "../ui/toast-store";
@@ -25,7 +26,9 @@ export function BackupCodesDialog({
 }) {
   const { palette } = useTheme();
   const [saving, setSaving] = useState(false);
+  const [confirmClose, setConfirmClose] = useState(false);
   const visible = !!codes?.length;
+  useEffect(() => { setConfirmClose(false); }, [codes]);
 
   const save = async () => {
     if (!codes?.length || saving) return;
@@ -43,7 +46,8 @@ export function BackupCodesDialog({
   };
 
   return (
-    <FloatingPanel visible={visible} onDismiss={onClose} maxWidth={layout.overlayConfirmWidth} dismissible={!saving}>
+    <>
+    <FloatingPanel visible={visible} obscured={confirmClose} onDismiss={() => setConfirmClose(true)} maxWidth={layout.overlayConfirmWidth} dismissible={!saving}>
       <PanelHeader
         icon="key-outline"
         iconColor={palette.accent}
@@ -76,6 +80,11 @@ export function BackupCodesDialog({
         loading={saving}
       />
     </FloatingPanel>
+    <ConfirmDialog visible={visible && confirmClose} onDismiss={() => setConfirmClose(false)}
+      title="Close backup codes?" message="Make sure you have saved these codes. They cannot be shown again."
+      tone="accent" confirmLabel="Close" cancelLabel="Keep viewing"
+      onConfirm={() => { setConfirmClose(false); onClose(); }} />
+    </>
   );
 }
 

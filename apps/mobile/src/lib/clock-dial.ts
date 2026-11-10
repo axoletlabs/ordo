@@ -6,6 +6,7 @@ export const CLOCK_INNER_RADIUS = 68;
 export type ClockField = "hour" | "minute";
 
 export function clockPoint(value: number, divisions: number, inner = false) {
+  "worklet";
   const angle = value / divisions * Math.PI * 2;
   const radius = inner ? CLOCK_INNER_RADIUS : CLOCK_OUTER_RADIUS;
   return { x: CLOCK_CENTER + Math.sin(angle) * radius, y: CLOCK_CENTER - Math.cos(angle) * radius };
@@ -13,6 +14,7 @@ export function clockPoint(value: number, divisions: number, inner = false) {
 
 /** Ignore the ambiguous center. Taps snap to five minutes; dragging can be precise. */
 export function clockValueAt(x: number, y: number, field: ClockField, hour12: boolean, minuteStep: 1 | 5 = 5): number | null {
+  "worklet";
   if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
   const dx = x - CLOCK_CENTER, dy = y - CLOCK_CENTER;
   const radius = Math.hypot(dx, dy);
@@ -29,6 +31,7 @@ export function clockValueAt(x: number, y: number, field: ClockField, hour12: bo
 }
 
 export function stepClockValue(value: number, step: number, field: ClockField, hour12: boolean) {
+  "worklet";
   const min = field === "hour" && hour12 ? 1 : 0;
   const count = field === "minute" ? 60 : hour12 ? 12 : 24;
   return ((value - min + step) % count + count) % count + min;

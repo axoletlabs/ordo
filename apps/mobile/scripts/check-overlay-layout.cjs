@@ -33,10 +33,10 @@ const stubs = {
   },
   "react-native-reanimated": {
     __esModule: true, default: { View }, useDerivedValue: fn => ({ get value() { return fn(); } }), useSharedValue: value => ({ value }), useAnimatedStyle: fn => fn(),
-    withTiming: value => value, Easing: { bezier: () => undefined },
+    withTiming: value => value, withSpring: value => value, cancelAnimation() {}, useAnimatedScrollHandler: () => ({}), Easing: { bezier: () => undefined },
   },
   "react-native-gesture-handler": {
-    Gesture: { Pan: () => { const pan = new Proxy({}, { get: () => () => pan }); return pan; } }, GestureDetector: pass,
+    Gesture: { Pan: () => { const pan = new Proxy({}, { get: () => () => pan }); return pan; }, Native: () => ({}), Simultaneous: (...gestures) => gestures }, GestureDetector: pass,
   },
   "react-native-svg": { __esModule: true, default: pass, Defs: pass, LinearGradient: pass, Rect: pass, Stop: pass },
   "react-native-safe-area-context": { useSafeAreaInsets: () => ({ top: 24, bottom: 24, left: 0, right: 0 }) },
@@ -55,6 +55,9 @@ const stubs = {
   "input-focus-scope": { InputFocusScopeContext: Context, useInputFocusScope: () => ({ active: false, ready: false }) },
   "material-motion": { useMaterialMotion: () => motion },
   tokens: { spacing: new Proxy({}, { get: (_, key) => Number(key) }), radius: {}, layout: { overlayMaxWidth: 560, overlayPadding: 24 } },
+  "sheet-gesture": {},
+  "draft-dismiss": { DraftDismissContext: Context, useDraftDismiss: () => ({ scope: { request: action => action() }, confirming: false, used: false }) },
+  ConfirmDialog: { ConfirmDialog: pass },
   PanelHeader: { PanelHeader: Header },
   SheetActionRow: { PanelActions: Actions },
   ThemedScrollView: { ThemedScrollView: props => React.createElement(View, props, props.children) },
@@ -81,9 +84,10 @@ async function main() {
   let count = 0;
   for (const dimensions of [{ width: 412, height: 915 }, { width: 1280, height: 800 }, { width: 915, height: 412 }, { width: 412, height: 300 }]) {
     viewport = dimensions;
-    for (const variant of ["form", "picker", "confirmation", "sheet"]) {
+    for (const variant of ["form", "picker", "confirmation", "sheet", "responsive-picker"]) {
       const html = renderToStaticMarkup(React.createElement(exports_.FloatingPanel, {
-        visible: true, onDismiss() {}, scrollBody: variant !== "picker",
+        visible: true, onDismiss() {}, scrollBody: variant !== "picker" && variant !== "responsive-picker",
+        ...(variant === "responsive-picker" ? { presentation: "responsive" } : {}),
         ...(variant === "sheet" ? { presentation: "bottom-sheet", sheetSizing: "adaptive" } : {}),
       }, React.createElement(Header), variant !== "confirmation" ? React.createElement(View, { style: { height: 120 } }) : null,
       React.createElement(Actions)));
@@ -124,10 +128,11 @@ async function main() {
       assert.ok(card.getComputedHeight() <= dimensions.height, `${variant}: popup exceeds viewport`);
       const actions = boxes.get("fixture-actions");
       // Very short sheets intentionally scroll their entire chrome/body.
-      const sheetScrollsAll = variant === "sheet" && Math.min(dimensions.height * 0.9, dimensions.height - 40) < 280;
+      const isSheet = variant === "sheet" || variant === "responsive-picker" && dimensions.width < 600;
+      const sheetScrollsAll = isSheet && Math.min(dimensions.height * 0.9, dimensions.height - 40) < 280;
       if (!sheetScrollsAll) assert.ok(top(actions) + actions.getComputedHeight() <= top(card) + card.getComputedHeight() + 1,
         `${variant} ${dimensions.width}×${dimensions.height}: actions at ${top(actions) + actions.getComputedHeight()} fall outside card ending at ${top(card) + card.getComputedHeight()}`);
-      const body = boxes.get(variant === "sheet" ? "material-sheet-body" : "material-dialog-body");
+      const body = boxes.get(isSheet ? "material-sheet-body" : "material-dialog-body");
       assert.ok(body.getComputedHeight() > 0, `${variant}: no initial body viewport`);
       root.freeRecursive(); count++;
     }

@@ -10,6 +10,7 @@ import { MaterialIcon } from "./MaterialIcon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
+  cancelAnimation,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
@@ -51,6 +52,9 @@ function ToastItem({ toast, active, onExited }: { toast: Toast; active: boolean;
   const enter = useSharedValue(0);
   const spatial = useSharedValue(0);
   const offsetX = useSharedValue(0);
+  const swipeStart = useSharedValue(0);
+  const dragging = useSharedValue(false);
+  const [swiping, setSwiping] = useState(false);
 
   const finishExit = useCallback(() => {
     if (finished.current) return;
@@ -83,7 +87,7 @@ function ToastItem({ toast, active, onExited }: { toast: Toast; active: boolean;
   }, [enter, spatial, motion.reducedMotion, motion.fast]);
   useEffect(() => {
     // Hover/focus may pause the timer, but must never restart an exit fade.
-    if (dismissed.current || hovered || focused) return;
+    if (dismissed.current || hovered || focused || swiping) return;
     const duration = toast.action ? Math.max(toast.duration, ACTION_TOAST_FLOOR_MS) : toast.duration;
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -91,25 +95,34 @@ function ToastItem({ toast, active, onExited }: { toast: Toast; active: boolean;
     if (Platform.OS === "android") AccessibilityInfo.getRecommendedTimeoutMillis(duration).then(schedule, () => schedule(duration));
     else schedule(duration);
     return () => { active = false; if (timer) clearTimeout(timer); };
-  }, [toast.id, toast.duration, toast.action, animateOut, hovered, focused]);
+  }, [toast.id, toast.duration, toast.action, animateOut, hovered, focused, swiping]);
 
   // Rebuilding the gesture per render (hover/focus/store updates) re-attaches
   // detectors on the exact frames a delete/undo toast competes with the list.
   const pan = useMemo(() => Gesture.Pan()
-    .enabled(toast.swipeable)
+    .enabled(toast.swipeable && active && !closing)
+    .activeOffsetX([-10, 10]).failOffsetY([-16, 16])
+    .onStart(() => {
+      cancelAnimation(offsetX); swipeStart.value = offsetX.value; dragging.value = true; runOnJS(setSwiping)(true);
+    })
     .onUpdate((e) => {
-      offsetX.value = e.translationX;
+      offsetX.value = swipeStart.value + e.translationX;
     })
     .onEnd((e) => {
       const past = Math.abs(offsetX.value) > SWIPE_THRESHOLD || Math.abs(e.velocityX) > SWIPE_VELOCITY;
       if (past) {
-        const dir = Math.sign(offsetX.value) || 1;
+        const dir = Math.sign(Math.abs(e.velocityX) > SWIPE_VELOCITY ? e.velocityX : offsetX.value) || 1;
         if (motion.reducedMotion) runOnJS(animateOut)();
-        else offsetX.value = withSpring(dir * 500, motion.spatial, (finished) => { if (finished) runOnJS(animateOut)(); });
+        else offsetX.value = withSpring(dir * 500, { ...motion.spatial, velocity: e.velocityX }, (finished) => { if (finished) runOnJS(animateOut)(); });
       } else {
-        offsetX.value = motion.reducedMotion ? 0 : withSpring(0, motion.spatial);
+        offsetX.value = motion.reducedMotion ? 0 : withSpring(0, { ...motion.spatial, velocity: e.velocityX });
       }
-    }), [toast.swipeable, motion.reducedMotion, motion.spatial, animateOut, offsetX]);
+      dragging.value = false;
+    })
+    .onFinalize(() => {
+      if (dragging.value) offsetX.value = motion.reducedMotion ? 0 : withSpring(0, motion.spatial);
+      dragging.value = false; runOnJS(setSwiping)(false);
+    }), [active, closing, toast.swipeable, motion.reducedMotion, motion.spatial, animateOut, offsetX]);
 
   const animStyle = useAnimatedStyle(() => ({
     opacity: enter.value,

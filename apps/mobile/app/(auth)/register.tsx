@@ -10,6 +10,7 @@ import { AuthShell } from "../../src/components/auth/AuthShell";
 import { AuthInput } from "../../src/components/auth/AuthInput";
 import { Button } from "../../src/components/ui/Button";
 import { CheckLine } from "../../src/components/ui/CheckLine";
+import { PressableScale } from "../../src/components/ui/PressableScale";
 import { Text } from "../../src/components/ui/Text";
 import { EyeToggle } from "../../src/components/ui/EyeToggle";
 import { useRegister } from "../../src/hooks/use-auth-actions";
@@ -57,17 +58,10 @@ export default function RegisterScreen() {
   const passwordRef = useRef<TextInput>(null);
   const confirmRef = useRef<TextInput>(null);
   const inFlight = useRef(false);
-  const skipAgeToggle = useRef(false);
   const emailRef = useRef<TextInput>(null);
   const credentialsLocked = useCredentialLock();
   const passwordField = lockedSecretDisplay(password, credentialsLocked, showPwd);
   const confirmField = lockedSecretDisplay(confirm, credentialsLocked, showPwd);
-  const markLegalOpen = () => {
-    skipAgeToggle.current = true;
-    setTimeout(() => {
-      skipAgeToggle.current = false;
-    }, 300);
-  };
 
   useFocusEffect(
     useCallback(() => {
@@ -239,20 +233,14 @@ export default function RegisterScreen() {
                 checked={atLeast13}
                 label={AGE_CONFIRM_LABEL}
                 onPress={() => {
-                  if (skipAgeToggle.current) {
-                    skipAgeToggle.current = false;
-                    return;
-                  }
                   setAtLeast13((v) => !v);
                   setFormError("");
                 }}
-              >
-                I am 13 or older and agree to the{" "}
-                <LegalLink label="Terms" url={CLOUD_TERMS_URL} onOpen={markLegalOpen} />
-                {" "}and{" "}
-                <LegalLink label="Privacy Policy" url={CLOUD_PRIVACY_URL} onOpen={markLegalOpen} />
-                .
-              </CheckLine>
+              />
+              <View style={styles.legalLinks}>
+                <LegalLink label="Terms" url={CLOUD_TERMS_URL} />
+                <LegalLink label="Privacy policy" url={CLOUD_PRIVACY_URL} />
+              </View>
               {formError === AGE_CONFIRM_ERROR ? (
                 <FormError message={formError} />
               ) : null}
@@ -271,32 +259,28 @@ export default function RegisterScreen() {
 function LegalLink({
   label,
   url,
-  onOpen,
 }: {
   label: string;
   url: string;
-  onOpen: () => void;
 }) {
   return (
-    <Text
-      variant="footnote"
-      color="accent"
+    <PressableScale
       accessibilityRole="link"
       accessibilityLabel={label}
-      onPress={(event) => {
-        event.stopPropagation();
-        onOpen();
+      onPress={() => {
         haptics.light();
         Linking.openURL(url).catch(() => {});
       }}
-      style={styles.link}
+      style={styles.legalTarget}
     >
-      {label.replaceAll(" ", "\u00a0")}
-    </Text>
+      <Text variant="footnote" color="accent" style={styles.link}>{label}</Text>
+    </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
+  legalLinks: { flexDirection: "row", flexWrap: "wrap", gap: spacing[8] },
+  legalTarget: { minHeight: 48, minWidth: 48, paddingHorizontal: spacing[12], justifyContent: "center", borderRadius: radius.full },
   link: { textDecorationLine: "underline", includeFontPadding: false },
   disabledCard: { padding: spacing[16], borderRadius: radius.lg, borderWidth: 1 },
 });

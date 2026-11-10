@@ -1,5 +1,6 @@
 /** Shared by gesture and accessible button entry; Android skip-fill is unchanged. */
 export function appendPatternNode(current: readonly number[], node: number): number[] {
+  "worklet";
   if (!Number.isInteger(node) || node < 0 || node > 8 || current.includes(node)) return [...current];
   const next = [...current];
   const from = current.at(-1);

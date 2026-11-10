@@ -30,12 +30,12 @@ function ReminderCustomPanelContent({ visible, initialUnix, onDismiss, onExited,
   const hour12 = useHourCycle();
   const active = useRef(visible && !busy);
   active.current = visible && !busy;
-  const [draft, setDraft] = useState(() => ({ at: seedUnix(initialUnix), section: "time" as Section, visible, initialUnix }));
+  const [draft, setDraft] = useState(() => ({ at: seedUnix(initialUnix), originalAt: seedUnix(initialUnix), section: "time" as Section, visible, initialUnix }));
   // Reset before committing descendants, not in an opening effect that mounts
   // the old calendar/time controls and then renders them a second time.
   let current = draft;
   if (visible && (!draft.visible || draft.initialUnix !== initialUnix)) {
-    current = { at: seedUnix(initialUnix), section: "time", visible, initialUnix };
+    current = { at: seedUnix(initialUnix), originalAt: seedUnix(initialUnix), section: "time", visible, initialUnix };
     setDraft(current);
   } else if (!visible && draft.visible) setDraft({ ...draft, visible });
   const { at, section } = current;
@@ -46,7 +46,7 @@ function ReminderCustomPanelContent({ visible, initialUnix, onDismiss, onExited,
   const parts = localTimeParts(at);
   const future = at > unixSeconds();
   const changeDate = (next: number) => setDraft((state) => ({ ...state, at: next }));
-  return <FloatingPanel visible={visible} onDismiss={onDismiss} onExited={onExited} dismissible={!busy} maxWidth={384} pageKey={section} style={styles.panel}>
+  return <FloatingPanel dirty={at !== current.originalAt} visible={visible} onDismiss={onDismiss} onExited={onExited} dismissible={!busy} maxWidth={384} pageKey={section} style={styles.panel}>
     <PanelHeader title="Custom reminder" subtitle={subtitle} style={styles.rail} />
     <View style={styles.body}>
       <View style={styles.rail}><Segmented options={SECTIONS} accessibilityLabel="Reminder date or time" value={section} disabled={busy}

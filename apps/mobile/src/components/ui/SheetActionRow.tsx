@@ -1,3 +1,4 @@
+import { DraftDismissContext } from "./draft-dismiss";
 import React from "react";
 import { StyleSheet, View } from "react-native";
 import { MaterialIcon as Ionicons } from "./MaterialIcon";
@@ -54,6 +55,7 @@ export function PanelActions({
   inline?: boolean;
   topSpacing?: Spacing;
 }) {
+  const draft = React.useContext(DraftDismissContext);
   const actions = (
     <View style={[sheetMenuStyles.row, { marginTop: spacing[topSpacing] }]}>
       {inline && children ? <View style={{ flex: 1, minWidth: 0 }}>{children}</View> : null}
@@ -63,7 +65,7 @@ export function PanelActions({
         size={size}
         onPress={() => {
           dismissKeyboard();
-          onCancel();
+          if (draft) draft.request(onCancel); else onCancel();
         }}
         disabled={cancelDisabled ?? loading}
         style={sheetMenuStyles.action}

@@ -44,7 +44,7 @@ export function EditTagsSheet({ visible, onDismiss, bookmark }: EditTagsSheetPro
   // mounted the previous/empty selection first, then reconciled the entire
   // list again on every opening. Render-adjusted state also stays local to a
   // discarded render, unlike an opening ref written ahead of the commit.
-  if (draftSource.visible !== visible || draftSource.bookmark !== bookmark) {
+  if (draftSource.visible !== visible || draftSource.bookmark?.id !== bookmark?.id) {
     setDraftSource({ visible, bookmark });
     if (visible && bookmark) {
       setSelectedIds(bookmark.tags.map((t) => t.id));
@@ -110,7 +110,7 @@ export function EditTagsSheet({ visible, onDismiss, bookmark }: EditTagsSheetPro
 
   return (
     <>
-      <FloatingPanel visible={visible} obscured={createTagOpen} onDismiss={onDismiss} scrollBody={false}>
+      <FloatingPanel presentation="responsive" dirty={dismissed.length > 0 || selectedIds.slice().sort().join() !== (draftSource.bookmark?.tags ?? []).map(t => t.id).sort().join()} dismissible={!updateTags.isPending} visible={visible} obscured={createTagOpen} onDismiss={onDismiss} scrollBody={false}>
         <PanelHeader title="Edit tags" />
         <TagSelectList selectedIds={selectedIds} onToggle={toggle} extraTags={bookmark?.tags ?? []}
           onRequestCreateTag={() => setCreateTagOpen(true)} header={<View style={styles.body}>

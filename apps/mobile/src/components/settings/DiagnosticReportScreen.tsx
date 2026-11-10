@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { StyleSheet, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
-import { SettingsGroup, SettingsPage, SettingsScrollView } from "./SettingsPage";
+import { SettingsContent, SettingsGroup, SettingsPage, SettingsScrollView } from "./SettingsPage";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTheme } from "../../theme/ThemeProvider";
 import { SettingRow } from "../ui/SettingRow";
 import { Toggle } from "../ui/Toggle";
 import { Button } from "../ui/Button";
@@ -20,6 +22,8 @@ const SECTIONS = [
   { key: "native", label: "Android details" },
 ] as const;
 export default function DiagnosticReportScreen() {
+  const insets = useSafeAreaInsets();
+  const { palette } = useTheme();
   const report = useSyncExternalStore(subscribePreparedDiagnosticReport, getPreparedDiagnosticReport, getPreparedDiagnosticReport);
   const router = useAppRouter();
   const [selection, setSelection] = useState<ReportSelection>({ ...DEFAULT_REPORT_SELECTION, native: report?.snapshot.build.platform === "android" });
@@ -59,13 +63,15 @@ export default function DiagnosticReportScreen() {
               right={<Toggle value={selection[section.key]} disabled={saving} onValueChange={value => setSelection(previous => ({ ...previous, [section.key]: value }))} />} />) : null}
           </> : null}
         </SettingsGroup>
-        <View style={styles.actions}>
+      </>}
+    </SettingsScrollView>
+    {report && text ? <View style={{ backgroundColor: palette.surfaceContainer, paddingBottom: insets.bottom }}>
+      <SettingsContent><View style={styles.actions}>
           <Button label="Save report" size="md" loading={saving} onPress={() => { void exportReport(false); }} block />
           <Button label="Copy report" variant="outlined" disabled={saving} onPress={() => { void exportReport(true); }} block />
           <Button label="Discard" variant="ghost" disabled={saving} onPress={() => { cancelDiagnosticExport(); discardPreparedDiagnosticReport(); router.back(); }} block />
-        </View>
-      </>}
-    </SettingsScrollView>
+      </View></SettingsContent>
+    </View> : null}
   </SettingsPage>;
 }
 const styles = StyleSheet.create({

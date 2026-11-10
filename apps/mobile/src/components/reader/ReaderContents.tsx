@@ -153,7 +153,7 @@ export const ReaderContents = React.memo(React.forwardRef<ReaderContentsHandle, 
         anchored={false} onPress={open} maxContentWidth={layout.maxReaderWidth}
         alignTo={embedded ? "parent" : "scene"} bottom={bottom} />
     </FABDock>
-    <FloatingPanel visible={visible} onDismiss={close} onExiting={commitSelection} onExited={resetList} triggerRef={triggerRef}
+    <FloatingPanel presentation="responsive" visible={visible} onDismiss={close} onExiting={commitSelection} onExited={resetList} triggerRef={triggerRef}
       maxWidth={Math.min(416, sceneWidth - spacing[32])} scrollBody={false} keepMounted={prepared}>
       <PanelHeader title="Contents" titleVariant="titleLarge" onClose={close} />
       <View style={{ height: listHeight, maxHeight: listHeight, flexShrink: 1 }}>

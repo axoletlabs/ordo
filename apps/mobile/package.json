@@ -21,6 +21,7 @@
     "test:share-intake-native": "node scripts/test-share-intake-native.cjs",
     "test:input-density": "node scripts/test-input-density.cjs",
     "test:folders": "node scripts/test-folder-delete.cjs",
+    "test:touch": "node scripts/test-touch-interactions.cjs",
     "test:hsv-color": "node scripts/test-hsv-color.cjs",
     "test:android-native": "node scripts/test-android-native-hotpaths.cjs",
     "clean": "rimraf .expo node_modules/.cache",

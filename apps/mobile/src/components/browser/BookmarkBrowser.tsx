@@ -341,7 +341,6 @@ export const BookmarkBrowser = forwardRef<BookmarkBrowserHandle, BookmarkBrowser
           setSupportMultipleWindows={false}
           bounces
           scrollEnabled={!blocked}
-          overScrollMode="never"
           cacheEnabled
           cacheMode="LOAD_DEFAULT"
           mixedContentMode="never"

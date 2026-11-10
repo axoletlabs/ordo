@@ -11,11 +11,13 @@ export const PTR_MAX_FOLLOW = 72;
 
 /** Progress 0–1 of the arming pull. */
 export function ptrProgress(dy: number): number {
+  "worklet";
   return Math.min(1, Math.max(0, dy) / PTR_THRESHOLD);
 }
 
 /** Fade in over the first part of the pull so the chip does not pop. */
 export function ptrHudOpacity(dy: number, refreshing: boolean): number {
+  "worklet";
   if (refreshing) return 1;
   if (dy <= 0) return 0;
   return Math.min(1, ptrProgress(dy) / 0.32);
@@ -23,6 +25,7 @@ export function ptrHudOpacity(dy: number, refreshing: boolean): number {
 
 /** Follow the finger with a bit of rubber-band past the threshold. */
 export function ptrHudTranslateY(dy: number): number {
+  "worklet";
   const raw = Math.max(0, dy);
   if (raw <= PTR_THRESHOLD) return raw * 0.55;
   return Math.min(PTR_MAX_FOLLOW, PTR_THRESHOLD * 0.55 + (raw - PTR_THRESHOLD) * 0.18);
@@ -30,25 +33,30 @@ export function ptrHudTranslateY(dy: number): number {
 
 /** Grow from a seed to full size as the pull arms. */
 export function ptrHudScale(dy: number, refreshing: boolean): number {
+  "worklet";
   if (refreshing) return 1;
   return 0.4 + ptrProgress(dy) * 0.6;
 }
 
 /** Drag-driven rotation (deg) until refresh takes over and the arc spins. */
 export function ptrPullRotation(dy: number): number {
+  "worklet";
   return ptrProgress(dy) * 270;
 }
 
 export function shouldCommitPtr(dy: number, refreshing: boolean): boolean {
+  "worklet";
   return !refreshing && dy >= PTR_THRESHOLD;
 }
 
 /** iOS list bounce past the top. Android reports 0. */
 export function listRefreshOverscrollDy(contentOffsetY: number): number {
+  "worklet";
   return contentOffsetY < 0 ? -contentOffsetY : 0;
 }
 
 export function listIsAtTop(contentOffsetY: number): boolean {
+  "worklet";
   return contentOffsetY <= 1;
 }
 
@@ -60,11 +68,13 @@ export interface RefreshPull {
 }
 
 export function beginRefreshPull(x: number, y: number, offset: number, enabled: boolean): RefreshPull {
+  "worklet";
   return { x, y, eligible: enabled && listIsAtTop(offset), distance: 0 };
 }
 
 /** Observe the existing scroll gesture; never claim its responder. */
 export function moveRefreshPull(pull: RefreshPull, x: number, y: number, offset: number, touches = 1): RefreshPull {
+  "worklet";
   if (!pull.eligible) return pull;
   const dy = y - pull.y;
   if (touches !== 1 || !listIsAtTop(offset) || Math.abs(x - pull.x) > Math.max(12, Math.abs(dy))) {
@@ -74,5 +84,6 @@ export function moveRefreshPull(pull: RefreshPull, x: number, y: number, offset:
 }
 
 export function finishRefreshPull(pull: RefreshPull | null, refreshing: boolean): boolean {
+  "worklet";
   return !!pull?.eligible && shouldCommitPtr(pull.distance, refreshing);
 }

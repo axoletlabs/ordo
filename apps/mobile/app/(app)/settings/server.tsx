@@ -338,7 +338,7 @@ function ServerEditPanel({
         }, 100)
       }
     >
-      <ThemedScrollView keyboardShouldPersistTaps="handled">
+      <ThemedScrollView keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
         <PanelHeader title="Server" />
         <View style={styles.fields}>
           <Input

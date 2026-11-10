@@ -56,7 +56,7 @@ function deviceIcon(s: SessionDto): keyof typeof Ionicons.glyphMap {
 
 export default function SessionsScreen() {
   const column = useColumnPadding(layout.maxSettingsWidth);
-  const { data: sessions, isLoading, error, refetch } = useSessions();
+  const { data: sessions, isLoading, isRefetching, error, refetch } = useSessions();
   const revoke = useRevokeSession();
   const [pendingRevoke, setPendingRevoke] = useState<SessionDto | null>(null);
   const reducedMotion = useReducedMotionPreference();
@@ -118,6 +118,8 @@ export default function SessionsScreen() {
         <ThemedFlatList
           data={rows}
           keyExtractor={(s) => s.id}
+          refreshing={isRefetching}
+          onRefresh={refetch}
           style={styles.list}
           contentContainerStyle={[
             styles.listContent,

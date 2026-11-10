@@ -2,6 +2,7 @@
  * Title block for floating panels and dialogs. Centered, using the same
  * Material headline-small role. An optional icon stacks above the title.
  */
+import { DraftDismissContext } from "./draft-dismiss";
 import React from "react";
 import { StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import { MaterialIcon as Ionicons } from "./MaterialIcon";
@@ -43,6 +44,7 @@ export function PanelHeader({
   align?: "left" | "center";
   style?: StyleProp<ViewStyle>;
 }) {
+  const draft = React.useContext(DraftDismissContext);
   const { palette } = useTheme();
   const titleId = React.useContext(PanelTitleContext);
   const resolvedIconColor = iconBackground === palette.primaryContainer && (!iconColor || iconColor === palette.primary)
@@ -51,7 +53,7 @@ export function PanelHeader({
   return (
     <View style={[styles.wrap, style]}>
       {onClose ? <View style={{ position: "absolute", right: -spacing[8], top: -spacing[8], zIndex: 2 }}>
-        <IconButton name="close" variant="standard" accessibilityLabel="Close dialog" onPress={onClose} />
+        <IconButton name="close" variant="standard" accessibilityLabel="Close dialog" onPress={() => { if (draft) draft.request(onClose); else onClose(); }} />
       </View> : null}
       {icon ? (
         <View

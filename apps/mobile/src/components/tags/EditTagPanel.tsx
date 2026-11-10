@@ -34,7 +34,7 @@ export function EditTagPanel({ visible, tag, onDismiss }: EditTagPanelProps) {
       setColor(tag.color);
       setError("");
     }
-  }, [visible, tag]);
+  }, [visible, tag?.id]);
 
   const save = async () => {
     if (!tag || update.isPending) return;
@@ -66,7 +66,7 @@ export function EditTagPanel({ visible, tag, onDismiss }: EditTagPanelProps) {
   };
 
   return (
-    <FloatingPanel visible={visible && !!tag} onDismiss={onDismiss} dismissible={!update.isPending}>
+    <FloatingPanel dirty={!!tag && color !== tag.color} visible={visible && !!tag} onDismiss={onDismiss} dismissible={!update.isPending}>
       <PanelHeader title="Edit tag" />
       <View style={styles.body}>
         <Input

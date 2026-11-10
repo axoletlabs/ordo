@@ -1,11 +1,12 @@
 /**
  * Shared contained Material loading indicator for lists and the in-app website.
  */
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { StyleSheet } from "react-native";
 import Animated, {
   Easing,
-  runOnJS,
+  useDerivedValue,
+  type SharedValue,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -20,32 +21,19 @@ export function RefreshHud({
   dy,
   refreshing,
 }: {
-  dy: number;
+  dy: number | SharedValue<number>;
   refreshing: boolean;
 }) {
   const motion = useMaterialMotion();
-  const pull = useSharedValue(0);
+  const numericPull = useSharedValue(typeof dy === "number" ? dy : 0);
   const refreshingSv = useSharedValue(refreshing);
-  const [mounted, setMounted] = useState(dy > 0 || refreshing);
-
-  useEffect(() => {
-    refreshingSv.value = refreshing;
-  }, [refreshing, refreshingSv]);
-
-  useEffect(() => {
-    if (refreshing || dy > 0) {
-      setMounted(true);
-      if (refreshing) {
-        pull.value = motion.reducedMotion ? PTR_THRESHOLD : withSpring(PTR_THRESHOLD, motion.fast);
-      } else {
-        pull.value = dy;
-      }
-      return;
-    }
-    pull.value = withTiming(0, { duration: motion.reducedMotion ? 0 : timing.normal, easing: Easing.out(Easing.cubic) }, (finished) => {
-      if (finished) runOnJS(setMounted)(false);
-    });
-  }, [dy, pull, refreshing, motion.fast, motion.reducedMotion]);
+  useEffect(() => { refreshingSv.value = refreshing; }, [refreshing, refreshingSv]);
+  useEffect(() => { if (typeof dy === "number") numericPull.value = dy; }, [dy, numericPull]);
+  const source = typeof dy === "number" ? numericPull : dy;
+  const pull = useDerivedValue(() => refreshingSv.value
+    ? (motion.reducedMotion ? PTR_THRESHOLD : withSpring(PTR_THRESHOLD, motion.fast))
+    : source.value > 0 ? source.value
+    : withTiming(0, { duration: motion.reducedMotion ? 0 : timing.normal, easing: Easing.out(Easing.cubic) }));
 
   const hudStyle = useAnimatedStyle(() => {
     const raw = Math.max(0, pull.value);
@@ -62,7 +50,6 @@ export function RefreshHud({
     };
   });
 
-  if (!mounted) return null;
 
   return (
     <Animated.View

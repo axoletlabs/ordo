@@ -114,7 +114,7 @@ function shareHarness({ quick = false, handoff, save } = {}) {
   const runner = hooks();
   const stateListeners = [];
   const { useIncomingShareStore: store } = load("store/incoming-share.ts", {
-    "react-native": { Platform: { OS: "android" }, AppState: { currentState: "active", addEventListener: (_, callback) => stateListeners.push(callback) } },
+    "react-native": { Platform: { OS: "android" }, useWindowDimensions: () => ({ width: 390, height: 844, scale: 2, fontScale: 1 }), AppState: { currentState: "active", addEventListener: (_, callback) => stateListeners.push(callback) } },
     "../lib/share-intake": intake,
     zustand: { create: initialize => {
       const api = createStore(initialize);
@@ -147,7 +147,7 @@ function formHarness({ autoPaste = false, clipboard = Promise.resolve(""), save 
   const create = { mutateAsync: async value => { writes.push(value); await save(value); } };
   const { Content } = load("components/bookmarks/AddBookmarkSheet.tsx", {
     react: runner.react,
-    "react-native": { Platform: { OS: "android" }, StyleSheet: { create: value => value }, View: "View" },
+    "react-native": { Platform: { OS: "android" }, StyleSheet: { create: value => value }, View: "View", useWindowDimensions: () => ({ width: 390, height: 844, scale: 2, fontScale: 1 }) },
     "expo-clipboard": { hasStringAsync: async () => true, getStringAsync: () => clipboard },
     "../../lib/shared-url": urls, "../../lib/bookmark-drafts": drafts,
     "../../hooks/use-bookmarks": { useCreateBookmark: () => create },

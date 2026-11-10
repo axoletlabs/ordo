@@ -150,7 +150,7 @@ function AuthenticatedAppLayout() {
       <Stack.Screen name="(tabs)" options={{ animation: "none", gestureEnabled: false }} />
       {/* Identity is owned by the router, so even queued double taps reuse one screen. */}
       <Stack.Screen name="folder/[id]" dangerouslySingular />
-      <Stack.Screen name="reader/[id]" dangerouslySingular />
+      <Stack.Screen name="reader/[id]" dangerouslySingular options={{ fullScreenGestureEnabled: false }} />
       <Stack.Screen name="tags/index" dangerouslySingular />
       <Stack.Screen name="tags/[id]" dangerouslySingular />
       <Stack.Screen name="settings/index" dangerouslySingular />

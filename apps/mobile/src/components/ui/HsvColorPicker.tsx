@@ -1,6 +1,9 @@
 /** Pointer and keyboard HSV picker: a saturation/brightness square plus a hue slider. */
-import React, { useMemo, useRef, useState } from "react";
-import { PanResponder, Platform, StyleSheet, View, type GestureResponderEvent, type LayoutChangeEvent, type ViewStyle } from "react-native";
+import { usePanelDraftField } from "./draft-dismiss";
+import React, { useEffect, useMemo, useState } from "react";
+import { Platform, StyleSheet, View, type ViewStyle } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, { runOnJS, useAnimatedStyle, useSharedValue, type SharedValue } from "react-native-reanimated";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { clamp, hueHex, hsvToHex, type Hsv } from "../../lib/hsv-color";
 import { layout, radius, spacing } from "../../theme/tokens";
@@ -10,58 +13,35 @@ const THUMB = 20;
 const HUE_STOPS = [0, 60, 120, 180, 240, 300, 360];
 const webDrag = Platform.OS === "web" ? { touchAction: "none", userSelect: "none" } as ViewStyle : null;
 
-function probePoint(event: GestureResponderEvent, origin: { x: number; y: number }) {
-  return { x: event.nativeEvent.pageX - origin.x, y: event.nativeEvent.pageY - origin.y };
-}
-
-function useDragSurface(onProbe: (x: number, y: number, width: number, height: number) => void) {
-  const origin = useRef({ x: 0, y: 0 });
-  const size = useRef({ width: 1, height: 1 });
-  const probe = useRef(onProbe);
-  probe.current = onProbe;
-  const responder = useMemo(() => PanResponder.create({
-    onStartShouldSetPanResponder: () => true,
-    onMoveShouldSetPanResponder: () => true,
-    onPanResponderTerminationRequest: () => false,
-    onShouldBlockNativeResponder: () => true,
-    onPanResponderGrant: (event) => {
-      const { pageX, pageY, locationX, locationY } = event.nativeEvent;
-      origin.current = { x: pageX - locationX, y: pageY - locationY };
-      probe.current(locationX, locationY, size.current.width, size.current.height);
-    },
-    onPanResponderMove: (event) => {
-      const point = probePoint(event, origin.current);
-      probe.current(point.x, point.y, size.current.width, size.current.height);
-    },
-  }), []);
-  return {
-    panHandlers: responder.panHandlers,
-    onLayout: (event: LayoutChangeEvent) => {
-      const { width, height } = event.nativeEvent.layout;
-      if (width > 0 && height > 0) size.current = { width, height };
-    },
-  };
-}
-
-function ColorThumb({ color, left, top }: { color: string; left: number; top: number }) {
-  return <View pointerEvents="none" style={[styles.thumb, { left, top, backgroundColor: color }]}>
-    <View style={styles.thumbInner} />
-  </View>;
+function ColorThumb({ hsv, hue = false, width, height }: { hsv: SharedValue<Hsv>; hue?: boolean; width: number; height: number }) {
+  const style = useAnimatedStyle(() => ({
+    transform: [{ translateX: (hue ? hsv.value.h / 360 : hsv.value.s) * width - THUMB / 2 },
+      { translateY: hue ? (height - THUMB) / 2 : (1 - hsv.value.v) * height - THUMB / 2 }],
+    backgroundColor: hue ? hueHex(hsv.value.h) : hsvToHex(hsv.value),
+  }));
+  return <Animated.View pointerEvents="none" style={[styles.thumb, style]}><View style={styles.thumbInner} /></Animated.View>;
 }
 
 export function HsvColorPicker({ value, onChange }: { value: Hsv; onChange: (value: Hsv) => void }) {
+  const markDraft = usePanelDraftField(JSON.stringify(value));
+  const change = (next: Hsv) => { markDraft(JSON.stringify(next)); onChange(next); };
   const { palette } = useTheme();
   const ids = React.useId().replace(/:/g, "");
   const [square, setSquare] = useState({ width: 0, height: 0 });
   const [slider, setSlider] = useState({ width: 0, height: 0 });
-  const hueColor = hueHex(value.h);
-  const current = hsvToHex(value);
-  const squareDrag = useDragSurface((x, y, width, height) => {
-    onChange({ h: value.h, s: clamp(x / width, 0, 1), v: clamp(1 - y / height, 0, 1) });
-  });
-  const hueDrag = useDragSurface((x, _y, width) => {
-    onChange({ ...value, h: clamp(x / width, 0, 1) * 359.999 });
-  });
+  const hsv = useSharedValue(value);
+  useEffect(() => { hsv.value = value; }, [value, hsv]);
+  const paint = useAnimatedStyle(() => ({ backgroundColor: hueHex(hsv.value.h) }));
+  const squareDrag = useMemo(() => Gesture.Pan().minDistance(0).maxPointers(1)
+    .onStart(e => { hsv.value = { ...hsv.value, s: clamp(e.x / Math.max(1, square.width), 0, 1), v: clamp(1 - e.y / Math.max(1, square.height), 0, 1) }; })
+    .onUpdate(e => { hsv.value = { ...hsv.value, s: clamp(e.x / Math.max(1, square.width), 0, 1), v: clamp(1 - e.y / Math.max(1, square.height), 0, 1) }; })
+    .onEnd(() => { runOnJS(change)(hsv.value); })
+    .onFinalize((_e, success) => { if (!success) hsv.value = value; }), [hsv, onChange, square, value]);
+  const hueDrag = useMemo(() => Gesture.Pan().minDistance(0).maxPointers(1)
+    .onStart(e => { hsv.value = { ...hsv.value, h: clamp(e.x / Math.max(1, slider.width), 0, 1) * 359.999 }; })
+    .onUpdate(e => { hsv.value = { ...hsv.value, h: clamp(e.x / Math.max(1, slider.width), 0, 1) * 359.999 }; })
+    .onEnd(() => { runOnJS(change)(hsv.value); })
+    .onFinalize((_e, success) => { if (!success) hsv.value = value; }), [hsv, onChange, slider, value]);
   const squareKeys = Platform.OS === "web" ? {
     tabIndex: 0 as const,
     role: "slider" as const,
@@ -82,7 +62,7 @@ export function HsvColorPicker({ value, onChange }: { value: Hsv; onChange: (val
       if (!next) return;
       event.preventDefault();
       event.stopPropagation();
-      onChange(next);
+      change(next);
     },
   } : {};
   const hueKeys = Platform.OS === "web" ? {
@@ -98,19 +78,19 @@ export function HsvColorPicker({ value, onChange }: { value: Hsv; onChange: (val
       if (step == null && event.key !== "Home" && event.key !== "End") return;
       event.preventDefault();
       event.stopPropagation();
-      onChange({ ...value, h: event.key === "Home" ? 0 : event.key === "End" ? 359 : value.h + step! });
+      change({ ...value, h: event.key === "Home" ? 0 : event.key === "End" ? 359 : value.h + step! });
     },
   } : {};
 
   return <View style={styles.root}>
-    <View collapsable={false} onLayout={(event) => { squareDrag.onLayout(event); setSquare(event.nativeEvent.layout); }}
+    <View collapsable={false} onLayout={(event) => { setSquare(event.nativeEvent.layout); }}
       style={styles.squareFrame}>
-      <View pointerEvents="none" style={[styles.squarePaint, { borderColor: palette.outlineVariant }]}>
+      <Animated.View pointerEvents="none" style={[styles.squarePaint, { borderColor: palette.outlineVariant }, paint]}>
         <Svg width="100%" height="100%" viewBox="0 0 100 100" preserveAspectRatio="none" accessible={Platform.OS === "web" ? undefined : false} aria-hidden>
           <Defs>
             <LinearGradient id={`${ids}-sat`} x1="0" y1="0" x2="1" y2="0">
               <Stop offset="0" stopColor="#FFFFFF" />
-              <Stop offset="1" stopColor={hueColor} />
+              <Stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
             </LinearGradient>
             <LinearGradient id={`${ids}-val`} x1="0" y1="0" x2="0" y2="1">
               <Stop offset="0" stopColor="#000000" stopOpacity="0" />
@@ -120,10 +100,9 @@ export function HsvColorPicker({ value, onChange }: { value: Hsv; onChange: (val
           <Rect width="100" height="100" fill={`url(#${ids}-sat)`} />
           <Rect width="100" height="100" fill={`url(#${ids}-val)`} />
         </Svg>
-      </View>
-      {square.width > 0 ? <ColorThumb color={current}
-        left={value.s * square.width - THUMB / 2} top={(1 - value.v) * square.height - THUMB / 2} /> : null}
-      <View {...squareDrag.panHandlers} {...squareKeys} accessible accessibilityRole="adjustable"
+      </Animated.View>
+      {square.width > 0 ? <ColorThumb hsv={hsv} width={square.width} height={square.height} /> : null}
+      <GestureDetector gesture={squareDrag}><View {...squareKeys} accessible accessibilityRole="adjustable"
         accessibilityLabel="Saturation and brightness"
         accessibilityHint="Left and right change saturation. Up and down change brightness."
         accessibilityValue={{ text: `${Math.round(value.s * 100)}% saturation, ${Math.round(value.v * 100)}% brightness` }}
@@ -131,11 +110,11 @@ export function HsvColorPicker({ value, onChange }: { value: Hsv; onChange: (val
         onAccessibilityAction={(event) => {
           const delta = event.nativeEvent.actionName === "increment" ? 0.05
             : event.nativeEvent.actionName === "decrement" ? -0.05 : 0;
-          if (delta) onChange({ ...value, v: value.v + delta });
+          if (delta) change({ ...value, v: value.v + delta });
         }}
-        style={[StyleSheet.absoluteFill, webDrag]} />
+        style={[StyleSheet.absoluteFill, webDrag]} /></GestureDetector>
     </View>
-    <View collapsable={false} onLayout={(event) => { hueDrag.onLayout(event); setSlider(event.nativeEvent.layout); }}
+    <View collapsable={false} onLayout={(event) => { setSlider(event.nativeEvent.layout); }}
       style={styles.hue}>
       <View pointerEvents="none" style={[styles.hueTrack, { borderColor: palette.outlineVariant }]}>
         <Svg width="100%" height="100%" viewBox="0 0 360 1" preserveAspectRatio="none" accessible={Platform.OS === "web" ? undefined : false} aria-hidden>
@@ -147,17 +126,16 @@ export function HsvColorPicker({ value, onChange }: { value: Hsv; onChange: (val
           <Rect width="360" height="1" fill={`url(#${ids}-hue)`} />
         </Svg>
       </View>
-      {slider.width > 0 ? <ColorThumb color={hueColor}
-        left={(value.h / 360) * slider.width - THUMB / 2} top={(slider.height - THUMB) / 2} /> : null}
-      <View {...hueDrag.panHandlers} {...hueKeys} accessible accessibilityRole="adjustable"
+      {slider.width > 0 ? <ColorThumb hsv={hsv} hue width={slider.width} height={slider.height} /> : null}
+      <GestureDetector gesture={hueDrag}><View {...hueKeys} accessible accessibilityRole="adjustable"
         accessibilityLabel="Hue" accessibilityValue={{ min: 0, max: 360, now: Math.round(value.h) }}
         accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
         onAccessibilityAction={(event) => {
           const delta = event.nativeEvent.actionName === "increment" ? 8
             : event.nativeEvent.actionName === "decrement" ? -8 : 0;
-          if (delta) onChange({ ...value, h: value.h + delta });
+          if (delta) change({ ...value, h: value.h + delta });
         }}
-        style={[StyleSheet.absoluteFill, webDrag]} />
+        style={[StyleSheet.absoluteFill, webDrag]} /></GestureDetector>
     </View>
   </View>;
 }
@@ -184,6 +162,7 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
   thumb: {
+    left: 0, top: 0,
     position: "absolute",
     width: THUMB,
     height: THUMB,
