@@ -152,3 +152,66 @@ folderLocked = true; actions = reveal(); actions.forEach(action => action.props.
 assert.equal(writes.length, 0); assert.equal(errors.length, 2, 'protected folders cannot mutate without a token');
 token = 'unlocked'; actions[1].props.onPress(); assert.equal(writes.length, 1);
 console.log('PASS: article swipes preserve folder scope, selection gating and the undoable delete path');
+
+// Overlay publishes must never flip the refresh gesture's native enabled state:
+// RNGH 2.32 cancels a begun handler mid-touch on an enabled flip, and a long-press
+// menu publish used to do exactly that while the finger held a row. The hook now
+// mirrors `enabled` into a shared value (stable gesture identity) and gates
+// arming/commit through it.
+const pullRefresh = load('lib/pull-refresh.ts');
+let jsCalls = [], refreshCalls = [];
+function gestureRecorder() {
+  const record = { enabled: [], down: null, move: null, up: null };
+  const chain = new Proxy({ __record: record }, {
+    get(target, key) {
+      if (key === '__record') return target.__record;
+      if (key === 'enabled') return value => { target.__record.enabled.push(value); return chain; };
+      if (key === 'onTouchesDown') return fn => { target.__record.down = fn; return chain; };
+      if (key === 'onTouchesMove') return fn => { target.__record.move = fn; return chain; };
+      if (key === 'onTouchesUp') return fn => { target.__record.up = fn; return chain; };
+      return () => chain;
+    },
+  });
+  return chain;
+}
+const manager = { begin() {}, fail() {}, activate() {}, end() {} };
+const refreshHost = hookHost();
+const { useMaterialRefresh } = load('hooks/use-material-refresh.ts', {
+  react: { ...refreshHost.React, useEffect: refreshHost.React.useLayoutEffect },
+  'react-native': { Platform: { OS: 'android' } },
+  'react-native-reanimated': {
+    useSharedValue: initial => refreshHost.React.useRef({ value: initial }).current,
+    runOnJS: fn => (...args) => { jsCalls.push(fn); fn(...args); },
+  },
+  'react-native-gesture-handler': {
+    Gesture: { Manual: gestureRecorder, Native: gestureRecorder,
+      Simultaneous: (native, observer) => ({ native, observer }) },
+  },
+  '../lib/pull-refresh': pullRefresh,
+  '../lib/haptics': { haptics: { light() {}, selection() {} } },
+});
+let enabled = true;
+const renderRefresh = () => refreshHost.render(() => useMaterialRefresh(false, () => refreshCalls.push('refresh'), enabled));
+const down = observer => observer.__record.down({ allTouches: [{ absoluteX: 4, absoluteY: 4 }], numberOfTouches: 1 }, manager);
+const up = observer => observer.__record.up({ allTouches: [] }, manager);
+
+let hook = renderRefresh();
+const gesture = hook.gesture;
+down(gesture.observer);
+// A menu publish flips `enabled` mid-hold. The gesture object and its native
+// enabled chain must not change; only the shared value moves.
+enabled = false; hook = renderRefresh();
+assert.equal(hook.gesture, gesture, 'overlay publish must not rebuild the refresh gesture');
+assert.deepEqual(gesture.observer.__record.enabled, [true], 'no mid-touch native enabled write');
+up(gesture.observer);
+assert.deepEqual(jsCalls, [], 'a pull begun before the overlay cannot commit under it');
+assert.deepEqual(refreshCalls, []);
+
+// A plain pull with no overlay still commits on release.
+jsCalls = []; enabled = true; hook = renderRefresh();
+down(hook.gesture.observer);
+hook.gesture.observer.__record.move({ allTouches: [{ absoluteX: 4, absoluteY: 300 }], numberOfTouches: 1 }, manager);
+up(hook.gesture.observer);
+assert.equal(jsCalls.length, 2, 'release runs the threshold haptic and exactly one runOnJS commit');
+assert.deepEqual(refreshCalls, ['refresh']);
+console.log('PASS: overlay publishes keep refresh gesture identity; disabled pulls never commit; plain pulls still commit');

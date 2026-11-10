@@ -16,6 +16,13 @@ export function useMaterialRefresh(refreshing: boolean, onRefresh?: (() => void)
   const dy = useSharedValue(0);
   const uiPull = useSharedValue<RefreshPull | null>(null);
   const busy = useSharedValue(refreshing);
+  // Mirror `enabled` into a shared value instead of driving Gesture.Manual().enabled().
+  // Flipping a begun handler's native enabled state cancels it mid-touch (RNGH posts the
+  // cancel to the UI thread), and an overlay publish does exactly that while the finger
+  // is still held on a row. Arming and commit below read this value instead, so the
+  // gesture object and its native enabled state stay stable through overlay publishes.
+  const enabledSv = useSharedValue(enabled);
+  useEffect(() => { enabledSv.value = enabled; }, [enabled, enabledSv]);
   const options = useRef({ refreshing, onRefresh, enabled, commitOnRelease });
   options.current = { refreshing, onRefresh, enabled, commitOnRelease };
   useEffect(() => {
@@ -71,13 +78,16 @@ export function useMaterialRefresh(refreshing: boolean, onRefresh?: (() => void)
       pull.current = { x: 0, y: 0, eligible: true, distance: PTR_THRESHOLD };
       finish();
     };
-    const observer = Gesture.Manual().enabled(enabled && !!onRefresh)
+    // Presence is read at gesture build time; the commit path re-reads the
+    // latest callback from options, so the identity stays stable even when a
+    // caller passes a fresh closure per render.
+    const observer = Gesture.Manual().enabled(!!options.current.onRefresh)
       .cancelsTouchesInView(false)
       .onTouchesDown((event, manager) => {
         const touch = event.allTouches[0];
         dy.value = 0;
         uiPull.value = touch ? beginRefreshPull(touch.absoluteX, touch.absoluteY, offset.value,
-          !busy.value && event.numberOfTouches === 1) : null;
+          enabledSv.value && !busy.value && event.numberOfTouches === 1) : null;
         if (!uiPull.value?.eligible) manager.fail();
         else manager.begin();
       })
@@ -92,7 +102,7 @@ export function useMaterialRefresh(refreshing: boolean, onRefresh?: (() => void)
         else if (dy.value >= 8) manager.activate();
       })
       .onTouchesUp((_event, manager) => {
-        if (finishRefreshPull(uiPull.value, busy.value) && commitOnRelease) {
+        if (finishRefreshPull(uiPull.value, busy.value || !enabledSv.value) && commitOnRelease) {
           busy.value = true;
           runOnJS(commit)();
         }
@@ -102,7 +112,7 @@ export function useMaterialRefresh(refreshing: boolean, onRefresh?: (() => void)
       .onTouchesCancelled((_event, manager) => { dy.value = 0; uiPull.value = null; manager.fail(); })
       .onFinalize(() => { dy.value = 0; uiPull.value = null; });
     return Gesture.Simultaneous(Gesture.Native(), observer);
-  }, [enabled, onRefresh, commitOnRelease, finish, dy, uiPull, busy, offset]);
+  }, [commitOnRelease, finish, dy, uiPull, busy, offset, enabledSv]);
 
   return {
     dy,
