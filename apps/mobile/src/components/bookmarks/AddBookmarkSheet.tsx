@@ -5,7 +5,6 @@ import React, { useState } from "react";
 import { Platform, StyleSheet, View, useWindowDimensions, type TextInput } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
-import { iconGlyphStyle } from "../../theme/icon-glyph";
 import { ResponsivePicker } from "../ui/ResponsivePicker";
 import { FloatingPanel } from "../ui/FloatingPanel";
 import { AnimatedDisclosure } from "../ui/AnimatedDisclosure";
