@@ -76,11 +76,11 @@ include the patched module before distributing an OTA.
 
 ## Validation
 
-Workspace typecheck and lint remain required. The Browser WebKit workflow
-generates the iOS project and compiles the patched WebView against the pinned
-Xcode toolchain on macOS. The Android APK build validates Fabric codegen and
-native integration.
-A desktop web preview cannot validate native request interception. Before a
+Workspace typecheck and lint remain required, and the Android APK build
+validates Fabric codegen and native integration. No CI job compiles the iOS
+project, so review `patches/react-native-webview@13.16.1.patch` and the iOS
+config plugins by reading them whenever either changes. A desktop web preview
+cannot validate native request interception. Before a
 release, smoke-test the APK on a device with redirects, back navigation,
 pull-to-refresh, force-dark, video, sign-in and an ad-heavy publisher; compare
 the same pages with blocking disabled. No finite test suite can guarantee
