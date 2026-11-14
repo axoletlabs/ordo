@@ -97,10 +97,10 @@ function ToastItem({ toast, active, onExited }: { toast: Toast; active: boolean;
   useEffect(() => { if (!active) animateOut(); }, [active, animateOut]);
   useEffect(() => { if (closing && motion.reducedMotion) finishExit(); }, [closing, motion.reducedMotion, finishExit]);
 
-  // Swipe exits fade in place while the momentum spring carries the card off
-  // along the swipe axis; no vertical settle, so a side throw and a downward
-  // throw keep their own motion. The spring's completion (or the fallback
-  // timer) commits the dismissal.
+  // Swipe exits keep the card fully opaque and let the momentum spring carry
+  // it off-screen along the swipe axis; no vertical settle and no fade, so a
+  // side throw and a downward throw stay visually distinct. The spring's
+  // completion (or the fallback timer) commits the dismissal.
   const finishSwipeExit = useCallback(() => {
     if (finished.current) return;
     finished.current = true;
@@ -156,8 +156,10 @@ function ToastItem({ toast, active, onExited }: { toast: Toast; active: boolean;
       const pastX = Math.abs(offsetX.value) > SWIPE_THRESHOLD || Math.abs(e.velocityX) > SWIPE_VELOCITY;
       const pastY = offsetY.value > SWIPE_THRESHOLD || e.velocityY > SWIPE_VELOCITY;
       if (pastX || pastY) {
+        // No fade: the card stays fully opaque and visibly travels off-screen
+        // along the swipe axis, carrying the release velocity with it. The
+        // settle fade belongs only to non-swipe dismissals.
         runOnJS(startSwipeFallback)();
-        enter.value = motion.reducedMotion ? 0 : withTiming(0, { duration: 150 });
         if (pastX) {
           const dir = Math.sign(Math.abs(e.velocityX) > SWIPE_VELOCITY ? e.velocityX : offsetX.value) || 1;
           if (motion.reducedMotion) { offsetX.value = dir * 500; runOnJS(finishSwipeExit)(); }
