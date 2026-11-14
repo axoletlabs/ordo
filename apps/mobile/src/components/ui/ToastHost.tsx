@@ -1,11 +1,14 @@
 /**
- * ToastHost — renders queued toasts at the bottom. Each toast enters with a
- * spring, auto-dismisses after its duration, and can be swiped away or carry an
- * inline action. Driven by two shared values (enter + swipe offset) so the
- * enter/exit and swipe animations never fight.
+ * ToastHost — the app's single notification surface, mounted once above
+ * every scene. A floating, elevated tonal card: a leading status icon
+ * carries the tone (success/danger), the message sits on the shared
+ * elevated surface. Enters on a spatial spring (rise + settle), exits on
+ * a fast fade, carries an optional inline action, and can be swiped away
+ * to either side or downward. Driven by shared values (enter, spatial,
+ * swipe offsets) so the enter/exit and swipe animations never fight.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AccessibilityInfo, Platform, StyleSheet, type View } from "react-native";
+import { AccessibilityInfo, Platform, StyleSheet, type View as ViewType } from "react-native";
 import { MaterialIcon } from "./MaterialIcon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
@@ -33,6 +36,11 @@ const SWIPE_VELOCITY = 600;
 /** Action toasts never auto-dismiss faster than this. */
 const ACTION_TOAST_FLOOR_MS = 8_000;
 
+/** The lifetime a toast displays (action toasts keep the 8s floor). */
+function toastDuration(toast: Toast): number {
+  return toast.action ? Math.max(toast.duration, ACTION_TOAST_FLOOR_MS) : toast.duration;
+}
+
 function ToastItem({ toast, active, onExited }: { toast: Toast; active: boolean; onExited: (id: string) => void }) {
   const { palette, shadows } = useTheme();
   const motion = useMaterialMotion();
@@ -43,18 +51,27 @@ function ToastItem({ toast, active, onExited }: { toast: Toast; active: boolean;
   const [closing, setClosing] = useState(false);
   const [hovered, setHovered] = useState(false);
   const [focused, setFocused] = useState(false);
-  const surfaceRef = useRef<View>(null);
+  const surfaceRef = useRef<ViewType>(null);
   React.useLayoutEffect(() => {
     if (Platform.OS === "web" && surfaceRef.current) (surfaceRef.current as unknown as HTMLElement).inert = !active || closing;
   }, [active, closing]);
 
-  // 0 → 1 enter/exit; horizontal px for swipe.
+  // 0 → 1 enter/exit and settle; horizontal + downward px for swipe.
   const enter = useSharedValue(0);
   const spatial = useSharedValue(0);
   const offsetX = useSharedValue(0);
-  const swipeStart = useSharedValue(0);
+  const offsetY = useSharedValue(0);
+  const swipeStartX = useSharedValue(0);
+  const swipeStartY = useSharedValue(0);
   const dragging = useSharedValue(false);
   const [swiping, setSwiping] = useState(false);
+
+  // Tone reads at a glance through the canonical Material status icons
+  // (checkmark-circle → check-circle, alert-circle → error); default toasts
+  // stay quiet.
+  const statusIcon: "checkmark-circle" | "alert-circle" | null =
+    toast.tone === "success" ? "checkmark-circle" : toast.tone === "danger" ? "alert-circle" : null;
+  const statusColor = toast.tone === "danger" ? palette.error : palette.primary;
 
   const finishExit = useCallback(() => {
     if (finished.current) return;
@@ -83,50 +100,71 @@ function ToastItem({ toast, active, onExited }: { toast: Toast; active: boolean;
   useEffect(() => {
     if (dismissed.current) return;
     enter.value = motion.reducedMotion ? 1 : withSpring(1, materialMotion.effects.spatial);
-    spatial.value = motion.reducedMotion ? 1 : withSpring(1, motion.fast);
+    spatial.value = motion.reducedMotion ? 1 : withSpring(1, motion.spatial);
   }, [enter, spatial, motion.reducedMotion, motion.fast]);
   useEffect(() => {
     // Hover/focus may pause the timer, but must never restart an exit fade.
     if (dismissed.current || hovered || focused || swiping) return;
-    const duration = toast.action ? Math.max(toast.duration, ACTION_TOAST_FLOOR_MS) : toast.duration;
-    let active = true;
+    const duration = toastDuration(toast);
+    let activeTimer = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const schedule = (timeout: number) => { if (active) timer = setTimeout(animateOut, Math.max(duration, timeout)); };
+    const schedule = (timeout: number) => { if (activeTimer) timer = setTimeout(animateOut, Math.max(duration, timeout)); };
     if (Platform.OS === "android") AccessibilityInfo.getRecommendedTimeoutMillis(duration).then(schedule, () => schedule(duration));
     else schedule(duration);
-    return () => { active = false; if (timer) clearTimeout(timer); };
+    return () => { activeTimer = false; if (timer) clearTimeout(timer); };
   }, [toast.id, toast.duration, toast.action, animateOut, hovered, focused, swiping]);
 
   // Rebuilding the gesture per render (hover/focus/store updates) re-attaches
   // detectors on the exact frames a delete/undo toast competes with the list.
+  // The pan activates on horizontal movement in either direction or a
+  // downward drag; moving up fails it so scrolling content passes through.
   const pan = useMemo(() => Gesture.Pan()
     .enabled(toast.swipeable && active && !closing)
-    .activeOffsetX([-10, 10]).failOffsetY([-16, 16])
+    .activeOffsetX([-10, 10])
+    .activeOffsetY(12)
+    .failOffsetY(-16)
     .onStart(() => {
-      cancelAnimation(offsetX); swipeStart.value = offsetX.value; dragging.value = true; runOnJS(setSwiping)(true);
+      cancelAnimation(offsetX); cancelAnimation(offsetY);
+      swipeStartX.value = offsetX.value; swipeStartY.value = offsetY.value;
+      dragging.value = true; runOnJS(setSwiping)(true);
     })
     .onUpdate((e) => {
-      offsetX.value = swipeStart.value + e.translationX;
+      offsetX.value = swipeStartX.value + e.translationX;
+      offsetY.value = Math.max(0, swipeStartY.value + e.translationY);
     })
     .onEnd((e) => {
-      const past = Math.abs(offsetX.value) > SWIPE_THRESHOLD || Math.abs(e.velocityX) > SWIPE_VELOCITY;
-      if (past) {
+      const pastX = Math.abs(offsetX.value) > SWIPE_THRESHOLD || Math.abs(e.velocityX) > SWIPE_VELOCITY;
+      const pastY = offsetY.value > SWIPE_THRESHOLD || e.velocityY > SWIPE_VELOCITY;
+      if (pastX) {
         const dir = Math.sign(Math.abs(e.velocityX) > SWIPE_VELOCITY ? e.velocityX : offsetX.value) || 1;
         if (motion.reducedMotion) runOnJS(animateOut)();
         else offsetX.value = withSpring(dir * 500, { ...motion.spatial, velocity: e.velocityX }, (finished) => { if (finished) runOnJS(animateOut)(); });
+        offsetY.value = motion.reducedMotion ? 0 : withSpring(0, motion.fast);
+      } else if (pastY) {
+        if (motion.reducedMotion) runOnJS(animateOut)();
+        else offsetY.value = withSpring(400, { ...motion.spatial, velocity: e.velocityY }, (finished) => { if (finished) runOnJS(animateOut)(); });
+        offsetX.value = motion.reducedMotion ? 0 : withSpring(0, motion.fast);
       } else {
         offsetX.value = motion.reducedMotion ? 0 : withSpring(0, { ...motion.spatial, velocity: e.velocityX });
+        offsetY.value = motion.reducedMotion ? 0 : withSpring(0, { ...motion.spatial, velocity: e.velocityY });
       }
       dragging.value = false;
     })
     .onFinalize(() => {
-      if (dragging.value) offsetX.value = motion.reducedMotion ? 0 : withSpring(0, motion.spatial);
+      if (dragging.value) {
+        offsetX.value = motion.reducedMotion ? 0 : withSpring(0, motion.spatial);
+        offsetY.value = motion.reducedMotion ? 0 : withSpring(0, motion.spatial);
+      }
       dragging.value = false; runOnJS(setSwiping)(false);
-    }), [active, closing, toast.swipeable, motion.reducedMotion, motion.spatial, animateOut, offsetX]);
+    }), [active, closing, toast.swipeable, motion.reducedMotion, motion.spatial, motion.fast, animateOut, offsetX, offsetY, swipeStartX, swipeStartY]);
 
   const animStyle = useAnimatedStyle(() => ({
     opacity: enter.value,
-    transform: [{ translateX: offsetX.value }, { translateY: (1 - spatial.value) * 20 }],
+    transform: [
+      { translateX: offsetX.value },
+      { translateY: (1 - spatial.value) * 24 + offsetY.value },
+      { scale: 0.94 + 0.06 * spatial.value },
+    ],
   }));
 
   return (
@@ -147,21 +185,24 @@ function ToastItem({ toast, active, onExited }: { toast: Toast; active: boolean;
         style={[
           styles.toast,
           {
-            backgroundColor: palette.inverseSurface,
-            borderRadius: radius.xs,
+            backgroundColor: palette.surfaceContainerHigh,
+            borderColor: palette.outlineVariant,
           },
-          shadows.level2,
+          shadows.level3,
           animStyle,
         ]}
       >
-        <Text variant="bodyMedium" style={[styles.message, { color: palette.inverseOnSurface }]}>
+        {statusIcon ? (
+          <MaterialIcon name={statusIcon} size={24} color={statusColor} />
+        ) : null}
+        <Text variant="bodyMedium" style={[styles.message, { color: palette.onSurface }]}>
           {toast.message}
         </Text>
         {toast.action ? (
           <PressableScale
             accessibilityRole="button"
             accessibilityLabel={toast.action.label}
-            stateLayerColor={palette.inversePrimary}
+            stateLayerColor={palette.onSurface}
             hitSlop={6}
             onPress={() => {
               if (dismissed.current || toast.action!.onPress() === false) return;
@@ -169,14 +210,14 @@ function ToastItem({ toast, active, onExited }: { toast: Toast; active: boolean;
             }}
             style={styles.actionHit}
           >
-            <Text variant="labelLarge" numberOfLines={1} style={[styles.action, { color: palette.inversePrimary }]}>
+            <Text variant="labelLarge" numberOfLines={1} style={[styles.action, { color: palette.primary }]}>
               {toast.action.label}
             </Text>
           </PressableScale>
         ) : null}
         {toast.action || Platform.OS === "web" ? <PressableScale accessibilityRole="button" accessibilityLabel="Dismiss notification"
-          stateLayerColor={palette.inverseOnSurface} onPress={animateOut} style={{ minWidth: 48, minHeight: 48, alignItems: "center", justifyContent: "center" }}>
-          <MaterialIcon name="close" color={palette.inverseOnSurface} />
+          stateLayerColor={palette.onSurface} onPress={animateOut} style={{ minWidth: 48, minHeight: 48, alignItems: "center", justifyContent: "center" }}>
+          <MaterialIcon name="close" size={20} color={palette.onSurfaceVariant} />
         </PressableScale> : null}
       </Animated.View>
     </GestureDetector>
@@ -225,11 +266,13 @@ const styles = StyleSheet.create({
     alignSelf: "center",
     flexDirection: "row",
     alignItems: "center",
-    gap: spacing[8],
+    gap: spacing[12],
     paddingHorizontal: spacing[16],
     marginTop: spacing[8],
-    minHeight: 48,
+    minHeight: 56,
     minWidth: 48,
+    borderWidth: 1,
+    borderRadius: radius.lg,
   },
   message: { flex: 1, minWidth: 0, includeFontPadding: false, paddingVertical: spacing[14] },
   // Actions retain a full touch target without making the container taller.
