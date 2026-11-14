@@ -4,8 +4,11 @@
  * carries the tone (success/danger), the message sits on the shared
  * elevated surface. Enters on a spatial spring (rise + settle), exits on
  * a fast fade, carries an optional inline action, and can be swiped away
- * to either side or downward. Driven by shared values (enter, spatial,
- * swipe offsets) so the enter/exit and swipe animations never fight.
+ * to either side or downward — the card follows the finger, and releasing
+ * with momentum throws it out along the swipe axis (side throws fly
+ * sideways, downward throws drop, no shared settle motion). Driven by
+ * shared values (enter, spatial, swipe offsets) so the enter/exit and
+ * swipe animations never fight.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccessibilityInfo, Platform, StyleSheet, type View as ViewType } from "react-native";
@@ -94,6 +97,23 @@ function ToastItem({ toast, active, onExited }: { toast: Toast; active: boolean;
   useEffect(() => { if (!active) animateOut(); }, [active, animateOut]);
   useEffect(() => { if (closing && motion.reducedMotion) finishExit(); }, [closing, motion.reducedMotion, finishExit]);
 
+  // Swipe exits fade in place while the momentum spring carries the card off
+  // along the swipe axis; no vertical settle, so a side throw and a downward
+  // throw keep their own motion. The spring's completion (or the fallback
+  // timer) commits the dismissal.
+  const finishSwipeExit = useCallback(() => {
+    if (finished.current) return;
+    finished.current = true;
+    clearTimeout(closeFallback.current);
+    setClosing(true);
+    dismiss(toast.id);
+    onExited(toast.id);
+  }, [dismiss, onExited, toast.id]);
+  const startSwipeFallback = useCallback(() => {
+    clearTimeout(closeFallback.current);
+    closeFallback.current = setTimeout(finishSwipeExit, 450);
+  }, [finishSwipeExit]);
+
   // Enter, then schedule an auto-dismiss. Action toasts keep their explicit
   // close button but still time out — with a longer floor so the action can
   // be read and tapped. Web keeps the close button and gains the same timer.
@@ -135,15 +155,19 @@ function ToastItem({ toast, active, onExited }: { toast: Toast; active: boolean;
     .onEnd((e) => {
       const pastX = Math.abs(offsetX.value) > SWIPE_THRESHOLD || Math.abs(e.velocityX) > SWIPE_VELOCITY;
       const pastY = offsetY.value > SWIPE_THRESHOLD || e.velocityY > SWIPE_VELOCITY;
-      if (pastX) {
-        const dir = Math.sign(Math.abs(e.velocityX) > SWIPE_VELOCITY ? e.velocityX : offsetX.value) || 1;
-        if (motion.reducedMotion) runOnJS(animateOut)();
-        else offsetX.value = withSpring(dir * 500, { ...motion.spatial, velocity: e.velocityX }, (finished) => { if (finished) runOnJS(animateOut)(); });
-        offsetY.value = motion.reducedMotion ? 0 : withSpring(0, motion.fast);
-      } else if (pastY) {
-        if (motion.reducedMotion) runOnJS(animateOut)();
-        else offsetY.value = withSpring(400, { ...motion.spatial, velocity: e.velocityY }, (finished) => { if (finished) runOnJS(animateOut)(); });
-        offsetX.value = motion.reducedMotion ? 0 : withSpring(0, motion.fast);
+      if (pastX || pastY) {
+        runOnJS(startSwipeFallback)();
+        enter.value = motion.reducedMotion ? 0 : withTiming(0, { duration: 150 });
+        if (pastX) {
+          const dir = Math.sign(Math.abs(e.velocityX) > SWIPE_VELOCITY ? e.velocityX : offsetX.value) || 1;
+          if (motion.reducedMotion) { offsetX.value = dir * 500; runOnJS(finishSwipeExit)(); }
+          else offsetX.value = withSpring(dir * 500, { ...motion.spatial, velocity: e.velocityX }, (finished) => { if (finished) runOnJS(finishSwipeExit)(); });
+          offsetY.value = motion.reducedMotion ? 0 : withSpring(0, motion.fast);
+        } else {
+          if (motion.reducedMotion) { offsetY.value = 400; runOnJS(finishSwipeExit)(); }
+          else offsetY.value = withSpring(400, { ...motion.spatial, velocity: e.velocityY }, (finished) => { if (finished) runOnJS(finishSwipeExit)(); });
+          offsetX.value = motion.reducedMotion ? 0 : withSpring(0, motion.fast);
+        }
       } else {
         offsetX.value = motion.reducedMotion ? 0 : withSpring(0, { ...motion.spatial, velocity: e.velocityX });
         offsetY.value = motion.reducedMotion ? 0 : withSpring(0, { ...motion.spatial, velocity: e.velocityY });
@@ -156,7 +180,7 @@ function ToastItem({ toast, active, onExited }: { toast: Toast; active: boolean;
         offsetY.value = motion.reducedMotion ? 0 : withSpring(0, motion.spatial);
       }
       dragging.value = false; runOnJS(setSwiping)(false);
-    }), [active, closing, toast.swipeable, motion.reducedMotion, motion.spatial, motion.fast, animateOut, offsetX, offsetY, swipeStartX, swipeStartY]);
+    }), [active, closing, toast.swipeable, motion.reducedMotion, motion.spatial, motion.fast, finishSwipeExit, startSwipeFallback, offsetX, offsetY, swipeStartX, swipeStartY]);
 
   const animStyle = useAnimatedStyle(() => ({
     opacity: enter.value,
