@@ -8,7 +8,8 @@
  *
  * This is not React's createPortal: the node is re-parented under OverlayHost,
  * so ThemeOverrideProvider in the publisher (the reader, for example) is not
- * an ancestor. OverlayPortal snapshots that palette and re-provides it here.
+ * an ancestor. OverlayPortal re-provides the palette and draft guard so fields
+ * and Close/Cancel controls keep their original form ownership.
  */
 import React, { createContext, useContext, useLayoutEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { Platform, StyleSheet, View } from "react-native";
@@ -16,6 +17,7 @@ import { ThemeOverrideProvider, useTheme } from "../../theme/ThemeProvider";
 import { createOverlayRegistry, topBlockingLayer, type OverlayLayer } from "../../lib/overlay-registry";
 import { isolateModal } from "../../lib/modal-isolation";
 import { AnimationActivityContext, AnimationActivityScopeContext, createAnimationActivityScope } from "../../hooks/use-animation-activity";
+import { DraftDismissContext } from "./draft-dismiss";
 
 type OverlayApi = ReturnType<typeof createOverlayRegistry<React.ReactNode>>;
 type BlockingApi = Pick<OverlayApi, "subscribe" | "isBlocked">;
@@ -163,6 +165,7 @@ function OverlayLayerSurface({ api, layer, covered }: { api: OverlayApi; layer: 
 export function OverlayPortal({ children, blocking = true, active = true }: { children: React.ReactNode; blocking?: boolean; active?: boolean }) {
   const ctx = useContext(OverlayContext);
   const { palette } = useTheme();
+  const draft = useContext(DraftDismissContext);
   const idRef = useRef<string | undefined>(undefined);
   if (!idRef.current) {
     nextId += 1;
@@ -174,8 +177,10 @@ export function OverlayPortal({ children, blocking = true, active = true }: { ch
   // scroll offsets); rebuilding this node on every commit made the registry
   // notify OverlayLayers, which then reconciled every mounted layer.
   const node = useMemo(
-    () => <ThemeOverrideProvider palette={palette}>{children}</ThemeOverrideProvider>,
-    [children, palette],
+    () => <ThemeOverrideProvider palette={palette}>
+      <DraftDismissContext.Provider value={draft}>{children}</DraftDismissContext.Provider>
+    </ThemeOverrideProvider>,
+    [children, palette, draft],
   );
 
   useLayoutEffect(() => {

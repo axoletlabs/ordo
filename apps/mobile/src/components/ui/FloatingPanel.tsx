@@ -100,10 +100,18 @@ export interface FloatingPanelProps {
   keepMounted?: boolean;
   /** Keep a draft mounted while a sibling picker is the active surface. */
   obscured?: boolean;
+  /** Internal: the draft confirm owns the screen. The surface stays painted
+   * and inert (only its own scrim yields to the dialog's scrim), instead of
+   * fading out the way a sibling-picker obscuring does. */
+  keepVisible?: boolean;
   /** An anchored dropdown can own focus/back without hiding its parent form. */
   interactive?: boolean;
   /** Nested dialog pages fade through in one surface, like context menus. */
   pageKey?: string;
+  /** Consulted before the draft guard and before the exit: a page inside the
+   * same surface can consume Back, a scrim tap, or a downward drag without
+   * closing the panel. Returning true keeps it open. */
+  onDismissAttempt?: () => boolean;
 }
 
 /** A prepared successor page, measured offscreen while the current one leaves. */
@@ -118,8 +126,18 @@ export function FloatingPanel(props: FloatingPanelProps) {
 
 function GuardedFloatingPanel(props: FloatingPanelProps) {
   const draft = useDraftDismiss(props.visible, props.dirty);
-  const onDismiss = React.useCallback(() => draft.scope.request(() => { props.onDismiss(); }), [draft.scope, props.onDismiss]);
-  const guarded = { ...props, onDismiss, obscured: !!props.obscured || draft.confirming };
+  const onDismiss = React.useCallback(() => {
+    // A retained page owns Back/scrim/drag while it has somewhere to go back to;
+    // only the surface's own root exits the flow (and asks about its draft).
+    if (props.onDismissAttempt?.()) return false;
+    return draft.scope.request(() => { props.onDismiss(); });
+  }, [draft.scope, props.onDismiss, props.onDismissAttempt]);
+  // A draft confirm keeps its surface mounted and painted (inert under the
+  // dialog's scrim) so the form does not vanish and pop back on Keep editing.
+  // A sibling picker still fades the surface out entirely, as before.
+  const guarded = { ...props, onDismiss,
+    obscured: !!props.obscured || draft.confirming,
+    keepVisible: draft.confirming && !props.obscured };
   return <>
     <DraftDismissContext.Provider value={draft.scope}>
       {props.pageKey != null ? <PagedFloatingPanelSurface {...guarded} pageKey={props.pageKey} /> : <FloatingPanelSurface {...guarded} />}
@@ -235,6 +253,7 @@ function FloatingPanelSurface({
   scrollResetKey,
   keepMounted = false,
   obscured = false,
+  keepVisible = false,
   interactive = true,
   pageKey,
   pageStyle,
@@ -316,43 +335,50 @@ function FloatingPanelSurface({
   // picker's own fade, so the stacked scrims keep a constant dim) instead
   // of cutting to display:none; the display switch only happens after the
   // fade-out settles, and is lifted before fading back in.
-  const obscuredFade = useSharedValue(obscured ? 0 : 1);
-  const [collapsedObscured, setCollapsedObscured] = React.useState(obscured);
+  const hiddenUnder = obscured && !keepVisible;
+  const obscuredFade = useSharedValue(hiddenUnder ? 0 : 1);
+  const scrimFade = useSharedValue(obscured ? 0 : 1);
+  const [collapsedObscured, setCollapsedObscured] = React.useState(hiddenUnder);
   const lastObscured = React.useRef(obscured);
-  const previousFade = React.useRef({ obscured, reducedMotion: motion.reducedMotion, visible });
+  const previousFade = React.useRef({ obscured, keepVisible, reducedMotion: motion.reducedMotion, visible });
   const finishObscuring = React.useCallback(() => {
     if (lastObscured.current) setCollapsedObscured(true);
   }, []);
   React.useLayoutEffect(() => {
     lastObscured.current = obscured;
     const previous = previousFade.current;
-    previousFade.current = { obscured, reducedMotion: motion.reducedMotion, visible };
+    previousFade.current = { obscured, keepVisible, reducedMotion: motion.reducedMotion, visible };
     if (!visible) {
       // The surface is exiting. Uncovering it here because a sibling picker
       // closed in the same commit would fade a hidden panel/scrim back in
       // underneath the exit; keep it collapsed and let a future open reveal it.
       if (obscured) {
-        obscuredFade.value = 0;
-        if (!collapsedObscured) setCollapsedObscured(true);
+        obscuredFade.value = keepVisible ? 1 : 0;
+        scrimFade.value = 0;
+        if (keepVisible) setCollapsedObscured(false);
+        else if (!collapsedObscured) setCollapsedObscured(true);
       }
       return;
     }
-    if (previous.visible === visible && previous.obscured === obscured && previous.reducedMotion === motion.reducedMotion) return;
+    if (previous.visible === visible && previous.obscured === obscured && previous.keepVisible === keepVisible && previous.reducedMotion === motion.reducedMotion) return;
     if (motion.reducedMotion) {
-      obscuredFade.value = obscured ? 0 : 1;
-      setCollapsedObscured(obscured);
+      obscuredFade.value = hiddenUnder ? 0 : 1;
+      scrimFade.value = obscured ? 0 : 1;
+      setCollapsedObscured(hiddenUnder);
       return;
     }
     const fade = { duration: 200, easing: Easing.inOut(Easing.quad) };
-    if (obscured) {
+    if (hiddenUnder) {
       obscuredFade.value = withTiming(0, fade, (finished) => {
         if (finished) runOnJS(finishObscuring)();
       });
+      scrimFade.value = withTiming(0, fade);
       return;
     }
     setCollapsedObscured(false);
     obscuredFade.value = withTiming(1, fade);
-  }, [obscured, visible, obscuredFade, finishObscuring, motion.reducedMotion, collapsedObscured]);
+    scrimFade.value = withTiming(obscured ? 0 : 1, fade);
+  }, [obscured, keepVisible, hiddenUnder, visible, obscuredFade, scrimFade, finishObscuring, motion.reducedMotion, collapsedObscured]);
   const lastChildren = React.useRef(children);
   const dormant = keepMounted && !rendered;
   React.useLayoutEffect(() => { if (visible || dormant) lastChildren.current = children; }, [visible, dormant, children]);
@@ -519,7 +545,7 @@ function FloatingPanelSurface({
   const gestureEnabled = sheet && dismissible && visible && interactive && !obscured;
   const fadeStyle = useAnimatedStyle(() => ({ opacity: progress.value * obscuredFade.value }));
   const scrimStyle = useAnimatedStyle(() => ({
-    opacity: progress.value * obscuredFade.value * (sheet ? Math.max(0, 1 - Math.max(0, dragOffset.value) / heightLimit) : 1),
+    opacity: progress.value * scrimFade.value * (sheet ? Math.max(0, 1 - Math.max(0, dragOffset.value) / heightLimit) : 1),
   }));
   // Web keeps its input ancestors untransformed/unclipped. Fade a separate
   // clipped surface and the contents, rather than compositing the entire
