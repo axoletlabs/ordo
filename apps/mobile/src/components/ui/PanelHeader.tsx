@@ -27,6 +27,7 @@ export function PanelHeader({
   numberOfLines = 3,
   accessory,
   onClose,
+  leading,
   align,
   style,
 }: {
@@ -41,6 +42,9 @@ export function PanelHeader({
   numberOfLines?: number;
   accessory?: React.ReactNode;
   onClose?: () => void;
+  /** A page-level Back control. It owns its own action, so navigating within a
+   * panel never asks the panel's draft guard about discarding. */
+  leading?: React.ReactNode;
   align?: "left" | "center";
   style?: StyleProp<ViewStyle>;
 }) {
@@ -52,6 +56,7 @@ export function PanelHeader({
       ? palette.error : iconColor ?? palette.secondary;
   return (
     <View style={[styles.wrap, style]}>
+      {leading ? <View style={{ position: "absolute", left: -spacing[8], top: -spacing[8], zIndex: 2 }}>{leading}</View> : null}
       {onClose ? <View style={{ position: "absolute", right: -spacing[8], top: -spacing[8], zIndex: 2 }}>
         <IconButton name="close" variant="standard" accessibilityLabel="Close dialog" onPress={() => { if (draft) draft.request(onClose); else onClose(); }} />
       </View> : null}
@@ -78,7 +83,7 @@ export function PanelHeader({
           accessibilityRole="header"
           align={align ?? (icon ? "center" : "left")}
           numberOfLines={numberOfLines}
-          style={[styles.title, onClose && !icon ? { paddingRight: 40 } : null]}
+          style={[styles.title, leading && !icon ? { paddingLeft: 40 } : null, onClose && !icon ? { paddingRight: 40 } : null]}
         >
           {title}
         </Text>

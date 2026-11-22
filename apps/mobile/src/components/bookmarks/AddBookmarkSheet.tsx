@@ -1,39 +1,44 @@
 /**
- * Floating dialog to collect, validate, and save one or more links.
+ * One save-owned surface. The form is the root page; folder, tag, creation,
+ * and unlock pages fade through inside the same sheet so Back, the draft, and
+ * the keyboard never move between sibling surfaces.
  */
 import React, { useState } from "react";
 import { Platform, StyleSheet, View, useWindowDimensions, type TextInput } from "react-native";
 import * as Clipboard from "expo-clipboard";
+import { TAG_NAME_MAX_LENGTH } from "@ordo/shared";
 import { MaterialIcon as Ionicons } from "../ui/MaterialIcon";
-import { ResponsivePicker } from "../ui/ResponsivePicker";
 import { FloatingPanel } from "../ui/FloatingPanel";
-import { AnimatedDisclosure } from "../ui/AnimatedDisclosure";
 import { PanelHeader } from "../ui/PanelHeader";
+import { IconButton } from "../ui/IconButton";
 import { Button } from "../ui/Button";
-import { extractSharedUrls } from "../../lib/shared-url";
+import { Input } from "../ui/Input";
 import { Text } from "../ui/Text";
 import { PickerField } from "../ui/PickerField";
-import { FolderPickerMenu } from "./FolderPickerMenu";
-import type { MenuAnchorRect } from "../ui/ContextMenu";
 import { PanelActions } from "../ui/SheetActionRow";
+import { DraftDismissContext } from "../ui/draft-dismiss";
 import { UnlockForm } from "./LockPrompt";
-import { CreateFolderPanel } from "./CreateFolderPanel";
+import { FolderIconPicker } from "./FolderIconPicker";
+import { FolderSelectPage } from "./FolderSelectPage";
+import { BookmarkLinkField, BookmarkLinkLayout, useBookmarkLinkActions } from "./BookmarkLinkField";
+import { useCreateFolderForm } from "./CreateFolderPanel";
+import { TagSelectList } from "../tags/TagSelectList";
+import { TagColorPicker } from "../tags/TagColorPicker";
+import { useCreateTagForm } from "../tags/CreateTagPanel";
 import { useCreateBookmark } from "../../hooks/use-bookmarks";
 import { useFolders } from "../../hooks/queries";
 import { useFolderTokenStore } from "../../store/folder-tokens";
 import { useSettingsStore } from "../../store/settings";
 import { useTags } from "../../hooks/use-tags";
-import { TagSelectList } from "../tags/TagSelectList";
-import { CreateTagPanel } from "../tags/CreateTagPanel";
+import { dismissKeyboard } from "../../hooks/use-keyboard-visible";
 import { errorMessage, isFolderProtected } from "../../lib/error-message";
 import { haptics } from "../../lib/haptics";
 import { prefetchExtraction } from "../../lib/prefetch-extraction";
+import { extractSharedUrls } from "../../lib/shared-url";
 import { toast } from "../ui/toast-store";
 import { spacing } from "../../theme/tokens";
 import { bookmarkDraftsFromUrls, pasteBookmarkDrafts, normalizeBookmarkDraft, validateBookmarkDrafts, type BookmarkDraft } from "../../lib/bookmark-drafts";
-import { BookmarkLinkField, BookmarkLinkLayout, useBookmarkLinkActions } from "./BookmarkLinkField";
 import { LazyMount } from "../ui/LazyMount";
-import { useOpeningFocus } from "./use-opening-focus";
 
 export interface AddBookmarkSheetProps {
   visible: boolean;
@@ -47,9 +52,8 @@ export interface AddBookmarkSheetProps {
   /** Tags preselected for the new bookmark (e.g. from a tag view). */
   initialTagIds?: string[];
   /**
-   * Share-sheet intake: links are already known, so don't autofocus the keyboard,
-   * don't dismiss on a scrim tap (that returns to the sender on Android), and
-   * keep the links compact until the user edits one.
+   * Share-sheet intake: don't dismiss on a scrim tap (that returns to the
+   * sender on Android), and report a completed save back to the sender.
    */
   shareIntake?: boolean;
   /** Share intake only: called instead of `onDismiss` after a successful save. */
@@ -60,8 +64,10 @@ const ROOT_DESTINATION = "__bookmarks__";
 /** Stable identity so the sheet's reset effect doesn't fire on parent renders. */
 const NO_TAGS: string[] = [];
 
-/** The single surface that owns focus/Back for the save flow. */
-type Surface = "closed" | "form" | "folderPicker" | "tagPicker" | "createFolder" | "createTag" | "unlock";
+/** Pages of the one save-owned surface. `unlock` is derived from the locked
+ * folder, not stored here, so a save can hand off and return to the same form. */
+type SavePage = "form" | "folder" | "tags" | "createFolder" | "createTag" | "unlock";
+type Surface = SavePage | "closed";
 
 /** Display name for the save destination; unfiled bookmarks land in "Bookmarks". */
 function destinationLabel(folderId: string | null, folderName?: string | null): string | null {
@@ -85,7 +91,12 @@ function AddBookmarkContent({
   shareIntake = false,
   onSaved,
 }: AddBookmarkSheetProps) {
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
+  const resting = React.useRef({ width, height });
+  // The IME must not switch organization controls between rows and columns.
+  if (width !== resting.current.width || Platform.OS === "web") resting.current = { width, height };
+  else resting.current.height = Math.max(resting.current.height, height);
+  const compactForm = width >= 600 && resting.current.height < 480;
   const intakeKey = JSON.stringify(initialUrls ?? (initialUrl ? [initialUrl] : []));
   const intakeUrls = React.useMemo(() => JSON.parse(intakeKey) as string[], [intakeKey]);
   const hasIntake = intakeUrls.length > 0;
@@ -94,15 +105,17 @@ function AddBookmarkContent({
   const { data: tags } = useTags();
   const [links, setLinks] = useState<BookmarkDraft[]>(() => bookmarkDraftsFromUrls(intakeUrls));
   const nextLinkId = React.useRef(Math.max(1, intakeUrls.length));
+  const [page, setPage] = useState<SavePage>("form");
   const [activeLinkId, setActiveLinkId] = useState<number | null>(shareIntake && hasIntake ? null : 0);
   const [focusRequest, setFocusRequest] = useState(0);
+  /** True once the panel's entrance has settled; the opening IME blur must
+   * not collapse the editor before its focus take can land. */
+  const entranceReady = React.useRef(false);
+  /** Last field the user worked in; paste, add, and prefetch all follow it. */
+  const activeLink = React.useRef<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveProgress, setSaveProgress] = useState(0);
   const saveRun = React.useRef<object | null>(null);
-  const entranceReady = React.useRef(false);
-  const urlRef = React.useRef<TextInput>(null);
-  const tagSearchRef = React.useRef<TextInput>(null);
-  const tagMenuRef = React.useRef<View>(null);
   const pasteEpoch = React.useRef(0);
   /** Bumped by any user/external URL edit; a pending clipboard read from an
    * older revision must never overwrite newer text (or refocus it). */
@@ -110,12 +123,8 @@ function AddBookmarkContent({
   const active = React.useRef(visible);
   const [error, setError] = useState("");
   const [lockedFolderId, setLockedFolderId] = useState<string | null>(null);
-  const [createFolderOpen, setCreateFolderOpen] = useState(false);
-  const [destinationOpen, setDestinationOpen] = useState(false);
-  const [createTagOpen, setCreateTagOpen] = useState(false);
-  const [showTagPicker, setShowTagPicker] = useState(false);
-  const [destinationAnchor, setDestinationAnchor] = useState<MenuAnchorRect | null>(null);
-  const [tagAnchor, setTagAnchor] = useState<MenuAnchorRect | null>(null);
+  /** The icon picker is a sibling overlay of the save sheet. */
+  const [iconPickerOpen, setIconPickerOpen] = useState(false);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>(initialTagIds);
   const [selectedDestination, setSelectedDestination] = useState(folderId ?? ROOT_DESTINATION);
   const selectedFolderId = selectedDestination === ROOT_DESTINATION ? null : selectedDestination;
@@ -125,21 +134,24 @@ function AddBookmarkContent({
     allowFolderSelection ? selectedFolder?.name : folderName,
   );
 
-  // Exactly one surface owns focus/Back. Deriving it from `visible` means a
-  // parent close releases every child selector in the same commit, before the
-  // passive reset can run.
-  const surface: Surface = !visible ? "closed"
-    : lockedFolderId ? "unlock"
-    : createFolderOpen ? "createFolder"
-    : createTagOpen ? "createTag"
-    : destinationOpen ? "folderPicker"
-    : showTagPicker ? "tagPicker"
-    : "form";
+  // Exactly one page owns focus/Back. Deriving it from `visible` means a parent
+  // close releases every child page in the same commit, before any reset.
+  const shownPage: SavePage = lockedFolderId ? "unlock" : page;
+  const surface: Surface = visible ? shownPage : "closed";
   const surfaceRef = React.useRef<Surface>(surface);
-  const folderPickerOpen = surface === "folderPicker";
-  const tagPickerOpen = surface === "tagPicker";
-  const panelObscured = surface === "createFolder" || surface === "createTag" || width < 600 && (surface === "folderPicker" || surface === "tagPicker");
-  const panelInteractive = surface === "form" || surface === "unlock";
+  const listPage = shownPage === "folder" || shownPage === "tags";
+
+  // A fresh opening always starts on the form. Adjusting during render (like
+  // the session token below) lets the opening commit paint the form instead of
+  // fading a stale page out over the entrance.
+  const wasVisible = React.useRef(visible);
+  if (visible && !wasVisible.current) {
+    wasVisible.current = true;
+    if (page !== "form") setPage("form");
+  } else if (!visible) {
+    wasVisible.current = false;
+  }
+
   // Stable content key: callers may pass a fresh same-value array (or the same
   // set in another order) on every render, which is not a new intent and must
   // not reset an active draft.
@@ -148,9 +160,9 @@ function AddBookmarkContent({
   // One applied open/intake session. Render-adjusted state, not a mutable
   // ref: a discarded concurrent render must not invent a close/new URL and
   // then silently suppress or mis-focus a save that belongs to the live
-  // session. Stable across clipboard requests and child pickers; closing or
-  // a different intake URL starts a new token. The committed token is
-  // published before paint below, so real closes invalidate in-flight saves.
+  // session. Stable across clipboard requests and page changes; closing or a
+  // different intake URL starts a new token. The committed token is published
+  // before paint below, so real closes invalidate in-flight saves.
   const [session, setSession] = React.useState(() => ({ visible, intakeKey, token: visible ? 1 : 0 }));
   if (session.visible !== visible) {
     setSession({ visible, intakeKey, token: session.token + 1 });
@@ -177,38 +189,25 @@ function AddBookmarkContent({
     draftRevision.current += 1;
   }, []);
 
-  /** A Save-owned child callback may only act for the child surface that was
-   * rendered in the same applied session. The token is captured by this render
-   * closure, so a stale await from a closed/reopened session cannot attach its
-   * folder/tag to the new draft or dismiss the new child. */
+  /** A Save-owned child callback may only act for the page that was rendered in
+   * the same applied session. The token is captured by this render closure, so
+   * a stale await from a closed/reopened session cannot attach its folder/tag
+   * to the new draft or navigate the new page. */
   const ownsChild = (expected: Surface) => active.current
     && surfaceRef.current === expected
     && session.token === committedSession.current;
 
-  // Native tag pickers delegate opening focus to the shared Input scope (the
-  // ContextMenu's measured active/ready session). Web keeps the explicit,
-  // cancellable take and never relies on native mount autofocus.
-  const tagOpeningFocus = useOpeningFocus({
-    active: Platform.OS === "web" && tagPickerOpen,
-    targetRef: tagSearchRef,
-    scopeRef: tagMenuRef,
-  });
-
-  // Owner close: release every child surface and pending clipboard work before
-  // paint. Waiting for the passive reset left a selector active for one commit.
+  // Owner close: release the unlock page and pending clipboard work before
+  // paint. The visible page is retained through the exit fade, so it is reset
+  // when the next opening commits instead of swapping under the fade.
   React.useLayoutEffect(() => {
     if (visible) return;
-    entranceReady.current = false;
-    // Mark the session closed before paint so a synchronous reopen cannot
-    // mistake a stale `true` for "still open".
     appliedProps.current.visible = false;
     pasteEpoch.current += 1;
     draftRevision.current += 1;
-    setCreateFolderOpen(false);
-    setDestinationOpen(false);
-    setCreateTagOpen(false);
+    entranceReady.current = false;
     setLockedFolderId(null);
-    setShowTagPicker(false);
+    setIconPickerOpen(false);
   }, [visible]);
 
   // Opening resets the draft from the props of that session. While the sheet
@@ -227,11 +226,11 @@ function AddBookmarkContent({
       nextLinkId.current = Math.max(1, intakeUrls.length);
       setActiveLinkId(shareIntake && hasIntake ? null : 0);
       setFocusRequest(0);
+      activeLink.current = null;
       saveRun.current = null;
       setSaving(false);
       setError("");
       setLockedFolderId(null);
-      setShowTagPicker(false);
       setSelectedTagIds(initialTagIds);
       return;
     }
@@ -248,6 +247,7 @@ function AddBookmarkContent({
       nextLinkId.current = Math.max(1, intakeUrls.length);
       setActiveLinkId(shareIntake && hasIntake ? null : 0);
       setFocusRequest(0);
+      activeLink.current = null;
       saveRun.current = null;
       setSaving(false);
       setError("");
@@ -289,21 +289,11 @@ function AddBookmarkContent({
 
   React.useEffect(() => {
     if (!visible) return;
-    const link = links.find((draft) => draft.id === activeLinkId);
-    if (!link) return;
+    const link = links.find((draft) => draft.id === (activeLink.current ?? links[0]?.id));
+    if (!link?.url.trim()) return;
     const handle = setTimeout(() => prefetchExtraction(link.url), 400);
     return () => clearTimeout(handle);
-  }, [activeLinkId, links, visible]);
-
-  /** Dropdowns own the surface: hand the link row to the picker. On native
-   * the picker's search field moves focus (and the IME target) in one step
-   * through the scoped focus take, so an eager blur here would only start an
-   * IME hide its reopen has to fight. Web restores focus through its own
-   * overlay machinery and expects the field released before the picker opens. */
-  const handFocusToDropdown = () => {
-    if (Platform.OS === "web") urlRef.current?.blur();
-    setActiveLinkId(null);
-  };
+  }, [links, visible]);
 
   const reset = () => {
     pasteEpoch.current += 1;
@@ -311,14 +301,13 @@ function AddBookmarkContent({
     setLinks([{ id: 0, url: "" }]);
     setActiveLinkId(0);
     setFocusRequest(0);
+    activeLink.current = null;
     setError("");
     setLockedFolderId(null);
     setSelectedDestination(folderId ?? ROOT_DESTINATION);
-    setDestinationOpen(false);
-    setShowTagPicker(false);
-    setCreateFolderOpen(false);
-    setCreateTagOpen(false);
+    setPage("form");
     setSelectedTagIds(initialTagIds);
+    setIconPickerOpen(false);
   };
 
   const close = () => {
@@ -326,9 +315,12 @@ function AddBookmarkContent({
     onDismiss();
   };
 
+  /** Programmatic focus retarget: expand the row, then let its field take
+   * the IME one frame after the layout commit (BookmarkLinkField defers the
+   * focus take so the just-mounted Android view can receive it). */
   const editLink = (id: number, input: TextInput | null = null) => {
     if (saving || saveRun.current) return;
-    if (input) urlRef.current = input;
+    activeLink.current = id;
     setActiveLinkId(id);
     if (!input) {
       pasteEpoch.current += 1;
@@ -337,7 +329,7 @@ function AddBookmarkContent({
   };
 
   const addLink = () => {
-    if (saving) return;
+    if (saving || saveRun.current) return;
     draftRevision.current += 1;
     const empty = links.find((link) => !link.url.trim());
     const id = empty?.id ?? nextLinkId.current++;
@@ -354,6 +346,28 @@ function AddBookmarkContent({
       editLink(links[index + 1]?.id ?? links[index - 1].id);
     }
     setError("");
+  };
+
+  const changeLink = (id: number, url: string) => {
+    draftRevision.current += 1;
+    activeLink.current = id;
+    // Native keyboard paste also arrives through onChangeText. A pasted
+    // collection should never be left as one invalid, concatenated URL.
+    const candidates = url.match(/https?:\/\/[^\s<>"']+/gi) ?? [];
+    const isBatch = candidates.length > 1 || candidates.some(candidate => /[,;]https?:\/\//i.test(candidate));
+    const urls = isBatch ? extractSharedUrls(undefined, url) : [];
+    setLinks((previous) => urls.length
+      ? pasteBookmarkDrafts(previous, id, urls, () => nextLinkId.current++)
+      : previous.map((link) => link.id === id ? { ...link, url, error: undefined } : link));
+    if (error) setError("");
+  };
+
+  const goToPage = (next: SavePage) => {
+    if (saving || saveRun.current) return;
+    // Organization is a deliberate place, not another text field: leave the
+    // IME once instead of hiding and reopening it on every handoff.
+    if (next !== "form") dismissKeyboard();
+    setPage(next);
   };
 
   const submit = async () => {
@@ -407,7 +421,7 @@ function AddBookmarkContent({
       // A retry must never resubmit links that already succeeded.
       if (saved.size) {
         setLinks((previous) => previous.filter((draft) => !saved.has(draft.id)));
-        setActiveLinkId(null);
+        activeLink.current = null;
       }
       if (selectedFolderId && isFolderProtected(e)) {
         setLockedFolderId(selectedFolderId);
@@ -423,8 +437,6 @@ function AddBookmarkContent({
     }
   };
 
-  const lockedFolder = folders?.find((folder) => folder.id === lockedFolderId);
-
   const pasteLink = async (id: number) => {
     if (saving || saveRun.current) return;
     const epoch = ++pasteEpoch.current;
@@ -439,8 +451,8 @@ function AddBookmarkContent({
       setError("");
       requestAnimationFrame(() => {
         if (!active.current || epoch !== pasteEpoch.current || revision !== draftRevision.current) return;
-        // Keep the clipboard draft when a picker/create/unlock surface opened
-        // meanwhile, but never pull focus or the IME back to the background.
+        // Keep the clipboard draft when another page opened meanwhile, but
+        // never pull focus or the IME back to the background.
         if (surfaceRef.current !== "form") return;
         // Paste is explicit user intent for this field, so reopening the IME
         // here is appropriate. The helper only resets this same field on the
@@ -454,137 +466,291 @@ function AddBookmarkContent({
     }
   };
 
-  const unlocking = Boolean(lockedFolderId);
-  const linkCount = links.filter((draft) => draft.url.trim()).length;
-  const invalidIndex = links.findIndex((draft) => draft.error);
-  const validation = invalidIndex < 0 ? "" : `Link ${invalidIndex + 1}: ${links[invalidIndex].error}`;
   const linkActions = useBookmarkLinkActions({
     onFocus: editLink,
     onBlur: (id) => {
-      if (visible && panelInteractive && entranceReady.current) {
-        setActiveLinkId((current) => current === id ? null : current);
+      // A real blur (Add link, picker handoff, scrim) collapses the editor;
+      // the entrance settle and field-to-field handoffs never reach here.
+      if (visible && active.current && surfaceRef.current === "form" && entranceReady.current) {
+        setActiveLinkId((current) => (current === id ? null : current));
       }
     },
-    onChange: (id, url) => {
-      draftRevision.current += 1;
-      // Native keyboard paste also arrives through onChangeText. A pasted
-      // collection should never be left as one invalid, concatenated URL.
-      const candidates = url.match(/https?:\/\/[^\s<>"']+/gi) ?? [];
-      const isBatch = candidates.length > 1 || candidates.some(candidate => /[,;]https?:\/\//i.test(candidate));
-      const urls = isBatch ? extractSharedUrls(undefined, url) : [];
-      setLinks((previous) => urls.length
-        ? pasteBookmarkDrafts(previous, id, urls, () => nextLinkId.current++)
-        : previous.map((link) => link.id === id ? { ...link, url, error: undefined } : link));
-      if (error) setError("");
-    },
+    onChange: changeLink,
     onRemove: removeLink,
     onPaste: (id) => { void pasteLink(id); },
     onNext: addLink,
   });
+  const folderForm = useCreateFolderForm(visible, (folder) => {
+    if (!ownsChild("createFolder")) return;
+    setSelectedDestination(folder.id);
+    setPage("form");
+  });
+  const tagForm = useCreateTagForm(visible, (tag) => {
+    if (!ownsChild("createTag")) return;
+    setSelectedTagIds((previous) => previous.includes(tag.id) ? previous : [...previous, tag.id]);
+    setPage("tags");
+  });
+  const creating = page === "createFolder" ? folderForm.busy : page === "createTag" && tagForm.busy;
+  const backToForm = () => {
+    if (!saving && !creating) {
+      dismissKeyboard();
+      setPage("form");
+    }
+  };
+  const backOnePage = () => {
+    if (saving || creating) return;
+    dismissKeyboard();
+    if (lockedFolderId) setLockedFolderId(null);
+    else setPage(page === "createFolder" ? "folder" : page === "createTag" ? "tags" : "form");
+  };
+
+  const lockedFolder = folders?.find((folder) => folder.id === lockedFolderId);
+  const unlocking = Boolean(lockedFolderId);
+  const linkCount = links.filter((draft) => draft.url.trim()).length;
+  const tagNames = selectedTagIds
+    .map((id) => tags?.find((tag) => tag.id === id)?.name)
+    .filter(Boolean)
+    .join(", ");
+  const tagsLabel = selectedTagIds.length === 0 ? "Add tags"
+    : tagNames || `${selectedTagIds.length} tags selected`;
+  const backButton = (
+    <IconButton name="arrow-back" variant="standard" accessibilityLabel="Back" disabled={creating} onPress={backOnePage} />
+  );
+  const confirmLabel = saving && linkCount > 1
+    ? `Saving ${Math.min(saveProgress + 1, linkCount)} of ${linkCount}`
+    : linkCount > 1 ? `Save ${linkCount} bookmarks` : "Save bookmark";
+
+  let content: React.ReactNode;
+  if (shownPage === "unlock") {
+    content = lockedFolderId ? (
+      <DraftDismissContext.Provider value={null}>
+        <UnlockForm
+          folderId={lockedFolderId}
+          folderName={lockedFolder?.name}
+          lockType={lockedFolder?.lockType}
+          pinLength={lockedFolder?.pinLength}
+          autoPromptDevice
+          presented={visible}
+          cancelLabel="Back"
+          onCancel={() => { if (ownsChild("unlock")) setLockedFolderId(null); }}
+          onUnlocked={() => {
+            if (!ownsChild("unlock")) return;
+            setLockedFolderId(null);
+            void submit();
+          }}
+        />
+      </DraftDismissContext.Provider>
+    ) : null;
+  } else if (shownPage === "folder") {
+    content = (
+      <>
+        <PanelHeader title="Save to folder" leading={backButton} />
+        <FolderSelectPage
+          folders={folders ?? []}
+          value={selectedFolderId}
+          onSelect={(id) => {
+            if (saving) return;
+            dismissKeyboard();
+            setSelectedDestination(id ?? ROOT_DESTINATION);
+            setPage("form");
+          }}
+          onCreate={() => goToPage("createFolder")}
+        />
+      </>
+    );
+  } else if (shownPage === "tags") {
+    content = (
+      <>
+        <PanelHeader title="Tags" leading={backButton} />
+        <TagSelectList
+          selectedIds={selectedTagIds}
+          onToggle={(tagId) => {
+            if (!ownsChild("tags")) return;
+            setSelectedTagIds((previous) => previous.includes(tagId)
+              ? previous.filter((id) => id !== tagId) : [...previous, tagId]);
+          }}
+          onRequestCreateTag={() => goToPage("createTag")}
+        />
+        <PanelActions confirmLabel="Done" onConfirm={backToForm} fullWidth />
+      </>
+    );
+  } else if (shownPage === "createFolder") {
+    content = (
+      <>
+        <PanelHeader title="New folder" leading={backButton} />
+        <DraftDismissContext.Provider value={null}>
+          <View style={styles.form}>
+            <Input
+              label="Name"
+              required showRequiredIndicator={false} maxLength={100} showCounter
+              value={folderForm.name}
+              onChangeText={folderForm.setName}
+              placeholder="e.g. Recipes"
+              disabled={folderForm.busy}
+              error={folderForm.error || undefined}
+              onSubmitEditing={() => void folderForm.submit()}
+            />
+            <FolderIconPicker value={folderForm.icon} onChange={folderForm.setIcon} onOpenChange={setIconPickerOpen} disabled={folderForm.busy} />
+          </View>
+        </DraftDismissContext.Provider>
+        <PanelActions
+          confirmLabel="Create folder"
+          onConfirm={() => void folderForm.submit()}
+          loading={folderForm.busy}
+          fullWidth
+        />
+      </>
+    );
+  } else if (shownPage === "createTag") {
+    content = (
+      <>
+        <PanelHeader title="New tag" leading={backButton} />
+        <DraftDismissContext.Provider value={null}>
+          <View style={styles.form}>
+            <Input
+              label="Tag name"
+              required maxLength={TAG_NAME_MAX_LENGTH} showCounter
+              value={tagForm.name}
+              onChangeText={tagForm.setName}
+              placeholder="Tag name"
+              autoCapitalize="words"
+              disabled={tagForm.busy}
+              error={tagForm.error || undefined}
+              returnKeyType="done"
+              onSubmitEditing={() => void tagForm.submit()}
+            />
+            <Text variant="label" color="tertiary" style={styles.colorLabel}>Color</Text>
+            <TagColorPicker value={tagForm.color} onChange={tagForm.setColor} />
+          </View>
+        </DraftDismissContext.Provider>
+        <PanelActions
+          confirmLabel="Create tag"
+          onConfirm={() => void tagForm.submit()}
+          loading={tagForm.busy}
+          fullWidth
+        />
+      </>
+    );
+  } else {
+    content = (
+      <>
+        <PanelHeader
+          title={links.length > 1 ? "Save bookmarks" : "Save bookmark"}
+          onClose={!shareIntake && !saving ? close : undefined}
+        />
+        <View style={[styles.form, compactForm && styles.compactForm]}>
+          <BookmarkLinkLayout
+            activeIndex={links.findIndex((draft) => draft.id === activeLinkId)}
+            fields={links.map((draft, index) => <BookmarkLinkField key={draft.id}
+              draft={draft} index={index} expanded={activeLinkId === draft.id}
+              disabled={saving} removable={links.length > 1}
+              autoFocus={visible && index === 0 && !shareIntake}
+              focusRequest={activeLinkId === draft.id ? focusRequest : 0}
+              focusEnabled={visible && !creating && !saving}
+              actions={linkActions} />)}
+          >
+            <Button
+              label="Add link"
+              variant="ghost"
+              icon={<Ionicons name="add" size={20} />}
+              disabled={saving}
+              style={styles.addLink}
+              onPress={addLink}
+            />
+          </BookmarkLinkLayout>
+          <View style={[styles.meta, compactForm && styles.compactMeta]}>
+            {allowFolderSelection ? (
+              <View style={compactForm && styles.compactPicker}>
+                <PickerField
+                  label="Folder"
+                  value={destination ?? "Bookmarks"}
+                  icon={selectedFolder?.icon ?? "bookmark-outline"}
+                  disabled={saving}
+                  onPress={() => goToPage("folder")}
+                />
+              </View>
+            ) : destination ? (
+              <Text variant="bodyMedium" color="secondary" style={compactForm && styles.compactPicker}>Saving to {destination}</Text>
+            ) : null}
+            <View style={compactForm && styles.compactPicker}>
+              <PickerField
+                label="Tags"
+                value={tagsLabel}
+                icon="pricetags-outline"
+                disabled={saving}
+                onPress={() => goToPage("tags")}
+              />
+            </View>
+          </View>
+        </View>
+        <PanelActions
+          confirmLabel={confirmLabel}
+          onConfirm={() => void submit()}
+          onCancel={shareIntake && !saving ? close : undefined}
+          cancelLabel="Cancel"
+          loading={saving}
+          fullWidth
+        >
+          {error ? (
+            <Text
+              variant="bodySmall"
+              color="danger"
+              accessibilityRole="alert"
+              accessibilityLiveRegion="polite"
+              style={styles.saveError}
+            >
+              {error}
+            </Text>
+          ) : null}
+        </PanelActions>
+      </>
+    );
+  }
 
   return (
-    <>
-      <FloatingPanel
-        presentation="responsive"
-        dirty={links.some((link) => link.url.trim().length > 0 && !intakeUrls.includes(link.url.trim())) || selectedTagIds.slice().sort().join() !== [...initialTagIds].sort().join() || selectedFolderId !== (folderId ?? null)}
-        visible={visible}
-        pageKey={lockedFolderId ? "unlock" : "save"}
-        obscured={panelObscured}
-        interactive={panelInteractive}
-        dismissible={!saving}
-        dismissOnScrim={!shareIntake}
-        onEntered={() => {
-          entranceReady.current = true;
-          // The panel dismisses the previous IME after measuring. Its blur
-          // must not collapse the opening editor before focus can settle.
-          if (!shareIntake && panelInteractive && activeLinkId !== null && !saving) {
-            setFocusRequest((value) => value + 1);
-          }
-        }}
-        onDismiss={() => {
-          if (unlocking) setLockedFolderId(null);
-          else close();
-        }}
-      >
-        {lockedFolderId ? (
-          <UnlockForm
-            folderId={lockedFolderId}
-            folderName={lockedFolder?.name}
-            lockType={lockedFolder?.lockType}
-            pinLength={lockedFolder?.pinLength}
-            autoPromptDevice
-            onCancel={() => { if (ownsChild("unlock")) setLockedFolderId(null); }}
-            onUnlocked={() => {
-              if (!ownsChild("unlock")) return;
-              setLockedFolderId(null);
-              void submit();
-            }}
-          />
-        ) : (
-          <>
-            <PanelHeader title={links.length > 1 ? "Save bookmarks" : "Save bookmark"} onClose={!shareIntake && !saving ? close : undefined} />
-            <BookmarkLinkLayout activeIndex={links.findIndex((draft) => draft.id === activeLinkId)}
-              fields={links.map((draft, index) => <BookmarkLinkField key={draft.id}
-                  draft={draft} index={index} expanded={activeLinkId === draft.id}
-                  disabled={saving} removable={links.length > 1}
-                  autoFocus={visible && index === 0 && !shareIntake}
-                  focusRequest={activeLinkId === draft.id ? focusRequest : 0}
-                  focusEnabled={visible && panelInteractive}
-                  actions={linkActions} />)}>
-              <View>
-                <Button label="Add link" variant="ghost" disabled={saving} style={styles.addLink}
-                  icon={<Ionicons name="add" size={20} />} onPress={addLink} />
-                <AnimatedDisclosure expanded={Boolean(error || validation)}>
-                  <Text variant="bodySmall" color="danger" style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="polite">{error || validation}</Text>
-                </AnimatedDisclosure>
-              </View>
-
-            {allowFolderSelection ? <PickerField label="Folder" value={destination ?? "Bookmarks"} dropdown expanded={destinationOpen} disabled={saving}
-              icon={selectedFolder?.icon ?? "bookmark-outline"} onPress={(anchor) => { handFocusToDropdown(); setDestinationAnchor(anchor); setDestinationOpen(true); }} />
-              : destination ? <Text variant="bodyMedium" color="secondary">Saving to {destination}</Text> : null}
-            <PickerField label="Tags" icon="pricetags-outline" dropdown expanded={showTagPicker} disabled={saving}
-              value={selectedTagIds.length ? selectedTagIds.map((id) => tags?.find((tag) => tag.id === id)?.name).filter(Boolean).join(", ") || `${selectedTagIds.length} tags selected` : "Add tags"}
-              onPress={(anchor) => { handFocusToDropdown(); setTagAnchor(anchor); setShowTagPicker(true); }} />
-            </BookmarkLinkLayout>
-            <PanelActions
-              confirmLabel={saving && linkCount > 1 ? `Saving ${Math.min(saveProgress + 1, linkCount)} of ${linkCount}` : linkCount > 1 ? `Save ${linkCount} bookmarks` : "Save bookmark"}
-              onConfirm={() => void submit()}
-              onCancel={close}
-              loading={saving}
-            />
-          </>
-        )}
-      </FloatingPanel>
-      <FolderPickerMenu visible={folderPickerOpen} onDismiss={() => setDestinationOpen(false)} folders={folders ?? []} anchor={destinationAnchor} returnFocusRef={urlRef}
-        value={selectedFolderId} onChange={(id) => setSelectedDestination(id ?? ROOT_DESTINATION)}
-        onCreate={() => { setDestinationOpen(false); setCreateFolderOpen(true); }} />
-      <ResponsivePicker title="Tags" visible={tagPickerOpen} onDismiss={() => setShowTagPicker(false)} anchor={tagAnchor} width={tagAnchor?.width} scrollBody={false} keyboardDismiss={false} estimatedHeight={280} returnFocusRef={urlRef}>
-        <View ref={tagMenuRef} {...tagOpeningFocus} style={{ paddingHorizontal: spacing[16], flexShrink: 1 }}>
-        <TagSelectList selectedIds={selectedTagIds} searchInputRef={tagSearchRef}
-          searchAutoFocus={Platform.OS !== "web"}
-          onToggle={(tagId) => setSelectedTagIds((previous) => previous.includes(tagId) ? previous.filter((id) => id !== tagId) : [...previous, tagId])}
-          menu maxHeight={240} onRequestCreateTag={() => { setShowTagPicker(false); setCreateTagOpen(true); }} />
-        </View>
-      </ResponsivePicker>
-      <CreateFolderPanel
-        visible={surface === "createFolder"}
-        onDismiss={() => { if (ownsChild("createFolder")) setCreateFolderOpen(false); }}
-        onCreated={(folder) => { if (ownsChild("createFolder")) setSelectedDestination(folder.id); }}
-      />
-      {/* Sibling of the save sheet: nested modals are not supported on Android. */}
-      <CreateTagPanel
-        visible={surface === "createTag"}
-        onDismiss={() => { if (ownsChild("createTag")) setCreateTagOpen(false); }}
-        onCreated={(tag) => {
-          if (!ownsChild("createTag")) return;
-          setSelectedTagIds((prev) => [...prev, tag.id]);
-        }}
-      />
-    </>
+    <FloatingPanel
+      presentation="responsive"
+      // Track the collection here: removed fields must not leave ghost edits
+      // in the panel's individual-input draft registry.
+      dirty={links.some((link) => link.url.trim().length > 0 && !intakeUrls.includes(link.url.trim()))
+        || selectedTagIds.slice().sort().join() !== [...initialTagIds].sort().join()
+        || selectedFolderId !== (folderId ?? null)}
+      visible={visible}
+      pageKey={shownPage}
+      scrollBody={!listPage}
+      obscured={iconPickerOpen}
+      dismissible={!saving && !creating}
+      dismissOnScrim={!shareIntake}
+      onEntered={() => {
+        entranceReady.current = true;
+        // The entrance dismisses the previous IME; its blur must not collapse
+        // the opening editor. A returning picker page retakes focus here too.
+        if (!shareIntake && activeLinkId !== null && !saving) {
+          setFocusRequest((value) => value + 1);
+        }
+      }}
+      onDismissAttempt={() => {
+        // Back, a scrim tap, or a downward drag goes back one page first.
+        if (lockedFolderId || page !== "form") { backOnePage(); return true; }
+        return false;
+      }}
+      onDismiss={() => {
+        if (unlocking) setLockedFolderId(null);
+        else close();
+      }}
+    >
+      {content}
+    </FloatingPanel>
   );
 }
 
 const styles = StyleSheet.create({
+  form: { gap: spacing[16] },
+  compactForm: { gap: spacing[8] },
   addLink: { alignSelf: "flex-start" },
-  error: { marginTop: spacing[8] },
+  meta: { gap: spacing[16], marginTop: spacing[8] },
+  compactMeta: { flexDirection: "row", gap: spacing[12], marginTop: 0, alignItems: "center" },
+  compactPicker: { flex: 1, minWidth: 0 },
+  colorLabel: { marginTop: spacing[16], marginBottom: spacing[8] },
+  saveError: { marginBottom: spacing[8] },
 });

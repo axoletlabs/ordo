@@ -59,6 +59,7 @@ export function TagSelectList({
   const { data: catalogue } = useTags();
   const create = useCreateTag();
   const [query, setQuery] = useState("");
+  const creating = React.useRef(false);
 
   const tags = useMemo(() => {
     const known = new Map<string, { id: string; name: string; color: TagColor }>();
@@ -80,7 +81,8 @@ export function TagSelectList({
   const listHeight = maxHeight ?? Math.min(300, height * 0.42);
 
   const createAndSelect = async (name: string) => {
-    if (create.isPending) return;
+    if (creating.current || create.isPending) return;
+    creating.current = true;
     Keyboard.dismiss();
     try {
       const tag = await create.mutateAsync({ name });
@@ -88,6 +90,8 @@ export function TagSelectList({
       setQuery("");
     } catch (error) {
       toast.error(errorMessage(error, "Couldn't create the tag. Try again."));
+    } finally {
+      creating.current = false;
     }
   };
 

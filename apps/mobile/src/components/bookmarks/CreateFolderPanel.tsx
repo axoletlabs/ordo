@@ -1,6 +1,7 @@
 /**
- * Floating dialog to create a folder: name + icon, optimistic create.
- * Shared by the library home header action and the save-bookmark sheet.
+ * Create a folder: name + icon, optimistic create.
+ * Shared by the library home header action and the save-bookmark sheet, which
+ * renders the form as a page of its own surface.
  */
 import React, { useState } from "react";
 import { StyleSheet, View } from "react-native";
@@ -17,6 +18,48 @@ import { spacing } from "../../theme/tokens";
 import { DEFAULT_FOLDER_ICON, type FolderDto, type FolderIcon } from "@ordo/shared";
 import { LazyMount } from "../ui/LazyMount";
 
+/** The folder-create fields and their submit, for callers that own the surface
+ * header and actions (the save sheet's in-place creation page). State survives
+ * moving between pages of one open surface and resets on the next opening. */
+export function useCreateFolderForm(visible: boolean, onCreated?: (folder: FolderDto) => void) {
+  const createFolder = useCreateFolder();
+  const [name, setName] = useState("");
+  const [icon, setIcon] = useState<FolderIcon>(DEFAULT_FOLDER_ICON);
+  const [error, setError] = useState("");
+  const submitting = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!visible) return;
+    setName("");
+    setIcon(DEFAULT_FOLDER_ICON);
+    setError("");
+  }, [visible]);
+
+  const submit = async () => {
+    if (submitting.current || createFolder.isPending) return;
+    setError("");
+    const trimmed = name.trim();
+    if (!trimmed) {
+      setError("Enter a folder name.");
+      return;
+    }
+    submitting.current = true;
+    try {
+      const folder = await createFolder.mutateAsync({ name: trimmed, icon });
+      haptics.success();
+      setName("");
+      setIcon(DEFAULT_FOLDER_ICON);
+      onCreated?.(folder);
+    } catch (cause) {
+      setError(errorMessage(cause));
+    } finally {
+      submitting.current = false;
+    }
+  };
+
+  return { name, setName, icon, setIcon, error, submit, busy: createFolder.isPending };
+}
+
 export function CreateFolderPanel(props: Parameters<typeof CreateFolderContent>[0]) {
   return <LazyMount active={props.visible}>{() => <CreateFolderContent {...props} />}</LazyMount>;
 }
@@ -30,50 +73,24 @@ function CreateFolderContent({
   onDismiss: () => void;
   onCreated?: (folder: FolderDto) => void;
 }) {
-  const createFolder = useCreateFolder();
-  const [name, setName] = useState("");
-  const [icon, setIcon] = useState<FolderIcon>(DEFAULT_FOLDER_ICON);
-  const [error, setError] = useState("");
+  const form = useCreateFolderForm(visible, (folder) => {
+    onCreated?.(folder);
+    onDismiss();
+  });
   const [iconOpen, setIconOpen] = useState(false);
 
-  React.useEffect(() => {
-    if (!visible) return;
-    setName("");
-    setIcon(DEFAULT_FOLDER_ICON);
-    setError("");
-    setIconOpen(false);
-  }, [visible]);
-
   const close = () => {
-    if (createFolder.isPending) return;
+    if (form.busy) return;
     onDismiss();
-  };
-
-  const submit = async () => {
-    if (createFolder.isPending) return;
-    setError("");
-    const trimmed = name.trim();
-    if (!trimmed) {
-      setError("Enter a folder name.");
-      return;
-    }
-    try {
-      const folder = await createFolder.mutateAsync({ name: trimmed, icon });
-      haptics.success();
-      onCreated?.(folder);
-      onDismiss();
-    } catch (cause) {
-      setError(errorMessage(cause));
-    }
   };
 
   return (
     <FloatingPanel
       visible={visible}
-      dirty={icon !== DEFAULT_FOLDER_ICON}
+      dirty={form.icon !== DEFAULT_FOLDER_ICON}
       obscured={iconOpen}
       onDismiss={close}
-      dismissible={!createFolder.isPending}
+      dismissible={!form.busy}
     >
       <ThemedScrollView keyboardShouldPersistTaps="handled">
         <PanelHeader title="New folder" />
@@ -81,21 +98,21 @@ function CreateFolderContent({
           <Input
             label="Name"
             required showRequiredIndicator={false} maxLength={100} showCounter
-            value={name}
-            disabled={createFolder.isPending}
-            onChangeText={setName}
+            value={form.name}
+            disabled={form.busy}
+            onChangeText={form.setName}
             placeholder="e.g. Recipes"
             autoFocus
-            error={error || undefined}
-            onSubmitEditing={submit}
+            error={form.error || undefined}
+            onSubmitEditing={() => void form.submit()}
           />
-          <FolderIconPicker value={icon} onChange={setIcon} onOpenChange={setIconOpen} disabled={createFolder.isPending} />
+          <FolderIconPicker value={form.icon} onChange={form.setIcon} onOpenChange={setIconOpen} disabled={form.busy} />
         </View>
         <PanelActions
           confirmLabel="Create folder"
-          onConfirm={() => void submit()}
+          onConfirm={() => void form.submit()}
           onCancel={close}
-          loading={createFolder.isPending}
+          loading={form.busy}
         />
       </ThemedScrollView>
     </FloatingPanel>
