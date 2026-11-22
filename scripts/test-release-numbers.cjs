@@ -14,4 +14,5 @@ assert.equal(androidBuildNumber("0.3.0", ["v0.2.0"]), null);
 assert.equal(androidBuildNumber("0.3.0", null), null);
 assert.equal(androidBuildNumber("0.3.0-preview.6", tags), 8);
 assert.equal(androidBuildNumber("0.2.0-preview.2", tags), 2);
+assert.equal(androidBuildNumber("0.4.0-preview.1", tags), 9);
 console.log("Stable and Preview build number checks passed.");

@@ -83,7 +83,7 @@ function isNewerVersion(candidate, current) {
 // line that restarted at Preview 1 could not upgrade the previous line's
 // previews in place. Each line starts after every preview code earlier lines
 // shipped; the release pipeline test holds this table against tag history.
-const PREVIEW_CODE_BASES = { "0.3": 2 };
+const PREVIEW_CODE_BASES = { "0.3": 2, "0.4": 8 };
 
 function releaseLineOf(value) {
   const classified = typeof value === "string" ? classifyReleaseVersion(value) : value;
