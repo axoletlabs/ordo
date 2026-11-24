@@ -78,3 +78,6 @@ yarn-error.log*
 .cursor/rules/*.local.mdc
 # untracked per-agent instructions dropped at the repo root
 /AGENTS.md
+
+# machine-local agent state (gh cli state, ui-audit scratch; per-VPS, never committed)
+.local/
